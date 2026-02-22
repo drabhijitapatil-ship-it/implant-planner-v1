@@ -27,20 +27,20 @@ async def create_users():
         {
             "name": "Dr. Abhijit Patil",
             "email": "abhijit.patil@dental.edu",
-            "password": "dental123",  # Change this password after first login
-            "role": "administrator"  # Implant Incharge, Supervisor and Administrator
+            "password": "dental123",
+            "role": "implant_incharge"  # Implant Incharge
         },
         {
             "name": "Dr. Ajay Sabane",
             "email": "ajay.sabane@dental.edu",
             "password": "dental123",
-            "role": "administrator"  # Implant Incharge, Supervisor and Administrator
+            "role": "administrator"  # Administrator
         },
         {
             "name": "Dr. Rajeshree Jadhav",
             "email": "rajeshree.jadhav@dental.edu",
             "password": "dental123",
-            "role": "administrator"  # Implant Incharge, Supervisor and Administrator
+            "role": "instructor"  # Instructor/Supervisor
         },
         {
             "name": "Dr. Vasantha N",
@@ -72,11 +72,25 @@ async def create_users():
         {"name": "Yashika Jain", "email": "yashika.jain@student.dental.edu", "password": "student123"},
     ]
     
+    # Nurses (read-only access)
+    nurses = [
+        {"name": "Nurse 1", "email": "nurse1@dental.edu", "password": "nurse123"},
+        {"name": "Nurse 2", "email": "nurse2@dental.edu", "password": "nurse123"},
+    ]
+    
     print("Creating faculty members...")
     for fac in faculty:
         existing = await db.users.find_one({"email": fac["email"]})
         if existing:
-            print(f"  ✓ {fac['name']} already exists")
+            # Update the role if it changed
+            if existing.get("role") != fac["role"]:
+                await db.users.update_one(
+                    {"email": fac["email"]},
+                    {"$set": {"role": fac["role"]}}
+                )
+                print(f"  ✓ Updated {fac['name']} role to ({fac['role']})")
+            else:
+                print(f"  ✓ {fac['name']} already exists")
         else:
             await db.users.insert_one({
                 "name": fac["name"],
@@ -100,14 +114,29 @@ async def create_users():
             })
             print(f"  ✓ Created {student['name']}")
     
+    print("\nCreating nurses...")
+    for nurse in nurses:
+        existing = await db.users.find_one({"email": nurse["email"]})
+        if existing:
+            print(f"  ✓ {nurse['name']} already exists")
+        else:
+            await db.users.insert_one({
+                "name": nurse["name"],
+                "email": nurse["email"],
+                "password_hash": hash_password(nurse["password"]),
+                "role": "nurse"
+            })
+            print(f"  ✓ Created {nurse['name']} (nurse)")
+    
     print("\n✅ User setup complete!")
     print("\nLogin credentials:")
     print("=" * 60)
-    print("\nFACULTY (Administrators):")
+    print("\nIMPLANT INCHARGE:")
     print("  - abhijit.patil@dental.edu / dental123")
+    print("\nADMINISTRATOR:")
     print("  - ajay.sabane@dental.edu / dental123")
+    print("\nINSTRUCTORS (Supervisors):")
     print("  - rajeshree.jadhav@dental.edu / dental123")
-    print("\nFACULTY (Supervisors/Instructors):")
     print("  - vasantha.n@dental.edu / dental123")
     print("  - rupali.patil@dental.edu / dental123")
     print("  - pankaj.kadam@dental.edu / dental123")
@@ -118,6 +147,9 @@ async def create_users():
     print("  - atharv.mahadik@student.dental.edu / student123")
     print("  - vaibhav.deshpande@student.dental.edu / student123")
     print("  - yashika.jain@student.dental.edu / student123")
+    print("\nNURSES (Read-only access):")
+    print("  - nurse1@dental.edu / nurse123")
+    print("  - nurse2@dental.edu / nurse123")
     print("=" * 60)
     print("\n⚠️  IMPORTANT: Change these passwords after first login!")
 
