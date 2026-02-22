@@ -33,15 +33,19 @@ export const CHECKLIST_DATA = {
 };
 
 export const STATUS_COLORS = {
-  pending_instructor: '#FFA500',
-  pending_implant_incharge: '#FFD700',
+  pending_phase1: '#FFA500',
+  phase1_approved: '#4CAF50',
+  pending_phase2: '#FFD700',
+  phase2_approved: '#4CAF50',
   approved: '#4CAF50',
   rejected: '#F44336',
 };
 
 export const STATUS_LABELS = {
-  pending_instructor: 'Pending Instructor Approval',
-  pending_implant_incharge: 'Pending Implant Incharge Approval',
+  pending_phase1: 'Phase 1: Pending Approval',
+  phase1_approved: 'Phase 1: Approved - Ready for Phase 2',
+  pending_phase2: 'Phase 2: Pending Approval',
+  phase2_approved: 'Phase 2: Approved - Completed',
   approved: 'Approved',
   rejected: 'Rejected',
 };
