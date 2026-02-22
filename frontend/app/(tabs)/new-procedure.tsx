@@ -271,7 +271,7 @@ export default function NewProcedureScreen() {
             />
           </View>
 
-          <ChecklistForm checklist={checklist} onChecklistChange={setChecklist} />
+          <ChecklistForm checklist={checklist} onChecklistChange={setChecklist} phase={1} />
 
           <View style={styles.buttonContainer}>
             <TouchableOpacity
