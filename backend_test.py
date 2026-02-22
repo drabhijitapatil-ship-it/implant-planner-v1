@@ -99,9 +99,19 @@ class DentalImplantTester:
             
         if not isinstance(instructors, list) or len(instructors) == 0:
             return self.log_error("No instructors found")
+        
+        # Find instructor with known credentials (prefer newly created ones)
+        target_instructor = None
+        for instructor in instructors:
+            if instructor["email"] in ["sarah.johnson@dental.edu", "michael.chen@dental.edu"]:
+                target_instructor = instructor
+                break
+        
+        if not target_instructor:
+            target_instructor = instructors[0]  # fallback
             
-        self.instructor_id = instructors[0]["id"]
-        self.log_success(f"Found {len(instructors)} instructors, selected: {instructors[0]['name']} (ID: {self.instructor_id})")
+        self.instructor_id = target_instructor["id"]
+        self.log_success(f"Found {len(instructors)} instructors, selected: {target_instructor['name']} (ID: {self.instructor_id})")
         
         # Get administrators (implant incharges)
         administrators = self.make_request("GET", "/users?role=administrator", token=self.student_token)
@@ -110,47 +120,55 @@ class DentalImplantTester:
             
         if not isinstance(administrators, list) or len(administrators) == 0:
             return self.log_error("No administrators found")
+        
+        # Find administrator with known credentials (prefer newly created ones)
+        target_administrator = None
+        for admin in administrators:
+            if admin["email"] in ["smith.admin@dental.edu"]:
+                target_administrator = admin
+                break
+        
+        if not target_administrator:
+            target_administrator = administrators[0]  # fallback
             
-        self.administrator_id = administrators[0]["id"]
-        self.log_success(f"Found {len(administrators)} administrators, selected: {administrators[0]['name']} (ID: {self.administrator_id})")
+        self.administrator_id = target_administrator["id"]
+        self.log_success(f"Found {len(administrators)} administrators, selected: {target_administrator['name']} (ID: {self.administrator_id})")
         
         # Login as instructor for later use
-        instructor_email = instructors[0]["email"]
-        # Try different password patterns for instructor
-        instructor_passwords = ["instructor123", "admin123", "password123", "123456"]
-        instructor_login = None
-        
-        for password in instructor_passwords:
-            instructor_login = self.make_request("POST", "/auth/login", {
-                "email": instructor_email,
-                "password": password
-            })
-            if instructor_login:
-                self.instructor_token = instructor_login["token"]
-                self.log_success(f"Pre-authenticated instructor: {instructors[0]['name']} (password: {password})")
-                break
-        
-        if not instructor_login:
-            return self.log_error("Failed to pre-authenticate instructor with any password")
+        instructor_email = target_instructor["email"]
+        # Use known working credentials
+        if instructor_email in ["sarah.johnson@dental.edu", "michael.chen@dental.edu"]:
+            instructor_password = "instructor123"
+        else:
+            instructor_password = "instructor123"  # try default
+            
+        instructor_login = self.make_request("POST", "/auth/login", {
+            "email": instructor_email,
+            "password": instructor_password
+        })
+        if instructor_login:
+            self.instructor_token = instructor_login["token"]
+            self.log_success(f"Pre-authenticated instructor: {target_instructor['name']}")
+        else:
+            return self.log_error(f"Failed to pre-authenticate instructor: {instructor_email}")
             
         # Login as administrator for later use
-        admin_email = administrators[0]["email"]
-        # Try different password patterns for administrator
-        admin_passwords = ["admin123", "instructor123", "password123", "123456"]
-        admin_login = None
-        
-        for password in admin_passwords:
-            admin_login = self.make_request("POST", "/auth/login", {
-                "email": admin_email,
-                "password": password
-            })
-            if admin_login:
-                self.administrator_token = admin_login["token"]
-                self.log_success(f"Pre-authenticated administrator: {administrators[0]['name']} (password: {password})")
-                break
-        
-        if not admin_login:
-            return self.log_error("Failed to pre-authenticate administrator with any password")
+        admin_email = target_administrator["email"]
+        # Use known working credentials
+        if admin_email == "smith.admin@dental.edu":
+            admin_password = "admin123"
+        else:
+            admin_password = "admin123"  # try default
+            
+        admin_login = self.make_request("POST", "/auth/login", {
+            "email": admin_email,
+            "password": admin_password
+        })
+        if admin_login:
+            self.administrator_token = admin_login["token"]
+            self.log_success(f"Pre-authenticated administrator: {target_administrator['name']}")
+        else:
+            return self.log_error(f"Failed to pre-authenticate administrator: {admin_email}")
             
         return True
         
