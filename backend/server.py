@@ -129,6 +129,10 @@ class ApprovalAction(BaseModel):
     action: str  # approve or reject
     rejection_reason: Optional[str] = None
 
+class Phase2Submit(BaseModel):
+    checklist_surgical: ChecklistSection
+    remark: Optional[str] = None
+
 class NotificationResponse(BaseModel):
     id: str
     procedure_id: str
