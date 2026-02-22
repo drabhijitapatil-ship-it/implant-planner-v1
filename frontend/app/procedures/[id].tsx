@@ -97,6 +97,9 @@ export default function ProcedureDetailScreen() {
   const canApprove = () => {
     if (!procedure) return false;
     
+    // Nurses cannot approve (read-only)
+    if (user?.role === 'nurse') return false;
+    
     const isInstructor = (user?.role === 'instructor' || user?.role === 'administrator') && user?.id === procedure.instructor_id;
     const isImplantIncharge = (user?.role === 'implant_incharge' || user?.role === 'administrator') && user?.id === procedure.implant_incharge_id;
     
@@ -125,6 +128,9 @@ export default function ProcedureDetailScreen() {
   const canEdit = () => {
     if (!procedure) return false;
     
+    // Nurses cannot edit (read-only)
+    if (user?.role === 'nurse') return false;
+    
     if (user?.role === 'implant_incharge') return true;
     
     if (user?.role === 'instructor' && user?.id === procedure.instructor_id) return true;
@@ -134,6 +140,23 @@ export default function ProcedureDetailScreen() {
     }
     
     return false;
+  };
+  
+  const canExportPDF = () => {
+    if (!procedure) return false;
+    return procedure.status === 'phase2_approved';
+  };
+  
+  const handleExportPDF = async () => {
+    if (!procedure) return;
+    setPdfLoading(true);
+    try {
+      await generateProcedurePDF(procedure);
+    } catch (error) {
+      console.error('Failed to generate PDF:', error);
+    } finally {
+      setPdfLoading(false);
+    }
   };
 
   const renderChecklistSection = (sectionKey: string, sectionTitle: string) => {
