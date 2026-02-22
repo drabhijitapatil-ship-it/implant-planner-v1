@@ -49,3 +49,19 @@ export const STATUS_LABELS = {
   approved: 'Approved',
   rejected: 'Rejected',
 };
+
+export const USER_ROLES = {
+  student: 'Student',
+  instructor: 'Instructor',
+  implant_incharge: 'Implant Incharge',
+  administrator: 'Administrator',
+  nurse: 'Nurse',
+};
+
+export const ROLE_OPTIONS = [
+  { value: 'student', label: 'Postgraduate Student' },
+  { value: 'instructor', label: 'Instructor (Supervisor)' },
+  { value: 'implant_incharge', label: 'Implant Incharge' },
+  { value: 'administrator', label: 'Administrator' },
+  { value: 'nurse', label: 'Nurse (Read-only)' },
+];
