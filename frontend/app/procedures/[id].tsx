@@ -95,15 +95,29 @@ export default function ProcedureDetailScreen() {
   const canApprove = () => {
     if (!procedure) return false;
     
-    if (procedure.status === 'pending_instructor' && user?.role === 'instructor' && user?.id === procedure.instructor_id) {
-      return true;
+    const isInstructor = (user?.role === 'instructor' || user?.role === 'administrator') && user?.id === procedure.instructor_id;
+    const isImplantIncharge = (user?.role === 'implant_incharge' || user?.role === 'administrator') && user?.id === procedure.implant_incharge_id;
+    
+    // Phase 1: Can approve if pending_phase1 and haven't approved yet
+    if (procedure.status === 'pending_phase1') {
+      if (isInstructor && !procedure.instructor_phase1_approved) return true;
+      if (isImplantIncharge && !procedure.implant_incharge_phase1_approved) return true;
     }
     
-    if (procedure.status === 'pending_implant_incharge' && user?.role === 'implant_incharge') {
-      return true;
+    // Phase 2: Can approve if pending_phase2 and haven't approved yet
+    if (procedure.status === 'pending_phase2') {
+      if (isInstructor && !procedure.instructor_phase2_approved) return true;
+      if (isImplantIncharge && !procedure.implant_incharge_phase2_approved) return true;
     }
     
     return false;
+  };
+  
+  const canSubmitPhase2 = () => {
+    if (!procedure) return false;
+    return user?.role === 'student' && 
+           user?.id === procedure.student_id && 
+           procedure.status === 'phase1_approved';
   };
 
   const canEdit = () => {
