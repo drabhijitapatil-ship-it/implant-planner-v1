@@ -250,14 +250,16 @@ class NurseRoleTester:
             
         # Test nurse cannot see specific pending procedure
         try:
-            proc_detail = self.make_request("GET", f"/procedures/{self.procedure_id}", 
-                                          token=self.nurse_token, expected_status=403)
-            if proc_detail is None:
+            proc_response = requests.get(f"{BASE_URL}/procedures/{self.procedure_id}",
+                                       headers={"Authorization": f"Bearer {self.nurse_token}"})
+            if proc_response.status_code == 403:
                 self.log_success("Nurse correctly denied access to pending procedure")
             else:
-                return self.log_error("Nurse should not be able to access pending procedure")
-        except:
-            self.log_success("Nurse correctly denied access to pending procedure")
+                self.log_error(f"Expected 403 for pending procedure access, got {proc_response.status_code}")
+                return False
+        except Exception as e:
+            self.log_error(f"Error testing pending procedure access: {e}")
+            return False
             
         return True
         
