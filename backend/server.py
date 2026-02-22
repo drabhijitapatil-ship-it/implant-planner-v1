@@ -371,43 +371,65 @@ async def approve_procedure(
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
     
-    # Determine who can approve
-    if procedure["status"] == "pending_instructor":
-        if current_user["role"] != "instructor" or procedure["instructor_id"] != current_user["_id"]:
-            raise HTTPException(status_code=403, detail="Only assigned instructor can approve")
+    # Check if user is instructor, implant incharge, or administrator
+    is_instructor = (current_user["role"] == "instructor" or current_user["role"] == "administrator") and current_user["_id"] == procedure["instructor_id"]
+    is_implant_incharge = (current_user["role"] == "implant_incharge" or current_user["role"] == "administrator") and current_user["_id"] == procedure["implant_incharge_id"]
+    
+    # Determine which phase we're in
+    if procedure["status"] == "pending_phase1":
+        # Phase 1: Pre-surgical approval
+        if not (is_instructor or is_implant_incharge):
+            raise HTTPException(status_code=403, detail="Only assigned instructor or implant incharge can approve")
         
         if action.action == "approve":
-            # Move to next approval stage
+            # Mark this approver as having approved
+            update_fields = {"updated_at": datetime.utcnow()}
+            
+            if is_instructor:
+                update_fields["instructor_phase1_approved"] = True
+                update_fields["instructor_phase1_approved_at"] = datetime.utcnow()
+            
+            if is_implant_incharge:
+                update_fields["implant_incharge_phase1_approved"] = True
+                update_fields["implant_incharge_phase1_approved_at"] = datetime.utcnow()
+            
+            # Check if BOTH have now approved
+            instructor_approved = procedure.get("instructor_phase1_approved", False) or is_instructor
+            implant_incharge_approved = procedure.get("implant_incharge_phase1_approved", False) or is_implant_incharge
+            
+            if instructor_approved and implant_incharge_approved:
+                # Both approved - move to Phase 1 Approved
+                update_fields["status"] = "phase1_approved"
+                update_fields["phase1_completed_at"] = datetime.utcnow()
+                
+                # Notify student that Phase 1 is approved
+                await db.notifications.insert_one({
+                    "user_id": procedure["student_id"],
+                    "procedure_id": procedure_id,
+                    "message": f"Phase 1 (Pre-surgical) approved! You can now submit Phase 2 (Surgical) after completing the procedure.",
+                    "type": "approved",
+                    "read": False,
+                    "created_at": datetime.utcnow()
+                })
+            else:
+                # One approved, waiting for the other
+                approver_name = current_user["name"]
+                waiting_for = "implant incharge" if instructor_approved else "instructor"
+                
+                # Notify student of partial approval
+                await db.notifications.insert_one({
+                    "user_id": procedure["student_id"],
+                    "procedure_id": procedure_id,
+                    "message": f"Phase 1: Approved by {approver_name}. Waiting for {waiting_for} approval.",
+                    "type": "approved",
+                    "read": False,
+                    "created_at": datetime.utcnow()
+                })
+            
             await db.procedures.update_one(
                 {"_id": ObjectId(procedure_id)},
-                {
-                    "$set": {
-                        "status": "pending_implant_incharge",
-                        "instructor_approved_at": datetime.utcnow(),
-                        "updated_at": datetime.utcnow()
-                    }
-                }
+                {"$set": update_fields}
             )
-            
-            # Notify implant incharge
-            await db.notifications.insert_one({
-                "user_id": procedure["implant_incharge_id"],
-                "procedure_id": procedure_id,
-                "message": f"Procedure for {procedure['patient_name']} approved by instructor and awaiting your approval",
-                "type": "approval_request",
-                "read": False,
-                "created_at": datetime.utcnow()
-            })
-            
-            # Notify student
-            await db.notifications.insert_one({
-                "user_id": procedure["student_id"],
-                "procedure_id": procedure_id,
-                "message": f"Your procedure for {procedure['patient_name']} has been approved by instructor",
-                "type": "approved",
-                "read": False,
-                "created_at": datetime.utcnow()
-            })
         else:
             # Reject
             await db.procedures.update_one(
@@ -416,6 +438,8 @@ async def approve_procedure(
                     "$set": {
                         "status": "rejected",
                         "rejection_reason": action.rejection_reason,
+                        "rejected_by": current_user["name"],
+                        "rejected_at": datetime.utcnow(),
                         "updated_at": datetime.utcnow()
                     }
                 }
@@ -425,28 +449,139 @@ async def approve_procedure(
             await db.notifications.insert_one({
                 "user_id": procedure["student_id"],
                 "procedure_id": procedure_id,
-                "message": f"Your procedure for {procedure['patient_name']} was rejected by instructor",
+                "message": f"Phase 1: Procedure rejected by {current_user['name']}. Reason: {action.rejection_reason}",
+                "type": "rejected",
+                "read": False,
+                "created_at": datetime.utcnow()
+            })
+            
+            # Notify the other approver
+            other_approver_id = procedure["implant_incharge_id"] if is_instructor else procedure["instructor_id"]
+            await db.notifications.insert_one({
+                "user_id": other_approver_id,
+                "procedure_id": procedure_id,
+                "message": f"Phase 1: Procedure for {procedure['patient_name']} was rejected by {current_user['name']}",
                 "type": "rejected",
                 "read": False,
                 "created_at": datetime.utcnow()
             })
     
-    elif procedure["status"] == "pending_implant_incharge":
-        if current_user["role"] != "implant_incharge":
-            raise HTTPException(status_code=403, detail="Only Implant Incharge can approve at this stage")
+    elif procedure["status"] == "pending_phase2":
+        # Phase 2: Surgical protocol approval
+        if not (is_instructor or is_implant_incharge):
+            raise HTTPException(status_code=403, detail="Only assigned instructor or implant incharge can approve")
         
         if action.action == "approve":
-            # Final approval
+            # Mark this approver as having approved Phase 2
+            update_fields = {"updated_at": datetime.utcnow()}
+            
+            if is_instructor:
+                update_fields["instructor_phase2_approved"] = True
+                update_fields["instructor_phase2_approved_at"] = datetime.utcnow()
+            
+            if is_implant_incharge:
+                update_fields["implant_incharge_phase2_approved"] = True
+                update_fields["implant_incharge_phase2_approved_at"] = datetime.utcnow()
+            
+            # Check if BOTH have now approved Phase 2
+            instructor_approved = procedure.get("instructor_phase2_approved", False) or is_instructor
+            implant_incharge_approved = procedure.get("implant_incharge_phase2_approved", False) or is_implant_incharge
+            
+            if instructor_approved and implant_incharge_approved:
+                # Both approved - procedure complete!
+                update_fields["status"] = "phase2_approved"
+                update_fields["phase2_completed_at"] = datetime.utcnow()
+                update_fields["fully_completed_at"] = datetime.utcnow()
+                
+                # Notify student of completion
+                await db.notifications.insert_one({
+                    "user_id": procedure["student_id"],
+                    "procedure_id": procedure_id,
+                    "message": f"🎉 Procedure completed! Phase 2 (Surgical) approved by both reviewers.",
+                    "type": "approved",
+                    "read": False,
+                    "created_at": datetime.utcnow()
+                })
+                
+                # Notify both approvers
+                await db.notifications.insert_one({
+                    "user_id": procedure["instructor_id"],
+                    "procedure_id": procedure_id,
+                    "message": f"Procedure for {procedure['patient_name']} fully completed",
+                    "type": "approved",
+                    "read": False,
+                    "created_at": datetime.utcnow()
+                })
+                
+                await db.notifications.insert_one({
+                    "user_id": procedure["implant_incharge_id"],
+                    "procedure_id": procedure_id,
+                    "message": f"Procedure for {procedure['patient_name']} fully completed",
+                    "type": "approved",
+                    "read": False,
+                    "created_at": datetime.utcnow()
+                })
+            else:
+                # One approved, waiting for the other
+                approver_name = current_user["name"]
+                waiting_for = "implant incharge" if instructor_approved else "instructor"
+                
+                # Notify student of partial approval
+                await db.notifications.insert_one({
+                    "user_id": procedure["student_id"],
+                    "procedure_id": procedure_id,
+                    "message": f"Phase 2: Approved by {approver_name}. Waiting for {waiting_for} approval.",
+                    "type": "approved",
+                    "read": False,
+                    "created_at": datetime.utcnow()
+                })
+            
+            await db.procedures.update_one(
+                {"_id": ObjectId(procedure_id)},
+                {"$set": update_fields}
+            )
+        else:
+            # Reject Phase 2
             await db.procedures.update_one(
                 {"_id": ObjectId(procedure_id)},
                 {
                     "$set": {
-                        "status": "approved",
-                        "implant_incharge_approved_at": datetime.utcnow(),
+                        "status": "rejected",
+                        "rejection_reason": action.rejection_reason,
+                        "rejected_by": current_user["name"],
+                        "rejected_at": datetime.utcnow(),
                         "updated_at": datetime.utcnow()
                     }
                 }
             )
+            
+            # Notify student
+            await db.notifications.insert_one({
+                "user_id": procedure["student_id"],
+                "procedure_id": procedure_id,
+                "message": f"Phase 2: Procedure rejected by {current_user['name']}. Reason: {action.rejection_reason}",
+                "type": "rejected",
+                "read": False,
+                "created_at": datetime.utcnow()
+            })
+            
+            # Notify the other approver
+            other_approver_id = procedure["implant_incharge_id"] if is_instructor else procedure["instructor_id"]
+            await db.notifications.insert_one({
+                "user_id": other_approver_id,
+                "procedure_id": procedure_id,
+                "message": f"Phase 2: Procedure for {procedure['patient_name']} was rejected by {current_user['name']}",
+                "type": "rejected",
+                "read": False,
+                "created_at": datetime.utcnow()
+            })
+    else:
+        raise HTTPException(status_code=400, detail="Procedure cannot be approved in current status")
+    
+    updated_procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    updated_procedure["_id"] = str(updated_procedure["_id"])
+    updated_procedure["id"] = updated_procedure["_id"]
+    return updated_procedure
             
             # Notify student and instructor
             await db.notifications.insert_one({
