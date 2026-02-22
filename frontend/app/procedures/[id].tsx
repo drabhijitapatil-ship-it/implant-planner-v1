@@ -527,6 +527,52 @@ const styles = StyleSheet.create({
   },
   additionalFieldValue: {
     fontSize: 14,
+  approvalSection: {
+    backgroundColor: '#FFF',
+    margin: 16,
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  approvalTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1A1A1A',
+    marginBottom: 12,
+  },
+  approvalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    gap: 12,
+  },
+  approvalText: {
+    fontSize: 14,
+    color: '#1A1A1A',
+    flex: 1,
+  },
+  phase2ButtonContainer: {
+    padding: 16,
+  },
+  phase2Button: {
+    flexDirection: 'row',
+    backgroundColor: '#4CAF50',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  phase2ButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+
     color: '#1A1A1A',
   },
   actionButtons: {
