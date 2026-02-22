@@ -36,6 +36,8 @@ export default function ProfileScreen() {
         return 'Postgraduate Student';
       case 'instructor':
         return 'Instructor/Faculty';
+      case 'administrator':
+        return 'Administrator';
       case 'implant_incharge':
         return 'Implant Incharge';
       default:
