@@ -16,6 +16,7 @@ import api from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { STATUS_COLORS, STATUS_LABELS, CHECKLIST_DATA } from '../../constants/checklist';
 import { format } from 'date-fns';
+import { generateProcedurePDF } from '../../utils/pdfGenerator';
 
 export default function ProcedureDetailScreen() {
   const { id } = useLocalSearchParams();
