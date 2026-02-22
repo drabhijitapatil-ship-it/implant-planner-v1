@@ -13,9 +13,10 @@ import { CHECKLIST_DATA } from '../constants/checklist';
 interface ChecklistFormProps {
   checklist: any;
   onChecklistChange: (checklist: any) => void;
+  phase?: 1 | 2;  // Optional: which phase to show (1=pre-surgical only, 2=surgical only)
 }
 
-export default function ChecklistForm({ checklist, onChecklistChange }: ChecklistFormProps) {
+export default function ChecklistForm({ checklist, onChecklistChange, phase }: ChecklistFormProps) {
   const handleCheckboxToggle = (section: string, itemId: string) => {
     const updatedChecklist = { ...checklist };
     if (!updatedChecklist[section]) {
