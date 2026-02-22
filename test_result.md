@@ -117,6 +117,30 @@ backend:
         agent: "testing"
         comment: "✅ Successfully tested user registration for all roles (student, instructor, implant_incharge). Login functionality working correctly. JWT token generation and validation working. Auth/me endpoint returns correct user info. Users endpoint returns all registered users."
 
+  - task: "Nurse Role Implementation"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented nurse role with read-only access. Nurses can only view approved/completed procedures. They cannot create, edit, approve or reject procedures. Added nurse role validation in registration."
+
+  - task: "PDF Export Feature"
+    implemented: true
+    working: "NA"
+    file: "frontend/utils/pdfGenerator.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented PDF export feature for completed procedures (phase2_approved). Added Export as PDF button on procedure detail page."
+
   - task: "Procedure Creation API"
     implemented: true
     working: true
