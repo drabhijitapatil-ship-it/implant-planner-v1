@@ -617,6 +617,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  pdfButtonContainer: {
+    padding: 16,
+    paddingTop: 0,
+  },
+  pdfButton: {
+    flexDirection: 'row',
+    backgroundColor: '#007AFF',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  pdfButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 
     color: '#1A1A1A',
   },
