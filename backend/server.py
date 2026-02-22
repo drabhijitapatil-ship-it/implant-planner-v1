@@ -149,7 +149,7 @@ async def register(user: UserRegister):
         raise HTTPException(status_code=400, detail="Email already registered")
     
     # Validate role
-    if user.role not in ["student", "instructor", "implant_incharge"]:
+    if user.role not in ["student", "instructor", "implant_incharge", "administrator"]:
         raise HTTPException(status_code=400, detail="Invalid role")
     
     # Create user
