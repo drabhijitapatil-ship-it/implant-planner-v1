@@ -66,7 +66,7 @@ class UserRegister(BaseModel):
     name: str
     email: EmailStr
     password: str
-    role: str  # student, instructor, implant_incharge
+    role: str  # student, instructor, implant_incharge, administrator, nurse
 
 class UserLogin(BaseModel):
     email: EmailStr
