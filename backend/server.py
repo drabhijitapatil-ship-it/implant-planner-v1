@@ -273,7 +273,7 @@ async def get_procedures(
         query["student_id"] = current_user["_id"]
     elif current_user["role"] == "instructor":
         query["instructor_id"] = current_user["_id"]
-    # implant_incharge can see all
+    # administrator and implant_incharge can see all
     
     if status:
         query["status"] = status
