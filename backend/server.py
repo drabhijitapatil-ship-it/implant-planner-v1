@@ -58,7 +58,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 # Models
@@ -421,7 +421,7 @@ async def approve_procedure(
                 await db.notifications.insert_one({
                     "user_id": procedure["student_id"],
                     "procedure_id": procedure_id,
-                    "message": f"Phase 1 (Pre-surgical) approved! You can now submit Phase 2 (Surgical) after completing the procedure.",
+                    "message": "Phase 1 (Pre-surgical) approved! You can now submit Phase 2 (Surgical) after completing the procedure.",
                     "type": "approved",
                     "read": False,
                     "created_at": datetime.utcnow()
@@ -512,7 +512,7 @@ async def approve_procedure(
                 await db.notifications.insert_one({
                     "user_id": procedure["student_id"],
                     "procedure_id": procedure_id,
-                    "message": f"🎉 Procedure completed! Phase 2 (Surgical) approved by both reviewers.",
+                    "message": "🎉 Procedure completed! Phase 2 (Surgical) approved by both reviewers.",
                     "type": "approved",
                     "read": False,
                     "created_at": datetime.utcnow()
