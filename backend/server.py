@@ -582,49 +582,62 @@ async def approve_procedure(
     updated_procedure["_id"] = str(updated_procedure["_id"])
     updated_procedure["id"] = updated_procedure["_id"]
     return updated_procedure
-            
-            # Notify student and instructor
-            await db.notifications.insert_one({
-                "user_id": procedure["student_id"],
-                "procedure_id": procedure_id,
-                "message": f"Your procedure for {procedure['patient_name']} has been fully approved!",
-                "type": "approved",
-                "read": False,
-                "created_at": datetime.utcnow()
-            })
-            
-            await db.notifications.insert_one({
-                "user_id": procedure["instructor_id"],
-                "procedure_id": procedure_id,
-                "message": f"Procedure for {procedure['patient_name']} has been fully approved",
-                "type": "approved",
-                "read": False,
-                "created_at": datetime.utcnow()
-            })
-        else:
-            # Reject
-            await db.procedures.update_one(
-                {"_id": ObjectId(procedure_id)},
-                {
-                    "$set": {
-                        "status": "rejected",
-                        "rejection_reason": action.rejection_reason,
-                        "updated_at": datetime.utcnow()
-                    }
-                }
-            )
-            
-            # Notify student and instructor
-            await db.notifications.insert_one({
-                "user_id": procedure["student_id"],
-                "procedure_id": procedure_id,
-                "message": f"Your procedure for {procedure['patient_name']} was rejected by Implant Incharge",
-                "type": "rejected",
-                "read": False,
-                "created_at": datetime.utcnow()
-            })
-    else:
-        raise HTTPException(status_code=400, detail="Procedure cannot be approved in current status")
+
+# Phase 2 Submission Route
+@api_router.post("/procedures/{procedure_id}/submit-phase2")
+async def submit_phase2(
+    procedure_id: str,
+    phase2_data: Phase2Submit,
+    current_user: dict = Depends(get_current_user)
+):
+    procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    
+    # Check if user is the student who created this procedure
+    if current_user["role"] != "student" or procedure["student_id"] != current_user["_id"]:
+        raise HTTPException(status_code=403, detail="Only the student who created this procedure can submit Phase 2")
+    
+    # Check if Phase 1 is approved
+    if procedure["status"] != "phase1_approved":
+        raise HTTPException(status_code=400, detail="Phase 1 must be approved before submitting Phase 2")
+    
+    # Update procedure with Phase 2 data
+    update_data = {
+        "checklist.surgical": phase2_data.checklist_surgical.model_dump(),
+        "status": "pending_phase2",
+        "current_phase": 2,
+        "phase2_submitted_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow()
+    }
+    
+    if phase2_data.remark:
+        update_data["phase2_remark"] = phase2_data.remark
+    
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": update_data}
+    )
+    
+    # Notify both instructor and implant incharge
+    await db.notifications.insert_one({
+        "user_id": procedure["instructor_id"],
+        "procedure_id": procedure_id,
+        "message": f"Phase 2: Surgical protocol submitted by {procedure['student_name']} for patient {procedure['patient_name']}",
+        "type": "approval_request",
+        "read": False,
+        "created_at": datetime.utcnow()
+    })
+    
+    await db.notifications.insert_one({
+        "user_id": procedure["implant_incharge_id"],
+        "procedure_id": procedure_id,
+        "message": f"Phase 2: Surgical protocol submitted by {procedure['student_name']} for patient {procedure['patient_name']}",
+        "type": "approval_request",
+        "read": False,
+        "created_at": datetime.utcnow()
+    })
     
     updated_procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     updated_procedure["_id"] = str(updated_procedure["_id"])
