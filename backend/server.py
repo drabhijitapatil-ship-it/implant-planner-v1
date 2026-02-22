@@ -273,9 +273,12 @@ async def get_procedures(
         query["student_id"] = current_user["_id"]
     elif current_user["role"] == "instructor":
         query["instructor_id"] = current_user["_id"]
+    elif current_user["role"] == "nurse":
+        # Nurses can only see fully approved/completed procedures
+        query["status"] = {"$in": ["phase1_approved", "phase2_approved", "approved"]}
     # administrator and implant_incharge can see all
     
-    if status:
+    if status and current_user["role"] != "nurse":
         query["status"] = status
     
     if date:
