@@ -224,7 +224,12 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
     procedure_dict = procedure.model_dump()
     procedure_dict.update({
         "student_id": current_user["_id"],
-        "status": "pending_instructor",
+        "status": "pending_phase1",  # Phase 1: Pre-surgical approval
+        "current_phase": 1,
+        "instructor_phase1_approved": False,
+        "implant_incharge_phase1_approved": False,
+        "instructor_phase2_approved": False,
+        "implant_incharge_phase2_approved": False,
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow()
     })
@@ -232,11 +237,20 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
     result = await db.procedures.insert_one(procedure_dict)
     procedure_id = str(result.inserted_id)
     
-    # Create notification for instructor
+    # Create notifications for BOTH instructor and implant incharge
     await db.notifications.insert_one({
         "user_id": procedure.instructor_id,
         "procedure_id": procedure_id,
-        "message": f"New procedure submitted by {procedure.student_name} for patient {procedure.patient_name}",
+        "message": f"Phase 1: New pre-surgical protocol submitted by {procedure.student_name} for patient {procedure.patient_name}",
+        "type": "approval_request",
+        "read": False,
+        "created_at": datetime.utcnow()
+    })
+    
+    await db.notifications.insert_one({
+        "user_id": procedure.implant_incharge_id,
+        "procedure_id": procedure_id,
+        "message": f"Phase 1: New pre-surgical protocol submitted by {procedure.student_name} for patient {procedure.patient_name}",
         "type": "approval_request",
         "read": False,
         "created_at": datetime.utcnow()
