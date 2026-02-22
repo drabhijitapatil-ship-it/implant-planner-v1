@@ -30,28 +30,6 @@ export const CHECKLIST_DATA = {
       { id: 'post_cleaning', label: 'Post operative cleaning of implant room, instruments and equipment' },
     ],
   },
-  second_stage: {
-    title: 'III. Second Stage Surgical Protocols',
-    items: [
-      { id: 'faculty_approval', label: 'Approval by supervising faculty' },
-      { id: 'sterilization', label: 'Cleanliness and sterilization of Implant room and instruments' },
-      { id: 'components_available', label: 'All components available (second stage and prosthetic)' },
-      { id: 'patient_consent', label: 'Patient consent' },
-    ],
-  },
-  prosthetic_phase: {
-    title: 'IV. Prosthetic Phase Protocols',
-    items: [
-      { id: 'faculty_approval', label: 'Approval from supervising faculty' },
-      { id: 'prosthetic_components', label: 'All prosthetic components available' },
-      { id: 'payment_confirmation', label: 'Confirmation of complete payment' },
-      { id: 'cleaned_instruments', label: 'Cleaned and autoclaved instruments' },
-      { id: 'impressions_approved', label: 'Impressions approved by supervising faculty' },
-      { id: 'impression_lab', label: 'Impression sent to the laboratory' },
-      { id: 'trials', label: 'Jig trial/Coping trial/bake trial' },
-      { id: 'final_cementation', label: 'Approved Final cementation/screwing of the prosthesis' },
-    ],
-  },
 };
 
 export const STATUS_COLORS = {
