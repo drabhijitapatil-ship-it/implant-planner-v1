@@ -180,9 +180,9 @@ class NurseRoleTester:
         implant_incharge_id = None
         
         for user in users:
-            if user["email"] == "rajeshree.jadhav@dental.edu":
+            if user["email"] == "sarah.johnson@dental.edu":
                 instructor_id = user["id"]
-            elif user["email"] == "abhijit.patil@dental.edu":
+            elif user["email"] == "smith.admin@dental.edu":
                 implant_incharge_id = user["id"]
                 
         if not instructor_id or not implant_incharge_id:
