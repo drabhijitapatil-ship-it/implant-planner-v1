@@ -337,9 +337,9 @@ class NurseRoleTester:
         """Test 6: Create and approve a procedure, then verify nurse can access it"""
         print("\n=== Test 6: Nurse Access to Approved Procedure ===")
         
-        # Login as instructor to approve the procedure
+        # Login as instructor to approve the procedure  
         instructor_login = self.make_request("POST", "/auth/login", {
-            "email": "rajeshree.jadhav@dental.edu", 
+            "email": "sarah.johnson@dental.edu", 
             "password": "instructor123"
         })
         
@@ -348,9 +348,9 @@ class NurseRoleTester:
             
         instructor_token = instructor_login["token"]
         
-        # Login as implant_incharge  
+        # Login as implant_incharge (use administrator role)
         admin_login = self.make_request("POST", "/auth/login", {
-            "email": "abhijit.patil@dental.edu",
+            "email": "smith.admin@dental.edu",
             "password": "admin123"
         })
         
