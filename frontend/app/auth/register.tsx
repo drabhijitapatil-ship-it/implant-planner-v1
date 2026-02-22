@@ -94,7 +94,7 @@ export default function RegisterScreen() {
                 >
                   <Picker.Item label="Postgraduate Student" value="student" />
                   <Picker.Item label="Instructor/Faculty" value="instructor" />
-                  <Picker.Item label="Implant Incharge" value="implant_incharge" />
+                  <Picker.Item label="Administrator" value="administrator" />
                 </Picker>
               </View>
 
