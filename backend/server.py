@@ -319,6 +319,10 @@ async def update_procedure(
     procedure_update: ProcedureUpdate,
     current_user: dict = Depends(get_current_user)
 ):
+    # Nurses cannot edit procedures (read-only access)
+    if current_user["role"] == "nurse":
+        raise HTTPException(status_code=403, detail="Nurses have read-only access")
+    
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     
     if not procedure:
