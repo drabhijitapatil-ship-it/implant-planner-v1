@@ -213,6 +213,48 @@ export default function ProcedureDetailScreen() {
           </View>
         </View>
 
+        {/* Phase Indicator and Approval Status */}
+        {(procedure.status === 'pending_phase1' || procedure.status === 'pending_phase2') && (
+          <View style={styles.approvalSection}>
+            <Text style={styles.approvalTitle}>
+              {procedure.status === 'pending_phase1' ? 'Phase 1 Approval Status' : 'Phase 2 Approval Status'}
+            </Text>
+            <View style={styles.approvalRow}>
+              <Ionicons 
+                name={procedure.instructor_phase1_approved || procedure.instructor_phase2_approved ? "checkmark-circle" : "time"} 
+                size={24} 
+                color={procedure.instructor_phase1_approved || procedure.instructor_phase2_approved ? "#4CAF50" : "#FFA500"} 
+              />
+              <Text style={styles.approvalText}>
+                Instructor: {procedure.instructor_phase1_approved || procedure.instructor_phase2_approved ? '✅ Approved' : '⏳ Pending'}
+              </Text>
+            </View>
+            <View style={styles.approvalRow}>
+              <Ionicons 
+                name={procedure.implant_incharge_phase1_approved || procedure.implant_incharge_phase2_approved ? "checkmark-circle" : "time"} 
+                size={24} 
+                color={procedure.implant_incharge_phase1_approved || procedure.implant_incharge_phase2_approved ? "#4CAF50" : "#FFA500"} 
+              />
+              <Text style={styles.approvalText}>
+                Implant Incharge: {procedure.implant_incharge_phase1_approved || procedure.implant_incharge_phase2_approved ? '✅ Approved' : '⏳ Pending'}
+              </Text>
+            </View>
+          </View>
+        )}
+        
+        {/* Submit Phase 2 Button for Students */}
+        {canSubmitPhase2() && (
+          <View style={styles.phase2ButtonContainer}>
+            <TouchableOpacity
+              style={styles.phase2Button}
+              onPress={() => router.push(`/procedures/submit-phase2/${id}`)}
+            >
+              <Ionicons name="document-text" size={20} color="#FFF" />
+              <Text style={styles.phase2ButtonText}>Submit Phase 2 (Surgical Protocols)</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Patient Information</Text>
           <InfoRow icon="person" label="Patient Name" value={procedure.patient_name} />
