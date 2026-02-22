@@ -279,6 +279,26 @@ export default function ProcedureDetailScreen() {
             </TouchableOpacity>
           </View>
         )}
+        
+        {/* Export PDF Button for Completed Procedures */}
+        {canExportPDF() && (
+          <View style={styles.pdfButtonContainer}>
+            <TouchableOpacity
+              style={[styles.pdfButton, pdfLoading && styles.buttonDisabled]}
+              onPress={handleExportPDF}
+              disabled={pdfLoading}
+            >
+              {pdfLoading ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <>
+                  <Ionicons name="download" size={20} color="#FFF" />
+                  <Text style={styles.pdfButtonText}>Export as PDF</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Patient Information</Text>
