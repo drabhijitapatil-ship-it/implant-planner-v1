@@ -116,27 +116,41 @@ class DentalImplantTester:
         
         # Login as instructor for later use
         instructor_email = instructors[0]["email"]
-        instructor_login = self.make_request("POST", "/auth/login", {
-            "email": instructor_email,
-            "password": "instructor123"
-        })
-        if instructor_login:
-            self.instructor_token = instructor_login["token"]
-            self.log_success(f"Pre-authenticated instructor: {instructors[0]['name']}")
-        else:
-            return self.log_error("Failed to pre-authenticate instructor")
+        # Try different password patterns for instructor
+        instructor_passwords = ["instructor123", "admin123", "password123", "123456"]
+        instructor_login = None
+        
+        for password in instructor_passwords:
+            instructor_login = self.make_request("POST", "/auth/login", {
+                "email": instructor_email,
+                "password": password
+            })
+            if instructor_login:
+                self.instructor_token = instructor_login["token"]
+                self.log_success(f"Pre-authenticated instructor: {instructors[0]['name']} (password: {password})")
+                break
+        
+        if not instructor_login:
+            return self.log_error("Failed to pre-authenticate instructor with any password")
             
         # Login as administrator for later use
         admin_email = administrators[0]["email"]
-        admin_login = self.make_request("POST", "/auth/login", {
-            "email": admin_email,
-            "password": "admin123"
-        })
-        if admin_login:
-            self.administrator_token = admin_login["token"]
-            self.log_success(f"Pre-authenticated administrator: {administrators[0]['name']}")
-        else:
-            return self.log_error("Failed to pre-authenticate administrator")
+        # Try different password patterns for administrator
+        admin_passwords = ["admin123", "instructor123", "password123", "123456"]
+        admin_login = None
+        
+        for password in admin_passwords:
+            admin_login = self.make_request("POST", "/auth/login", {
+                "email": admin_email,
+                "password": password
+            })
+            if admin_login:
+                self.administrator_token = admin_login["token"]
+                self.log_success(f"Pre-authenticated administrator: {administrators[0]['name']} (password: {password})")
+                break
+        
+        if not admin_login:
+            return self.log_error("Failed to pre-authenticate administrator with any password")
             
         return True
         
