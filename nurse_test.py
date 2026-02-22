@@ -283,12 +283,16 @@ class NurseRoleTester:
             "procedure_time": "10:00"
         }
         
-        create_response = self.make_request("POST", "/procedures", procedure_data, 
-                                          self.nurse_token, expected_status=403)
-        if create_response is None:
-            self.log_success("Nurse correctly denied permission to create procedures")
-        else:
-            self.log_error("Nurse should not be able to create procedures")
+        try:
+            create_response = requests.post(f"{BASE_URL}/procedures", json=procedure_data, 
+                                          headers={"Authorization": f"Bearer {self.nurse_token}"})
+            if create_response.status_code == 403:
+                self.log_success("Nurse correctly denied permission to create procedures")
+            else:
+                self.log_error(f"Expected 403 for create, got {create_response.status_code}")
+                success = False
+        except Exception as e:
+            self.log_error(f"Error testing create restriction: {e}")
             success = False
             
         # Test 2: Nurse cannot edit procedures
