@@ -101,8 +101,6 @@ export default function ChecklistForm({ checklist, onChecklistChange }: Checklis
       
       {renderChecklistSection('pre_surgical', CHECKLIST_DATA.pre_surgical)}
       {renderChecklistSection('surgical', CHECKLIST_DATA.surgical)}
-      {renderChecklistSection('second_stage', CHECKLIST_DATA.second_stage)}
-      {renderChecklistSection('prosthetic_phase', CHECKLIST_DATA.prosthetic_phase)}
     </View>
   );
 }
