@@ -483,25 +483,55 @@ async def approve_procedure(
 # Notification Routes
 @api_router.get("/notifications")
 async def get_notifications(current_user: dict = Depends(get_current_user)):
-    notifications = await db.notifications.find(
-        {"user_id": current_user["_id"]}
-    ).sort("created_at", -1).to_list(100)
+    # Use aggregation to avoid N+1 query problem
+    pipeline = [
+        {"$match": {"user_id": current_user["_id"]}},
+        {"$sort": {"created_at": -1}},
+        {"$limit": 100},
+        {
+            "$lookup": {
+                "from": "procedures",
+                "let": {"procedure_id_str": "$procedure_id"},
+                "pipeline": [
+                    {
+                        "$match": {
+                            "$expr": {
+                                "$eq": [{"$toString": "$_id"}, "$$procedure_id_str"]
+                            }
+                        }
+                    },
+                    {
+                        "$project": {
+                            "patient_name": 1,
+                            "procedure_date": 1,
+                            "status": 1
+                        }
+                    }
+                ],
+                "as": "procedure_info"
+            }
+        }
+    ]
+    
+    notifications = await db.notifications.aggregate(pipeline).to_list(100)
     
     result = []
     for notif in notifications:
-        # Get procedure details
-        procedure = await db.procedures.find_one({"_id": ObjectId(notif["procedure_id"])})
-        
         notif["_id"] = str(notif["_id"])
         notif["id"] = notif["_id"]
         notif["created_at"] = notif["created_at"].isoformat()
         
-        if procedure:
+        # Extract procedure details from lookup result
+        if notif.get("procedure_info") and len(notif["procedure_info"]) > 0:
+            procedure = notif["procedure_info"][0]
             notif["procedure_details"] = {
                 "patient_name": procedure.get("patient_name"),
                 "procedure_date": procedure.get("procedure_date"),
                 "status": procedure.get("status")
             }
+        
+        # Remove the temporary lookup field
+        notif.pop("procedure_info", None)
         
         result.append(notif)
     
