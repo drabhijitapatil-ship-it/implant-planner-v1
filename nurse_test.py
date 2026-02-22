@@ -319,7 +319,7 @@ class NurseRoleTester:
         approval_data = {"action": "approve"}
         
         try:
-            approve_response = requests.put(f"{BASE_URL}/procedures/{self.procedure_id}/approve", 
+            approve_response = requests.post(f"{BASE_URL}/procedures/{self.procedure_id}/approve", 
                                           json=approval_data, 
                                           headers={"Authorization": f"Bearer {self.nurse_token}"})
             if approve_response.status_code == 403:
