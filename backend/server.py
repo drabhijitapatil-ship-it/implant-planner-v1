@@ -304,6 +304,10 @@ async def get_procedure(procedure_id: str, current_user: dict = Depends(get_curr
         raise HTTPException(status_code=403, detail="Access denied")
     elif current_user["role"] == "instructor" and procedure["instructor_id"] != current_user["_id"]:
         raise HTTPException(status_code=403, detail="Access denied")
+    elif current_user["role"] == "nurse":
+        # Nurses can only view approved/completed procedures
+        if procedure["status"] not in ["phase1_approved", "phase2_approved", "approved"]:
+            raise HTTPException(status_code=403, detail="Nurses can only view approved procedures")
     
     procedure["_id"] = str(procedure["_id"])
     procedure["id"] = procedure["_id"]
