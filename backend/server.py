@@ -89,8 +89,6 @@ class ChecklistSection(BaseModel):
 class Checklist(BaseModel):
     pre_surgical: Optional[ChecklistSection] = None
     surgical: Optional[ChecklistSection] = None
-    second_stage: Optional[ChecklistSection] = None
-    prosthetic_phase: Optional[ChecklistSection] = None
 
 class ProcedureCreate(BaseModel):
     student_name: str
