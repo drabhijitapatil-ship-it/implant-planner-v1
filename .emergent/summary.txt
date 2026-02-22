@@ -1,0 +1,205 @@
+<analysis>
+<original_problem_statement>
+The user wants to build a mobile app using Expo for the Department of Prosthodontics to plan and manage dental implant procedures.
+
+**PRODUCT REQUIREMENTS:**
+
+1.  **User Roles & Access Control:**
+    *   **Postgraduate (PG) Student:** Can add new patient procedures, fill out the checklist, and view a consolidated dashboard of scheduled/open slots.
+    *   **Instructor (Supervisor):** Can view/edit/approve procedures they are assigned to.
+    *   **Implant Incharge:** Can view/edit/approve all procedures.
+    *   **Administrator:** Has full access to the application, including managing users.
+    *   **Nurse:** Read-only access to view the dashboard of approved, scheduled patients.
+
+2.  **Core Workflow (Phase-Based):**
+    *   **Phase 1 (Pre-Surgical):** A PG student fills out patient details and the Pre-Surgical Protocol section of the checklist.
+    *   **Phase 1 Approval:** The submission is sent to the assigned Instructor and an Implant Incharge. BOTH must approve it.
+    *   **Phase 2 (Surgical):** Once Phase 1 is approved, the Surgical Protocol part of the checklist becomes active.
+    *   **Phase 2 Submission:** After the procedure, the PG student fills out the Surgical Protocol section.
+    *   **Phase 2 Approval:** The Phase 2 submission is sent to the Instructor and Implant Incharge for final approval.
+
+3.  **Features:**
+    *   **Data Entry Form:** Fields for PG name, Patient name, Instructor, Implant Incharge, Registration number, implant site, Receipt number, Amount paid, and procedure date/time.
+    *   **Digital Checklist:** A form that is split into Pre-Surgical Protocol and Surgical Protocol.
+    *   **Dashboard:** A consolidated schedule/calendar view showing filled and open slots.
+    *   **Scheduling:** Time slots are from 9:30 am to 2 PM (Mon-Fri) and 10 am on Saturday.
+    *   **In-App Notifications:** Alerts for Instructors and Implant Incharge on new submissions and status changes.
+    *   **PDF Export:** Ability to export a PDF report of a procedure case after it is fully completed (Phase 2 approved).
+
+4.  **Pre-populated Users:**
+    *   A specific list of faculty and students needs to be pre-loaded into the system with their designated roles.
+
+</original_problem_statement>
+**User's preferred language**: English
+
+**what currently exists?**
+A full-stack mobile application has been built using Expo for the frontend and FastAPI for the backend with a MongoDB database.
+- **Authentication:** A complete JWT-based authentication system with four roles is in place: , , , and .
+- **Phase-Based Workflow:** The backend fully supports the two-phase approval system. Procedures have distinct statuses for Phase 1 and Phase 2, each requiring dual approval from an instructor and an incharge.
+- **Frontend Implementation:** The UI has been built to support the workflow, including:
+    - Role-based views and actions.
+    - A conditional  that shows only the relevant section (Phase 1 or Phase 2).
+    - A dedicated screen for submitting Phase 2 data ().
+    - A detailed procedure view () that displays the approval status of each approver for each phase.
+- **User Seeding:** A script () was created and executed to populate the database with the initial list of users.
+- **PDF Export (Partial):** The required libraries (, ) are installed, a utility function  exists, and an Export PDF button has been added to the UI. The final logic to connect the button to the utility is pending.
+
+**Last working item**:
+- Last item agent was working: The agent was about to start implementing the user's latest request (from message #306) to modify user lists and add a new Nurse role. The last action was viewing the list of existing users in the database to plan the required changes.
+- Status: NOT STARTED
+- Agent Testing Done: N
+- Which testing method agent to use? backend testing agent
+- User Testing Done: N
+
+**All Pending/In progress Issue list**:
+-   **Issue 1: Implement latest user data and role changes (P0)**
+    -   **Description:** The user has requested specific changes to the pre-populated user list and the addition of a new 'Nurse' role with read-only permissions.
+    -   **Next debug checklist:**
+        1.  **Add 'Nurse' Role:**
+            *   Update : Add 'nurse' to the  and any role-checking logic.
+            *   Update : Add 'nurse' to the  constant.
+        2.  **Implement Read-Only Access:**
+            *   Modify the  endpoint in . If the requesting user's role is 'nurse', return only procedures that are fully approved and scheduled, and potentially strip sensitive data. Deny access to all other endpoints that allow mutation (create, edit, approve).
+        3.  **Update User Data:**
+            *   Modify  (or create a new migration script) to:
+                *   Remove Dr. Johnson, Dr. Sarah Johnson, Dr. Michael Chen.
+                *   Ensure Dr. Abhijit Patil and Dr. Rajeshree Jadhav are listed as instructors.
+                *   Set Dr. Abhijit Patil as the Implant Incharge.
+                *   Create two new users, 'Nurse 1' and 'Nurse 2', with the 'nurse' role.
+            *   Run the script to apply changes to the database.
+        4.  **Update Frontend for Nurse:**
+            *   Adjust the dashboard and login/register screens to accommodate the 'nurse' role. Ensure action buttons (like 'New Procedure', 'Approve') are hidden for nurses.
+    -   **Why fix this issue and what will be achieved with the fix?** To align the application's user base and permissions with the user's real-world operational needs.
+    -   **Status:** NOT STARTED
+    -   **Is recurring issue?** N
+    -   **Should Test frontend/backend/both after fix?** Both
+    -   **Blocked on other issue:** None
+
+**In progress Task List**:
+-   **Task 1: Complete and Test PDF Export Feature (P1)**
+    -   **Description:** The feature to export a completed procedure as a PDF was started but not finished.
+    -   **Where to resume:** In , implement the  event handler for the Export PDF button.
+        1.  Inside the handler, fetch the full procedure details using the API.
+        2.  Construct an HTML string template that contains all the procedure information (patient details, checklist data, approval statuses, dates).
+        3.  Call the  utility from , passing the HTML content.
+        4.  Use  or  from  to allow the user to save or share the generated PDF file.
+        5.  Ensure the button is only visible for procedures that are fully completed (i.e., ).
+    -   **What will be achieved with this?** Users will be able to generate and download official records of completed implant procedures.
+    -   **Status:** IN PROGRESS
+    -   **Should Test frontend/backend/both after fix?** Frontend
+    -   **Blocked on something:** None
+
+**Upcoming and Future Tasks**
+- No new future tasks have been requested by the user beyond the ones listed above.
+
+**Completed work in this session**
+- **Core App Scaffolding:** Built the initial full-stack application with a FastAPI backend and an Expo frontend.
+- **Authentication & RBAC:** Implemented JWT-based authentication for roles: , , , and .
+- **Two-Phase Approval Workflow:** Designed and implemented the complex, dual-approval, two-phase procedure workflow on both the backend and frontend.
+- **User Seeding:** Created and ran a script () to pre-populate the database with a list of users and their roles.
+- **UI Implementation:** Developed all necessary screens, including login, registration, dashboard, procedure list, new procedure form, and a detailed procedure view.
+- **Bug Fixes:**
+    - Resolved a critical deployment-blocking error related to incorrect module import paths in .
+    - Fixed an N+1 query issue in the notifications endpoint () by using a MongoDB aggregation pipeline.
+    - Corrected a frontend bug where the checklist form was rendering removed sections.
+- **Documentation:** Created a visual walkthrough document () with ASCII mockups.
+
+**Earlier issues found/mentioned but not fixed**
+-   **Issue 1: Unreliable Expo Preview (Ngrok Tunnel Failures)**
+    -   **Debug checklist:** This issue was investigated extensively. It was determined to be an environmental constraint of the Kubernetes/network setup, not a code bug. The  tunnel used by Expo to create the public preview URL frequently times out or fails to connect.
+    -   **Why to solve this issue and what will be achieved with this?** This is not a bug to be fixed by the agent. The next agent must be aware that the live preview is unreliable and should not waste time trying to fix it. Debugging should rely on logs, API testing (), and other methods.
+    -   **Should Test frontend/backend/both after fix:** N/A (Environmental Issue)
+    -   **Is recurring issue?** Y
+
+**Known issue recurrence from previous fork**
+- The agent repeatedly ran into issues with large, monolithic code changes, leading to syntax errors and incomplete logic. It is recommended that the next agent make smaller, more atomic commits/changes.
+
+**Code Architecture**
+
+
+**Key Technical Concepts**
+-   **Frontend:** React Native, Expo, Expo Router (file-based routing), React Context for state management, Axios.
+-   **Backend:** FastAPI, Python, Motor (async MongoDB driver), Pydantic for data validation, JWT for authentication, Passlib for hashing.
+-   **Database:** MongoDB.
+-   **Architecture:** Full-stack monorepo with a separate frontend and backend. Role-Based Access Control (RBAC) is central to the design.
+
+**key DB schema**
+-   **users:** 
+-   **procedures:** 
+-   **notifications:** 
+
+**changes in tech stack**
+- No changes to the core tech stack.
+
+**All files of reference**
+-   ****: Contains the entire backend application logic, including all models, endpoints, and the complex phase-based approval workflow. It's the single most important file for backend work.
+-   ****: The procedure detail screen. It contains complex conditional logic for displaying status, approvals, and action buttons based on user role and procedure phase.
+-   ****: The new screen for the second part of the workflow.
+-   ****: A crucial reusable component, modified to conditionally render different parts of the checklist based on the procedure's phase.
+-   ****: The script used to manage the pre-populated user list. It will need to be modified for the latest user request.
+-   ****: The new utility for handling PDF creation.
+
+**Areas that need refactoring**:
+- The  file is becoming very large and monolithic. It contains models, authentication logic, and all API endpoints. For future scalability, it would be beneficial to refactor this into a more structured layout, separating routes, models, and services/business logic into different files/modules.
+
+**key api endpoints**
+-   : Creates a new user.
+-   : Authenticates a user and returns a JWT.
+-   : Returns the current authenticated user's data.
+-   : Creates a new procedure (Phase 1 submission).
+-   : Gets a list of procedures based on the user's role.
+-   : Gets details for a single procedure.
+-   : The core endpoint for handling the multi-phase, dual-approval logic.
+-   : Submits the Phase 2 data.
+-   : Gets notifications for the current user.
+
+**Critical Info for New Agent**
+-   **The Expo preview URL is unreliable.** Do not waste time debugging ngrok/tunnel issues. It's a known limitation of the environment. Rely on API testing () and logs for verification.
+-   The immediate priority is to implement the user's latest request from message #306: update user lists and add a new read-only Nurse role.
+-   The PDF export feature is in-progress and is the next task after the user role changes are complete.
+-   The backend code in  is complex due to the business logic. Be careful when modifying the approval endpoints.
+
+**documents created in this job**
+-   : A visual walkthrough of the app's functionality using ASCII mockups.
+-   : Utility file for the PDF export feature.
+-   : Script to seed the database with users.
+
+**Last 10 User Messages and any pending HUMAN messages**
+1.  ****: (In Progress) User requested a new feature.
+2.  ****: (In Progress) User checking status. Agent confirmed it was not yet complete.
+3.  ****: User requested to finalize and deploy.
+4.  ****: (Pending - P0) The user's most recent and highest priority request, detailing user list changes and the new 'Nurse' role.
+5.  ****: (Resolved) User reported a deployment issue.
+6.  ****: (Resolved) User provided logs and requested a fix for a deployment failure.
+7.  ****: (Resolved) User requesting a fix for the deployment.
+8.  ****: (Completed) User asked to finish the previous large task.
+9.  ****: (Resolved) User reported a bug after a major backend change, which was traced to a frontend rendering error.
+10. ****: (Completed) User requested the major two-phase workflow change and user role updates, which have been implemented.
+
+**Project Health Check:**
+-   **Broken:** The Expo preview URL service is unreliable due to environmental network restrictions.
+-   **Mocked:** None.
+
+**3rd Party Integrations**
+- No external 3rd party integrations requiring API keys are being used.
+
+**Testing status**
+-   **Testing agent used after significant changes:** YES, the backend testing agent was used to verify API functionality.
+-   **Troubleshoot agent used after agent stuck in loop:** YES, used to diagnose the Expo preview/ngrok issue.
+-   **Test files created:** None.
+-   **Known regressions:** None.
+
+**Credentials to test flow:**
+The  script created the initial users. The password for all is .
+-   **Administrator:** 
+-   **Supervisor:** 
+-   **Student:** 
+
+**What agent forgot to execute**
+- The agent was interrupted while implementing the PDF export feature. It did not complete the final step of wiring the Export PDF button's  handler to the  utility and the  or  functionality.
+
+</analysis>
+<SYS_PROMPT_SEPARATOR>
+<workspace_dir>
+/app
+</workspace_dir>
