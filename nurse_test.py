@@ -300,23 +300,33 @@ class NurseRoleTester:
             "patient_name": "Updated Name"
         }
         
-        edit_response = self.make_request("PUT", f"/procedures/{self.procedure_id}", 
-                                        update_data, self.nurse_token, expected_status=403)
-        if edit_response is None:
-            self.log_success("Nurse correctly denied permission to edit procedures")
-        else:
-            self.log_error("Nurse should not be able to edit procedures")
+        try:
+            edit_response = requests.put(f"{BASE_URL}/procedures/{self.procedure_id}", 
+                                       json=update_data, 
+                                       headers={"Authorization": f"Bearer {self.nurse_token}"})
+            if edit_response.status_code == 403:
+                self.log_success("Nurse correctly denied permission to edit procedures")
+            else:
+                self.log_error(f"Expected 403 for edit, got {edit_response.status_code}")
+                success = False
+        except Exception as e:
+            self.log_error(f"Error testing edit restriction: {e}")
             success = False
             
         # Test 3: Nurse cannot approve procedures
         approval_data = {"action": "approve"}
         
-        approve_response = self.make_request("POST", f"/procedures/{self.procedure_id}/approve", 
-                                           approval_data, self.nurse_token, expected_status=403)
-        if approve_response is None:
-            self.log_success("Nurse correctly denied permission to approve procedures")
-        else:
-            self.log_error("Nurse should not be able to approve procedures")
+        try:
+            approve_response = requests.put(f"{BASE_URL}/procedures/{self.procedure_id}/approve", 
+                                          json=approval_data, 
+                                          headers={"Authorization": f"Bearer {self.nurse_token}"})
+            if approve_response.status_code == 403:
+                self.log_success("Nurse correctly denied permission to approve procedures")
+            else:
+                self.log_error(f"Expected 403 for approve, got {approve_response.status_code}")
+                success = False
+        except Exception as e:
+            self.log_error(f"Error testing approve restriction: {e}")
             success = False
             
         return success
