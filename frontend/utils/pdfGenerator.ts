@@ -290,6 +290,7 @@ const getChecklistLabel = (section: string, id: string): string => {
       payment: 'Full payment done',
       medical_assessment: 'Medical assessment done',
       realguide: 'RealGUIDE Planning and Report',
+      oral_prophylaxis: 'Oral Prophylaxis done',
     },
     surgical: {
       consent_form: 'Signed Patient consent form',
