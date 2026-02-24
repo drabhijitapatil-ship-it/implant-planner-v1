@@ -323,15 +323,10 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus:
-    - "New Procedure Form Submission (Android Crash Fix - Issue #5)"
-    - "User Lists Filtering (Issues #1-3)"
-    - "Nurse Role Read-Only Access"
-    - "PDF Export Feature (Issue #4)"
-    - "Checklist Update - Oral Prophylaxis (Issue #7)"
+  current_focus: []
   stuck_tasks: []
   test_all: false
-  test_priority: "high_first"
+  test_priority: "completed"
 
 agent_communication:
   - agent: "testing"
