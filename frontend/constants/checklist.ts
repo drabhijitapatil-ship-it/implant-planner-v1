@@ -11,6 +11,7 @@ export const CHECKLIST_DATA = {
       { id: 'payment', label: 'Full payment done' },
       { id: 'medical_assessment', label: 'Medical assessment done' },
       { id: 'realguide', label: 'RealGUIDE Planning and Report' },
+      { id: 'oral_prophylaxis', label: 'Oral Prophylaxis done' },
     ],
     additionalFields: [
       { id: 'implant_specs', label: 'Number of Implant with specifications (company, length, diameter etc.)' },
