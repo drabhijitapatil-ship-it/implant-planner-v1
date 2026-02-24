@@ -52,12 +52,22 @@ export default function NewProcedureScreen() {
 
   const loadUsers = async () => {
     try {
-      const [instructorsRes, implantInchargesRes] = await Promise.all([
-        api.get('/users?role=instructor'),
-        api.get('/users?role=implant_incharge'),
-      ]);
-      setInstructors(instructorsRes.data);
-      setImplantIncharges(implantInchargesRes.data);
+      // Get all users and filter by role
+      const usersRes = await api.get('/users');
+      const allUsers = usersRes.data;
+      
+      // Instructors include: instructor role AND administrator role
+      const instructorList = allUsers.filter((u: any) => 
+        u.role === 'instructor' || u.role === 'administrator' || u.role === 'implant_incharge'
+      );
+      
+      // Implant Incharges include: implant_incharge role AND administrator role
+      const inchargeList = allUsers.filter((u: any) => 
+        u.role === 'implant_incharge' || u.role === 'administrator'
+      );
+      
+      setInstructors(instructorList);
+      setImplantIncharges(inchargeList);
     } catch (error) {
       console.error('Failed to load users:', error);
     }
