@@ -241,7 +241,65 @@ backend:
         comment: "✅ COMPREHENSIVE PHASE-BASED WORKFLOW TESTED SUCCESSFULLY! Complete end-to-end testing of the specific scenario requested: 1) Student (Gaurav Pandey) login ✅, 2) Get instructors & administrators ✅, 3) Student creates Phase 1 procedure with pre-surgical checklist ✅ (status: pending_phase1), 4) Instructor approves Phase 1 ✅ (partial approval), 5) Implant incharge approves Phase 1 ✅ (status changes to phase1_approved), 6) Student submits Phase 2 with surgical checklist ✅ (status: pending_phase2), 7) Instructor approves Phase 2 ✅ (partial approval), 8) Implant incharge final approval ✅ (status: phase2_approved - COMPLETE!), 9) All notifications verified ✅. The phase-based workflow with dual approvals for each phase works perfectly. All status transitions, approval flags, and notifications function correctly."
 
 frontend:
-  # Frontend testing not performed by testing agent
+  - task: "New Procedure Form Submission (Android Crash Fix - Issue #5)"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/(tabs)/new-procedure.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Critical test required - test new procedure form submission with all required fields to ensure no crashes occur. This addresses Issue #5 about Android crash on submit."
+
+  - task: "User Lists Filtering (Issues #1-3)"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/(tabs)/new-procedure.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Test instructor and implant incharge dropdown lists. Dr. Abhijit Patil should appear in BOTH lists. Dr. Johnson, Dr. Sarah Johnson, Dr. Michael Chen should NOT be in instructor list. Dr. Smith should NOT be in implant incharge list. Dr. Rajeshree Jadhav should be in instructor list."
+
+  - task: "Nurse Role Read-Only Access"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/(tabs)/_layout.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Test nurse role restrictions. Nurses should NOT see 'New Procedure' tab. Dashboard and Procedures should only show approved/completed procedures. No approve/reject buttons should be visible."
+
+  - task: "PDF Export Feature (Issue #4)"
+    implemented: true
+    working: "NA"
+    file: "frontend/utils/pdfGenerator.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Test PDF export functionality for procedures with status 'phase2_approved'. Export as PDF button should be visible and functional for completed procedures."
+
+  - task: "Checklist Update - Oral Prophylaxis (Issue #7)"
+    implemented: true
+    working: "NA"
+    file: "frontend/constants/checklist.ts"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Verify 'Oral Prophylaxis done' option appears in pre-surgical checklist after 'RealGUIDE Planning and Report' item."
 
 metadata:
   created_by: "testing_agent"
