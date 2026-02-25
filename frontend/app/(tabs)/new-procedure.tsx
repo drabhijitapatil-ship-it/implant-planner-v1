@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import api from '../../utils/api';
 import ChecklistForm from '../../components/ChecklistForm';
+import BackToDashboard from '../../components/BackToDashboard';
 import { useRouter } from 'expo-router';
 import { format, addDays } from 'date-fns';
 import { Calendar } from 'react-native-calendars';
