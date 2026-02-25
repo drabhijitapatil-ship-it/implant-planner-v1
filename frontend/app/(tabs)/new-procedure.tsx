@@ -66,9 +66,9 @@ export default function NewProcedureScreen() {
       const usersRes = await api.get('/users');
       const allUsers = usersRes.data;
       
-      // Instructors include: instructor role AND administrator role
-      const instructorList = allUsers.filter((u: any) => 
-        u.role === 'instructor' || u.role === 'administrator' || u.role === 'implant_incharge'
+      // Supervisors include: supervisor role AND administrator role (Dr. Abhijit Patil appears here too)
+      const supervisorList = allUsers.filter((u: any) => 
+        u.role === 'supervisor' || u.role === 'administrator' || u.role === 'implant_incharge'
       );
       
       // Implant Incharges include: implant_incharge role AND administrator role
@@ -76,7 +76,7 @@ export default function NewProcedureScreen() {
         u.role === 'implant_incharge' || u.role === 'administrator'
       );
       
-      setInstructors(instructorList);
+      setInstructors(supervisorList);
       setImplantIncharges(inchargeList);
     } catch (error) {
       console.error('Failed to load users:', error);
@@ -87,12 +87,12 @@ export default function NewProcedureScreen() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleInstructorChange = (instructorId: string) => {
-    const instructor = instructors.find((i: any) => i.id === instructorId);
+  const handleInstructorChange = (supervisorId: string) => {
+    const supervisor = instructors.find((i: any) => i.id === supervisorId);
     setFormData((prev) => ({
       ...prev,
-      instructor_id: instructorId,
-      instructor_name: instructor ? (instructor as any).name : '',
+      instructor_id: supervisorId,
+      instructor_name: supervisor ? (supervisor as any).name : '',
     }));
   };
 
