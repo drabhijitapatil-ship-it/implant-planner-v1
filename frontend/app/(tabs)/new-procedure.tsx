@@ -393,6 +393,116 @@ export default function NewProcedureScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Instructor Dropdown Modal */}
+      <Modal
+        visible={showInstructorDropdown}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowInstructorDropdown(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.dropdownModal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Instructor</Text>
+              <TouchableOpacity onPress={() => setShowInstructorDropdown(false)}>
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={instructors}
+              keyExtractor={(item: any) => item.id}
+              renderItem={({ item }: any) => (
+                <TouchableOpacity
+                  style={[
+                    styles.dropdownItem,
+                    formData.instructor_id === item.id && styles.dropdownItemSelected,
+                  ]}
+                  onPress={() => {
+                    handleInstructorChange(item.id);
+                    setShowInstructorDropdown(false);
+                  }}
+                >
+                  <View style={styles.dropdownItemContent}>
+                    <Ionicons 
+                      name="person-circle" 
+                      size={32} 
+                      color={formData.instructor_id === item.id ? '#007AFF' : '#666'} 
+                    />
+                    <View>
+                      <Text style={[
+                        styles.dropdownItemText,
+                        formData.instructor_id === item.id && styles.dropdownItemTextSelected,
+                      ]}>
+                        {item.name}
+                      </Text>
+                      <Text style={styles.dropdownItemRole}>{item.role}</Text>
+                    </View>
+                  </View>
+                  {formData.instructor_id === item.id && (
+                    <Ionicons name="checkmark-circle" size={24} color="#007AFF" />
+                  )}
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Implant Incharge Dropdown Modal */}
+      <Modal
+        visible={showInchargeDropdown}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowInchargeDropdown(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.dropdownModal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Implant Incharge</Text>
+              <TouchableOpacity onPress={() => setShowInchargeDropdown(false)}>
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={implantIncharges}
+              keyExtractor={(item: any) => item.id}
+              renderItem={({ item }: any) => (
+                <TouchableOpacity
+                  style={[
+                    styles.dropdownItem,
+                    formData.implant_incharge_id === item.id && styles.dropdownItemSelected,
+                  ]}
+                  onPress={() => {
+                    handleImplantInchargeChange(item.id);
+                    setShowInchargeDropdown(false);
+                  }}
+                >
+                  <View style={styles.dropdownItemContent}>
+                    <Ionicons 
+                      name="person-circle" 
+                      size={32} 
+                      color={formData.implant_incharge_id === item.id ? '#007AFF' : '#666'} 
+                    />
+                    <View>
+                      <Text style={[
+                        styles.dropdownItemText,
+                        formData.implant_incharge_id === item.id && styles.dropdownItemTextSelected,
+                      ]}>
+                        {item.name}
+                      </Text>
+                      <Text style={styles.dropdownItemRole}>{item.role}</Text>
+                    </View>
+                  </View>
+                  {formData.implant_incharge_id === item.id && (
+                    <Ionicons name="checkmark-circle" size={24} color="#007AFF" />
+                  )}
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
