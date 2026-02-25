@@ -228,13 +228,13 @@ export default function NewProcedureScreen() {
 
             <Text style={styles.sectionTitle}>Medical Team</Text>
 
-            <Text style={styles.label}>Instructor *</Text>
+            <Text style={styles.label}>Supervisor *</Text>
             <TouchableOpacity 
               style={styles.dropdownButton}
               onPress={() => setShowInstructorDropdown(true)}
             >
               <Text style={formData.instructor_name ? styles.dropdownText : styles.dropdownPlaceholder}>
-                {formData.instructor_name || 'Select Instructor'}
+                {formData.instructor_name || 'Select Supervisor'}
               </Text>
               <Ionicons name="chevron-down" size={20} color="#666" />
             </TouchableOpacity>
