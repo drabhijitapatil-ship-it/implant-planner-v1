@@ -188,6 +188,7 @@ export default function NewProcedureScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
+      <BackToDashboard />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
