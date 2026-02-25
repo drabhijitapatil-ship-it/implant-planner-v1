@@ -110,7 +110,7 @@ export const generateProcedurePDF = async (procedure: any) => {
             <h1>Dental Implant Procedure Report</h1>
             <p>Department of Prosthodontics</p>
             <p>Bharati Vidyapeeth Dental College and Hospital, Pune</p>
-            <span class="status-badge">✓ COMPLETED</span>
+            <span class="status-badge">✓ STAGE 1 IMPLANT PLACEMENT DONE SUCCESSFULLY</span>
           </div>
 
           <div class="section">
