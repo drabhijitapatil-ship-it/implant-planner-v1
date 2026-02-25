@@ -35,10 +35,10 @@ export default function ProfileScreen() {
     switch (role) {
       case 'student':
         return 'Postgraduate Student';
-      case 'instructor':
-        return 'Instructor/Faculty';
+      case 'supervisor':
+        return 'Supervisor';
       case 'administrator':
-        return 'Administrator';
+        return 'Administrator (Supervisor + Implant Incharge)';
       case 'implant_incharge':
         return 'Implant Incharge';
       case 'nurse':
