@@ -41,6 +41,10 @@ export default function NotificationsScreen() {
     loadNotifications();
   };
 
+  const goToDashboard = () => {
+    router.push('/(tabs)/dashboard');
+  };
+
   const markAsRead = async (notificationId: string) => {
     try {
       await api.put(`/notifications/${notificationId}/read`);
