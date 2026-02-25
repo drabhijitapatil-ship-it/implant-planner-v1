@@ -7,7 +7,7 @@ interface BackToDashboardProps {
   label?: string;
 }
 
-export default function BackToDashboard({ label = 'Back to Dashboard' }: BackToDashboardProps) {
+export default function BackToDashboard({ label = 'Dashboard' }: BackToDashboardProps) {
   const router = useRouter();
 
   const handlePress = () => {
@@ -15,34 +15,39 @@ export default function BackToDashboard({ label = 'Back to Dashboard' }: BackToD
   };
 
   return (
-    <TouchableOpacity style={styles.backButton} onPress={handlePress}>
-      <Ionicons name="arrow-back-circle" size={28} color="#FFF" />
-      <Text style={styles.backButtonText}>{label}</Text>
-    </TouchableOpacity>
+    <View style={styles.container}>
+      <TouchableOpacity style={styles.backButton} onPress={handlePress}>
+        <Ionicons name="arrow-back" size={20} color="#FFF" />
+        <Text style={styles.backButtonText}>{label}</Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+    alignItems: 'flex-start',
+  },
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     backgroundColor: '#DC3545',
-    borderBottomWidth: 0,
-    gap: 10,
-    marginHorizontal: 16,
-    marginVertical: 12,
-    borderRadius: 12,
+    borderRadius: 25,
+    gap: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+    shadowRadius: 3,
+    elevation: 3,
   },
   backButtonText: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#FFF',
-    fontWeight: '700',
+    fontWeight: '600',
   },
 });
