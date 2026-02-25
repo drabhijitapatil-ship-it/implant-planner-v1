@@ -123,6 +123,12 @@ export default function ProceduresScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
+      {/* Back to Dashboard Header */}
+      <TouchableOpacity style={styles.backButton} onPress={goToDashboard}>
+        <Ionicons name="arrow-back" size={24} color="#007AFF" />
+        <Text style={styles.backButtonText}>Back to Dashboard</Text>
+      </TouchableOpacity>
+
       <View style={styles.filterContainer}>
         {filterButtons.map((btn) => (
           <TouchableOpacity
