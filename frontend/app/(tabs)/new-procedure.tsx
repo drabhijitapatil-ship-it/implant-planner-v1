@@ -280,7 +280,7 @@ export default function NewProcedureScreen() {
 
             <Text style={styles.label}>Receipt Number *</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, fieldErrors.receipt_number && styles.inputError]}
               value={formData.receipt_number}
               onChangeText={(value) => handleInputChange('receipt_number', value)}
               placeholder="Enter receipt number"
@@ -288,7 +288,7 @@ export default function NewProcedureScreen() {
 
             <Text style={styles.label}>Amount Paid (INR) *</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, fieldErrors.amount_paid && styles.inputError]}
               value={formData.amount_paid}
               onChangeText={(value) => handleInputChange('amount_paid', value)}
               placeholder="Enter amount"
