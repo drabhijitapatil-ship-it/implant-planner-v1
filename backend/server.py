@@ -84,6 +84,7 @@ class UserResponse(BaseModel):
     role: str
 
 class ChecklistItem(BaseModel):
+    id: Optional[str] = None
     label: str
     value: Optional[bool] = None
 
