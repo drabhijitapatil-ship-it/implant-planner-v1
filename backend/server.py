@@ -71,7 +71,7 @@ class UserRegister(BaseModel):
     name: str
     email: EmailStr
     password: str
-    role: str  # student, instructor, implant_incharge, administrator, nurse
+    role: str  # student, supervisor, implant_incharge, administrator, nurse
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -100,8 +100,8 @@ class ProcedureCreate(BaseModel):
     student_name: str
     patient_name: str
     registration_number: str
-    instructor_id: str
-    instructor_name: str
+    supervisor_id: str
+    supervisor_name: str
     implant_incharge_id: str
     implant_incharge_name: str
     implant_site: str
@@ -117,8 +117,8 @@ class ProcedureCreate(BaseModel):
 class ProcedureUpdate(BaseModel):
     patient_name: Optional[str] = None
     registration_number: Optional[str] = None
-    instructor_id: Optional[str] = None
-    instructor_name: Optional[str] = None
+    supervisor_id: Optional[str] = None
+    supervisor_name: Optional[str] = None
     implant_incharge_id: Optional[str] = None
     implant_incharge_name: Optional[str] = None
     implant_site: Optional[str] = None
@@ -157,7 +157,7 @@ async def register(user: UserRegister):
         raise HTTPException(status_code=400, detail="Email already registered")
     
     # Validate role
-    if user.role not in ["student", "instructor", "implant_incharge", "administrator", "nurse"]:
+    if user.role not in ["student", "supervisor", "implant_incharge", "administrator", "nurse"]:
         raise HTTPException(status_code=400, detail="Invalid role")
     
     # Create user
@@ -251,9 +251,9 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
         "student_id": current_user["_id"],
         "status": "pending_phase1",  # Phase 1: Pre-surgical approval
         "current_phase": 1,
-        "instructor_phase1_approved": False,
+        "supervisor_phase1_approved": False,
         "implant_incharge_phase1_approved": False,
-        "instructor_phase2_approved": False,
+        "supervisor_phase2_approved": False,
         "implant_incharge_phase2_approved": False,
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow()
@@ -262,9 +262,9 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
     result = await db.procedures.insert_one(procedure_dict)
     procedure_id = str(result.inserted_id)
     
-    # Create notification for instructor that they have been assigned
+    # Create notification for supervisor that they have been assigned
     await db.notifications.insert_one({
-        "user_id": procedure.instructor_id,
+        "user_id": procedure.supervisor_id,
         "procedure_id": procedure_id,
         "message": f"You have been assigned as Instructor for a new procedure by {procedure.student_name} for patient {procedure.patient_name}",
         "type": "assignment",
@@ -272,9 +272,9 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
         "created_at": datetime.utcnow()
     })
     
-    # Create notifications for BOTH instructor and implant incharge for approval
+    # Create notifications for BOTH supervisor and implant incharge for approval
     await db.notifications.insert_one({
-        "user_id": procedure.instructor_id,
+        "user_id": procedure.supervisor_id,
         "procedure_id": procedure_id,
         "message": f"Phase 1: New pre-surgical protocol submitted by {procedure.student_name} for patient {procedure.patient_name}",
         "type": "approval_request",
@@ -306,8 +306,8 @@ async def get_procedures(
     # Filter based on role
     if current_user["role"] == "student":
         query["student_id"] = current_user["_id"]
-    elif current_user["role"] == "instructor":
-        query["instructor_id"] = current_user["_id"]
+    elif current_user["role"] == "supervisor":
+        query["supervisor_id"] = current_user["_id"]
     elif current_user["role"] == "nurse":
         # Nurses can only see fully approved/completed procedures
         query["status"] = {"$in": ["phase1_approved", "phase2_approved", "approved"]}
@@ -337,7 +337,7 @@ async def get_procedure(procedure_id: str, current_user: dict = Depends(get_curr
     # Check access
     if current_user["role"] == "student" and procedure["student_id"] != current_user["_id"]:
         raise HTTPException(status_code=403, detail="Access denied")
-    elif current_user["role"] == "instructor" and procedure["instructor_id"] != current_user["_id"]:
+    elif current_user["role"] == "supervisor" and procedure["supervisor_id"] != current_user["_id"]:
         raise HTTPException(status_code=403, detail="Access denied")
     elif current_user["role"] == "nurse":
         # Nurses can only view approved/completed procedures
@@ -368,11 +368,11 @@ async def update_procedure(
         # Students can only edit their own pending procedures
         if procedure["student_id"] != current_user["_id"]:
             raise HTTPException(status_code=403, detail="Access denied")
-        if procedure["status"] != "pending_instructor":
+        if procedure["status"] != "pending_supervisor":
             raise HTTPException(status_code=403, detail="Cannot edit approved procedures")
-    elif current_user["role"] == "instructor":
-        # Instructors can edit if they are the instructor
-        if procedure["instructor_id"] != current_user["_id"]:
+    elif current_user["role"] == "supervisor":
+        # Instructors can edit if they are the supervisor
+        if procedure["supervisor_id"] != current_user["_id"]:
             raise HTTPException(status_code=403, detail="Access denied")
     # implant_incharge can edit all
     
@@ -421,43 +421,43 @@ async def approve_procedure(
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
     
-    # Check if user is instructor, implant incharge, or administrator
-    is_instructor = (current_user["role"] == "instructor" or current_user["role"] == "administrator") and current_user["_id"] == procedure["instructor_id"]
+    # Check if user is supervisor, implant incharge, or administrator
+    is_supervisor = (current_user["role"] == "supervisor" or current_user["role"] == "administrator") and current_user["_id"] == procedure["supervisor_id"]
     is_implant_incharge = (current_user["role"] == "implant_incharge" or current_user["role"] == "administrator") and current_user["_id"] == procedure["implant_incharge_id"]
     
-    # Check if the same person is BOTH instructor AND implant incharge
-    same_person_both_roles = procedure["instructor_id"] == procedure["implant_incharge_id"]
+    # Check if the same person is BOTH supervisor AND implant incharge
+    same_person_both_roles = procedure["supervisor_id"] == procedure["implant_incharge_id"]
     
     # Determine which phase we're in
     if procedure["status"] == "pending_phase1":
         # Phase 1: Pre-surgical approval
-        if not (is_instructor or is_implant_incharge):
-            raise HTTPException(status_code=403, detail="Only assigned instructor or implant incharge can approve")
+        if not (is_supervisor or is_implant_incharge):
+            raise HTTPException(status_code=403, detail="Only assigned supervisor or implant incharge can approve")
         
         if action.action == "approve":
             # Mark this approver as having approved
             update_fields = {"updated_at": datetime.utcnow()}
             
-            # If same person is both instructor and implant incharge, approve both roles at once
-            if same_person_both_roles and (is_instructor or is_implant_incharge):
-                update_fields["instructor_phase1_approved"] = True
-                update_fields["instructor_phase1_approved_at"] = datetime.utcnow()
+            # If same person is both supervisor and implant incharge, approve both roles at once
+            if same_person_both_roles and (is_supervisor or is_implant_incharge):
+                update_fields["supervisor_phase1_approved"] = True
+                update_fields["supervisor_phase1_approved_at"] = datetime.utcnow()
                 update_fields["implant_incharge_phase1_approved"] = True
                 update_fields["implant_incharge_phase1_approved_at"] = datetime.utcnow()
             else:
-                if is_instructor:
-                    update_fields["instructor_phase1_approved"] = True
-                    update_fields["instructor_phase1_approved_at"] = datetime.utcnow()
+                if is_supervisor:
+                    update_fields["supervisor_phase1_approved"] = True
+                    update_fields["supervisor_phase1_approved_at"] = datetime.utcnow()
                 
                 if is_implant_incharge:
                     update_fields["implant_incharge_phase1_approved"] = True
                     update_fields["implant_incharge_phase1_approved_at"] = datetime.utcnow()
             
             # Check if BOTH have now approved
-            instructor_approved = procedure.get("instructor_phase1_approved", False) or is_instructor or (same_person_both_roles and is_implant_incharge)
-            implant_incharge_approved = procedure.get("implant_incharge_phase1_approved", False) or is_implant_incharge or (same_person_both_roles and is_instructor)
+            supervisor_approved = procedure.get("supervisor_phase1_approved", False) or is_supervisor or (same_person_both_roles and is_implant_incharge)
+            implant_incharge_approved = procedure.get("implant_incharge_phase1_approved", False) or is_implant_incharge or (same_person_both_roles and is_supervisor)
             
-            if instructor_approved and implant_incharge_approved:
+            if supervisor_approved and implant_incharge_approved:
                 # Both approved - move to Phase 1 Approved
                 update_fields["status"] = "phase1_approved"
                 update_fields["phase1_completed_at"] = datetime.utcnow()
@@ -474,7 +474,7 @@ async def approve_procedure(
             else:
                 # One approved, waiting for the other
                 approver_name = current_user["name"]
-                waiting_for = "implant incharge" if instructor_approved else "instructor"
+                waiting_for = "implant incharge" if supervisor_approved else "supervisor"
                 
                 # Notify student of partial approval
                 await db.notifications.insert_one({
@@ -516,7 +516,7 @@ async def approve_procedure(
             })
             
             # Notify the other approver
-            other_approver_id = procedure["implant_incharge_id"] if is_instructor else procedure["instructor_id"]
+            other_approver_id = procedure["implant_incharge_id"] if is_supervisor else procedure["supervisor_id"]
             await db.notifications.insert_one({
                 "user_id": other_approver_id,
                 "procedure_id": procedure_id,
@@ -528,33 +528,33 @@ async def approve_procedure(
     
     elif procedure["status"] == "pending_phase2":
         # Phase 2: Surgical protocol approval
-        if not (is_instructor or is_implant_incharge):
-            raise HTTPException(status_code=403, detail="Only assigned instructor or implant incharge can approve")
+        if not (is_supervisor or is_implant_incharge):
+            raise HTTPException(status_code=403, detail="Only assigned supervisor or implant incharge can approve")
         
         if action.action == "approve":
             # Mark this approver as having approved Phase 2
             update_fields = {"updated_at": datetime.utcnow()}
             
-            # If same person is both instructor and implant incharge, approve both roles at once
-            if same_person_both_roles and (is_instructor or is_implant_incharge):
-                update_fields["instructor_phase2_approved"] = True
-                update_fields["instructor_phase2_approved_at"] = datetime.utcnow()
+            # If same person is both supervisor and implant incharge, approve both roles at once
+            if same_person_both_roles and (is_supervisor or is_implant_incharge):
+                update_fields["supervisor_phase2_approved"] = True
+                update_fields["supervisor_phase2_approved_at"] = datetime.utcnow()
                 update_fields["implant_incharge_phase2_approved"] = True
                 update_fields["implant_incharge_phase2_approved_at"] = datetime.utcnow()
             else:
-                if is_instructor:
-                    update_fields["instructor_phase2_approved"] = True
-                    update_fields["instructor_phase2_approved_at"] = datetime.utcnow()
+                if is_supervisor:
+                    update_fields["supervisor_phase2_approved"] = True
+                    update_fields["supervisor_phase2_approved_at"] = datetime.utcnow()
                 
                 if is_implant_incharge:
                     update_fields["implant_incharge_phase2_approved"] = True
                     update_fields["implant_incharge_phase2_approved_at"] = datetime.utcnow()
             
             # Check if BOTH have now approved Phase 2
-            instructor_approved = procedure.get("instructor_phase2_approved", False) or is_instructor or (same_person_both_roles and is_implant_incharge)
-            implant_incharge_approved = procedure.get("implant_incharge_phase2_approved", False) or is_implant_incharge or (same_person_both_roles and is_instructor)
+            supervisor_approved = procedure.get("supervisor_phase2_approved", False) or is_supervisor or (same_person_both_roles and is_implant_incharge)
+            implant_incharge_approved = procedure.get("implant_incharge_phase2_approved", False) or is_implant_incharge or (same_person_both_roles and is_supervisor)
             
-            if instructor_approved and implant_incharge_approved:
+            if supervisor_approved and implant_incharge_approved:
                 # Both approved - procedure complete!
                 update_fields["status"] = "phase2_approved"
                 update_fields["phase2_completed_at"] = datetime.utcnow()
@@ -572,7 +572,7 @@ async def approve_procedure(
                 
                 # Notify both approvers
                 await db.notifications.insert_one({
-                    "user_id": procedure["instructor_id"],
+                    "user_id": procedure["supervisor_id"],
                     "procedure_id": procedure_id,
                     "message": f"Procedure for {procedure['patient_name']} fully completed",
                     "type": "approved",
@@ -591,7 +591,7 @@ async def approve_procedure(
             else:
                 # One approved, waiting for the other
                 approver_name = current_user["name"]
-                waiting_for = "implant incharge" if instructor_approved else "instructor"
+                waiting_for = "implant incharge" if supervisor_approved else "supervisor"
                 
                 # Notify student of partial approval
                 await db.notifications.insert_one({
@@ -633,7 +633,7 @@ async def approve_procedure(
             })
             
             # Notify the other approver
-            other_approver_id = procedure["implant_incharge_id"] if is_instructor else procedure["instructor_id"]
+            other_approver_id = procedure["implant_incharge_id"] if is_supervisor else procedure["supervisor_id"]
             await db.notifications.insert_one({
                 "user_id": other_approver_id,
                 "procedure_id": procedure_id,
@@ -687,9 +687,9 @@ async def submit_phase2(
         {"$set": update_data}
     )
     
-    # Notify both instructor and implant incharge
+    # Notify both supervisor and implant incharge
     await db.notifications.insert_one({
-        "user_id": procedure["instructor_id"],
+        "user_id": procedure["supervisor_id"],
         "procedure_id": procedure_id,
         "message": f"Phase 2: Surgical protocol submitted by {procedure['student_name']} for patient {procedure['patient_name']}",
         "type": "approval_request",
@@ -793,11 +793,11 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     
     if current_user["role"] == "student":
         query["student_id"] = current_user["_id"]
-    elif current_user["role"] == "instructor":
-        query["instructor_id"] = current_user["_id"]
+    elif current_user["role"] == "supervisor":
+        query["supervisor_id"] = current_user["_id"]
     
     total = await db.procedures.count_documents(query)
-    pending = await db.procedures.count_documents({**query, "status": {"$in": ["pending_instructor", "pending_implant_incharge"]}})
+    pending = await db.procedures.count_documents({**query, "status": {"$in": ["pending_supervisor", "pending_implant_incharge"]}})
     approved = await db.procedures.count_documents({**query, "status": "approved"})
     rejected = await db.procedures.count_documents({**query, "status": "rejected"})
     
