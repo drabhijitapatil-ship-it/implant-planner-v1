@@ -219,7 +219,7 @@ export default function ProcedureDetailScreen() {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <BackToDashboard />
 
-      <ScrollView>
+      <ScrollView contentContainerStyle={canExportPDF() ? styles.scrollContentWithPdf : undefined}>
         <View style={styles.statusCard}>
           <View
             style={[
