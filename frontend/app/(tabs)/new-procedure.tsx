@@ -230,7 +230,7 @@ export default function NewProcedureScreen() {
 
             <Text style={styles.label}>Patient Name *</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, fieldErrors.patient_name && styles.inputError]}
               value={formData.patient_name}
               onChangeText={(value) => handleInputChange('patient_name', value)}
               placeholder="Enter patient name"
