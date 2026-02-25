@@ -138,7 +138,19 @@ export default function NewProcedureScreen() {
         },
       ]);
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.detail || 'Failed to submit procedure');
+      console.error('Submit error:', error.response?.data);
+      let errorMessage = 'Failed to submit procedure';
+      if (error.response?.data?.detail) {
+        // Handle array-type validation errors from Pydantic
+        if (Array.isArray(error.response.data.detail)) {
+          errorMessage = error.response.data.detail
+            .map((e: any) => e.msg || e.message || JSON.stringify(e))
+            .join('\n');
+        } else {
+          errorMessage = String(error.response.data.detail);
+        }
+      }
+      Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
     }
