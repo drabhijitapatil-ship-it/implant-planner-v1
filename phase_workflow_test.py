@@ -239,23 +239,25 @@ class PhaseWorkflowTester:
         
         # Phase 2 checklist data (surgical checklist)
         phase2_data = {
-            "checklist": {
-                "surgical": [
-                    {"id": "s1", "label": "Pre-operative antiseptic rinse completed", "value": "yes"},
-                    {"id": "s2", "label": "Local anesthesia administered", "value": "yes"},
-                    {"id": "s3", "label": "Surgical site prepared and draped", "value": "yes"},
-                    {"id": "s4", "label": "Incision and flap reflection completed", "value": "yes"},
-                    {"id": "s5", "label": "Implant site preparation (drilling) completed", "value": "yes"},
-                    {"id": "s6", "label": "Implant placement completed", "value": "yes"},
-                    {"id": "s7", "label": "Bone graft/membrane placement (if applicable)", "value": "yes"},
-                    {"id": "s8", "label": "Closure and suturing completed", "value": "yes"},
-                    {"id": "s9", "label": "Post-operative instructions given", "value": "yes"},
-                    {"id": "s10", "label": "Patient vitals stable", "value": "yes"}
-                ]
-            },
-            "surgical_notes": "Implant placement completed successfully. No complications during surgery. Patient tolerated procedure well. Bone quality was adequate for primary stability.",
-            "complications": "None",
-            "next_appointment": (datetime.now() + timedelta(days=14)).strftime("%Y-%m-%d")
+            "checklist_surgical": {
+                "items": [
+                    {"id": "s1", "label": "Pre-operative antiseptic rinse completed", "value": True},
+                    {"id": "s2", "label": "Local anesthesia administered", "value": True},
+                    {"id": "s3", "label": "Surgical site prepared and draped", "value": True},
+                    {"id": "s4", "label": "Incision and flap reflection completed", "value": True},
+                    {"id": "s5", "label": "Implant site preparation (drilling) completed", "value": True},
+                    {"id": "s6", "label": "Implant placement completed", "value": True},
+                    {"id": "s7", "label": "Bone graft/membrane placement (if applicable)", "value": True},
+                    {"id": "s8", "label": "Closure and suturing completed", "value": True},
+                    {"id": "s9", "label": "Post-operative instructions given", "value": True},
+                    {"id": "s10", "label": "Patient vitals stable", "value": True}
+                ],
+                "additional_fields": {
+                    "surgical_notes": "Implant placement completed successfully. No complications during surgery. Patient tolerated procedure well. Bone quality was adequate for primary stability.",
+                    "complications": "None",
+                    "next_appointment": (datetime.now() + timedelta(days=14)).strftime("%Y-%m-%d")
+                }
+            }
         }
         
         self.log("Submitting Phase 2 with surgical checklist...")
