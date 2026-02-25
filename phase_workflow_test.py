@@ -263,13 +263,6 @@ class PhaseWorkflowTester:
         self.log("Submitting Phase 2 with surgical checklist...")
         self.log(f"Surgical checklist items: {len(phase2_data['checklist_surgical']['items'])}")
         
-        # First, initialize the checklist structure if it doesn't exist
-        init_response = requests.put(f"{BASE_URL}/procedures/{self.procedure_id}", 
-                                   json={"checklist": {}}, headers=headers)
-        
-        if init_response.status_code != 200:
-            self.log(f"Warning: Could not initialize checklist structure: {init_response.status_code}")
-        
         response = requests.post(f"{BASE_URL}/procedures/{self.procedure_id}/submit-phase2", 
                                json=phase2_data, headers=headers)
         
