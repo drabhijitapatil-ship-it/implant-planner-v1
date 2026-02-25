@@ -100,10 +100,10 @@ class PhaseWorkflowTester:
             "student_name": "Gaurav Pandey",
             "patient_name": "John Doe - Phase Workflow Test",
             "registration_number": "REG-PHASE-001",
-            "instructor_id": self.dr_abhijit_id,
-            "instructor_name": "Dr. Abhijit Patil",
-            "implant_incharge_id": self.dr_abhijit_id,  # Same person as instructor
-            "implant_incharge_name": "Dr. Abhijit Patil",  # Same person as instructor
+            "supervisor_id": self.dr_abhijit_id,
+            "supervisor_name": "Dr. Abhijit Patil",
+            "implant_incharge_id": self.dr_abhijit_id,  # Same person as supervisor
+            "implant_incharge_name": "Dr. Abhijit Patil",  # Same person as supervisor
             "implant_site": "#46 (Lower Right Second Premolar)",
             "receipt_number": "REC-PHASE-001",
             "amount_paid": 75000.0,
