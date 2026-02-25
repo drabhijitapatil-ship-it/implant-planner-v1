@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import api from '../../utils/api';
 import { useRouter } from 'expo-router';
 import { format } from 'date-fns';
+import BackToDashboard from '../../components/BackToDashboard';
 
 export default function NotificationsScreen() {
   const [notifications, setNotifications] = useState([]);
@@ -39,10 +40,6 @@ export default function NotificationsScreen() {
   const onRefresh = () => {
     setRefreshing(true);
     loadNotifications();
-  };
-
-  const goToDashboard = () => {
-    router.push('/(tabs)/dashboard');
   };
 
   const markAsRead = async (notificationId: string) => {
