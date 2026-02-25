@@ -209,15 +209,15 @@ class PhaseWorkflowTester:
             
         procedure = response.json()
         status = procedure.get("status")
-        instructor_approved = procedure.get("instructor_phase1_approved", False)
+        supervisor_approved = procedure.get("supervisor_phase1_approved", False)
         implant_incharge_approved = procedure.get("implant_incharge_phase1_approved", False)
         
         self.log(f"Verification results:")
         self.log(f"   Status: {status}")
-        self.log(f"   instructor_phase1_approved: {instructor_approved}")
+        self.log(f"   supervisor_phase1_approved: {supervisor_approved}")
         self.log(f"   implant_incharge_phase1_approved: {implant_incharge_approved}")
         
-        if status == "phase1_approved" and instructor_approved and implant_incharge_approved:
+        if status == "phase1_approved" and supervisor_approved and implant_incharge_approved:
             self.log("✅ Phase 2 is now activated (Phase 1 fully approved)")
             self.test_results.append("✅ Phase 2 activated after Phase 1 approval")
             return True
