@@ -594,6 +594,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: '#FAFAFA',
   },
+  inputError: {
+    borderColor: '#DC3545',
+    borderWidth: 2,
+    backgroundColor: '#FFF5F5',
+  },
   textArea: {
     minHeight: 80,
     textAlignVertical: 'top',
