@@ -41,8 +41,8 @@ export default function NewProcedureScreen() {
   const [formData, setFormData] = useState({
     patient_name: '',
     registration_number: '',
-    instructor_id: '',
-    instructor_name: '',
+    supervisor_id: '',
+    supervisor_name: '',
     implant_incharge_id: '',
     implant_incharge_name: '',
     implant_site: '',
@@ -56,6 +56,7 @@ export default function NewProcedureScreen() {
   });
 
   const [checklist, setChecklist] = useState({});
+  const [fieldErrors, setFieldErrors] = useState<{[key: string]: boolean}>({});
 
   useEffect(() => {
     loadUsers();
