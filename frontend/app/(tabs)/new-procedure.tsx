@@ -226,7 +226,7 @@ export default function NewProcedureScreen() {
               placeholder="Enter implant site (e.g., #16)"
             />
 
-            <Text style={styles.sectionTitle}>Medical Team</Text>
+            <Text style={styles.sectionTitle}>Faculty</Text>
 
             <Text style={styles.label}>Supervisor *</Text>
             <TouchableOpacity 
