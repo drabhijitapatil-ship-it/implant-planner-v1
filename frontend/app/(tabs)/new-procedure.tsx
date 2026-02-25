@@ -11,9 +11,9 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
+  FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Picker } from '@react-native-picker/picker';
 import { useAuth } from '../../contexts/AuthContext';
 import api from '../../utils/api';
 import ChecklistForm from '../../components/ChecklistForm';
@@ -31,6 +31,8 @@ export default function NewProcedureScreen() {
   const [instructors, setInstructors] = useState([]);
   const [implantIncharges, setImplantIncharges] = useState([]);
   const [showCalendar, setShowCalendar] = useState(false);
+  const [showInstructorDropdown, setShowInstructorDropdown] = useState(false);
+  const [showInchargeDropdown, setShowInchargeDropdown] = useState(false);
   
   // Calculate minimum date (24 hours from now for students)
   const minDate = format(addDays(new Date(), 1), 'yyyy-MM-dd');
