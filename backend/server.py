@@ -425,6 +425,9 @@ async def approve_procedure(
     is_instructor = (current_user["role"] == "instructor" or current_user["role"] == "administrator") and current_user["_id"] == procedure["instructor_id"]
     is_implant_incharge = (current_user["role"] == "implant_incharge" or current_user["role"] == "administrator") and current_user["_id"] == procedure["implant_incharge_id"]
     
+    # Check if the same person is BOTH instructor AND implant incharge
+    same_person_both_roles = procedure["instructor_id"] == procedure["implant_incharge_id"]
+    
     # Determine which phase we're in
     if procedure["status"] == "pending_phase1":
         # Phase 1: Pre-surgical approval
@@ -435,17 +438,24 @@ async def approve_procedure(
             # Mark this approver as having approved
             update_fields = {"updated_at": datetime.utcnow()}
             
-            if is_instructor:
+            # If same person is both instructor and implant incharge, approve both roles at once
+            if same_person_both_roles and (is_instructor or is_implant_incharge):
                 update_fields["instructor_phase1_approved"] = True
                 update_fields["instructor_phase1_approved_at"] = datetime.utcnow()
-            
-            if is_implant_incharge:
                 update_fields["implant_incharge_phase1_approved"] = True
                 update_fields["implant_incharge_phase1_approved_at"] = datetime.utcnow()
+            else:
+                if is_instructor:
+                    update_fields["instructor_phase1_approved"] = True
+                    update_fields["instructor_phase1_approved_at"] = datetime.utcnow()
+                
+                if is_implant_incharge:
+                    update_fields["implant_incharge_phase1_approved"] = True
+                    update_fields["implant_incharge_phase1_approved_at"] = datetime.utcnow()
             
             # Check if BOTH have now approved
-            instructor_approved = procedure.get("instructor_phase1_approved", False) or is_instructor
-            implant_incharge_approved = procedure.get("implant_incharge_phase1_approved", False) or is_implant_incharge
+            instructor_approved = procedure.get("instructor_phase1_approved", False) or is_instructor or (same_person_both_roles and is_implant_incharge)
+            implant_incharge_approved = procedure.get("implant_incharge_phase1_approved", False) or is_implant_incharge or (same_person_both_roles and is_instructor)
             
             if instructor_approved and implant_incharge_approved:
                 # Both approved - move to Phase 1 Approved
