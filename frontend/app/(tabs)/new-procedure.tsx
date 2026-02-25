@@ -86,6 +86,10 @@ export default function NewProcedureScreen() {
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+    // Clear error when field is filled
+    if (value) {
+      setFieldErrors((prev) => ({ ...prev, [field]: false }));
+    }
   };
 
   const handleInstructorChange = (supervisorId: string) => {
@@ -108,6 +112,10 @@ export default function NewProcedureScreen() {
       implant_incharge_id: inchargeId,
       implant_incharge_name: incharge ? (incharge as any).name : '',
     }));
+    // Clear error when field is filled
+    if (inchargeId) {
+      setFieldErrors((prev) => ({ ...prev, implant_incharge_id: false }));
+    }
   };
 
   const handleDateSelect = (day: any) => {
