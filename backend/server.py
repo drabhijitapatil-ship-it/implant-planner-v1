@@ -535,17 +535,24 @@ async def approve_procedure(
             # Mark this approver as having approved Phase 2
             update_fields = {"updated_at": datetime.utcnow()}
             
-            if is_instructor:
+            # If same person is both instructor and implant incharge, approve both roles at once
+            if same_person_both_roles and (is_instructor or is_implant_incharge):
                 update_fields["instructor_phase2_approved"] = True
                 update_fields["instructor_phase2_approved_at"] = datetime.utcnow()
-            
-            if is_implant_incharge:
                 update_fields["implant_incharge_phase2_approved"] = True
                 update_fields["implant_incharge_phase2_approved_at"] = datetime.utcnow()
+            else:
+                if is_instructor:
+                    update_fields["instructor_phase2_approved"] = True
+                    update_fields["instructor_phase2_approved_at"] = datetime.utcnow()
+                
+                if is_implant_incharge:
+                    update_fields["implant_incharge_phase2_approved"] = True
+                    update_fields["implant_incharge_phase2_approved_at"] = datetime.utcnow()
             
             # Check if BOTH have now approved Phase 2
-            instructor_approved = procedure.get("instructor_phase2_approved", False) or is_instructor
-            implant_incharge_approved = procedure.get("implant_incharge_phase2_approved", False) or is_implant_incharge
+            instructor_approved = procedure.get("instructor_phase2_approved", False) or is_instructor or (same_person_both_roles and is_implant_incharge)
+            implant_incharge_approved = procedure.get("implant_incharge_phase2_approved", False) or is_implant_incharge or (same_person_both_roles and is_instructor)
             
             if instructor_approved and implant_incharge_approved:
                 # Both approved - procedure complete!
