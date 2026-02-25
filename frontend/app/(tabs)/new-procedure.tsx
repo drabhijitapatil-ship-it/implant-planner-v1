@@ -342,7 +342,7 @@ export default function NewProcedureScreen() {
 
             <Text style={styles.label}>Implant Specifications *</Text>
             <TextInput
-              style={[styles.input, styles.textArea]}
+              style={[styles.input, styles.textArea, fieldErrors.implant_specifications && styles.inputError]}
               value={formData.implant_specifications}
               onChangeText={(value) => handleInputChange('implant_specifications', value)}
               placeholder="Enter number of implants with specifications (company, length, diameter, etc.)"
