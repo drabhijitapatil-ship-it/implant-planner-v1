@@ -14,6 +14,7 @@ import api from '../../utils/api';
 import { useRouter } from 'expo-router';
 import { format } from 'date-fns';
 import { STATUS_COLORS, STATUS_LABELS } from '../../constants/checklist';
+import BackToDashboard from '../../components/BackToDashboard';
 
 export default function ProceduresScreen() {
   const [procedures, setProcedures] = useState([]);
@@ -45,10 +46,6 @@ export default function ProceduresScreen() {
   const onRefresh = () => {
     setRefreshing(true);
     loadProcedures();
-  };
-
-  const goToDashboard = () => {
-    router.push('/(tabs)/dashboard');
   };
 
   const renderProcedure = ({ item }: any) => (
