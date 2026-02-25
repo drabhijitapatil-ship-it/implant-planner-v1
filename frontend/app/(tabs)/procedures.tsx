@@ -47,6 +47,10 @@ export default function ProceduresScreen() {
     loadProcedures();
   };
 
+  const goToDashboard = () => {
+    router.push('/(tabs)/dashboard');
+  };
+
   const renderProcedure = ({ item }: any) => (
     <TouchableOpacity
       style={styles.procedureCard}
