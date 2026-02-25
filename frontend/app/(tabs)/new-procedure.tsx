@@ -396,7 +396,7 @@ export default function NewProcedureScreen() {
         </View>
       </Modal>
 
-      {/* Instructor Dropdown Modal */}
+      {/* Supervisor Dropdown Modal */}
       <Modal
         visible={showInstructorDropdown}
         animationType="slide"
@@ -406,7 +406,7 @@ export default function NewProcedureScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.dropdownModal}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Instructor</Text>
+              <Text style={styles.modalTitle}>Select Supervisor</Text>
               <TouchableOpacity onPress={() => setShowInstructorDropdown(false)}>
                 <Ionicons name="close" size={24} color="#333" />
               </TouchableOpacity>
