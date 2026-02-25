@@ -127,7 +127,7 @@ export default function NewProcedureScreen() {
     const requiredFields = [
       { field: 'patient_name', label: 'Patient Name' },
       { field: 'registration_number', label: 'Registration Number' },
-      { field: 'instructor_id', label: 'Instructor' },
+      { field: 'supervisor_id', label: 'Supervisor' },
       { field: 'implant_incharge_id', label: 'Implant Incharge' },
       { field: 'implant_site', label: 'Implant Site' },
       { field: 'receipt_number', label: 'Receipt Number' },
@@ -138,11 +138,24 @@ export default function NewProcedureScreen() {
       { field: 'bone_graft_specifications', label: 'Bone Graft/Membrane Specifications' },
     ];
 
+    const errors: {[key: string]: boolean} = {};
+    const missingFields: string[] = [];
+
     for (const { field, label } of requiredFields) {
       if (!formData[field as keyof typeof formData]) {
-        Alert.alert('Validation Error', `${label} is required`);
-        return false;
+        errors[field] = true;
+        missingFields.push(label);
       }
+    }
+
+    setFieldErrors(errors);
+
+    if (missingFields.length > 0) {
+      Alert.alert(
+        'Required Fields Missing', 
+        `Please fill in the following fields:\n\n• ${missingFields.join('\n• ')}`
+      );
+      return false;
     }
 
     return true;
