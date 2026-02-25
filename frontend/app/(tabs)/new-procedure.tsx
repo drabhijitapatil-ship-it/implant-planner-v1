@@ -10,6 +10,7 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from '@react-native-picker/picker';
@@ -17,7 +18,10 @@ import { useAuth } from '../../contexts/AuthContext';
 import api from '../../utils/api';
 import ChecklistForm from '../../components/ChecklistForm';
 import { useRouter } from 'expo-router';
-import { format } from 'date-fns';
+import { format, addDays } from 'date-fns';
+import { Calendar } from 'react-native-calendars';
+import { Ionicons } from '@expo/vector-icons';
+import { PROCEDURE_TIME_SLOTS } from '../../constants/checklist';
 
 export default function NewProcedureScreen() {
   const { user } = useAuth();
@@ -26,6 +30,10 @@ export default function NewProcedureScreen() {
   const [loading, setLoading] = useState(false);
   const [instructors, setInstructors] = useState([]);
   const [implantIncharges, setImplantIncharges] = useState([]);
+  const [showCalendar, setShowCalendar] = useState(false);
+  
+  // Calculate minimum date (24 hours from now for students)
+  const minDate = format(addDays(new Date(), 1), 'yyyy-MM-dd');
   
   const [formData, setFormData] = useState({
     patient_name: '',
@@ -37,8 +45,8 @@ export default function NewProcedureScreen() {
     implant_site: '',
     receipt_number: '',
     amount_paid: '',
-    procedure_date: format(new Date(), 'yyyy-MM-dd'),
-    procedure_time: '09:30',
+    procedure_date: minDate,
+    procedure_time: '10:00',
     implant_specifications: '',
     bone_graft_specifications: '',
     remark: '',
@@ -52,7 +60,6 @@ export default function NewProcedureScreen() {
 
   const loadUsers = async () => {
     try {
-      // Get all users and filter by role
       const usersRes = await api.get('/users');
       const allUsers = usersRes.data;
       
@@ -82,7 +89,7 @@ export default function NewProcedureScreen() {
     setFormData((prev) => ({
       ...prev,
       instructor_id: instructorId,
-      instructor_name: instructor?.name || '',
+      instructor_name: instructor ? (instructor as any).name : '',
     }));
   };
 
@@ -91,26 +98,33 @@ export default function NewProcedureScreen() {
     setFormData((prev) => ({
       ...prev,
       implant_incharge_id: inchargeId,
-      implant_incharge_name: incharge?.name || '',
+      implant_incharge_name: incharge ? (incharge as any).name : '',
     }));
   };
 
+  const handleDateSelect = (day: any) => {
+    setFormData((prev) => ({ ...prev, procedure_date: day.dateString }));
+    setShowCalendar(false);
+  };
+
   const validateForm = () => {
-    const required = [
-      'patient_name',
-      'registration_number',
-      'instructor_id',
-      'implant_incharge_id',
-      'implant_site',
-      'receipt_number',
-      'amount_paid',
-      'procedure_date',
-      'procedure_time',
+    const requiredFields = [
+      { field: 'patient_name', label: 'Patient Name' },
+      { field: 'registration_number', label: 'Registration Number' },
+      { field: 'instructor_id', label: 'Instructor' },
+      { field: 'implant_incharge_id', label: 'Implant Incharge' },
+      { field: 'implant_site', label: 'Implant Site' },
+      { field: 'receipt_number', label: 'Receipt Number' },
+      { field: 'amount_paid', label: 'Amount Paid' },
+      { field: 'procedure_date', label: 'Procedure Date' },
+      { field: 'procedure_time', label: 'Procedure Time' },
+      { field: 'implant_specifications', label: 'Implant Specifications' },
+      { field: 'bone_graft_specifications', label: 'Bone Graft/Membrane Specifications' },
     ];
 
-    for (const field of required) {
+    for (const { field, label } of requiredFields) {
       if (!formData[field as keyof typeof formData]) {
-        Alert.alert('Validation Error', `Please fill in ${field.replace(/_/g, ' ')}`);
+        Alert.alert('Validation Error', `${label} is required`);
         return false;
       }
     }
@@ -141,7 +155,6 @@ export default function NewProcedureScreen() {
       console.error('Submit error:', error.response?.data);
       let errorMessage = 'Failed to submit procedure';
       if (error.response?.data?.detail) {
-        // Handle array-type validation errors from Pydantic
         if (Array.isArray(error.response.data.detail)) {
           errorMessage = error.response.data.detail
             .map((e: any) => e.msg || e.message || JSON.stringify(e))
@@ -154,6 +167,20 @@ export default function NewProcedureScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const formatDisplayDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      return format(date, 'EEEE, MMMM d, yyyy');
+    } catch {
+      return dateString;
+    }
+  };
+
+  const getTimeSlotLabel = (value: string) => {
+    const slot = PROCEDURE_TIME_SLOTS.find(s => s.value === value);
+    return slot ? slot.label : value;
   };
 
   return (
@@ -192,16 +219,17 @@ export default function NewProcedureScreen() {
               style={styles.input}
               value={formData.implant_site}
               onChangeText={(value) => handleInputChange('implant_site', value)}
-              placeholder="Enter implant site (e.g., #16, #26)"
+              placeholder="Enter implant site (e.g., #16)"
             />
 
-            <Text style={styles.sectionTitle}>Staff Assignment</Text>
+            <Text style={styles.sectionTitle}>Medical Team</Text>
 
             <Text style={styles.label}>Instructor *</Text>
             <View style={styles.pickerContainer}>
               <Picker
                 selectedValue={formData.instructor_id}
                 onValueChange={handleInstructorChange}
+                style={styles.picker}
               >
                 <Picker.Item label="Select Instructor" value="" />
                 {instructors.map((instructor: any) => (
@@ -215,6 +243,7 @@ export default function NewProcedureScreen() {
               <Picker
                 selectedValue={formData.implant_incharge_id}
                 onValueChange={handleImplantInchargeChange}
+                style={styles.picker}
               >
                 <Picker.Item label="Select Implant Incharge" value="" />
                 {implantIncharges.map((incharge: any) => (
@@ -233,71 +262,98 @@ export default function NewProcedureScreen() {
               placeholder="Enter receipt number"
             />
 
-            <Text style={styles.label}>Amount Paid *</Text>
+            <Text style={styles.label}>Amount Paid (INR) *</Text>
             <TextInput
               style={styles.input}
               value={formData.amount_paid}
               onChangeText={(value) => handleInputChange('amount_paid', value)}
-              placeholder="Enter amount paid"
+              placeholder="Enter amount"
               keyboardType="numeric"
             />
 
-            <Text style={styles.sectionTitle}>Scheduling</Text>
+            <Text style={styles.sectionTitle}>Schedule</Text>
 
             <Text style={styles.label}>Procedure Date *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.procedure_date}
-              onChangeText={(value) => handleInputChange('procedure_date', value)}
-              placeholder="YYYY-MM-DD"
-            />
+            <TouchableOpacity 
+              style={styles.datePickerButton}
+              onPress={() => setShowCalendar(true)}
+            >
+              <Ionicons name="calendar" size={20} color="#007AFF" />
+              <Text style={styles.datePickerText}>{formatDisplayDate(formData.procedure_date)}</Text>
+              <Ionicons name="chevron-down" size={20} color="#666" />
+            </TouchableOpacity>
+            <Text style={styles.helperText}>
+              Note: Students must schedule at least 24 hours in advance
+            </Text>
 
             <Text style={styles.label}>Procedure Time *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.procedure_time}
-              onChangeText={(value) => handleInputChange('procedure_time', value)}
-              placeholder="HH:MM (e.g., 09:30)"
-            />
+            <View style={styles.timeSlotContainer}>
+              {PROCEDURE_TIME_SLOTS.map((slot) => (
+                <TouchableOpacity
+                  key={slot.value}
+                  style={[
+                    styles.timeSlotButton,
+                    formData.procedure_time === slot.value && styles.timeSlotButtonActive,
+                  ]}
+                  onPress={() => handleInputChange('procedure_time', slot.value)}
+                >
+                  <Ionicons 
+                    name="time" 
+                    size={18} 
+                    color={formData.procedure_time === slot.value ? '#FFF' : '#007AFF'} 
+                  />
+                  <Text
+                    style={[
+                      styles.timeSlotText,
+                      formData.procedure_time === slot.value && styles.timeSlotTextActive,
+                    ]}
+                  >
+                    {slot.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
-            <Text style={styles.sectionTitle}>Additional Information</Text>
+            <Text style={styles.sectionTitle}>Implant Details (Mandatory)</Text>
 
-            <Text style={styles.label}>Implant Specifications</Text>
+            <Text style={styles.label}>Implant Specifications *</Text>
             <TextInput
               style={[styles.input, styles.textArea]}
               value={formData.implant_specifications}
               onChangeText={(value) => handleInputChange('implant_specifications', value)}
-              placeholder="Company, length, diameter, etc."
+              placeholder="Enter number of implants with specifications (company, length, diameter, etc.)"
               multiline
               numberOfLines={3}
             />
 
-            <Text style={styles.label}>Bone Graft/Membrane Specifications</Text>
+            <Text style={styles.label}>Bone Graft/Membrane Specifications *</Text>
             <TextInput
               style={[styles.input, styles.textArea]}
               value={formData.bone_graft_specifications}
               onChangeText={(value) => handleInputChange('bone_graft_specifications', value)}
-              placeholder="If applicable"
+              placeholder="Enter bone graft/membrane specifications"
               multiline
               numberOfLines={3}
             />
 
-            <Text style={styles.label}>Remark</Text>
+            <Text style={styles.label}>Additional Remarks (Optional)</Text>
             <TextInput
               style={[styles.input, styles.textArea]}
               value={formData.remark}
               onChangeText={(value) => handleInputChange('remark', value)}
-              placeholder="Additional remarks"
+              placeholder="Enter any additional remarks"
               multiline
-              numberOfLines={3}
+              numberOfLines={2}
             />
-          </View>
 
-          <ChecklistForm checklist={checklist} onChecklistChange={setChecklist} phase={1} />
+            <ChecklistForm 
+              checklist={checklist} 
+              onChecklistChange={setChecklist}
+              phase={1}
+            />
 
-          <View style={styles.buttonContainer}>
             <TouchableOpacity
-              style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+              style={[styles.submitButton, loading && styles.buttonDisabled]}
               onPress={handleSubmit}
               disabled={loading}
             >
@@ -310,6 +366,37 @@ export default function NewProcedureScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Calendar Modal */}
+      <Modal
+        visible={showCalendar}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowCalendar(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.calendarModal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Date</Text>
+              <TouchableOpacity onPress={() => setShowCalendar(false)}>
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+            <Calendar
+              minDate={minDate}
+              onDayPress={handleDateSelect}
+              markedDates={{
+                [formData.procedure_date]: { selected: true, selectedColor: '#007AFF' },
+              }}
+              theme={{
+                todayTextColor: '#007AFF',
+                selectedDayBackgroundColor: '#007AFF',
+                arrowColor: '#007AFF',
+              }}
+            />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -323,26 +410,30 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 32,
+    padding: 16,
   },
   header: {
-    backgroundColor: '#FFF',
-    padding: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
+    marginBottom: 24,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#1A1A1A',
-    marginBottom: 4,
   },
   subtitle: {
     fontSize: 14,
     color: '#666',
+    marginTop: 4,
   },
   form: {
+    backgroundColor: '#FFF',
+    borderRadius: 16,
     padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   sectionTitle: {
     fontSize: 18,
@@ -350,12 +441,15 @@ const styles = StyleSheet.create({
     color: '#1A1A1A',
     marginTop: 16,
     marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+    paddingBottom: 8,
   },
   label: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#1A1A1A',
-    marginBottom: 8,
+    fontWeight: '500',
+    color: '#333',
+    marginBottom: 6,
     marginTop: 12,
   },
   input: {
@@ -363,8 +457,8 @@ const styles = StyleSheet.create({
     borderColor: '#DDD',
     borderRadius: 8,
     padding: 12,
-    fontSize: 14,
-    backgroundColor: '#FFF',
+    fontSize: 16,
+    backgroundColor: '#FAFAFA',
   },
   textArea: {
     minHeight: 80,
@@ -374,24 +468,97 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#DDD',
     borderRadius: 8,
-    backgroundColor: '#FFF',
+    backgroundColor: '#FAFAFA',
     overflow: 'hidden',
   },
-  buttonContainer: {
+  picker: {
+    height: 50,
+  },
+  datePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#DDD',
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: '#FAFAFA',
+    gap: 8,
+  },
+  datePickerText: {
+    flex: 1,
+    fontSize: 16,
+    color: '#333',
+  },
+  helperText: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  timeSlotContainer: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  timeSlotButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#007AFF',
+    borderRadius: 12,
     padding: 16,
+    gap: 8,
+    backgroundColor: '#FFF',
+  },
+  timeSlotButtonActive: {
+    backgroundColor: '#007AFF',
+  },
+  timeSlotText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#007AFF',
+  },
+  timeSlotTextActive: {
+    color: '#FFF',
   },
   submitButton: {
     backgroundColor: '#007AFF',
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
+    marginTop: 24,
   },
-  submitButtonDisabled: {
+  buttonDisabled: {
     opacity: 0.6,
   },
   submitButtonText: {
     color: '#FFF',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  calendarModal: {
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
   },
 });
