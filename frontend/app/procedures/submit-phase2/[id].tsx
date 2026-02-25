@@ -61,19 +61,17 @@ export default function Phase2SubmissionScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#007AFF" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Submit Phase 2</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <BackToDashboard />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
         <ScrollView contentContainerStyle={styles.scrollContent}>
+          <View style={styles.titleContainer}>
+            <Text style={styles.pageTitle}>Submit Phase 2 - Surgical Protocols</Text>
+          </View>
+          
           <View style={styles.infoBox}>
             <Ionicons name="information-circle" size={24} color="#007AFF" />
             <Text style={styles.infoText}>
