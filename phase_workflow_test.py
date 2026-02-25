@@ -261,7 +261,7 @@ class PhaseWorkflowTester:
         }
         
         self.log("Submitting Phase 2 with surgical checklist...")
-        self.log(f"Surgical checklist items: {len(phase2_data['checklist']['surgical'])}")
+        self.log(f"Surgical checklist items: {len(phase2_data['checklist_surgical']['items'])}")
         
         response = requests.post(f"{BASE_URL}/procedures/{self.procedure_id}/submit-phase2", 
                                json=phase2_data, headers=headers)
