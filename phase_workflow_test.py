@@ -304,7 +304,7 @@ class PhaseWorkflowTester:
         }
         
         self.log("Approving Phase 2...")
-        response = requests.post(f"{BASE_URL}/procedures/{self.procedure_id}/approve-phase2", 
+        response = requests.post(f"{BASE_URL}/procedures/{self.procedure_id}/approve", 
                                json=approval_data, headers=headers)
         
         if response.status_code != 200:
