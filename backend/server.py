@@ -670,16 +670,17 @@ async def submit_phase2(
     if procedure["status"] != "phase1_approved":
         raise HTTPException(status_code=400, detail="Phase 1 must be approved before submitting Phase 2")
     
-    # Update procedure with Phase 2 data
-    # First, initialize checklist if it doesn't exist
-    if procedure.get("checklist") is None:
-        await db.procedures.update_one(
-            {"_id": ObjectId(procedure_id)},
-            {"$set": {"checklist": {}}}
-        )
+    # Build the update data - handle null checklist properly
+    existing_checklist = procedure.get("checklist") or {}
+    
+    # Create the complete checklist with surgical data
+    new_checklist = {
+        **existing_checklist,
+        "surgical": phase2_data.checklist_surgical.model_dump()
+    }
     
     update_data = {
-        "checklist.surgical": phase2_data.checklist_surgical.model_dump(),
+        "checklist": new_checklist,
         "status": "pending_phase2",
         "current_phase": 2,
         "phase2_submitted_at": datetime.utcnow(),
