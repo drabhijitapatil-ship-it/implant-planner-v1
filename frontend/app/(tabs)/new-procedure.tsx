@@ -227,32 +227,26 @@ export default function NewProcedureScreen() {
             <Text style={styles.sectionTitle}>Medical Team</Text>
 
             <Text style={styles.label}>Instructor *</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={formData.instructor_id}
-                onValueChange={handleInstructorChange}
-                style={styles.picker}
-              >
-                <Picker.Item label="Select Instructor" value="" />
-                {instructors.map((instructor: any) => (
-                  <Picker.Item key={instructor.id} label={instructor.name} value={instructor.id} />
-                ))}
-              </Picker>
-            </View>
+            <TouchableOpacity 
+              style={styles.dropdownButton}
+              onPress={() => setShowInstructorDropdown(true)}
+            >
+              <Text style={formData.instructor_name ? styles.dropdownText : styles.dropdownPlaceholder}>
+                {formData.instructor_name || 'Select Instructor'}
+              </Text>
+              <Ionicons name="chevron-down" size={20} color="#666" />
+            </TouchableOpacity>
 
             <Text style={styles.label}>Implant Incharge *</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={formData.implant_incharge_id}
-                onValueChange={handleImplantInchargeChange}
-                style={styles.picker}
-              >
-                <Picker.Item label="Select Implant Incharge" value="" />
-                {implantIncharges.map((incharge: any) => (
-                  <Picker.Item key={incharge.id} label={incharge.name} value={incharge.id} />
-                ))}
-              </Picker>
-            </View>
+            <TouchableOpacity 
+              style={styles.dropdownButton}
+              onPress={() => setShowInchargeDropdown(true)}
+            >
+              <Text style={formData.implant_incharge_name ? styles.dropdownText : styles.dropdownPlaceholder}>
+                {formData.implant_incharge_name || 'Select Implant Incharge'}
+              </Text>
+              <Ionicons name="chevron-down" size={20} color="#666" />
+            </TouchableOpacity>
 
             <Text style={styles.sectionTitle}>Payment Details</Text>
 
