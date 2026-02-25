@@ -217,13 +217,7 @@ export default function ProcedureDetailScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#007AFF" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Procedure Details</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <BackToDashboard />
 
       <ScrollView>
         <View style={styles.statusCard}>
