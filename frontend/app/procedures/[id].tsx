@@ -262,20 +262,24 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
         
-        {/* Submit Phase 2 Button for Students */}
+        {/* Submit Phase 2 Button for Students - RED COLOR */}
         {canSubmitPhase2() && (
           <View style={styles.phase2ButtonContainer}>
             <TouchableOpacity
               style={styles.phase2Button}
               onPress={() => router.push(`/procedures/submit-phase2/${id}`)}
             >
-              <Ionicons name="document-text" size={20} color="#FFF" />
-              <Text style={styles.phase2ButtonText}>Submit Phase 2 (Surgical Protocols)</Text>
+              <Ionicons name="medical" size={24} color="#FFF" />
+              <View style={styles.phase2ButtonTextContainer}>
+                <Text style={styles.phase2ButtonTitle}>PHASE 2 - SURGICAL PROTOCOLS</Text>
+                <Text style={styles.phase2ButtonSubtitle}>Tap to complete surgical checklist</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={24} color="#FFF" />
             </TouchableOpacity>
           </View>
         )}
         
-        {/* Export PDF Button for Completed Procedures */}
+        {/* Export PDF Button - Bottom Center RED */}
         {canExportPDF() && (
           <View style={styles.pdfButtonContainer}>
             <TouchableOpacity
@@ -284,11 +288,11 @@ export default function ProcedureDetailScreen() {
               disabled={pdfLoading}
             >
               {pdfLoading ? (
-                <ActivityIndicator color="#FFF" />
+                <ActivityIndicator color="#FFF" size="small" />
               ) : (
                 <>
-                  <Ionicons name="download" size={20} color="#FFF" />
-                  <Text style={styles.pdfButtonText}>Export as PDF</Text>
+                  <Ionicons name="document-text" size={24} color="#FFF" />
+                  <Text style={styles.pdfButtonText}>EXPORT AS PDF</Text>
                 </>
               )}
             </TouchableOpacity>
