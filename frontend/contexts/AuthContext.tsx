@@ -98,8 +98,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const updateProfilePhoto = async (photoBase64: string) => {
+    try {
+      await axios.put(`${EXPO_PUBLIC_BACKEND_URL}/api/auth/profile-photo`, {
+        profile_photo: photoBase64,
+      });
+      
+      // Update local user state
+      if (user) {
+        const updatedUser = { ...user, profile_photo: photoBase64 };
+        setUser(updatedUser);
+        await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+      }
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Failed to update profile photo');
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, token, login, register, logout, loading }}>
+    <AuthContext.Provider value={{ user, token, login, register, logout, updateProfilePhoto, loading }}>
       {children}
     </AuthContext.Provider>
   );
