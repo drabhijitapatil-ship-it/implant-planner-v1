@@ -50,7 +50,7 @@ export const STATUS_LABELS = {
   pending_phase1: 'Phase 1: Pending Approval',
   phase1_approved: 'Phase 1: Approved - Ready for Phase 2',
   pending_phase2: 'Phase 2: Pending Approval',
-  phase2_approved: 'Phase 2: Approved - Completed',
+  phase2_approved: 'Stage 1 Implant Placement Done Successfully',
   approved: 'Approved',
   rejected: 'Rejected',
 };
