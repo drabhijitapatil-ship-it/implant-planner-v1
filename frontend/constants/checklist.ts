@@ -13,10 +13,7 @@ export const CHECKLIST_DATA = {
       { id: 'realguide', label: 'RealGUIDE Planning and Report' },
       { id: 'oral_prophylaxis', label: 'Oral Prophylaxis done' },
     ],
-    additionalFields: [
-      { id: 'implant_specs', label: 'Number of Implant with specifications (company, length, diameter etc.)' },
-      { id: 'bone_graft', label: 'Bone graft/Membrane or other specifications (if applicable)' },
-    ],
+    // Removed additional fields - now mandatory form fields
   },
   surgical: {
     title: 'II. Surgical Protocols',
@@ -32,6 +29,12 @@ export const CHECKLIST_DATA = {
     ],
   },
 };
+
+// Time slots available for procedures
+export const PROCEDURE_TIME_SLOTS = [
+  { value: '10:00', label: '10:00 AM' },
+  { value: '14:00', label: '2:00 PM' },
+];
 
 export const STATUS_COLORS = {
   pending_phase1: '#FFA500',
