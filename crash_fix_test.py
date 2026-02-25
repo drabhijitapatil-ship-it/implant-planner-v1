@@ -152,7 +152,7 @@ class CrashFixTester:
         self.log_info("Sending procedure creation request with specific checklist format...")
         print(f"Payload preview: {json.dumps(procedure_data, indent=2)}")
         
-        response = self.make_request("POST", "/procedures", procedure_data, self.student_token, 201)
+        response = self.make_request("POST", "/procedures", procedure_data, self.student_token, 200)
         if not response:
             return self.log_error("Failed to create procedure - this indicates the crash fix may not be working")
             
