@@ -697,7 +697,7 @@ async def submit_phase2(
     
     # Notify both supervisor and implant incharge
     await db.notifications.insert_one({
-        "user_id": procedure["instructor_id"],
+        "user_id": procedure["supervisor_id"],
         "procedure_id": procedure_id,
         "message": f"Phase 2: Surgical protocol submitted by {procedure['student_name']} for patient {procedure['patient_name']}",
         "type": "approval_request",
