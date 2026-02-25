@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import api from '../../../utils/api';
 import ChecklistForm from '../../../components/ChecklistForm';
+import BackToDashboard from '../../../components/BackToDashboard';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function Phase2SubmissionScreen() {
