@@ -130,6 +130,12 @@ export default function NotificationsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
+      {/* Back to Dashboard Header */}
+      <TouchableOpacity style={styles.backButton} onPress={goToDashboard}>
+        <Ionicons name="arrow-back" size={24} color="#007AFF" />
+        <Text style={styles.backButtonText}>Back to Dashboard</Text>
+      </TouchableOpacity>
+
       {notifications.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="notifications-outline" size={64} color="#CCC" />
