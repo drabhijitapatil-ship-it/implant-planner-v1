@@ -227,6 +227,25 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
     if current_user["role"] != "student":
         raise HTTPException(status_code=403, detail="Only students can create procedures")
     
+    # Check 24-hour scheduling restriction for students
+    try:
+        procedure_datetime = datetime.strptime(f"{procedure.procedure_date} {procedure.procedure_time}", "%Y-%m-%d %H:%M")
+        hours_until_procedure = (procedure_datetime - datetime.now()).total_seconds() / 3600
+        
+        if hours_until_procedure < 24:
+            raise HTTPException(
+                status_code=400, 
+                detail="Students cannot schedule procedures less than 24 hours in advance. Please select a date at least 24 hours from now."
+            )
+    except ValueError:
+        pass  # If date parsing fails, let it proceed (will be caught by validation)
+    
+    # Validate mandatory fields
+    if not procedure.implant_specifications or procedure.implant_specifications.strip() == "":
+        raise HTTPException(status_code=400, detail="Implant Specifications is a mandatory field")
+    if not procedure.bone_graft_specifications or procedure.bone_graft_specifications.strip() == "":
+        raise HTTPException(status_code=400, detail="Bone Graft/Membrane Specifications is a mandatory field")
+    
     procedure_dict = procedure.model_dump()
     procedure_dict.update({
         "student_id": current_user["_id"],
@@ -243,7 +262,17 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
     result = await db.procedures.insert_one(procedure_dict)
     procedure_id = str(result.inserted_id)
     
-    # Create notifications for BOTH instructor and implant incharge
+    # Create notification for instructor that they have been assigned
+    await db.notifications.insert_one({
+        "user_id": procedure.instructor_id,
+        "procedure_id": procedure_id,
+        "message": f"You have been assigned as Instructor for a new procedure by {procedure.student_name} for patient {procedure.patient_name}",
+        "type": "assignment",
+        "read": False,
+        "created_at": datetime.utcnow()
+    })
+    
+    # Create notifications for BOTH instructor and implant incharge for approval
     await db.notifications.insert_one({
         "user_id": procedure.instructor_id,
         "procedure_id": procedure_id,
