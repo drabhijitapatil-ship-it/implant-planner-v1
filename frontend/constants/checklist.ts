@@ -55,7 +55,7 @@ export const STATUS_LABELS = {
 
 export const USER_ROLES = {
   student: 'Student',
-  instructor: 'Instructor',
+  supervisor: 'Supervisor',
   implant_incharge: 'Implant Incharge',
   administrator: 'Administrator',
   nurse: 'Nurse',
@@ -63,7 +63,7 @@ export const USER_ROLES = {
 
 export const ROLE_OPTIONS = [
   { value: 'student', label: 'Postgraduate Student' },
-  { value: 'instructor', label: 'Instructor (Supervisor)' },
+  { value: 'supervisor', label: 'Supervisor' },
   { value: 'implant_incharge', label: 'Implant Incharge' },
   { value: 'administrator', label: 'Administrator' },
   { value: 'nurse', label: 'Nurse (Read-only)' },
