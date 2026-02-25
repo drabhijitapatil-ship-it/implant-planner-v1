@@ -82,6 +82,7 @@ class UserResponse(BaseModel):
     name: str
     email: str
     role: str
+    profile_photo: Optional[str] = None
 
 class ChecklistItem(BaseModel):
     id: Optional[str] = None
