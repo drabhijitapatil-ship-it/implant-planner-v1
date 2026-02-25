@@ -71,7 +71,7 @@ export default function ChecklistForm({ checklist, onChecklistChange, phase }: C
             <TouchableOpacity
               key={item.id}
               style={styles.checkboxRow}
-              onPress={() => handleCheckboxToggle(sectionKey, item.id)}
+              onPress={() => handleCheckboxToggle(sectionKey, item.id, item.label)}
             >
               <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
                 {isChecked && <Ionicons name="checkmark" size={16} color="#FFF" />}
