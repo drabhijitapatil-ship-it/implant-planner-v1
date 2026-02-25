@@ -1,6 +1,7 @@
 export const CHECKLIST_DATA = {
   pre_surgical: {
     title: 'I. Pre-surgical Protocols',
+    type: 'checkbox', // Simple checkbox type
     items: [
       { id: 'case_selection', label: 'Case Selection Approved' },
       { id: 'academic_readiness', label: 'Academic Readiness (with presentation)' },
@@ -13,10 +14,10 @@ export const CHECKLIST_DATA = {
       { id: 'realguide', label: 'RealGUIDE Planning and Report' },
       { id: 'oral_prophylaxis', label: 'Oral Prophylaxis done' },
     ],
-    // Removed additional fields - now mandatory form fields
   },
   surgical: {
     title: 'II. Surgical Protocols',
+    type: 'yes_no', // Yes/No toggle type
     items: [
       { id: 'consent_form', label: 'Signed Patient consent form' },
       { id: 'cbct_report', label: 'Arranged CBCT Report' },
