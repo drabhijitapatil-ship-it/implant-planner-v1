@@ -194,7 +194,8 @@ async def login(user: UserLogin):
             id=str(db_user["_id"]),
             name=db_user["name"],
             email=db_user["email"],
-            role=db_user["role"]
+            role=db_user["role"],
+            profile_photo=db_user.get("profile_photo")
         )
     }
 
@@ -204,8 +205,25 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         id=current_user["_id"],
         name=current_user["name"],
         email=current_user["email"],
-        role=current_user["role"]
+        role=current_user["role"],
+        profile_photo=current_user.get("profile_photo")
     )
+
+# Profile Photo Update
+class ProfilePhotoUpdate(BaseModel):
+    profile_photo: str  # Base64 encoded image
+
+@api_router.put("/auth/profile-photo")
+async def update_profile_photo(
+    photo_data: ProfilePhotoUpdate,
+    current_user: dict = Depends(get_current_user)
+):
+    await db.users.update_one(
+        {"_id": ObjectId(current_user["_id"])},
+        {"$set": {"profile_photo": photo_data.profile_photo, "updated_at": datetime.utcnow()}}
+    )
+    
+    return {"message": "Profile photo updated successfully"}
 
 # User Routes
 @api_router.get("/users")
