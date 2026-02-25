@@ -92,9 +92,13 @@ export default function NewProcedureScreen() {
     const supervisor = instructors.find((i: any) => i.id === supervisorId);
     setFormData((prev) => ({
       ...prev,
-      instructor_id: supervisorId,
-      instructor_name: supervisor ? (supervisor as any).name : '',
+      supervisor_id: supervisorId,
+      supervisor_name: supervisor ? (supervisor as any).name : '',
     }));
+    // Clear error when field is filled
+    if (supervisorId) {
+      setFieldErrors((prev) => ({ ...prev, supervisor_id: false }));
+    }
   };
 
   const handleImplantInchargeChange = (inchargeId: string) => {
