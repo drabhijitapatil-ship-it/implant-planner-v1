@@ -168,16 +168,16 @@ class PhaseWorkflowTester:
             
         updated_procedure = response.json()
         status = updated_procedure.get("status")
-        instructor_approved = updated_procedure.get("instructor_phase1_approved", False)
+        supervisor_approved = updated_procedure.get("supervisor_phase1_approved", False)
         implant_incharge_approved = updated_procedure.get("implant_incharge_phase1_approved", False)
         
         self.log(f"✅ Phase 1 approval completed!")
         self.log(f"   New status: {status}")
-        self.log(f"   instructor_phase1_approved: {instructor_approved}")
+        self.log(f"   supervisor_phase1_approved: {supervisor_approved}")
         self.log(f"   implant_incharge_phase1_approved: {implant_incharge_approved}")
         
         # Verify auto-approve functionality (same person is both roles)
-        if instructor_approved and implant_incharge_approved and status == "phase1_approved":
+        if supervisor_approved and implant_incharge_approved and status == "phase1_approved":
             self.log("✅ Auto-approve working correctly - both approval flags set to TRUE")
             self.log("✅ Status correctly changed to 'phase1_approved'")
             self.test_results.append("✅ Phase 1 auto-approved (same person is both supervisor and implant incharge)")
