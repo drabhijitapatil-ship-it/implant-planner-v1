@@ -238,7 +238,7 @@ export default function NewProcedureScreen() {
 
             <Text style={styles.label}>Registration Number *</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, fieldErrors.registration_number && styles.inputError]}
               value={formData.registration_number}
               onChangeText={(value) => handleInputChange('registration_number', value)}
               placeholder="Enter registration number"
@@ -246,7 +246,7 @@ export default function NewProcedureScreen() {
 
             <Text style={styles.label}>Implant Site *</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, fieldErrors.implant_site && styles.inputError]}
               value={formData.implant_site}
               onChangeText={(value) => handleInputChange('implant_site', value)}
               placeholder="Enter implant site (e.g., #16)"
@@ -256,18 +256,18 @@ export default function NewProcedureScreen() {
 
             <Text style={styles.label}>Supervisor *</Text>
             <TouchableOpacity 
-              style={styles.dropdownButton}
+              style={[styles.dropdownButton, fieldErrors.supervisor_id && styles.inputError]}
               onPress={() => setShowInstructorDropdown(true)}
             >
-              <Text style={formData.instructor_name ? styles.dropdownText : styles.dropdownPlaceholder}>
-                {formData.instructor_name || 'Select Supervisor'}
+              <Text style={formData.supervisor_name ? styles.dropdownText : styles.dropdownPlaceholder}>
+                {formData.supervisor_name || 'Select Supervisor'}
               </Text>
               <Ionicons name="chevron-down" size={20} color="#666" />
             </TouchableOpacity>
 
             <Text style={styles.label}>Implant Incharge *</Text>
             <TouchableOpacity 
-              style={styles.dropdownButton}
+              style={[styles.dropdownButton, fieldErrors.implant_incharge_id && styles.inputError]}
               onPress={() => setShowInchargeDropdown(true)}
             >
               <Text style={formData.implant_incharge_name ? styles.dropdownText : styles.dropdownPlaceholder}>
