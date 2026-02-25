@@ -124,31 +124,21 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F5F5F5',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
-  },
-  backButton: {
-    padding: 4,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1A1A1A',
-  },
-  placeholder: {
-    width: 32,
-  },
   keyboardView: {
     flex: 1,
   },
   scrollContent: {
     paddingBottom: 32,
+  },
+  titleContainer: {
+    padding: 16,
+    paddingBottom: 0,
+  },
+  pageTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    textAlign: 'center',
   },
   infoBox: {
     flexDirection: 'row',
