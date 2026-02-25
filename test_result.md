@@ -240,6 +240,18 @@ backend:
         agent: "testing"
         comment: "✅ COMPREHENSIVE PHASE-BASED WORKFLOW TESTED SUCCESSFULLY! Complete end-to-end testing of the specific scenario requested: 1) Student (Gaurav Pandey) login ✅, 2) Get instructors & administrators ✅, 3) Student creates Phase 1 procedure with pre-surgical checklist ✅ (status: pending_phase1), 4) Instructor approves Phase 1 ✅ (partial approval), 5) Implant incharge approves Phase 1 ✅ (status changes to phase1_approved), 6) Student submits Phase 2 with surgical checklist ✅ (status: pending_phase2), 7) Instructor approves Phase 2 ✅ (partial approval), 8) Implant incharge final approval ✅ (status: phase2_approved - COMPLETE!), 9) All notifications verified ✅. The phase-based workflow with dual approvals for each phase works perfectly. All status transitions, approval flags, and notifications function correctly."
 
+  - task: "Procedure Creation Crash Fix Verification"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ CRASH FIX CONFIRMED! Specific procedure creation test completed successfully using the exact payload format that was causing crashes. Test scenario: 1) Student login (gaurav.pandey@student.dental.edu/student123) ✅, 2) Get list of users to find instructor and implant_incharge IDs ✅, 3) Create procedure with specific checklist format containing pre_surgical items with id/label/value structure and additional_fields ✅. Procedure created successfully with ID 699e9f1e7c7d67c66fb59d36, status: pending_phase1, no 422 validation errors encountered. The checklist structure with items array and additional_fields object is properly handled. Crash fix is working correctly."
+
 frontend:
   - task: "New Procedure Form Submission (Android Crash Fix - Issue #5)"
     implemented: true
