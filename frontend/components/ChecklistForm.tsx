@@ -17,7 +17,7 @@ interface ChecklistFormProps {
 }
 
 export default function ChecklistForm({ checklist, onChecklistChange, phase }: ChecklistFormProps) {
-  const handleCheckboxToggle = (section: string, itemId: string) => {
+  const handleCheckboxToggle = (section: string, itemId: string, itemLabel: string) => {
     const updatedChecklist = { ...checklist };
     if (!updatedChecklist[section]) {
       updatedChecklist[section] = { items: [] };
@@ -30,7 +30,8 @@ export default function ChecklistForm({ checklist, onChecklistChange, phase }: C
       updatedChecklist[section].items[itemIndex].value = 
         !updatedChecklist[section].items[itemIndex].value;
     } else {
-      updatedChecklist[section].items.push({ id: itemId, value: true });
+      // Include label when adding new item
+      updatedChecklist[section].items.push({ id: itemId, label: itemLabel, value: true });
     }
     
     onChecklistChange(updatedChecklist);
