@@ -352,7 +352,7 @@ export default function NewProcedureScreen() {
 
             <Text style={styles.label}>Bone Graft/Membrane Specifications *</Text>
             <TextInput
-              style={[styles.input, styles.textArea]}
+              style={[styles.input, styles.textArea, fieldErrors.bone_graft_specifications && styles.inputError]}
               value={formData.bone_graft_specifications}
               onChangeText={(value) => handleInputChange('bone_graft_specifications', value)}
               placeholder="Enter bone graft/membrane specifications"
