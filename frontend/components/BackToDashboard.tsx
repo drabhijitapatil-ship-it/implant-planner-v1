@@ -1,5 +1,5 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { TouchableOpacity, Text, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
@@ -16,7 +16,7 @@ export default function BackToDashboard({ label = 'Back to Dashboard' }: BackToD
 
   return (
     <TouchableOpacity style={styles.backButton} onPress={handlePress}>
-      <Ionicons name="arrow-back" size={24} color="#007AFF" />
+      <Ionicons name="arrow-back-circle" size={28} color="#FFF" />
       <Text style={styles.backButtonText}>{label}</Text>
     </TouchableOpacity>
   );
@@ -26,15 +26,23 @@ const styles = StyleSheet.create({
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
-    gap: 8,
+    justifyContent: 'center',
+    padding: 14,
+    backgroundColor: '#DC3545',
+    borderBottomWidth: 0,
+    gap: 10,
+    marginHorizontal: 16,
+    marginVertical: 12,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   backButtonText: {
     fontSize: 16,
-    color: '#007AFF',
-    fontWeight: '500',
+    color: '#FFF',
+    fontWeight: '700',
   },
 });
