@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import BackToDashboard from '../../components/BackToDashboard';
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
@@ -40,6 +41,8 @@ export default function ProfileScreen() {
         return 'Administrator';
       case 'implant_incharge':
         return 'Implant Incharge';
+      case 'nurse':
+        return 'Nurse';
       default:
         return role;
     }
@@ -47,6 +50,7 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
+      <BackToDashboard />
       <ScrollView>
         <View style={styles.header}>
           <View style={styles.avatar}>
