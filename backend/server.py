@@ -896,6 +896,326 @@ async def submit_phase2(
     updated_procedure["id"] = updated_procedure["_id"]
     return updated_procedure
 
+# Stage 2 - Surgical Protocol Submission
+@api_router.post("/procedures/{procedure_id}/stage2/surgical")
+async def submit_stage2_surgical(
+    procedure_id: str,
+    data: Stage2SurgicalSubmit,
+    current_user: dict = Depends(get_current_user)
+):
+    procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if current_user["role"] != "student" or procedure["student_id"] != current_user["_id"]:
+        raise HTTPException(status_code=403, detail="Only the student who created this procedure can submit")
+    if procedure["status"] != "phase2_approved":
+        raise HTTPException(status_code=400, detail="Stage 1 must be complete before starting Stage 2")
+
+    existing_checklist = procedure.get("checklist") or {}
+    new_checklist = {**existing_checklist, "second_stage": data.checklist.model_dump()}
+
+    update_data = {
+        "checklist": new_checklist,
+        "status": "pending_stage2_surgical",
+        "stage2_surgical_submitted_at": datetime.utcnow(),
+        "supervisor_stage2_surgical_approved": False,
+        "implant_incharge_stage2_surgical_approved": False,
+        "updated_at": datetime.utcnow()
+    }
+    if data.remark:
+        update_data["stage2_surgical_remark"] = data.remark
+
+    await db.procedures.update_one({"_id": ObjectId(procedure_id)}, {"$set": update_data})
+
+    # Notify approvers
+    for uid in [procedure["supervisor_id"], procedure["implant_incharge_id"]]:
+        await db.notifications.insert_one({
+            "user_id": uid,
+            "procedure_id": procedure_id,
+            "message": f"Stage 2 Surgical Protocol submitted by {procedure['student_name']} for patient {procedure['patient_name']}",
+            "type": "approval_request",
+            "read": False,
+            "created_at": datetime.utcnow()
+        })
+
+    push_recipients = list(set([procedure["supervisor_id"], procedure["implant_incharge_id"]]))
+    await send_expo_push_notifications(
+        push_recipients,
+        "Stage 2 Surgical Protocol Requires Approval",
+        f"{procedure['student_name']} submitted Stage 2 Surgical Protocol for {procedure['patient_name']}",
+        {"procedure_id": procedure_id, "type": "approval_request"},
+    )
+
+    updated = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    updated["_id"] = str(updated["_id"])
+    updated["id"] = updated["_id"]
+    return updated
+
+
+# Stage 2 - Prosthetic Phase Protocol Submission
+@api_router.post("/procedures/{procedure_id}/stage2/prosthetic")
+async def submit_stage2_prosthetic(
+    procedure_id: str,
+    data: Stage2ProstheticSubmit,
+    current_user: dict = Depends(get_current_user)
+):
+    procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if current_user["role"] != "student" or procedure["student_id"] != current_user["_id"]:
+        raise HTTPException(status_code=403, detail="Only the student who created this procedure can submit")
+    if procedure["status"] != "stage2_surgical_approved":
+        raise HTTPException(status_code=400, detail="Stage 2 Surgical Protocol must be approved first")
+
+    existing_checklist = procedure.get("checklist") or {}
+    new_checklist = {**existing_checklist, "prosthetic_phase": data.checklist.model_dump()}
+
+    update_data = {
+        "checklist": new_checklist,
+        "status": "pending_stage2_prosthetic",
+        "stage2_prosthetic_submitted_at": datetime.utcnow(),
+        "supervisor_stage2_prosthetic_approved": False,
+        "implant_incharge_stage2_prosthetic_approved": False,
+        "updated_at": datetime.utcnow()
+    }
+    if data.remark:
+        update_data["stage2_prosthetic_remark"] = data.remark
+
+    await db.procedures.update_one({"_id": ObjectId(procedure_id)}, {"$set": update_data})
+
+    for uid in [procedure["supervisor_id"], procedure["implant_incharge_id"]]:
+        await db.notifications.insert_one({
+            "user_id": uid,
+            "procedure_id": procedure_id,
+            "message": f"Stage 2 Prosthetic Phase Protocol submitted by {procedure['student_name']} for patient {procedure['patient_name']}",
+            "type": "approval_request",
+            "read": False,
+            "created_at": datetime.utcnow()
+        })
+
+    push_recipients = list(set([procedure["supervisor_id"], procedure["implant_incharge_id"]]))
+    await send_expo_push_notifications(
+        push_recipients,
+        "Stage 2 Prosthetic Protocol Requires Approval",
+        f"{procedure['student_name']} submitted Prosthetic Phase Protocol for {procedure['patient_name']}",
+        {"procedure_id": procedure_id, "type": "approval_request"},
+    )
+
+    updated = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    updated["_id"] = str(updated["_id"])
+    updated["id"] = updated["_id"]
+    return updated
+
+
+# Stage 2 - Surgical Protocol Approval
+@api_router.post("/procedures/{procedure_id}/stage2/surgical/approve")
+async def approve_stage2_surgical(
+    procedure_id: str,
+    action: ApprovalAction,
+    current_user: dict = Depends(get_current_user)
+):
+    if current_user["role"] in ["student", "nurse"]:
+        raise HTTPException(status_code=403, detail="Only supervisors and implant incharge can approve")
+
+    procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if procedure["status"] != "pending_stage2_surgical":
+        raise HTTPException(status_code=400, detail="Procedure is not pending Stage 2 Surgical approval")
+
+    is_supervisor = current_user["_id"] == procedure.get("supervisor_id")
+    is_implant_incharge = current_user["_id"] == procedure.get("implant_incharge_id")
+    if not (is_supervisor or is_implant_incharge):
+        raise HTTPException(status_code=403, detail="Only assigned supervisor or implant incharge can approve")
+
+    same_person = procedure["supervisor_id"] == procedure["implant_incharge_id"]
+
+    if action.action == "approve":
+        update_fields = {"updated_at": datetime.utcnow()}
+
+        if same_person:
+            update_fields["supervisor_stage2_surgical_approved"] = True
+            update_fields["supervisor_stage2_surgical_approved_at"] = datetime.utcnow()
+            update_fields["implant_incharge_stage2_surgical_approved"] = True
+            update_fields["implant_incharge_stage2_surgical_approved_at"] = datetime.utcnow()
+        else:
+            if is_supervisor:
+                update_fields["supervisor_stage2_surgical_approved"] = True
+                update_fields["supervisor_stage2_surgical_approved_at"] = datetime.utcnow()
+            if is_implant_incharge:
+                update_fields["implant_incharge_stage2_surgical_approved"] = True
+                update_fields["implant_incharge_stage2_surgical_approved_at"] = datetime.utcnow()
+
+        sup_ok = procedure.get("supervisor_stage2_surgical_approved", False) or is_supervisor or (same_person and is_implant_incharge)
+        inc_ok = procedure.get("implant_incharge_stage2_surgical_approved", False) or is_implant_incharge or (same_person and is_supervisor)
+
+        if sup_ok and inc_ok:
+            update_fields["status"] = "stage2_surgical_approved"
+            update_fields["stage2_surgical_completed_at"] = datetime.utcnow()
+            await db.notifications.insert_one({
+                "user_id": procedure["student_id"],
+                "procedure_id": procedure_id,
+                "message": "Stage 2 Surgical Protocol approved! You can now submit the Prosthetic Phase Protocol.",
+                "type": "approved",
+                "read": False,
+                "created_at": datetime.utcnow()
+            })
+            await send_expo_push_notifications(
+                [procedure["student_id"]],
+                "Stage 2 Surgical Approved!",
+                "You can now submit the Prosthetic Phase Protocol.",
+                {"procedure_id": procedure_id, "type": "approved"},
+            )
+        else:
+            approver_name = current_user["name"]
+            waiting_for = "implant incharge" if sup_ok else "supervisor"
+            await db.notifications.insert_one({
+                "user_id": procedure["student_id"],
+                "procedure_id": procedure_id,
+                "message": f"Stage 2 Surgical: Approved by {approver_name}. Waiting for {waiting_for}.",
+                "type": "approved",
+                "read": False,
+                "created_at": datetime.utcnow()
+            })
+
+        await db.procedures.update_one({"_id": ObjectId(procedure_id)}, {"$set": update_fields})
+    else:
+        await db.procedures.update_one(
+            {"_id": ObjectId(procedure_id)},
+            {"$set": {
+                "status": "stage2_surgical_rejected",
+                "stage2_surgical_rejection_reason": action.rejection_reason,
+                "stage2_surgical_rejected_by": current_user["name"],
+                "stage2_surgical_rejected_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow()
+            }}
+        )
+        await db.notifications.insert_one({
+            "user_id": procedure["student_id"],
+            "procedure_id": procedure_id,
+            "message": f"Stage 2 Surgical Protocol rejected by {current_user['name']}. Reason: {action.rejection_reason}",
+            "type": "rejected",
+            "read": False,
+            "created_at": datetime.utcnow()
+        })
+
+    updated = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    updated["_id"] = str(updated["_id"])
+    updated["id"] = updated["_id"]
+    return updated
+
+
+# Stage 2 - Prosthetic Phase Approval
+@api_router.post("/procedures/{procedure_id}/stage2/prosthetic/approve")
+async def approve_stage2_prosthetic(
+    procedure_id: str,
+    action: ApprovalAction,
+    current_user: dict = Depends(get_current_user)
+):
+    if current_user["role"] in ["student", "nurse"]:
+        raise HTTPException(status_code=403, detail="Only supervisors and implant incharge can approve")
+
+    procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if procedure["status"] != "pending_stage2_prosthetic":
+        raise HTTPException(status_code=400, detail="Procedure is not pending Stage 2 Prosthetic approval")
+
+    is_supervisor = current_user["_id"] == procedure.get("supervisor_id")
+    is_implant_incharge = current_user["_id"] == procedure.get("implant_incharge_id")
+    if not (is_supervisor or is_implant_incharge):
+        raise HTTPException(status_code=403, detail="Only assigned supervisor or implant incharge can approve")
+
+    same_person = procedure["supervisor_id"] == procedure["implant_incharge_id"]
+
+    if action.action == "approve":
+        update_fields = {"updated_at": datetime.utcnow()}
+
+        if same_person:
+            update_fields["supervisor_stage2_prosthetic_approved"] = True
+            update_fields["supervisor_stage2_prosthetic_approved_at"] = datetime.utcnow()
+            update_fields["implant_incharge_stage2_prosthetic_approved"] = True
+            update_fields["implant_incharge_stage2_prosthetic_approved_at"] = datetime.utcnow()
+        else:
+            if is_supervisor:
+                update_fields["supervisor_stage2_prosthetic_approved"] = True
+                update_fields["supervisor_stage2_prosthetic_approved_at"] = datetime.utcnow()
+            if is_implant_incharge:
+                update_fields["implant_incharge_stage2_prosthetic_approved"] = True
+                update_fields["implant_incharge_stage2_prosthetic_approved_at"] = datetime.utcnow()
+
+        sup_ok = procedure.get("supervisor_stage2_prosthetic_approved", False) or is_supervisor or (same_person and is_implant_incharge)
+        inc_ok = procedure.get("implant_incharge_stage2_prosthetic_approved", False) or is_implant_incharge or (same_person and is_supervisor)
+
+        if sup_ok and inc_ok:
+            update_fields["status"] = "completed"
+            update_fields["stage2_prosthetic_completed_at"] = datetime.utcnow()
+            update_fields["treatment_completed_at"] = datetime.utcnow()
+
+            # Notify all parties
+            await db.notifications.insert_one({
+                "user_id": procedure["student_id"],
+                "procedure_id": procedure_id,
+                "message": f"Treatment for {procedure['patient_name']} is now complete! Both Stage 2 protocols have been approved.",
+                "type": "approved",
+                "read": False,
+                "created_at": datetime.utcnow()
+            })
+            for uid in [procedure["supervisor_id"], procedure["implant_incharge_id"]]:
+                await db.notifications.insert_one({
+                    "user_id": uid,
+                    "procedure_id": procedure_id,
+                    "message": f"Treatment for {procedure['patient_name']} fully completed. All protocols approved.",
+                    "type": "approved",
+                    "read": False,
+                    "created_at": datetime.utcnow()
+                })
+            push_all = list(set([procedure["student_id"], procedure["supervisor_id"], procedure["implant_incharge_id"]]))
+            await send_expo_push_notifications(
+                push_all,
+                "Treatment Complete!",
+                f"All protocols for {procedure['patient_name']} have been approved. Treatment is complete.",
+                {"procedure_id": procedure_id, "type": "completed"},
+            )
+        else:
+            approver_name = current_user["name"]
+            waiting_for = "implant incharge" if sup_ok else "supervisor"
+            await db.notifications.insert_one({
+                "user_id": procedure["student_id"],
+                "procedure_id": procedure_id,
+                "message": f"Stage 2 Prosthetic: Approved by {approver_name}. Waiting for {waiting_for}.",
+                "type": "approved",
+                "read": False,
+                "created_at": datetime.utcnow()
+            })
+
+        await db.procedures.update_one({"_id": ObjectId(procedure_id)}, {"$set": update_fields})
+    else:
+        await db.procedures.update_one(
+            {"_id": ObjectId(procedure_id)},
+            {"$set": {
+                "status": "stage2_prosthetic_rejected",
+                "stage2_prosthetic_rejection_reason": action.rejection_reason,
+                "stage2_prosthetic_rejected_by": current_user["name"],
+                "stage2_prosthetic_rejected_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow()
+            }}
+        )
+        await db.notifications.insert_one({
+            "user_id": procedure["student_id"],
+            "procedure_id": procedure_id,
+            "message": f"Stage 2 Prosthetic Protocol rejected by {current_user['name']}. Reason: {action.rejection_reason}",
+            "type": "rejected",
+            "read": False,
+            "created_at": datetime.utcnow()
+        })
+
+    updated = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    updated["_id"] = str(updated["_id"])
+    updated["id"] = updated["_id"]
+    return updated
+
+
 # Notification Routes
 @api_router.get("/notifications")
 async def get_notifications(current_user: dict = Depends(get_current_user)):
