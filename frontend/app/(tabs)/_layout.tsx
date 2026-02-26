@@ -1,9 +1,11 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePushNotifications } from '../../utils/usePushNotifications';
 
 export default function TabsLayout() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
+  usePushNotifications(token);
 
   return (
     <Tabs
