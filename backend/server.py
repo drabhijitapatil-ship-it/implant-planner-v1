@@ -854,6 +854,15 @@ async def submit_phase2(
         "created_at": datetime.utcnow()
     })
     
+    # Send push notifications to supervisor and implant incharge
+    push_recipients = list(set([procedure["supervisor_id"], procedure["implant_incharge_id"]]))
+    await send_expo_push_notifications(
+        push_recipients,
+        "Phase 2 Requires Approval",
+        f"Surgical protocol submitted by {procedure['student_name']} for patient {procedure['patient_name']}",
+        {"procedure_id": procedure_id, "type": "approval_request"},
+    )
+    
     updated_procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     updated_procedure["_id"] = str(updated_procedure["_id"])
     updated_procedure["id"] = updated_procedure["_id"]
