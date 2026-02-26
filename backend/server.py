@@ -265,7 +265,7 @@ async def create_user(user: UserCreate, current_user: dict = Depends(get_current
     user_dict = {
         "name": user.name,
         "email": user.email,
-        "password_hash": get_password_hash(user.password),
+        "password_hash": hash_password(user.password),
         "role": user.role,
         "created_at": datetime.utcnow()
     }
