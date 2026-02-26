@@ -134,7 +134,7 @@ export const generateProcedurePDF = async (procedure: any) => {
 
           ${procedure.stage2_surgical_remark ? `
           <div class="section">
-            <div class="section-title">Stage 2 Surgical Remarks</div>
+            <div class="section-title">Phase 3 - Second Stage Surgical Remarks</div>
             <p class="info-value">${procedure.stage2_surgical_remark}</p>
           </div>` : ''}
 
