@@ -425,7 +425,7 @@ export default function ProcedureDetailScreen() {
 
       {/* Fixed bottom bar */}
       <View style={styles.bottomBar}>
-        <BackToDashboard />
+        <BackToDashboard floating={false} />
         {canExportPDF() && (
           <TouchableOpacity
             style={[styles.pdfButton, pdfLoading && styles.buttonDisabled]}
