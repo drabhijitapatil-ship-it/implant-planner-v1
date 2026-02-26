@@ -1003,8 +1003,8 @@ async def submit_stage2_prosthetic(
     push_recipients = list(set([procedure["supervisor_id"], procedure["implant_incharge_id"]]))
     await send_expo_push_notifications(
         push_recipients,
-        "Stage 2 Prosthetic Protocol Requires Approval",
-        f"{procedure['student_name']} submitted Prosthetic Phase Protocol for {procedure['patient_name']}",
+        "Phase 4: Prosthetic Protocol Requires Approval",
+        f"{procedure['student_name']} submitted Phase 4 Prosthetic Protocol for {procedure['patient_name']}",
         {"procedure_id": procedure_id, "type": "approval_request"},
     )
 
