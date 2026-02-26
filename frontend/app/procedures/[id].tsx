@@ -262,17 +262,17 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
         
-        {/* Submit Phase 2 Button for Students - RED COLOR */}
+        {/* Submit Phase 2 Button for Students - GREEN COLOR */}
         {canSubmitPhase2() && (
           <View style={styles.phase2ButtonContainer}>
             <TouchableOpacity
               style={styles.phase2Button}
               onPress={() => router.push(`/procedures/submit-phase2/${id}`)}
             >
-              <Ionicons name="medical" size={24} color="#FFF" />
+              <Ionicons name="checkmark-circle" size={24} color="#FFF" />
               <View style={styles.phase2ButtonTextContainer}>
-                <Text style={styles.phase2ButtonTitle}>PHASE 2 - SURGICAL PROTOCOLS</Text>
-                <Text style={styles.phase2ButtonSubtitle}>Tap to complete surgical checklist</Text>
+                <Text style={styles.phase2ButtonTitle}>PHASE 1 APPROVED ✓</Text>
+                <Text style={styles.phase2ButtonSubtitle}>Tap to complete Phase 2 - Surgical Checklist</Text>
               </View>
               <Ionicons name="chevron-forward" size={24} color="#FFF" />
             </TouchableOpacity>
