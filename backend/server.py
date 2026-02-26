@@ -159,9 +159,12 @@ async def send_expo_push_notifications(user_ids: List[str], title: str, body: st
     if not user_ids:
         return
     tokens = []
-    for uid in user_ids:
-        user = await db.users.find_one({"_id": ObjectId(uid)}, {"push_token": 1})
-        if user and user.get("push_token"):
+    users = await db.users.find(
+        {"_id": {"$in": [ObjectId(uid) for uid in user_ids]}},
+        {"push_token": 1}
+    ).to_list(len(user_ids))
+    for user in users:
+        if user.get("push_token"):
             tokens.append(user["push_token"])
     if not tokens:
         return
