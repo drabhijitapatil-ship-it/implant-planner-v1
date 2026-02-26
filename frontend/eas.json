@@ -6,7 +6,7 @@
     "production": {
       "distribution": "store",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://implant-scheduler.preview.emergentagent.com"
+        "EXPO_PUBLIC_BACKEND_URL": "https://implant-mgmt-1.preview.emergentagent.com"
       }
     },
     "preview": {
