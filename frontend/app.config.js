@@ -1,10 +1,9 @@
 /**
  * app.config.js - Dynamic Expo configuration
  * 
- * This file patches Node's module resolution to handle the case where
- * @expo/config-plugins is not hoisted to the top-level node_modules
- * in the EAS build environment. The patch ensures the module can be
- * found inside expo's own node_modules as a fallback.
+ * Patches Node's module resolution so @expo/config-plugins is always
+ * resolvable, even when npm doesn't hoist it to the top-level node_modules
+ * in the EAS build environment.
  */
 const path = require('path');
 const Module = require('module');
@@ -31,4 +30,6 @@ Module._resolveFilename = function (request, parent, isMain, options) {
   return originalResolveFilename.call(this, request, parent, isMain, options);
 };
 
-module.exports = require('./app.json');
+module.exports = ({ config }) => {
+  return config;
+};
