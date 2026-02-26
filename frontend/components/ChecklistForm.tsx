@@ -16,7 +16,7 @@ interface ChecklistFormProps {
   stage2Section?: 'second_stage' | 'prosthetic_phase';  // For Stage 2 forms
 }
 
-export default function ChecklistForm({ checklist, onChecklistChange, phase }: ChecklistFormProps) {
+export default function ChecklistForm({ checklist, onChecklistChange, phase, stage2Section }: ChecklistFormProps) {
   const handleCheckboxToggle = (section: string, itemId: string, itemLabel: string) => {
     const updatedChecklist = { ...checklist };
     if (!updatedChecklist[section]) {
