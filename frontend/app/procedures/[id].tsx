@@ -253,26 +253,39 @@ export default function ProcedureDetailScreen() {
         </View>
 
         {/* Phase Indicator and Approval Status */}
-        {(procedure.status === 'pending_phase1' || procedure.status === 'pending_phase2') && (
+        {(procedure.status === 'pending_phase1' || procedure.status === 'pending_phase2' ||
+          procedure.status === 'pending_stage2_surgical' || procedure.status === 'pending_stage2_prosthetic') && (
           <View style={styles.approvalSection}>
             <Text style={styles.approvalTitle}>
-              {procedure.status === 'pending_phase1' ? 'Phase 1 Approval Status' : 'Phase 2 Approval Status'}
+              {procedure.status === 'pending_phase1' ? 'Phase 1 Approval Status' : 
+               procedure.status === 'pending_phase2' ? 'Phase 2 Approval Status' :
+               procedure.status === 'pending_stage2_surgical' ? 'Stage 2 Surgical Approval Status' :
+               'Stage 2 Prosthetic Approval Status'}
             </Text>
             <View style={styles.approvalRow}>
               <Ionicons 
                 name={
-                  (procedure.status === 'pending_phase1' ? procedure.supervisor_phase1_approved : procedure.supervisor_phase2_approved)
+                  (procedure.status === 'pending_phase1' ? procedure.supervisor_phase1_approved : 
+                   procedure.status === 'pending_phase2' ? procedure.supervisor_phase2_approved :
+                   procedure.status === 'pending_stage2_surgical' ? procedure.supervisor_stage2_surgical_approved :
+                   procedure.supervisor_stage2_prosthetic_approved)
                     ? "checkmark-circle" : "time"
                 } 
                 size={24} 
                 color={
-                  (procedure.status === 'pending_phase1' ? procedure.supervisor_phase1_approved : procedure.supervisor_phase2_approved)
+                  (procedure.status === 'pending_phase1' ? procedure.supervisor_phase1_approved : 
+                   procedure.status === 'pending_phase2' ? procedure.supervisor_phase2_approved :
+                   procedure.status === 'pending_stage2_surgical' ? procedure.supervisor_stage2_surgical_approved :
+                   procedure.supervisor_stage2_prosthetic_approved)
                     ? "#4CAF50" : "#FFA500"
                 } 
               />
               <Text style={styles.approvalText}>
                 Supervisor: {
-                  (procedure.status === 'pending_phase1' ? procedure.supervisor_phase1_approved : procedure.supervisor_phase2_approved)
+                  (procedure.status === 'pending_phase1' ? procedure.supervisor_phase1_approved : 
+                   procedure.status === 'pending_phase2' ? procedure.supervisor_phase2_approved :
+                   procedure.status === 'pending_stage2_surgical' ? procedure.supervisor_stage2_surgical_approved :
+                   procedure.supervisor_stage2_prosthetic_approved)
                     ? 'Approved' : 'Pending'
                 }
               </Text>
@@ -280,18 +293,27 @@ export default function ProcedureDetailScreen() {
             <View style={styles.approvalRow}>
               <Ionicons 
                 name={
-                  (procedure.status === 'pending_phase1' ? procedure.implant_incharge_phase1_approved : procedure.implant_incharge_phase2_approved)
+                  (procedure.status === 'pending_phase1' ? procedure.implant_incharge_phase1_approved : 
+                   procedure.status === 'pending_phase2' ? procedure.implant_incharge_phase2_approved :
+                   procedure.status === 'pending_stage2_surgical' ? procedure.implant_incharge_stage2_surgical_approved :
+                   procedure.implant_incharge_stage2_prosthetic_approved)
                     ? "checkmark-circle" : "time"
                 } 
                 size={24} 
                 color={
-                  (procedure.status === 'pending_phase1' ? procedure.implant_incharge_phase1_approved : procedure.implant_incharge_phase2_approved)
+                  (procedure.status === 'pending_phase1' ? procedure.implant_incharge_phase1_approved : 
+                   procedure.status === 'pending_phase2' ? procedure.implant_incharge_phase2_approved :
+                   procedure.status === 'pending_stage2_surgical' ? procedure.implant_incharge_stage2_surgical_approved :
+                   procedure.implant_incharge_stage2_prosthetic_approved)
                     ? "#4CAF50" : "#FFA500"
                 } 
               />
               <Text style={styles.approvalText}>
                 Implant Incharge: {
-                  (procedure.status === 'pending_phase1' ? procedure.implant_incharge_phase1_approved : procedure.implant_incharge_phase2_approved)
+                  (procedure.status === 'pending_phase1' ? procedure.implant_incharge_phase1_approved : 
+                   procedure.status === 'pending_phase2' ? procedure.implant_incharge_phase2_approved :
+                   procedure.status === 'pending_stage2_surgical' ? procedure.implant_incharge_stage2_surgical_approved :
+                   procedure.implant_incharge_stage2_prosthetic_approved)
                     ? 'Approved' : 'Pending'
                 }
               </Text>
