@@ -611,6 +611,13 @@ async def approve_procedure(
                     "read": False,
                     "created_at": datetime.utcnow()
                 })
+                # Push notify student
+                await send_expo_push_notifications(
+                    [procedure["student_id"]],
+                    "Phase 1 Approved!",
+                    "Pre-surgical protocol approved. You can now submit Phase 2.",
+                    {"procedure_id": procedure_id, "type": "approved"},
+                )
             else:
                 # One approved, waiting for the other
                 approver_name = current_user["name"]
