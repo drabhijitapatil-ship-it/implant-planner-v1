@@ -442,6 +442,30 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
+        {procedure.stage2_surgical_rejection_reason && (
+          <View style={[styles.section, styles.rejectionSection]}>
+            <Text style={styles.sectionTitle}>Stage 2 Surgical - Rejection Reason</Text>
+            <Text style={styles.rejectionText}>{procedure.stage2_surgical_rejection_reason}</Text>
+            {procedure.stage2_surgical_rejected_by && (
+              <Text style={[styles.rejectionText, { marginTop: 4, fontStyle: 'italic' }]}>
+                Rejected by: {procedure.stage2_surgical_rejected_by}
+              </Text>
+            )}
+          </View>
+        )}
+
+        {procedure.stage2_prosthetic_rejection_reason && (
+          <View style={[styles.section, styles.rejectionSection]}>
+            <Text style={styles.sectionTitle}>Stage 2 Prosthetic - Rejection Reason</Text>
+            <Text style={styles.rejectionText}>{procedure.stage2_prosthetic_rejection_reason}</Text>
+            {procedure.stage2_prosthetic_rejected_by && (
+              <Text style={[styles.rejectionText, { marginTop: 4, fontStyle: 'italic' }]}>
+                Rejected by: {procedure.stage2_prosthetic_rejected_by}
+              </Text>
+            )}
+          </View>
+        )}
+
         {procedure.checklist && (
           <>
             {renderChecklistSection('pre_surgical', 'I. Pre-surgical Protocols')}
