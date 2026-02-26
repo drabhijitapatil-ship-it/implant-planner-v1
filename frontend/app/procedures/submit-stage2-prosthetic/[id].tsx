@@ -41,7 +41,7 @@ export default function Stage2ProstheticSubmissionScreen() {
 
       Alert.alert(
         'Success',
-        'Stage 2 Prosthetic Phase Protocol submitted successfully! Awaiting approval from supervisor and implant incharge.',
+        'Phase 4 - Prosthetic Protocol submitted successfully! Awaiting approval from supervisor and implant incharge.',
         [{ text: 'OK', onPress: () => router.back() }]
       );
     } catch (error: any) {
@@ -61,14 +61,14 @@ export default function Stage2ProstheticSubmissionScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.titleContainer}>
             <Text style={styles.pageTitle} data-testid="stage2-prosthetic-title">
-              Stage 2 - Prosthetic Phase Protocol
+              Phase 4 - Prosthetic Protocol
             </Text>
           </View>
 
           <View style={styles.infoBox}>
             <Ionicons name="information-circle" size={24} color="#007AFF" />
             <Text style={styles.infoText}>
-              Second Stage Surgical Protocol has been approved. Please fill the Prosthetic Phase Protocol checklist to complete the treatment.
+              Phase 3 - Second Stage Surgical Protocol has been approved. Please fill the Phase 4 - Prosthetic Protocol checklist to complete the treatment.
             </Text>
           </View>
 
@@ -103,7 +103,7 @@ export default function Stage2ProstheticSubmissionScreen() {
               ) : (
                 <>
                   <Ionicons name="checkmark-circle" size={20} color="#FFF" />
-                  <Text style={styles.submitButtonText}>Submit Prosthetic Phase Protocol</Text>
+                  <Text style={styles.submitButtonText}>Submit Phase 4 - Prosthetic Protocol</Text>
                 </>
               )}
             </TouchableOpacity>
