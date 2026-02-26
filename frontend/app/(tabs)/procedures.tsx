@@ -105,8 +105,8 @@ export default function ProceduresScreen() {
 
   const filterButtons = [
     { key: 'all', label: 'All' },
-    { key: 'pending_instructor', label: 'Pending' },
-    { key: 'approved', label: 'Approved' },
+    { key: 'pending', label: 'Pending' },
+    { key: 'completed', label: 'Completed' },
     { key: 'rejected', label: 'Rejected' },
   ];
 
