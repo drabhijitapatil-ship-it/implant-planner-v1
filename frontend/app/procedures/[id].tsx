@@ -97,10 +97,11 @@ export default function ProcedureDetailScreen() {
 
   const canApprove = () => {
     if (!procedure) return false;
-    if (user?.role === 'nurse') return false;
+    if (user?.role === 'nurse' || user?.role === 'student') return false;
     
-    const isSupervisor = (user?.role === 'supervisor' || user?.role === 'administrator' || user?.role === 'implant_incharge') && user?.id === procedure.supervisor_id;
-    const isImplantIncharge = (user?.role === 'implant_incharge' || user?.role === 'administrator') && user?.id === procedure.implant_incharge_id;
+    // Assignment-based check: anyone assigned as supervisor or incharge can approve
+    const isSupervisor = user?.id === procedure.supervisor_id;
+    const isImplantIncharge = user?.id === procedure.implant_incharge_id;
     
     if (procedure.status === 'pending_phase1') {
       if (isSupervisor && !procedure.supervisor_phase1_approved) return true;
