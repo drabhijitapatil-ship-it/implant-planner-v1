@@ -256,6 +256,18 @@ async def update_profile_photo(
     
     return {"message": "Profile photo updated successfully"}
 
+# Push Token Registration
+@api_router.post("/auth/push-token")
+async def register_push_token(
+    data: PushTokenRegister,
+    current_user: dict = Depends(get_current_user)
+):
+    await db.users.update_one(
+        {"_id": ObjectId(current_user["_id"])},
+        {"$set": {"push_token": data.push_token}}
+    )
+    return {"message": "Push token registered"}
+
 # User Routes
 @api_router.get("/users")
 async def get_users(role: Optional[str] = None, current_user: dict = Depends(get_current_user)):
