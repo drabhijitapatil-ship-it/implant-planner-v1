@@ -959,7 +959,7 @@ async def submit_stage2_surgical(
     return updated
 
 
-# Stage 2 - Prosthetic Phase Protocol Submission
+# Phase 4 - Prosthetic Protocol Submission
 @api_router.post("/procedures/{procedure_id}/stage2/prosthetic")
 async def submit_stage2_prosthetic(
     procedure_id: str,
