@@ -332,7 +332,7 @@ export default function NewProcedureScreen() {
               <Ionicons name="chevron-down" size={20} color="#666" />
             </TouchableOpacity>
             <Text style={styles.helperText}>
-              Note: Students must schedule at least 24 hours in advance
+              Note: Students must schedule at least 24 hours in advance. No scheduling on Sundays. Saturdays: 9:30 AM only.
             </Text>
 
             <Text style={styles.label}>Procedure Time *</Text>
