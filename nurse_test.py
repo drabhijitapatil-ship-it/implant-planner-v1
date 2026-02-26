@@ -6,7 +6,7 @@ import sys
 from datetime import datetime, timedelta
 
 # Configuration
-BASE_URL = "https://implant-mgmt-1.preview.emergentagent.com/api"
+BASE_URL = "https://dental-workflow-test.preview.emergentagent.com/api"
 HEADERS = {"Content-Type": "application/json"}
 
 class NurseRoleTester:
