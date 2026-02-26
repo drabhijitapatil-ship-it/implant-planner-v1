@@ -141,6 +141,17 @@ class Phase2Submit(BaseModel):
     checklist_surgical: ChecklistSection
     remark: Optional[str] = None
 
+class Stage2SurgicalSubmit(BaseModel):
+    checklist: ChecklistSection
+    remark: Optional[str] = None
+
+class Stage2ProstheticSubmit(BaseModel):
+    checklist: ChecklistSection
+    remark: Optional[str] = None
+
+class FinalCommentSubmit(BaseModel):
+    comment: str
+
 class NotificationResponse(BaseModel):
     id: str
     procedure_id: str
