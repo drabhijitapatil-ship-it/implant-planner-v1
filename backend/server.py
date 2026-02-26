@@ -421,6 +421,15 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
         "created_at": datetime.utcnow()
     })
     
+    # Send push notifications to supervisor and implant incharge
+    push_recipients = list(set([procedure.supervisor_id, procedure.implant_incharge_id]))
+    await send_expo_push_notifications(
+        push_recipients,
+        "New Procedure Requires Approval",
+        f"Phase 1: {procedure.student_name} submitted a pre-surgical protocol for patient {procedure.patient_name}",
+        {"procedure_id": procedure_id, "type": "approval_request"},
+    )
+    
     procedure_dict["_id"] = procedure_id
     procedure_dict["id"] = procedure_id
     return procedure_dict
