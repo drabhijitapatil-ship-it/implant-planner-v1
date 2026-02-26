@@ -19,7 +19,7 @@ Mobile app using Expo for the Department of Prosthodontics to plan and manage de
 
 ### Stage 2: Healing & Prosthetic Phase
 - **Second Stage Surgical Protocol:** Student fills healing/exposure checklist → Dual approval
-- **Prosthetic Phase Protocol:** Student fills prosthetic checklist → Dual approval  
+- **Prosthetic Phase Protocol:** Student fills prosthetic checklist → Dual approval
 - When both protocols approved → Status: `completed` (Treatment Complete)
 
 ## Status Flow
@@ -42,9 +42,13 @@ Mobile app using Expo for the Department of Prosthodontics to plan and manage de
 - [x] Procedure list filtering (pending/completed/rejected)
 - [x] Rejection reasons for Stage 2 protocols
 - [x] Status labels and colors for all stages
+- [x] **Patient Search on Dashboard** - Real-time search by patient name or registration number
+- [x] **Profile Photo Avatar on Dashboard** - Shows uploaded photo or initials fallback; taps to profile
+- [x] **Treatment Timeline/Progress Tracker** - Visual step-by-step progress bar on procedure detail page
 
 ## API Endpoints
 - `POST /api/auth/login` - User login
+- `PUT /api/auth/profile-photo` - Upload profile photo
 - `GET /api/procedures` - List procedures (with status filter)
 - `POST /api/procedures` - Create new procedure
 - `GET /api/procedures/{id}` - Get procedure detail
