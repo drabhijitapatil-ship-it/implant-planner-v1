@@ -972,7 +972,7 @@ async def submit_stage2_prosthetic(
     if current_user["role"] != "student" or procedure["student_id"] != current_user["_id"]:
         raise HTTPException(status_code=403, detail="Only the student who created this procedure can submit")
     if procedure["status"] != "stage2_surgical_approved":
-        raise HTTPException(status_code=400, detail="Stage 2 Surgical Protocol must be approved first")
+        raise HTTPException(status_code=400, detail="Phase 3 must be approved before starting Phase 4")
 
     existing_checklist = procedure.get("checklist") or {}
     new_checklist = {**existing_checklist, "prosthetic_phase": data.checklist.model_dump()}
