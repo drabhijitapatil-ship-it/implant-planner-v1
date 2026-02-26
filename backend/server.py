@@ -150,6 +150,36 @@ class NotificationResponse(BaseModel):
     created_at: str
     procedure_details: Optional[Dict[str, Any]] = None
 
+class PushTokenRegister(BaseModel):
+    push_token: str
+
+# Expo Push Notification Helper
+async def send_expo_push_notifications(user_ids: List[str], title: str, body: str, data: Optional[Dict] = None):
+    """Send push notifications to users via Expo Push API."""
+    if not user_ids:
+        return
+    tokens = []
+    for uid in user_ids:
+        user = await db.users.find_one({"_id": ObjectId(uid)}, {"push_token": 1})
+        if user and user.get("push_token"):
+            tokens.append(user["push_token"])
+    if not tokens:
+        return
+    messages = [
+        {"to": token, "sound": "default", "title": title, "body": body, "data": data or {}}
+        for token in tokens
+    ]
+    try:
+        async with httpx.AsyncClient() as client_http:
+            await client_http.post(
+                "https://exp.host/--/api/v2/push/send",
+                json=messages,
+                headers={"Accept": "application/json", "Content-Type": "application/json"},
+                timeout=10,
+            )
+    except Exception as e:
+        logging.error(f"Failed to send push notification: {e}")
+
 # Auth Routes
 @api_router.post("/auth/register", response_model=UserResponse)
 async def register(user: UserRegister):
