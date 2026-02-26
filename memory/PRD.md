@@ -53,11 +53,13 @@ Mobile app (Expo) for the Department of Prosthodontics to plan and manage dental
 - [ ] PDF export visual testing
 
 ## Deployment Fix (Feb 26, 2026)
-- Fixed Expo SDK 55 EAS update failure: `--environment flag is required`
-- Created `eas.json` with production/preview build profiles and env configuration
-- Updated `app.json`: added `runtimeVersion`, `updates` URL, `extra.eas.projectId`, `bundleIdentifier`, `package`, `expo-updates` plugin
-- Installed `expo-updates` package
-- Fixed backend `get_current_user` to exclude `password_hash` from projection
-- Capped query result limits (users: 100, procedures: 100)
-- Fixed dashboard stats to use correct status field names
-- **Deployment verified PASS ✅ (Feb 2026)** — No blockers, app is deployment-ready
+- **Root Cause:** Emergent EAS builder image (2025101601) runs `eas update` without `--environment` flag, which SDK 55 requires
+- **Fix:** Downgraded Expo SDK from 55 to 54 (54.0.33) where `--environment` is not required
+- expo-updates downgraded from ^55.0.11 to ~29.0.16 (SDK 54 compatible)
+- Removed SDK 55 features: `newArchEnabled`, `edgeToEdgeEnabled`
+- Fixed app.json schema: backgroundColor hex codes (#000 -> #000000)
+- Fixed icon images to be exactly 512x512 (were 512x513)
+- Removed conflicting package-lock.json (only yarn.lock needed)
+- Created `eas.json` with production/preview build profiles
+- All 17/17 expo-doctor checks pass
+- **Deployment agent verified PASS ✅** — No blockers
