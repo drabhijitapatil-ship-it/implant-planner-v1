@@ -716,6 +716,13 @@ async def approve_procedure(
                     "read": False,
                     "created_at": datetime.utcnow()
                 })
+                # Push notify student of completion
+                await send_expo_push_notifications(
+                    [procedure["student_id"]],
+                    "Procedure Complete!",
+                    f"Stage 1 Implant Placement for {procedure['patient_name']} done successfully!",
+                    {"procedure_id": procedure_id, "type": "completed"},
+                )
                 
                 # Notify both approvers
                 await db.notifications.insert_one({
