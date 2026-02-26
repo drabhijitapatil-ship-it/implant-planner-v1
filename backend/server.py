@@ -239,6 +239,58 @@ async def get_users(role: Optional[str] = None, current_user: dict = Depends(get
     
     return users
 
+# User Management (Admin/Implant Incharge only)
+class UserCreate(BaseModel):
+    name: str
+    email: EmailStr
+    password: str
+    role: str
+
+@api_router.post("/users")
+async def create_user(user: UserCreate, current_user: dict = Depends(get_current_user)):
+    # Only administrators can create users
+    if current_user["role"] not in ["administrator", "implant_incharge"]:
+        raise HTTPException(status_code=403, detail="Only administrators and implant incharge can create users")
+    
+    # Check if email already exists
+    existing = await db.users.find_one({"email": user.email})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Validate role
+    if user.role not in ["student", "supervisor", "implant_incharge", "administrator", "nurse"]:
+        raise HTTPException(status_code=400, detail="Invalid role")
+    
+    # Create user
+    user_dict = {
+        "name": user.name,
+        "email": user.email,
+        "password_hash": get_password_hash(user.password),
+        "role": user.role,
+        "created_at": datetime.utcnow()
+    }
+    
+    result = await db.users.insert_one(user_dict)
+    
+    return {"id": str(result.inserted_id), "message": "User created successfully"}
+
+@api_router.delete("/users/{user_id}")
+async def delete_user(user_id: str, current_user: dict = Depends(get_current_user)):
+    # Only administrators can delete users
+    if current_user["role"] not in ["administrator", "implant_incharge"]:
+        raise HTTPException(status_code=403, detail="Only administrators and implant incharge can delete users")
+    
+    # Cannot delete yourself
+    if user_id == current_user["_id"]:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    
+    result = await db.users.delete_one({"_id": ObjectId(user_id)})
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return {"message": "User deleted successfully"}
+
 # Procedure Routes
 @api_router.post("/procedures")
 async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depends(get_current_user)):
