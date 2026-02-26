@@ -52,6 +52,20 @@ Mobile app (Expo) for the Department of Prosthodontics to plan and manage dental
 - [ ] Clean up duplicate student entries in DB
 - [ ] PDF export visual testing
 
+## User Credentials & Push Notifications (Feb 26, 2026)
+- Registered all user roles with standardized credentials:
+  - Implant Incharge: abhijit.patil@dental.edu / Admin@123
+  - Administrator: ajay.sabane@dental.edu / Admin@123
+  - Supervisors (4): Supervisor@123 (rajeshree.jadhav, vasantha.n, rupali.patil, pankaj.kadam @dental.edu)
+  - Students (12): Student@123 (gaurav.pandey, anand.kurum, manasi.dhiren, etc. @student.dental.edu)
+  - Nurses (2): Nurse@123 (priya.sharma, anjali.desai @dental.edu)
+- Cleaned up duplicate user entries from previous script runs
+- Added Expo Push Notifications:
+  - Backend: push token registration endpoint, async push delivery via Expo API
+  - Frontend: usePushNotifications hook, automatic token registration on login
+  - Triggers: New procedure creation, Phase 2 submission, approval/rejection events
+- All 12 backend tests passed (100%)
+
 ## Deployment Fix (Feb 26, 2026)
 - **Root Cause:** Emergent EAS builder image (2025101601) runs `eas update` without `--environment` flag, which SDK 55 requires
 - **Fix:** Downgraded Expo SDK from 55 to 54 (54.0.33) where `--environment` is not required
