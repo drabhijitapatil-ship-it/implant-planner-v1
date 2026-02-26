@@ -17,7 +17,7 @@ export default function BackToDashboard({ label = 'Dashboard' }: BackToDashboard
   return (
     <View style={styles.container}>
       <TouchableOpacity style={styles.backButton} onPress={handlePress}>
-        <Ionicons name="arrow-back" size={20} color="#FFF" />
+        <Ionicons name="home" size={18} color="#FFF" />
         <Text style={styles.backButtonText}>{label}</Text>
       </TouchableOpacity>
     </View>
@@ -26,24 +26,24 @@ export default function BackToDashboard({ label = 'Dashboard' }: BackToDashboard
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
-    alignItems: 'flex-start',
+    position: 'absolute',
+    bottom: 20,
+    left: 16,
+    zIndex: 999,
   },
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     backgroundColor: '#DC3545',
     borderRadius: 25,
     gap: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
   },
   backButtonText: {
     fontSize: 14,
