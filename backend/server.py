@@ -509,8 +509,13 @@ async def approve_procedure(
         raise HTTPException(status_code=404, detail="Procedure not found")
     
     # Check if user is supervisor, implant incharge, or administrator
-    is_supervisor = (current_user["role"] == "supervisor" or current_user["role"] == "administrator") and current_user["_id"] == procedure["supervisor_id"]
-    is_implant_incharge = (current_user["role"] == "implant_incharge" or current_user["role"] == "administrator") and current_user["_id"] == procedure["implant_incharge_id"]
+    # The check is based on procedure assignment, not user role
+    # Students and nurses cannot approve
+    if current_user["role"] in ["student", "nurse"]:
+        raise HTTPException(status_code=403, detail="Students and nurses cannot approve procedures")
+    
+    is_supervisor = current_user["_id"] == procedure.get("supervisor_id")
+    is_implant_incharge = current_user["_id"] == procedure.get("implant_incharge_id")
     
     # Check if the same person is BOTH supervisor AND implant incharge
     same_person_both_roles = procedure["supervisor_id"] == procedure["implant_incharge_id"]
