@@ -56,7 +56,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         user_id = payload.get("user_id")
         if user_id is None:
             raise HTTPException(status_code=401, detail="Invalid token")
-        user = await db.users.find_one({"_id": ObjectId(user_id)})
+        user = await db.users.find_one({"_id": ObjectId(user_id)}, {"password_hash": 0})
         if user is None:
             raise HTTPException(status_code=401, detail="User not found")
         user["_id"] = str(user["_id"])
@@ -232,7 +232,7 @@ async def get_users(role: Optional[str] = None, current_user: dict = Depends(get
     if role:
         query["role"] = role
     
-    users = await db.users.find(query, {"password_hash": 0}).to_list(1000)
+    users = await db.users.find(query, {"password_hash": 0}).to_list(100)
     for user in users:
         user["_id"] = str(user["_id"])
         user["id"] = user["_id"]
@@ -406,7 +406,7 @@ async def get_procedures(
     if date:
         query["procedure_date"] = date
     
-    procedures = await db.procedures.find(query).sort("procedure_date", 1).to_list(1000)
+    procedures = await db.procedures.find(query).sort("procedure_date", 1).to_list(100)
     
     for proc in procedures:
         proc["_id"] = str(proc["_id"])
