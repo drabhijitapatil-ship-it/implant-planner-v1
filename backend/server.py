@@ -463,7 +463,7 @@ async def get_procedures(
         query["supervisor_id"] = current_user["_id"]
     elif current_user["role"] == "nurse":
         # Nurses can only see fully approved/completed procedures
-        query["status"] = {"$in": ["phase1_approved", "phase2_approved", "approved"]}
+        query["status"] = {"$in": ["phase1_approved", "phase2_approved", "approved", "stage2_surgical_approved", "completed"]}
     # administrator and implant_incharge can see all
     
     if status and current_user["role"] != "nurse":
