@@ -939,7 +939,7 @@ async def submit_stage2_surgical(
         await db.notifications.insert_one({
             "user_id": uid,
             "procedure_id": procedure_id,
-            "message": f"Stage 2 Surgical Protocol submitted by {procedure['student_name']} for patient {procedure['patient_name']}",
+            "message": f"Phase 3: Second Stage Surgical Protocol submitted by {procedure['student_name']} for patient {procedure['patient_name']}",
             "type": "approval_request",
             "read": False,
             "created_at": datetime.utcnow()
