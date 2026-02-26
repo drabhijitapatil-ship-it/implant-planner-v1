@@ -608,12 +608,12 @@ const styles = StyleSheet.create({
   },
   phase2Button: {
     flexDirection: 'row',
-    backgroundColor: '#DC3545',
+    backgroundColor: '#28A745',
     borderRadius: 16,
     padding: 18,
     alignItems: 'center',
     gap: 12,
-    shadowColor: '#DC3545',
+    shadowColor: '#28A745',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
@@ -629,7 +629,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   phase2ButtonSubtitle: {
-    color: 'rgba(255,255,255,0.8)',
+    color: 'rgba(255,255,255,0.9)',
     fontSize: 12,
     marginTop: 2,
   },
