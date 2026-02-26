@@ -119,8 +119,33 @@ export default function NewProcedureScreen() {
   };
 
   const handleDateSelect = (day: any) => {
-    setFormData((prev) => ({ ...prev, procedure_date: day.dateString }));
+    // Block Sundays
+    const selectedDate = new Date(day.dateString);
+    if (selectedDate.getUTCDay() === 0) {
+      Alert.alert('Not Available', 'No scheduling is available on Sundays.');
+      return;
+    }
+    // If Saturday, auto-set time to 9:30 AM
+    if (selectedDate.getUTCDay() === 6) {
+      setFormData((prev) => ({ ...prev, procedure_date: day.dateString, procedure_time: '09:30' }));
+    } else {
+      setFormData((prev) => ({ ...prev, procedure_date: day.dateString }));
+    }
     setShowCalendar(false);
+  };
+
+  const isSaturday = () => {
+    try {
+      const d = new Date(formData.procedure_date);
+      return d.getUTCDay() === 6;
+    } catch { return false; }
+  };
+
+  const getAvailableTimeSlots = () => {
+    if (isSaturday()) {
+      return PROCEDURE_TIME_SLOTS.filter(s => s.value === '09:30');
+    }
+    return PROCEDURE_TIME_SLOTS.filter(s => s.value !== '09:30');
   };
 
   const validateForm = () => {
