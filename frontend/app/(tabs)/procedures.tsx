@@ -79,7 +79,7 @@ export default function ProceduresScreen() {
 
       <View style={styles.detailRow}>
         <Ionicons name="school" size={16} color="#666" />
-        <Text style={styles.detailText}>Instructor: {item.instructor_name}</Text>
+        <Text style={styles.detailText}>Supervisor: {item.supervisor_name}</Text>
       </View>
 
       <View style={styles.detailRow}>
