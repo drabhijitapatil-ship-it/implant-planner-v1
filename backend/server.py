@@ -508,12 +508,8 @@ async def approve_procedure(
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
     
-    # Check if user is supervisor, implant incharge, or administrator
-    # The check is based on procedure assignment, not user role
-    # Students and nurses cannot approve
-    if current_user["role"] in ["student", "nurse"]:
-        raise HTTPException(status_code=403, detail="Students and nurses cannot approve procedures")
-    
+    # Check if user is the assigned supervisor or implant incharge for this procedure
+    # Assignment-based check (not role-based) allows any faculty to approve when assigned
     is_supervisor = current_user["_id"] == procedure.get("supervisor_id")
     is_implant_incharge = current_user["_id"] == procedure.get("implant_incharge_id")
     
