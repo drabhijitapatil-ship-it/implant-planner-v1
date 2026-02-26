@@ -252,6 +252,72 @@ export default function ProcedureDetailScreen() {
           </View>
         </View>
 
+        {/* Treatment Timeline / Progress Tracker */}
+        <View style={styles.timelineContainer} data-testid="treatment-timeline">
+          <Text style={styles.timelineTitle}>Treatment Progress</Text>
+          <View style={styles.timelineSteps}>
+            {[
+              { key: 'phase1', label: 'Phase 1', subtitle: 'Pre-surgical', 
+                done: ['phase1_approved','pending_phase2','phase2_approved','pending_stage2_surgical','stage2_surgical_approved','pending_stage2_prosthetic','completed'].includes(procedure.status),
+                active: procedure.status === 'pending_phase1',
+                timestamp: procedure.phase1_completed_at },
+              { key: 'phase2', label: 'Phase 2', subtitle: 'Surgical',
+                done: ['phase2_approved','pending_stage2_surgical','stage2_surgical_approved','pending_stage2_prosthetic','completed'].includes(procedure.status),
+                active: ['phase1_approved','pending_phase2'].includes(procedure.status),
+                timestamp: procedure.phase2_completed_at },
+              { key: 'stage2s', label: 'Stage 2', subtitle: 'Surgical Protocol',
+                done: ['stage2_surgical_approved','pending_stage2_prosthetic','completed'].includes(procedure.status),
+                active: ['phase2_approved','pending_stage2_surgical'].includes(procedure.status),
+                timestamp: procedure.stage2_surgical_completed_at },
+              { key: 'stage2p', label: 'Stage 2', subtitle: 'Prosthetic Protocol',
+                done: procedure.status === 'completed',
+                active: ['stage2_surgical_approved','pending_stage2_prosthetic'].includes(procedure.status),
+                timestamp: procedure.stage2_prosthetic_completed_at },
+              { key: 'complete', label: 'Complete', subtitle: 'Treatment Done',
+                done: procedure.status === 'completed',
+                active: false,
+                timestamp: procedure.treatment_completed_at },
+            ].map((step, index, arr) => (
+              <View key={step.key} style={styles.timelineStep}>
+                <View style={styles.timelineNodeCol}>
+                  <View style={[
+                    styles.timelineNode,
+                    step.done && styles.timelineNodeDone,
+                    step.active && styles.timelineNodeActive,
+                  ]}>
+                    {step.done ? (
+                      <Ionicons name="checkmark" size={14} color="#FFF" />
+                    ) : step.active ? (
+                      <View style={styles.timelinePulse} />
+                    ) : (
+                      <View style={styles.timelineDot} />
+                    )}
+                  </View>
+                  {index < arr.length - 1 && (
+                    <View style={[
+                      styles.timelineLine,
+                      step.done && styles.timelineLineDone,
+                    ]} />
+                  )}
+                </View>
+                <View style={styles.timelineLabelCol}>
+                  <Text style={[
+                    styles.timelineLabel,
+                    step.done && styles.timelineLabelDone,
+                    step.active && styles.timelineLabelActive,
+                  ]}>{step.label}</Text>
+                  <Text style={styles.timelineSubtitle}>{step.subtitle}</Text>
+                  {step.timestamp && (
+                    <Text style={styles.timelineTimestamp}>
+                      {format(new Date(step.timestamp), 'MMM dd, HH:mm')}
+                    </Text>
+                  )}
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+
         {/* Phase Indicator and Approval Status */}
         {(procedure.status === 'pending_phase1' || procedure.status === 'pending_phase2' ||
           procedure.status === 'pending_stage2_surgical' || procedure.status === 'pending_stage2_prosthetic') && (
