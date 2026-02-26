@@ -117,11 +117,11 @@ export const generateProcedurePDF = async (procedure: any) => {
           </div>` : ''}
 
           ${procedure.checklist?.second_stage || procedure.checklist?.prosthetic_phase ? `
-          <div class="stage-divider">STAGE 2 - HEALING &amp; PROSTHETIC PHASE</div>
+          <div class="stage-divider">PHASE 3 &amp; 4 - HEALING &amp; PROSTHETIC PHASE</div>
 
           ${procedure.checklist?.second_stage ? `
           <div class="section">
-            <div class="section-title">III. Second Stage Surgical Protocol</div>
+            <div class="section-title">III. Phase 3 - Second Stage Surgical Protocol</div>
             <div class="checklist">
               ${procedure.checklist.second_stage.items?.map((item: any) => `
                 <div class="checklist-item">
