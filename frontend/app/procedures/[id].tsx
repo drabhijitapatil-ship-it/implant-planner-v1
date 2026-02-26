@@ -847,4 +847,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  completedBanner: {
+    margin: 16,
+    padding: 20,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 16,
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 2,
+    borderColor: '#4CAF50',
+  },
+  completedText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#2E7D32',
+  },
+  completedSubtext: {
+    fontSize: 14,
+    color: '#388E3C',
+    textAlign: 'center',
+  },
 });
