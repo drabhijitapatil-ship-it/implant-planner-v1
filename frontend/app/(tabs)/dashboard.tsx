@@ -152,7 +152,7 @@ export default function DashboardScreen() {
                   </View>
                 </View>
                 <Text style={styles.procedureDetail}>Student: {proc.student_name}</Text>
-                <Text style={styles.procedureDetail}>Instructor: {proc.instructor_name}</Text>
+                <Text style={styles.procedureDetail}>Supervisor: {proc.supervisor_name}</Text>
                 <Text style={styles.procedureDetail}>Time: {proc.procedure_time}</Text>
                 <Text style={styles.procedureDetail}>Site: {proc.implant_site}</Text>
               </TouchableOpacity>
