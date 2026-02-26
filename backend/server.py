@@ -467,7 +467,14 @@ async def get_procedures(
     # administrator and implant_incharge can see all
     
     if status and current_user["role"] != "nurse":
-        query["status"] = status
+        if status == "pending":
+            query["status"] = {"$in": ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic"]}
+        elif status == "completed":
+            query["status"] = {"$in": ["phase2_approved", "stage2_surgical_approved", "completed"]}
+        elif status == "rejected":
+            query["status"] = {"$in": ["rejected", "stage2_surgical_rejected", "stage2_prosthetic_rejected"]}
+        else:
+            query["status"] = status
     
     if date:
         query["procedure_date"] = date
