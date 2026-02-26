@@ -948,8 +948,8 @@ async def submit_stage2_surgical(
     push_recipients = list(set([procedure["supervisor_id"], procedure["implant_incharge_id"]]))
     await send_expo_push_notifications(
         push_recipients,
-        "Stage 2 Surgical Protocol Requires Approval",
-        f"{procedure['student_name']} submitted Stage 2 Surgical Protocol for {procedure['patient_name']}",
+        "Phase 3: Second Stage Surgical Protocol Requires Approval",
+        f"{procedure['student_name']} submitted Phase 3 Second Stage Surgical Protocol for {procedure['patient_name']}",
         {"procedure_id": procedure_id, "type": "approval_request"},
     )
 
