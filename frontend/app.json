@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "dental-phase-app",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "runtimeVersion": {
       "policy": "sdkVersion"
     },
@@ -22,9 +21,8 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000"
+        "backgroundColor": "#000000"
       },
-      "edgeToEdgeEnabled": true,
       "package": "com.dental.phaseapp"
     },
     "web": {
@@ -40,7 +38,7 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#000"
+          "backgroundColor": "#000000"
         }
       ],
       "expo-updates"
