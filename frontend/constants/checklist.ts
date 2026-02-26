@@ -27,6 +27,32 @@ export const CHECKLIST_DATA = {
       { id: 'post_cleaning', label: 'Post operative cleaning of implant room, instruments and equipment' },
     ],
   },
+  second_stage: {
+    title: 'III. Second Stage Surgical Protocol',
+    items: [
+      { id: 'healing_assessment', label: 'Implant healing assessment (clinical & radiographic)' },
+      { id: 'tissue_conditioning', label: 'Tissue conditioning done' },
+      { id: 'second_stage_surgery', label: 'Second stage surgery performed' },
+      { id: 'healing_abutment', label: 'Healing abutment placed' },
+      { id: 'soft_tissue_eval', label: 'Soft tissue evaluation and management' },
+      { id: 'patient_hygiene', label: 'Patient oral hygiene instructions given' },
+      { id: 'post_op_radiograph', label: 'Post-operative radiograph taken' },
+      { id: 'follow_up_scheduled', label: 'Follow-up appointment scheduled' },
+    ],
+  },
+  prosthetic_phase: {
+    title: 'IV. Prosthetic Phase Protocol',
+    items: [
+      { id: 'impression_taken', label: 'Final impression taken' },
+      { id: 'bite_registration', label: 'Bite registration completed' },
+      { id: 'shade_selection', label: 'Shade selection done' },
+      { id: 'try_in', label: 'Try-in verification completed' },
+      { id: 'final_prosthesis', label: 'Final prosthesis placed' },
+      { id: 'occlusal_adjustment', label: 'Occlusal adjustment done' },
+      { id: 'patient_instructions', label: 'Patient care instructions given' },
+      { id: 'maintenance_schedule', label: 'Maintenance schedule established' },
+    ],
+  },
 };
 
 // Time slots available for procedures
