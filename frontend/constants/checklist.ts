@@ -83,7 +83,7 @@ export const STATUS_LABELS: Record<string, string> = {
   pending_phase1: 'Phase 1: Pending Approval',
   phase1_approved: 'Phase 1: Approved - Ready for Phase 2',
   pending_phase2: 'Phase 2: Pending Approval',
-  phase2_approved: 'Stage 1 Implant Placement Done - Ready for Stage 2',
+  phase2_approved: 'Phase 2 Approved - Ready for Phase 3',
   pending_stage2_surgical: 'Phase 3: Second Stage Surgical Protocol Pending Approval',
   stage2_surgical_approved: 'Phase 3: Approved - Ready for Phase 4',
   stage2_surgical_rejected: 'Phase 3: Second Stage Surgical Protocol Rejected',
