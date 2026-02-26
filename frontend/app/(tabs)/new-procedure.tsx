@@ -444,7 +444,7 @@ export default function NewProcedureScreen() {
                 <TouchableOpacity
                   style={[
                     styles.dropdownItem,
-                    formData.instructor_id === item.id && styles.dropdownItemSelected,
+                    formData.supervisor_id === item.id && styles.dropdownItemSelected,
                   ]}
                   onPress={() => {
                     handleInstructorChange(item.id);
