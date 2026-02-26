@@ -1163,7 +1163,7 @@ async def approve_stage2_prosthetic(
             await db.notifications.insert_one({
                 "user_id": procedure["student_id"],
                 "procedure_id": procedure_id,
-                "message": f"Treatment for {procedure['patient_name']} is now complete! Both Stage 2 protocols have been approved.",
+                "message": f"Treatment for {procedure['patient_name']} is now complete! All protocols (Phase 1-4) have been approved.",
                 "type": "approved",
                 "read": False,
                 "created_at": datetime.utcnow()
