@@ -30,9 +30,12 @@ export const CHECKLIST_DATA = {
 };
 
 // Time slots available for procedures
+// Monday-Friday: 10:00 AM, 2:00 PM
+// Saturday: 9:30 AM only
 export const PROCEDURE_TIME_SLOTS = [
-  { value: '10:00', label: '10:00 AM' },
-  { value: '14:00', label: '2:00 PM' },
+  { value: '10:00', label: '10:00 AM', days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'] },
+  { value: '14:00', label: '2:00 PM', days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'] },
+  { value: '09:30', label: '9:30 AM (Saturday)', days: ['Sat'] },
 ];
 
 export const STATUS_COLORS = {
