@@ -51,3 +51,12 @@ Mobile app (Expo) for the Department of Prosthodontics to plan and manage dental
 - [ ] Refactor new-procedure.tsx into smaller components
 - [ ] Clean up duplicate student entries in DB
 - [ ] PDF export visual testing
+
+## Deployment Fix (Feb 26, 2026)
+- Fixed Expo SDK 55 EAS update failure: `--environment flag is required`
+- Created `eas.json` with production/preview build profiles and env configuration
+- Updated `app.json`: added `runtimeVersion`, `updates` URL, `extra.eas.projectId`, `bundleIdentifier`, `package`, `expo-updates` plugin
+- Installed `expo-updates` package
+- Fixed backend `get_current_user` to exclude `password_hash` from projection
+- Capped query result limits (users: 100, procedures: 100)
+- Fixed dashboard stats to use correct status field names
