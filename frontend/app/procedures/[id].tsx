@@ -97,22 +97,18 @@ export default function ProcedureDetailScreen() {
 
   const canApprove = () => {
     if (!procedure) return false;
-    
-    // Nurses cannot approve (read-only)
     if (user?.role === 'nurse') return false;
     
-    const isInstructor = (user?.role === 'instructor' || user?.role === 'administrator') && user?.id === procedure.instructor_id;
+    const isSupervisor = (user?.role === 'supervisor' || user?.role === 'administrator' || user?.role === 'implant_incharge') && user?.id === procedure.supervisor_id;
     const isImplantIncharge = (user?.role === 'implant_incharge' || user?.role === 'administrator') && user?.id === procedure.implant_incharge_id;
     
-    // Phase 1: Can approve if pending_phase1 and haven't approved yet
     if (procedure.status === 'pending_phase1') {
-      if (isInstructor && !procedure.instructor_phase1_approved) return true;
+      if (isSupervisor && !procedure.supervisor_phase1_approved) return true;
       if (isImplantIncharge && !procedure.implant_incharge_phase1_approved) return true;
     }
     
-    // Phase 2: Can approve if pending_phase2 and haven't approved yet
     if (procedure.status === 'pending_phase2') {
-      if (isInstructor && !procedure.instructor_phase2_approved) return true;
+      if (isSupervisor && !procedure.supervisor_phase2_approved) return true;
       if (isImplantIncharge && !procedure.implant_incharge_phase2_approved) return true;
     }
     
@@ -128,18 +124,12 @@ export default function ProcedureDetailScreen() {
 
   const canEdit = () => {
     if (!procedure) return false;
-    
-    // Nurses cannot edit (read-only)
     if (user?.role === 'nurse') return false;
-    
     if (user?.role === 'implant_incharge') return true;
-    
-    if (user?.role === 'instructor' && user?.id === procedure.instructor_id) return true;
-    
-    if (user?.role === 'student' && user?.id === procedure.student_id && procedure.status === 'pending_instructor') {
+    if (user?.role === 'supervisor' && user?.id === procedure.supervisor_id) return true;
+    if (user?.role === 'student' && user?.id === procedure.student_id && procedure.status === 'pending_phase1') {
       return true;
     }
-    
     return false;
   };
   
@@ -172,7 +162,7 @@ export default function ProcedureDetailScreen() {
       <View key={sectionKey} style={styles.section}>
         <Text style={styles.sectionTitle}>{sectionTitle}</Text>
         {sectionData.items.map((item: any) => {
-          const itemDef = checklistDef.items.find((i: any) => i.id === item.id);
+          const itemDef = checklistDef?.items.find((i: any) => i.id === item.id);
           return (
             <View key={item.id} style={styles.checklistItem}>
               <Ionicons
@@ -180,7 +170,7 @@ export default function ProcedureDetailScreen() {
                 size={20}
                 color={item.value ? '#4CAF50' : '#F44336'}
               />
-              <Text style={styles.checklistLabel}>{itemDef?.label || item.id}</Text>
+              <Text style={styles.checklistLabel}>{itemDef?.label || item.label || item.id}</Text>
             </View>
           );
         })}
@@ -217,9 +207,7 @@ export default function ProcedureDetailScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <BackToDashboard />
-
-      <ScrollView contentContainerStyle={canExportPDF() ? styles.scrollContentWithPdf : undefined}>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.statusCard}>
           <View
             style={[
@@ -241,22 +229,40 @@ export default function ProcedureDetailScreen() {
             </Text>
             <View style={styles.approvalRow}>
               <Ionicons 
-                name={procedure.instructor_phase1_approved || procedure.instructor_phase2_approved ? "checkmark-circle" : "time"} 
+                name={
+                  (procedure.status === 'pending_phase1' ? procedure.supervisor_phase1_approved : procedure.supervisor_phase2_approved)
+                    ? "checkmark-circle" : "time"
+                } 
                 size={24} 
-                color={procedure.instructor_phase1_approved || procedure.instructor_phase2_approved ? "#4CAF50" : "#FFA500"} 
+                color={
+                  (procedure.status === 'pending_phase1' ? procedure.supervisor_phase1_approved : procedure.supervisor_phase2_approved)
+                    ? "#4CAF50" : "#FFA500"
+                } 
               />
               <Text style={styles.approvalText}>
-                Instructor: {procedure.instructor_phase1_approved || procedure.instructor_phase2_approved ? '✅ Approved' : '⏳ Pending'}
+                Supervisor: {
+                  (procedure.status === 'pending_phase1' ? procedure.supervisor_phase1_approved : procedure.supervisor_phase2_approved)
+                    ? 'Approved' : 'Pending'
+                }
               </Text>
             </View>
             <View style={styles.approvalRow}>
               <Ionicons 
-                name={procedure.implant_incharge_phase1_approved || procedure.implant_incharge_phase2_approved ? "checkmark-circle" : "time"} 
+                name={
+                  (procedure.status === 'pending_phase1' ? procedure.implant_incharge_phase1_approved : procedure.implant_incharge_phase2_approved)
+                    ? "checkmark-circle" : "time"
+                } 
                 size={24} 
-                color={procedure.implant_incharge_phase1_approved || procedure.implant_incharge_phase2_approved ? "#4CAF50" : "#FFA500"} 
+                color={
+                  (procedure.status === 'pending_phase1' ? procedure.implant_incharge_phase1_approved : procedure.implant_incharge_phase2_approved)
+                    ? "#4CAF50" : "#FFA500"
+                } 
               />
               <Text style={styles.approvalText}>
-                Implant Incharge: {procedure.implant_incharge_phase1_approved || procedure.implant_incharge_phase2_approved ? '✅ Approved' : '⏳ Pending'}
+                Implant Incharge: {
+                  (procedure.status === 'pending_phase1' ? procedure.implant_incharge_phase1_approved : procedure.implant_incharge_phase2_approved)
+                    ? 'Approved' : 'Pending'
+                }
               </Text>
             </View>
           </View>
@@ -268,33 +274,14 @@ export default function ProcedureDetailScreen() {
             <TouchableOpacity
               style={styles.phase2Button}
               onPress={() => router.push(`/procedures/submit-phase2/${id}`)}
+              data-testid="phase2-submit-btn"
             >
               <Ionicons name="checkmark-circle" size={24} color="#FFF" />
               <View style={styles.phase2ButtonTextContainer}>
-                <Text style={styles.phase2ButtonTitle}>PHASE 1 APPROVED ✓</Text>
+                <Text style={styles.phase2ButtonTitle}>PHASE 1 APPROVED</Text>
                 <Text style={styles.phase2ButtonSubtitle}>Tap to complete Phase 2 - Surgical Checklist</Text>
               </View>
               <Ionicons name="chevron-forward" size={24} color="#FFF" />
-            </TouchableOpacity>
-          </View>
-        )}
-        
-        {/* Export PDF Button - Bottom Center RED */}
-        {canExportPDF() && (
-          <View style={styles.pdfButtonContainer}>
-            <TouchableOpacity
-              style={[styles.pdfButton, pdfLoading && styles.buttonDisabled]}
-              onPress={handleExportPDF}
-              disabled={pdfLoading}
-            >
-              {pdfLoading ? (
-                <ActivityIndicator color="#FFF" size="small" />
-              ) : (
-                <>
-                  <Ionicons name="document-text" size={24} color="#FFF" />
-                  <Text style={styles.pdfButtonText}>EXPORT AS PDF</Text>
-                </>
-              )}
             </TouchableOpacity>
           </View>
         )}
@@ -309,7 +296,7 @@ export default function ProcedureDetailScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Staff</Text>
           <InfoRow icon="school" label="Student" value={procedure.student_name} />
-          <InfoRow icon="school" label="Instructor" value={procedure.instructor_name} />
+          <InfoRow icon="school" label="Supervisor" value={procedure.supervisor_name} />
           <InfoRow icon="medkit" label="Implant Incharge" value={procedure.implant_incharge_name} />
         </View>
 
@@ -318,7 +305,7 @@ export default function ProcedureDetailScreen() {
           <InfoRow
             icon="calendar"
             label="Date"
-            value={format(new Date(procedure.procedure_date), 'MMM dd, yyyy')}
+            value={procedure.procedure_date ? format(new Date(procedure.procedure_date), 'MMM dd, yyyy') : 'N/A'}
           />
           <InfoRow icon="time" label="Time" value={procedure.procedure_time} />
         </View>
@@ -372,6 +359,7 @@ export default function ProcedureDetailScreen() {
               style={[styles.approveButton, actionLoading && styles.buttonDisabled]}
               onPress={handleApprove}
               disabled={actionLoading}
+              data-testid="approve-btn"
             >
               {actionLoading ? (
                 <ActivityIndicator color="#FFF" />
@@ -387,6 +375,7 @@ export default function ProcedureDetailScreen() {
               style={[styles.rejectButton, actionLoading && styles.buttonDisabled]}
               onPress={() => setShowRejectDialog(true)}
               disabled={actionLoading}
+              data-testid="reject-btn"
             >
               <Ionicons name="close-circle" size={20} color="#FFF" />
               <Text style={styles.buttonText}>Reject</Text>
@@ -429,7 +418,32 @@ export default function ProcedureDetailScreen() {
             </View>
           </View>
         )}
+
+        {/* Extra bottom spacing for the fixed buttons */}
+        <View style={{ height: canExportPDF() ? 100 : 80 }} />
       </ScrollView>
+
+      {/* Fixed bottom bar */}
+      <View style={styles.bottomBar}>
+        <BackToDashboard />
+        {canExportPDF() && (
+          <TouchableOpacity
+            style={[styles.pdfButton, pdfLoading && styles.buttonDisabled]}
+            onPress={handleExportPDF}
+            disabled={pdfLoading}
+            data-testid="export-pdf-btn"
+          >
+            {pdfLoading ? (
+              <ActivityIndicator color="#FFF" size="small" />
+            ) : (
+              <>
+                <Ionicons name="document-text" size={20} color="#FFF" />
+                <Text style={styles.pdfButtonText}>EXPORT AS PDF</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
+      </View>
     </SafeAreaView>
   );
 }
@@ -451,8 +465,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F5F5F5',
   },
-  scrollContentWithPdf: {
-    paddingBottom: 100,
+  scrollContent: {
+    paddingBottom: 20,
   },
   loadingContainer: {
     flex: 1,
@@ -467,26 +481,6 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 16,
     color: '#999',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
-  },
-  backButton: {
-    padding: 4,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1A1A1A',
-  },
-  placeholder: {
-    width: 32,
   },
   statusCard: {
     padding: 16,
@@ -574,6 +568,8 @@ const styles = StyleSheet.create({
   },
   additionalFieldValue: {
     fontSize: 14,
+    color: '#1A1A1A',
+  },
   approvalSection: {
     backgroundColor: '#FFF',
     margin: 16,
@@ -633,40 +629,36 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
-  phase2ButtonText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  pdfButtonContainer: {
-    position: 'absolute',
-    bottom: 20,
-    left: 16,
-    right: 16,
-    zIndex: 100,
+  bottomBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5EA',
   },
   pdfButton: {
     flexDirection: 'row',
     backgroundColor: '#DC3545',
-    borderRadius: 16,
-    padding: 18,
+    borderRadius: 25,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: 8,
     shadowColor: '#DC3545',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
   pdfButtonText: {
     color: '#FFF',
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: '700',
-    letterSpacing: 1,
-  },
-
-    color: '#1A1A1A',
+    letterSpacing: 0.5,
   },
   actionButtons: {
     flexDirection: 'row',
