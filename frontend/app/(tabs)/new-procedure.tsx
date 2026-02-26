@@ -337,7 +337,7 @@ export default function NewProcedureScreen() {
 
             <Text style={styles.label}>Procedure Time *</Text>
             <View style={styles.timeSlotContainer}>
-              {PROCEDURE_TIME_SLOTS.map((slot) => (
+              {getAvailableTimeSlots().map((slot) => (
                 <TouchableOpacity
                   key={slot.value}
                   style={[
