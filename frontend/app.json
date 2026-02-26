@@ -1,22 +1,31 @@
 {
   "expo": {
-    "name": "frontend",
-    "slug": "frontend",
+    "name": "dental-phase-app",
+    "slug": "dental-phase-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "frontend",
+    "scheme": "dental-phase-app",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
+    "updates": {
+      "enabled": true,
+      "url": "https://u.expo.dev/be59d9a1-1a99-47e5-be02-81385517957d"
+    },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.dental.phaseapp"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#000"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.dental.phaseapp"
     },
     "web": {
       "bundler": "metro",
@@ -37,6 +46,11 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "be59d9a1-1a99-47e5-be02-81385517957d"
+      }
     }
   }
 }
