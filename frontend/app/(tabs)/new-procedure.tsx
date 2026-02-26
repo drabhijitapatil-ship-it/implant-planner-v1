@@ -455,19 +455,19 @@ export default function NewProcedureScreen() {
                     <Ionicons 
                       name="person-circle" 
                       size={32} 
-                      color={formData.instructor_id === item.id ? '#007AFF' : '#666'} 
+                      color={formData.supervisor_id === item.id ? '#007AFF' : '#666'} 
                     />
                     <View>
                       <Text style={[
                         styles.dropdownItemText,
-                        formData.instructor_id === item.id && styles.dropdownItemTextSelected,
+                        formData.supervisor_id === item.id && styles.dropdownItemTextSelected,
                       ]}>
                         {item.name}
                       </Text>
                       <Text style={styles.dropdownItemRole}>{item.role}</Text>
                     </View>
                   </View>
-                  {formData.instructor_id === item.id && (
+                  {formData.supervisor_id === item.id && (
                     <Ionicons name="checkmark-circle" size={24} color="#007AFF" />
                   )}
                 </TouchableOpacity>
