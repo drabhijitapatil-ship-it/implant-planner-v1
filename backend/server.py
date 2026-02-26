@@ -499,9 +499,9 @@ async def approve_procedure(
     action: ApprovalAction,
     current_user: dict = Depends(get_current_user)
 ):
-    # Nurses cannot approve procedures (read-only access)
-    if current_user["role"] == "nurse":
-        raise HTTPException(status_code=403, detail="Nurses have read-only access")
+    # Students and nurses cannot approve
+    if current_user["role"] in ["student", "nurse"]:
+        raise HTTPException(status_code=403, detail="Only supervisors and implant incharge can approve procedures")
     
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     
