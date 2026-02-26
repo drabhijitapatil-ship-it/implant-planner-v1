@@ -64,20 +64,32 @@ export const PROCEDURE_TIME_SLOTS = [
   { value: '09:30', label: '9:30 AM (Saturday)', days: ['Sat'] },
 ];
 
-export const STATUS_COLORS = {
+export const STATUS_COLORS: Record<string, string> = {
   pending_phase1: '#FFA500',
   phase1_approved: '#4CAF50',
   pending_phase2: '#FFD700',
-  phase2_approved: '#4CAF50',
+  phase2_approved: '#2196F3',
+  pending_stage2_surgical: '#FF9800',
+  stage2_surgical_approved: '#8BC34A',
+  stage2_surgical_rejected: '#F44336',
+  pending_stage2_prosthetic: '#FF9800',
+  stage2_prosthetic_rejected: '#F44336',
+  completed: '#4CAF50',
   approved: '#4CAF50',
   rejected: '#F44336',
 };
 
-export const STATUS_LABELS = {
+export const STATUS_LABELS: Record<string, string> = {
   pending_phase1: 'Phase 1: Pending Approval',
   phase1_approved: 'Phase 1: Approved - Ready for Phase 2',
   pending_phase2: 'Phase 2: Pending Approval',
-  phase2_approved: 'Stage 1 Implant Placement Done Successfully',
+  phase2_approved: 'Stage 1 Implant Placement Done - Ready for Stage 2',
+  pending_stage2_surgical: 'Stage 2: Surgical Protocol Pending Approval',
+  stage2_surgical_approved: 'Stage 2: Surgical Approved - Ready for Prosthetic',
+  stage2_surgical_rejected: 'Stage 2: Surgical Protocol Rejected',
+  pending_stage2_prosthetic: 'Stage 2: Prosthetic Protocol Pending Approval',
+  stage2_prosthetic_rejected: 'Stage 2: Prosthetic Protocol Rejected',
+  completed: 'Treatment Complete',
   approved: 'Approved',
   rejected: 'Rejected',
 };
