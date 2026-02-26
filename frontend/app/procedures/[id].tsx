@@ -166,7 +166,7 @@ export default function ProcedureDetailScreen() {
   
   const canExportPDF = () => {
     if (!procedure) return false;
-    return procedure.status === 'phase2_approved';
+    return procedure.status === 'completed' || procedure.status === 'phase2_approved';
   };
   
   const handleExportPDF = async () => {
