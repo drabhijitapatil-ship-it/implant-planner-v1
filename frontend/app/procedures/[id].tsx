@@ -971,4 +971,98 @@ const styles = StyleSheet.create({
     color: '#388E3C',
     textAlign: 'center',
   },
+  timelineContainer: {
+    margin: 16,
+    marginTop: 0,
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  timelineTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 16,
+  },
+  timelineSteps: {},
+  timelineStep: {
+    flexDirection: 'row',
+    minHeight: 56,
+  },
+  timelineNodeCol: {
+    width: 32,
+    alignItems: 'center',
+  },
+  timelineNode: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#E0E0E0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+  },
+  timelineNodeDone: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50',
+  },
+  timelineNodeActive: {
+    backgroundColor: '#FFF',
+    borderColor: '#007AFF',
+    borderWidth: 3,
+  },
+  timelinePulse: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#007AFF',
+  },
+  timelineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#CCC',
+  },
+  timelineLine: {
+    width: 2,
+    flex: 1,
+    backgroundColor: '#E0E0E0',
+    marginVertical: 2,
+  },
+  timelineLineDone: {
+    backgroundColor: '#4CAF50',
+  },
+  timelineLabelCol: {
+    flex: 1,
+    marginLeft: 12,
+    paddingBottom: 16,
+  },
+  timelineLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#999',
+  },
+  timelineLabelDone: {
+    color: '#2E7D32',
+  },
+  timelineLabelActive: {
+    color: '#007AFF',
+  },
+  timelineSubtitle: {
+    fontSize: 12,
+    color: '#AAA',
+    marginTop: 1,
+  },
+  timelineTimestamp: {
+    fontSize: 11,
+    color: '#4CAF50',
+    marginTop: 2,
+    fontWeight: '500',
+  },
 });
