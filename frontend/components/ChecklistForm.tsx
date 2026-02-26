@@ -100,8 +100,10 @@ export default function ChecklistForm({ checklist, onChecklistChange, phase, sta
     <View style={styles.container}>
       <Text style={styles.mainTitle}>Implant Standard Operating Protocol Checklist</Text>
       
-      {(!phase || phase === 1) && renderChecklistSection('pre_surgical', CHECKLIST_DATA.pre_surgical)}
-      {(!phase || phase === 2) && renderChecklistSection('surgical', CHECKLIST_DATA.surgical)}
+      {(!phase || phase === 1) && !stage2Section && renderChecklistSection('pre_surgical', CHECKLIST_DATA.pre_surgical)}
+      {(!phase || phase === 2) && !stage2Section && renderChecklistSection('surgical', CHECKLIST_DATA.surgical)}
+      {stage2Section === 'second_stage' && renderChecklistSection('second_stage', CHECKLIST_DATA.second_stage)}
+      {stage2Section === 'prosthetic_phase' && renderChecklistSection('prosthetic_phase', CHECKLIST_DATA.prosthetic_phase)}
     </View>
   );
 }
