@@ -298,11 +298,27 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
     if current_user["role"] != "student":
         raise HTTPException(status_code=403, detail="Only students can create procedures")
     
-    # Check 24-hour scheduling restriction for students
+    # Check scheduling restrictions
     try:
         procedure_datetime = datetime.strptime(f"{procedure.procedure_date} {procedure.procedure_time}", "%Y-%m-%d %H:%M")
-        hours_until_procedure = (procedure_datetime - datetime.now()).total_seconds() / 3600
         
+        # Block Sunday scheduling for everyone
+        if procedure_datetime.weekday() == 6:  # Sunday
+            raise HTTPException(
+                status_code=400,
+                detail="No scheduling is available on Sundays."
+            )
+        
+        # Saturday: only 9:30 AM slot
+        if procedure_datetime.weekday() == 5:  # Saturday
+            if procedure.procedure_time != "09:30":
+                raise HTTPException(
+                    status_code=400,
+                    detail="Only 9:30 AM slot is available on Saturdays."
+                )
+        
+        # 24-hour restriction for students only
+        hours_until_procedure = (procedure_datetime - datetime.now()).total_seconds() / 3600
         if hours_until_procedure < 24:
             raise HTTPException(
                 status_code=400, 
