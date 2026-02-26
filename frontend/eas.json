@@ -1,0 +1,20 @@
+{
+  "cli": {
+    "version": ">= 3.0.0"
+  },
+  "build": {
+    "production": {
+      "distribution": "store",
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://dental-phase-app.preview.emergentagent.com"
+      }
+    },
+    "preview": {
+      "extends": "production",
+      "distribution": "internal"
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
