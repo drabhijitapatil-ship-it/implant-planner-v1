@@ -314,7 +314,7 @@ class TestStage2BackendAPIs:
             json=payload
         )
         assert response.status_code == 400, f"Expected 400, got {response.status_code}: {response.text}"
-        assert "Surgical Protocol must be approved" in response.json().get("detail", "")
+        assert "Phase 3 must be approved" in response.json().get("detail", "")
         
         print("PASS: Stage 2 Prosthetic correctly blocked when Surgical not approved")
 
