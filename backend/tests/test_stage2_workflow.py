@@ -193,9 +193,9 @@ class TestStage2BackendAPIs:
             json=payload
         )
         assert response.status_code == 400, f"Expected 400, got {response.status_code}: {response.text}"
-        assert "Stage 1 must be complete" in response.json().get("detail", "")
+        assert "Phase 2 must be approved" in response.json().get("detail", "")
         
-        print("PASS: Stage 2 Surgical correctly blocked when Stage 1 not complete")
+        print("PASS: Phase 3 (Stage 2 Surgical) correctly blocked when Phase 2 not approved")
 
     # Test 7: Progress through Phase 1 and Phase 2 approval
     def test_07_approve_phase1_and_phase2(self, tokens):
