@@ -163,8 +163,8 @@ export const generateProcedurePDF = async (procedure: any) => {
             <table>
               <tr><td class="info-label">Phase 1 (Pre-surgical) Completed:</td><td class="info-value">${procedure.phase1_completed_at ? format(new Date(procedure.phase1_completed_at), 'MMMM dd, yyyy HH:mm') : 'N/A'}</td></tr>
               <tr><td class="info-label">Phase 2 (Surgical) Completed:</td><td class="info-value">${procedure.phase2_completed_at ? format(new Date(procedure.phase2_completed_at), 'MMMM dd, yyyy HH:mm') : 'N/A'}</td></tr>
-              ${procedure.stage2_surgical_completed_at ? `<tr><td class="info-label">Stage 2 Surgical Completed:</td><td class="info-value">${format(new Date(procedure.stage2_surgical_completed_at), 'MMMM dd, yyyy HH:mm')}</td></tr>` : ''}
-              ${procedure.stage2_prosthetic_completed_at ? `<tr><td class="info-label">Stage 2 Prosthetic Completed:</td><td class="info-value">${format(new Date(procedure.stage2_prosthetic_completed_at), 'MMMM dd, yyyy HH:mm')}</td></tr>` : ''}
+              ${procedure.stage2_surgical_completed_at ? `<tr><td class="info-label">Phase 3 (Second Stage Surgical) Completed:</td><td class="info-value">${format(new Date(procedure.stage2_surgical_completed_at), 'MMMM dd, yyyy HH:mm')}</td></tr>` : ''}
+              ${procedure.stage2_prosthetic_completed_at ? `<tr><td class="info-label">Phase 4 (Prosthetic) Completed:</td><td class="info-value">${format(new Date(procedure.stage2_prosthetic_completed_at), 'MMMM dd, yyyy HH:mm')}</td></tr>` : ''}
               ${procedure.treatment_completed_at ? `<tr><td class="info-label">Treatment Completed:</td><td class="info-value">${format(new Date(procedure.treatment_completed_at), 'MMMM dd, yyyy HH:mm')}</td></tr>` : ''}
             </table>
           </div>
