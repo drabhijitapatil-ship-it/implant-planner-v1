@@ -1069,8 +1069,8 @@ async def approve_stage2_surgical(
             })
             await send_expo_push_notifications(
                 [procedure["student_id"]],
-                "Stage 2 Surgical Approved!",
-                "You can now submit the Prosthetic Phase Protocol.",
+                "Phase 3 Approved!",
+                "You can now submit Phase 4 - Prosthetic Protocol.",
                 {"procedure_id": procedure_id, "type": "approved"},
             )
         else:
