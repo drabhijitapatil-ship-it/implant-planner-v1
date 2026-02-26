@@ -28,7 +28,7 @@ export const CHECKLIST_DATA = {
     ],
   },
   second_stage: {
-    title: 'III. Second Stage Surgical Protocol',
+    title: 'Phase 3: Second Stage Surgical Protocol',
     items: [
       { id: 'healing_assessment', label: 'Implant healing assessment (clinical & radiographic)' },
       { id: 'tissue_conditioning', label: 'Tissue conditioning done' },
@@ -41,7 +41,7 @@ export const CHECKLIST_DATA = {
     ],
   },
   prosthetic_phase: {
-    title: 'IV. Prosthetic Phase Protocol',
+    title: 'Phase 4: Prosthetic Protocol',
     items: [
       { id: 'impression_taken', label: 'Final impression taken' },
       { id: 'bite_registration', label: 'Bite registration completed' },
@@ -84,11 +84,11 @@ export const STATUS_LABELS: Record<string, string> = {
   phase1_approved: 'Phase 1: Approved - Ready for Phase 2',
   pending_phase2: 'Phase 2: Pending Approval',
   phase2_approved: 'Stage 1 Implant Placement Done - Ready for Stage 2',
-  pending_stage2_surgical: 'Stage 2: Surgical Protocol Pending Approval',
-  stage2_surgical_approved: 'Stage 2: Surgical Approved - Ready for Prosthetic',
-  stage2_surgical_rejected: 'Stage 2: Surgical Protocol Rejected',
-  pending_stage2_prosthetic: 'Stage 2: Prosthetic Protocol Pending Approval',
-  stage2_prosthetic_rejected: 'Stage 2: Prosthetic Protocol Rejected',
+  pending_stage2_surgical: 'Phase 3: Second Stage Surgical Protocol Pending Approval',
+  stage2_surgical_approved: 'Phase 3: Approved - Ready for Phase 4',
+  stage2_surgical_rejected: 'Phase 3: Second Stage Surgical Protocol Rejected',
+  pending_stage2_prosthetic: 'Phase 4: Prosthetic Protocol Pending Approval',
+  stage2_prosthetic_rejected: 'Phase 4: Prosthetic Protocol Rejected',
   completed: 'Treatment Complete',
   approved: 'Approved',
   rejected: 'Rejected',
