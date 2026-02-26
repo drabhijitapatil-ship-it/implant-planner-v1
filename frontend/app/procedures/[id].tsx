@@ -430,8 +430,22 @@ export default function ProcedureDetailScreen() {
 
         {procedure.remark && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Remark</Text>
+            <Text style={styles.sectionTitle}>Stage 1 Remarks</Text>
             <Text style={styles.specText}>{procedure.remark}</Text>
+          </View>
+        )}
+
+        {procedure.stage2_surgical_remark && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Stage 2 Surgical Remarks</Text>
+            <Text style={styles.specText}>{procedure.stage2_surgical_remark}</Text>
+          </View>
+        )}
+
+        {procedure.stage2_prosthetic_remark && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Stage 2 Prosthetic Remarks</Text>
+            <Text style={styles.specText}>{procedure.stage2_prosthetic_remark}</Text>
           </View>
         )}
 
