@@ -45,8 +45,8 @@ ALL_USERS = [
     {"name": "Dr. Krishana Mehta", "email": "krishana.mehta@student.dental.edu", "password": "Student@123", "role": "student"},
     {"name": "Dr. Sakshi Lohade", "email": "sakshi.lohade@student.dental.edu", "password": "Student@123", "role": "student"},
     # Nurses
-    {"name": "Nurse Priya Sharma", "email": "priya.sharma@dental.edu", "password": "Nurse@123", "role": "nurse"},
-    {"name": "Nurse Anjali Desai", "email": "anjali.desai@dental.edu", "password": "Nurse@123", "role": "nurse"},
+    {"name": "Nurse 1", "email": "priya.sharma@dental.edu", "password": "Nurse@123", "role": "nurse"},
+    {"name": "Nurse 2", "email": "anjali.desai@dental.edu", "password": "Nurse@123", "role": "nurse"},
 ]
 
 # Old emails to clean up (duplicates from previous runs)
