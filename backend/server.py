@@ -1190,7 +1190,7 @@ async def approve_stage2_prosthetic(
             await db.notifications.insert_one({
                 "user_id": procedure["student_id"],
                 "procedure_id": procedure_id,
-                "message": f"Stage 2 Prosthetic: Approved by {approver_name}. Waiting for {waiting_for}.",
+                "message": f"Phase 4: Approved by {approver_name}. Waiting for {waiting_for}.",
                 "type": "approved",
                 "read": False,
                 "created_at": datetime.utcnow()
