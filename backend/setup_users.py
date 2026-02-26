@@ -40,25 +40,25 @@ async def create_users():
             "name": "Dr. Rajeshree Jadhav",
             "email": "rajeshree.jadhav@dental.edu",
             "password": "dental123",
-            "role": "instructor"  # Instructor/Supervisor
+            "role": "supervisor"  # Supervisor
         },
         {
             "name": "Dr. Vasantha N",
             "email": "vasantha.n@dental.edu",
             "password": "dental123",
-            "role": "instructor"  # Supervisor
+            "role": "supervisor"  # Supervisor
         },
         {
             "name": "Dr. Rupali Patil",
             "email": "rupali.patil@dental.edu",
             "password": "dental123",
-            "role": "instructor"  # Supervisor
+            "role": "supervisor"  # Supervisor
         },
         {
             "name": "Dr. Pankaj Kadam",
             "email": "pankaj.kadam@dental.edu",
             "password": "dental123",
-            "role": "instructor"  # Supervisor
+            "role": "supervisor"  # Supervisor
         },
     ]
     
