@@ -13,6 +13,7 @@ interface ChecklistFormProps {
   checklist: any;
   onChecklistChange: (checklist: any) => void;
   phase?: 1 | 2;  // Optional: which phase to show (1=pre-surgical only, 2=surgical only)
+  stage2Section?: 'second_stage' | 'prosthetic_phase';  // For Stage 2 forms
 }
 
 export default function ChecklistForm({ checklist, onChecklistChange, phase }: ChecklistFormProps) {
