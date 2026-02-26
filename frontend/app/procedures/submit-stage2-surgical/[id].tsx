@@ -41,7 +41,7 @@ export default function Stage2SurgicalSubmissionScreen() {
 
       Alert.alert(
         'Success',
-        'Stage 2 Surgical Protocol submitted successfully! Awaiting approval from supervisor and implant incharge.',
+        'Phase 3 - Second Stage Surgical Protocol submitted successfully! Awaiting approval from supervisor and implant incharge.',
         [{ text: 'OK', onPress: () => router.back() }]
       );
     } catch (error: any) {
@@ -61,14 +61,14 @@ export default function Stage2SurgicalSubmissionScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.titleContainer}>
             <Text style={styles.pageTitle} data-testid="stage2-surgical-title">
-              Stage 2 - Second Stage Surgical Protocol
+              Phase 3 - Second Stage Surgical Protocol
             </Text>
           </View>
 
           <View style={styles.infoBox}>
             <Ionicons name="information-circle" size={24} color="#007AFF" />
             <Text style={styles.infoText}>
-              Stage 1 Implant Placement is complete. Please fill the Second Stage Surgical Protocol checklist for the healing and exposure phase.
+              Stage 1 Implant Placement is complete. Please fill the Phase 3 - Second Stage Surgical Protocol checklist for the healing and exposure phase.
             </Text>
           </View>
 
@@ -103,7 +103,7 @@ export default function Stage2SurgicalSubmissionScreen() {
               ) : (
                 <>
                   <Ionicons name="checkmark-circle" size={20} color="#FFF" />
-                  <Text style={styles.submitButtonText}>Submit Stage 2 Surgical Protocol</Text>
+                  <Text style={styles.submitButtonText}>Submit Phase 3 - Second Stage Surgical Protocol</Text>
                 </>
               )}
             </TouchableOpacity>
