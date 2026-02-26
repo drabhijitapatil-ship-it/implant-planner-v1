@@ -181,7 +181,7 @@ class TestStage2BackendAPIs:
         
         payload = {
             "checklist": {
-                "items": [{"id": "healing_assessment", "value": True}],
+                "items": [{"id": "healing_assessment", "label": "Test", "value": True}],
                 "additional_fields": {}
             },
             "remark": "Test remark"
@@ -302,7 +302,7 @@ class TestStage2BackendAPIs:
         
         payload = {
             "checklist": {
-                "items": [{"id": "impression_taken", "value": True}],
+                "items": [{"id": "impression_taken", "label": "Test", "value": True}],
                 "additional_fields": {}
             },
             "remark": "Should fail"
@@ -514,7 +514,7 @@ class TestStage2BackendAPIs:
             "procedure_time": procedure_time,
             "implant_specifications": "Test implant for rejection",
             "bone_graft_specifications": "Test graft for rejection",
-            "checklist": {"pre_surgical": {"items": [{"id": "case_selection", "value": True}], "additional_fields": {}}}
+            "checklist": {"pre_surgical": {"items": [{"id": "case_selection", "label": "Test", "value": True}], "additional_fields": {}}}
         }
         
         response = requests.post(
@@ -526,16 +526,15 @@ class TestStage2BackendAPIs:
         reject_procedure_id = response.json()["id"]
         
         # Fast-track through Phase 1 and Phase 2
-        for endpoint in ["/approve", "/approve"]:  # Phase 1 dual approval
-            requests.post(f"{BASE_URL}/api/procedures/{reject_procedure_id}{endpoint}",
-                headers={"Authorization": f"Bearer {tokens['supervisor']['token']}"}, json={"action": "approve"})
-            requests.post(f"{BASE_URL}/api/procedures/{reject_procedure_id}{endpoint}",
-                headers={"Authorization": f"Bearer {tokens['implant_incharge']['token']}"}, json={"action": "approve"})
+        requests.post(f"{BASE_URL}/api/procedures/{reject_procedure_id}/approve",
+            headers={"Authorization": f"Bearer {tokens['supervisor']['token']}"}, json={"action": "approve"})
+        requests.post(f"{BASE_URL}/api/procedures/{reject_procedure_id}/approve",
+            headers={"Authorization": f"Bearer {tokens['implant_incharge']['token']}"}, json={"action": "approve"})
         
         # Submit Phase 2
         requests.post(f"{BASE_URL}/api/procedures/{reject_procedure_id}/submit-phase2",
             headers={"Authorization": f"Bearer {tokens['student']['token']}"},
-            json={"checklist_surgical": {"items": [{"id": "consent_form", "value": True}], "additional_fields": {}}})
+            json={"checklist_surgical": {"items": [{"id": "consent_form", "label": "Test", "value": True}], "additional_fields": {}}})
         
         # Approve Phase 2
         requests.post(f"{BASE_URL}/api/procedures/{reject_procedure_id}/approve",
@@ -544,9 +543,10 @@ class TestStage2BackendAPIs:
             headers={"Authorization": f"Bearer {tokens['implant_incharge']['token']}"}, json={"action": "approve"})
         
         # Submit Stage 2 Surgical
-        requests.post(f"{BASE_URL}/api/procedures/{reject_procedure_id}/stage2/surgical",
+        response = requests.post(f"{BASE_URL}/api/procedures/{reject_procedure_id}/stage2/surgical",
             headers={"Authorization": f"Bearer {tokens['student']['token']}"},
-            json={"checklist": {"items": [{"id": "healing_assessment", "value": True}], "additional_fields": {}}})
+            json={"checklist": {"items": [{"id": "healing_assessment", "label": "Test", "value": True}], "additional_fields": {}}})
+        assert response.status_code == 200, f"Stage 2 Surgical submission failed: {response.text}"
         
         # REJECT Stage 2 Surgical
         response = requests.post(
@@ -554,7 +554,7 @@ class TestStage2BackendAPIs:
             headers={"Authorization": f"Bearer {tokens['supervisor']['token']}"},
             json={"action": "reject", "rejection_reason": "Test rejection for Stage 2 Surgical"}
         )
-        assert response.status_code == 200
+        assert response.status_code == 200, f"Stage 2 Surgical rejection failed: {response.text}"
         
         procedure = response.json()
         assert procedure["status"] == "stage2_surgical_rejected"
