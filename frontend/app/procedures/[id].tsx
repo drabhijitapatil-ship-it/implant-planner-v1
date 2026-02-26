@@ -112,6 +112,16 @@ export default function ProcedureDetailScreen() {
       if (isSupervisor && !procedure.supervisor_phase2_approved) return true;
       if (isImplantIncharge && !procedure.implant_incharge_phase2_approved) return true;
     }
+
+    if (procedure.status === 'pending_stage2_surgical') {
+      if (isSupervisor && !procedure.supervisor_stage2_surgical_approved) return true;
+      if (isImplantIncharge && !procedure.implant_incharge_stage2_surgical_approved) return true;
+    }
+
+    if (procedure.status === 'pending_stage2_prosthetic') {
+      if (isSupervisor && !procedure.supervisor_stage2_prosthetic_approved) return true;
+      if (isImplantIncharge && !procedure.implant_incharge_stage2_prosthetic_approved) return true;
+    }
     
     return false;
   };
@@ -121,6 +131,26 @@ export default function ProcedureDetailScreen() {
     return user?.role === 'student' && 
            user?.id === procedure.student_id && 
            procedure.status === 'phase1_approved';
+  };
+
+  const canSubmitStage2Surgical = () => {
+    if (!procedure) return false;
+    return user?.role === 'student' && 
+           user?.id === procedure.student_id && 
+           procedure.status === 'phase2_approved';
+  };
+
+  const canSubmitStage2Prosthetic = () => {
+    if (!procedure) return false;
+    return user?.role === 'student' && 
+           user?.id === procedure.student_id && 
+           procedure.status === 'stage2_surgical_approved';
+  };
+
+  const getApproveEndpoint = () => {
+    if (procedure?.status === 'pending_stage2_surgical') return `/procedures/${id}/stage2/surgical/approve`;
+    if (procedure?.status === 'pending_stage2_prosthetic') return `/procedures/${id}/stage2/prosthetic/approve`;
+    return `/procedures/${id}/approve`;
   };
 
   const canEdit = () => {
