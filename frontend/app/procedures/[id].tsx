@@ -58,7 +58,7 @@ export default function ProcedureDetailScreen() {
           onPress: async () => {
             setActionLoading(true);
             try {
-              await api.post(`/procedures/${id}/approve`, { action: 'approve' });
+              await api.post(getApproveEndpoint(), { action: 'approve' });
               Alert.alert('Success', 'Procedure approved successfully');
               loadProcedure();
             } catch (error: any) {
@@ -80,7 +80,7 @@ export default function ProcedureDetailScreen() {
 
     setActionLoading(true);
     try {
-      await api.post(`/procedures/${id}/approve`, {
+      await api.post(getApproveEndpoint(), {
         action: 'reject',
         rejection_reason: rejectionReason,
       });
