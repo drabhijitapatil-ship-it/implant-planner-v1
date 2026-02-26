@@ -265,11 +265,11 @@ export default function ProcedureDetailScreen() {
                 done: ['phase2_approved','pending_stage2_surgical','stage2_surgical_approved','pending_stage2_prosthetic','completed'].includes(procedure.status),
                 active: ['phase1_approved','pending_phase2'].includes(procedure.status),
                 timestamp: procedure.phase2_completed_at },
-              { key: 'stage2s', label: 'Stage 2', subtitle: 'Surgical Protocol',
+              { key: 'stage2s', label: 'Phase 3', subtitle: 'Second Stage Surgical',
                 done: ['stage2_surgical_approved','pending_stage2_prosthetic','completed'].includes(procedure.status),
                 active: ['phase2_approved','pending_stage2_surgical'].includes(procedure.status),
                 timestamp: procedure.stage2_surgical_completed_at },
-              { key: 'stage2p', label: 'Stage 2', subtitle: 'Prosthetic Protocol',
+              { key: 'stage2p', label: 'Phase 4', subtitle: 'Prosthetic Protocol',
                 done: procedure.status === 'completed',
                 active: ['stage2_surgical_approved','pending_stage2_prosthetic'].includes(procedure.status),
                 timestamp: procedure.stage2_prosthetic_completed_at },
@@ -325,8 +325,8 @@ export default function ProcedureDetailScreen() {
             <Text style={styles.approvalTitle}>
               {procedure.status === 'pending_phase1' ? 'Phase 1 Approval Status' : 
                procedure.status === 'pending_phase2' ? 'Phase 2 Approval Status' :
-               procedure.status === 'pending_stage2_surgical' ? 'Stage 2 Surgical Approval Status' :
-               'Stage 2 Prosthetic Approval Status'}
+               procedure.status === 'pending_stage2_surgical' ? 'Phase 3 Approval Status' :
+               'Phase 4 Approval Status'}
             </Text>
             <View style={styles.approvalRow}>
               <Ionicons 
@@ -416,7 +416,7 @@ export default function ProcedureDetailScreen() {
               <Ionicons name="medkit" size={24} color="#FFF" />
               <View style={styles.phase2ButtonTextContainer}>
                 <Text style={styles.phase2ButtonTitle}>STAGE 1 COMPLETE</Text>
-                <Text style={styles.phase2ButtonSubtitle}>Tap to start Stage 2 - Second Stage Surgical Protocol</Text>
+                <Text style={styles.phase2ButtonSubtitle}>Tap to start Phase 3 - Second Stage Surgical Protocol</Text>
               </View>
               <Ionicons name="chevron-forward" size={24} color="#FFF" />
             </TouchableOpacity>
@@ -433,8 +433,8 @@ export default function ProcedureDetailScreen() {
             >
               <Ionicons name="construct" size={24} color="#FFF" />
               <View style={styles.phase2ButtonTextContainer}>
-                <Text style={styles.phase2ButtonTitle}>STAGE 2 SURGICAL APPROVED</Text>
-                <Text style={styles.phase2ButtonSubtitle}>Tap to start Prosthetic Phase Protocol</Text>
+                <Text style={styles.phase2ButtonTitle}>PHASE 3 APPROVED</Text>
+                <Text style={styles.phase2ButtonSubtitle}>Tap to start Phase 4 - Prosthetic Protocol</Text>
               </View>
               <Ionicons name="chevron-forward" size={24} color="#FFF" />
             </TouchableOpacity>
@@ -503,14 +503,14 @@ export default function ProcedureDetailScreen() {
 
         {procedure.stage2_surgical_remark && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Stage 2 Surgical Remarks</Text>
+            <Text style={styles.sectionTitle}>Phase 3 Surgical Remarks</Text>
             <Text style={styles.specText}>{procedure.stage2_surgical_remark}</Text>
           </View>
         )}
 
         {procedure.stage2_prosthetic_remark && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Stage 2 Prosthetic Remarks</Text>
+            <Text style={styles.sectionTitle}>Phase 4 Prosthetic Remarks</Text>
             <Text style={styles.specText}>{procedure.stage2_prosthetic_remark}</Text>
           </View>
         )}
@@ -524,7 +524,7 @@ export default function ProcedureDetailScreen() {
 
         {procedure.stage2_surgical_rejection_reason && (
           <View style={[styles.section, styles.rejectionSection]}>
-            <Text style={styles.sectionTitle}>Stage 2 Surgical - Rejection Reason</Text>
+            <Text style={styles.sectionTitle}>Phase 3 - Rejection Reason</Text>
             <Text style={styles.rejectionText}>{procedure.stage2_surgical_rejection_reason}</Text>
             {procedure.stage2_surgical_rejected_by && (
               <Text style={[styles.rejectionText, { marginTop: 4, fontStyle: 'italic' }]}>
@@ -536,7 +536,7 @@ export default function ProcedureDetailScreen() {
 
         {procedure.stage2_prosthetic_rejection_reason && (
           <View style={[styles.section, styles.rejectionSection]}>
-            <Text style={styles.sectionTitle}>Stage 2 Prosthetic - Rejection Reason</Text>
+            <Text style={styles.sectionTitle}>Phase 4 - Rejection Reason</Text>
             <Text style={styles.rejectionText}>{procedure.stage2_prosthetic_rejection_reason}</Text>
             {procedure.stage2_prosthetic_rejected_by && (
               <Text style={[styles.rejectionText, { marginTop: 4, fontStyle: 'italic' }]}>
@@ -550,8 +550,8 @@ export default function ProcedureDetailScreen() {
           <>
             {renderChecklistSection('pre_surgical', 'I. Pre-surgical Protocols')}
             {renderChecklistSection('surgical', 'II. Surgical Protocols')}
-            {renderChecklistSection('second_stage', 'III. Second Stage Surgical Protocols')}
-            {renderChecklistSection('prosthetic_phase', 'IV. Prosthetic Phase Protocols')}
+            {renderChecklistSection('second_stage', 'Phase 3: Second Stage Surgical Protocol')}
+            {renderChecklistSection('prosthetic_phase', 'Phase 4: Prosthetic Protocol')}
           </>
         )}
 
