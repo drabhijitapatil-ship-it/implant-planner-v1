@@ -1112,7 +1112,7 @@ async def approve_stage2_surgical(
     return updated
 
 
-# Stage 2 - Prosthetic Phase Approval
+# Phase 4 - Prosthetic Protocol Approval
 @api_router.post("/procedures/{procedure_id}/stage2/prosthetic/approve")
 async def approve_stage2_prosthetic(
     procedure_id: str,
