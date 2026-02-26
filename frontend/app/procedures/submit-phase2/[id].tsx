@@ -44,7 +44,7 @@ export default function Phase2SubmissionScreen() {
       
       Alert.alert(
         'Success',
-        'Phase 2 (Surgical Protocols) submitted successfully! Awaiting approval from instructor and implant incharge.',
+        'Phase 2 (Surgical Protocols) submitted successfully! Awaiting approval from supervisor and implant incharge.',
         [
           {
             text: 'OK',
