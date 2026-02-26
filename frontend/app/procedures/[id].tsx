@@ -339,6 +339,51 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
+        {/* Start Stage 2 Surgical Button */}
+        {canSubmitStage2Surgical() && (
+          <View style={styles.phase2ButtonContainer}>
+            <TouchableOpacity
+              style={[styles.phase2Button, { backgroundColor: '#2196F3' }]}
+              onPress={() => router.push(`/procedures/submit-stage2-surgical/${id}`)}
+              data-testid="stage2-surgical-btn"
+            >
+              <Ionicons name="medkit" size={24} color="#FFF" />
+              <View style={styles.phase2ButtonTextContainer}>
+                <Text style={styles.phase2ButtonTitle}>STAGE 1 COMPLETE</Text>
+                <Text style={styles.phase2ButtonSubtitle}>Tap to start Stage 2 - Second Stage Surgical Protocol</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={24} color="#FFF" />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Start Stage 2 Prosthetic Button */}
+        {canSubmitStage2Prosthetic() && (
+          <View style={styles.phase2ButtonContainer}>
+            <TouchableOpacity
+              style={[styles.phase2Button, { backgroundColor: '#FF9800' }]}
+              onPress={() => router.push(`/procedures/submit-stage2-prosthetic/${id}`)}
+              data-testid="stage2-prosthetic-btn"
+            >
+              <Ionicons name="construct" size={24} color="#FFF" />
+              <View style={styles.phase2ButtonTextContainer}>
+                <Text style={styles.phase2ButtonTitle}>STAGE 2 SURGICAL APPROVED</Text>
+                <Text style={styles.phase2ButtonSubtitle}>Tap to start Prosthetic Phase Protocol</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={24} color="#FFF" />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Treatment Complete Banner */}
+        {procedure.status === 'completed' && (
+          <View style={styles.completedBanner}>
+            <Ionicons name="trophy" size={28} color="#4CAF50" />
+            <Text style={styles.completedText}>Treatment Complete</Text>
+            <Text style={styles.completedSubtext}>All protocols have been approved successfully</Text>
+          </View>
+        )}
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Patient Information</Text>
           <InfoRow icon="person" label="Patient Name" value={procedure.patient_name} />
