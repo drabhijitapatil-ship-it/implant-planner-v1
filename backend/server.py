@@ -1211,7 +1211,7 @@ async def approve_stage2_prosthetic(
         await db.notifications.insert_one({
             "user_id": procedure["student_id"],
             "procedure_id": procedure_id,
-            "message": f"Stage 2 Prosthetic Protocol rejected by {current_user['name']}. Reason: {action.rejection_reason}",
+            "message": f"Phase 4: Rejected by {current_user['name']}. Reason: {action.rejection_reason}",
             "type": "rejected",
             "read": False,
             "created_at": datetime.utcnow()
