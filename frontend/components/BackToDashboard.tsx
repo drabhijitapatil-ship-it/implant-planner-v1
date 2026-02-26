@@ -1,28 +1,41 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { TouchableOpacity, Text, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 interface BackToDashboardProps {
   label?: string;
+  floating?: boolean;
 }
 
-export default function BackToDashboard({ label = 'Dashboard' }: BackToDashboardProps) {
+export default function BackToDashboard({ label = 'Dashboard', floating = true }: BackToDashboardProps) {
   const router = useRouter();
 
   const handlePress = () => {
     router.push('/(tabs)/dashboard');
   };
 
-  return (
+  const button = (
     <TouchableOpacity style={styles.backButton} onPress={handlePress} data-testid="back-to-dashboard-btn">
       <Ionicons name="home" size={18} color="#FFF" />
       <Text style={styles.backButtonText}>{label}</Text>
     </TouchableOpacity>
   );
+
+  if (floating) {
+    return <View style={styles.floatingContainer}>{button}</View>;
+  }
+
+  return button;
 }
 
 const styles = StyleSheet.create({
+  floatingContainer: {
+    position: 'absolute',
+    bottom: 20,
+    left: 16,
+    zIndex: 999,
+  },
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
