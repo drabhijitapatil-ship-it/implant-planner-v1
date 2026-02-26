@@ -20,7 +20,7 @@ import os
 # Use environment variable for BASE_URL
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 if not BASE_URL:
-    BASE_URL = "https://implant-mgmt-1.preview.emergentagent.com"
+    BASE_URL = "https://dental-workflow-test.preview.emergentagent.com"
 
 # Test credentials
 ABHIJIT_EMAIL = "abhijit.patil@dental.edu"
