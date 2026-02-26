@@ -1126,7 +1126,7 @@ async def approve_stage2_prosthetic(
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
     if procedure["status"] != "pending_stage2_prosthetic":
-        raise HTTPException(status_code=400, detail="Procedure is not pending Stage 2 Prosthetic approval")
+        raise HTTPException(status_code=400, detail="Procedure is not pending Phase 4 approval")
 
     is_supervisor = current_user["_id"] == procedure.get("supervisor_id")
     is_implant_incharge = current_user["_id"] == procedure.get("implant_incharge_id")
