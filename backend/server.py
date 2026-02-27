@@ -348,6 +348,37 @@ async def delete_user(user_id: str, current_user: dict = Depends(get_current_use
     
     return {"message": "User deleted successfully"}
 
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    role: Optional[str] = None
+    password: Optional[str] = None
+
+@api_router.put("/users/{user_id}")
+async def update_user(user_id: str, user: UserUpdate, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] not in ["administrator", "implant_incharge"]:
+        raise HTTPException(status_code=403, detail="Only administrators and implant incharge can update users")
+    
+    existing = await db.users.find_one({"_id": ObjectId(user_id)})
+    if not existing:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    update_fields = {}
+    if user.name and user.name.strip():
+        update_fields["name"] = user.name.strip()
+    if user.role:
+        if user.role not in ["student", "supervisor", "implant_incharge", "administrator", "nurse"]:
+            raise HTTPException(status_code=400, detail="Invalid role")
+        update_fields["role"] = user.role
+    if user.password and user.password.strip():
+        update_fields["password_hash"] = hash_password(user.password)
+    
+    if not update_fields:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    
+    await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": update_fields})
+    
+    return {"message": "User updated successfully"}
+
 # Procedure Routes
 @api_router.post("/procedures")
 async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depends(get_current_user)):
