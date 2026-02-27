@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../utils/api';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { format } from 'date-fns';
 import { STATUS_COLORS, STATUS_LABELS } from '../../constants/checklist';
 import BackToDashboard from '../../components/BackToDashboard';
