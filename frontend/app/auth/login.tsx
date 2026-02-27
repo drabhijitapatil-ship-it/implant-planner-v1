@@ -48,6 +48,7 @@ export default function LoginScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.content}>
             <Text style={styles.title}>Dental Implant Manager</Text>
+            <Text style={styles.collegeText}>Bharati Vidyapeeth Dental College and Hospital</Text>
             <Text style={styles.subtitle}>Department of Prosthodontics</Text>
 
             <View style={styles.form}>
