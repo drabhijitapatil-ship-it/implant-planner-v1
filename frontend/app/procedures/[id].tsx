@@ -415,7 +415,7 @@ export default function ProcedureDetailScreen() {
             >
               <Ionicons name="medkit" size={24} color="#FFF" />
               <View style={styles.phase2ButtonTextContainer}>
-                <Text style={styles.phase2ButtonTitle}>STAGE 1 COMPLETE</Text>
+                <Text style={styles.phase2ButtonTitle}>PHASE 2 APPROVED</Text>
                 <Text style={styles.phase2ButtonSubtitle}>Tap to start Phase 3 - Second Stage Surgical Protocol</Text>
               </View>
               <Ionicons name="chevron-forward" size={24} color="#FFF" />
