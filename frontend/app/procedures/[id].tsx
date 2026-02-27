@@ -18,6 +18,7 @@ import { STATUS_COLORS, STATUS_LABELS, CHECKLIST_DATA } from '../../constants/ch
 import { format } from 'date-fns';
 import { generateProcedurePDF } from '../../utils/pdfGenerator';
 import BackToDashboard from '../../components/BackToDashboard';
+import * as Linking from 'expo-linking';
 
 export default function ProcedureDetailScreen() {
   const { id } = useLocalSearchParams();
