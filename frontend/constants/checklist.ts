@@ -15,7 +15,7 @@ export const CHECKLIST_DATA = {
     ],
   },
   surgical: {
-    title: 'II. Surgical Protocols',
+    title: 'Phase 2: Surgical Protocol',
     items: [
       { id: 'consent_form', label: 'Signed Patient consent form' },
       { id: 'cbct_report', label: 'Arranged CBCT Report' },
