@@ -1,6 +1,6 @@
 export const CHECKLIST_DATA = {
   pre_surgical: {
-    title: 'I. Pre-surgical Protocols',
+    title: 'Phase 1: Pre-Surgical Protocol',
     items: [
       { id: 'case_selection', label: 'Case Selection Approved' },
       { id: 'academic_readiness', label: 'Academic Readiness (with presentation)' },
