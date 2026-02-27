@@ -23,6 +23,7 @@ import { format, addDays } from 'date-fns';
 import { Calendar } from 'react-native-calendars';
 import { Ionicons } from '@expo/vector-icons';
 import { PROCEDURE_TIME_SLOTS } from '../../constants/checklist';
+import * as DocumentPicker from 'expo-document-picker';
 
 export default function NewProcedureScreen() {
   const { user } = useAuth();
