@@ -218,22 +218,38 @@ export default function DashboardScreen() {
         {!searchQuery.trim() && (
           <>
             <View style={styles.statsContainer}>
-              <View style={[styles.statCard, { backgroundColor: '#007AFF' }]}>
+              <TouchableOpacity
+                style={[styles.statCard, { backgroundColor: '#007AFF' }]}
+                onPress={() => router.push('/procedures')}
+                data-testid="stat-total"
+              >
                 <Text style={styles.statNumber}>{stats.total}</Text>
                 <Text style={styles.statLabel}>Total</Text>
-              </View>
-              <View style={[styles.statCard, { backgroundColor: '#FFA500' }]}>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.statCard, { backgroundColor: '#FFA500' }]}
+                onPress={() => router.push({ pathname: '/procedures', params: { filter: 'pending' } })}
+                data-testid="stat-pending"
+              >
                 <Text style={styles.statNumber}>{stats.pending}</Text>
                 <Text style={styles.statLabel}>Pending</Text>
-              </View>
-              <View style={[styles.statCard, { backgroundColor: '#4CAF50' }]}>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.statCard, { backgroundColor: '#4CAF50' }]}
+                onPress={() => router.push({ pathname: '/procedures', params: { filter: 'completed' } })}
+                data-testid="stat-approved"
+              >
                 <Text style={styles.statNumber}>{stats.approved}</Text>
                 <Text style={styles.statLabel}>Approved</Text>
-              </View>
-              <View style={[styles.statCard, { backgroundColor: '#F44336' }]}>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.statCard, { backgroundColor: '#F44336' }]}
+                onPress={() => router.push({ pathname: '/procedures', params: { filter: 'rejected' } })}
+                data-testid="stat-rejected"
+              >
                 <Text style={styles.statNumber}>{stats.rejected}</Text>
                 <Text style={styles.statLabel}>Rejected</Text>
-              </View>
+              </TouchableOpacity>
             </View>
 
             {/* Calendar */}
