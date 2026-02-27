@@ -810,6 +810,29 @@ const styles = StyleSheet.create({
   timeSlotTextActive: {
     color: '#FFF',
   },
+  filePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#DDD',
+    borderRadius: 10,
+    borderStyle: 'dashed',
+    padding: 14,
+    backgroundColor: '#FAFAFA',
+    gap: 10,
+  },
+  filePickerText: {
+    fontSize: 15,
+    color: '#999',
+  },
+  filePickerTextSelected: {
+    fontSize: 15,
+    color: '#333',
+    fontWeight: '500',
+  },
+  fileRemoveBtn: {
+    padding: 4,
+  },
   submitButton: {
     backgroundColor: '#007AFF',
     borderRadius: 12,
