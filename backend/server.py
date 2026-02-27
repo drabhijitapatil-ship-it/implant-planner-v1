@@ -600,6 +600,71 @@ async def delete_procedure(procedure_id: str, current_user: dict = Depends(get_c
     
     return {"message": "Procedure deleted successfully"}
 
+# File Upload for CBCT
+ALLOWED_EXTENSIONS = {'.pdf', '.png', '.jpg', '.jpeg', '.heif', '.heic'}
+MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB
+
+@api_router.post("/procedures/{procedure_id}/upload-cbct")
+async def upload_cbct(
+    procedure_id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    if current_user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Only students can upload files")
+    
+    procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if procedure["student_id"] != current_user["_id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    ext = Path(file.filename).suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"File type not allowed. Allowed: {', '.join(ALLOWED_EXTENSIONS)}")
+    
+    contents = await file.read()
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File size exceeds 25MB limit")
+    
+    unique_name = f"{uuid.uuid4().hex}{ext}"
+    file_path = UPLOADS_DIR / unique_name
+    with open(file_path, "wb") as f:
+        f.write(contents)
+    
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {
+            "cbct_file": unique_name,
+            "cbct_original_name": file.filename,
+            "cbct_content_type": file.content_type,
+            "updated_at": datetime.utcnow()
+        }}
+    )
+    
+    return {"message": "File uploaded successfully", "filename": file.filename}
+
+@api_router.get("/uploads/{filename}")
+async def serve_upload(filename: str, current_user: dict = Depends(get_current_user)):
+    file_path = UPLOADS_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    # Only supervisor, implant_incharge, administrator, and the procedure's student can view
+    procedure = await db.procedures.find_one({"cbct_file": filename})
+    if procedure:
+        allowed = False
+        if current_user["role"] in ["administrator", "implant_incharge"]:
+            allowed = True
+        elif current_user["role"] == "supervisor" and procedure.get("supervisor_id") == current_user["_id"]:
+            allowed = True
+        elif current_user["role"] == "student" and procedure.get("student_id") == current_user["_id"]:
+            allowed = True
+        if not allowed:
+            raise HTTPException(status_code=403, detail="Access denied")
+    
+    return FileResponse(file_path, filename=procedure.get("cbct_original_name", filename) if procedure else filename)
+
 # Approval Routes
 @api_router.post("/procedures/{procedure_id}/approve")
 async def approve_procedure(
