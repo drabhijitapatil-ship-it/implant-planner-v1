@@ -61,6 +61,17 @@ export default function TabsLayout() {
           ),
         }}
       />
+      {(user?.role === 'administrator' || user?.role === 'implant_incharge') && (
+        <Tabs.Screen
+          name="user-management"
+          options={{
+            title: 'Users',
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="people" size={size} color={color} />
+            ),
+          }}
+        />
+      )}
       <Tabs.Screen
         name="profile"
         options={{
