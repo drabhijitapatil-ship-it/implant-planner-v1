@@ -760,6 +760,22 @@ const styles = StyleSheet.create({
     color: '#1A1A1A',
     lineHeight: 20,
   },
+  cbctFileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F8FF',
+    borderRadius: 10,
+    padding: 12,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#D0E8FF',
+  },
+  cbctFileName: {
+    flex: 1,
+    fontSize: 14,
+    color: '#007AFF',
+    fontWeight: '500',
+  },
   rejectionSection: {
     backgroundColor: '#FFEBEE',
   },
