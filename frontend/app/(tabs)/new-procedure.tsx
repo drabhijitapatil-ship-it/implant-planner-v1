@@ -408,6 +408,32 @@ export default function NewProcedureScreen() {
               ))}
             </View>
 
+            <Text style={styles.sectionTitle}>CBCT Slides and Report</Text>
+            <TouchableOpacity
+              style={styles.filePickerButton}
+              onPress={pickCbctFile}
+              data-testid="cbct-file-picker"
+            >
+              <Ionicons name="document-attach" size={22} color={cbctFile ? '#4CAF50' : '#007AFF'} />
+              <View style={{ flex: 1 }}>
+                <Text style={cbctFile ? styles.filePickerTextSelected : styles.filePickerText}>
+                  {cbctFile ? cbctFile.name : 'Tap to select file'}
+                </Text>
+                <Text style={styles.helperText}>
+                  PDF, PNG, JPEG, HEIF (Max 25MB)
+                </Text>
+              </View>
+              {cbctFile && (
+                <TouchableOpacity
+                  onPress={() => setCbctFile(null)}
+                  style={styles.fileRemoveBtn}
+                  data-testid="cbct-file-remove"
+                >
+                  <Ionicons name="close-circle" size={22} color="#F44336" />
+                </TouchableOpacity>
+              )}
+            </TouchableOpacity>
+
             <Text style={styles.sectionTitle}>Implant Details (Mandatory)</Text>
 
             <Text style={styles.label}>Implant Specifications *</Text>
