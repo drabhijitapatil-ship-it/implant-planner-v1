@@ -58,6 +58,8 @@ export default function NewProcedureScreen() {
 
   const [checklist, setChecklist] = useState({});
   const [fieldErrors, setFieldErrors] = useState<{[key: string]: boolean}>({});
+  const [cbctFile, setCbctFile] = useState<any>(null);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     loadUsers();
