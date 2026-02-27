@@ -31,10 +31,10 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 │   └── tests/             # Pytest test files
 ├── frontend/
 │   ├── app/               # Expo Router pages
-│   │   ├── (tabs)/        # Dashboard, Procedures, Notifications tabs
+│   │   ├── (tabs)/        # Dashboard, Procedures, Notifications, User Management, Profile tabs
 │   │   └── procedures/    # Procedure detail, submit forms
 │   ├── components/        # Shared components (ChecklistForm, BackToDashboard)
-│   ├── constants/         # checklist.ts (statuses, labels, checklist items)
+│   ├── constants/         # checklist.ts (statuses, labels, checklist items, roles)
 │   ├── contexts/          # AuthContext
 │   └── utils/             # api.ts, pdfGenerator.ts
 ```
@@ -50,18 +50,23 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - `POST /api/procedures/{id}/stage2/prosthetic/approve` - Phase 4 approval
 - `GET /api/dashboard/stats` - Dashboard statistics
 - `GET /api/notifications` - User notifications
+- `GET /api/users` - List users (all authenticated)
+- `POST /api/users` - Create user (admin/implant_incharge only)
+- `DELETE /api/users/{id}` - Delete user (admin/implant_incharge only)
 
 ## Completed Features
 - [x] JWT authentication with 5 roles
-- [x] Procedure creation with scheduling restrictions (no Sundays, Saturday 9:30 AM only, 24h advance for students)
+- [x] Procedure creation with scheduling restrictions
 - [x] Phase 1-4 dual approval workflow
 - [x] Push notifications via Expo
 - [x] Patient search on dashboard
 - [x] User avatar with initials fallback
 - [x] Visual treatment timeline on procedure detail
 - [x] PDF export of complete procedure
-- [x] Phase 3/4 rename (from "Stage 2") - Labels updated, internal codes stable
-- [x] User management endpoints (create/delete users for admin roles)
+- [x] Phase 3/4 rename (from "Stage 2") - All labels updated
+- [x] Interactive dashboard stat tiles (navigate to filtered procedures)
+- [x] Status badge position fix (proper SafeAreaView padding)
+- [x] User Management tab (admin/implant_incharge: list, create, delete users)
 
 ## Credentials
 - Student: gaurav.pandey@student.dental.edu / Student@123
@@ -70,11 +75,8 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - Administrator: ajay.sabane@dental.edu / Admin@123
 - Nurse: priya.sharma@dental.edu / Nurse@123
 
-## Upcoming Tasks
-- [ ] P1: Build Frontend UI for User Management (admin/implant_incharge screen)
-- [ ] P2: Data cleanup (remove duplicate users from earlier runs)
-
 ## Backlog / Future
+- [ ] P2: Data cleanup (remove duplicate users from earlier runs)
 - [ ] Break down backend/server.py monolith into routers/models/services
 - [ ] Modularize frontend/app/new-procedure.tsx form logic
 
