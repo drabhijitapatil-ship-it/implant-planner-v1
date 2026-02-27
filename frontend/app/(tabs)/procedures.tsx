@@ -22,6 +22,13 @@ export default function ProceduresScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState('all');
   const router = useRouter();
+  const params = useLocalSearchParams<{ filter?: string }>();
+
+  useEffect(() => {
+    if (params.filter && ['pending', 'completed', 'rejected'].includes(params.filter)) {
+      setFilter(params.filter);
+    }
+  }, [params.filter]);
 
   useEffect(() => {
     loadProcedures();
