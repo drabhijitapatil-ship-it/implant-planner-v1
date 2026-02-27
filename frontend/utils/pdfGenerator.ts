@@ -99,7 +99,7 @@ export const generateProcedurePDF = async (procedure: any) => {
           </div>
 
           <div class="section">
-            <div class="section-title">II. Surgical Protocols</div>
+            <div class="section-title">Phase 2: Surgical Protocol</div>
             <div class="checklist">
               ${procedure.checklist?.surgical?.items?.map((item: any) => `
                 <div class="checklist-item">
