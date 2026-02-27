@@ -495,6 +495,31 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
+        {procedure.cbct_file && (
+          <View style={styles.section} data-testid="cbct-file-section">
+            <Text style={styles.sectionTitle}>CBCT Slides and Report</Text>
+            <TouchableOpacity
+              style={styles.cbctFileRow}
+              onPress={async () => {
+                try {
+                  const baseUrl = api.defaults.baseURL || '';
+                  const fileUrl = `${baseUrl}/uploads/${procedure.cbct_file}`;
+                  await Linking.openURL(fileUrl);
+                } catch (e) {
+                  Alert.alert('Error', 'Could not open file');
+                }
+              }}
+              data-testid="cbct-file-download"
+            >
+              <Ionicons name="document-attach" size={22} color="#007AFF" />
+              <Text style={styles.cbctFileName} numberOfLines={1}>
+                {procedure.cbct_original_name || 'CBCT Report'}
+              </Text>
+              <Ionicons name="download-outline" size={20} color="#007AFF" />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {procedure.remark && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Phase 1 Remarks</Text>
