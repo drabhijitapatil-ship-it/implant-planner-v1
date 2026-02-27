@@ -129,6 +129,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 40,
   },
+  collegeText: {
+    fontSize: 14,
+    color: '#444',
+    textAlign: 'center',
+    marginBottom: 4,
+    fontWeight: '500',
+  },
   form: {
     backgroundColor: '#FFF',
     borderRadius: 16,
