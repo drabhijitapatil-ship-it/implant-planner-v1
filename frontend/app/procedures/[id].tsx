@@ -496,7 +496,7 @@ export default function ProcedureDetailScreen() {
 
         {procedure.remark && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Stage 1 Remarks</Text>
+            <Text style={styles.sectionTitle}>Phase 1 Remarks</Text>
             <Text style={styles.specText}>{procedure.remark}</Text>
           </View>
         )}
