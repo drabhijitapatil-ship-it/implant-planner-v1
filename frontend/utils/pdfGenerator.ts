@@ -86,7 +86,7 @@ export const generateProcedurePDF = async (procedure: any) => {
           <div class="stage-divider">STAGE 1 - IMPLANT PLACEMENT</div>
 
           <div class="section">
-            <div class="section-title">I. Pre-surgical Protocols</div>
+            <div class="section-title">Phase 1: Pre-Surgical Protocol</div>
             <div class="checklist">
               ${procedure.checklist?.pre_surgical?.items?.map((item: any) => `
                 <div class="checklist-item">
