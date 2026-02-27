@@ -52,6 +52,7 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - `GET /api/notifications` - User notifications
 - `GET /api/users` - List users (all authenticated)
 - `POST /api/users` - Create user (admin/implant_incharge only)
+- `PUT /api/users/{id}` - Update user name/role/password (admin/implant_incharge only)
 - `DELETE /api/users/{id}` - Delete user (admin/implant_incharge only)
 
 ## Completed Features
