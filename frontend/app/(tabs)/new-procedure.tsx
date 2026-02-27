@@ -201,7 +201,30 @@ export default function NewProcedureScreen() {
         checklist,
       };
 
-      await api.post('/procedures', payload);
+      const res = await api.post('/procedures', payload);
+      const procedureId = res.data?.id || res.data?._id;
+
+      // Upload CBCT file if selected
+      if (cbctFile && procedureId) {
+        try {
+          setUploading(true);
+          const uploadForm = new FormData();
+          uploadForm.append('file', {
+            uri: cbctFile.uri,
+            name: cbctFile.name,
+            type: cbctFile.mimeType || 'application/octet-stream',
+          } as any);
+          await api.post(`/procedures/${procedureId}/upload-cbct`, uploadForm, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+        } catch (uploadErr) {
+          console.error('CBCT upload error:', uploadErr);
+          Alert.alert('Warning', 'Procedure created but CBCT file upload failed. You can re-upload later.');
+        } finally {
+          setUploading(false);
+        }
+      }
+
       Alert.alert('Success', 'Procedure submitted successfully!', [
         {
           text: 'OK',
@@ -223,6 +246,25 @@ export default function NewProcedureScreen() {
       Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const pickCbctFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'image/png', 'image/jpeg', 'image/heif', 'image/heic'],
+        copyToCacheDirectory: true,
+      });
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const file = result.assets[0];
+        if (file.size && file.size > 25 * 1024 * 1024) {
+          Alert.alert('File Too Large', 'Maximum file size is 25MB');
+          return;
+        }
+        setCbctFile(file);
+      }
+    } catch (err) {
+      console.error('Document picker error:', err);
     }
   };
 
