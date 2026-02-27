@@ -67,7 +67,8 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - [x] Phase 3/4 rename (from "Stage 2") - All labels updated
 - [x] Interactive dashboard stat tiles (navigate to filtered procedures)
 - [x] Status badge position fix (proper SafeAreaView padding)
-- [x] User Management tab (admin/implant_incharge: list, create, delete users)
+- [x] User Management tab (admin/implant_incharge: list, create, edit, delete users)
+- [x] Edit user functionality (change name, role, reset password)
 
 ## Credentials
 - Student: gaurav.pandey@student.dental.edu / Student@123
