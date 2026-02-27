@@ -70,6 +70,10 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - [x] User Management tab (admin/implant_incharge: list, create, edit, delete users)
 - [x] Edit user functionality (change name, role, reset password)
 
+- [x] CBCT file upload on new procedure form (PDF, PNG, JPEG, HEIF up to 25MB)
+- [x] CBCT file visible to supervisor/implant_incharge on procedure detail page
+- [x] Login page updated with college name
+
 ## Credentials
 - Student: gaurav.pandey@student.dental.edu / Student@123
 - Supervisor: vasantha.n@dental.edu / Supervisor@123
