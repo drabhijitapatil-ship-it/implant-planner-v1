@@ -48,6 +48,8 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - `POST /api/procedures/{id}/stage2/surgical/approve` - Phase 3 approval
 - `POST /api/procedures/{id}/stage2/prosthetic` - Submit Phase 4 checklist
 - `POST /api/procedures/{id}/stage2/prosthetic/approve` - Phase 4 approval
+- `POST /api/procedures/{id}/upload-cbct` - Upload CBCT file (student only, owner only)
+- `GET /api/uploads/{filename}` - Download CBCT file (authorized users only)
 - `GET /api/dashboard/stats` - Dashboard statistics
 - `GET /api/notifications` - User notifications
 - `GET /api/users` - List users (all authenticated)
