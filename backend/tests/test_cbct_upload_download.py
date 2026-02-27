@@ -25,7 +25,7 @@ BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://dental-workflow-test
 STUDENT1_EMAIL = "gaurav.pandey@student.dental.edu"
 STUDENT1_PASSWORD = "Student@123"
 
-STUDENT2_EMAIL = "shruti.k@student.dental.edu"
+STUDENT2_EMAIL = "atharva.mahadik@student.dental.edu"
 STUDENT2_PASSWORD = "Student@123"
 
 SUPERVISOR_EMAIL = "vasantha.n@dental.edu"
