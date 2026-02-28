@@ -17,7 +17,7 @@ export default function BackToDashboard({ label = 'Dashboard', floating = true }
 
   const button = (
     <TouchableOpacity style={styles.backButton} onPress={handlePress} data-testid="back-to-dashboard-btn">
-      <Ionicons name="home" size={18} color="#FFF" />
+      <Ionicons name="home" size={14} color="#FFF" />
       <Text style={styles.backButtonText}>{label}</Text>
     </TouchableOpacity>
   );
