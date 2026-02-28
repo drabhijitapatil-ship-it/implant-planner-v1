@@ -685,7 +685,7 @@ export default function ProcedureDetailScreen() {
             onPress={handleDeleteProcedure}
             data-testid="delete-procedure-btn"
           >
-            <Ionicons name="trash" size={20} color="#FFF" />
+            <Ionicons name="trash" size={16} color="#FFF" />
             <Text style={styles.pdfButtonText}>DELETE</Text>
           </TouchableOpacity>
         )}
