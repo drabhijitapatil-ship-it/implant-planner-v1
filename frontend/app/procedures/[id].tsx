@@ -679,6 +679,16 @@ export default function ProcedureDetailScreen() {
       {/* Fixed bottom bar */}
       <View style={styles.bottomBar}>
         <BackToDashboard floating={false} />
+        {user?.role === 'implant_incharge' && (
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={handleDeleteProcedure}
+            data-testid="delete-procedure-btn"
+          >
+            <Ionicons name="trash" size={20} color="#FFF" />
+            <Text style={styles.pdfButtonText}>DELETE</Text>
+          </TouchableOpacity>
+        )}
         {canExportPDF() && (
           <TouchableOpacity
             style={[styles.pdfButton, pdfLoading && styles.buttonDisabled]}
