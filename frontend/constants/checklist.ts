@@ -12,6 +12,7 @@ export const CHECKLIST_DATA = {
       { id: 'medical_assessment', label: 'Medical assessment done' },
       { id: 'realguide', label: 'RealGUIDE Planning and Report' },
       { id: 'oral_prophylaxis', label: 'Oral Prophylaxis done' },
+      { id: 'patient_consent', label: 'Patient Consent Taken' },
     ],
   },
   surgical: {
