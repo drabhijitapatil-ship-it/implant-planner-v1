@@ -182,6 +182,31 @@ export default function ProcedureDetailScreen() {
     }
   };
 
+  const handleDeleteProcedure = () => {
+    if (!procedure) return;
+    Alert.alert(
+      'Delete Patient Record',
+      `Are you sure you want to permanently delete the record for ${procedure.patient_name}? This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.delete(`/procedures/${procedure.id || procedure._id}`);
+              Alert.alert('Deleted', 'Patient record has been deleted.', [
+                { text: 'OK', onPress: () => router.back() },
+              ]);
+            } catch (error: any) {
+              Alert.alert('Error', error.response?.data?.detail || 'Failed to delete record');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const renderChecklistSection = (sectionKey: string, sectionTitle: string) => {
     const sectionData = procedure.checklist?.[sectionKey];
     if (!sectionData || !sectionData.items || sectionData.items.length === 0) {
