@@ -700,8 +700,8 @@ export default function ProcedureDetailScreen() {
               <ActivityIndicator color="#FFF" size="small" />
             ) : (
               <>
-                <Ionicons name="document-text" size={20} color="#FFF" />
-                <Text style={styles.pdfButtonText}>EXPORT AS PDF</Text>
+                <Ionicons name="document-text" size={16} color="#FFF" />
+                <Text style={styles.pdfButtonText}>EXPORT PDF</Text>
               </>
             )}
           </TouchableOpacity>
