@@ -574,8 +574,8 @@ export default function ProcedureDetailScreen() {
 
         {procedure.checklist && (
           <>
-            {renderChecklistSection('pre_surgical', 'I. Pre-surgical Protocols')}
-            {renderChecklistSection('surgical', 'II. Surgical Protocols')}
+            {renderChecklistSection('pre_surgical', 'Phase 1: Pre-Surgical Protocol')}
+            {renderChecklistSection('surgical', 'Phase 2: Surgical Protocol')}
             {renderChecklistSection('second_stage', 'Phase 3: Second Stage Surgical Protocol')}
             {renderChecklistSection('prosthetic_phase', 'Phase 4: Prosthetic Protocol')}
           </>
