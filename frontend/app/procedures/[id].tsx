@@ -933,6 +933,16 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 4,
   },
+  deleteButton: {
+    flexDirection: 'row',
+    backgroundColor: '#F44336',
+    borderRadius: 25,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
   pdfButtonText: {
     color: '#FFF',
     fontSize: 14,
