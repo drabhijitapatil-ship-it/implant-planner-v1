@@ -51,7 +51,8 @@ export default function NewProcedureScreen() {
     amount_paid: '',
     procedure_date: minDate,
     procedure_time: '10:00',
-    implant_specifications: '',
+    implant_region: '',
+    implant_company: '',
     bone_graft_specifications: '',
     remark: '',
   });
@@ -59,6 +60,7 @@ export default function NewProcedureScreen() {
   const [checklist, setChecklist] = useState({});
   const [fieldErrors, setFieldErrors] = useState<{[key: string]: boolean}>({});
   const [cbctFile, setCbctFile] = useState<any>(null);
+  const [iosFile, setIosFile] = useState<any>(null);
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
@@ -162,7 +164,8 @@ export default function NewProcedureScreen() {
       { field: 'amount_paid', label: 'Amount Paid' },
       { field: 'procedure_date', label: 'Procedure Date' },
       { field: 'procedure_time', label: 'Procedure Time' },
-      { field: 'implant_specifications', label: 'Implant Specifications' },
+      { field: 'implant_region', label: 'Implant Region' },
+      { field: 'implant_company', label: 'Implant Company' },
       { field: 'bone_graft_specifications', label: 'Bone Graft/Membrane Specifications' },
     ];
 
@@ -174,6 +177,13 @@ export default function NewProcedureScreen() {
         errors[field] = true;
         missingFields.push(label);
       }
+    }
+
+    if (!iosFile) {
+      missingFields.push('IOS or Intra-oral Photos');
+    }
+    if (!cbctFile) {
+      missingFields.push('CBCT Slides and Report');
     }
 
     setFieldErrors(errors);
@@ -203,6 +213,27 @@ export default function NewProcedureScreen() {
 
       const res = await api.post('/procedures', payload);
       const procedureId = res.data?.id || res.data?._id;
+
+      // Upload IOS file if selected
+      if (iosFile && procedureId) {
+        try {
+          setUploading(true);
+          const iosForm = new FormData();
+          iosForm.append('file', {
+            uri: iosFile.uri,
+            name: iosFile.name,
+            type: iosFile.mimeType || 'application/octet-stream',
+          } as any);
+          await api.post(`/procedures/${procedureId}/upload-ios`, iosForm, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+        } catch (uploadErr) {
+          console.error('IOS upload error:', uploadErr);
+          Alert.alert('Warning', 'Procedure created but IOS photo upload failed.');
+        } finally {
+          setUploading(false);
+        }
+      }
 
       // Upload CBCT file if selected
       if (cbctFile && procedureId) {
@@ -262,6 +293,25 @@ export default function NewProcedureScreen() {
           return;
         }
         setCbctFile(file);
+      }
+    } catch (err) {
+      console.error('Document picker error:', err);
+    }
+  };
+
+  const pickIosFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['image/png', 'image/jpeg', 'image/heif', 'image/heic'],
+        copyToCacheDirectory: true,
+      });
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const file = result.assets[0];
+        if (file.size && file.size > 25 * 1024 * 1024) {
+          Alert.alert('File Too Large', 'Maximum file size is 25MB');
+          return;
+        }
+        setIosFile(file);
       }
     } catch (err) {
       console.error('Document picker error:', err);
@@ -408,7 +458,33 @@ export default function NewProcedureScreen() {
               ))}
             </View>
 
-            <Text style={styles.sectionTitle}>CBCT Slides and Report</Text>
+            <Text style={styles.sectionTitle}>IOS or Intra-oral Photos *</Text>
+            <TouchableOpacity
+              style={styles.filePickerButton}
+              onPress={pickIosFile}
+              data-testid="ios-file-picker"
+            >
+              <Ionicons name="camera" size={22} color={iosFile ? '#4CAF50' : '#007AFF'} />
+              <View style={{ flex: 1 }}>
+                <Text style={iosFile ? styles.filePickerTextSelected : styles.filePickerText}>
+                  {iosFile ? iosFile.name : 'Tap to select photo'}
+                </Text>
+                <Text style={styles.helperText}>
+                  PNG, JPEG, HEIF (Max 25MB)
+                </Text>
+              </View>
+              {iosFile && (
+                <TouchableOpacity
+                  onPress={() => setIosFile(null)}
+                  style={styles.fileRemoveBtn}
+                  data-testid="ios-file-remove"
+                >
+                  <Ionicons name="close-circle" size={22} color="#F44336" />
+                </TouchableOpacity>
+              )}
+            </TouchableOpacity>
+
+            <Text style={styles.sectionTitle}>CBCT Slides and Report *</Text>
             <TouchableOpacity
               style={styles.filePickerButton}
               onPress={pickCbctFile}
@@ -436,14 +512,20 @@ export default function NewProcedureScreen() {
 
             <Text style={styles.sectionTitle}>Implant Details (Mandatory)</Text>
 
-            <Text style={styles.label}>Implant Specifications *</Text>
+            <Text style={styles.label}>Implant Region *</Text>
             <TextInput
-              style={[styles.input, styles.textArea, fieldErrors.implant_specifications && styles.inputError]}
-              value={formData.implant_specifications}
-              onChangeText={(value) => handleInputChange('implant_specifications', value)}
-              placeholder="Enter number of implants with specifications (company, length, diameter, etc.)"
-              multiline
-              numberOfLines={3}
+              style={[styles.input, fieldErrors.implant_region && styles.inputError]}
+              value={formData.implant_region}
+              onChangeText={(value) => handleInputChange('implant_region', value)}
+              placeholder="Enter implant region (e.g., Lower Right Molar)"
+            />
+
+            <Text style={styles.label}>Implant Company *</Text>
+            <TextInput
+              style={[styles.input, fieldErrors.implant_company && styles.inputError]}
+              value={formData.implant_company}
+              onChangeText={(value) => handleInputChange('implant_company', value)}
+              placeholder="Enter implant company (e.g., Nobel Biocare)"
             />
 
             <Text style={styles.label}>Bone Graft/Membrane Specifications *</Text>

@@ -506,10 +506,21 @@ export default function ProcedureDetailScreen() {
           <InfoRow icon="cash" label="Amount Paid" value={`₹${procedure.amount_paid}`} />
         </View>
 
-        {procedure.implant_specifications && (
+        {(procedure.implant_region || procedure.implant_company) && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Implant Specifications</Text>
-            <Text style={styles.specText}>{procedure.implant_specifications}</Text>
+            <Text style={styles.sectionTitle}>Implant Details</Text>
+            {procedure.implant_region && (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Region:</Text>
+                <Text style={styles.specText}>{procedure.implant_region}</Text>
+              </View>
+            )}
+            {procedure.implant_company && (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Company:</Text>
+                <Text style={styles.specText}>{procedure.implant_company}</Text>
+              </View>
+            )}
           </View>
         )}
 
@@ -517,6 +528,31 @@ export default function ProcedureDetailScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Bone Graft/Membrane</Text>
             <Text style={styles.specText}>{procedure.bone_graft_specifications}</Text>
+          </View>
+        )}
+
+        {procedure.ios_file && (
+          <View style={styles.section} data-testid="ios-file-section">
+            <Text style={styles.sectionTitle}>IOS or Intra-oral Photos</Text>
+            <TouchableOpacity
+              style={styles.cbctFileRow}
+              onPress={async () => {
+                try {
+                  const baseUrl = api.defaults.baseURL || '';
+                  const fileUrl = `${baseUrl}/uploads/${procedure.ios_file}`;
+                  await Linking.openURL(fileUrl);
+                } catch (e) {
+                  Alert.alert('Error', 'Could not open file');
+                }
+              }}
+              data-testid="ios-file-download"
+            >
+              <Ionicons name="camera" size={22} color="#007AFF" />
+              <Text style={styles.cbctFileName} numberOfLines={1}>
+                {procedure.ios_original_name || 'Intra-oral Photo'}
+              </Text>
+              <Ionicons name="download-outline" size={20} color="#007AFF" />
+            </TouchableOpacity>
           </View>
         )}
 
@@ -810,6 +846,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#007AFF',
     fontWeight: '500',
+  },
+  detailRow: {
+    flexDirection: 'row',
+    marginBottom: 6,
+  },
+  detailLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#555',
+    width: 80,
   },
   rejectionSection: {
     backgroundColor: '#FFEBEE',

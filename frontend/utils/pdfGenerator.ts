@@ -71,10 +71,11 @@ export const generateProcedurePDF = async (procedure: any) => {
             </table>
           </div>
 
-          ${procedure.implant_specifications ? `
+          ${(procedure.implant_region || procedure.implant_company) ? `
           <div class="section">
-            <div class="section-title">Implant Specifications</div>
-            <p class="info-value">${procedure.implant_specifications}</p>
+            <div class="section-title">Implant Details</div>
+            ${procedure.implant_region ? `<p class="info-value"><strong>Region:</strong> ${procedure.implant_region}</p>` : ''}
+            ${procedure.implant_company ? `<p class="info-value"><strong>Company:</strong> ${procedure.implant_company}</p>` : ''}
           </div>` : ''}
 
           ${procedure.bone_graft_specifications ? `
