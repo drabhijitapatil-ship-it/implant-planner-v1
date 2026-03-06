@@ -116,7 +116,8 @@ class ProcedureCreate(BaseModel):
     procedure_date: str
     procedure_time: str
     checklist: Optional[Checklist] = None
-    implant_specifications: Optional[str] = ""
+    implant_region: Optional[str] = ""
+    implant_company: Optional[str] = ""
     bone_graft_specifications: Optional[str] = ""
     remark: Optional[str] = ""
 
@@ -133,7 +134,8 @@ class ProcedureUpdate(BaseModel):
     procedure_date: Optional[str] = None
     procedure_time: Optional[str] = None
     checklist: Optional[Checklist] = None
-    implant_specifications: Optional[str] = None
+    implant_region: Optional[str] = None
+    implant_company: Optional[str] = None
     bone_graft_specifications: Optional[str] = None
     remark: Optional[str] = None
 
@@ -420,8 +422,10 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
         pass  # If date parsing fails, let it proceed (will be caught by validation)
     
     # Validate mandatory fields
-    if not procedure.implant_specifications or procedure.implant_specifications.strip() == "":
-        raise HTTPException(status_code=400, detail="Implant Specifications is a mandatory field")
+    if not procedure.implant_region or procedure.implant_region.strip() == "":
+        raise HTTPException(status_code=400, detail="Implant Region is a mandatory field")
+    if not procedure.implant_company or procedure.implant_company.strip() == "":
+        raise HTTPException(status_code=400, detail="Implant Company is a mandatory field")
     if not procedure.bone_graft_specifications or procedure.bone_graft_specifications.strip() == "":
         raise HTTPException(status_code=400, detail="Bone Graft/Membrane Specifications is a mandatory field")
     
@@ -644,6 +648,47 @@ async def upload_cbct(
     
     return {"message": "File uploaded successfully", "filename": file.filename}
 
+@api_router.post("/procedures/{procedure_id}/upload-ios")
+async def upload_ios(
+    procedure_id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    if current_user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Only students can upload files")
+    
+    procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if procedure["student_id"] != current_user["_id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    ext = Path(file.filename).suffix.lower()
+    allowed_ios = {'.png', '.jpg', '.jpeg', '.heif', '.heic'}
+    if ext not in allowed_ios:
+        raise HTTPException(status_code=400, detail=f"File type not allowed. Allowed: {', '.join(allowed_ios)}")
+    
+    contents = await file.read()
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File size exceeds 25MB limit")
+    
+    unique_name = f"{uuid.uuid4().hex}{ext}"
+    file_path = UPLOADS_DIR / unique_name
+    with open(file_path, "wb") as f:
+        f.write(contents)
+    
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {
+            "ios_file": unique_name,
+            "ios_original_name": file.filename,
+            "ios_content_type": file.content_type,
+            "updated_at": datetime.utcnow()
+        }}
+    )
+    
+    return {"message": "File uploaded successfully", "filename": file.filename}
+
 @api_router.get("/uploads/{filename}")
 async def serve_upload(filename: str, current_user: dict = Depends(get_current_user)):
     file_path = UPLOADS_DIR / filename
@@ -651,7 +696,7 @@ async def serve_upload(filename: str, current_user: dict = Depends(get_current_u
         raise HTTPException(status_code=404, detail="File not found")
     
     # Only supervisor, implant_incharge, administrator, and the procedure's student can view
-    procedure = await db.procedures.find_one({"cbct_file": filename})
+    procedure = await db.procedures.find_one({"$or": [{"cbct_file": filename}, {"ios_file": filename}]})
     if procedure:
         allowed = False
         if current_user["role"] in ["administrator", "implant_incharge"]:
