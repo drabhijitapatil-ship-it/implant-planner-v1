@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
-  FlatList,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -91,24 +91,31 @@ export default function ImplantSelectionScreen() {
           <Text style={styles.cardTitle}>Step 1: Select Implant System</Text>
           <TouchableOpacity
             style={styles.dropdown}
-            onPress={() => setShowDropdown(!showDropdown)}
+            onPress={() => setShowDropdown(true)}
             data-testid="system-dropdown"
           >
             <Ionicons name="medical" size={18} color="#1E88E5" />
             <Text style={selectedSystem ? styles.dropdownText : styles.dropdownPlaceholder}>
               {selectedSystem ? `${selectedSystem.brand} – ${selectedSystem.system}` : 'Select Implant System'}
             </Text>
-            <Ionicons name={showDropdown ? 'chevron-up' : 'chevron-down'} size={18} color="#8E8E93" />
+            <Ionicons name="chevron-down" size={18} color="#8E8E93" />
           </TouchableOpacity>
+        </View>
 
-          {showDropdown && (
-            <View style={styles.dropdownList}>
-              <FlatList
-                data={systems}
-                keyExtractor={(item, i) => `${item.brand}-${item.system}-${i}`}
-                style={{ maxHeight: 250 }}
-                renderItem={({ item }) => (
+        {/* Dropdown Modal */}
+        <Modal visible={showDropdown} animationType="slide" transparent>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Select Implant System</Text>
+                <TouchableOpacity onPress={() => setShowDropdown(false)} data-testid="close-dropdown">
+                  <Ionicons name="close" size={24} color="#666" />
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={true}>
+                {systems.map((item, i) => (
                   <TouchableOpacity
+                    key={`${item.brand}-${item.system}-${i}`}
                     style={[
                       styles.dropdownItem,
                       selectedSystem?.brand === item.brand && selectedSystem?.system === item.system && styles.dropdownItemActive,
@@ -123,11 +130,11 @@ export default function ImplantSelectionScreen() {
                     <Text style={styles.dropdownItemBrand}>{item.brand}</Text>
                     <Text style={styles.dropdownItemSystem}>{item.system}</Text>
                   </TouchableOpacity>
-                )}
-              />
+                ))}
+              </ScrollView>
             </View>
-          )}
-        </View>
+          </View>
+        </Modal>
 
         {/* STEP 2 — Bone Measurements */}
         <View style={[styles.card, !selectedSystem && styles.cardDisabled]}>
@@ -313,17 +320,27 @@ const styles = StyleSheet.create({
   },
   dropdownText: { flex: 1, fontSize: 14, color: '#263238', fontWeight: '500' },
   dropdownPlaceholder: { flex: 1, fontSize: 14, color: '#90A4AE' },
-  dropdownList: {
-    marginTop: 8, borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 10,
-    backgroundColor: '#FFF', overflow: 'hidden',
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end',
   },
+  modalContent: {
+    backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    maxHeight: '70%', paddingBottom: 30,
+  },
+  modalHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    padding: 18, borderBottomWidth: 1, borderBottomColor: '#F0F0F0',
+  },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: '#263238' },
+  modalScroll: { paddingHorizontal: 8 },
   dropdownItem: {
-    flexDirection: 'row', justifyContent: 'space-between', padding: 12,
-    borderBottomWidth: 1, borderBottomColor: '#F0F0F0',
+    flexDirection: 'row', justifyContent: 'space-between', padding: 14,
+    borderBottomWidth: 1, borderBottomColor: '#F0F0F0', marginHorizontal: 4,
+    borderRadius: 8,
   },
   dropdownItemActive: { backgroundColor: '#E3F2FD' },
-  dropdownItemBrand: { fontSize: 14, fontWeight: '600', color: '#263238' },
-  dropdownItemSystem: { fontSize: 13, color: '#546E7A' },
+  dropdownItemBrand: { fontSize: 15, fontWeight: '600', color: '#263238' },
+  dropdownItemSystem: { fontSize: 14, color: '#546E7A' },
   inputLabel: { fontSize: 13, fontWeight: '600', color: '#546E7A', marginBottom: 6, marginTop: 10 },
   inputRow: {
     flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#D0D7DE',
