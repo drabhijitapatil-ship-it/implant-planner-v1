@@ -62,7 +62,7 @@ export default function RegisterScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.content}>
             <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>Join Dental Implant Manager</Text>
+            <Text style={styles.subtitle}>Join My Implant Planner</Text>
 
             <View style={styles.form}>
               <Text style={styles.label}>Full Name</Text>
