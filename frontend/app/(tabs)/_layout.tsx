@@ -45,7 +45,7 @@ export default function TabsLayout() {
         options={{
           title: 'Home',
           tabBarIcon: ({ color }) => (
-            <Ionicons name="home" size={26} color={color} />
+            <Ionicons name="home" size={24} color={color} />
           ),
         }}
       />
@@ -54,9 +54,19 @@ export default function TabsLayout() {
         options={{
           title: 'New Case',
           tabBarIcon: ({ color }) => (
-            <Ionicons name="add-circle" size={26} color={color} />
+            <Ionicons name="add-circle" size={24} color={color} />
           ),
           href: isNurse ? null : '/new-procedure',
+        }}
+      />
+      <Tabs.Screen
+        name="implant-selection"
+        options={{
+          title: 'Implant',
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="medical" size={24} color={color} />
+          ),
+          href: isNurse ? null : '/implant-selection',
         }}
       />
       <Tabs.Screen
@@ -64,7 +74,7 @@ export default function TabsLayout() {
         options={{
           title: isNurse ? 'Cases' : 'My Cases',
           tabBarIcon: ({ color }) => (
-            <Ionicons name="folder-open" size={26} color={color} />
+            <Ionicons name="folder-open" size={24} color={color} />
           ),
         }}
       />
@@ -73,7 +83,7 @@ export default function TabsLayout() {
         options={{
           title: 'Alerts',
           tabBarIcon: ({ color }) => (
-            <Ionicons name="notifications" size={26} color={color} />
+            <Ionicons name="notifications" size={24} color={color} />
           ),
         }}
       />
@@ -82,7 +92,7 @@ export default function TabsLayout() {
         options={{
           title: 'Users',
           tabBarIcon: ({ color }) => (
-            <Ionicons name="people" size={26} color={color} />
+            <Ionicons name="people" size={24} color={color} />
           ),
           href: isAdmin ? '/user-management' : null,
         }}
@@ -92,7 +102,7 @@ export default function TabsLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color }) => (
-            <Ionicons name="person-circle" size={26} color={color} />
+            <Ionicons name="person-circle" size={24} color={color} />
           ),
         }}
       />
