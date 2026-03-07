@@ -77,6 +77,8 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - [x] Login page updated with college name
 
 - [x] Implant Selection module (implant library with 72 records, suggestion engine with clinical rules)
+- [x] Implant Selection dropdown fix: Modal-based picker with loading/error states, Pressable overlay, Android back button support, nestedScrollEnabled
+- [x] Health check endpoint (GET /) for Kubernetes liveness/readiness probes
 
 ## Credentials
 - Student: gaurav.pandey@student.dental.edu / Student@123

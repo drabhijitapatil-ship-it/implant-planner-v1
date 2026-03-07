@@ -41,6 +41,11 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
+# Health check endpoint for Kubernetes liveness/readiness probes
+@app.get("/")
+async def health_check():
+    return {"status": "ok"}
+
 # Helper functions
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
