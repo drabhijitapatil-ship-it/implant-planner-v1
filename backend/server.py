@@ -1465,6 +1465,90 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
         "rejected": rejected
     }
 
+
+# Implant Library endpoints
+@api_router.get("/implant-library/systems")
+async def get_implant_systems(current_user: dict = Depends(get_current_user)):
+    pipeline = [
+        {"$group": {"_id": {"brand": "$brand", "system": "$system"}}},
+        {"$sort": {"_id.brand": 1, "_id.system": 1}},
+    ]
+    results = await db.implant_library.aggregate(pipeline).to_list(100)
+    systems = [{"brand": r["_id"]["brand"], "system": r["_id"]["system"]} for r in results]
+    return systems
+
+@api_router.get("/implant-library/suggest")
+async def suggest_implant(
+    system: str,
+    brand: str,
+    bone_width: float,
+    bone_height: float,
+    current_user: dict = Depends(get_current_user),
+):
+    # Determine diameter range from bone width (maintain >=1.5mm on each side)
+    max_diameter = bone_width - 3.0  # 1.5mm clearance each side
+    if bone_width < 5:
+        diam_min, diam_max = 3.0, 3.5
+    elif bone_width < 6:
+        diam_min, diam_max = 3.75, 4.0
+    elif bone_width < 7:
+        diam_min, diam_max = 4.0, 4.5
+    else:
+        diam_min, diam_max = 4.5, 6.0
+
+    # Determine length range from bone height (maintain >=2mm safety clearance)
+    max_length = bone_height - 2.0
+    if bone_height >= 13:
+        length_label = "Long implant"
+        len_min, len_max = 11.5, 14.0
+    elif bone_height >= 10:
+        length_label = "Standard implant"
+        len_min, len_max = 10.0, 12.0
+    elif bone_height >= 8:
+        length_label = "Short implant"
+        len_min, len_max = 7.0, 10.0
+    else:
+        length_label = "Insufficient bone height"
+        len_min, len_max = 0, 8.0
+
+    # Query matching implants using clinical ranges
+    query = {
+        "brand": brand,
+        "system": system,
+        "diameter": {"$gte": diam_min, "$lte": diam_max},
+        "length": {"$gte": len_min, "$lte": len_max},
+    }
+    implants = await db.implant_library.find(query, {"_id": 0}).sort([("diameter", 1), ("length", 1)]).to_list(50)
+
+    # If no exact matches, try wider range (±0.5mm diameter, ±2mm length)
+    if not implants:
+        query_wider = {
+            "brand": brand,
+            "system": system,
+            "diameter": {"$gte": diam_min - 0.5, "$lte": diam_max + 0.5},
+            "length": {"$gte": max(len_min - 2, 6), "$lte": len_max + 2},
+        }
+        implants = await db.implant_library.find(query_wider, {"_id": 0}).sort([("diameter", 1), ("length", 1)]).to_list(50)
+
+    # Also get all implants for this system as fallback
+    all_implants = await db.implant_library.find(
+        {"brand": brand, "system": system}, {"_id": 0}
+    ).sort([("diameter", 1), ("length", 1)]).to_list(50)
+
+    return {
+        "recommended": implants,
+        "all_options": all_implants,
+        "clinical_guidance": {
+            "bone_width": bone_width,
+            "bone_height": bone_height,
+            "recommended_diameter_range": f"{diam_min}–{diam_max} mm",
+            "recommended_length_range": f"{len_min}–{len_max} mm",
+            "length_category": length_label,
+            "max_implant_diameter": round(max_diameter, 1),
+            "safety_note": "Maintain >=1.5 mm bone on both sides of implant and >=2 mm clearance from inferior alveolar nerve / maxillary sinus.",
+        },
+    }
+
 app.include_router(api_router)
 
 app.add_middleware(
