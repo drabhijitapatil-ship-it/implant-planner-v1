@@ -76,6 +76,8 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - [x] CBCT file visible to supervisor/implant_incharge on procedure detail page
 - [x] Login page updated with college name
 
+- [x] Implant Selection module (implant library with 72 records, suggestion engine with clinical rules)
+
 ## Credentials
 - Student: gaurav.pandey@student.dental.edu / Student@123
 - Supervisor: vasantha.n@dental.edu / Supervisor@123
