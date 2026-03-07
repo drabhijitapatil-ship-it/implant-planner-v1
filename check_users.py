@@ -1,7 +1,7 @@
 import requests
 import json
 
-BASE_URL = "https://dental-workflow-test.preview.emergentagent.com/api"
+BASE_URL = "https://implant-workflow-2.preview.emergentagent.com/api"
 
 # Login as student first to get access
 student_login = requests.post(f"{BASE_URL}/auth/login", json={

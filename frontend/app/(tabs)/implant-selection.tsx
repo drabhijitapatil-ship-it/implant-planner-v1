@@ -8,6 +8,9 @@ import {
   TextInput,
   ActivityIndicator,
   Modal,
+  Pressable,
+  Alert,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +22,7 @@ type Implant = { brand: string; system: string; diameter: number; length: number
 export default function ImplantSelectionScreen() {
   const [systems, setSystems] = useState<ImplantSystem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedSystem, setSelectedSystem] = useState<ImplantSystem | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [boneWidth, setBoneWidth] = useState('');
@@ -27,11 +31,22 @@ export default function ImplantSelectionScreen() {
   const [searching, setSearching] = useState(false);
 
   useEffect(() => {
-    api.get('/implant-library/systems')
-      .then((res) => setSystems(res.data))
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    loadSystems();
   }, []);
+
+  const loadSystems = () => {
+    setLoading(true);
+    setLoadError(null);
+    api.get('/implant-library/systems')
+      .then((res) => {
+        setSystems(res.data || []);
+      })
+      .catch((err) => {
+        const msg = err?.response?.data?.detail || err?.message || 'Failed to load implant systems';
+        setLoadError(msg);
+      })
+      .finally(() => setLoading(false));
+  };
 
   const handleSuggest = async () => {
     if (!selectedSystem || !boneWidth || !boneHeight) return;
@@ -89,51 +104,94 @@ export default function ImplantSelectionScreen() {
         {/* STEP 1 — Select Implant System */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Step 1: Select Implant System</Text>
-          <TouchableOpacity
-            style={styles.dropdown}
-            onPress={() => setShowDropdown(true)}
-            data-testid="system-dropdown"
-          >
-            <Ionicons name="medical" size={18} color="#1E88E5" />
-            <Text style={selectedSystem ? styles.dropdownText : styles.dropdownPlaceholder}>
-              {selectedSystem ? `${selectedSystem.brand} – ${selectedSystem.system}` : 'Select Implant System'}
-            </Text>
-            <Ionicons name="chevron-down" size={18} color="#8E8E93" />
-          </TouchableOpacity>
+          {loading ? (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator size="small" color="#1E88E5" />
+              <Text style={styles.loadingText}>Loading implant systems...</Text>
+            </View>
+          ) : loadError ? (
+            <View>
+              <Text style={styles.errorText}>{loadError}</Text>
+              <TouchableOpacity style={styles.retryBtn} onPress={loadSystems} testID="retry-load-btn">
+                <Ionicons name="refresh" size={16} color="#1E88E5" />
+                <Text style={styles.retryBtnText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.dropdown}
+              onPress={() => {
+                if (systems.length === 0) {
+                  Alert.alert('No Data', 'No implant systems available. Please try again.');
+                  return;
+                }
+                setShowDropdown(true);
+              }}
+              activeOpacity={0.7}
+              testID="system-dropdown"
+            >
+              <Ionicons name="medical" size={18} color="#1E88E5" />
+              <Text style={selectedSystem ? styles.dropdownText : styles.dropdownPlaceholder}>
+                {selectedSystem ? `${selectedSystem.brand} - ${selectedSystem.system}` : `Select Implant System (${systems.length} available)`}
+              </Text>
+              <Ionicons name="chevron-down" size={18} color="#8E8E93" />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Dropdown Modal */}
-        <Modal visible={showDropdown} animationType="slide" transparent>
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
+        <Modal
+          visible={showDropdown}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setShowDropdown(false)}
+          statusBarTranslucent={Platform.OS === 'android'}
+        >
+          <Pressable style={styles.modalOverlay} onPress={() => setShowDropdown(false)}>
+            <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Select Implant System</Text>
-                <TouchableOpacity onPress={() => setShowDropdown(false)} data-testid="close-dropdown">
-                  <Ionicons name="close" size={24} color="#666" />
+                <TouchableOpacity
+                  onPress={() => setShowDropdown(false)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  testID="close-dropdown"
+                >
+                  <Ionicons name="close-circle" size={28} color="#666" />
                 </TouchableOpacity>
               </View>
-              <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={true}>
-                {systems.map((item, i) => (
-                  <TouchableOpacity
-                    key={`${item.brand}-${item.system}-${i}`}
-                    style={[
-                      styles.dropdownItem,
-                      selectedSystem?.brand === item.brand && selectedSystem?.system === item.system && styles.dropdownItemActive,
-                    ]}
-                    onPress={() => {
-                      setSelectedSystem(item);
-                      setShowDropdown(false);
-                      setResults(null);
-                    }}
-                    data-testid={`system-${item.brand}-${item.system}`}
-                  >
-                    <Text style={styles.dropdownItemBrand}>{item.brand}</Text>
-                    <Text style={styles.dropdownItemSystem}>{item.system}</Text>
-                  </TouchableOpacity>
-                ))}
+              <View style={styles.modalDivider} />
+              <ScrollView
+                style={styles.modalScroll}
+                showsVerticalScrollIndicator={true}
+                bounces={true}
+                nestedScrollEnabled={true}
+              >
+                {systems.map((item, i) => {
+                  const isSelected = selectedSystem?.brand === item.brand && selectedSystem?.system === item.system;
+                  return (
+                    <TouchableOpacity
+                      key={`${item.brand}-${item.system}-${i}`}
+                      style={[styles.dropdownItem, isSelected && styles.dropdownItemActive]}
+                      onPress={() => {
+                        setSelectedSystem(item);
+                        setShowDropdown(false);
+                        setResults(null);
+                      }}
+                      activeOpacity={0.6}
+                      testID={`system-option-${i}`}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.dropdownItemBrand}>{item.brand}</Text>
+                        <Text style={styles.dropdownItemSystem}>{item.system}</Text>
+                      </View>
+                      {isSelected && <Ionicons name="checkmark-circle" size={22} color="#1E88E5" />}
+                    </TouchableOpacity>
+                  );
+                })}
+                <View style={{ height: 30 }} />
               </ScrollView>
-            </View>
-          </View>
+            </Pressable>
+          </Pressable>
         </Modal>
 
         {/* STEP 2 — Bone Measurements */}
@@ -151,7 +209,7 @@ export default function ImplantSelectionScreen() {
               placeholderTextColor="#B0BEC5"
               keyboardType="decimal-pad"
               editable={!!selectedSystem}
-              data-testid="bone-width-input"
+              testID="bone-width-input"
             />
             <Text style={styles.unitText}>mm</Text>
           </View>
@@ -167,7 +225,7 @@ export default function ImplantSelectionScreen() {
               placeholderTextColor="#B0BEC5"
               keyboardType="decimal-pad"
               editable={!!selectedSystem}
-              data-testid="bone-height-input"
+              testID="bone-height-input"
             />
             <Text style={styles.unitText}>mm</Text>
           </View>
@@ -176,7 +234,7 @@ export default function ImplantSelectionScreen() {
             style={[styles.suggestBtn, (!selectedSystem || !boneWidth || !boneHeight) && styles.btnDisabled]}
             onPress={handleSuggest}
             disabled={!selectedSystem || !boneWidth || !boneHeight || searching}
-            data-testid="suggest-btn"
+            testID="suggest-btn"
           >
             {searching ? (
               <ActivityIndicator color="#FFF" size="small" />
@@ -230,7 +288,7 @@ export default function ImplantSelectionScreen() {
               <>
                 <Text style={styles.resultSectionTitle}>Best Matches</Text>
                 {results.recommended.map((imp: Implant, i: number) => (
-                  <View key={`rec-${i}`} style={styles.implantCard} data-testid={`result-${i}`}>
+                  <View key={`rec-${i}`} style={styles.implantCard} testID={`result-${i}`}>
                     <View style={styles.implantIcon}>
                       <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
                     </View>
@@ -280,7 +338,7 @@ export default function ImplantSelectionScreen() {
             )}
 
             {/* Reset Button */}
-            <TouchableOpacity style={styles.resetBtn} onPress={handleReset} data-testid="reset-btn">
+            <TouchableOpacity style={styles.resetBtn} onPress={handleReset} testID="reset-btn">
               <Ionicons name="refresh" size={18} color="#1E88E5" />
               <Text style={styles.resetBtnText}>New Selection</Text>
             </TouchableOpacity>
@@ -314,6 +372,11 @@ const styles = StyleSheet.create({
   },
   cardDisabled: { opacity: 0.5 },
   cardTitle: { fontSize: 15, fontWeight: '700', color: '#263238', marginBottom: 12 },
+  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14 },
+  loadingText: { fontSize: 14, color: '#546E7A' },
+  errorText: { fontSize: 13, color: '#D32F2F', marginBottom: 8 },
+  retryBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 10, alignSelf: 'flex-start' },
+  retryBtnText: { fontSize: 14, fontWeight: '600', color: '#1E88E5' },
   dropdown: {
     flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#D0D7DE',
     borderRadius: 12, padding: 14, backgroundColor: '#FAFAFA', gap: 10,
@@ -329,14 +392,15 @@ const styles = StyleSheet.create({
   },
   modalHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    padding: 18, borderBottomWidth: 1, borderBottomColor: '#F0F0F0',
+    padding: 18,
   },
   modalTitle: { fontSize: 18, fontWeight: '700', color: '#263238' },
+  modalDivider: { height: 1, backgroundColor: '#F0F0F0' },
   modalScroll: { paddingHorizontal: 8 },
   dropdownItem: {
-    flexDirection: 'row', justifyContent: 'space-between', padding: 14,
-    borderBottomWidth: 1, borderBottomColor: '#F0F0F0', marginHorizontal: 4,
-    borderRadius: 8,
+    flexDirection: 'row', alignItems: 'center', padding: 16,
+    borderBottomWidth: 1, borderBottomColor: '#F0F0F0', marginHorizontal: 8,
+    borderRadius: 8, minHeight: 56,
   },
   dropdownItemActive: { backgroundColor: '#E3F2FD' },
   dropdownItemBrand: { fontSize: 15, fontWeight: '600', color: '#263238' },
