@@ -21,16 +21,21 @@ export default function TabsLayout() {
           backgroundColor: '#FFF',
           borderTopWidth: 1,
           borderTopColor: '#E5E5EA',
-          paddingBottom: 6,
+          paddingBottom: 4,
           paddingTop: 4,
-          height: 58,
+          paddingHorizontal: 4,
+          height: 56,
         },
         tabBarLabelStyle: {
-          fontSize: 10,
-          fontWeight: '500',
+          fontSize: 9,
+          fontWeight: '600',
+          marginTop: 0,
         },
         tabBarIconStyle: {
-          marginBottom: -2,
+          marginBottom: 0,
+        },
+        tabBarItemStyle: {
+          paddingVertical: 2,
         },
       }}
     >
@@ -38,8 +43,8 @@ export default function TabsLayout() {
         name="dashboard"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home" size={22} color={color} />
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="home" size={20} color={color} />
           ),
         }}
       />
@@ -47,8 +52,8 @@ export default function TabsLayout() {
         name="new-procedure"
         options={{
           title: 'New Case',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="add-circle" size={22} color={color} />
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="add-circle" size={20} color={color} />
           ),
           href: isNurse ? null : '/new-procedure',
         }}
@@ -57,8 +62,8 @@ export default function TabsLayout() {
         name="procedures"
         options={{
           title: isNurse ? 'Cases' : 'My Cases',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="folder-open" size={22} color={color} />
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="folder-open" size={20} color={color} />
           ),
         }}
       />
@@ -66,8 +71,8 @@ export default function TabsLayout() {
         name="notifications"
         options={{
           title: 'Alerts',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="notifications" size={22} color={color} />
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="notifications" size={20} color={color} />
           ),
         }}
       />
@@ -75,8 +80,8 @@ export default function TabsLayout() {
         name="user-management"
         options={{
           title: 'Users',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="people" size={22} color={color} />
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="people" size={20} color={color} />
           ),
           href: isAdmin ? '/user-management' : null,
         }}
@@ -84,9 +89,9 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'My Profile',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-circle" size={22} color={color} />
+          title: 'Profile',
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="person-circle" size={20} color={color} />
           ),
         }}
       />
