@@ -10,10 +10,16 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Image,
+  Dimensions,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const IMAGE_WIDTH = SCREEN_WIDTH * 0.67;
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -40,70 +46,99 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
-      >
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <View style={styles.content}>
-            <Text style={styles.title}>Dental Implant Manager</Text>
-            <Text style={styles.collegeText}>Bharati Vidyapeeth Dental College and Hospital</Text>
-            <Text style={styles.subtitle}>Department of Prosthodontics</Text>
+    <LinearGradient colors={['#E3F2FD', '#FFFFFF']} style={styles.gradient}>
+      <SafeAreaView style={styles.container}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardView}
+        >
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.content}>
+              {/* Hero Image */}
+              <View style={styles.imageContainer} data-testid="hero-image">
+                <View style={styles.imageGlow} />
+                <View style={styles.imageWrapper}>
+                  <Image
+                    source={require('../../assets/images/implant-hero.png')}
+                    style={styles.heroImage}
+                    resizeMode="contain"
+                  />
+                </View>
+              </View>
 
-            <View style={styles.form}>
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                style={styles.input}
-                value={email}
-                onChangeText={setEmail}
-                placeholder="Enter your email"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
+              {/* Titles */}
+              <Text style={styles.title}>My Implant Planner</Text>
+              <Text style={styles.subtitle}>Digital Implant Planning Assistant</Text>
 
-              <Text style={styles.label}>Password</Text>
-              <TextInput
-                style={styles.input}
-                value={password}
-                onChangeText={setPassword}
-                placeholder="Enter your password"
-                secureTextEntry
-                autoCapitalize="none"
-              />
+              <Text style={styles.collegeText}>Bharati Vidyapeeth Dental College and Hospital</Text>
+              <Text style={styles.deptText}>Department of Prosthodontics</Text>
 
-              <TouchableOpacity
-                style={[styles.button, loading && styles.buttonDisabled]}
-                onPress={handleLogin}
-                disabled={loading}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#FFF" />
-                ) : (
-                  <Text style={styles.buttonText}>Login</Text>
-                )}
-              </TouchableOpacity>
+              {/* Login Form */}
+              <View style={styles.form}>
+                <Text style={styles.label}>Email</Text>
+                <TextInput
+                  style={styles.input}
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="Enter your email"
+                  placeholderTextColor="#999"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  data-testid="login-email-input"
+                />
 
-              <TouchableOpacity
-                style={styles.linkButton}
-                onPress={() => router.push('/auth/register')}
-                disabled={loading}
-              >
-                <Text style={styles.linkText}>Don't have an account? Register</Text>
-              </TouchableOpacity>
+                <Text style={styles.label}>Password</Text>
+                <TextInput
+                  style={styles.input}
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Enter your password"
+                  placeholderTextColor="#999"
+                  secureTextEntry
+                  autoCapitalize="none"
+                  data-testid="login-password-input"
+                />
+
+                <TouchableOpacity
+                  style={[styles.button, loading && styles.buttonDisabled]}
+                  onPress={handleLogin}
+                  disabled={loading}
+                  data-testid="login-submit-btn"
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#FFF" />
+                  ) : (
+                    <Text style={styles.buttonText}>Login</Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.linkButton}
+                  onPress={() => router.push('/auth/register')}
+                  disabled={loading}
+                  data-testid="register-link"
+                >
+                  <Text style={styles.linkText}>Don't have an account? Register</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
+  gradient: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
   },
   keyboardView: {
     flex: 1,
@@ -116,25 +151,66 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 24,
   },
+  imageContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+    position: 'relative',
+  },
+  imageGlow: {
+    position: 'absolute',
+    width: IMAGE_WIDTH * 0.85,
+    height: IMAGE_WIDTH * 0.85,
+    borderRadius: IMAGE_WIDTH * 0.425,
+    backgroundColor: 'rgba(33, 150, 243, 0.08)',
+    top: '15%',
+  },
+  imageWrapper: {
+    width: IMAGE_WIDTH,
+    height: IMAGE_WIDTH * 0.75,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroImage: {
+    width: '100%',
+    height: '100%',
+  },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#1A1A1A',
+    fontSize: 30,
+    fontWeight: '700',
+    color: '#1565C0',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: '#1976D2',
     textAlign: 'center',
-    marginBottom: 40,
+    marginBottom: 16,
+    fontWeight: '400',
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
   },
   collegeText: {
-    fontSize: 14,
-    color: '#444',
+    fontSize: 13,
+    color: '#546E7A',
     textAlign: 'center',
-    marginBottom: 4,
+    marginBottom: 2,
     fontWeight: '500',
+  },
+  deptText: {
+    fontSize: 13,
+    color: '#78909C',
+    textAlign: 'center',
+    marginBottom: 24,
+    fontWeight: '400',
   },
   form: {
     backgroundColor: '#FFF',
@@ -147,23 +223,24 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   label: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#1A1A1A',
-    marginBottom: 8,
-    marginTop: 16,
+    color: '#37474F',
+    marginBottom: 6,
+    marginTop: 14,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#DDD',
-    borderRadius: 8,
+    borderColor: '#E0E0E0',
+    borderRadius: 10,
     padding: 12,
-    fontSize: 16,
-    backgroundColor: '#F9F9F9',
+    fontSize: 15,
+    backgroundColor: '#FAFAFA',
+    color: '#1A1A1A',
   },
   button: {
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
+    backgroundColor: '#1565C0',
+    borderRadius: 10,
     padding: 16,
     alignItems: 'center',
     marginTop: 24,
@@ -181,7 +258,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   linkText: {
-    color: '#007AFF',
+    color: '#1976D2',
     fontSize: 14,
   },
 });
