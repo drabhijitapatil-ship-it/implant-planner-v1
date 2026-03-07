@@ -21,21 +21,22 @@ export default function TabsLayout() {
           backgroundColor: '#FFF',
           borderTopWidth: 1,
           borderTopColor: '#E5E5EA',
-          paddingBottom: 4,
-          paddingTop: 4,
-          paddingHorizontal: 4,
-          height: 56,
+          paddingBottom: 2,
+          paddingTop: 6,
+          paddingHorizontal: 12,
+          height: 62,
         },
         tabBarLabelStyle: {
           fontSize: 9,
           fontWeight: '600',
-          marginTop: 0,
+          marginTop: 2,
         },
         tabBarIconStyle: {
           marginBottom: 0,
         },
         tabBarItemStyle: {
-          paddingVertical: 2,
+          paddingVertical: 0,
+          minWidth: 0,
         },
       }}
     >
@@ -44,7 +45,7 @@ export default function TabsLayout() {
         options={{
           title: 'Home',
           tabBarIcon: ({ color }) => (
-            <Ionicons name="home" size={20} color={color} />
+            <Ionicons name="home" size={26} color={color} />
           ),
         }}
       />
@@ -53,7 +54,7 @@ export default function TabsLayout() {
         options={{
           title: 'New Case',
           tabBarIcon: ({ color }) => (
-            <Ionicons name="add-circle" size={20} color={color} />
+            <Ionicons name="add-circle" size={26} color={color} />
           ),
           href: isNurse ? null : '/new-procedure',
         }}
@@ -63,7 +64,7 @@ export default function TabsLayout() {
         options={{
           title: isNurse ? 'Cases' : 'My Cases',
           tabBarIcon: ({ color }) => (
-            <Ionicons name="folder-open" size={20} color={color} />
+            <Ionicons name="folder-open" size={26} color={color} />
           ),
         }}
       />
@@ -72,7 +73,7 @@ export default function TabsLayout() {
         options={{
           title: 'Alerts',
           tabBarIcon: ({ color }) => (
-            <Ionicons name="notifications" size={20} color={color} />
+            <Ionicons name="notifications" size={26} color={color} />
           ),
         }}
       />
@@ -81,7 +82,7 @@ export default function TabsLayout() {
         options={{
           title: 'Users',
           tabBarIcon: ({ color }) => (
-            <Ionicons name="people" size={20} color={color} />
+            <Ionicons name="people" size={26} color={color} />
           ),
           href: isAdmin ? '/user-management' : null,
         }}
@@ -91,7 +92,7 @@ export default function TabsLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color }) => (
-            <Ionicons name="person-circle" size={20} color={color} />
+            <Ionicons name="person-circle" size={26} color={color} />
           ),
         }}
       />
