@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,14 +12,16 @@ import {
   ActivityIndicator,
   Image,
   Dimensions,
+  Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const IMAGE_WIDTH = SCREEN_WIDTH * 0.67;
+const IMAGE_SIZE = SCREEN_WIDTH * 0.55;
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -28,12 +30,47 @@ export default function LoginScreen() {
   const { login } = useAuth();
   const router = useRouter();
 
+  // Animations
+  const glowAnim = useRef(new Animated.Value(0.3)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Soft glow pulse
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, { toValue: 0.7, duration: 2000, useNativeDriver: false }),
+        Animated.timing(glowAnim, { toValue: 0.3, duration: 2000, useNativeDriver: false }),
+      ])
+    ).start();
+
+    // Gentle scale breathing
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(scaleAnim, { toValue: 1.02, duration: 3000, useNativeDriver: true }),
+        Animated.timing(scaleAnim, { toValue: 0.98, duration: 3000, useNativeDriver: true }),
+      ])
+    ).start();
+
+    // Slow subtle rotation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(rotateAnim, { toValue: 1, duration: 6000, useNativeDriver: true }),
+        Animated.timing(rotateAnim, { toValue: 0, duration: 6000, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+
+  const rotateInterpolate = rotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['-2deg', '2deg'],
+  });
+
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
-
     setLoading(true);
     try {
       await login(email, password);
@@ -46,7 +83,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <LinearGradient colors={['#E3F2FD', '#FFFFFF']} style={styles.gradient}>
+    <LinearGradient colors={['#E3F2FD', '#F5FAFF', '#FFFFFF']} style={styles.gradient}>
       <SafeAreaView style={styles.container}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -55,75 +92,113 @@ export default function LoginScreen() {
           <ScrollView
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
           >
             <View style={styles.content}>
-              {/* Hero Image */}
+              {/* Hero Image with Animations */}
               <View style={styles.imageContainer} data-testid="hero-image">
-                <View style={styles.imageGlow} />
-                <View style={styles.imageWrapper}>
+                <Animated.View style={[styles.glowOuter, { opacity: glowAnim }]} />
+                <Animated.View
+                  style={[
+                    styles.imageWrapper,
+                    { transform: [{ scale: scaleAnim }, { rotate: rotateInterpolate }] },
+                  ]}
+                >
                   <Image
                     source={require('../../assets/images/implant-hero.png')}
                     style={styles.heroImage}
                     resizeMode="contain"
                   />
-                </View>
+                </Animated.View>
               </View>
 
-              {/* Titles */}
-              <Text style={styles.title}>My Implant Planner</Text>
+              {/* App Title */}
+              <Text style={styles.title} data-testid="app-title">My Implant Planner</Text>
               <Text style={styles.subtitle}>Digital Implant Planning Assistant</Text>
 
-              <Text style={styles.collegeText}>Bharati Vidyapeeth Dental College and Hospital</Text>
-              <Text style={styles.deptText}>Department of Prosthodontics</Text>
+              {/* Tagline */}
+              <Text style={styles.tagline}>Plan  &bull;  Visualize  &bull;  Restore</Text>
 
               {/* Login Form */}
               <View style={styles.form}>
-                <Text style={styles.label}>Email</Text>
-                <TextInput
-                  style={styles.input}
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholder="Enter your email"
-                  placeholderTextColor="#999"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  data-testid="login-email-input"
-                />
+                <View style={styles.inputContainer}>
+                  <View style={styles.inputIconBox}>
+                    <Ionicons name="mail-outline" size={20} color="#1E88E5" />
+                  </View>
+                  <TextInput
+                    style={styles.input}
+                    value={email}
+                    onChangeText={setEmail}
+                    placeholder="Email / Username"
+                    placeholderTextColor="#90A4AE"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    data-testid="login-email-input"
+                  />
+                </View>
 
-                <Text style={styles.label}>Password</Text>
-                <TextInput
-                  style={styles.input}
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder="Enter your password"
-                  placeholderTextColor="#999"
-                  secureTextEntry
-                  autoCapitalize="none"
-                  data-testid="login-password-input"
-                />
+                <View style={styles.inputContainer}>
+                  <View style={styles.inputIconBox}>
+                    <Ionicons name="lock-closed-outline" size={20} color="#1E88E5" />
+                  </View>
+                  <TextInput
+                    style={styles.input}
+                    value={password}
+                    onChangeText={setPassword}
+                    placeholder="Password"
+                    placeholderTextColor="#90A4AE"
+                    secureTextEntry
+                    autoCapitalize="none"
+                    data-testid="login-password-input"
+                  />
+                </View>
 
                 <TouchableOpacity
-                  style={[styles.button, loading && styles.buttonDisabled]}
-                  onPress={handleLogin}
-                  disabled={loading}
-                  data-testid="login-submit-btn"
+                  style={styles.forgotBtn}
+                  data-testid="forgot-password-link"
                 >
-                  {loading ? (
-                    <ActivityIndicator color="#FFF" />
-                  ) : (
-                    <Text style={styles.buttonText}>Login</Text>
-                  )}
+                  <Text style={styles.forgotText}>Forgot Password?</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.linkButton}
+                  style={[styles.loginBtnWrap, loading && styles.buttonDisabled]}
+                  onPress={handleLogin}
+                  disabled={loading}
+                  activeOpacity={0.85}
+                  data-testid="login-submit-btn"
+                >
+                  <LinearGradient
+                    colors={['#1E88E5', '#42A5F5']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.loginBtn}
+                  >
+                    {loading ? (
+                      <ActivityIndicator color="#FFF" />
+                    ) : (
+                      <Text style={styles.loginBtnText}>LOGIN</Text>
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.createAccountBtn}
                   onPress={() => router.push('/auth/register')}
                   disabled={loading}
                   data-testid="register-link"
                 >
-                  <Text style={styles.linkText}>Don't have an account? Register</Text>
+                  <Text style={styles.createAccountText}>
+                    Don't have an account? <Text style={styles.createAccountLink}>Create Account</Text>
+                  </Text>
                 </TouchableOpacity>
+              </View>
+
+              {/* Footer */}
+              <View style={styles.footer}>
+                <Text style={styles.footerPowered}>Powered by</Text>
+                <Text style={styles.footerCollege}>Bharati Vidyapeeth Dental College</Text>
+                <Text style={styles.footerDept}>Department of Prosthodontics</Text>
               </View>
             </View>
           </ScrollView>
@@ -149,116 +224,160 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     justifyContent: 'center',
-    padding: 24,
+    paddingHorizontal: 28,
+    paddingVertical: 16,
   },
+  // --- Image ---
   imageContainer: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
     position: 'relative',
   },
-  imageGlow: {
+  glowOuter: {
     position: 'absolute',
-    width: IMAGE_WIDTH * 0.85,
-    height: IMAGE_WIDTH * 0.85,
-    borderRadius: IMAGE_WIDTH * 0.425,
-    backgroundColor: 'rgba(33, 150, 243, 0.08)',
-    top: '15%',
+    width: IMAGE_SIZE * 1.1,
+    height: IMAGE_SIZE * 1.1,
+    borderRadius: IMAGE_SIZE * 0.55,
+    backgroundColor: '#42A5F5',
+    top: -(IMAGE_SIZE * 0.05),
   },
   imageWrapper: {
-    width: IMAGE_WIDTH,
-    height: IMAGE_WIDTH * 0.75,
+    width: IMAGE_SIZE,
+    height: IMAGE_SIZE,
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 6,
+    borderRadius: IMAGE_SIZE / 2,
+    padding: 10,
+    shadowColor: '#1E88E5',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   heroImage: {
-    width: '100%',
-    height: '100%',
+    width: '95%',
+    height: '95%',
   },
+  // --- Title / Subtitle ---
   title: {
     fontSize: 30,
     fontWeight: '700',
-    color: '#1565C0',
+    color: '#1E88E5',
     textAlign: 'center',
     marginBottom: 4,
+    letterSpacing: 0.5,
     fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
   },
   subtitle: {
     fontSize: 16,
-    color: '#1976D2',
+    color: '#42A5F5',
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 8,
     fontWeight: '400',
     fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
   },
-  collegeText: {
-    fontSize: 13,
+  tagline: {
+    fontSize: 14,
+    fontWeight: '500',
     color: '#546E7A',
     textAlign: 'center',
-    marginBottom: 2,
-    fontWeight: '500',
-  },
-  deptText: {
-    fontSize: 13,
-    color: '#78909C',
-    textAlign: 'center',
     marginBottom: 24,
-    fontWeight: '400',
+    letterSpacing: 1,
   },
+  // --- Form ---
   form: {
-    backgroundColor: '#FFF',
-    borderRadius: 16,
-    padding: 24,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 22,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
     elevation: 4,
   },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#37474F',
-    marginBottom: 6,
-    marginTop: 14,
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#D0D7DE',
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    marginBottom: 14,
+    overflow: 'hidden',
+  },
+  inputIconBox: {
+    width: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 10,
-    padding: 12,
+    flex: 1,
+    paddingVertical: 14,
+    paddingRight: 14,
     fontSize: 15,
-    backgroundColor: '#FAFAFA',
-    color: '#1A1A1A',
+    color: '#263238',
   },
-  button: {
-    backgroundColor: '#1565C0',
-    borderRadius: 10,
-    padding: 16,
+  forgotBtn: {
+    alignSelf: 'flex-end',
+    marginBottom: 18,
+  },
+  forgotText: {
+    fontSize: 13,
+    color: '#1E88E5',
+    fontWeight: '500',
+  },
+  // --- Login Button ---
+  loginBtnWrap: {
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  loginBtn: {
+    height: 50,
+    borderRadius: 14,
     alignItems: 'center',
-    marginTop: 24,
+    justifyContent: 'center',
   },
   buttonDisabled: {
     opacity: 0.6,
   },
-  buttonText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '600',
+  loginBtnText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 1.5,
   },
-  linkButton: {
+  // --- Create Account ---
+  createAccountBtn: {
     marginTop: 16,
     alignItems: 'center',
   },
-  linkText: {
-    color: '#1976D2',
-    fontSize: 14,
+  createAccountText: {
+    fontSize: 13,
+    color: '#546E7A',
+  },
+  createAccountLink: {
+    color: '#1E88E5',
+    fontWeight: '600',
+  },
+  // --- Footer ---
+  footer: {
+    marginTop: 28,
+    alignItems: 'center',
+  },
+  footerPowered: {
+    fontSize: 11,
+    color: '#90A4AE',
+    marginBottom: 2,
+  },
+  footerCollege: {
+    fontSize: 12,
+    color: '#546E7A',
+    fontWeight: '500',
+  },
+  footerDept: {
+    fontSize: 11,
+    color: '#78909C',
   },
 });
