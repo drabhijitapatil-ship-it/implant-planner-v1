@@ -77,7 +77,10 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - [x] Login page updated with college name
 
 - [x] Implant Selection module (implant library with 72 records, suggestion engine with clinical rules)
-- [x] Implant Selection dropdown fix: Modal-based picker with loading/error states, Pressable overlay, Android back button support, nestedScrollEnabled
+- [x] Implant Selection redesign: 4-step workflow with FDI dental chart (Step 1: Tooth Selection, Step 2: System, Step 3: Bone Measurements, Step 4: Results)
+- [x] FDI tooth chart with 28 teeth (upper/lower jaw), tooth-specific diameter/length recommendations
+- [x] Backend: /api/implant-library/tooth-recommendations endpoint (28 entries), /suggest updated with tooth parameter
+- [x] "Add Implant to Case" button copies recommendation to clipboard
 - [x] Health check endpoint (GET /) for Kubernetes liveness/readiness probes
 
 ## Credentials
