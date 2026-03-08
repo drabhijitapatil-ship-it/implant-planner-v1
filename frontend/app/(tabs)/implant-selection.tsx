@@ -123,6 +123,7 @@ export default function ImplantSelectionScreen() {
   const [boneHeight, setBoneHeight] = useState('');
   const [results, setResults] = useState<any>(null);
   const [searching, setSearching] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     Promise.all([
@@ -370,6 +371,7 @@ export default function ImplantSelectionScreen() {
             onPress={() => {
               if (!selectedTooth) return;
               setShowDropdown(true);
+              setSearchQuery('');
             }}
             activeOpacity={selectedTooth ? 0.7 : 1}
             testID="system-dropdown"
@@ -405,13 +407,36 @@ export default function ImplantSelectionScreen() {
                 </TouchableOpacity>
               </View>
               <View style={styles.modalDivider} />
+              <View style={styles.searchBarContainer}>
+                <Ionicons name="search" size={18} color="#90A4AE" />
+                <TextInput
+                  style={styles.searchInput}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="Search brand or system..."
+                  placeholderTextColor="#B0BEC5"
+                  autoFocus={true}
+                  testID="system-search-input"
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Ionicons name="close-circle" size={20} color="#B0BEC5" />
+                  </TouchableOpacity>
+                )}
+              </View>
               <ScrollView
                 style={styles.modalScroll}
                 showsVerticalScrollIndicator={true}
                 bounces={true}
                 nestedScrollEnabled={true}
               >
-                {systems.map((item, i) => {
+                {systems
+                  .filter((item) => {
+                    if (!searchQuery.trim()) return true;
+                    const q = searchQuery.toLowerCase();
+                    return item.brand.toLowerCase().includes(q) || item.system.toLowerCase().includes(q);
+                  })
+                  .map((item, i) => {
                   const isSelected =
                     selectedSystem?.brand === item.brand &&
                     selectedSystem?.system === item.system;
@@ -732,6 +757,18 @@ const styles = StyleSheet.create({
   },
   modalTitle: { fontSize: 18, fontWeight: '700', color: '#263238' },
   modalDivider: { height: 1, backgroundColor: '#F0F0F0' },
+  searchBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 10,
+    gap: 8,
+  },
+  searchInput: { flex: 1, fontSize: 15, color: '#263238' },
   modalScroll: { paddingHorizontal: 8 },
   dropdownItem: {
     flexDirection: 'row',
