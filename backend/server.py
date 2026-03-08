@@ -1472,6 +1472,13 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
 
 
 # Implant Library endpoints
+
+# Load tooth recommendations from JSON file
+import json as _json
+_tooth_rec_path = ROOT_DIR / "tooth_implant_recommendations.json"
+with open(_tooth_rec_path) as _f:
+    TOOTH_RECOMMENDATIONS = _json.load(_f)
+
 @api_router.get("/implant-library/systems")
 async def get_implant_systems(current_user: dict = Depends(get_current_user)):
     pipeline = [
@@ -1482,14 +1489,28 @@ async def get_implant_systems(current_user: dict = Depends(get_current_user)):
     systems = [{"brand": r["_id"]["brand"], "system": r["_id"]["system"]} for r in results]
     return systems
 
+@api_router.get("/implant-library/tooth-recommendations")
+async def get_tooth_recommendations(current_user: dict = Depends(get_current_user)):
+    return TOOTH_RECOMMENDATIONS
+
+@api_router.get("/implant-library/tooth-recommendations/{tooth}")
+async def get_tooth_recommendation(tooth: str, current_user: dict = Depends(get_current_user)):
+    if tooth not in TOOTH_RECOMMENDATIONS:
+        raise HTTPException(status_code=404, detail=f"No recommendation for tooth {tooth}")
+    return TOOTH_RECOMMENDATIONS[tooth]
+
 @api_router.get("/implant-library/suggest")
 async def suggest_implant(
     system: str,
     brand: str,
     bone_width: float,
     bone_height: float,
+    tooth: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
 ):
+    # Get tooth-specific recommendations if tooth is provided
+    tooth_data = TOOTH_RECOMMENDATIONS.get(tooth) if tooth else None
+
     # Determine diameter range from bone width (maintain >=1.5mm on each side)
     max_diameter = bone_width - 3.0  # 1.5mm clearance each side
     if bone_width < 5:
@@ -1500,6 +1521,14 @@ async def suggest_implant(
         diam_min, diam_max = 4.0, 4.5
     else:
         diam_min, diam_max = 4.5, 6.0
+
+    # If tooth data is available, intersect with tooth-specific diameter range
+    if tooth_data:
+        tooth_diam_min, tooth_diam_max = tooth_data["diameter"]
+        diam_min = max(diam_min, tooth_diam_min)
+        diam_max = min(diam_max, tooth_diam_max)
+        if diam_min > diam_max:
+            diam_min, diam_max = tooth_diam_min, tooth_diam_max
 
     # Determine length range from bone height (maintain >=2mm safety clearance)
     max_length = bone_height - 2.0
@@ -1515,6 +1544,14 @@ async def suggest_implant(
     else:
         length_label = "Insufficient bone height"
         len_min, len_max = 0, 8.0
+
+    # If tooth data is available, intersect with tooth-specific length range
+    if tooth_data:
+        tooth_len_min, tooth_len_max = tooth_data["length"]
+        len_min = max(len_min, tooth_len_min)
+        len_max = min(len_max, tooth_len_max)
+        if len_min > len_max:
+            len_min, len_max = tooth_len_min, tooth_len_max
 
     # Query matching implants using clinical ranges
     query = {
@@ -1540,7 +1577,7 @@ async def suggest_implant(
         {"brand": brand, "system": system}, {"_id": 0}
     ).sort([("diameter", 1), ("length", 1)]).to_list(50)
 
-    return {
+    response = {
         "recommended": implants,
         "all_options": all_implants,
         "clinical_guidance": {
@@ -1553,6 +1590,16 @@ async def suggest_implant(
             "safety_note": "Maintain >=1.5 mm bone on both sides of implant and >=2 mm clearance from inferior alveolar nerve / maxillary sinus.",
         },
     }
+
+    if tooth_data:
+        response["tooth_recommendation"] = {
+            "tooth": tooth,
+            "region": tooth_data["region"],
+            "recommended_diameter": f"{tooth_data['diameter'][0]}–{tooth_data['diameter'][1]} mm",
+            "recommended_length": f"{tooth_data['length'][0]}–{tooth_data['length'][1]} mm",
+        }
+
+    return response
 
 app.include_router(api_router)
 
