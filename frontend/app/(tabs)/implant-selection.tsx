@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import api from '../../utils/api';
 
-type ImplantSystem = { brand: string; system: string };
+type ImplantSystem = { brand: string; system: string; diameters: number[]; lengths: number[]; count: number };
 type Implant = { brand: string; system: string; diameter: number; length: number };
 type ToothRec = { region: string; toothType: string; diameter: [number, number] };
 
@@ -453,6 +453,12 @@ export default function ImplantSelectionScreen() {
                       <View style={{ flex: 1 }}>
                         <Text style={styles.dropdownItemBrand}>{item.brand}</Text>
                         <Text style={styles.dropdownItemSystem}>{item.system}</Text>
+                        <Text style={styles.dropdownItemSizes}>
+                          D: {item.diameters.join(', ')} mm
+                        </Text>
+                        <Text style={styles.dropdownItemSizes}>
+                          L: {item.lengths.join(', ')} mm
+                        </Text>
                       </View>
                       {isSelected && <Ionicons name="checkmark-circle" size={22} color="#1E88E5" />}
                     </TouchableOpacity>
@@ -775,6 +781,7 @@ const styles = StyleSheet.create({
   dropdownItemActive: { backgroundColor: '#E3F2FD' },
   dropdownItemBrand: { fontSize: 15, fontWeight: '600', color: '#263238' },
   dropdownItemSystem: { fontSize: 14, color: '#546E7A' },
+  dropdownItemSizes: { fontSize: 11, color: '#78909C', marginTop: 2 },
 
   // Inputs
   inputLabel: { fontSize: 13, fontWeight: '600', color: '#546E7A', marginBottom: 6, marginTop: 10 },
