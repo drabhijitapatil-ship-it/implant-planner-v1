@@ -41,11 +41,6 @@ def parse_xlsx():
     df["brand"] = df["brand"].astype(str).str.strip()
     df["system"] = df["system"].astype(str).str.strip()
 
-    # Fix data entry errors: system name containing brand name
-    for i, r in df.iterrows():
-        if r["system"].startswith(r["brand"]):
-            df.at[i, "system"] = r["system"][len(r["brand"]):].strip()
-
     records = [{"brand": r["brand"], "system": r["system"],
                 "diameter": float(r["diameter"]), "length": float(r["length"])}
                for _, r in df.iterrows()]
