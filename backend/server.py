@@ -1636,3 +1636,79 @@ logger = logging.getLogger(__name__)
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+
+@app.on_event("startup")
+async def seed_on_startup():
+    """Auto-seed users and implant library if collections are empty (for fresh deployments)."""
+    import pandas as pd
+
+    # --- Seed users ---
+    user_count = await db.users.count_documents({})
+    if user_count == 0:
+        logging.info("No users found — seeding default users...")
+        users_data = [
+            {"name": "Dr. Abhijit Patil", "email": "abhijit.patil@dental.edu", "password": "Admin@123", "role": "implant_incharge"},
+            {"name": "Dr. Ajay Sabane", "email": "ajay.sabane@dental.edu", "password": "Admin@123", "role": "administrator"},
+            {"name": "Dr. Rajeshree Jadhav", "email": "rajeshree.jadhav@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
+            {"name": "Dr. Vasantha N", "email": "vasantha.n@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
+            {"name": "Dr. Rupali Patil", "email": "rupali.patil@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
+            {"name": "Dr. Pankaj Kadam", "email": "pankaj.kadam@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
+            {"name": "Dr. Gaurav Pandey", "email": "gaurav.pandey@student.dental.edu", "password": "Student@123", "role": "student"},
+            {"name": "Dr. Anand Kurum", "email": "anand.kurum@student.dental.edu", "password": "Student@123", "role": "student"},
+            {"name": "Dr. Manasi Dhiren", "email": "manasi.dhiren@student.dental.edu", "password": "Student@123", "role": "student"},
+            {"name": "Dr. Atharva Mahadik", "email": "atharva.mahadik@student.dental.edu", "password": "Student@123", "role": "student"},
+            {"name": "Dr. Vaibhav Deshpande", "email": "vaibhav.deshpande@student.dental.edu", "password": "Student@123", "role": "student"},
+            {"name": "Dr. Yashica Jain", "email": "yashica.jain@student.dental.edu", "password": "Student@123", "role": "student"},
+            {"name": "Dr. Renuka Bodakhe", "email": "renuka.bodakhe@student.dental.edu", "password": "Student@123", "role": "student"},
+            {"name": "Dr. Shritej Sevakari", "email": "shritej.sevakari@student.dental.edu", "password": "Student@123", "role": "student"},
+            {"name": "Dr. Aaditya Patil", "email": "aaditya.patil@student.dental.edu", "password": "Student@123", "role": "student"},
+            {"name": "Dr. Kunal Parikh", "email": "kunal.parikh@student.dental.edu", "password": "Student@123", "role": "student"},
+            {"name": "Dr. Krishana Mehta", "email": "krishana.mehta@student.dental.edu", "password": "Student@123", "role": "student"},
+            {"name": "Dr. Sakshi Lohade", "email": "sakshi.lohade@student.dental.edu", "password": "Student@123", "role": "student"},
+            {"name": "Nurse 1", "email": "nurse1@dental.edu", "password": "Nurse@123", "role": "nurse"},
+            {"name": "Nurse 2", "email": "nurse2@dental.edu", "password": "Nurse@123", "role": "nurse"},
+        ]
+        docs = [
+            {"name": u["name"], "email": u["email"], "password_hash": pwd_context.hash(u["password"]), "role": u["role"]}
+            for u in users_data
+        ]
+        await db.users.insert_many(docs)
+        logging.info(f"Seeded {len(docs)} users.")
+    else:
+        logging.info(f"Users collection has {user_count} documents — skipping seed.")
+
+    # --- Seed implant library ---
+    implant_count = await db.implant_library.count_documents({})
+    if implant_count == 0:
+        xlsx_path = ROOT_DIR / "implant_library_latest.xlsx"
+        if xlsx_path.exists():
+            logging.info("No implant data found — seeding from XLSX...")
+            df = pd.read_excel(xlsx_path, skiprows=0)
+            df.columns = [c.strip() for c in df.columns]
+            brand_col = [c for c in df.columns if "company" in c.lower()][0]
+            system_col = [c for c in df.columns if "system" in c.lower() or "name" in c.lower()][0]
+            diam_col = [c for c in df.columns if "diameter" in c.lower()][0]
+            len_col = [c for c in df.columns if "length" in c.lower()][0]
+
+            records = []
+            seen = set()
+            for _, row in df.iterrows():
+                try:
+                    brand = str(row[brand_col]).strip()
+                    system = str(row[system_col]).strip()
+                    diameter = round(float(row[diam_col]), 2)
+                    length = round(float(row[len_col]), 2)
+                    key = (brand, system, diameter, length)
+                    if key not in seen:
+                        seen.add(key)
+                        records.append({"brand": brand, "system": system, "diameter": diameter, "length": length})
+                except (ValueError, TypeError):
+                    continue
+
+            if records:
+                await db.implant_library.insert_many(records)
+            logging.info(f"Seeded {len(records)} implant records.")
+        else:
+            logging.warning(f"XLSX file not found at {xlsx_path} — skipping implant seed.")
+    else:
+        logging.info(f"Implant library has {implant_count} documents — skipping seed.")

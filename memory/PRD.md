@@ -84,7 +84,7 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - [x] Search/filter bar in implant system dropdown modal
 - [x] Implant library: 42 systems, 438 individual implant entries from XLSX. Dropdown shows EVERY entry (company + system + diameter + length)
 - [x] Implant recommendation engine: Bone rule (diameter+2mm, length+2mm), Tooth-type diameter guide (centralIncisor, lateralIncisor, canine, premolar, molar)
-- [x] Health check endpoint (GET /) for Kubernetes liveness/readiness probes
+- [x] Auto-seed on startup: Users (20 accounts) and Implant Library (438 records from XLSX) seeded automatically when production DB is empty
 
 ## Credentials
 - Student: gaurav.pandey@student.dental.edu / Student@123
