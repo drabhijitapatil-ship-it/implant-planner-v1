@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import api from '../../utils/api';
 
-type ImplantSystem = { brand: string; system: string; diameters: number[]; lengths: number[]; count: number };
+type ImplantSystem = { brand: string; system: string; diameter: number; length: number };
 type Implant = { brand: string; system: string; diameter: number; length: number };
 type ToothRec = { region: string; toothType: string; diameter: [number, number] };
 
@@ -377,8 +377,8 @@ export default function ImplantSelectionScreen() {
             <Ionicons name="medical" size={18} color={selectedTooth ? '#1E88E5' : '#B0BEC5'} />
             <Text style={selectedSystem ? styles.dropdownText : styles.dropdownPlaceholder}>
               {selectedSystem
-                ? `${selectedSystem.brand} - ${selectedSystem.system}`
-                : `Select Implant System (${systems.length})`}
+                ? `${selectedSystem.brand} - ${selectedSystem.system} (${selectedSystem.diameter}mm x ${selectedSystem.length}mm)`
+                : `Select Implant (${systems.length} entries)`}
             </Text>
             <Ionicons name="chevron-down" size={18} color="#8E8E93" />
           </TouchableOpacity>
@@ -437,10 +437,12 @@ export default function ImplantSelectionScreen() {
                   .map((item, i) => {
                   const isSelected =
                     selectedSystem?.brand === item.brand &&
-                    selectedSystem?.system === item.system;
+                    selectedSystem?.system === item.system &&
+                    selectedSystem?.diameter === item.diameter &&
+                    selectedSystem?.length === item.length;
                   return (
                     <TouchableOpacity
-                      key={`${item.brand}-${item.system}-${i}`}
+                      key={`${item.brand}-${item.system}-${item.diameter}-${item.length}-${i}`}
                       style={[styles.dropdownItem, isSelected && styles.dropdownItemActive]}
                       onPress={() => {
                         setSelectedSystem(item);
@@ -454,10 +456,7 @@ export default function ImplantSelectionScreen() {
                         <Text style={styles.dropdownItemBrand}>{item.brand}</Text>
                         <Text style={styles.dropdownItemSystem}>{item.system}</Text>
                         <Text style={styles.dropdownItemSizes}>
-                          D: {item.diameters.join(', ')} mm
-                        </Text>
-                        <Text style={styles.dropdownItemSizes}>
-                          L: {item.lengths.join(', ')} mm
+                          Diameter: {item.diameter} mm  |  Length: {item.length} mm
                         </Text>
                       </View>
                       {isSelected && <Ionicons name="checkmark-circle" size={22} color="#1E88E5" />}

@@ -1523,28 +1523,11 @@ for fdi, tooth_type in FDI_TO_TYPE.items():
 
 @api_router.get("/implant-library/systems")
 async def get_implant_systems(current_user: dict = Depends(get_current_user)):
-    pipeline = [
-        {"$group": {
-            "_id": {"brand": "$brand", "system": "$system"},
-            "diameters": {"$addToSet": "$diameter"},
-            "lengths": {"$addToSet": "$length"},
-            "count": {"$sum": 1},
-        }},
-        {"$sort": {"_id.brand": 1, "_id.system": 1}},
-    ]
-    results = await db.implant_library.aggregate(pipeline).to_list(200)
-    systems = []
-    for r in results:
-        diams = sorted(r["diameters"])
-        lens = sorted(r["lengths"])
-        systems.append({
-            "brand": r["_id"]["brand"],
-            "system": r["_id"]["system"],
-            "diameters": diams,
-            "lengths": lens,
-            "count": r["count"],
-        })
-    return systems
+    """Return every individual implant entry from the library."""
+    implants = await db.implant_library.find(
+        {}, {"_id": 0}
+    ).sort([("brand", 1), ("system", 1), ("diameter", 1), ("length", 1)]).to_list(2000)
+    return implants
 
 @api_router.get("/implant-library/tooth-recommendations")
 async def get_tooth_recommendations(current_user: dict = Depends(get_current_user)):
