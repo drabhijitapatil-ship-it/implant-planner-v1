@@ -1473,53 +1473,37 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
 
 # Implant Library endpoints
 
-# Tooth-based diameter guide (from user's engine)
-TOOTH_GUIDE = {
-    "centralIncisor": [3.3, 4.0],
-    "lateralIncisor": [3.0, 3.5],
-    "canine": [3.5, 4.5],
-    "premolar": [3.8, 5.0],
-    "molar": [4.5, 7.0],
+# Tooth-wise Implant Recommendation Database (from user specification section 4)
+TOOTH_RECOMMENDATIONS = {
+    "11": {"region": "Maxillary Central Incisor", "diameter": [3.5, 4.3], "length": [11, 13]},
+    "12": {"region": "Maxillary Lateral Incisor", "diameter": [3.0, 3.5], "length": [10, 13]},
+    "13": {"region": "Maxillary Canine", "diameter": [3.5, 4.0], "length": [11, 13]},
+    "14": {"region": "Maxillary 1st Premolar", "diameter": [3.5, 4.0], "length": [10, 13]},
+    "15": {"region": "Maxillary 2nd Premolar", "diameter": [3.5, 4.5], "length": [10, 12]},
+    "16": {"region": "Maxillary 1st Molar", "diameter": [4.5, 5.0], "length": [10, 12]},
+    "17": {"region": "Maxillary 2nd Molar", "diameter": [4.5, 5.5], "length": [8, 10]},
+    "21": {"region": "Maxillary Central Incisor", "diameter": [3.5, 4.3], "length": [11, 13]},
+    "22": {"region": "Maxillary Lateral Incisor", "diameter": [3.0, 3.5], "length": [10, 13]},
+    "23": {"region": "Maxillary Canine", "diameter": [3.5, 4.0], "length": [11, 13]},
+    "24": {"region": "Maxillary 1st Premolar", "diameter": [3.5, 4.0], "length": [10, 13]},
+    "25": {"region": "Maxillary 2nd Premolar", "diameter": [3.5, 4.5], "length": [10, 12]},
+    "26": {"region": "Maxillary 1st Molar", "diameter": [4.5, 5.0], "length": [10, 12]},
+    "27": {"region": "Maxillary 2nd Molar", "diameter": [4.5, 5.5], "length": [8, 10]},
+    "31": {"region": "Mandibular Central Incisor", "diameter": [3.0, 3.3], "length": [10, 13]},
+    "32": {"region": "Mandibular Lateral Incisor", "diameter": [3.0, 3.5], "length": [10, 13]},
+    "33": {"region": "Mandibular Canine", "diameter": [3.5, 4.0], "length": [11, 13]},
+    "34": {"region": "Mandibular 1st Premolar", "diameter": [3.5, 4.0], "length": [10, 13]},
+    "35": {"region": "Mandibular 2nd Premolar", "diameter": [3.5, 4.5], "length": [10, 13]},
+    "36": {"region": "Mandibular 1st Molar", "diameter": [4.5, 5.0], "length": [10, 12]},
+    "37": {"region": "Mandibular 2nd Molar", "diameter": [4.5, 5.5], "length": [8, 10]},
+    "41": {"region": "Mandibular Central Incisor", "diameter": [3.0, 3.3], "length": [10, 13]},
+    "42": {"region": "Mandibular Lateral Incisor", "diameter": [3.0, 3.5], "length": [10, 13]},
+    "43": {"region": "Mandibular Canine", "diameter": [3.5, 4.0], "length": [11, 13]},
+    "44": {"region": "Mandibular 1st Premolar", "diameter": [3.5, 4.0], "length": [10, 13]},
+    "45": {"region": "Mandibular 2nd Premolar", "diameter": [3.5, 4.5], "length": [10, 13]},
+    "46": {"region": "Mandibular 1st Molar", "diameter": [4.5, 5.0], "length": [10, 12]},
+    "47": {"region": "Mandibular 2nd Molar", "diameter": [4.5, 5.5], "length": [8, 10]},
 }
-
-# FDI number → tooth type mapping
-FDI_TO_TYPE = {}
-for fdi in ["11", "21", "31", "41"]:
-    FDI_TO_TYPE[fdi] = "centralIncisor"
-for fdi in ["12", "22", "32", "42"]:
-    FDI_TO_TYPE[fdi] = "lateralIncisor"
-for fdi in ["13", "23", "33", "43"]:
-    FDI_TO_TYPE[fdi] = "canine"
-for fdi in ["14", "15", "24", "25", "34", "35", "44", "45"]:
-    FDI_TO_TYPE[fdi] = "premolar"
-for fdi in ["16", "17", "26", "27", "36", "37", "46", "47"]:
-    FDI_TO_TYPE[fdi] = "molar"
-
-# Build tooth recommendations from FDI → type → guide
-TOOTH_RECOMMENDATIONS = {}
-FDI_REGION = {
-    "11": "Maxillary Central Incisor", "21": "Maxillary Central Incisor",
-    "31": "Mandibular Central Incisor", "41": "Mandibular Central Incisor",
-    "12": "Maxillary Lateral Incisor", "22": "Maxillary Lateral Incisor",
-    "32": "Mandibular Lateral Incisor", "42": "Mandibular Lateral Incisor",
-    "13": "Maxillary Canine", "23": "Maxillary Canine",
-    "33": "Mandibular Canine", "43": "Mandibular Canine",
-    "14": "Maxillary 1st Premolar", "24": "Maxillary 1st Premolar",
-    "34": "Mandibular 1st Premolar", "44": "Mandibular 1st Premolar",
-    "15": "Maxillary 2nd Premolar", "25": "Maxillary 2nd Premolar",
-    "35": "Mandibular 2nd Premolar", "45": "Mandibular 2nd Premolar",
-    "16": "Maxillary 1st Molar", "26": "Maxillary 1st Molar",
-    "36": "Mandibular 1st Molar", "46": "Mandibular 1st Molar",
-    "17": "Maxillary 2nd Molar", "27": "Maxillary 2nd Molar",
-    "37": "Mandibular 2nd Molar", "47": "Mandibular 2nd Molar",
-}
-for fdi, tooth_type in FDI_TO_TYPE.items():
-    guide = TOOTH_GUIDE[tooth_type]
-    TOOTH_RECOMMENDATIONS[fdi] = {
-        "region": FDI_REGION[fdi],
-        "toothType": tooth_type,
-        "diameter": guide,
-    }
 
 @api_router.get("/implant-library/systems")
 async def get_implant_systems(current_user: dict = Depends(get_current_user)):
@@ -1565,54 +1549,91 @@ async def suggest_implant(
     current_user: dict = Depends(get_current_user),
 ):
     """
-    Implant recommendation engine.
-    Bone rule: min bone width = diameter + 2mm, min bone height = length + 2mm
-    Tooth rule: diameter must fall within tooth-type guide range
+    Implant suggestion engine (per user specification sections 8-11).
+    Bone width rule: maintain >=1.5mm bone around implant.
+    Bone height rule: maintain 2mm clearance from nerve/sinus.
     """
-    # Step 1: Get all implants for selected brand+system
+    tooth_data = TOOTH_RECOMMENDATIONS.get(tooth) if tooth else None
+
+    # Bone Width Algorithm (section 8): determine max diameter
+    if bone_width < 5:
+        diam_min, diam_max = 3.0, 3.5
+    elif bone_width < 6:
+        diam_min, diam_max = 3.75, 4.0
+    elif bone_width < 7:
+        diam_min, diam_max = 4.0, 4.5
+    else:
+        diam_min, diam_max = 4.5, 6.0
+
+    # Intersect with tooth-specific diameter range
+    if tooth_data:
+        diam_min = max(diam_min, tooth_data["diameter"][0])
+        diam_max = min(diam_max, tooth_data["diameter"][1])
+        if diam_min > diam_max:
+            diam_min, diam_max = tooth_data["diameter"][0], tooth_data["diameter"][1]
+
+    # Bone Height Algorithm (section 9): determine length range
+    max_length = bone_height - 2.0  # 2mm safety clearance
+    if bone_height >= 13:
+        length_label = "Long implant"
+        len_min, len_max = 11.5, min(14.0, max_length)
+    elif bone_height >= 10:
+        length_label = "Standard implant"
+        len_min, len_max = 10.0, min(12.0, max_length)
+    elif bone_height >= 8:
+        length_label = "Short implant"
+        len_min, len_max = 7.0, min(10.0, max_length)
+    else:
+        length_label = "Insufficient bone height"
+        len_min, len_max = 0, max_length
+
+    # Intersect with tooth-specific length range
+    if tooth_data:
+        len_min = max(len_min, tooth_data["length"][0])
+        len_max = min(len_max, tooth_data["length"][1])
+        if len_min > len_max:
+            len_min, len_max = tooth_data["length"][0], tooth_data["length"][1]
+
+    # Query matching implants
+    query = {
+        "brand": brand, "system": system,
+        "diameter": {"$gte": diam_min, "$lte": diam_max},
+        "length": {"$gte": len_min, "$lte": len_max},
+    }
+    recommended = await db.implant_library.find(query, {"_id": 0}).sort([("diameter", 1), ("length", 1)]).to_list(50)
+
+    # Wider fallback if no exact matches
+    if not recommended:
+        query_wider = {
+            "brand": brand, "system": system,
+            "diameter": {"$gte": diam_min - 0.5, "$lte": diam_max + 0.5},
+            "length": {"$gte": max(len_min - 2, 6), "$lte": len_max + 2},
+        }
+        recommended = await db.implant_library.find(query_wider, {"_id": 0}).sort([("diameter", 1), ("length", 1)]).to_list(50)
+
     all_implants = await db.implant_library.find(
         {"brand": brand, "system": system}, {"_id": 0}
     ).sort([("diameter", 1), ("length", 1)]).to_list(200)
 
-    # Step 2: Filter by bone dimensions (diameter + 2 <= boneWidth AND length + 2 <= boneHeight)
-    max_diameter = bone_width - 2.0
-    max_length = bone_height - 2.0
-    bone_filtered = [
-        imp for imp in all_implants
-        if imp["diameter"] + 2 <= bone_width and imp["length"] + 2 <= bone_height
-    ]
-
-    # Step 3: Filter by tooth type diameter guide (if tooth provided)
-    tooth_type = FDI_TO_TYPE.get(tooth) if tooth else None
-    tooth_guide = TOOTH_GUIDE.get(tooth_type) if tooth_type else None
-
-    if tooth_guide:
-        recommended = [
-            imp for imp in bone_filtered
-            if tooth_guide[0] <= imp["diameter"] <= tooth_guide[1]
-        ]
-    else:
-        recommended = bone_filtered
-
-    # Build response
     response = {
         "recommended": recommended,
         "all_options": all_implants,
         "clinical_guidance": {
             "bone_width": bone_width,
             "bone_height": bone_height,
-            "max_implant_diameter": round(max_diameter, 1),
-            "max_implant_length": round(max_length, 1),
-            "safety_note": "Minimum bone width = implant diameter + 2 mm. Minimum bone height = implant length + 2 mm.",
+            "recommended_diameter_range": f"{diam_min}–{diam_max} mm",
+            "recommended_length_range": f"{len_min}–{len_max} mm",
+            "length_category": length_label,
+            "safety_note": "Maintain >=1.5 mm bone around implant and >=2 mm clearance from inferior alveolar nerve / maxillary sinus.",
         },
     }
 
-    if tooth_type and tooth_guide:
+    if tooth_data:
         response["tooth_recommendation"] = {
             "tooth": tooth,
-            "region": FDI_REGION.get(tooth, ""),
-            "toothType": tooth_type,
-            "recommended_diameter": f"{tooth_guide[0]}–{tooth_guide[1]} mm",
+            "region": tooth_data["region"],
+            "recommended_diameter": f"{tooth_data['diameter'][0]}–{tooth_data['diameter'][1]} mm",
+            "recommended_length": f"{tooth_data['length'][0]}–{tooth_data['length'][1]} mm",
         }
 
     return response

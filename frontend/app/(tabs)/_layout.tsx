@@ -62,7 +62,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="implant-selection"
         options={{
-          title: 'Implant',
+          title: 'Implants',
           tabBarIcon: ({ color }) => (
             <Ionicons name="medical" size={24} color={color} />
           ),

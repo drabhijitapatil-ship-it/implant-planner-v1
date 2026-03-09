@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 
 # API Configuration - Using external API as specified in system requirements
-API_BASE_URL = "https://implant-workflow-2.preview.emergentagent.com/api"
+API_BASE_URL = "https://teeth-selection-tool.preview.emergentagent.com/api"
 
 # Test Credentials from review request
 STUDENT_CREDENTIALS = {
