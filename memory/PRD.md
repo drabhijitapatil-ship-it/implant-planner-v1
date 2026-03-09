@@ -82,7 +82,7 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - [x] Backend: /api/implant-library/tooth-recommendations endpoint (28 entries), /suggest updated with tooth parameter
 - [x] "Add Implant to Case" button copies recommendation to clipboard
 - [x] Search/filter bar in implant system dropdown modal
-- [x] Implant library updated: 25 systems, 363 records (cross-product of diameters x lengths per system, with exceptions for Neodent Titamax/Helix GM and B&B EV)
+- [x] Implant library updated: 42 systems, 406 records from XLSX v2 (Noble Biocare, Straumann, Neodent, Bredent, Cowellmedi, B&B Dental, Dentsply Sirona, Zimmer Biomet, BioHorizons, Megagen, Osstem, Dentium, MIS, Camlog, Alpha Bio, Blue Sky Bio, NeoBiotech)
 - [x] Health check endpoint (GET /) for Kubernetes liveness/readiness probes
 
 ## Credentials
