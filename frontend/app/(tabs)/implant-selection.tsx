@@ -19,7 +19,7 @@ import api from '../../utils/api';
 
 type ImplantSystem = { brand: string; system: string };
 type Implant = { brand: string; system: string; diameter: number; length: number };
-type ToothRec = { region: string; diameter: [number, number]; length: [number, number] };
+type ToothRec = { region: string; toothType: string; diameter: [number, number] };
 
 // FDI Dental Chart Data
 const UPPER_RIGHT = ['17', '16', '15', '14', '13', '12', '11'];
@@ -348,15 +348,13 @@ export default function ImplantSelectionScreen() {
                 </Text>
               </View>
               <View style={styles.toothRecRow}>
-                <Text style={styles.toothRecLabel}>Diameter Range:</Text>
-                <Text style={styles.toothRecValue}>
-                  {toothInfo.diameter[0]} - {toothInfo.diameter[1]} mm
-                </Text>
+                <Text style={styles.toothRecLabel}>Type:</Text>
+                <Text style={styles.toothRecValue}>{toothInfo.toothType}</Text>
               </View>
               <View style={styles.toothRecRow}>
-                <Text style={styles.toothRecLabel}>Length Range:</Text>
+                <Text style={styles.toothRecLabel}>Diameter Guide:</Text>
                 <Text style={styles.toothRecValue}>
-                  {toothInfo.length[0]} - {toothInfo.length[1]} mm
+                  {toothInfo.diameter[0]} - {toothInfo.diameter[1]} mm
                 </Text>
               </View>
             </View>
@@ -535,8 +533,8 @@ export default function ImplantSelectionScreen() {
                   {results.tooth_recommendation.region}
                 </Text>
                 <Text style={styles.toothResultSub}>
-                  Rec. Diameter: {results.tooth_recommendation.recommended_diameter} | Length:{' '}
-                  {results.tooth_recommendation.recommended_length}
+                  Type: {results.tooth_recommendation.toothType} | Rec. Diameter:{' '}
+                  {results.tooth_recommendation.recommended_diameter}
                 </Text>
               </View>
             )}
@@ -549,9 +547,9 @@ export default function ImplantSelectionScreen() {
                 <Text style={styles.guidanceValue}>{results.clinical_guidance.bone_width} mm</Text>
               </View>
               <View style={styles.guidanceRow}>
-                <Text style={styles.guidanceLabel}>Diameter Range:</Text>
+                <Text style={styles.guidanceLabel}>Max Implant Diameter:</Text>
                 <Text style={styles.guidanceValue}>
-                  {results.clinical_guidance.recommended_diameter_range}
+                  {results.clinical_guidance.max_implant_diameter} mm
                 </Text>
               </View>
               <View style={styles.guidanceRow}>
@@ -561,15 +559,9 @@ export default function ImplantSelectionScreen() {
                 </Text>
               </View>
               <View style={styles.guidanceRow}>
-                <Text style={styles.guidanceLabel}>Length Range:</Text>
+                <Text style={styles.guidanceLabel}>Max Implant Length:</Text>
                 <Text style={styles.guidanceValue}>
-                  {results.clinical_guidance.recommended_length_range}
-                </Text>
-              </View>
-              <View style={styles.guidanceRow}>
-                <Text style={styles.guidanceLabel}>Category:</Text>
-                <Text style={styles.guidanceValue}>
-                  {results.clinical_guidance.length_category}
+                  {results.clinical_guidance.max_implant_length} mm
                 </Text>
               </View>
             </View>
