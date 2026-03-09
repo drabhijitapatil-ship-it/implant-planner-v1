@@ -17,11 +17,29 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import api from '../../utils/api';
 
-type ImplantSystem = { brand: string; system: string; diameters: number[]; lengths: number[]; count: number };
-type Implant = { brand: string; system: string; diameter: number; length: number };
-type ToothRec = { region: string; toothType: string; diameter: [number, number] };
+// ── Types ──────────────────────────────────────────────────
+type ImplantSystem = {
+  brand: string;
+  system: string;
+  diameters: number[];
+  lengths: number[];
+  count: number;
+};
 
-// FDI Dental Chart Data
+type Implant = {
+  brand: string;
+  system: string;
+  diameter: number;
+  length: number;
+};
+
+type ToothRec = {
+  region: string;
+  diameter: [number, number];
+  length: [number, number];
+};
+
+// ── FDI Dental Chart Data ──────────────────────────────────
 const UPPER_RIGHT = ['17', '16', '15', '14', '13', '12', '11'];
 const UPPER_LEFT = ['21', '22', '23', '24', '25', '26', '27'];
 const LOWER_RIGHT = ['47', '46', '45', '44', '43', '42', '41'];
@@ -41,15 +59,7 @@ function getToothWidth(tooth: string): number {
   return 20;
 }
 
-function getToothLabel(tooth: string): string {
-  const t = TOOTH_TYPE[tooth];
-  if (t === 'molar') return 'M';
-  if (t === 'premolar') return 'P';
-  if (t === 'canine') return 'C';
-  return 'I';
-}
-
-// Tooth component for the FDI chart
+// ── Tooth Component ────────────────────────────────────────
 function Tooth({
   tooth,
   isSelected,
@@ -70,17 +80,17 @@ function Tooth({
     <TouchableOpacity
       onPress={onPress}
       activeOpacity={0.7}
-      testID={`tooth-${tooth}`}
+      data-testid={`tooth-${tooth}`}
       style={[
         toothStyles.tooth,
         {
           width: w,
           height: isMolar ? 34 : isPremolar ? 32 : isCanine ? 30 : 28,
           borderRadius: isMolar ? 5 : isPremolar ? 7 : 9,
-          borderTopLeftRadius: isUpper ? (isMolar ? 5 : 9) : (isMolar ? 3 : 5),
-          borderTopRightRadius: isUpper ? (isMolar ? 5 : 9) : (isMolar ? 3 : 5),
-          borderBottomLeftRadius: isUpper ? (isMolar ? 3 : 5) : (isMolar ? 5 : 9),
-          borderBottomRightRadius: isUpper ? (isMolar ? 3 : 5) : (isMolar ? 5 : 9),
+          borderTopLeftRadius: isUpper ? (isMolar ? 5 : 9) : isMolar ? 3 : 5,
+          borderTopRightRadius: isUpper ? (isMolar ? 5 : 9) : isMolar ? 3 : 5,
+          borderBottomLeftRadius: isUpper ? (isMolar ? 3 : 5) : isMolar ? 5 : 9,
+          borderBottomRightRadius: isUpper ? (isMolar ? 3 : 5) : isMolar ? 5 : 9,
           backgroundColor: isSelected ? '#1E88E5' : '#E8EDF2',
           borderColor: isSelected ? '#1565C0' : '#C5CDD5',
         },
@@ -108,7 +118,7 @@ const toothStyles = StyleSheet.create({
   toothNumber: { fontWeight: '700' },
 });
 
-// Main Screen
+// ── Main Screen ────────────────────────────────────────────
 export default function ImplantSelectionScreen() {
   const [systems, setSystems] = useState<ImplantSystem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -155,7 +165,7 @@ export default function ImplantSelectionScreen() {
         },
       });
       setResults(res.data);
-    } catch (err) {
+    } catch {
       Alert.alert('Error', 'Failed to get implant suggestions.');
     } finally {
       setSearching(false);
@@ -175,9 +185,9 @@ export default function ImplantSelectionScreen() {
     const rec = results.recommended[0];
     const toothInfo = toothRecs[selectedTooth!];
     const text = [
-      `Implant Recommendation`,
+      'Implant Recommendation',
       `Tooth: ${selectedTooth} (${toothInfo?.region || ''})`,
-      `System: ${rec.brand} ${rec.system}`,
+      `System: ${rec.brand} - ${rec.system}`,
       `Diameter: ${rec.diameter} mm`,
       `Length: ${rec.length} mm`,
       `Bone Width: ${boneWidth} mm`,
@@ -187,7 +197,16 @@ export default function ImplantSelectionScreen() {
     Alert.alert('Copied', 'Implant recommendation copied to clipboard.');
   };
 
-  const currentStep = !selectedTooth ? 1 : !selectedSystem ? 2 : (!boneWidth || !boneHeight) ? 3 : 4;
+  const currentStep = !selectedTooth
+    ? 1
+    : !selectedSystem
+      ? 2
+      : !boneWidth || !boneHeight
+        ? 3
+        : results
+          ? 4
+          : 3;
+
   const toothInfo = selectedTooth ? toothRecs[selectedTooth] : null;
 
   if (loading) {
@@ -251,7 +270,7 @@ export default function ImplantSelectionScreen() {
           ))}
         </View>
 
-        {/* STEP 1 — FDI Tooth Selection */}
+        {/* ── STEP 1 — FDI Tooth Selection ── */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Step 1: Select Tooth (FDI Chart)</Text>
 
@@ -269,6 +288,9 @@ export default function ImplantSelectionScreen() {
                       isUpper={true}
                       onPress={() => {
                         setSelectedTooth(t);
+                        setSelectedSystem(null);
+                        setBoneWidth('');
+                        setBoneHeight('');
                         setResults(null);
                       }}
                     />
@@ -286,6 +308,9 @@ export default function ImplantSelectionScreen() {
                       isUpper={true}
                       onPress={() => {
                         setSelectedTooth(t);
+                        setSelectedSystem(null);
+                        setBoneWidth('');
+                        setBoneHeight('');
                         setResults(null);
                       }}
                     />
@@ -295,7 +320,6 @@ export default function ImplantSelectionScreen() {
             </View>
           </View>
 
-          {/* Divider */}
           <View style={styles.jawDivider} />
 
           {/* Lower Jaw */}
@@ -312,6 +336,9 @@ export default function ImplantSelectionScreen() {
                       isUpper={false}
                       onPress={() => {
                         setSelectedTooth(t);
+                        setSelectedSystem(null);
+                        setBoneWidth('');
+                        setBoneHeight('');
                         setResults(null);
                       }}
                     />
@@ -329,6 +356,9 @@ export default function ImplantSelectionScreen() {
                       isUpper={false}
                       onPress={() => {
                         setSelectedTooth(t);
+                        setSelectedSystem(null);
+                        setBoneWidth('');
+                        setBoneHeight('');
                         setResults(null);
                       }}
                     />
@@ -338,7 +368,7 @@ export default function ImplantSelectionScreen() {
             </View>
           </View>
 
-          {/* Tooth Recommendation */}
+          {/* Tooth-wise Recommendation (appears after tooth selection) */}
           {selectedTooth && toothInfo && (
             <View style={styles.toothRecBox}>
               <View style={styles.toothRecHeader}>
@@ -348,20 +378,22 @@ export default function ImplantSelectionScreen() {
                 </Text>
               </View>
               <View style={styles.toothRecRow}>
-                <Text style={styles.toothRecLabel}>Type:</Text>
-                <Text style={styles.toothRecValue}>{toothInfo.toothType}</Text>
-              </View>
-              <View style={styles.toothRecRow}>
-                <Text style={styles.toothRecLabel}>Diameter Guide:</Text>
+                <Text style={styles.toothRecLabel}>Recommended Diameter:</Text>
                 <Text style={styles.toothRecValue}>
                   {toothInfo.diameter[0]} - {toothInfo.diameter[1]} mm
+                </Text>
+              </View>
+              <View style={styles.toothRecRow}>
+                <Text style={styles.toothRecLabel}>Recommended Length:</Text>
+                <Text style={styles.toothRecValue}>
+                  {toothInfo.length[0]} - {toothInfo.length[1]} mm
                 </Text>
               </View>
             </View>
           )}
         </View>
 
-        {/* STEP 2 — Select Implant System */}
+        {/* ── STEP 2 — Select Implant System ── */}
         <View style={[styles.card, !selectedTooth && styles.cardDisabled]}>
           <Text style={styles.cardTitle}>Step 2: Select Implant System</Text>
           <TouchableOpacity
@@ -372,19 +404,19 @@ export default function ImplantSelectionScreen() {
               setSearchQuery('');
             }}
             activeOpacity={selectedTooth ? 0.7 : 1}
-            testID="system-dropdown"
+            data-testid="system-dropdown"
           >
             <Ionicons name="medical" size={18} color={selectedTooth ? '#1E88E5' : '#B0BEC5'} />
             <Text style={selectedSystem ? styles.dropdownText : styles.dropdownPlaceholder}>
               {selectedSystem
-                ? `${selectedSystem.brand} - ${selectedSystem.system}`
+                ? `${selectedSystem.brand} – ${selectedSystem.system}`
                 : `Select Implant System (${systems.length})`}
             </Text>
             <Ionicons name="chevron-down" size={18} color="#8E8E93" />
           </TouchableOpacity>
         </View>
 
-        {/* Dropdown Modal */}
+        {/* ── Dropdown Modal ── */}
         <Modal
           visible={showDropdown}
           animationType="slide"
@@ -399,7 +431,7 @@ export default function ImplantSelectionScreen() {
                 <TouchableOpacity
                   onPress={() => setShowDropdown(false)}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  testID="close-dropdown"
+                  data-testid="close-dropdown"
                 >
                   <Ionicons name="close-circle" size={28} color="#666" />
                 </TouchableOpacity>
@@ -414,10 +446,13 @@ export default function ImplantSelectionScreen() {
                   placeholder="Search brand or system..."
                   placeholderTextColor="#B0BEC5"
                   autoFocus={true}
-                  testID="system-search-input"
+                  data-testid="system-search-input"
                 />
                 {searchQuery.length > 0 && (
-                  <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <TouchableOpacity
+                    onPress={() => setSearchQuery('')}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
                     <Ionicons name="close-circle" size={20} color="#B0BEC5" />
                   </TouchableOpacity>
                 )}
@@ -432,45 +467,52 @@ export default function ImplantSelectionScreen() {
                   .filter((item) => {
                     if (!searchQuery.trim()) return true;
                     const q = searchQuery.toLowerCase();
-                    return item.brand.toLowerCase().includes(q) || item.system.toLowerCase().includes(q);
+                    return (
+                      item.brand.toLowerCase().includes(q) ||
+                      item.system.toLowerCase().includes(q)
+                    );
                   })
                   .map((item, i) => {
-                  const isSelected =
-                    selectedSystem?.brand === item.brand &&
-                    selectedSystem?.system === item.system;
-                  return (
-                    <TouchableOpacity
-                      key={`${item.brand}-${item.system}-${i}`}
-                      style={[styles.dropdownItem, isSelected && styles.dropdownItemActive]}
-                      onPress={() => {
-                        setSelectedSystem(item);
-                        setShowDropdown(false);
-                        setResults(null);
-                      }}
-                      activeOpacity={0.6}
-                      testID={`system-option-${i}`}
-                    >
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.dropdownItemBrand}>{item.brand}</Text>
-                        <Text style={styles.dropdownItemSystem}>{item.system}</Text>
-                        <Text style={styles.dropdownItemSizes}>
-                          D: {item.diameters.join(', ')} mm
-                        </Text>
-                        <Text style={styles.dropdownItemSizes}>
-                          L: {item.lengths.join(', ')} mm
-                        </Text>
-                      </View>
-                      {isSelected && <Ionicons name="checkmark-circle" size={22} color="#1E88E5" />}
-                    </TouchableOpacity>
-                  );
-                })}
+                    const isSelected =
+                      selectedSystem?.brand === item.brand &&
+                      selectedSystem?.system === item.system;
+                    return (
+                      <TouchableOpacity
+                        key={`${item.brand}-${item.system}-${i}`}
+                        style={[styles.dropdownItem, isSelected && styles.dropdownItemActive]}
+                        onPress={() => {
+                          setSelectedSystem(item);
+                          setShowDropdown(false);
+                          setBoneWidth('');
+                          setBoneHeight('');
+                          setResults(null);
+                        }}
+                        activeOpacity={0.6}
+                        data-testid={`system-option-${i}`}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.dropdownItemTitle}>
+                            {item.brand} – {item.system}
+                          </Text>
+                          <Text style={styles.dropdownItemSizes}>
+                            {item.count} sizes | D: {item.diameters[0]}–
+                            {item.diameters[item.diameters.length - 1]} mm | L: {item.lengths[0]}–
+                            {item.lengths[item.lengths.length - 1]} mm
+                          </Text>
+                        </View>
+                        {isSelected && (
+                          <Ionicons name="checkmark-circle" size={22} color="#1E88E5" />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
                 <View style={{ height: 30 }} />
               </ScrollView>
             </Pressable>
           </Pressable>
         </Modal>
 
-        {/* STEP 3 — Bone Measurements */}
+        {/* ── STEP 3 — Bone Measurements ── */}
         <View style={[styles.card, !selectedSystem && styles.cardDisabled]}>
           <Text style={styles.cardTitle}>Step 3: Enter Bone Measurements</Text>
 
@@ -480,12 +522,15 @@ export default function ImplantSelectionScreen() {
             <TextInput
               style={styles.measureInput}
               value={boneWidth}
-              onChangeText={setBoneWidth}
+              onChangeText={(v) => {
+                setBoneWidth(v);
+                setResults(null);
+              }}
               placeholder="e.g. 7"
               placeholderTextColor="#B0BEC5"
               keyboardType="decimal-pad"
               editable={!!selectedSystem}
-              testID="bone-width-input"
+              data-testid="bone-width-input"
             />
             <Text style={styles.unitText}>mm</Text>
           </View>
@@ -496,12 +541,15 @@ export default function ImplantSelectionScreen() {
             <TextInput
               style={styles.measureInput}
               value={boneHeight}
-              onChangeText={setBoneHeight}
+              onChangeText={(v) => {
+                setBoneHeight(v);
+                setResults(null);
+              }}
               placeholder="e.g. 12"
               placeholderTextColor="#B0BEC5"
               keyboardType="decimal-pad"
               editable={!!selectedSystem}
-              testID="bone-height-input"
+              data-testid="bone-height-input"
             />
             <Text style={styles.unitText}>mm</Text>
           </View>
@@ -513,34 +561,85 @@ export default function ImplantSelectionScreen() {
             ]}
             onPress={handleSuggest}
             disabled={!selectedSystem || !boneWidth || !boneHeight || searching}
-            testID="suggest-btn"
+            data-testid="suggest-btn"
           >
             {searching ? (
               <ActivityIndicator color="#FFF" size="small" />
             ) : (
               <>
                 <Ionicons name="search" size={18} color="#FFF" />
-                <Text style={styles.suggestBtnText}>Find Implant</Text>
+                <Text style={styles.suggestBtnText}>Find Best Implant</Text>
               </>
             )}
           </TouchableOpacity>
         </View>
 
-        {/* STEP 4 — Results */}
+        {/* ── STEP 4 — Result ── */}
         {results && (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Recommended Implants</Text>
+            <Text style={styles.cardTitle}>Implant Recommendation</Text>
 
-            {/* Tooth Info */}
-            {results.tooth_recommendation && (
-              <View style={styles.toothResultBox}>
-                <Text style={styles.toothResultTitle}>
-                  Tooth {results.tooth_recommendation.tooth}:{' '}
-                  {results.tooth_recommendation.region}
+            {/* Summary Info */}
+            <View style={styles.summaryBox}>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Tooth:</Text>
+                <Text style={styles.summaryValue}>
+                  {selectedTooth}
+                  {toothInfo ? ` (${toothInfo.region})` : ''}
                 </Text>
-                <Text style={styles.toothResultSub}>
-                  Type: {results.tooth_recommendation.toothType} | Rec. Diameter:{' '}
-                  {results.tooth_recommendation.recommended_diameter}
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>System:</Text>
+                <Text style={styles.summaryValue}>
+                  {selectedSystem?.brand} – {selectedSystem?.system}
+                </Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Bone Width:</Text>
+                <Text style={styles.summaryValue}>{boneWidth} mm</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Bone Height:</Text>
+                <Text style={styles.summaryValue}>{boneHeight} mm</Text>
+              </View>
+            </View>
+
+            {/* Recommended Implant(s) */}
+            {results.recommended && results.recommended.length > 0 ? (
+              <View style={styles.recommendedSection}>
+                <Text style={styles.recommendedTitle}>Recommended Implant</Text>
+                {results.recommended.map((imp: Implant, i: number) => (
+                  <View
+                    key={`rec-${i}`}
+                    style={styles.implantCard}
+                    data-testid={`recommended-implant-${i}`}
+                  >
+                    <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+                    <View style={styles.implantInfo}>
+                      <Text style={styles.implantSystem}>
+                        {imp.brand} – {imp.system}
+                      </Text>
+                      <View style={styles.implantSpecs}>
+                        <View style={styles.specBadge}>
+                          <Text style={styles.specBadgeText}>
+                            Diameter: {imp.diameter} mm
+                          </Text>
+                        </View>
+                        <View style={styles.specBadge}>
+                          <Text style={styles.specBadgeText}>
+                            Length: {imp.length} mm
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.noMatchBox}>
+                <Ionicons name="information-circle" size={22} color="#FF9800" />
+                <Text style={styles.noMatchText}>
+                  No exact matches found for the given bone measurements in this system.
                 </Text>
               </View>
             )}
@@ -549,25 +648,21 @@ export default function ImplantSelectionScreen() {
             <View style={styles.guidanceBox}>
               <Text style={styles.guidanceTitle}>Clinical Guidance</Text>
               <View style={styles.guidanceRow}>
-                <Text style={styles.guidanceLabel}>Bone Width:</Text>
-                <Text style={styles.guidanceValue}>{results.clinical_guidance.bone_width} mm</Text>
-              </View>
-              <View style={styles.guidanceRow}>
-                <Text style={styles.guidanceLabel}>Max Implant Diameter:</Text>
+                <Text style={styles.guidanceLabel}>Diameter Range:</Text>
                 <Text style={styles.guidanceValue}>
-                  {results.clinical_guidance.max_implant_diameter} mm
+                  {results.clinical_guidance?.recommended_diameter_range}
                 </Text>
               </View>
               <View style={styles.guidanceRow}>
-                <Text style={styles.guidanceLabel}>Bone Height:</Text>
+                <Text style={styles.guidanceLabel}>Length Range:</Text>
                 <Text style={styles.guidanceValue}>
-                  {results.clinical_guidance.bone_height} mm
+                  {results.clinical_guidance?.recommended_length_range}
                 </Text>
               </View>
               <View style={styles.guidanceRow}>
-                <Text style={styles.guidanceLabel}>Max Implant Length:</Text>
+                <Text style={styles.guidanceLabel}>Category:</Text>
                 <Text style={styles.guidanceValue}>
-                  {results.clinical_guidance.max_implant_length} mm
+                  {results.clinical_guidance?.length_category}
                 </Text>
               </View>
             </View>
@@ -575,49 +670,19 @@ export default function ImplantSelectionScreen() {
             {/* Safety Note */}
             <View style={styles.safetyBox}>
               <Ionicons name="alert-circle" size={16} color="#E65100" />
-              <Text style={styles.safetyText}>{results.clinical_guidance.safety_note}</Text>
+              <Text style={styles.safetyText}>
+                {results.clinical_guidance?.safety_note}
+              </Text>
             </View>
 
-            {/* Recommended Implants */}
-            {results.recommended.length > 0 ? (
-              <>
-                <Text style={styles.resultSectionTitle}>Best Matches</Text>
-                {results.recommended.map((imp: Implant, i: number) => (
-                  <View key={`rec-${i}`} style={styles.implantCard} testID={`result-${i}`}>
-                    <View style={styles.implantIcon}>
-                      <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
-                    </View>
-                    <View style={styles.implantInfo}>
-                      <Text style={styles.implantSystem}>
-                        {imp.brand} - {imp.system}
-                      </Text>
-                      <View style={styles.implantSpecs}>
-                        <View style={styles.specBadge}>
-                          <Text style={styles.specBadgeText}>{imp.diameter} mm dia</Text>
-                        </View>
-                        <View style={styles.specBadge}>
-                          <Text style={styles.specBadgeText}>{imp.length} mm length</Text>
-                        </View>
-                      </View>
-                    </View>
-                  </View>
-                ))}
-              </>
-            ) : (
-              <View style={styles.noMatchBox}>
-                <Ionicons name="information-circle" size={22} color="#FF9800" />
-                <Text style={styles.noMatchText}>
-                  No exact matches found for the given parameters.
+            {/* All Available Sizes */}
+            {results.all_options && results.all_options.length > 0 && (
+              <View style={styles.allOptionsSection}>
+                <Text style={styles.allOptionsTitle}>
+                  All Available Sizes ({results.all_options.length})
                 </Text>
-              </View>
-            )}
-
-            {/* All Options */}
-            {results.all_options.length > 0 && (
-              <>
-                <Text style={styles.resultSectionTitle}>All Available Sizes</Text>
                 {results.all_options.map((imp: Implant, i: number) => {
-                  const isMatch = results.recommended.some(
+                  const isMatch = results.recommended?.some(
                     (r: Implant) => r.diameter === imp.diameter && r.length === imp.length
                   );
                   return (
@@ -632,7 +697,7 @@ export default function ImplantSelectionScreen() {
                     </View>
                   );
                 })}
-              </>
+              </View>
             )}
 
             {/* Action Buttons */}
@@ -640,13 +705,17 @@ export default function ImplantSelectionScreen() {
               <TouchableOpacity
                 style={styles.copyBtn}
                 onPress={handleCopyRecommendation}
-                testID="copy-recommendation-btn"
+                data-testid="copy-recommendation-btn"
               >
                 <Ionicons name="copy-outline" size={18} color="#FFF" />
-                <Text style={styles.copyBtnText}>Add Implant to Case</Text>
+                <Text style={styles.copyBtnText}>Copy Recommendation</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.resetBtn} onPress={handleReset} testID="reset-btn">
+              <TouchableOpacity
+                style={styles.resetBtn}
+                onPress={handleReset}
+                data-testid="reset-btn"
+              >
                 <Ionicons name="refresh" size={18} color="#1E88E5" />
                 <Text style={styles.resetBtnText}>New Selection</Text>
               </TouchableOpacity>
@@ -658,6 +727,7 @@ export default function ImplantSelectionScreen() {
   );
 }
 
+// ── Styles ─────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5FAFF' },
   scroll: { padding: 16, paddingBottom: 40 },
@@ -668,7 +738,12 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 22, fontWeight: '700', color: '#263238' },
 
   // Steps
-  stepsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 18 },
+  stepsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 18,
+  },
   stepItem: { alignItems: 'center', gap: 3 },
   stepCircle: {
     width: 28,
@@ -683,7 +758,13 @@ const styles = StyleSheet.create({
   stepNumActive: { color: '#FFF' },
   stepLabel: { fontSize: 9, color: '#999', fontWeight: '500' },
   stepLabelActive: { color: '#1E88E5' },
-  stepLine: { height: 2, flex: 1, backgroundColor: '#E0E0E0', marginHorizontal: 4, marginBottom: 14 },
+  stepLine: {
+    height: 2,
+    flex: 1,
+    backgroundColor: '#E0E0E0',
+    marginHorizontal: 4,
+    marginBottom: 14,
+  },
   stepLineActive: { backgroundColor: '#1E88E5' },
 
   // Cards
@@ -703,12 +784,23 @@ const styles = StyleSheet.create({
 
   // FDI Chart
   jawSection: { marginBottom: 6 },
-  jawLabel: { fontSize: 12, fontWeight: '600', color: '#546E7A', marginBottom: 6, textAlign: 'center' },
+  jawLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#546E7A',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
   jawRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   quadrant: { alignItems: 'center' },
-  quadrantLabel: { fontSize: 9, color: '#90A4AE', fontWeight: '500', marginBottom: 3 },
   teethRow: { flexDirection: 'row', alignItems: 'center' },
-  midline: { width: 2, height: 40, backgroundColor: '#CFD8DC', marginHorizontal: 2, borderRadius: 1 },
+  midline: {
+    width: 2,
+    height: 40,
+    backgroundColor: '#CFD8DC',
+    marginHorizontal: 2,
+    borderRadius: 1,
+  },
   jawDivider: { height: 1, backgroundColor: '#ECEFF1', marginVertical: 8 },
 
   // Tooth Recommendation
@@ -771,20 +863,24 @@ const styles = StyleSheet.create({
   dropdownItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    padding: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
     marginHorizontal: 8,
     borderRadius: 8,
-    minHeight: 56,
   },
   dropdownItemActive: { backgroundColor: '#E3F2FD' },
-  dropdownItemBrand: { fontSize: 15, fontWeight: '600', color: '#263238' },
-  dropdownItemSystem: { fontSize: 14, color: '#546E7A' },
+  dropdownItemTitle: { fontSize: 14, fontWeight: '600', color: '#263238' },
   dropdownItemSizes: { fontSize: 11, color: '#78909C', marginTop: 2 },
 
   // Inputs
-  inputLabel: { fontSize: 13, fontWeight: '600', color: '#546E7A', marginBottom: 6, marginTop: 10 },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#546E7A',
+    marginBottom: 6,
+    marginTop: 10,
+  },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -810,15 +906,74 @@ const styles = StyleSheet.create({
   btnDisabled: { opacity: 0.4 },
   suggestBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
 
-  // Results
-  toothResultBox: { backgroundColor: '#F3E5F5', borderRadius: 10, padding: 12, marginBottom: 10 },
-  toothResultTitle: { fontSize: 14, fontWeight: '700', color: '#6A1B9A' },
-  toothResultSub: { fontSize: 12, color: '#7B1FA2', marginTop: 4 },
-  guidanceBox: { backgroundColor: '#E3F2FD', borderRadius: 10, padding: 14, marginBottom: 12 },
+  // Result — Summary
+  summaryBox: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 14,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  summaryLabel: { fontSize: 13, color: '#546E7A' },
+  summaryValue: { fontSize: 13, fontWeight: '600', color: '#263238', flexShrink: 1, textAlign: 'right' },
+
+  // Result — Recommended Implant
+  recommendedSection: { marginBottom: 14 },
+  recommendedTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#2E7D32',
+    marginBottom: 8,
+  },
+  implantCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F8E9',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+    gap: 10,
+  },
+  implantInfo: { flex: 1 },
+  implantSystem: { fontSize: 14, fontWeight: '600', color: '#263238', marginBottom: 6 },
+  implantSpecs: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  specBadge: {
+    backgroundColor: '#C8E6C9',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  specBadgeText: { fontSize: 12, fontWeight: '600', color: '#2E7D32' },
+
+  // No Match
+  noMatchBox: {
+    flexDirection: 'row',
+    gap: 8,
+    backgroundColor: '#FFF8E1',
+    borderRadius: 10,
+    padding: 14,
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  noMatchText: { flex: 1, fontSize: 13, color: '#F57F17' },
+
+  // Clinical Guidance
+  guidanceBox: {
+    backgroundColor: '#E3F2FD',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 12,
+  },
   guidanceTitle: { fontSize: 13, fontWeight: '700', color: '#1565C0', marginBottom: 8 },
   guidanceRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
   guidanceLabel: { fontSize: 13, color: '#37474F' },
   guidanceValue: { fontSize: 13, fontWeight: '600', color: '#1565C0' },
+
+  // Safety Note
   safetyBox: {
     flexDirection: 'row',
     gap: 8,
@@ -829,37 +984,10 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   safetyText: { flex: 1, fontSize: 11, color: '#E65100', lineHeight: 16 },
-  resultSectionTitle: { fontSize: 14, fontWeight: '700', color: '#263238', marginTop: 8, marginBottom: 8 },
-  implantCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F1F8E9',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
-    gap: 10,
-  },
-  implantIcon: {},
-  implantInfo: { flex: 1 },
-  implantSystem: { fontSize: 14, fontWeight: '600', color: '#263238', marginBottom: 4 },
-  implantSpecs: { flexDirection: 'row', gap: 8 },
-  specBadge: {
-    backgroundColor: '#C8E6C9',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  specBadgeText: { fontSize: 12, fontWeight: '600', color: '#2E7D32' },
-  noMatchBox: {
-    flexDirection: 'row',
-    gap: 8,
-    backgroundColor: '#FFF8E1',
-    borderRadius: 10,
-    padding: 14,
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  noMatchText: { flex: 1, fontSize: 13, color: '#F57F17' },
+
+  // All Options
+  allOptionsSection: { marginBottom: 14 },
+  allOptionsTitle: { fontSize: 14, fontWeight: '700', color: '#263238', marginBottom: 8 },
   implantRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
