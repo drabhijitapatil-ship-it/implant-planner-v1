@@ -76,15 +76,18 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - [x] CBCT file visible to supervisor/implant_incharge on procedure detail page
 - [x] Login page updated with college name
 
-- [x] Implant Selection module (implant library with 72 records, suggestion engine with clinical rules)
-- [x] Implant Selection redesign: 4-step workflow with FDI dental chart (Step 1: Tooth Selection, Step 2: System, Step 3: Bone Measurements, Step 4: Results)
-- [x] FDI tooth chart with 28 teeth (upper/lower jaw), tooth-specific diameter/length recommendations
-- [x] Backend: /api/implant-library/tooth-recommendations endpoint (28 entries), /suggest updated with tooth parameter
-- [x] "Add Implant to Case" button copies recommendation to clipboard
-- [x] Search/filter bar in implant system dropdown modal
-- [x] Implant library: 42 systems, 438 individual implant entries from XLSX. Dropdown shows EVERY entry (company + system + diameter + length)
-- [x] Implant recommendation engine: Bone rule (diameter+2mm, length+2mm), Tooth-type diameter guide (centralIncisor, lateralIncisor, canine, premolar, molar)
-- [x] Auto-seed on startup: Users (20 accounts) and Implant Library (438 records from XLSX) seeded automatically when production DB is empty
+- [x] Implant Selection module with complete multi-step workflow
+- [x] Step 1: FDI dental chart (28 teeth) with tooth-wise recommendation (diameter + length ranges)
+- [x] Step 2: Implant system dropdown with search (42 systems from XLSX)
+- [x] Step 3: Bone width/height input with algorithm-based filtering
+- [x] Step 4: Results display with recommended implant, clinical guidance, safety notes, all sizes
+- [x] Backend: /api/implant-library/systems, /tooth-recommendations, /suggest endpoints
+- [x] Suggestion engine: Bone width algorithm (<5->3.0-3.5, 5-6->3.75-4.0, 6-7->4.0-4.5, >=7->4.5-6.0), Bone height (>=13->Long, >=10->Standard, >=8->Short), 2mm safety clearance
+- [x] Tooth-specific range intersection for diameter and length
+- [x] Copy recommendation to clipboard, New Selection reset
+- [x] Implant library: 42 systems, 438 records from implant_library_latest.xlsx
+- [x] Auto-seed on startup: Users (20 accounts) and Implant Library (438 records) seeded when production DB is empty
+- [x] Tab navigation: Admin/Incharge see Users tab, Nurses hidden from New Case/Implants
 
 ## Credentials
 - Student: gaurav.pandey@student.dental.edu / Student@123
@@ -98,7 +101,14 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - [ ] Break down backend/server.py monolith into routers/models/services
 - [ ] Modularize frontend/app/new-procedure.tsx form logic
 
+## Key API Endpoints — Implant Library
+- `GET /api/implant-library/systems` - Returns 42 implant systems grouped by brand+system with diameters, lengths, count
+- `GET /api/implant-library/tooth-recommendations` - Returns 28 FDI tooth entries with region, diameter range, length range
+- `GET /api/implant-library/tooth-recommendations/{tooth}` - Returns single tooth recommendation
+- `GET /api/implant-library/suggest?brand=X&system=Y&bone_width=Z&bone_height=W&tooth=T` - Runs suggestion engine with bone algorithms + tooth intersection
+
 ## Important Notes
 - Internal status codes use `stage2_surgical`/`stage2_prosthetic` for DB stability
 - All user-facing labels use "Phase 3" and "Phase 4" terminology
 - Do NOT modify `app.config.js` (deployment monkey-patching)
+- XLSX brand name "Noble Biocare" in data has extra 'l' vs user spec "Nobel Biocare"
