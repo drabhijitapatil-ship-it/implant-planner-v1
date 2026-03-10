@@ -96,6 +96,7 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - [x] Procedure-bone type compatibility validation (Indication Dictionary): Immediate(D1-D3), Sinus Lift(D3-D4), etc.
 - [x] Backend: POST /api/implant-library/suggest-auto, GET /api/implant-library/procedure-options
 - [x] Implant Risk Calculator in "Let Me Choose" results: 5-factor scoring (Width, Height, Density, Procedure, Tooth Position), total 5-15, Low/Moderate/High with color-coded visual meter and suggested actions
+- [x] Implant Risk Calculator also in "Suggest Me" results: auto-populates bone type from input, procedure selector if multiple chosen
 - [x] Backend: POST /api/implant-library/calculate-risk endpoint
 
 ## Credentials
