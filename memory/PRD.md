@@ -95,6 +95,8 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - [x] "Suggest Me" tab: Select Tooth → Procedure Type (multi-select, 6 options) → Bone Type (D1-D4) → Bone Measurements → Auto-suggest from all systems
 - [x] Procedure-bone type compatibility validation (Indication Dictionary): Immediate(D1-D3), Sinus Lift(D3-D4), etc.
 - [x] Backend: POST /api/implant-library/suggest-auto, GET /api/implant-library/procedure-options
+- [x] Implant Risk Calculator in "Let Me Choose" results: 5-factor scoring (Width, Height, Density, Procedure, Tooth Position), total 5-15, Low/Moderate/High with color-coded visual meter and suggested actions
+- [x] Backend: POST /api/implant-library/calculate-risk endpoint
 
 ## Credentials
 - Student: gaurav.pandey@student.dental.edu / Student@123
@@ -115,6 +117,7 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - `GET /api/implant-library/suggest?brand=X&system=Y&bone_width=Z&bone_height=W&tooth=T` - "Let Me Choose" engine with tooth intersection
 - `POST /api/implant-library/suggest-auto` - "Suggest Me" engine: validates procedure+bone type, filters all systems by diameter/length
 - `GET /api/implant-library/procedure-options` - Returns 6 procedures, 4 bone types, compatibility dict
+- `POST /api/implant-library/calculate-risk` - Risk Calculator: 5-factor scoring (Width, Height, Density, Procedure, Tooth) → Low/Moderate/High
 
 ## Important Notes
 - Internal status codes use `stage2_surgical`/`stage2_prosthetic` for DB stability
