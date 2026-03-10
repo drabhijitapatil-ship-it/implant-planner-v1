@@ -1801,17 +1801,20 @@ async def suggest_auto(
         [("brand", 1), ("system", 1), ("diameter", 1), ("length", 1)]
     ).to_list(500)
 
-    # Check tooth restrictions
-    if tooth:
-        filtered = []
-        for imp in all_matching:
-            key = f"{imp['brand']}|{imp['system']}"
-            ind = IMPLANT_INDICATIONS.get(key, {})
-            restricted = ind.get("restricted_teeth")
-            if restricted and tooth not in restricted:
-                continue
-            filtered.append(imp)
-        all_matching = filtered
+    # Check tooth restrictions and filter to indication-only systems
+    filtered = []
+    for imp in all_matching:
+        key = f"{imp['brand']}|{imp['system']}"
+        ind = IMPLANT_INDICATIONS.get(key, {})
+        # Only include systems that have indications
+        if not ind.get("indication"):
+            continue
+        # Check tooth restrictions
+        restricted = ind.get("restricted_teeth")
+        if restricted and tooth and tooth not in restricted:
+            continue
+        filtered.append(imp)
+    all_matching = filtered
 
     # Group by system
     systems_map = {}
