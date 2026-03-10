@@ -24,6 +24,8 @@ type ImplantSystem = {
   diameters: number[];
   lengths: number[];
   count: number;
+  indication?: string;
+  restricted_teeth?: string[];
 };
 
 type Implant = {
@@ -414,6 +416,14 @@ export default function ImplantSelectionScreen() {
             </Text>
             <Ionicons name="chevron-down" size={18} color="#8E8E93" />
           </TouchableOpacity>
+
+          {/* Show indication for selected system */}
+          {selectedSystem?.indication ? (
+            <View style={styles.indicationBox}>
+              <Ionicons name="information-circle" size={14} color="#0D47A1" />
+              <Text style={styles.indicationText}>{selectedSystem.indication}</Text>
+            </View>
+          ) : null}
         </View>
 
         {/* ── Dropdown Modal ── */}
@@ -469,36 +479,81 @@ export default function ImplantSelectionScreen() {
                     const q = searchQuery.toLowerCase();
                     return (
                       item.brand.toLowerCase().includes(q) ||
-                      item.system.toLowerCase().includes(q)
+                      item.system.toLowerCase().includes(q) ||
+                      (item.indication || '').toLowerCase().includes(q)
                     );
                   })
                   .map((item, i) => {
                     const isSelected =
                       selectedSystem?.brand === item.brand &&
                       selectedSystem?.system === item.system;
+                    const isRestricted =
+                      item.restricted_teeth &&
+                      selectedTooth &&
+                      !item.restricted_teeth.includes(selectedTooth);
                     return (
                       <TouchableOpacity
                         key={`${item.brand}-${item.system}-${i}`}
-                        style={[styles.dropdownItem, isSelected && styles.dropdownItemActive]}
+                        style={[
+                          styles.dropdownItem,
+                          isSelected && styles.dropdownItemActive,
+                          isRestricted && styles.dropdownItemRestricted,
+                        ]}
                         onPress={() => {
+                          if (isRestricted) {
+                            Alert.alert(
+                              'Not Indicated',
+                              `${item.brand} – ${item.system} is not indicated for tooth ${selectedTooth}.\n\n${item.indication}`,
+                            );
+                            return;
+                          }
                           setSelectedSystem(item);
                           setShowDropdown(false);
                           setBoneWidth('');
                           setBoneHeight('');
                           setResults(null);
                         }}
-                        activeOpacity={0.6}
+                        activeOpacity={isRestricted ? 1 : 0.6}
                         data-testid={`system-option-${i}`}
                       >
                         <View style={{ flex: 1 }}>
-                          <Text style={styles.dropdownItemTitle}>
+                          <Text
+                            style={[
+                              styles.dropdownItemTitle,
+                              isRestricted && styles.dropdownItemTitleRestricted,
+                            ]}
+                          >
                             {item.brand} – {item.system}
                           </Text>
-                          <Text style={styles.dropdownItemSizes}>
+                          {item.indication ? (
+                            <Text
+                              style={[
+                                styles.dropdownItemIndication,
+                                isRestricted && styles.dropdownItemIndicationRestricted,
+                              ]}
+                              numberOfLines={2}
+                            >
+                              {item.indication}
+                            </Text>
+                          ) : null}
+                          <Text
+                            style={[
+                              styles.dropdownItemSizes,
+                              isRestricted && { color: '#B0BEC5' },
+                            ]}
+                          >
                             {item.count} sizes | D: {item.diameters[0]}–
                             {item.diameters[item.diameters.length - 1]} mm | L: {item.lengths[0]}–
                             {item.lengths[item.lengths.length - 1]} mm
                           </Text>
+                          {isRestricted && (
+                            <View style={styles.restrictedBadge}>
+                              <Ionicons name="lock-closed" size={10} color="#E53935" />
+                              <Text style={styles.restrictedBadgeText}>
+                                Not for tooth {selectedTooth}
+                              </Text>
+                            </View>
+                          )}
                         </View>
                         {isSelected && (
                           <Ionicons name="checkmark-circle" size={22} color="#1E88E5" />
@@ -603,6 +658,16 @@ export default function ImplantSelectionScreen() {
                 <Text style={styles.summaryValue}>{boneHeight} mm</Text>
               </View>
             </View>
+
+            {/* System Indication */}
+            {selectedSystem?.indication ? (
+              <View style={styles.indicationResultBox}>
+                <Ionicons name="information-circle" size={16} color="#0D47A1" />
+                <Text style={styles.indicationResultText}>
+                  {selectedSystem.indication}
+                </Text>
+              </View>
+            ) : null}
 
             {/* Recommended Implant(s) */}
             {results.recommended && results.recommended.length > 0 ? (
@@ -870,8 +935,65 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   dropdownItemActive: { backgroundColor: '#E3F2FD' },
+  dropdownItemRestricted: { backgroundColor: '#FAFAFA', opacity: 0.6 },
   dropdownItemTitle: { fontSize: 14, fontWeight: '600', color: '#263238' },
+  dropdownItemTitleRestricted: { color: '#9E9E9E' },
+  dropdownItemIndication: {
+    fontSize: 11,
+    color: '#1565C0',
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
+  dropdownItemIndicationRestricted: { color: '#B0BEC5' },
   dropdownItemSizes: { fontSize: 11, color: '#78909C', marginTop: 2 },
+  restrictedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+    backgroundColor: '#FFEBEE',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+  },
+  restrictedBadgeText: { fontSize: 10, color: '#E53935', fontWeight: '600' },
+
+  // Indication (below dropdown)
+  indicationBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    marginTop: 10,
+    backgroundColor: '#E8EAF6',
+    borderRadius: 8,
+    padding: 10,
+  },
+  indicationText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#1A237E',
+    fontStyle: 'italic',
+    lineHeight: 16,
+  },
+
+  // Indication in results
+  indicationResultBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    backgroundColor: '#E8EAF6',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 14,
+  },
+  indicationResultText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#1A237E',
+    fontStyle: 'italic',
+    lineHeight: 16,
+  },
 
   // Inputs
   inputLabel: {

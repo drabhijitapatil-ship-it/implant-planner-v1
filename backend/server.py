@@ -1505,9 +1505,67 @@ TOOTH_RECOMMENDATIONS = {
     "47": {"region": "Mandibular 2nd Molar", "diameter": [4.5, 5.5], "length": [8, 10]},
 }
 
+# Implant system-specific indications
+# Key format: "brand|system"
+IMPLANT_INDICATIONS = {
+    "Neodent|Drive GM Acqua": {
+        "indication": "Indicated for Bone D3 and D4 and Immediate Placement.",
+    },
+    "Neodent|Drive GM NeoPorous": {
+        "indication": "Indicated for Bone D3 and D4 and Immediate Placement.",
+    },
+    "Neodent|Helix GM Acqua": {
+        "indication": "Indicated in D1, D2, D3, and D4 Bone Types and Immediate Placement.",
+    },
+    "Neodent|Helix GM Neoporous": {
+        "indication": "Indicated in D1, D2, D3, and D4 Bone Types and Immediate Placement.",
+    },
+    "Neodent|Titamax GM NeoPorous": {
+        "indication": "Indicated for Bone D1 and D2 and Bone Graft areas.",
+    },
+    "Noble Biocare|NobelActive NP": {
+        "indication": "Only indicated for the replacement of teeth 41, 42, 31, 32, 12, and 22.",
+        "restricted_teeth": ["41", "42", "31", "32", "12", "22"],
+    },
+    "Noble Biocare|NobelActive RP": {
+        "indication": "Primary indications for D4 or an extraction socket.",
+    },
+    "Noble Biocare|NobelParallel RP": {
+        "indication": "Universal use.",
+    },
+    "NeoBiotech|IS-III active": {
+        "indication": "Indicated for Immediate placement and Soft Bone.",
+    },
+    "Osstem|TS III": {
+        "indication": "Indicated for D1, D2, D3, and D4 Bone Types.",
+    },
+    "Osstem|TS IV": {
+        "indication": "Indicated for D3 and D4 Bone Type. Indicated for Sinus Lift.",
+    },
+    "Osstem|SS III": {
+        "indication": "Indicated for D3 and D4 Bone Type (Preferably Cancellous).",
+    },
+    "Osstem|MS": {
+        "indication": "Indicated for teeth 31, 32, 33, 41, 42, 43.",
+        "restricted_teeth": ["31", "32", "33", "41", "42", "43"],
+    },
+    "Osstem|ETIII NH": {
+        "indication": "Hydroxyapatite Coated. Indicated for Enhanced Osseointegration and Fast Healing.",
+    },
+    "BioHorizons|Tapered Pro": {
+        "indication": "Indicated for Immediate Placement and the esthetic zone. Laser Lock Collar surface for connective tissue attachment.",
+    },
+    "BioHorizons|Tapered IM": {
+        "indication": "Indicated for Immediate Placement in the molar region.",
+    },
+    "BioHorizons|Tapered Short": {
+        "indication": "Indicated for Bone height of 8, 9, 10 mm.",
+    },
+}
+
 @api_router.get("/implant-library/systems")
 async def get_implant_systems(current_user: dict = Depends(get_current_user)):
-    """Return implant systems grouped by brand+system with all available diameters and lengths."""
+    """Return implant systems grouped by brand+system with indications and restrictions."""
     pipeline = [
         {"$group": {
             "_id": {"brand": "$brand", "system": "$system"},
@@ -1520,13 +1578,21 @@ async def get_implant_systems(current_user: dict = Depends(get_current_user)):
     results = await db.implant_library.aggregate(pipeline).to_list(200)
     systems = []
     for r in results:
-        systems.append({
-            "brand": r["_id"]["brand"],
-            "system": r["_id"]["system"],
+        brand = r["_id"]["brand"]
+        system = r["_id"]["system"]
+        key = f"{brand}|{system}"
+        ind_data = IMPLANT_INDICATIONS.get(key, {})
+        entry = {
+            "brand": brand,
+            "system": system,
             "diameters": sorted(r["diameters"]),
             "lengths": sorted(r["lengths"]),
             "count": r["count"],
-        })
+            "indication": ind_data.get("indication", ""),
+        }
+        if "restricted_teeth" in ind_data:
+            entry["restricted_teeth"] = ind_data["restricted_teeth"]
+        systems.append(entry)
     return systems
 
 @api_router.get("/implant-library/tooth-recommendations")
