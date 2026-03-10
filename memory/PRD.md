@@ -88,6 +88,9 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - [x] Implant library: 42 systems, 438 records from implant_library_latest.xlsx
 - [x] Auto-seed on startup: Users (20 accounts) and Implant Library (438 records) seeded when production DB is empty
 - [x] Tab navigation: Admin/Incharge see Users tab, Nurses hidden from New Case/Implants
+- [x] Implant system-specific indications: 17 systems with clinical indications (bone type, immediate placement, etc.)
+- [x] Auto-restrict NobelActive NP to teeth 41,42,31,32,12,22 and Osstem MS to teeth 31,32,33,41,42,43
+- [x] Indications displayed in dropdown, selected system area, and results screen
 
 ## Credentials
 - Student: gaurav.pandey@student.dental.edu / Student@123
