@@ -463,68 +463,217 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
   result: any; system: ImplantSystem; tooth: string; toothInfo: ToothRec | null;
   boneWidth: string; boneHeight: string; onReset: () => void;
 }) {
+  const [riskBoneType, setRiskBoneType] = useState('');
+  const [riskProcedure, setRiskProcedure] = useState('');
+  const [riskResult, setRiskResult] = useState<any>(null);
+  const [riskLoading, setRiskLoading] = useState(false);
+
+  const BONE_TYPES_R = ['D1', 'D2', 'D3', 'D4'];
+  const PROCEDURES_R = [
+    'Conventional Implant Placement',
+    'Immediate Implant Placement',
+    'Immediate Implant Placement with Bone Graft',
+    'Sinus Lift',
+    'Restricted Bone Height',
+  ];
+
+  const bestImplant = result.recommended?.[0];
+
+  const handleCalcRisk = async () => {
+    if (!bestImplant || !riskBoneType || !riskProcedure) return;
+    setRiskLoading(true);
+    try {
+      const res = await api.post('/implant-library/calculate-risk', {
+        bone_width: parseFloat(boneWidth),
+        bone_height: parseFloat(boneHeight),
+        implant_diameter: bestImplant.diameter,
+        implant_length: bestImplant.length,
+        bone_type: riskBoneType,
+        procedure: riskProcedure,
+        tooth,
+      });
+      setRiskResult(res.data);
+    } catch { Alert.alert('Error', 'Failed to calculate risk.'); }
+    finally { setRiskLoading(false); }
+  };
+
+  const riskColor = riskResult?.color === 'green' ? '#4CAF50' : riskResult?.color === 'orange' ? '#FF9800' : '#F44336';
+
   const copyRec = async () => {
-    if (!result.recommended?.length) return;
-    const r = result.recommended[0];
-    const txt = ['Implant Recommendation', `Tooth: ${tooth}${toothInfo ? ` (${toothInfo.region})` : ''}`,
-      `System: ${r.brand} – ${r.system}`, `Diameter: ${r.diameter} mm`, `Length: ${r.length} mm`,
-      `Bone Width: ${boneWidth} mm`, `Bone Height: ${boneHeight} mm`].join('\n');
-    await Clipboard.setStringAsync(txt);
+    if (!bestImplant) return;
+    const lines = ['Implant Recommendation', `Tooth: ${tooth}${toothInfo ? ` (${toothInfo.region})` : ''}`,
+      `System: ${bestImplant.brand} – ${bestImplant.system}`, `Diameter: ${bestImplant.diameter} mm`, `Length: ${bestImplant.length} mm`,
+      `Bone Width: ${boneWidth} mm`, `Bone Height: ${boneHeight} mm`];
+    if (riskResult) {
+      lines.push('', `Risk Level: ${riskResult.risk_level} (Score: ${riskResult.total_score}/15)`);
+      riskResult.factors.forEach((f: any) => lines.push(`  ${f.factor}: ${f.risk} (${f.score})`));
+      if (riskResult.suggested_actions?.length) { lines.push('', 'Suggested Actions:'); riskResult.suggested_actions.forEach((a: string) => lines.push(`  - ${a}`)); }
+    }
+    await Clipboard.setStringAsync(lines.join('\n'));
     Alert.alert('Copied', 'Recommendation copied to clipboard.');
   };
+
   return (
-    <View style={s.card} data-testid="choose-result">
-      <Text style={s.cardTitle}>Implant Recommendation</Text>
-      <View style={s.summaryBox}>
-        <SummaryRow label="Tooth" value={`${tooth}${toothInfo ? ` (${toothInfo.region})` : ''}`} />
-        <SummaryRow label="System" value={`${system.brand} – ${system.system}`} />
-        <SummaryRow label="Bone Width" value={`${boneWidth} mm`} />
-        <SummaryRow label="Bone Height" value={`${boneHeight} mm`} />
-      </View>
-      {system.indication ? (
-        <View style={s.indResultBox}><Ionicons name="information-circle" size={16} color="#0D47A1" /><Text style={s.indResultText}>{system.indication}</Text></View>
-      ) : null}
-      {result.recommended?.length > 0 ? (
-        <View style={{ marginBottom: 12 }}>
-          <Text style={s.recTitle}>Recommended Implant</Text>
-          {result.recommended.map((imp: Implant, i: number) => (
-            <View key={`r-${i}`} style={s.impCard} data-testid={`recommended-implant-${i}`}>
-              <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
-              <View style={{ flex: 1 }}>
-                <Text style={s.impSys}>{imp.brand} – {imp.system}</Text>
-                <View style={s.impSpecs}>
-                  <View style={s.specBadge}><Text style={s.specText}>Diameter: {imp.diameter} mm</Text></View>
-                  <View style={s.specBadge}><Text style={s.specText}>Length: {imp.length} mm</Text></View>
+    <View>
+      {/* Implant Recommendation Card */}
+      <View style={s.card} data-testid="choose-result">
+        <Text style={s.cardTitle}>Implant Recommendation</Text>
+        <View style={s.summaryBox}>
+          <SummaryRow label="Tooth" value={`${tooth}${toothInfo ? ` (${toothInfo.region})` : ''}`} />
+          <SummaryRow label="System" value={`${system.brand} – ${system.system}`} />
+          <SummaryRow label="Bone Width" value={`${boneWidth} mm`} />
+          <SummaryRow label="Bone Height" value={`${boneHeight} mm`} />
+        </View>
+        {system.indication ? (
+          <View style={s.indResultBox}><Ionicons name="information-circle" size={16} color="#0D47A1" /><Text style={s.indResultText}>{system.indication}</Text></View>
+        ) : null}
+        {result.recommended?.length > 0 ? (
+          <View style={{ marginBottom: 12 }}>
+            <Text style={s.recTitle}>Recommended Implant</Text>
+            {result.recommended.map((imp: Implant, i: number) => (
+              <View key={`r-${i}`} style={s.impCard} data-testid={`recommended-implant-${i}`}>
+                <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.impSys}>{imp.brand} – {imp.system}</Text>
+                  <View style={s.impSpecs}>
+                    <View style={s.specBadge}><Text style={s.specText}>Diameter: {imp.diameter} mm</Text></View>
+                    <View style={s.specBadge}><Text style={s.specText}>Length: {imp.length} mm</Text></View>
+                  </View>
                 </View>
               </View>
-            </View>
-          ))}
-        </View>
-      ) : (
-        <View style={s.noMatch}><Ionicons name="information-circle" size={22} color="#FF9800" /><Text style={s.noMatchText}>No exact matches found for the given measurements in this system.</Text></View>
-      )}
-      <GuidanceBox guidance={result.clinical_guidance} />
-      {result.all_options?.length > 0 && (
-        <View style={{ marginBottom: 12 }}>
-          <Text style={s.allOptTitle}>All Available Sizes ({result.all_options.length})</Text>
-          {result.all_options.map((imp: Implant, i: number) => {
-            const isMatch = result.recommended?.some((r: Implant) => r.diameter === imp.diameter && r.length === imp.length);
+            ))}
+          </View>
+        ) : (
+          <View style={s.noMatch}><Ionicons name="information-circle" size={22} color="#FF9800" /><Text style={s.noMatchText}>No exact matches found for the given measurements in this system.</Text></View>
+        )}
+        <GuidanceBox guidance={result.clinical_guidance} />
+      </View>
+
+      {/* ── Risk Calculator Card ── */}
+      {bestImplant && (
+        <View style={s.card} data-testid="risk-calculator-card">
+          <View style={s.riskHeader}>
+            <Ionicons name="shield-checkmark" size={22} color="#5C6BC0" />
+            <Text style={s.riskHeaderTitle}>Implant Risk Calculator</Text>
+          </View>
+
+          <Text style={s.riskSubLabel}>
+            Using: {bestImplant.brand} – {bestImplant.system} (D: {bestImplant.diameter} mm, L: {bestImplant.length} mm)
+          </Text>
+
+          {/* Bone Type */}
+          <Text style={s.inputLabel}>Bone Type (Lekholm & Zarb)</Text>
+          <View style={s.boneTypeRow}>
+            {BONE_TYPES_R.map((bt) => (
+              <TouchableOpacity key={bt} style={[s.boneTypeBtn, riskBoneType === bt && s.boneTypeBtnActive]}
+                onPress={() => { setRiskBoneType(bt); setRiskResult(null); }} data-testid={`risk-bone-${bt}`}>
+                <Text style={[s.boneTypeBtnText, riskBoneType === bt && s.boneTypeBtnTextActive]}>{bt}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Procedure */}
+          <Text style={[s.inputLabel, { marginTop: 14 }]}>Procedure Type</Text>
+          {PROCEDURES_R.map((proc) => {
+            const sel = riskProcedure === proc;
             return (
-              <View key={`a-${i}`} style={[s.impRow, isMatch && s.impRowMatch]}>
-                <Text style={s.impRowText}>{imp.diameter} mm x {imp.length} mm</Text>
-                {isMatch && <Ionicons name="checkmark" size={16} color="#4CAF50" />}
-              </View>
+              <TouchableOpacity key={proc} style={[s.riskProcChip, sel && s.riskProcChipActive]}
+                onPress={() => { setRiskProcedure(proc); setRiskResult(null); }}
+                data-testid={`risk-proc-${proc.replace(/\s+/g, '-').toLowerCase()}`}>
+                <Ionicons name={sel ? 'radio-button-on' : 'radio-button-off'} size={18} color={sel ? '#5C6BC0' : '#B0BEC5'} />
+                <Text style={[s.riskProcText, sel && s.riskProcTextActive]}>{proc}</Text>
+              </TouchableOpacity>
             );
           })}
+
+          {/* Calculate Button */}
+          <TouchableOpacity
+            style={[s.riskCalcBtn, (!riskBoneType || !riskProcedure) && s.btnOff]}
+            onPress={handleCalcRisk}
+            disabled={!riskBoneType || !riskProcedure || riskLoading}
+            data-testid="calculate-risk-btn">
+            {riskLoading ? <ActivityIndicator color="#FFF" size="small" /> : (
+              <><Ionicons name="calculator" size={18} color="#FFF" /><Text style={s.primaryBtnText}>Calculate Risk</Text></>
+            )}
+          </TouchableOpacity>
+
+          {/* ── Risk Result ── */}
+          {riskResult && (
+            <View style={{ marginTop: 16 }} data-testid="risk-result">
+              {/* Risk Level Badge */}
+              <View style={[s.riskLevelBox, { backgroundColor: riskColor + '18', borderColor: riskColor }]}>
+                <Ionicons name={riskResult.risk_level === 'Low' ? 'shield-checkmark' : riskResult.risk_level === 'Moderate' ? 'alert-circle' : 'warning'}
+                  size={28} color={riskColor} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.riskLevelText, { color: riskColor }]}>{riskResult.risk_level} Risk</Text>
+                  <Text style={s.riskScoreText}>Score: {riskResult.total_score} / 15</Text>
+                </View>
+              </View>
+
+              {/* Risk Meter */}
+              <View style={s.riskMeter} data-testid="risk-meter">
+                <View style={s.riskMeterTrack}>
+                  <View style={[s.riskMeterFill, { width: `${Math.min((riskResult.total_score / 15) * 100, 100)}%`, backgroundColor: riskColor }]} />
+                </View>
+                <View style={s.riskMeterLabels}>
+                  <Text style={[s.riskMeterLabel, { color: '#4CAF50' }]}>Low (5-7)</Text>
+                  <Text style={[s.riskMeterLabel, { color: '#FF9800' }]}>Mod (8-11)</Text>
+                  <Text style={[s.riskMeterLabel, { color: '#F44336' }]}>High (12-15)</Text>
+                </View>
+              </View>
+
+              {/* Breakdown Table */}
+              <View style={s.riskTable}>
+                <View style={s.riskTableHeader}>
+                  <Text style={[s.riskTableHCol, { flex: 2 }]}>Factor</Text>
+                  <Text style={s.riskTableHCol}>Risk</Text>
+                  <Text style={s.riskTableHCol}>Score</Text>
+                </View>
+                {riskResult.factors.map((f: any, i: number) => {
+                  const fc = f.risk === 'Low' ? '#4CAF50' : f.risk === 'Moderate' ? '#FF9800' : '#F44336';
+                  return (
+                    <View key={i} style={s.riskTableRow}>
+                      <View style={{ flex: 2 }}>
+                        <Text style={s.riskTableCell}>{f.factor}</Text>
+                        {f.remaining !== undefined && <Text style={s.riskTableDetail}>Remaining: {f.remaining} mm</Text>}
+                        {f.detail && <Text style={s.riskTableDetail}>{f.detail}</Text>}
+                      </View>
+                      <View style={[s.riskBadge, { backgroundColor: fc + '20' }]}>
+                        <Text style={[s.riskBadgeText, { color: fc }]}>{f.risk}</Text>
+                      </View>
+                      <Text style={[s.riskTableScore, { color: fc }]}>{f.score}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+
+              {/* Suggested Actions */}
+              {riskResult.suggested_actions?.length > 0 && (
+                <View style={s.riskActionsBox}>
+                  <Text style={s.riskActionsTitle}>Suggested Actions</Text>
+                  {riskResult.suggested_actions.map((a: string, i: number) => (
+                    <View key={i} style={s.riskActionRow}>
+                      <Ionicons name="chevron-forward" size={14} color="#5C6BC0" />
+                      <Text style={s.riskActionText}>{a}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
         </View>
       )}
-      <View style={s.actions}>
-        <TouchableOpacity style={s.copyBtn} onPress={copyRec} data-testid="copy-recommendation-btn">
-          <Ionicons name="copy-outline" size={18} color="#FFF" /><Text style={s.copyBtnText}>Copy Recommendation</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.resetBtn} onPress={onReset} data-testid="reset-btn">
-          <Ionicons name="refresh" size={18} color="#1E88E5" /><Text style={s.resetBtnText}>New Selection</Text>
-        </TouchableOpacity>
+
+      {/* Actions */}
+      <View style={[s.card, { paddingVertical: 12 }]}>
+        <View style={s.actions}>
+          <TouchableOpacity style={s.copyBtn} onPress={copyRec} data-testid="copy-recommendation-btn">
+            <Ionicons name="copy-outline" size={18} color="#FFF" /><Text style={s.copyBtnText}>Copy Recommendation</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.resetBtn} onPress={onReset} data-testid="reset-btn">
+            <Ionicons name="refresh" size={18} color="#1E88E5" /><Text style={s.resetBtnText}>New Selection</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -781,4 +930,35 @@ const s = StyleSheet.create({
   copyBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
   resetBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, padding: 12, borderWidth: 1, borderColor: '#1E88E5', borderRadius: 10 },
   resetBtnText: { fontSize: 14, fontWeight: '600', color: '#1E88E5' },
+
+  // Risk Calculator
+  riskHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  riskHeaderTitle: { fontSize: 16, fontWeight: '700', color: '#283593' },
+  riskSubLabel: { fontSize: 12, color: '#78909C', marginBottom: 12, fontStyle: 'italic' },
+  riskProcChip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, paddingHorizontal: 12, borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 10, marginBottom: 6, backgroundColor: '#FAFAFA' },
+  riskProcChipActive: { borderColor: '#5C6BC0', backgroundColor: '#E8EAF6' },
+  riskProcText: { fontSize: 13, color: '#546E7A', flex: 1 },
+  riskProcTextActive: { color: '#283593', fontWeight: '600' },
+  riskCalcBtn: { flexDirection: 'row', backgroundColor: '#5C6BC0', borderRadius: 12, padding: 14, alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 14 },
+  riskLevelBox: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1.5, borderRadius: 12, padding: 14, marginBottom: 14 },
+  riskLevelText: { fontSize: 18, fontWeight: '800' },
+  riskScoreText: { fontSize: 13, color: '#546E7A', marginTop: 2 },
+  riskMeter: { marginBottom: 16 },
+  riskMeterTrack: { height: 10, backgroundColor: '#ECEFF1', borderRadius: 5, overflow: 'hidden' },
+  riskMeterFill: { height: '100%', borderRadius: 5 },
+  riskMeterLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
+  riskMeterLabel: { fontSize: 10, fontWeight: '600' },
+  riskTable: { backgroundColor: '#FAFAFA', borderRadius: 10, overflow: 'hidden', marginBottom: 14 },
+  riskTableHeader: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ECEFF1', paddingVertical: 8, paddingHorizontal: 12 },
+  riskTableHCol: { flex: 1, fontSize: 12, fontWeight: '700', color: '#37474F' },
+  riskTableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#ECEFF1' },
+  riskTableCell: { fontSize: 13, fontWeight: '600', color: '#263238' },
+  riskTableDetail: { fontSize: 10, color: '#90A4AE', marginTop: 1 },
+  riskBadge: { flex: 1, borderRadius: 6, paddingVertical: 3, paddingHorizontal: 6, alignItems: 'center' },
+  riskBadgeText: { fontSize: 11, fontWeight: '700' },
+  riskTableScore: { flex: 1, fontSize: 14, fontWeight: '700', textAlign: 'center' },
+  riskActionsBox: { backgroundColor: '#FFF8E1', borderRadius: 10, padding: 12 },
+  riskActionsTitle: { fontSize: 13, fontWeight: '700', color: '#E65100', marginBottom: 8 },
+  riskActionRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  riskActionText: { fontSize: 12, color: '#BF360C', flex: 1 },
 });
