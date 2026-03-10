@@ -1859,6 +1859,127 @@ async def suggest_auto(
         "valid_procedures": valid_procedures,
     }
 
+# ── Implant Risk Calculator ──────────────────────────────────
+
+PROCEDURE_RISK_SCORES = {
+    "Conventional Implant Placement": 1,
+    "Conventional Implant Placement with Bone Graft": 2,
+    "Immediate Implant Placement": 2,
+    "Immediate Implant Placement with Bone Graft": 2,
+    "Sinus Lift": 3,
+    "Restricted Bone Height": 3,
+}
+
+BONE_DENSITY_SCORES = {"D1": 1, "D2": 1, "D3": 2, "D4": 3}
+
+def _get_tooth_region(tooth: str) -> str:
+    """Return anterior/premolar/molar for an FDI tooth number."""
+    unit = int(tooth) % 10
+    if unit in (1, 2, 3):
+        return "Anterior"
+    if unit in (4, 5):
+        return "Premolar"
+    return "Molar"
+
+TOOTH_REGION_SCORES = {"Anterior": 1, "Premolar": 2, "Molar": 3}
+
+def _score_label(score: int) -> str:
+    if score <= 1:
+        return "Low"
+    if score <= 2:
+        return "Moderate"
+    return "High"
+
+@api_router.post("/implant-library/calculate-risk")
+async def calculate_risk(
+    body: dict,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Implant Risk Calculator.
+    Body: { bone_width, bone_height, implant_diameter, implant_length,
+            bone_type, procedure, tooth }
+    """
+    bone_width = float(body.get("bone_width", 0))
+    bone_height = float(body.get("bone_height", 0))
+    implant_diameter = float(body.get("implant_diameter", 0))
+    implant_length = float(body.get("implant_length", 0))
+    bone_type = body.get("bone_type", "")
+    procedure = body.get("procedure", "")
+    tooth = body.get("tooth", "")
+
+    if not all([bone_width, bone_height, implant_diameter, implant_length, bone_type, procedure, tooth]):
+        raise HTTPException(status_code=400, detail="All fields are required")
+
+    # 1. Width risk
+    remaining_width = bone_width - implant_diameter
+    if remaining_width >= 3:
+        width_score = 1
+    elif remaining_width >= 2:
+        width_score = 2
+    else:
+        width_score = 3
+
+    # 2. Height risk
+    remaining_height = bone_height - implant_length
+    if remaining_height >= 3:
+        height_score = 1
+    elif remaining_height >= 2:
+        height_score = 2
+    else:
+        height_score = 3
+
+    # 3. Bone density risk
+    density_score = BONE_DENSITY_SCORES.get(bone_type, 2)
+
+    # 4. Procedure risk
+    procedure_score = PROCEDURE_RISK_SCORES.get(procedure, 2)
+
+    # 5. Tooth position risk
+    region = _get_tooth_region(tooth)
+    tooth_score = TOOTH_REGION_SCORES.get(region, 2)
+
+    total = width_score + height_score + density_score + procedure_score + tooth_score
+
+    if total <= 7:
+        risk_level = "Low"
+        color = "green"
+    elif total <= 11:
+        risk_level = "Moderate"
+        color = "orange"
+    else:
+        risk_level = "High"
+        color = "red"
+
+    # Suggested actions for moderate/high risk
+    actions = []
+    if height_score == 3:
+        actions.append("Consider shorter implant")
+    if width_score == 3:
+        actions.append("Consider narrower implant or bone graft")
+    if density_score == 3:
+        actions.append("Consider implant with enhanced surface treatment")
+    if procedure_score == 3:
+        actions.append("Ensure advanced surgical planning")
+    if total >= 8:
+        actions.append("Evaluate CBCT carefully")
+    if total >= 12:
+        actions.append("Consider bone graft")
+
+    return {
+        "factors": [
+            {"factor": "Bone Width", "remaining": round(remaining_width, 1), "risk": _score_label(width_score), "score": width_score},
+            {"factor": "Bone Height", "remaining": round(remaining_height, 1), "risk": _score_label(height_score), "score": height_score},
+            {"factor": "Bone Density", "detail": bone_type, "risk": _score_label(density_score), "score": density_score},
+            {"factor": "Procedure", "detail": procedure, "risk": _score_label(procedure_score), "score": procedure_score},
+            {"factor": "Tooth Position", "detail": f"{tooth} ({region})", "risk": _score_label(tooth_score), "score": tooth_score},
+        ],
+        "total_score": total,
+        "risk_level": risk_level,
+        "color": color,
+        "suggested_actions": actions,
+    }
+
 app.include_router(api_router)
 
 app.add_middleware(
