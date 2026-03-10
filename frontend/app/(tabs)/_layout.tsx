@@ -1,7 +1,10 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePushNotifications } from '../../utils/usePushNotifications';
+
+const implantIcon = require('../../assets/images/implant-icon.png');
 
 export default function TabsLayout() {
   const { user, token } = useAuth();
@@ -63,8 +66,12 @@ export default function TabsLayout() {
         name="implant-selection"
         options={{
           title: 'Implants',
-          tabBarIcon: ({ color }) => (
-            <Ionicons name="medical" size={24} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Image
+              source={implantIcon}
+              style={{ width: 24, height: 24, tintColor: color }}
+              resizeMode="contain"
+            />
           ),
           href: isNurse ? null : '/implant-selection',
         }}
