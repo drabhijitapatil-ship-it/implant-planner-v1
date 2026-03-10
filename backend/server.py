@@ -1704,6 +1704,161 @@ async def suggest_implant(
 
     return response
 
+# Procedure → Bone Type compatibility (Indication Dictionary)
+PROCEDURE_BONE_COMPATIBILITY = {
+    "Conventional Implant Placement": {
+        "allowedBone": ["D1", "D2", "D3", "D4"],
+    },
+    "Conventional Implant Placement with Bone Graft": {
+        "allowedBone": ["D1", "D2", "D3", "D4"],
+    },
+    "Immediate Implant Placement": {
+        "allowedBone": ["D1", "D2", "D3"],
+    },
+    "Immediate Implant Placement with Bone Graft": {
+        "allowedBone": ["D2", "D3", "D4"],
+    },
+    "Sinus Lift": {
+        "allowedBone": ["D3", "D4"],
+    },
+    "Restricted Bone Height": {
+        "allowedBone": ["D3", "D4"],
+    },
+}
+
+PROCEDURE_LIST = list(PROCEDURE_BONE_COMPATIBILITY.keys())
+
+@api_router.get("/implant-library/procedure-options")
+async def get_procedure_options(current_user: dict = Depends(get_current_user)):
+    """Return available procedure types and bone compatibility info."""
+    return {
+        "procedures": PROCEDURE_LIST,
+        "bone_types": ["D1", "D2", "D3", "D4"],
+        "compatibility": PROCEDURE_BONE_COMPATIBILITY,
+    }
+
+@api_router.post("/implant-library/suggest-auto")
+async def suggest_auto(
+    body: dict,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Suggest Me engine: auto-suggest implants based on clinical conditions.
+    Body: { tooth?, procedures: [], bone_type, bone_width, bone_height }
+    """
+    procedures = body.get("procedures", [])
+    bone_type = body.get("bone_type", "")
+    bone_width = float(body.get("bone_width", 0))
+    bone_height = float(body.get("bone_height", 0))
+    tooth = body.get("tooth")
+
+    if not procedures or not bone_type or bone_width <= 0 or bone_height <= 0:
+        raise HTTPException(status_code=400, detail="Missing required fields")
+
+    # Validate procedure + bone type compatibility
+    warnings = []
+    valid_procedures = []
+    for proc in procedures:
+        compat = PROCEDURE_BONE_COMPATIBILITY.get(proc)
+        if not compat:
+            warnings.append(f"Unknown procedure: {proc}")
+            continue
+        if bone_type not in compat["allowedBone"]:
+            warnings.append(f"{proc} is not recommended for bone type {bone_type}")
+        else:
+            valid_procedures.append(proc)
+
+    # Bone Width → Diameter range
+    if bone_width < 5:
+        diam_min, diam_max = 3.0, 3.5
+    elif bone_width < 6:
+        diam_min, diam_max = 3.75, 4.0
+    elif bone_width < 7:
+        diam_min, diam_max = 4.0, 4.5
+    else:
+        diam_min, diam_max = 4.5, 6.0
+
+    # Bone Height → Length range
+    if bone_height >= 13:
+        len_min, len_max = 11.5, 15.0
+        length_label = "Long implant"
+    elif bone_height >= 10:
+        len_min, len_max = 10.0, 13.0
+        length_label = "Standard implant"
+    elif bone_height >= 8:
+        len_min, len_max = 8.0, 10.0
+        length_label = "Short implant"
+    else:
+        len_min, len_max = 6.0, 8.0
+        length_label = "Very short implant"
+
+    # Query all matching implants across all systems
+    query = {
+        "diameter": {"$gte": diam_min, "$lte": diam_max},
+        "length": {"$gte": len_min, "$lte": len_max},
+    }
+    all_matching = await db.implant_library.find(query, {"_id": 0}).sort(
+        [("brand", 1), ("system", 1), ("diameter", 1), ("length", 1)]
+    ).to_list(500)
+
+    # Check tooth restrictions
+    if tooth:
+        filtered = []
+        for imp in all_matching:
+            key = f"{imp['brand']}|{imp['system']}"
+            ind = IMPLANT_INDICATIONS.get(key, {})
+            restricted = ind.get("restricted_teeth")
+            if restricted and tooth not in restricted:
+                continue
+            filtered.append(imp)
+        all_matching = filtered
+
+    # Group by system
+    systems_map = {}
+    for imp in all_matching:
+        key = f"{imp['brand']}|{imp['system']}"
+        if key not in systems_map:
+            ind = IMPLANT_INDICATIONS.get(key, {})
+            systems_map[key] = {
+                "brand": imp["brand"],
+                "system": imp["system"],
+                "indication": ind.get("indication", ""),
+                "implants": [],
+            }
+        systems_map[key]["implants"].append({
+            "diameter": imp["diameter"],
+            "length": imp["length"],
+        })
+
+    recommended_systems = list(systems_map.values())
+
+    # Build tooth recommendation
+    tooth_data = TOOTH_RECOMMENDATIONS.get(tooth) if tooth else None
+    tooth_rec = None
+    if tooth_data:
+        tooth_rec = {
+            "tooth": tooth,
+            "region": tooth_data["region"],
+            "recommended_diameter": f"{tooth_data['diameter'][0]}–{tooth_data['diameter'][1]} mm",
+            "recommended_length": f"{tooth_data['length'][0]}–{tooth_data['length'][1]} mm",
+        }
+
+    return {
+        "recommended_systems": recommended_systems,
+        "clinical_guidance": {
+            "bone_width": bone_width,
+            "bone_height": bone_height,
+            "bone_type": bone_type,
+            "procedures": procedures,
+            "recommended_diameter_range": f"{diam_min}–{diam_max} mm",
+            "recommended_length_range": f"{len_min}–{len_max} mm",
+            "length_category": length_label,
+        },
+        "tooth_recommendation": tooth_rec,
+        "validation_warnings": warnings,
+        "valid_procedures": valid_procedures,
+    }
+
 app.include_router(api_router)
 
 app.add_middleware(

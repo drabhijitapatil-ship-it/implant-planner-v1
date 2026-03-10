@@ -28,20 +28,16 @@ type ImplantSystem = {
   restricted_teeth?: string[];
 };
 
-type Implant = {
+type Implant = { brand: string; system: string; diameter: number; length: number };
+type ToothRec = { region: string; diameter: [number, number]; length: [number, number] };
+type SuggestSystem = {
   brand: string;
   system: string;
-  diameter: number;
-  length: number;
+  indication: string;
+  implants: { diameter: number; length: number }[];
 };
 
-type ToothRec = {
-  region: string;
-  diameter: [number, number];
-  length: [number, number];
-};
-
-// ── FDI Dental Chart Data ──────────────────────────────────
+// ── FDI Chart ──────────────────────────────────────────────
 const UPPER_RIGHT = ['17', '16', '15', '14', '13', '12', '11'];
 const UPPER_LEFT = ['21', '22', '23', '24', '25', '26', '27'];
 const LOWER_RIGHT = ['47', '46', '45', '44', '43', '42', '41'];
@@ -53,89 +49,130 @@ const TOOTH_TYPE: Record<string, string> = {};
 ['13', '23', '33', '43'].forEach((t) => (TOOTH_TYPE[t] = 'canine'));
 ['11', '12', '21', '22', '31', '32', '41', '42'].forEach((t) => (TOOTH_TYPE[t] = 'incisor'));
 
-function getToothWidth(tooth: string): number {
+function getToothWidth(tooth: string) {
   const t = TOOTH_TYPE[tooth];
-  if (t === 'molar') return 26;
-  if (t === 'premolar') return 23;
-  if (t === 'canine') return 22;
-  return 20;
+  return t === 'molar' ? 26 : t === 'premolar' ? 23 : t === 'canine' ? 22 : 20;
 }
 
-// ── Tooth Component ────────────────────────────────────────
-function Tooth({
-  tooth,
-  isSelected,
-  onPress,
-  isUpper,
-}: {
-  tooth: string;
-  isSelected: boolean;
-  onPress: () => void;
-  isUpper: boolean;
+// ── Shared: Tooth Button ───────────────────────────────────
+function Tooth({ tooth, isSelected, onPress, isUpper }: {
+  tooth: string; isSelected: boolean; onPress: () => void; isUpper: boolean;
 }) {
   const w = getToothWidth(tooth);
   const isMolar = TOOTH_TYPE[tooth] === 'molar';
-  const isPremolar = TOOTH_TYPE[tooth] === 'premolar';
-  const isCanine = TOOTH_TYPE[tooth] === 'canine';
-
   return (
-    <TouchableOpacity
-      onPress={onPress}
-      activeOpacity={0.7}
-      data-testid={`tooth-${tooth}`}
-      style={[
-        toothStyles.tooth,
-        {
-          width: w,
-          height: isMolar ? 34 : isPremolar ? 32 : isCanine ? 30 : 28,
-          borderRadius: isMolar ? 5 : isPremolar ? 7 : 9,
-          borderTopLeftRadius: isUpper ? (isMolar ? 5 : 9) : isMolar ? 3 : 5,
-          borderTopRightRadius: isUpper ? (isMolar ? 5 : 9) : isMolar ? 3 : 5,
-          borderBottomLeftRadius: isUpper ? (isMolar ? 3 : 5) : isMolar ? 5 : 9,
-          borderBottomRightRadius: isUpper ? (isMolar ? 3 : 5) : isMolar ? 5 : 9,
-          backgroundColor: isSelected ? '#1E88E5' : '#E8EDF2',
-          borderColor: isSelected ? '#1565C0' : '#C5CDD5',
-        },
-      ]}
+    <TouchableOpacity onPress={onPress} activeOpacity={0.7} data-testid={`tooth-${tooth}`}
+      style={[toothS.tooth, {
+        width: w,
+        height: isMolar ? 34 : TOOTH_TYPE[tooth] === 'premolar' ? 32 : TOOTH_TYPE[tooth] === 'canine' ? 30 : 28,
+        borderRadius: isMolar ? 5 : 9,
+        backgroundColor: isSelected ? '#1E88E5' : '#E8EDF2',
+        borderColor: isSelected ? '#1565C0' : '#C5CDD5',
+      }]}
     >
-      <Text
-        style={[
-          toothStyles.toothNumber,
-          { color: isSelected ? '#FFF' : '#37474F', fontSize: 10 },
-        ]}
-      >
-        {tooth}
-      </Text>
+      <Text style={[toothS.num, { color: isSelected ? '#FFF' : '#37474F' }]}>{tooth}</Text>
     </TouchableOpacity>
   );
 }
-
-const toothStyles = StyleSheet.create({
-  tooth: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    marginHorizontal: 1,
-  },
-  toothNumber: { fontWeight: '700' },
+const toothS = StyleSheet.create({
+  tooth: { alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, marginHorizontal: 1 },
+  num: { fontWeight: '700', fontSize: 10 },
 });
 
-// ── Main Screen ────────────────────────────────────────────
+// ── Shared: FDI Dental Chart Component ─────────────────────
+function FDIChart({ selectedTooth, onSelect }: {
+  selectedTooth: string | null;
+  onSelect: (tooth: string) => void;
+}) {
+  const renderRow = (teeth: string[], isUpper: boolean, leftTeeth: string[]) => (
+    <View style={s.jawRow}>
+      <View style={s.quadrant}>
+        <View style={s.teethRow}>
+          {teeth.map((t) => (
+            <Tooth key={t} tooth={t} isSelected={selectedTooth === t} isUpper={isUpper}
+              onPress={() => onSelect(t)} />
+          ))}
+        </View>
+      </View>
+      <View style={s.midline} />
+      <View style={s.quadrant}>
+        <View style={s.teethRow}>
+          {leftTeeth.map((t) => (
+            <Tooth key={t} tooth={t} isSelected={selectedTooth === t} isUpper={isUpper}
+              onPress={() => onSelect(t)} />
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+  return (
+    <View>
+      <Text style={s.jawLabel}>Upper Jaw (Maxillary)</Text>
+      {renderRow(UPPER_RIGHT, true, UPPER_LEFT)}
+      <View style={s.jawDivider} />
+      <Text style={s.jawLabel}>Lower Jaw (Mandibular)</Text>
+      {renderRow(LOWER_RIGHT, false, LOWER_LEFT)}
+    </View>
+  );
+}
+
+// ── Shared: Tooth Recommendation Box ───────────────────────
+function ToothRecBox({ tooth, info }: { tooth: string; info: ToothRec }) {
+  return (
+    <View style={s.toothRecBox}>
+      <View style={s.toothRecHeader}>
+        <Ionicons name="information-circle" size={18} color="#1565C0" />
+        <Text style={s.toothRecTitle}>Tooth {tooth}: {info.region}</Text>
+      </View>
+      <View style={s.toothRecRow}>
+        <Text style={s.toothRecLabel}>Recommended Diameter:</Text>
+        <Text style={s.toothRecVal}>{info.diameter[0]} – {info.diameter[1]} mm</Text>
+      </View>
+      <View style={s.toothRecRow}>
+        <Text style={s.toothRecLabel}>Recommended Length:</Text>
+        <Text style={s.toothRecVal}>{info.length[0]} – {info.length[1]} mm</Text>
+      </View>
+    </View>
+  );
+}
+
+// ── MAIN SCREEN ────────────────────────────────────────────
 export default function ImplantSelectionScreen() {
+  const [activeTab, setActiveTab] = useState<'choose' | 'suggest'>('choose');
   const [systems, setSystems] = useState<ImplantSystem[]>([]);
+  const [toothRecs, setToothRecs] = useState<Record<string, ToothRec>>({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [toothRecs, setToothRecs] = useState<Record<string, ToothRec>>({});
 
-  // Step states
-  const [selectedTooth, setSelectedTooth] = useState<string | null>(null);
-  const [selectedSystem, setSelectedSystem] = useState<ImplantSystem | null>(null);
+  // "Let Me Choose" states
+  const [cTooth, setCTooth] = useState<string | null>(null);
+  const [cSystem, setCSystem] = useState<ImplantSystem | null>(null);
+  const [cWidth, setCWidth] = useState('');
+  const [cHeight, setCHeight] = useState('');
+  const [cResult, setCResult] = useState<any>(null);
+  const [cSearching, setCSearching] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
-  const [boneWidth, setBoneWidth] = useState('');
-  const [boneHeight, setBoneHeight] = useState('');
-  const [results, setResults] = useState<any>(null);
-  const [searching, setSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // "Suggest Me" states
+  const [sTooth, setSTooth] = useState<string | null>(null);
+  const [sProcedures, setSProcedures] = useState<string[]>([]);
+  const [sBoneType, setSBoneType] = useState('');
+  const [sWidth, setSWidth] = useState('');
+  const [sHeight, setSHeight] = useState('');
+  const [sResult, setSResult] = useState<any>(null);
+  const [sSearching, setSSearching] = useState(false);
+  const [showBoneTypeDD, setShowBoneTypeDD] = useState(false);
+
+  const PROCEDURES = [
+    'Conventional Implant Placement',
+    'Conventional Implant Placement with Bone Graft',
+    'Immediate Implant Placement',
+    'Immediate Implant Placement with Bone Graft',
+    'Sinus Lift',
+    'Restricted Bone Height',
+  ];
+  const BONE_TYPES = ['D1', 'D2', 'D3', 'D4'];
 
   useEffect(() => {
     Promise.all([
@@ -146,1003 +183,602 @@ export default function ImplantSelectionScreen() {
         setSystems(sysRes.data || []);
         setToothRecs(toothRes.data || {});
       })
-      .catch((err) => {
-        setLoadError(err?.response?.data?.detail || err?.message || 'Failed to load data');
-      })
+      .catch((err) => setLoadError(err?.response?.data?.detail || err?.message || 'Failed to load'))
       .finally(() => setLoading(false));
   }, []);
 
-  const handleSuggest = async () => {
-    if (!selectedTooth || !selectedSystem || !boneWidth || !boneHeight) return;
-    setSearching(true);
-    setResults(null);
+  // ── Let Me Choose: handlers ──
+  const handleChooseSuggest = async () => {
+    if (!cTooth || !cSystem || !cWidth || !cHeight) return;
+    setCSearching(true);
+    setCResult(null);
     try {
       const res = await api.get('/implant-library/suggest', {
-        params: {
-          brand: selectedSystem.brand,
-          system: selectedSystem.system,
-          bone_width: parseFloat(boneWidth),
-          bone_height: parseFloat(boneHeight),
-          tooth: selectedTooth,
-        },
+        params: { brand: cSystem.brand, system: cSystem.system, bone_width: parseFloat(cWidth), bone_height: parseFloat(cHeight), tooth: cTooth },
       });
-      setResults(res.data);
-    } catch {
-      Alert.alert('Error', 'Failed to get implant suggestions.');
-    } finally {
-      setSearching(false);
-    }
+      setCResult(res.data);
+    } catch { Alert.alert('Error', 'Failed to get suggestion.'); }
+    finally { setCSearching(false); }
   };
 
-  const handleReset = () => {
-    setSelectedTooth(null);
-    setSelectedSystem(null);
-    setBoneWidth('');
-    setBoneHeight('');
-    setResults(null);
+  const resetChoose = () => { setCTooth(null); setCSystem(null); setCWidth(''); setCHeight(''); setCResult(null); };
+
+  // ── Suggest Me: handlers ──
+  const toggleProcedure = (proc: string) => {
+    setSProcedures((prev) => prev.includes(proc) ? prev.filter((p) => p !== proc) : [...prev, proc]);
+    setSResult(null);
   };
 
-  const handleCopyRecommendation = async () => {
-    if (!results || !results.recommended || results.recommended.length === 0) return;
-    const rec = results.recommended[0];
-    const toothInfo = toothRecs[selectedTooth!];
-    const text = [
-      'Implant Recommendation',
-      `Tooth: ${selectedTooth} (${toothInfo?.region || ''})`,
-      `System: ${rec.brand} - ${rec.system}`,
-      `Diameter: ${rec.diameter} mm`,
-      `Length: ${rec.length} mm`,
-      `Bone Width: ${boneWidth} mm`,
-      `Bone Height: ${boneHeight} mm`,
-    ].join('\n');
-    await Clipboard.setStringAsync(text);
-    Alert.alert('Copied', 'Implant recommendation copied to clipboard.');
+  const handleSuggestMe = async () => {
+    if (!sProcedures.length || !sBoneType || !sWidth || !sHeight) return;
+    setSSearching(true);
+    setSResult(null);
+    try {
+      const res = await api.post('/implant-library/suggest-auto', {
+        tooth: sTooth, procedures: sProcedures, bone_type: sBoneType,
+        bone_width: parseFloat(sWidth), bone_height: parseFloat(sHeight),
+      });
+      setSResult(res.data);
+    } catch { Alert.alert('Error', 'Failed to get suggestions.'); }
+    finally { setSSearching(false); }
   };
 
-  const currentStep = !selectedTooth
-    ? 1
-    : !selectedSystem
-      ? 2
-      : !boneWidth || !boneHeight
-        ? 3
-        : results
-          ? 4
-          : 3;
+  const resetSuggest = () => { setSTooth(null); setSProcedures([]); setSBoneType(''); setSWidth(''); setSHeight(''); setSResult(null); };
 
-  const toothInfo = selectedTooth ? toothRecs[selectedTooth] : null;
+  // helpers
+  const cToothInfo = cTooth ? toothRecs[cTooth] : null;
+  const sToothInfo = sTooth ? toothRecs[sTooth] : null;
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container} edges={['bottom']}>
-        <View style={styles.loadingCenter}>
-          <ActivityIndicator size="large" color="#1E88E5" />
-          <Text style={styles.loadingCenterText}>Loading implant data...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (loadError) {
-    return (
-      <SafeAreaView style={styles.container} edges={['bottom']}>
-        <View style={styles.loadingCenter}>
-          <Ionicons name="alert-circle" size={48} color="#D32F2F" />
-          <Text style={styles.errorCenterText}>{loadError}</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  if (loading) return (
+    <SafeAreaView style={s.container} edges={['bottom']}>
+      <View style={s.center}><ActivityIndicator size="large" color="#1E88E5" /><Text style={s.centerText}>Loading implant data...</Text></View>
+    </SafeAreaView>
+  );
+  if (loadError) return (
+    <SafeAreaView style={s.container} edges={['bottom']}>
+      <View style={s.center}><Ionicons name="alert-circle" size={48} color="#D32F2F" /><Text style={s.errText}>{loadError}</Text></View>
+    </SafeAreaView>
+  );
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+    <SafeAreaView style={s.container} edges={['bottom']}>
+      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         {/* Header */}
-        <View style={styles.header}>
+        <View style={s.header}>
           <Ionicons name="medical" size={26} color="#1E88E5" />
-          <Text style={styles.headerTitle}>Implant Selection</Text>
+          <Text style={s.headerTitle}>Implant Selection</Text>
         </View>
 
-        {/* Steps Indicator */}
-        <View style={styles.stepsRow}>
-          {[
-            { n: 1, label: 'Tooth' },
-            { n: 2, label: 'System' },
-            { n: 3, label: 'Bone' },
-            { n: 4, label: 'Result' },
-          ].map((s, i) => (
-            <React.Fragment key={s.n}>
-              {i > 0 && (
-                <View style={[styles.stepLine, currentStep > s.n - 1 && styles.stepLineActive]} />
-              )}
-              <View style={styles.stepItem}>
-                <View style={[styles.stepCircle, currentStep >= s.n && styles.stepCircleActive]}>
-                  {currentStep > s.n ? (
-                    <Ionicons name="checkmark" size={14} color="#FFF" />
-                  ) : (
-                    <Text style={[styles.stepNum, currentStep >= s.n && styles.stepNumActive]}>
-                      {s.n}
-                    </Text>
-                  )}
-                </View>
-                <Text style={[styles.stepLabel, currentStep >= s.n && styles.stepLabelActive]}>
-                  {s.label}
-                </Text>
-              </View>
-            </React.Fragment>
-          ))}
-        </View>
-
-        {/* ── STEP 1 — FDI Tooth Selection ── */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Step 1: Select Tooth (FDI Chart)</Text>
-
-          {/* Upper Jaw */}
-          <View style={styles.jawSection}>
-            <Text style={styles.jawLabel}>Upper Jaw (Maxillary)</Text>
-            <View style={styles.jawRow}>
-              <View style={styles.quadrant}>
-                <View style={styles.teethRow}>
-                  {UPPER_RIGHT.map((t) => (
-                    <Tooth
-                      key={t}
-                      tooth={t}
-                      isSelected={selectedTooth === t}
-                      isUpper={true}
-                      onPress={() => {
-                        setSelectedTooth(t);
-                        setSelectedSystem(null);
-                        setBoneWidth('');
-                        setBoneHeight('');
-                        setResults(null);
-                      }}
-                    />
-                  ))}
-                </View>
-              </View>
-              <View style={styles.midline} />
-              <View style={styles.quadrant}>
-                <View style={styles.teethRow}>
-                  {UPPER_LEFT.map((t) => (
-                    <Tooth
-                      key={t}
-                      tooth={t}
-                      isSelected={selectedTooth === t}
-                      isUpper={true}
-                      onPress={() => {
-                        setSelectedTooth(t);
-                        setSelectedSystem(null);
-                        setBoneWidth('');
-                        setBoneHeight('');
-                        setResults(null);
-                      }}
-                    />
-                  ))}
-                </View>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.jawDivider} />
-
-          {/* Lower Jaw */}
-          <View style={styles.jawSection}>
-            <Text style={styles.jawLabel}>Lower Jaw (Mandibular)</Text>
-            <View style={styles.jawRow}>
-              <View style={styles.quadrant}>
-                <View style={styles.teethRow}>
-                  {LOWER_RIGHT.map((t) => (
-                    <Tooth
-                      key={t}
-                      tooth={t}
-                      isSelected={selectedTooth === t}
-                      isUpper={false}
-                      onPress={() => {
-                        setSelectedTooth(t);
-                        setSelectedSystem(null);
-                        setBoneWidth('');
-                        setBoneHeight('');
-                        setResults(null);
-                      }}
-                    />
-                  ))}
-                </View>
-              </View>
-              <View style={styles.midline} />
-              <View style={styles.quadrant}>
-                <View style={styles.teethRow}>
-                  {LOWER_LEFT.map((t) => (
-                    <Tooth
-                      key={t}
-                      tooth={t}
-                      isSelected={selectedTooth === t}
-                      isUpper={false}
-                      onPress={() => {
-                        setSelectedTooth(t);
-                        setSelectedSystem(null);
-                        setBoneWidth('');
-                        setBoneHeight('');
-                        setResults(null);
-                      }}
-                    />
-                  ))}
-                </View>
-              </View>
-            </View>
-          </View>
-
-          {/* Tooth-wise Recommendation (appears after tooth selection) */}
-          {selectedTooth && toothInfo && (
-            <View style={styles.toothRecBox}>
-              <View style={styles.toothRecHeader}>
-                <Ionicons name="information-circle" size={18} color="#1565C0" />
-                <Text style={styles.toothRecTitle}>
-                  Tooth {selectedTooth}: {toothInfo.region}
-                </Text>
-              </View>
-              <View style={styles.toothRecRow}>
-                <Text style={styles.toothRecLabel}>Recommended Diameter:</Text>
-                <Text style={styles.toothRecValue}>
-                  {toothInfo.diameter[0]} - {toothInfo.diameter[1]} mm
-                </Text>
-              </View>
-              <View style={styles.toothRecRow}>
-                <Text style={styles.toothRecLabel}>Recommended Length:</Text>
-                <Text style={styles.toothRecValue}>
-                  {toothInfo.length[0]} - {toothInfo.length[1]} mm
-                </Text>
-              </View>
-            </View>
-          )}
-        </View>
-
-        {/* ── STEP 2 — Select Implant System ── */}
-        <View style={[styles.card, !selectedTooth && styles.cardDisabled]}>
-          <Text style={styles.cardTitle}>Step 2: Select Implant System</Text>
+        {/* ── Tab Bar ── */}
+        <View style={s.tabBar} data-testid="implant-tab-bar">
           <TouchableOpacity
-            style={styles.dropdown}
-            onPress={() => {
-              if (!selectedTooth) return;
-              setShowDropdown(true);
-              setSearchQuery('');
-            }}
-            activeOpacity={selectedTooth ? 0.7 : 1}
-            data-testid="system-dropdown"
+            style={[s.tab, activeTab === 'choose' && s.tabActive]}
+            onPress={() => setActiveTab('choose')}
+            data-testid="tab-let-me-choose"
           >
-            <Ionicons name="medical" size={18} color={selectedTooth ? '#1E88E5' : '#B0BEC5'} />
-            <Text style={selectedSystem ? styles.dropdownText : styles.dropdownPlaceholder}>
-              {selectedSystem
-                ? `${selectedSystem.brand} – ${selectedSystem.system}`
-                : `Select Implant System (${systems.length})`}
-            </Text>
-            <Ionicons name="chevron-down" size={18} color="#8E8E93" />
+            <Ionicons name="hand-left-outline" size={16} color={activeTab === 'choose' ? '#FFF' : '#546E7A'} />
+            <Text style={[s.tabText, activeTab === 'choose' && s.tabTextActive]}>Let Me Choose</Text>
           </TouchableOpacity>
-
-          {/* Show indication for selected system */}
-          {selectedSystem?.indication ? (
-            <View style={styles.indicationBox}>
-              <Ionicons name="information-circle" size={14} color="#0D47A1" />
-              <Text style={styles.indicationText}>{selectedSystem.indication}</Text>
-            </View>
-          ) : null}
+          <TouchableOpacity
+            style={[s.tab, activeTab === 'suggest' && s.tabActive]}
+            onPress={() => setActiveTab('suggest')}
+            data-testid="tab-suggest-me"
+          >
+            <Ionicons name="bulb-outline" size={16} color={activeTab === 'suggest' ? '#FFF' : '#546E7A'} />
+            <Text style={[s.tabText, activeTab === 'suggest' && s.tabTextActive]}>Suggest Me</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* ── Dropdown Modal ── */}
-        <Modal
-          visible={showDropdown}
-          animationType="slide"
-          transparent={true}
-          onRequestClose={() => setShowDropdown(false)}
-          statusBarTranslucent={Platform.OS === 'android'}
-        >
-          <Pressable style={styles.modalOverlay} onPress={() => setShowDropdown(false)}>
-            <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Select Implant System</Text>
-                <TouchableOpacity
-                  onPress={() => setShowDropdown(false)}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  data-testid="close-dropdown"
-                >
+        {/* ═════════════════════════════════════════════════ */}
+        {/* TAB 1: LET ME CHOOSE                            */}
+        {/* ═════════════════════════════════════════════════ */}
+        {activeTab === 'choose' && (
+          <View>
+            {/* Step 1: Select Tooth */}
+            <View style={s.card}>
+              <Text style={s.cardTitle}>Select Tooth</Text>
+              <FDIChart selectedTooth={cTooth} onSelect={(t) => { setCTooth(t); setCSystem(null); setCWidth(''); setCHeight(''); setCResult(null); }} />
+              {cTooth && cToothInfo && <ToothRecBox tooth={cTooth} info={cToothInfo} />}
+            </View>
+
+            {/* Step 2: Select System */}
+            <View style={[s.card, !cTooth && s.cardOff]}>
+              <Text style={s.cardTitle}>Select Implant System</Text>
+              <TouchableOpacity style={s.dropdown} onPress={() => { if (cTooth) { setShowDropdown(true); setSearchQuery(''); } }} data-testid="system-dropdown">
+                <Ionicons name="medical" size={18} color={cTooth ? '#1E88E5' : '#B0BEC5'} />
+                <Text style={cSystem ? s.ddText : s.ddPlaceholder}>
+                  {cSystem ? `${cSystem.brand} – ${cSystem.system}` : `Select Implant System (${systems.length})`}
+                </Text>
+                <Ionicons name="chevron-down" size={18} color="#8E8E93" />
+              </TouchableOpacity>
+              {cSystem?.indication ? (
+                <View style={s.indBox}><Ionicons name="information-circle" size={14} color="#0D47A1" /><Text style={s.indText}>{cSystem.indication}</Text></View>
+              ) : null}
+            </View>
+
+            {/* Step 3: Bone Measurements */}
+            <View style={[s.card, !cSystem && s.cardOff]}>
+              <Text style={s.cardTitle}>Enter Bone Measurements</Text>
+              <BoneInputs width={cWidth} height={cHeight} setWidth={(v) => { setCWidth(v); setCResult(null); }} setHeight={(v) => { setCHeight(v); setCResult(null); }} enabled={!!cSystem} />
+              <TouchableOpacity style={[s.primaryBtn, (!cSystem || !cWidth || !cHeight) && s.btnOff]} onPress={handleChooseSuggest}
+                disabled={!cSystem || !cWidth || !cHeight || cSearching} data-testid="find-best-btn">
+                {cSearching ? <ActivityIndicator color="#FFF" size="small" /> : (
+                  <><Ionicons name="search" size={18} color="#FFF" /><Text style={s.primaryBtnText}>Find Best Implant</Text></>
+                )}
+              </TouchableOpacity>
+            </View>
+
+            {/* Result */}
+            {cResult && <ChooseResult result={cResult} system={cSystem!} tooth={cTooth!} toothInfo={cToothInfo} boneWidth={cWidth} boneHeight={cHeight} onReset={resetChoose} />}
+          </View>
+        )}
+
+        {/* ═════════════════════════════════════════════════ */}
+        {/* TAB 2: SUGGEST ME                               */}
+        {/* ═════════════════════════════════════════════════ */}
+        {activeTab === 'suggest' && (
+          <View>
+            {/* Step 1: Select Tooth */}
+            <View style={s.card}>
+              <Text style={s.cardTitle}>Select Tooth</Text>
+              <FDIChart selectedTooth={sTooth} onSelect={(t) => { setSTooth(t); setSResult(null); }} />
+              {sTooth && sToothInfo && <ToothRecBox tooth={sTooth} info={sToothInfo} />}
+            </View>
+
+            {/* Step 2: Procedure Type */}
+            <View style={s.card}>
+              <Text style={s.cardTitle}>Implant Procedure Type</Text>
+              <Text style={s.subLabel}>Select one or more procedures:</Text>
+              {PROCEDURES.map((proc) => {
+                const selected = sProcedures.includes(proc);
+                return (
+                  <TouchableOpacity key={proc} style={[s.procChip, selected && s.procChipActive]}
+                    onPress={() => toggleProcedure(proc)} data-testid={`proc-${proc.replace(/\s+/g, '-').toLowerCase()}`}>
+                    <Ionicons name={selected ? 'checkbox' : 'square-outline'} size={20} color={selected ? '#1E88E5' : '#90A4AE'} />
+                    <Text style={[s.procChipText, selected && s.procChipTextActive]}>{proc}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Step 3: Bone Type */}
+            <View style={[s.card, !sProcedures.length && s.cardOff]}>
+              <Text style={s.cardTitle}>Bone Type</Text>
+              <View style={s.boneTypeRow}>
+                {BONE_TYPES.map((bt) => (
+                  <TouchableOpacity key={bt} style={[s.boneTypeBtn, sBoneType === bt && s.boneTypeBtnActive]}
+                    onPress={() => { if (sProcedures.length) { setSBoneType(bt); setSResult(null); } }}
+                    data-testid={`bone-type-${bt}`}>
+                    <Text style={[s.boneTypeBtnText, sBoneType === bt && s.boneTypeBtnTextActive]}>{bt}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Step 4: Bone Measurements */}
+            <View style={[s.card, !sBoneType && s.cardOff]}>
+              <Text style={s.cardTitle}>Bone Measurements</Text>
+              <BoneInputs width={sWidth} height={sHeight} setWidth={(v) => { setSWidth(v); setSResult(null); }} setHeight={(v) => { setSHeight(v); setSResult(null); }} enabled={!!sBoneType} />
+              <TouchableOpacity style={[s.suggestBtn, (!sBoneType || !sWidth || !sHeight || !sProcedures.length) && s.btnOff]}
+                onPress={handleSuggestMe} disabled={!sBoneType || !sWidth || !sHeight || !sProcedures.length || sSearching}
+                data-testid="suggest-me-btn">
+                {sSearching ? <ActivityIndicator color="#FFF" size="small" /> : (
+                  <><Ionicons name="bulb" size={18} color="#FFF" /><Text style={s.primaryBtnText}>Suggest Me</Text></>
+                )}
+              </TouchableOpacity>
+            </View>
+
+            {/* Result */}
+            {sResult && <SuggestResult result={sResult} tooth={sTooth} toothInfo={sToothInfo} onReset={resetSuggest} />}
+          </View>
+        )}
+
+        {/* ── System Dropdown Modal (shared for "Let Me Choose") ── */}
+        <Modal visible={showDropdown} animationType="slide" transparent statusBarTranslucent={Platform.OS === 'android'} onRequestClose={() => setShowDropdown(false)}>
+          <Pressable style={s.modalOverlay} onPress={() => setShowDropdown(false)}>
+            <Pressable style={s.modalContent} onPress={(e) => e.stopPropagation()}>
+              <View style={s.modalHeader}>
+                <Text style={s.modalTitle}>Select Implant System</Text>
+                <TouchableOpacity onPress={() => setShowDropdown(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} data-testid="close-dropdown">
                   <Ionicons name="close-circle" size={28} color="#666" />
                 </TouchableOpacity>
               </View>
-              <View style={styles.modalDivider} />
-              <View style={styles.searchBarContainer}>
+              <View style={s.modalDiv} />
+              <View style={s.searchBar}>
                 <Ionicons name="search" size={18} color="#90A4AE" />
-                <TextInput
-                  style={styles.searchInput}
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  placeholder="Search brand or system..."
-                  placeholderTextColor="#B0BEC5"
-                  autoFocus={true}
-                  data-testid="system-search-input"
-                />
+                <TextInput style={s.searchInput} value={searchQuery} onChangeText={setSearchQuery}
+                  placeholder="Search brand or system..." placeholderTextColor="#B0BEC5" autoFocus data-testid="system-search-input" />
                 {searchQuery.length > 0 && (
-                  <TouchableOpacity
-                    onPress={() => setSearchQuery('')}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
+                  <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                     <Ionicons name="close-circle" size={20} color="#B0BEC5" />
                   </TouchableOpacity>
                 )}
               </View>
-              <ScrollView
-                style={styles.modalScroll}
-                showsVerticalScrollIndicator={true}
-                bounces={true}
-                nestedScrollEnabled={true}
-              >
-                {systems
-                  .filter((item) => {
-                    if (!searchQuery.trim()) return true;
-                    const q = searchQuery.toLowerCase();
-                    return (
-                      item.brand.toLowerCase().includes(q) ||
-                      item.system.toLowerCase().includes(q) ||
-                      (item.indication || '').toLowerCase().includes(q)
-                    );
-                  })
-                  .map((item, i) => {
-                    const isSelected =
-                      selectedSystem?.brand === item.brand &&
-                      selectedSystem?.system === item.system;
-                    const isRestricted =
-                      item.restricted_teeth &&
-                      selectedTooth &&
-                      !item.restricted_teeth.includes(selectedTooth);
-                    return (
-                      <TouchableOpacity
-                        key={`${item.brand}-${item.system}-${i}`}
-                        style={[
-                          styles.dropdownItem,
-                          isSelected && styles.dropdownItemActive,
-                          isRestricted && styles.dropdownItemRestricted,
-                        ]}
-                        onPress={() => {
-                          if (isRestricted) {
-                            Alert.alert(
-                              'Not Indicated',
-                              `${item.brand} – ${item.system} is not indicated for tooth ${selectedTooth}.\n\n${item.indication}`,
-                            );
-                            return;
-                          }
-                          setSelectedSystem(item);
-                          setShowDropdown(false);
-                          setBoneWidth('');
-                          setBoneHeight('');
-                          setResults(null);
-                        }}
-                        activeOpacity={isRestricted ? 1 : 0.6}
-                        data-testid={`system-option-${i}`}
-                      >
-                        <View style={{ flex: 1 }}>
-                          <Text
-                            style={[
-                              styles.dropdownItemTitle,
-                              isRestricted && styles.dropdownItemTitleRestricted,
-                            ]}
-                          >
-                            {item.brand} – {item.system}
-                          </Text>
-                          {item.indication ? (
-                            <Text
-                              style={[
-                                styles.dropdownItemIndication,
-                                isRestricted && styles.dropdownItemIndicationRestricted,
-                              ]}
-                              numberOfLines={2}
-                            >
-                              {item.indication}
-                            </Text>
-                          ) : null}
-                          <Text
-                            style={[
-                              styles.dropdownItemSizes,
-                              isRestricted && { color: '#B0BEC5' },
-                            ]}
-                          >
-                            {item.count} sizes | D: {item.diameters[0]}–
-                            {item.diameters[item.diameters.length - 1]} mm | L: {item.lengths[0]}–
-                            {item.lengths[item.lengths.length - 1]} mm
-                          </Text>
-                          {isRestricted && (
-                            <View style={styles.restrictedBadge}>
-                              <Ionicons name="lock-closed" size={10} color="#E53935" />
-                              <Text style={styles.restrictedBadgeText}>
-                                Not for tooth {selectedTooth}
-                              </Text>
-                            </View>
-                          )}
-                        </View>
-                        {isSelected && (
-                          <Ionicons name="checkmark-circle" size={22} color="#1E88E5" />
+              <ScrollView style={s.modalScroll} showsVerticalScrollIndicator bounces nestedScrollEnabled>
+                {systems.filter((it) => {
+                  if (!searchQuery.trim()) return true;
+                  const q = searchQuery.toLowerCase();
+                  return it.brand.toLowerCase().includes(q) || it.system.toLowerCase().includes(q) || (it.indication || '').toLowerCase().includes(q);
+                }).map((item, i) => {
+                  const isSel = cSystem?.brand === item.brand && cSystem?.system === item.system;
+                  const isRestricted = item.restricted_teeth && cTooth && !item.restricted_teeth.includes(cTooth);
+                  return (
+                    <TouchableOpacity key={`${item.brand}-${item.system}-${i}`}
+                      style={[s.ddItem, isSel && s.ddItemActive, isRestricted && s.ddItemRestricted]}
+                      onPress={() => {
+                        if (isRestricted) { Alert.alert('Not Indicated', `${item.brand} – ${item.system} is not indicated for tooth ${cTooth}.\n\n${item.indication}`); return; }
+                        setCSystem(item); setShowDropdown(false); setCWidth(''); setCHeight(''); setCResult(null);
+                      }}
+                      activeOpacity={isRestricted ? 1 : 0.6} data-testid={`system-option-${i}`}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[s.ddItemTitle, isRestricted && { color: '#9E9E9E' }]}>{item.brand} – {item.system}</Text>
+                        {item.indication ? <Text style={[s.ddItemInd, isRestricted && { color: '#B0BEC5' }]} numberOfLines={2}>{item.indication}</Text> : null}
+                        <Text style={[s.ddItemSizes, isRestricted && { color: '#B0BEC5' }]}>
+                          {item.count} sizes | D: {item.diameters[0]}–{item.diameters[item.diameters.length - 1]} mm | L: {item.lengths[0]}–{item.lengths[item.lengths.length - 1]} mm
+                        </Text>
+                        {isRestricted && (
+                          <View style={s.restrictBadge}><Ionicons name="lock-closed" size={10} color="#E53935" /><Text style={s.restrictText}>Not for tooth {cTooth}</Text></View>
                         )}
-                      </TouchableOpacity>
-                    );
-                  })}
+                      </View>
+                      {isSel && <Ionicons name="checkmark-circle" size={22} color="#1E88E5" />}
+                    </TouchableOpacity>
+                  );
+                })}
                 <View style={{ height: 30 }} />
               </ScrollView>
             </Pressable>
           </Pressable>
         </Modal>
-
-        {/* ── STEP 3 — Bone Measurements ── */}
-        <View style={[styles.card, !selectedSystem && styles.cardDisabled]}>
-          <Text style={styles.cardTitle}>Step 3: Enter Bone Measurements</Text>
-
-          <Text style={styles.inputLabel}>Bone Width (mm)</Text>
-          <View style={styles.inputRow}>
-            <Ionicons name="resize-outline" size={18} color="#1E88E5" />
-            <TextInput
-              style={styles.measureInput}
-              value={boneWidth}
-              onChangeText={(v) => {
-                setBoneWidth(v);
-                setResults(null);
-              }}
-              placeholder="e.g. 7"
-              placeholderTextColor="#B0BEC5"
-              keyboardType="decimal-pad"
-              editable={!!selectedSystem}
-              data-testid="bone-width-input"
-            />
-            <Text style={styles.unitText}>mm</Text>
-          </View>
-
-          <Text style={styles.inputLabel}>Bone Height (mm)</Text>
-          <View style={styles.inputRow}>
-            <Ionicons name="arrow-up-outline" size={18} color="#1E88E5" />
-            <TextInput
-              style={styles.measureInput}
-              value={boneHeight}
-              onChangeText={(v) => {
-                setBoneHeight(v);
-                setResults(null);
-              }}
-              placeholder="e.g. 12"
-              placeholderTextColor="#B0BEC5"
-              keyboardType="decimal-pad"
-              editable={!!selectedSystem}
-              data-testid="bone-height-input"
-            />
-            <Text style={styles.unitText}>mm</Text>
-          </View>
-
-          <TouchableOpacity
-            style={[
-              styles.suggestBtn,
-              (!selectedSystem || !boneWidth || !boneHeight) && styles.btnDisabled,
-            ]}
-            onPress={handleSuggest}
-            disabled={!selectedSystem || !boneWidth || !boneHeight || searching}
-            data-testid="suggest-btn"
-          >
-            {searching ? (
-              <ActivityIndicator color="#FFF" size="small" />
-            ) : (
-              <>
-                <Ionicons name="search" size={18} color="#FFF" />
-                <Text style={styles.suggestBtnText}>Find Best Implant</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* ── STEP 4 — Result ── */}
-        {results && (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Implant Recommendation</Text>
-
-            {/* Summary Info */}
-            <View style={styles.summaryBox}>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Tooth:</Text>
-                <Text style={styles.summaryValue}>
-                  {selectedTooth}
-                  {toothInfo ? ` (${toothInfo.region})` : ''}
-                </Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>System:</Text>
-                <Text style={styles.summaryValue}>
-                  {selectedSystem?.brand} – {selectedSystem?.system}
-                </Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Bone Width:</Text>
-                <Text style={styles.summaryValue}>{boneWidth} mm</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Bone Height:</Text>
-                <Text style={styles.summaryValue}>{boneHeight} mm</Text>
-              </View>
-            </View>
-
-            {/* System Indication */}
-            {selectedSystem?.indication ? (
-              <View style={styles.indicationResultBox}>
-                <Ionicons name="information-circle" size={16} color="#0D47A1" />
-                <Text style={styles.indicationResultText}>
-                  {selectedSystem.indication}
-                </Text>
-              </View>
-            ) : null}
-
-            {/* Recommended Implant(s) */}
-            {results.recommended && results.recommended.length > 0 ? (
-              <View style={styles.recommendedSection}>
-                <Text style={styles.recommendedTitle}>Recommended Implant</Text>
-                {results.recommended.map((imp: Implant, i: number) => (
-                  <View
-                    key={`rec-${i}`}
-                    style={styles.implantCard}
-                    data-testid={`recommended-implant-${i}`}
-                  >
-                    <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
-                    <View style={styles.implantInfo}>
-                      <Text style={styles.implantSystem}>
-                        {imp.brand} – {imp.system}
-                      </Text>
-                      <View style={styles.implantSpecs}>
-                        <View style={styles.specBadge}>
-                          <Text style={styles.specBadgeText}>
-                            Diameter: {imp.diameter} mm
-                          </Text>
-                        </View>
-                        <View style={styles.specBadge}>
-                          <Text style={styles.specBadgeText}>
-                            Length: {imp.length} mm
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            ) : (
-              <View style={styles.noMatchBox}>
-                <Ionicons name="information-circle" size={22} color="#FF9800" />
-                <Text style={styles.noMatchText}>
-                  No exact matches found for the given bone measurements in this system.
-                </Text>
-              </View>
-            )}
-
-            {/* Clinical Guidance */}
-            <View style={styles.guidanceBox}>
-              <Text style={styles.guidanceTitle}>Clinical Guidance</Text>
-              <View style={styles.guidanceRow}>
-                <Text style={styles.guidanceLabel}>Diameter Range:</Text>
-                <Text style={styles.guidanceValue}>
-                  {results.clinical_guidance?.recommended_diameter_range}
-                </Text>
-              </View>
-              <View style={styles.guidanceRow}>
-                <Text style={styles.guidanceLabel}>Length Range:</Text>
-                <Text style={styles.guidanceValue}>
-                  {results.clinical_guidance?.recommended_length_range}
-                </Text>
-              </View>
-              <View style={styles.guidanceRow}>
-                <Text style={styles.guidanceLabel}>Category:</Text>
-                <Text style={styles.guidanceValue}>
-                  {results.clinical_guidance?.length_category}
-                </Text>
-              </View>
-            </View>
-
-            {/* Safety Note */}
-            <View style={styles.safetyBox}>
-              <Ionicons name="alert-circle" size={16} color="#E65100" />
-              <Text style={styles.safetyText}>
-                {results.clinical_guidance?.safety_note}
-              </Text>
-            </View>
-
-            {/* All Available Sizes */}
-            {results.all_options && results.all_options.length > 0 && (
-              <View style={styles.allOptionsSection}>
-                <Text style={styles.allOptionsTitle}>
-                  All Available Sizes ({results.all_options.length})
-                </Text>
-                {results.all_options.map((imp: Implant, i: number) => {
-                  const isMatch = results.recommended?.some(
-                    (r: Implant) => r.diameter === imp.diameter && r.length === imp.length
-                  );
-                  return (
-                    <View
-                      key={`all-${i}`}
-                      style={[styles.implantRow, isMatch && styles.implantRowMatch]}
-                    >
-                      <Text style={styles.implantRowText}>
-                        {imp.diameter} mm x {imp.length} mm
-                      </Text>
-                      {isMatch && <Ionicons name="checkmark" size={16} color="#4CAF50" />}
-                    </View>
-                  );
-                })}
-              </View>
-            )}
-
-            {/* Action Buttons */}
-            <View style={styles.actionRow}>
-              <TouchableOpacity
-                style={styles.copyBtn}
-                onPress={handleCopyRecommendation}
-                data-testid="copy-recommendation-btn"
-              >
-                <Ionicons name="copy-outline" size={18} color="#FFF" />
-                <Text style={styles.copyBtnText}>Copy Recommendation</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.resetBtn}
-                onPress={handleReset}
-                data-testid="reset-btn"
-              >
-                <Ionicons name="refresh" size={18} color="#1E88E5" />
-                <Text style={styles.resetBtnText}>New Selection</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+// ── Shared: Bone Measurement Inputs ────────────────────────
+function BoneInputs({ width, height, setWidth, setHeight, enabled }: {
+  width: string; height: string; setWidth: (v: string) => void; setHeight: (v: string) => void; enabled: boolean;
+}) {
+  return (
+    <>
+      <Text style={s.inputLabel}>Bone Width (mm)</Text>
+      <View style={s.inputRow}>
+        <Ionicons name="resize-outline" size={18} color="#1E88E5" />
+        <TextInput style={s.measureInput} value={width} onChangeText={setWidth} placeholder="e.g. 7"
+          placeholderTextColor="#B0BEC5" keyboardType="decimal-pad" editable={enabled} data-testid="bone-width-input" />
+        <Text style={s.unit}>mm</Text>
+      </View>
+      <Text style={s.inputLabel}>Bone Height (mm)</Text>
+      <View style={s.inputRow}>
+        <Ionicons name="arrow-up-outline" size={18} color="#1E88E5" />
+        <TextInput style={s.measureInput} value={height} onChangeText={setHeight} placeholder="e.g. 12"
+          placeholderTextColor="#B0BEC5" keyboardType="decimal-pad" editable={enabled} data-testid="bone-height-input" />
+        <Text style={s.unit}>mm</Text>
+      </View>
+    </>
+  );
+}
+
+// ── "Let Me Choose" Result ─────────────────────────────────
+function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight, onReset }: {
+  result: any; system: ImplantSystem; tooth: string; toothInfo: ToothRec | null;
+  boneWidth: string; boneHeight: string; onReset: () => void;
+}) {
+  const copyRec = async () => {
+    if (!result.recommended?.length) return;
+    const r = result.recommended[0];
+    const txt = ['Implant Recommendation', `Tooth: ${tooth}${toothInfo ? ` (${toothInfo.region})` : ''}`,
+      `System: ${r.brand} – ${r.system}`, `Diameter: ${r.diameter} mm`, `Length: ${r.length} mm`,
+      `Bone Width: ${boneWidth} mm`, `Bone Height: ${boneHeight} mm`].join('\n');
+    await Clipboard.setStringAsync(txt);
+    Alert.alert('Copied', 'Recommendation copied to clipboard.');
+  };
+  return (
+    <View style={s.card} data-testid="choose-result">
+      <Text style={s.cardTitle}>Implant Recommendation</Text>
+      <View style={s.summaryBox}>
+        <SummaryRow label="Tooth" value={`${tooth}${toothInfo ? ` (${toothInfo.region})` : ''}`} />
+        <SummaryRow label="System" value={`${system.brand} – ${system.system}`} />
+        <SummaryRow label="Bone Width" value={`${boneWidth} mm`} />
+        <SummaryRow label="Bone Height" value={`${boneHeight} mm`} />
+      </View>
+      {system.indication ? (
+        <View style={s.indResultBox}><Ionicons name="information-circle" size={16} color="#0D47A1" /><Text style={s.indResultText}>{system.indication}</Text></View>
+      ) : null}
+      {result.recommended?.length > 0 ? (
+        <View style={{ marginBottom: 12 }}>
+          <Text style={s.recTitle}>Recommended Implant</Text>
+          {result.recommended.map((imp: Implant, i: number) => (
+            <View key={`r-${i}`} style={s.impCard} data-testid={`recommended-implant-${i}`}>
+              <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+              <View style={{ flex: 1 }}>
+                <Text style={s.impSys}>{imp.brand} – {imp.system}</Text>
+                <View style={s.impSpecs}>
+                  <View style={s.specBadge}><Text style={s.specText}>Diameter: {imp.diameter} mm</Text></View>
+                  <View style={s.specBadge}><Text style={s.specText}>Length: {imp.length} mm</Text></View>
+                </View>
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <View style={s.noMatch}><Ionicons name="information-circle" size={22} color="#FF9800" /><Text style={s.noMatchText}>No exact matches found for the given measurements in this system.</Text></View>
+      )}
+      <GuidanceBox guidance={result.clinical_guidance} />
+      {result.all_options?.length > 0 && (
+        <View style={{ marginBottom: 12 }}>
+          <Text style={s.allOptTitle}>All Available Sizes ({result.all_options.length})</Text>
+          {result.all_options.map((imp: Implant, i: number) => {
+            const isMatch = result.recommended?.some((r: Implant) => r.diameter === imp.diameter && r.length === imp.length);
+            return (
+              <View key={`a-${i}`} style={[s.impRow, isMatch && s.impRowMatch]}>
+                <Text style={s.impRowText}>{imp.diameter} mm x {imp.length} mm</Text>
+                {isMatch && <Ionicons name="checkmark" size={16} color="#4CAF50" />}
+              </View>
+            );
+          })}
+        </View>
+      )}
+      <View style={s.actions}>
+        <TouchableOpacity style={s.copyBtn} onPress={copyRec} data-testid="copy-recommendation-btn">
+          <Ionicons name="copy-outline" size={18} color="#FFF" /><Text style={s.copyBtnText}>Copy Recommendation</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.resetBtn} onPress={onReset} data-testid="reset-btn">
+          <Ionicons name="refresh" size={18} color="#1E88E5" /><Text style={s.resetBtnText}>New Selection</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+// ── "Suggest Me" Result ────────────────────────────────────
+function SuggestResult({ result, tooth, toothInfo, onReset }: {
+  result: any; tooth: string | null; toothInfo: ToothRec | null; onReset: () => void;
+}) {
+  const cg = result.clinical_guidance || {};
+  const systems: SuggestSystem[] = result.recommended_systems || [];
+  const warnings: string[] = result.validation_warnings || [];
+
+  const copySuggest = async () => {
+    if (!systems.length) return;
+    const best = systems[0];
+    const imp = best.implants[0];
+    const lines = ['Implant Suggestion',
+      tooth ? `Tooth: ${tooth}${toothInfo ? ` (${toothInfo.region})` : ''}` : '',
+      `System: ${best.brand} – ${best.system}`,
+      `Diameter: ${imp.diameter} mm`, `Length: ${imp.length} mm`,
+      `Bone Type: ${cg.bone_type}`, `Procedure: ${cg.procedures?.join(', ')}`,
+      `Bone Width: ${cg.bone_width} mm`, `Bone Height: ${cg.bone_height} mm`,
+    ].filter(Boolean).join('\n');
+    await Clipboard.setStringAsync(lines);
+    Alert.alert('Copied', 'Suggestion copied to clipboard.');
+  };
+
+  return (
+    <View style={s.card} data-testid="suggest-result">
+      <Text style={s.cardTitle}>Suggested Implants</Text>
+
+      {/* Warnings */}
+      {warnings.length > 0 && (
+        <View style={s.warningBox}>
+          <Ionicons name="warning" size={18} color="#E65100" />
+          <View style={{ flex: 1 }}>
+            {warnings.map((w, i) => <Text key={i} style={s.warningText}>{w}</Text>)}
+          </View>
+        </View>
+      )}
+
+      {/* Summary */}
+      <View style={s.summaryBox}>
+        {tooth && <SummaryRow label="Tooth" value={`${tooth}${toothInfo ? ` (${toothInfo.region})` : ''}`} />}
+        <SummaryRow label="Bone Type" value={cg.bone_type || ''} />
+        <SummaryRow label="Procedure(s)" value={cg.procedures?.join(', ') || ''} />
+        <SummaryRow label="Bone Width" value={`${cg.bone_width} mm`} />
+        <SummaryRow label="Bone Height" value={`${cg.bone_height} mm`} />
+      </View>
+
+      <GuidanceBox guidance={cg} />
+
+      {/* Recommended Systems */}
+      {systems.length > 0 ? (
+        <View style={{ marginBottom: 12 }}>
+          <Text style={s.recTitle}>Matching Systems ({systems.length})</Text>
+          {systems.map((sys, i) => (
+            <View key={`sys-${i}`} style={s.sugSysCard} data-testid={`suggest-system-${i}`}>
+              <View style={s.sugSysHeader}>
+                <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
+                <Text style={s.sugSysName}>{sys.brand} – {sys.system}</Text>
+              </View>
+              {sys.indication ? <Text style={s.sugSysInd}>{sys.indication}</Text> : null}
+              <View style={s.sugSysSizes}>
+                {sys.implants.map((imp, j) => (
+                  <View key={`imp-${j}`} style={s.sugSizeBadge}>
+                    <Text style={s.sugSizeText}>D: {imp.diameter} mm  L: {imp.length} mm</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <View style={s.noMatch}><Ionicons name="information-circle" size={22} color="#FF9800" /><Text style={s.noMatchText}>No implants found matching these clinical conditions.</Text></View>
+      )}
+
+      {/* Actions */}
+      <View style={s.actions}>
+        <TouchableOpacity style={s.copyBtn} onPress={copySuggest} data-testid="copy-suggest-btn">
+          <Ionicons name="copy-outline" size={18} color="#FFF" /><Text style={s.copyBtnText}>Copy Suggestion</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.resetBtn} onPress={onReset} data-testid="reset-suggest-btn">
+          <Ionicons name="refresh" size={18} color="#1E88E5" /><Text style={s.resetBtnText}>New Suggestion</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+// ── Shared micro-components ────────────────────────────────
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={s.sumRow}><Text style={s.sumLabel}>{label}:</Text><Text style={s.sumVal}>{value}</Text></View>
+  );
+}
+
+function GuidanceBox({ guidance }: { guidance: any }) {
+  if (!guidance) return null;
+  return (
+    <View style={s.guidanceBox}>
+      <Text style={s.guidanceTitle}>Clinical Guidance</Text>
+      <View style={s.guidRow}><Text style={s.guidLabel}>Diameter Range:</Text><Text style={s.guidVal}>{guidance.recommended_diameter_range}</Text></View>
+      <View style={s.guidRow}><Text style={s.guidLabel}>Length Range:</Text><Text style={s.guidVal}>{guidance.recommended_length_range}</Text></View>
+      <View style={s.guidRow}><Text style={s.guidLabel}>Category:</Text><Text style={s.guidVal}>{guidance.length_category}</Text></View>
+      {guidance.safety_note && (
+        <View style={s.safetyBox}><Ionicons name="alert-circle" size={14} color="#E65100" /><Text style={s.safetyText}>{guidance.safety_note}</Text></View>
+      )}
+    </View>
+  );
+}
+
 // ── Styles ─────────────────────────────────────────────────
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5FAFF' },
   scroll: { padding: 16, paddingBottom: 40 },
-  loadingCenter: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
-  loadingCenterText: { fontSize: 15, color: '#546E7A' },
-  errorCenterText: { fontSize: 14, color: '#D32F2F', textAlign: 'center', marginTop: 8 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
+  centerText: { fontSize: 15, color: '#546E7A' },
+  errText: { fontSize: 14, color: '#D32F2F', textAlign: 'center', marginTop: 8 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
   headerTitle: { fontSize: 22, fontWeight: '700', color: '#263238' },
 
-  // Steps
-  stepsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 18,
-  },
-  stepItem: { alignItems: 'center', gap: 3 },
-  stepCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#E0E0E0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  stepCircleActive: { backgroundColor: '#1E88E5' },
-  stepNum: { fontSize: 12, fontWeight: '700', color: '#999' },
-  stepNumActive: { color: '#FFF' },
-  stepLabel: { fontSize: 9, color: '#999', fontWeight: '500' },
-  stepLabelActive: { color: '#1E88E5' },
-  stepLine: {
-    height: 2,
-    flex: 1,
-    backgroundColor: '#E0E0E0',
-    marginHorizontal: 4,
-    marginBottom: 14,
-  },
-  stepLineActive: { backgroundColor: '#1E88E5' },
+  // Tab bar
+  tabBar: { flexDirection: 'row', backgroundColor: '#ECEFF1', borderRadius: 12, padding: 4, marginBottom: 16 },
+  tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 10 },
+  tabActive: { backgroundColor: '#1E88E5' },
+  tabText: { fontSize: 14, fontWeight: '600', color: '#546E7A' },
+  tabTextActive: { color: '#FFF' },
 
   // Cards
-  card: {
-    backgroundColor: '#FFF',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  cardDisabled: { opacity: 0.45 },
+  card: { backgroundColor: '#FFF', borderRadius: 14, padding: 16, marginBottom: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
+  cardOff: { opacity: 0.45 },
   cardTitle: { fontSize: 15, fontWeight: '700', color: '#263238', marginBottom: 12 },
+  subLabel: { fontSize: 12, color: '#78909C', marginBottom: 8 },
 
-  // FDI Chart
-  jawSection: { marginBottom: 6 },
-  jawLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#546E7A',
-    marginBottom: 6,
-    textAlign: 'center',
-  },
+  // FDI
   jawRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   quadrant: { alignItems: 'center' },
   teethRow: { flexDirection: 'row', alignItems: 'center' },
-  midline: {
-    width: 2,
-    height: 40,
-    backgroundColor: '#CFD8DC',
-    marginHorizontal: 2,
-    borderRadius: 1,
-  },
+  midline: { width: 2, height: 40, backgroundColor: '#CFD8DC', marginHorizontal: 2, borderRadius: 1 },
   jawDivider: { height: 1, backgroundColor: '#ECEFF1', marginVertical: 8 },
+  jawLabel: { fontSize: 12, fontWeight: '600', color: '#546E7A', marginBottom: 6, textAlign: 'center' },
 
-  // Tooth Recommendation
-  toothRecBox: {
-    backgroundColor: '#E3F2FD',
-    borderRadius: 10,
-    padding: 12,
-    marginTop: 10,
-  },
+  // Tooth rec
+  toothRecBox: { backgroundColor: '#E3F2FD', borderRadius: 10, padding: 12, marginTop: 10 },
   toothRecHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
   toothRecTitle: { fontSize: 13, fontWeight: '700', color: '#1565C0' },
   toothRecRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 },
   toothRecLabel: { fontSize: 12, color: '#37474F' },
-  toothRecValue: { fontSize: 12, fontWeight: '600', color: '#1565C0' },
+  toothRecVal: { fontSize: 12, fontWeight: '600', color: '#1565C0' },
 
   // Dropdown
-  dropdown: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#D0D7DE',
-    borderRadius: 12,
-    padding: 14,
-    backgroundColor: '#FAFAFA',
-    gap: 10,
-  },
-  dropdownText: { flex: 1, fontSize: 14, color: '#263238', fontWeight: '500' },
-  dropdownPlaceholder: { flex: 1, fontSize: 14, color: '#90A4AE' },
+  dropdown: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#D0D7DE', borderRadius: 12, padding: 14, backgroundColor: '#FAFAFA', gap: 10 },
+  ddText: { flex: 1, fontSize: 14, color: '#263238', fontWeight: '500' },
+  ddPlaceholder: { flex: 1, fontSize: 14, color: '#90A4AE' },
+  indBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 10, backgroundColor: '#E8EAF6', borderRadius: 8, padding: 10 },
+  indText: { flex: 1, fontSize: 12, color: '#1A237E', fontStyle: 'italic', lineHeight: 16 },
 
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: {
-    backgroundColor: '#FFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '70%',
-    paddingBottom: 30,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 18,
-  },
+  modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '70%', paddingBottom: 30 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 18 },
   modalTitle: { fontSize: 18, fontWeight: '700', color: '#263238' },
-  modalDivider: { height: 1, backgroundColor: '#F0F0F0' },
-  searchBarContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 16,
-    marginVertical: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 10,
-    gap: 8,
-  },
+  modalDiv: { height: 1, backgroundColor: '#F0F0F0' },
+  searchBar: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginVertical: 10, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#F5F5F5', borderRadius: 10, gap: 8 },
   searchInput: { flex: 1, fontSize: 15, color: '#263238' },
   modalScroll: { paddingHorizontal: 8 },
-  dropdownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-    marginHorizontal: 8,
-    borderRadius: 8,
-  },
-  dropdownItemActive: { backgroundColor: '#E3F2FD' },
-  dropdownItemRestricted: { backgroundColor: '#FAFAFA', opacity: 0.6 },
-  dropdownItemTitle: { fontSize: 14, fontWeight: '600', color: '#263238' },
-  dropdownItemTitleRestricted: { color: '#9E9E9E' },
-  dropdownItemIndication: {
-    fontSize: 11,
-    color: '#1565C0',
-    marginTop: 2,
-    fontStyle: 'italic',
-  },
-  dropdownItemIndicationRestricted: { color: '#B0BEC5' },
-  dropdownItemSizes: { fontSize: 11, color: '#78909C', marginTop: 2 },
-  restrictedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-    backgroundColor: '#FFEBEE',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    alignSelf: 'flex-start',
-  },
-  restrictedBadgeText: { fontSize: 10, color: '#E53935', fontWeight: '600' },
+  ddItem: { flexDirection: 'row', alignItems: 'center', padding: 14, borderBottomWidth: 1, borderBottomColor: '#F0F0F0', marginHorizontal: 8, borderRadius: 8 },
+  ddItemActive: { backgroundColor: '#E3F2FD' },
+  ddItemRestricted: { backgroundColor: '#FAFAFA', opacity: 0.6 },
+  ddItemTitle: { fontSize: 14, fontWeight: '600', color: '#263238' },
+  ddItemInd: { fontSize: 11, color: '#1565C0', marginTop: 2, fontStyle: 'italic' },
+  ddItemSizes: { fontSize: 11, color: '#78909C', marginTop: 2 },
+  restrictBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, backgroundColor: '#FFEBEE', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, alignSelf: 'flex-start' },
+  restrictText: { fontSize: 10, color: '#E53935', fontWeight: '600' },
 
-  // Indication (below dropdown)
-  indicationBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 6,
-    marginTop: 10,
-    backgroundColor: '#E8EAF6',
-    borderRadius: 8,
-    padding: 10,
-  },
-  indicationText: {
-    flex: 1,
-    fontSize: 12,
-    color: '#1A237E',
-    fontStyle: 'italic',
-    lineHeight: 16,
-  },
+  // Procedure chips (Suggest Me)
+  procChip: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 12, borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 10, marginBottom: 8, backgroundColor: '#FAFAFA' },
+  procChipActive: { borderColor: '#1E88E5', backgroundColor: '#E3F2FD' },
+  procChipText: { fontSize: 14, color: '#546E7A', flex: 1 },
+  procChipTextActive: { color: '#1565C0', fontWeight: '600' },
 
-  // Indication in results
-  indicationResultBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 6,
-    backgroundColor: '#E8EAF6',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 14,
-  },
-  indicationResultText: {
-    flex: 1,
-    fontSize: 12,
-    color: '#1A237E',
-    fontStyle: 'italic',
-    lineHeight: 16,
-  },
+  // Bone type selector
+  boneTypeRow: { flexDirection: 'row', gap: 10 },
+  boneTypeBtn: { flex: 1, paddingVertical: 14, borderRadius: 10, borderWidth: 1.5, borderColor: '#D0D7DE', alignItems: 'center', backgroundColor: '#FAFAFA' },
+  boneTypeBtnActive: { borderColor: '#1E88E5', backgroundColor: '#E3F2FD' },
+  boneTypeBtnText: { fontSize: 16, fontWeight: '700', color: '#90A4AE' },
+  boneTypeBtnTextActive: { color: '#1E88E5' },
 
   // Inputs
-  inputLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#546E7A',
-    marginBottom: 6,
-    marginTop: 10,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#D0D7DE',
-    borderRadius: 12,
-    padding: 12,
-    backgroundColor: '#FAFAFA',
-    gap: 8,
-  },
+  inputLabel: { fontSize: 13, fontWeight: '600', color: '#546E7A', marginBottom: 6, marginTop: 10 },
+  inputRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#D0D7DE', borderRadius: 12, padding: 12, backgroundColor: '#FAFAFA', gap: 8 },
   measureInput: { flex: 1, fontSize: 16, color: '#263238', fontWeight: '500' },
-  unitText: { fontSize: 14, color: '#90A4AE', fontWeight: '500' },
-  suggestBtn: {
-    flexDirection: 'row',
-    backgroundColor: '#1E88E5',
-    borderRadius: 12,
-    padding: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 16,
-  },
-  btnDisabled: { opacity: 0.4 },
-  suggestBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
+  unit: { fontSize: 14, color: '#90A4AE', fontWeight: '500' },
 
-  // Result — Summary
-  summaryBox: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 14,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  summaryLabel: { fontSize: 13, color: '#546E7A' },
-  summaryValue: { fontSize: 13, fontWeight: '600', color: '#263238', flexShrink: 1, textAlign: 'right' },
+  // Buttons
+  primaryBtn: { flexDirection: 'row', backgroundColor: '#1E88E5', borderRadius: 12, padding: 14, alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 16 },
+  suggestBtn: { flexDirection: 'row', backgroundColor: '#7B1FA2', borderRadius: 12, padding: 14, alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 16 },
+  btnOff: { opacity: 0.4 },
+  primaryBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
 
-  // Result — Recommended Implant
-  recommendedSection: { marginBottom: 14 },
-  recommendedTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#2E7D32',
-    marginBottom: 8,
-  },
-  implantCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F1F8E9',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
-    gap: 10,
-  },
-  implantInfo: { flex: 1 },
-  implantSystem: { fontSize: 14, fontWeight: '600', color: '#263238', marginBottom: 6 },
-  implantSpecs: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
-  specBadge: {
-    backgroundColor: '#C8E6C9',
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  specBadgeText: { fontSize: 12, fontWeight: '600', color: '#2E7D32' },
+  // Summary
+  summaryBox: { backgroundColor: '#F5F5F5', borderRadius: 10, padding: 12, marginBottom: 14 },
+  sumRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
+  sumLabel: { fontSize: 13, color: '#546E7A' },
+  sumVal: { fontSize: 13, fontWeight: '600', color: '#263238', flexShrink: 1, textAlign: 'right' },
 
-  // No Match
-  noMatchBox: {
-    flexDirection: 'row',
-    gap: 8,
-    backgroundColor: '#FFF8E1',
-    borderRadius: 10,
-    padding: 14,
-    alignItems: 'center',
-    marginBottom: 14,
-  },
+  // Indication in result
+  indResultBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: '#E8EAF6', borderRadius: 8, padding: 10, marginBottom: 14 },
+  indResultText: { flex: 1, fontSize: 12, color: '#1A237E', fontStyle: 'italic', lineHeight: 16 },
+
+  // Recommended
+  recTitle: { fontSize: 15, fontWeight: '700', color: '#2E7D32', marginBottom: 8 },
+  impCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F1F8E9', borderRadius: 10, padding: 12, marginBottom: 8, gap: 10 },
+  impSys: { fontSize: 14, fontWeight: '600', color: '#263238', marginBottom: 6 },
+  impSpecs: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  specBadge: { backgroundColor: '#C8E6C9', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 },
+  specText: { fontSize: 12, fontWeight: '600', color: '#2E7D32' },
+  noMatch: { flexDirection: 'row', gap: 8, backgroundColor: '#FFF8E1', borderRadius: 10, padding: 14, alignItems: 'center', marginBottom: 14 },
   noMatchText: { flex: 1, fontSize: 13, color: '#F57F17' },
 
-  // Clinical Guidance
-  guidanceBox: {
-    backgroundColor: '#E3F2FD',
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 12,
-  },
+  // Guidance
+  guidanceBox: { backgroundColor: '#E3F2FD', borderRadius: 10, padding: 14, marginBottom: 12 },
   guidanceTitle: { fontSize: 13, fontWeight: '700', color: '#1565C0', marginBottom: 8 },
-  guidanceRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  guidanceLabel: { fontSize: 13, color: '#37474F' },
-  guidanceValue: { fontSize: 13, fontWeight: '600', color: '#1565C0' },
-
-  // Safety Note
-  safetyBox: {
-    flexDirection: 'row',
-    gap: 8,
-    backgroundColor: '#FFF3E0',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 14,
-    alignItems: 'flex-start',
-  },
+  guidRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
+  guidLabel: { fontSize: 13, color: '#37474F' },
+  guidVal: { fontSize: 13, fontWeight: '600', color: '#1565C0' },
+  safetyBox: { flexDirection: 'row', gap: 6, backgroundColor: '#FFF3E0', borderRadius: 8, padding: 8, marginTop: 8, alignItems: 'flex-start' },
   safetyText: { flex: 1, fontSize: 11, color: '#E65100', lineHeight: 16 },
 
-  // All Options
-  allOptionsSection: { marginBottom: 14 },
-  allOptionsTitle: { fontSize: 14, fontWeight: '700', color: '#263238', marginBottom: 8 },
-  implantRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-  },
-  implantRowMatch: { backgroundColor: '#F1F8E9' },
-  implantRowText: { fontSize: 14, color: '#37474F' },
+  // Warnings
+  warningBox: { flexDirection: 'row', gap: 8, backgroundColor: '#FFF3E0', borderRadius: 10, padding: 12, marginBottom: 14, alignItems: 'flex-start' },
+  warningText: { fontSize: 13, color: '#E65100', lineHeight: 18 },
 
-  // Action buttons
-  actionRow: { marginTop: 16, gap: 10 },
-  copyBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    padding: 14,
-    backgroundColor: '#43A047',
-    borderRadius: 12,
-  },
+  // All Options
+  allOptTitle: { fontSize: 14, fontWeight: '700', color: '#263238', marginBottom: 8 },
+  impRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  impRowMatch: { backgroundColor: '#F1F8E9' },
+  impRowText: { fontSize: 14, color: '#37474F' },
+
+  // Suggest Me result system cards
+  sugSysCard: { backgroundColor: '#F1F8E9', borderRadius: 12, padding: 14, marginBottom: 10 },
+  sugSysHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  sugSysName: { fontSize: 14, fontWeight: '700', color: '#263238', flex: 1 },
+  sugSysInd: { fontSize: 11, color: '#1565C0', fontStyle: 'italic', marginBottom: 6, marginLeft: 28 },
+  sugSysSizes: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginLeft: 28 },
+  sugSizeBadge: { backgroundColor: '#C8E6C9', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
+  sugSizeText: { fontSize: 11, fontWeight: '600', color: '#2E7D32' },
+
+  // Actions
+  actions: { marginTop: 16, gap: 10 },
+  copyBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 14, backgroundColor: '#43A047', borderRadius: 12 },
   copyBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
-  resetBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#1E88E5',
-    borderRadius: 10,
-  },
+  resetBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, padding: 12, borderWidth: 1, borderColor: '#1E88E5', borderRadius: 10 },
   resetBtnText: { fontSize: 14, fontWeight: '600', color: '#1E88E5' },
 });
