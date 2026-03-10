@@ -91,6 +91,10 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - [x] Implant system-specific indications: 17 systems with clinical indications (bone type, immediate placement, etc.)
 - [x] Auto-restrict NobelActive NP to teeth 41,42,31,32,12,22 and Osstem MS to teeth 31,32,33,41,42,43
 - [x] Indications displayed in dropdown, selected system area, and results screen
+- [x] Two-tab Implant Selection: "Let Me Choose" (manual) + "Suggest Me" (auto-suggestion)
+- [x] "Suggest Me" tab: Select Tooth → Procedure Type (multi-select, 6 options) → Bone Type (D1-D4) → Bone Measurements → Auto-suggest from all systems
+- [x] Procedure-bone type compatibility validation (Indication Dictionary): Immediate(D1-D3), Sinus Lift(D3-D4), etc.
+- [x] Backend: POST /api/implant-library/suggest-auto, GET /api/implant-library/procedure-options
 
 ## Credentials
 - Student: gaurav.pandey@student.dental.edu / Student@123
@@ -105,10 +109,12 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - [ ] Modularize frontend/app/new-procedure.tsx form logic
 
 ## Key API Endpoints — Implant Library
-- `GET /api/implant-library/systems` - Returns 42 implant systems grouped by brand+system with diameters, lengths, count
+- `GET /api/implant-library/systems` - Returns 42 implant systems with indications and restricted_teeth
 - `GET /api/implant-library/tooth-recommendations` - Returns 28 FDI tooth entries with region, diameter range, length range
 - `GET /api/implant-library/tooth-recommendations/{tooth}` - Returns single tooth recommendation
-- `GET /api/implant-library/suggest?brand=X&system=Y&bone_width=Z&bone_height=W&tooth=T` - Runs suggestion engine with bone algorithms + tooth intersection
+- `GET /api/implant-library/suggest?brand=X&system=Y&bone_width=Z&bone_height=W&tooth=T` - "Let Me Choose" engine with tooth intersection
+- `POST /api/implant-library/suggest-auto` - "Suggest Me" engine: validates procedure+bone type, filters all systems by diameter/length
+- `GET /api/implant-library/procedure-options` - Returns 6 procedures, 4 bone types, compatibility dict
 
 ## Important Notes
 - Internal status codes use `stage2_surgical`/`stage2_prosthetic` for DB stability
