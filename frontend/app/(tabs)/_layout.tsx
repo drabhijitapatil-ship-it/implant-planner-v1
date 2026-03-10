@@ -25,9 +25,9 @@ export default function TabsLayout() {
           borderTopWidth: 1,
           borderTopColor: '#E5E5EA',
           paddingBottom: 2,
-          paddingTop: 6,
+          paddingTop: 8,
           paddingHorizontal: 12,
-          height: 62,
+          height: 70,
         },
         tabBarLabelStyle: {
           fontSize: 9,
@@ -69,7 +69,7 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, focused }) => (
             <Image
               source={implantIcon}
-              style={{ width: 24, height: 24, tintColor: color }}
+              style={{ width: 30, height: 30, tintColor: color }}
               resizeMode="contain"
             />
           ),
