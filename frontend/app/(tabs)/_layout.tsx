@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  Image,
   View,
   Text,
   TouchableOpacity,
@@ -14,8 +13,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePushNotifications } from '../../utils/usePushNotifications';
-
-const implantIcon = require('../../assets/images/implant-icon.png');
+import ImplantIcon from '../../components/ImplantIcon';
 
 // ── Side Drawer Menu ───────────────────────────────────────
 function DrawerMenu({
@@ -258,11 +256,7 @@ export default function TabsLayout() {
           options={{
             title: 'Implant',
             tabBarIcon: ({ color }) => (
-              <Image
-                source={implantIcon}
-                style={{ width: 28, height: 28, tintColor: color }}
-                resizeMode="contain"
-              />
+              <ImplantIcon size={28} color={color} />
             ),
             href: isNurse ? null : '/implant-selection',
           }}
