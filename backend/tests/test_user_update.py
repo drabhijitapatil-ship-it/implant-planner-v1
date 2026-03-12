@@ -12,7 +12,7 @@ import os
 
 BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', '').rstrip('/')
 if not BASE_URL:
-    BASE_URL = "https://teeth-selection-tool.preview.emergentagent.com"
+    BASE_URL = "https://drill-sequence.preview.emergentagent.com"
 
 # Test credentials
 ADMIN_EMAIL = "ajay.sabane@dental.edu"

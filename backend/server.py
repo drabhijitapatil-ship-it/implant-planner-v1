@@ -1983,6 +1983,366 @@ async def calculate_risk(
         "suggested_actions": actions,
     }
 
+# ── Drilling Protocol Engine ─────────────────────────────────
+
+DRILLING_PROTOCOLS = {
+    "BioHorizons|Tapered Pro": {
+        "system_name": "BioHorizons Tapered Pro Conical RBT",
+        "lengths": [9, 10.5, 12, 15, 18],
+        "pilot": {"diameter": 2.0, "code": "TSD2020PD", "type": "Pilot Drill", "rpm": "1500-2000"},
+        "soft_drills": [
+            {"diameter": 2.8, "code": "TSD2028SB"},
+            {"diameter": 3.2, "code": "TSD2032SB"},
+            {"diameter": 3.7, "code": "TSD2037SB"},
+            {"diameter": 4.1, "code": "TSD2041SB"},
+            {"diameter": 4.7, "code": "TSD2047SB"},
+        ],
+        "dense_drills": [
+            {"diameter": 2.5, "code": "TSD2025DB"},
+            {"diameter": 2.8, "code": "TSD2028DB"},
+            {"diameter": 3.2, "code": "TSD2032DB"},
+            {"diameter": 3.7, "code": "TSD2037DB"},
+            {"diameter": 4.1, "code": "TSD2041DB"},
+            {"diameter": 4.7, "code": "TSD2047DB"},
+            {"diameter": 5.4, "code": "TSD2054DB"},
+        ],
+        "dense_protocol_map": {
+            "3.3": [2.5, 2.8, 3.2],
+            "3.8": [2.5, 2.8, 3.2, 3.7],
+            "4.2": [2.5, 2.8, 3.2, 3.7, 4.1],
+            "4.6": [2.5, 2.8, 3.2, 3.7, 4.1, 4.7],
+            "5.2": [2.5, 2.8, 3.2, 3.7, 4.1, 4.7, 5.4],
+        },
+    },
+    "BioHorizons|Tapered Short": {
+        "system_name": "BioHorizons Tapered Short RBT",
+        "lengths": [6, 7.5],
+        "pilot": {"diameter": 2.0, "code": "TDS32PD", "type": "Short Pilot Drill", "rpm": "1500-2000"},
+        "soft_drills": [
+            {"diameter": 3.3, "code": "TDS33SB"},
+            {"diameter": 3.7, "code": "TDS37SB"},
+            {"diameter": 4.2, "code": "TDS42SB"},
+            {"diameter": 4.7, "code": "TDS47SB"},
+        ],
+        "dense_drills": [
+            {"diameter": 3.7, "code": "TDS37DB"},
+            {"diameter": 4.2, "code": "TDS42DB"},
+            {"diameter": 4.8, "code": "TDS48DB"},
+            {"diameter": 5.4, "code": "TDS54DB"},
+        ],
+        "crestal_drills": [
+            {"diameter": 4.2, "code": "TDS42CB"},
+            {"diameter": 4.8, "code": "TDS48CB"},
+            {"diameter": 5.4, "code": "TDS54CB"},
+        ],
+    },
+}
+
+def _find_drill(drills, diameter):
+    for d in drills:
+        if d["diameter"] == diameter:
+            return d
+    return None
+
+def _largest_drill_below(drills, max_dia):
+    candidates = [d for d in drills if d["diameter"] <= max_dia]
+    return candidates[-1] if candidates else None
+
+def _generate_pro_protocol(proto, implant_diameter, implant_length, bone):
+    steps = []
+    step_num = 1
+    depth = implant_length
+
+    # Step 1: Pilot drill
+    p = proto["pilot"]
+    steps.append({"step": step_num, "drill_type": p["type"], "code": p["code"],
+                   "diameter": p["diameter"], "depth": depth, "rpm": p["rpm"], "irrigation": True})
+    step_num += 1
+
+    dia_key = str(implant_diameter)
+    dense_map = proto["dense_protocol_map"]
+
+    if bone == "D4":
+        # Reduced: pilot → last soft ≤ implant → last dense ≤ implant → implant
+        soft = _largest_drill_below(proto["soft_drills"], implant_diameter)
+        if soft:
+            steps.append({"step": step_num, "drill_type": "Soft Bone Drill", "code": soft["code"],
+                           "diameter": soft["diameter"], "depth": depth, "rpm": "1000", "irrigation": True})
+            step_num += 1
+        dense = _largest_drill_below(proto["dense_drills"], implant_diameter)
+        if dense:
+            steps.append({"step": step_num, "drill_type": "Dense Bone Drill", "code": dense["code"],
+                           "diameter": dense["diameter"], "depth": depth, "rpm": "1000", "irrigation": True})
+            step_num += 1
+    else:
+        # Full dense drill sequence from protocol map
+        drill_diameters = dense_map.get(dia_key, [])
+        if not drill_diameters:
+            closest = min(dense_map.keys(), key=lambda k: abs(float(k) - implant_diameter), default=None)
+            if closest:
+                drill_diameters = dense_map[closest]
+        for dd in drill_diameters:
+            drill = _find_drill(proto["dense_drills"], dd)
+            if drill:
+                steps.append({"step": step_num, "drill_type": "Dense Bone Drill", "code": drill["code"],
+                               "diameter": drill["diameter"], "depth": depth, "rpm": "1000", "irrigation": True})
+                step_num += 1
+
+    # Final: Implant placement
+    steps.append({"step": step_num, "drill_type": "Implant Placement", "code": "—",
+                   "diameter": implant_diameter, "depth": depth, "rpm": "30", "irrigation": False})
+    return steps
+
+def _generate_short_protocol(proto, implant_diameter, implant_length, bone):
+    steps = []
+    step_num = 1
+    depth = implant_length
+
+    p = proto["pilot"]
+    steps.append({"step": step_num, "drill_type": p["type"], "code": p["code"],
+                   "diameter": p["diameter"], "depth": depth, "rpm": p["rpm"], "irrigation": True})
+    step_num += 1
+
+    if bone == "D4":
+        soft = _largest_drill_below(proto["soft_drills"], implant_diameter)
+        if soft:
+            steps.append({"step": step_num, "drill_type": "Soft Bone Drill", "code": soft["code"],
+                           "diameter": soft["diameter"], "depth": depth, "rpm": "1000", "irrigation": True})
+            step_num += 1
+    else:
+        # Soft bone drill
+        soft = _largest_drill_below(proto["soft_drills"], implant_diameter)
+        if soft:
+            steps.append({"step": step_num, "drill_type": "Soft Bone Drill", "code": soft["code"],
+                           "diameter": soft["diameter"], "depth": depth, "rpm": "1000", "irrigation": True})
+            step_num += 1
+        # Dense bone drill
+        dense = _largest_drill_below(proto["dense_drills"], implant_diameter + 0.5)
+        if dense:
+            steps.append({"step": step_num, "drill_type": "Dense Bone Drill", "code": dense["code"],
+                           "diameter": dense["diameter"], "depth": depth, "rpm": "1000", "irrigation": True})
+            step_num += 1
+        # Crestal (D1/D2 only)
+        if bone in ("D1", "D2") and proto.get("crestal_drills"):
+            crestal = _largest_drill_below(proto["crestal_drills"], implant_diameter + 0.5)
+            if crestal:
+                steps.append({"step": step_num, "drill_type": "Crestal Bone Drill", "code": crestal["code"],
+                               "diameter": crestal["diameter"], "depth": depth, "rpm": "800", "irrigation": True})
+                step_num += 1
+
+    steps.append({"step": step_num, "drill_type": "Implant Placement", "code": "—",
+                   "diameter": implant_diameter, "depth": depth, "rpm": "30", "irrigation": False})
+    return steps
+
+@api_router.post("/drilling-protocols/generate")
+async def generate_drilling_protocol(
+    body: dict,
+    current_user: dict = Depends(get_current_user),
+):
+    """Generate a drilling protocol for a specific implant and bone density."""
+    brand = body.get("brand", "")
+    system = body.get("system", "")
+    diameter = float(body.get("diameter", 0))
+    length = float(body.get("length", 0))
+    bone = body.get("bone_density", "")
+    tooth = body.get("tooth", "")
+
+    if not all([brand, system, diameter, length, bone]):
+        raise HTTPException(status_code=400, detail="brand, system, diameter, length, bone_density required")
+
+    key = f"{brand}|{system}"
+    proto = DRILLING_PROTOCOLS.get(key)
+    if not proto:
+        raise HTTPException(status_code=404, detail=f"No drilling protocol available for {brand} {system}")
+
+    if "Short" in system:
+        steps = _generate_short_protocol(proto, diameter, length, bone)
+    else:
+        steps = _generate_pro_protocol(proto, diameter, length, bone)
+
+    protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
+
+    return {
+        "system_name": proto["system_name"],
+        "implant": {"brand": brand, "system": system, "diameter": diameter, "length": length},
+        "bone_density": bone,
+        "protocol_type": protocol_type,
+        "tooth": tooth,
+        "steps": steps,
+        "total_steps": len(steps),
+        "notes": [
+            f"All drills use depth marking {length} mm",
+            "Maintain copious irrigation during drilling" if bone != "D4" else "Reduced drilling for soft bone",
+            f"Target insertion torque: 35-45 Ncm",
+        ],
+    }
+
+@api_router.get("/drilling-protocols/available")
+async def get_available_protocols(current_user: dict = Depends(get_current_user)):
+    """Return list of implant systems that have drilling protocols."""
+    result = []
+    for key, proto in DRILLING_PROTOCOLS.items():
+        brand, system = key.split("|")
+        result.append({
+            "brand": brand,
+            "system": system,
+            "system_name": proto["system_name"],
+            "lengths": proto["lengths"],
+        })
+    return result
+
+@api_router.post("/drilling-protocols/export-pdf")
+async def export_drilling_pdf(
+    body: dict,
+    current_user: dict = Depends(get_current_user),
+):
+    """Generate a PDF of the drilling protocol."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from fastapi.responses import StreamingResponse
+    import io
+
+    brand = body.get("brand", "")
+    system = body.get("system", "")
+    diameter = float(body.get("diameter", 0))
+    length = float(body.get("length", 0))
+    bone = body.get("bone_density", "")
+    tooth = body.get("tooth", "")
+
+    if not all([brand, system, diameter, length, bone]):
+        raise HTTPException(status_code=400, detail="All fields required")
+
+    key = f"{brand}|{system}"
+    proto = DRILLING_PROTOCOLS.get(key)
+    if not proto:
+        raise HTTPException(status_code=404, detail="No protocol available")
+
+    if "Short" in system:
+        steps = _generate_short_protocol(proto, diameter, length, bone)
+    else:
+        steps = _generate_pro_protocol(proto, diameter, length, bone)
+
+    protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=20*mm, bottomMargin=15*mm,
+                            leftMargin=15*mm, rightMargin=15*mm)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    # Title
+    title_style = ParagraphStyle('title', parent=styles['Title'], fontSize=18,
+                                  textColor=colors.HexColor('#1565C0'), spaceAfter=6)
+    elements.append(Paragraph("Drilling Protocol – Surgical Reference", title_style))
+    elements.append(Spacer(1, 4*mm))
+
+    # Info table
+    info_data = [
+        ["Implant System:", proto["system_name"]],
+        ["Implant Size:", f"{diameter} x {length} mm"],
+        ["Bone Density:", bone],
+        ["Protocol:", protocol_type],
+    ]
+    if tooth:
+        info_data.insert(0, ["Tooth (FDI):", tooth])
+    info_table = Table(info_data, colWidths=[45*mm, 120*mm])
+    info_table.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 11),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#263238')),
+        ('TEXTCOLOR', (1, 0), (1, -1), colors.HexColor('#1565C0')),
+    ]))
+    elements.append(info_table)
+    elements.append(Spacer(1, 8*mm))
+
+    # Drilling sequence table
+    elements.append(Paragraph("Drilling Sequence", ParagraphStyle('h2', parent=styles['Heading2'],
+                               fontSize=14, textColor=colors.HexColor('#263238'))))
+    elements.append(Spacer(1, 3*mm))
+
+    header = ["Step", "Drill Type", "Code", "Diameter", "Depth", "RPM", "Irrigation"]
+    table_data = [header]
+    for s in steps:
+        table_data.append([
+            str(s["step"]),
+            s["drill_type"],
+            s["code"],
+            f"{s['diameter']} mm",
+            f"{s['depth']} mm",
+            str(s["rpm"]),
+            "Yes" if s["irrigation"] else "No",
+        ])
+
+    col_widths = [12*mm, 40*mm, 28*mm, 22*mm, 20*mm, 25*mm, 22*mm]
+    t = Table(table_data, colWidths=col_widths)
+
+    drill_colors = {
+        "Pilot Drill": colors.HexColor('#E3F2FD'),
+        "Short Pilot Drill": colors.HexColor('#E3F2FD'),
+        "Dense Bone Drill": colors.HexColor('#F5F5F5'),
+        "Soft Bone Drill": colors.HexColor('#E8F5E9'),
+        "Crestal Bone Drill": colors.HexColor('#FFF8E1'),
+        "Implant Placement": colors.HexColor('#FFF3E0'),
+    }
+    style_cmds = [
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1565C0')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#B0BEC5')),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+    ]
+    for i, s in enumerate(steps):
+        bg = drill_colors.get(s["drill_type"], colors.white)
+        style_cmds.append(('BACKGROUND', (0, i + 1), (-1, i + 1), bg))
+
+    t.setStyle(TableStyle(style_cmds))
+    elements.append(t)
+    elements.append(Spacer(1, 8*mm))
+
+    # Notes
+    elements.append(Paragraph("Notes", ParagraphStyle('h3', parent=styles['Heading3'],
+                               fontSize=12, textColor=colors.HexColor('#37474F'))))
+    notes = [
+        f"All drills use depth marking {length} mm.",
+        "Maintain copious irrigation during drilling.",
+        "Target insertion torque: 35-45 Ncm.",
+        "Verify primary stability before prosthetic loading.",
+    ]
+    for n in notes:
+        elements.append(Paragraph(f"• {n}", ParagraphStyle('note', parent=styles['Normal'],
+                                   fontSize=10, spaceAfter=2, leftIndent=5*mm)))
+    elements.append(Spacer(1, 6*mm))
+
+    # Checklist
+    elements.append(Paragraph("Surgical Checklist", ParagraphStyle('h3', parent=styles['Heading3'],
+                               fontSize=12, textColor=colors.HexColor('#37474F'))))
+    checklist = [
+        "CBCT reviewed", "Implant size verified", "Surgical kit prepared",
+        "Sterile irrigation ready", "Primary stability confirmed",
+        "Torque recorded", "Post-operative instructions given",
+    ]
+    for c in checklist:
+        elements.append(Paragraph(f"☐  {c}", ParagraphStyle('check', parent=styles['Normal'],
+                                   fontSize=10, spaceAfter=3, leftIndent=5*mm)))
+
+    # Footer
+    elements.append(Spacer(1, 10*mm))
+    elements.append(Paragraph("Generated by My Implant Planner",
+                    ParagraphStyle('footer', parent=styles['Normal'], fontSize=8,
+                                    textColor=colors.HexColor('#B0BEC5'), alignment=1)))
+
+    doc.build(elements)
+    buf.seek(0)
+    filename = f"DrillingProtocol_{brand}_{diameter}x{length}_{bone}.pdf"
+    return StreamingResponse(buf, media_type="application/pdf",
+                              headers={"Content-Disposition": f"attachment; filename={filename}"})
+
 app.include_router(api_router)
 
 app.add_middleware(
