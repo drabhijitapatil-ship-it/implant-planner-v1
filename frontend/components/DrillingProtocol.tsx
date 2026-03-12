@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import api from '../../utils/api';
+import api from '../utils/api';
 
 type DrillStep = {
   step: number; drill_type: string; code: string;

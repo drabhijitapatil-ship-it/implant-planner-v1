@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import api from '../../utils/api';
+import DrillingProtocolScreen from '../../components/DrillingProtocol';
 
 // ── Types ──────────────────────────────────────────────────
 type ImplantSystem = {
@@ -164,6 +165,13 @@ export default function ImplantSelectionScreen() {
   const [sSearching, setSSearching] = useState(false);
   const [showBoneTypeDD, setShowBoneTypeDD] = useState(false);
 
+  // Drilling Protocol states
+  const [showDrillingProtocol, setShowDrillingProtocol] = useState(false);
+  const [selectedDrillImplant, setSelectedDrillImplant] = useState<{
+    brand: string; system: string; diameter: number; length: number;
+  } | null>(null);
+  const [selectedDrillTooth, setSelectedDrillTooth] = useState('');
+
   const PROCEDURES = [
     'Conventional Implant Placement',
     'Conventional Implant Placement with Bone Graft',
@@ -225,6 +233,13 @@ export default function ImplantSelectionScreen() {
 
   const resetSuggest = () => { setSTooth(null); setSProcedures([]); setSBoneType(''); setSWidth(''); setSHeight(''); setSResult(null); };
 
+  // Drilling Protocol handler
+  const openDrillingProtocol = (implant: { brand: string; system: string; diameter: number; length: number }, tooth: string) => {
+    setSelectedDrillImplant(implant);
+    setSelectedDrillTooth(tooth);
+    setShowDrillingProtocol(true);
+  };
+
   // helpers
   const cToothInfo = cTooth ? toothRecs[cTooth] : null;
   const sToothInfo = sTooth ? toothRecs[sTooth] : null;
@@ -239,6 +254,17 @@ export default function ImplantSelectionScreen() {
       <View style={s.center}><Ionicons name="alert-circle" size={48} color="#D32F2F" /><Text style={s.errText}>{loadError}</Text></View>
     </SafeAreaView>
   );
+
+  // Show Drilling Protocol screen as full overlay
+  if (showDrillingProtocol && selectedDrillImplant) {
+    return (
+      <DrillingProtocolScreen
+        implant={selectedDrillImplant}
+        tooth={selectedDrillTooth}
+        onClose={() => { setShowDrillingProtocol(false); setSelectedDrillImplant(null); }}
+      />
+    );
+  }
 
   return (
     <SafeAreaView style={s.container} edges={['bottom']}>
@@ -309,7 +335,7 @@ export default function ImplantSelectionScreen() {
             </View>
 
             {/* Result */}
-            {cResult && <ChooseResult result={cResult} system={cSystem!} tooth={cTooth!} toothInfo={cToothInfo} boneWidth={cWidth} boneHeight={cHeight} onReset={resetChoose} />}
+            {cResult && <ChooseResult result={cResult} system={cSystem!} tooth={cTooth!} toothInfo={cToothInfo} boneWidth={cWidth} boneHeight={cHeight} onReset={resetChoose} onOpenProtocol={openDrillingProtocol} />}
           </View>
         )}
 
@@ -369,7 +395,7 @@ export default function ImplantSelectionScreen() {
             </View>
 
             {/* Result */}
-            {sResult && <SuggestResult result={sResult} tooth={sTooth} toothInfo={sToothInfo} onReset={resetSuggest} />}
+            {sResult && <SuggestResult result={sResult} tooth={sTooth} toothInfo={sToothInfo} onReset={resetSuggest} onOpenProtocol={openDrillingProtocol} />}
           </View>
         )}
 
@@ -459,14 +485,17 @@ function BoneInputs({ width, height, setWidth, setHeight, enabled }: {
 }
 
 // ── "Let Me Choose" Result ─────────────────────────────────
-function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight, onReset }: {
+function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight, onReset, onOpenProtocol }: {
   result: any; system: ImplantSystem; tooth: string; toothInfo: ToothRec | null;
   boneWidth: string; boneHeight: string; onReset: () => void;
+  onOpenProtocol: (implant: { brand: string; system: string; diameter: number; length: number }, tooth: string) => void;
 }) {
   const [riskBoneType, setRiskBoneType] = useState('');
   const [riskProcedure, setRiskProcedure] = useState('');
   const [riskResult, setRiskResult] = useState<any>(null);
   const [riskLoading, setRiskLoading] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
 
   const BONE_TYPES_R = ['D1', 'D2', 'D3', 'D4'];
   const PROCEDURES_R = [
@@ -477,17 +506,21 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
     'Restricted Bone Height',
   ];
 
-  const bestImplant = result.recommended?.[0];
+  const allImplants: Implant[] = result.recommended || [];
+  const visibleImplants = showAll ? allImplants : allImplants.slice(0, 5);
+  const hasMore = allImplants.length > 5;
+  const selectedImplant = selectedIdx !== null ? allImplants[selectedIdx] : null;
+  const riskImplant = selectedImplant || allImplants[0];
 
   const handleCalcRisk = async () => {
-    if (!bestImplant || !riskBoneType || !riskProcedure) return;
+    if (!riskImplant || !riskBoneType || !riskProcedure) return;
     setRiskLoading(true);
     try {
       const res = await api.post('/implant-library/calculate-risk', {
         bone_width: parseFloat(boneWidth),
         bone_height: parseFloat(boneHeight),
-        implant_diameter: bestImplant.diameter,
-        implant_length: bestImplant.length,
+        implant_diameter: riskImplant.diameter,
+        implant_length: riskImplant.length,
         bone_type: riskBoneType,
         procedure: riskProcedure,
         tooth,
@@ -500,9 +533,10 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
   const riskColor = riskResult?.color === 'green' ? '#4CAF50' : riskResult?.color === 'orange' ? '#FF9800' : '#F44336';
 
   const copyRec = async () => {
-    if (!bestImplant) return;
+    const imp = selectedImplant || allImplants[0];
+    if (!imp) return;
     const lines = ['Implant Recommendation', `Tooth: ${tooth}${toothInfo ? ` (${toothInfo.region})` : ''}`,
-      `System: ${bestImplant.brand} – ${bestImplant.system}`, `Diameter: ${bestImplant.diameter} mm`, `Length: ${bestImplant.length} mm`,
+      `System: ${imp.brand} – ${imp.system}`, `Diameter: ${imp.diameter} mm`, `Length: ${imp.length} mm`,
       `Bone Width: ${boneWidth} mm`, `Bone Height: ${boneHeight} mm`];
     if (riskResult) {
       lines.push('', `Risk Level: ${riskResult.risk_level} (Score: ${riskResult.total_score}/15)`);
@@ -527,30 +561,64 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
         {system.indication ? (
           <View style={s.indResultBox}><Ionicons name="information-circle" size={16} color="#0D47A1" /><Text style={s.indResultText}>{system.indication}</Text></View>
         ) : null}
-        {result.recommended?.length > 0 ? (
+        {allImplants.length > 0 ? (
           <View style={{ marginBottom: 12 }}>
-            <Text style={s.recTitle}>Recommended Implant</Text>
-            {result.recommended.map((imp: Implant, i: number) => (
-              <View key={`r-${i}`} style={s.impCard} data-testid={`recommended-implant-${i}`}>
-                <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
-                <View style={{ flex: 1 }}>
-                  <Text style={s.impSys}>{imp.brand} – {imp.system}</Text>
-                  <View style={s.impSpecs}>
-                    <View style={s.specBadge}><Text style={s.specText}>Diameter: {imp.diameter} mm</Text></View>
-                    <View style={s.specBadge}><Text style={s.specText}>Length: {imp.length} mm</Text></View>
+            <Text style={s.recTitle}>
+              {showAll ? `All Implants (${allImplants.length})` : `Top ${Math.min(5, allImplants.length)} Implants`}
+            </Text>
+            <Text style={s.selectHint}>Tap an implant to select it for drilling protocol</Text>
+            {visibleImplants.map((imp: Implant, i: number) => {
+              const isSelected = selectedIdx === i;
+              return (
+                <TouchableOpacity key={`r-${i}`}
+                  style={[s.impCard, isSelected && s.impCardSelected]}
+                  onPress={() => setSelectedIdx(isSelected ? null : i)}
+                  activeOpacity={0.7}
+                  data-testid={`recommended-implant-${i}`}>
+                  <Ionicons name={isSelected ? 'radio-button-on' : 'radio-button-off'} size={22} color={isSelected ? '#1565C0' : '#B0BEC5'} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.impSys}>{imp.brand} – {imp.system}</Text>
+                    <View style={s.impSpecs}>
+                      <View style={[s.specBadge, isSelected && { backgroundColor: '#BBDEFB' }]}><Text style={[s.specText, isSelected && { color: '#0D47A1' }]}>Diameter: {imp.diameter} mm</Text></View>
+                      <View style={[s.specBadge, isSelected && { backgroundColor: '#BBDEFB' }]}><Text style={[s.specText, isSelected && { color: '#0D47A1' }]}>Length: {imp.length} mm</Text></View>
+                    </View>
                   </View>
-                </View>
-              </View>
-            ))}
+                  {i === 0 && <View style={s.bestBadge}><Text style={s.bestBadgeText}>Best</Text></View>}
+                </TouchableOpacity>
+              );
+            })}
+            {hasMore && !showAll && (
+              <TouchableOpacity style={s.showMoreBtn} onPress={() => setShowAll(true)} data-testid="show-more-btn">
+                <Text style={s.showMoreText}>Show More ({allImplants.length - 5} more)</Text>
+                <Ionicons name="chevron-down" size={16} color="#1E88E5" />
+              </TouchableOpacity>
+            )}
+            {showAll && hasMore && (
+              <TouchableOpacity style={s.showMoreBtn} onPress={() => setShowAll(false)} data-testid="show-less-btn">
+                <Text style={s.showMoreText}>Show Less</Text>
+                <Ionicons name="chevron-up" size={16} color="#1E88E5" />
+              </TouchableOpacity>
+            )}
           </View>
         ) : (
           <View style={s.noMatch}><Ionicons name="information-circle" size={22} color="#FF9800" /><Text style={s.noMatchText}>No exact matches found for the given measurements in this system.</Text></View>
         )}
         <GuidanceBox guidance={result.clinical_guidance} />
+
+        {/* Give Drilling Protocol Button */}
+        {selectedImplant && (
+          <TouchableOpacity
+            style={s.drillProtocolBtn}
+            onPress={() => onOpenProtocol(selectedImplant, tooth)}
+            data-testid="give-drilling-protocol-btn">
+            <Ionicons name="construct" size={18} color="#FFF" />
+            <Text style={s.drillProtocolBtnText}>Give Drilling Protocol</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* ── Risk Calculator Card ── */}
-      {bestImplant && (
+      {riskImplant && (
         <View style={s.card} data-testid="risk-calculator-card">
           <View style={s.riskHeader}>
             <Ionicons name="shield-checkmark" size={22} color="#5C6BC0" />
@@ -558,7 +626,8 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
           </View>
 
           <Text style={s.riskSubLabel}>
-            Using: {bestImplant.brand} – {bestImplant.system} (D: {bestImplant.diameter} mm, L: {bestImplant.length} mm)
+            Using: {riskImplant.brand} – {riskImplant.system} (D: {riskImplant.diameter} mm, L: {riskImplant.length} mm)
+            {selectedImplant ? ' (Selected)' : ' (Best Match)'}
           </Text>
 
           {/* Bone Type */}
@@ -680,20 +749,39 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
 }
 
 // ── "Suggest Me" Result ────────────────────────────────────
-function SuggestResult({ result, tooth, toothInfo, onReset }: {
+function SuggestResult({ result, tooth, toothInfo, onReset, onOpenProtocol }: {
   result: any; tooth: string | null; toothInfo: ToothRec | null; onReset: () => void;
+  onOpenProtocol: (implant: { brand: string; system: string; diameter: number; length: number }, tooth: string) => void;
 }) {
   const cg = result.clinical_guidance || {};
   const systems: SuggestSystem[] = result.recommended_systems || [];
   const warnings: string[] = result.validation_warnings || [];
+  const [showAll, setShowAll] = useState(false);
 
   // Risk Calculator state
   const [riskProcedure, setRiskProcedure] = useState(cg.procedures?.length === 1 ? cg.procedures[0] : '');
   const [riskResult, setRiskResult] = useState<any>(null);
   const [riskLoading, setRiskLoading] = useState(false);
 
+  // Implant selection state: track by "sysIdx-impIdx"
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+
+  const visibleSystems = showAll ? systems : systems.slice(0, 5);
+  const hasMore = systems.length > 5;
+
+  const getSelectedImplant = (): { brand: string; system: string; diameter: number; length: number } | null => {
+    if (!selectedKey) return null;
+    const [si, ii] = selectedKey.split('-').map(Number);
+    const sys = systems[si];
+    if (!sys) return null;
+    const imp = sys.implants[ii];
+    if (!imp) return null;
+    return { brand: sys.brand, system: sys.system, diameter: imp.diameter, length: imp.length };
+  };
+
+  const selectedImplant = getSelectedImplant();
   const bestSystem = systems[0];
-  const bestImplant = bestSystem?.implants?.[0];
+  const bestImplant = selectedImplant || (bestSystem?.implants?.[0] ? { brand: bestSystem.brand, system: bestSystem.system, ...bestSystem.implants[0] } : null);
 
   const handleCalcRisk = async () => {
     if (!bestImplant || !riskProcedure || !tooth) return;
@@ -716,11 +804,12 @@ function SuggestResult({ result, tooth, toothInfo, onReset }: {
   const riskColor = riskResult?.color === 'green' ? '#4CAF50' : riskResult?.color === 'orange' ? '#FF9800' : '#F44336';
 
   const copySuggest = async () => {
-    if (!bestSystem || !bestImplant) return;
+    const imp = selectedImplant || (bestSystem?.implants?.[0] ? { brand: bestSystem.brand, system: bestSystem.system, ...bestSystem.implants[0] } : null);
+    if (!imp) return;
     const lines = ['Implant Suggestion',
       tooth ? `Tooth: ${tooth}${toothInfo ? ` (${toothInfo.region})` : ''}` : '',
-      `System: ${bestSystem.brand} – ${bestSystem.system}`,
-      `Diameter: ${bestImplant.diameter} mm`, `Length: ${bestImplant.length} mm`,
+      `System: ${imp.brand} – ${imp.system}`,
+      `Diameter: ${imp.diameter} mm`, `Length: ${imp.length} mm`,
       `Bone Type: ${cg.bone_type}`, `Procedure: ${cg.procedures?.join(', ')}`,
       `Bone Width: ${cg.bone_width} mm`, `Bone Height: ${cg.bone_height} mm`,
     ].filter(Boolean);
@@ -760,26 +849,62 @@ function SuggestResult({ result, tooth, toothInfo, onReset }: {
 
         {systems.length > 0 ? (
           <View style={{ marginBottom: 12 }}>
-            <Text style={s.recTitle}>Matching Systems ({systems.length})</Text>
-            {systems.map((sys, i) => (
+            <Text style={s.recTitle}>
+              {showAll ? `All Matching Systems (${systems.length})` : `Top ${Math.min(5, systems.length)} Systems`}
+            </Text>
+            <Text style={s.selectHint}>Tap an implant size to select it for drilling protocol</Text>
+            {visibleSystems.map((sys, i) => (
               <View key={`sys-${i}`} style={s.sugSysCard} data-testid={`suggest-system-${i}`}>
                 <View style={s.sugSysHeader}>
                   <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
                   <Text style={s.sugSysName}>{sys.brand} – {sys.system}</Text>
+                  {i === 0 && <View style={s.bestBadge}><Text style={s.bestBadgeText}>Best</Text></View>}
                 </View>
                 {sys.indication ? <Text style={s.sugSysInd}>{sys.indication}</Text> : null}
                 <View style={s.sugSysSizes}>
-                  {sys.implants.map((imp, j) => (
-                    <View key={`imp-${j}`} style={s.sugSizeBadge}>
-                      <Text style={s.sugSizeText}>D: {imp.diameter} mm  L: {imp.length} mm</Text>
-                    </View>
-                  ))}
+                  {sys.implants.map((imp, j) => {
+                    const key = `${i}-${j}`;
+                    const isSelected = selectedKey === key;
+                    return (
+                      <TouchableOpacity key={`imp-${j}`}
+                        style={[s.sugSizeBadge, isSelected && s.sugSizeBadgeSelected]}
+                        onPress={() => setSelectedKey(isSelected ? null : key)}
+                        activeOpacity={0.7}
+                        data-testid={`suggest-implant-${i}-${j}`}>
+                        <Ionicons name={isSelected ? 'radio-button-on' : 'radio-button-off'} size={14} color={isSelected ? '#0D47A1' : '#66BB6A'} />
+                        <Text style={[s.sugSizeText, isSelected && { color: '#0D47A1' }]}>D: {imp.diameter} mm  L: {imp.length} mm</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
               </View>
             ))}
+            {hasMore && !showAll && (
+              <TouchableOpacity style={s.showMoreBtn} onPress={() => setShowAll(true)} data-testid="suggest-show-more-btn">
+                <Text style={s.showMoreText}>Show More ({systems.length - 5} more)</Text>
+                <Ionicons name="chevron-down" size={16} color="#1E88E5" />
+              </TouchableOpacity>
+            )}
+            {showAll && hasMore && (
+              <TouchableOpacity style={s.showMoreBtn} onPress={() => setShowAll(false)} data-testid="suggest-show-less-btn">
+                <Text style={s.showMoreText}>Show Less</Text>
+                <Ionicons name="chevron-up" size={16} color="#1E88E5" />
+              </TouchableOpacity>
+            )}
           </View>
         ) : (
           <View style={s.noMatch}><Ionicons name="information-circle" size={22} color="#FF9800" /><Text style={s.noMatchText}>No implants found matching these clinical conditions.</Text></View>
+        )}
+
+        {/* Give Drilling Protocol Button */}
+        {selectedImplant && tooth && (
+          <TouchableOpacity
+            style={s.drillProtocolBtn}
+            onPress={() => onOpenProtocol(selectedImplant, tooth)}
+            data-testid="suggest-give-drilling-protocol-btn">
+            <Ionicons name="construct" size={18} color="#FFF" />
+            <Text style={s.drillProtocolBtnText}>Give Drilling Protocol</Text>
+          </TouchableOpacity>
         )}
       </View>
 
@@ -791,7 +916,8 @@ function SuggestResult({ result, tooth, toothInfo, onReset }: {
             <Text style={s.riskHeaderTitle}>Implant Risk Calculator</Text>
           </View>
           <Text style={s.riskSubLabel}>
-            Using: {bestSystem.brand} – {bestSystem.system} (D: {bestImplant.diameter} mm, L: {bestImplant.length} mm) | Bone: {cg.bone_type}
+            Using: {bestImplant.brand} – {bestImplant.system} (D: {bestImplant.diameter} mm, L: {bestImplant.length} mm) | Bone: {cg.bone_type}
+            {selectedImplant ? ' (Selected)' : ' (Best Match)'}
           </Text>
 
           {/* Procedure selector (only if multiple procedures were selected) */}
@@ -1022,7 +1148,8 @@ const s = StyleSheet.create({
 
   // Recommended
   recTitle: { fontSize: 15, fontWeight: '700', color: '#2E7D32', marginBottom: 8 },
-  impCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F1F8E9', borderRadius: 10, padding: 12, marginBottom: 8, gap: 10 },
+  impCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F1F8E9', borderRadius: 10, padding: 12, marginBottom: 8, gap: 10, borderWidth: 1.5, borderColor: 'transparent' },
+  impCardSelected: { borderColor: '#1565C0', backgroundColor: '#E3F2FD' },
   impSys: { fontSize: 14, fontWeight: '600', color: '#263238', marginBottom: 6 },
   impSpecs: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   specBadge: { backgroundColor: '#C8E6C9', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 },
@@ -1055,7 +1182,8 @@ const s = StyleSheet.create({
   sugSysName: { fontSize: 14, fontWeight: '700', color: '#263238', flex: 1 },
   sugSysInd: { fontSize: 11, color: '#1565C0', fontStyle: 'italic', marginBottom: 6, marginLeft: 28 },
   sugSysSizes: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginLeft: 28 },
-  sugSizeBadge: { backgroundColor: '#C8E6C9', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
+  sugSizeBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#C8E6C9', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1.5, borderColor: 'transparent' },
+  sugSizeBadgeSelected: { borderColor: '#0D47A1', backgroundColor: '#BBDEFB' },
   sugSizeText: { fontSize: 11, fontWeight: '600', color: '#2E7D32' },
 
   // Actions
@@ -1095,4 +1223,13 @@ const s = StyleSheet.create({
   riskActionsTitle: { fontSize: 13, fontWeight: '700', color: '#E65100', marginBottom: 8 },
   riskActionRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
   riskActionText: { fontSize: 12, color: '#BF360C', flex: 1 },
+
+  // Selection & Drilling Protocol
+  selectHint: { fontSize: 11, color: '#78909C', marginBottom: 8, fontStyle: 'italic' },
+  bestBadge: { backgroundColor: '#FFF8E1', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: '#FFD54F' },
+  bestBadgeText: { fontSize: 10, fontWeight: '700', color: '#F57F17' },
+  showMoreBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderWidth: 1, borderColor: '#1E88E5', borderRadius: 10, borderStyle: 'dashed', marginTop: 4 },
+  showMoreText: { fontSize: 13, fontWeight: '600', color: '#1E88E5' },
+  drillProtocolBtn: { flexDirection: 'row', backgroundColor: '#00695C', borderRadius: 12, padding: 14, alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8 },
+  drillProtocolBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
 });
