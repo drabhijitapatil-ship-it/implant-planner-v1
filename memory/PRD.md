@@ -107,9 +107,22 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - Nurse: priya.sharma@dental.edu / Nurse@123
 
 ## Backlog / Future
+- [ ] P1: Add more drilling protocol data for other implant systems (awaiting user data)
 - [ ] P2: Data cleanup (remove duplicate users from earlier runs)
-- [ ] Break down backend/server.py monolith into routers/models/services
-- [ ] Modularize frontend/app/new-procedure.tsx form logic
+- [ ] P2: Break down backend/server.py monolith into routers/models/services
+- [ ] P2: Modularize frontend/app/new-procedure.tsx form logic
+
+## Completed Features — Drilling Protocol (March 2026)
+- [x] Backend: Drilling protocol data for BioHorizons Tapered Pro Conical RBT and Tapered Short RBT
+- [x] Backend: POST /api/drilling-protocols/generate — generates step-by-step drill sequence for implant + bone density
+- [x] Backend: POST /api/drilling-protocols/export-pdf — generates downloadable PDF of drilling protocol
+- [x] Backend: GET /api/drilling-protocols/available — returns list of systems with protocols
+- [x] Frontend: Top 5 results display with "Show More" button in both "Let Me Choose" and "Suggest Me" tabs
+- [x] Frontend: Selectable implant cards with radio-button UI in both result workflows
+- [x] Frontend: "Best" badge on top-ranked implant
+- [x] Frontend: "Give Drilling Protocol" button appears after implant selection
+- [x] Frontend: Full Drilling Protocol screen (DrillingProtocol.tsx) with bone density selector, step-by-step timeline, navigation, quick reference, and Export PDF
+- [x] End-to-end tested: Login → Implant tab → Search → Select → Protocol → PDF Export (100% pass rate)
 
 ## Key API Endpoints — Implant Library
 - `GET /api/implant-library/systems` - Returns 42 implant systems with indications and restricted_teeth
