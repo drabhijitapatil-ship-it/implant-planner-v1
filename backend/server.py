@@ -1561,6 +1561,15 @@ IMPLANT_INDICATIONS = {
     "BioHorizons|Tapered Short": {
         "indication": "Indicated for Bone height of 8, 9, 10 mm.",
     },
+    "BioHorizons|Tapered Pro Conical RBT": {
+        "indication": "Indicated for Immediate Placement and the esthetic zone. Laser Lock Collar surface for connective tissue attachment.",
+    },
+    "BioHorizons|Tapered Short Conical RBT": {
+        "indication": "Indicated for Bone height of 8, 9, 10 mm.",
+    },
+    "Conelog|Progressive Line": {
+        "indication": "Indicated for all bone types (D1–D4). Conical connection with platform switching.",
+    },
 }
 
 @api_router.get("/implant-library/systems")
@@ -2037,6 +2046,10 @@ DRILLING_PROTOCOLS = {
         ],
     },
 }
+
+# Alias the "Conical RBT" full names to the same protocols
+DRILLING_PROTOCOLS["BioHorizons|Tapered Pro Conical RBT"] = DRILLING_PROTOCOLS["BioHorizons|Tapered Pro"]
+DRILLING_PROTOCOLS["BioHorizons|Tapered Short Conical RBT"] = DRILLING_PROTOCOLS["BioHorizons|Tapered Short"]
 
 def _find_drill(drills, diameter):
     for d in drills:
