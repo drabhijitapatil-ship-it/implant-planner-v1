@@ -506,7 +506,10 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
     'Restricted Bone Height',
   ];
 
-  const allImplants: Implant[] = result.recommended || [];
+  const recommended: Implant[] = result.recommended || [];
+  const allOptions: Implant[] = result.all_options || [];
+  const allImplants = recommended.length > 0 ? recommended : allOptions;
+  const isUsingAllOptions = recommended.length === 0 && allOptions.length > 0;
   const visibleImplants = showAll ? allImplants : allImplants.slice(0, 5);
   const hasMore = allImplants.length > 5;
   const selectedImplant = selectedIdx !== null ? allImplants[selectedIdx] : null;
@@ -563,8 +566,16 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
         ) : null}
         {allImplants.length > 0 ? (
           <View style={{ marginBottom: 12 }}>
+            {isUsingAllOptions && (
+              <View style={s.allOptionsNote}>
+                <Ionicons name="information-circle" size={16} color="#E65100" />
+                <Text style={s.allOptionsNoteText}>No exact matches for given measurements. Showing all available sizes in this system.</Text>
+              </View>
+            )}
             <Text style={s.recTitle}>
-              {showAll ? `All Implants (${allImplants.length})` : `Top ${Math.min(5, allImplants.length)} Implants`}
+              {isUsingAllOptions
+                ? (showAll ? `All Available Sizes (${allImplants.length})` : `Available Sizes (${Math.min(5, allImplants.length)})`)
+                : (showAll ? `All Implants (${allImplants.length})` : `Top ${Math.min(5, allImplants.length)} Implants`)}
             </Text>
             <Text style={s.selectHint}>Tap an implant to select it for drilling protocol</Text>
             {visibleImplants.map((imp: Implant, i: number) => {
@@ -1232,4 +1243,6 @@ const s = StyleSheet.create({
   showMoreText: { fontSize: 13, fontWeight: '600', color: '#1E88E5' },
   drillProtocolBtn: { flexDirection: 'row', backgroundColor: '#00695C', borderRadius: 12, padding: 14, alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8 },
   drillProtocolBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
+  allOptionsNote: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: '#FFF3E0', borderRadius: 8, padding: 10, marginBottom: 10 },
+  allOptionsNoteText: { flex: 1, fontSize: 12, color: '#E65100', lineHeight: 16 },
 });
