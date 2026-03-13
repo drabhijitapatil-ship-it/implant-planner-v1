@@ -127,6 +127,7 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - [x] Updated implant library: 438→485 records, 42→45 systems. Added BioHorizons Tapered Pro Conical RBT (25 sizes), BioHorizons Tapered Short Conical RBT (3 sizes), Conelog Progressive Line (17 sizes)
 - [x] Drilling protocol aliases: Conical RBT systems share protocols with their non-RBT counterparts
 - [x] IMPLANT_INDICATIONS added for all 3 new systems
+- [x] Conelog Progressive Line drilling protocol: Full implementation with bone-density-dependent algorithm (D1/D2 standard with dense bone drill, D3/D4 soft bone with under-preparation), 4 diameters (3.3/3.8/4.3/5.0), 5 lengths (7/9/11/13/16), progressive twist drill sequence, profile drills, PDF export
 
 ## Key API Endpoints — Implant Library
 - `GET /api/implant-library/systems` - Returns 42 implant systems with indications and restricted_teeth
