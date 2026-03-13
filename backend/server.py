@@ -1523,6 +1523,9 @@ IMPLANT_INDICATIONS = {
     "Neodent|Titamax GM NeoPorous": {
         "indication": "Indicated for Bone D1 and D2 and Bone Graft areas.",
     },
+    "Neodent|Titamax GM Acqua": {
+        "indication": "Indicated for Bone D1 and D2 and Bone Graft areas.",
+    },
     "Noble Biocare|NobelActive NP": {
         "indication": "Only indicated for the replacement of teeth 41, 42, 31, 32, 12, and 22.",
         "restricted_teeth": ["41", "42", "31", "32", "12", "22"],
@@ -2079,6 +2082,63 @@ DRILLING_PROTOCOLS["Conelog|Progressive Line"] = {
     ],
 }
 
+# ── Neodent Grand Morse Drilling Protocols ──────────────────────────
+# Shared drill code lookup for all Neodent GM systems
+NEODENT_GM_CODES = {
+    2.0: "103.170", 2.8: "103.162", 3.0: "103.213",
+    3.3: "103.163", 3.5: "103.414", 3.6: "103.166",
+    3.75: "103.168", 3.8: "103.415", 4.0: "103.416",
+    4.3: "103.167", 5.0: "103.418",
+}
+NEODENT_GM_COMBO_CODES = {
+    "2.8/3.5": "103.414", "3.0/3.75": "103.168",
+    "3.3/4.0": "103.415", "3.6/4.3": "103.416",
+    "4.3/5.0": "103.418",
+}
+
+# Helix GM protocol
+DRILLING_PROTOCOLS["Neodent|Helix GM Acqua"] = {
+    "system_name": "Neodent Helix GM",
+    "protocol_family": "helix",
+    "lengths": [8, 10, 11.5, 13, 16, 18],
+    "sequences": {
+        3.5:  [3.5],
+        3.75: [3.5, 3.75],
+        4.0:  [3.5, 3.75, 4.0],
+        4.3:  [3.5, 3.75, 4.0, 4.3],
+        5.0:  [3.5, 3.75, 4.0, 4.3, 5.0],
+        6.0:  [3.5, 3.75, 4.0, 4.3, 5.0],
+    },
+}
+DRILLING_PROTOCOLS["Neodent|Helix GM Neoporous"] = DRILLING_PROTOCOLS["Neodent|Helix GM Acqua"]
+
+# Drive GM protocol
+DRILLING_PROTOCOLS["Neodent|Drive GM Acqua"] = {
+    "system_name": "Neodent Drive GM",
+    "protocol_family": "drive",
+    "lengths": [8, 10, 11.5, 13, 16, 18],
+    "sequences": {
+        3.5: [3.5],
+        4.3: [3.5, 4.3],
+        5.0: [3.5, 4.3, 5.0],
+    },
+}
+DRILLING_PROTOCOLS["Neodent|Drive GM NeoPorous"] = DRILLING_PROTOCOLS["Neodent|Drive GM Acqua"]
+
+# Titamax GM protocol
+DRILLING_PROTOCOLS["Neodent|Titamax GM Acqua"] = {
+    "system_name": "Neodent Titamax GM",
+    "protocol_family": "titamax",
+    "lengths": [7, 8, 9, 11, 13, 15, 17],
+    "titamax_sequences": {
+        3.5:  ["2/3", 2.8, 3.0, "2.8/3.5", 3.3],
+        3.75: ["2/3", 2.8, 3.0, "3.0/3.75", 3.3],
+        4.0:  ["2/3", 2.8, 3.0, "3.3/4.0", 3.8],
+        5.0:  ["2/3", 2.8, 3.0, "3.3/4.0", 3.8, 4.3, "4.3/5.0"],
+    },
+}
+DRILLING_PROTOCOLS["Neodent|Titamax GM NeoPorous"] = DRILLING_PROTOCOLS["Neodent|Titamax GM Acqua"]
+
 def _find_drill(drills, diameter):
     for d in drills:
         if d["diameter"] == diameter:
@@ -2088,6 +2148,74 @@ def _find_drill(drills, diameter):
 def _largest_drill_below(drills, max_dia):
     candidates = [d for d in drills if d["diameter"] <= max_dia]
     return candidates[-1] if candidates else None
+
+
+def _generate_neodent_protocol(proto, implant_diameter, implant_length, bone):
+    """Generate drilling protocol for Neodent Grand Morse systems (Helix/Drive/Titamax)."""
+    family = proto.get("protocol_family", "helix")
+    steps = []
+    step_num = 1
+    depth = str(implant_length)
+    is_dense = bone in ("D1", "D2")
+    rpm_drill = "800-1200" if is_dense else "500-800"
+
+    def _add_step(drill_type, diameter, code="—", irrigation=True, rpm=None):
+        nonlocal step_num
+        steps.append({
+            "step": step_num, "drill_type": drill_type, "code": code,
+            "diameter": diameter, "depth": depth,
+            "rpm": rpm or rpm_drill, "irrigation": irrigation,
+        })
+        step_num += 1
+
+    # Step 1 always: Initial Drill 2.0
+    _add_step("Initial Drill", 2.0, NEODENT_GM_CODES.get(2.0, "—"))
+
+    if family == "helix":
+        seq_map = proto["sequences"]
+        seq = list(seq_map.get(implant_diameter, []))
+        # D4: skip final drill for under-preparation
+        if bone == "D4" and len(seq) > 1:
+            seq = seq[:-1]
+        for d in seq:
+            code = NEODENT_GM_CODES.get(d, "—")
+            _add_step(f"Drill {d} mm", d, code)
+        # D1/D2: add contour drill
+        if is_dense:
+            _add_step("Contour Drill", implant_diameter, "—")
+
+    elif family == "drive":
+        seq_map = proto["sequences"]
+        seq = list(seq_map.get(implant_diameter, []))
+        for d in seq:
+            code = NEODENT_GM_CODES.get(d, "—")
+            _add_step(f"Drill {d} mm", d, code)
+        # Dense bone: add optional final drill (next size up)
+        if is_dense and implant_diameter < 5.0:
+            all_diams = sorted(seq_map.keys())
+            idx = all_diams.index(implant_diameter) if implant_diameter in all_diams else -1
+            if idx >= 0 and idx + 1 < len(all_diams):
+                next_d = all_diams[idx + 1]
+                code = NEODENT_GM_CODES.get(next_d, "—")
+                _add_step(f"Final Drill {next_d} mm (Dense Bone)", next_d, code)
+
+    elif family == "titamax":
+        seq_map = proto["titamax_sequences"]
+        seq = list(seq_map.get(implant_diameter, []))
+        for entry in seq:
+            if isinstance(entry, str):
+                if entry == "2/3":
+                    _add_step("Step Drill 2/3", 3.0, "—")
+                else:
+                    code = NEODENT_GM_COMBO_CODES.get(entry, "—")
+                    _add_step(f"Combination Drill {entry}", float(entry.split("/")[-1]), code)
+            else:
+                code = NEODENT_GM_CODES.get(entry, "—")
+                _add_step(f"Drill {entry} mm", entry, code)
+
+    # Final: Implant Placement
+    _add_step("Implant Placement", implant_diameter, "—", irrigation=False, rpm="30")
+    return steps
 
 def _generate_pro_protocol(proto, implant_diameter, implant_length, bone):
     steps = []
@@ -2250,14 +2378,24 @@ async def generate_drilling_protocol(
     if not proto:
         raise HTTPException(status_code=404, detail=f"No drilling protocol available for {brand} {system}")
 
-    if "Short" in system and "Conelog" not in system:
+    if "Short" in system and "Conelog" not in system and brand != "Neodent":
         steps = _generate_short_protocol(proto, diameter, length, bone)
     elif "Progressive" in system or brand == "Conelog":
         steps = _generate_conelog_protocol(proto, diameter, length, bone)
+    elif proto.get("protocol_family") in ("helix", "drive", "titamax"):
+        steps = _generate_neodent_protocol(proto, diameter, length, bone)
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
-    protocol_type = "Soft Bone Protocol" if ("Progressive" in system or brand == "Conelog") and bone in ("D3", "D4") else "Standard Protocol" if ("Progressive" in system or brand == "Conelog") else ("Reduced Protocol" if bone == "D4" else "Conventional Protocol")
+    family = proto.get("protocol_family", "")
+    if family in ("helix", "drive", "titamax"):
+        protocol_type = "Dense Bone Protocol" if bone in ("D1", "D2") else ("Soft Bone Protocol" if bone == "D4" else "Standard Protocol")
+    elif "Progressive" in system or brand == "Conelog":
+        protocol_type = "Soft Bone Protocol" if bone in ("D3", "D4") else "Standard Protocol"
+    else:
+        protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
+
+    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else "35-45 Ncm"
 
     return {
         "system_name": proto["system_name"],
@@ -2270,7 +2408,7 @@ async def generate_drilling_protocol(
         "notes": [
             f"All drills use depth marking {length} mm",
             "Maintain copious irrigation during drilling" if bone != "D4" else "Reduced drilling for soft bone",
-            f"Target insertion torque: 35-45 Ncm",
+            f"Target insertion torque: {insertion_torque}",
         ],
     }
 
@@ -2317,14 +2455,22 @@ async def export_drilling_pdf(
     if not proto:
         raise HTTPException(status_code=404, detail="No protocol available")
 
-    if "Short" in system and "Conelog" not in system:
+    if "Short" in system and "Conelog" not in system and brand != "Neodent":
         steps = _generate_short_protocol(proto, diameter, length, bone)
     elif "Progressive" in system or brand == "Conelog":
         steps = _generate_conelog_protocol(proto, diameter, length, bone)
+    elif proto.get("protocol_family") in ("helix", "drive", "titamax"):
+        steps = _generate_neodent_protocol(proto, diameter, length, bone)
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
-    protocol_type = "Soft Bone Protocol" if ("Progressive" in system or brand == "Conelog") and bone in ("D3", "D4") else "Standard Protocol" if ("Progressive" in system or brand == "Conelog") else ("Reduced Protocol" if bone == "D4" else "Conventional Protocol")
+    family = proto.get("protocol_family", "")
+    if family in ("helix", "drive", "titamax"):
+        protocol_type = "Dense Bone Protocol" if bone in ("D1", "D2") else ("Soft Bone Protocol" if bone == "D4" else "Standard Protocol")
+    elif "Progressive" in system or brand == "Conelog":
+        protocol_type = "Soft Bone Protocol" if bone in ("D3", "D4") else "Standard Protocol"
+    else:
+        protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=20*mm, bottomMargin=15*mm,
                             leftMargin=15*mm, rightMargin=15*mm)
