@@ -2051,6 +2051,32 @@ DRILLING_PROTOCOLS = {
 DRILLING_PROTOCOLS["BioHorizons|Tapered Pro Conical RBT"] = DRILLING_PROTOCOLS["BioHorizons|Tapered Pro"]
 DRILLING_PROTOCOLS["BioHorizons|Tapered Short Conical RBT"] = DRILLING_PROTOCOLS["BioHorizons|Tapered Short"]
 
+# Conelog Progressive Line protocol
+DRILLING_PROTOCOLS["Conelog|Progressive Line"] = {
+    "system_name": "CONELOG Progressive Line",
+    "lengths": [7, 9, 11, 13, 16],
+    "bone_marker": {"diameter": 2.3, "code": "J5050.2300"},
+    "pilot_drill": {"diameter": 2.0, "code": "J5051.2000"},
+    "twist_drills": [
+        {"diameter": 3.3, "code": "J5079.3300"},
+        {"diameter": 3.8, "code": "J5079.3800"},
+        {"diameter": 4.3, "code": "J5079.4300"},
+        {"diameter": 5.0, "code": "J5079.5000"},
+    ],
+    "profile_drills": [
+        {"diameter": 3.3, "code": "J5080.3300"},
+        {"diameter": 3.8, "code": "J5080.3800"},
+        {"diameter": 4.3, "code": "J5080.4300"},
+        {"diameter": 5.0, "code": "J5080.5000"},
+    ],
+    "dense_bone_drills": [
+        {"diameter": 3.3, "code": "J5072.3300"},
+        {"diameter": 3.8, "code": "J5072.3800"},
+        {"diameter": 4.3, "code": "J5072.4300"},
+        {"diameter": 5.0, "code": "J5072.5000"},
+    ],
+}
+
 def _find_drill(drills, diameter):
     for d in drills:
         if d["diameter"] == diameter:
@@ -2147,6 +2173,60 @@ def _generate_short_protocol(proto, implant_diameter, implant_length, bone):
                    "diameter": implant_diameter, "depth": depth, "rpm": "30", "irrigation": False})
     return steps
 
+def _generate_conelog_protocol(proto, implant_diameter, implant_length, bone):
+    """Generate drilling protocol for Conelog Progressive Line."""
+    steps = []
+    step_num = 1
+    depth = f"{implant_length}"
+    is_dense = bone in ("D1", "D2")
+    is_soft = bone in ("D3", "D4")
+
+    # Step 1: Bone Marker
+    bm = proto["bone_marker"]
+    steps.append({"step": step_num, "drill_type": "Bone Marker", "code": bm["code"],
+                   "diameter": bm["diameter"], "depth": "Mark site", "rpm": "1500", "irrigation": True})
+    step_num += 1
+
+    # Step 2: Pilot Drill
+    pd = proto["pilot_drill"]
+    steps.append({"step": step_num, "drill_type": "Pilot Drill", "code": pd["code"],
+                   "diameter": pd["diameter"], "depth": depth, "rpm": "800-1000", "irrigation": True})
+    step_num += 1
+
+    # Step 3: Parallel Pin (alignment check)
+    steps.append({"step": step_num, "drill_type": "Parallel Pin", "code": "—",
+                   "diameter": 2.0, "depth": depth, "rpm": "—", "irrigation": False})
+    step_num += 1
+
+    # Step 4: Progressive Twist Drills up to implant diameter
+    # In soft bone (D3/D4): skip the FINAL twist drill for under-preparation
+    drill_sequence = [d for d in proto["twist_drills"] if d["diameter"] <= implant_diameter]
+    drills_to_use = drill_sequence[:-1] if is_soft and len(drill_sequence) > 1 else drill_sequence
+    for drill in drills_to_use:
+        steps.append({"step": step_num, "drill_type": f"Twist Drill {drill['diameter']} mm", "code": drill["code"],
+                       "diameter": drill["diameter"], "depth": depth, "rpm": "800-1000", "irrigation": True})
+        step_num += 1
+
+    # Step 5: Profile Drill matching implant diameter
+    profile = _find_drill(proto["profile_drills"], implant_diameter)
+    if profile:
+        steps.append({"step": step_num, "drill_type": "Profile Drill", "code": profile["code"],
+                       "diameter": profile["diameter"], "depth": depth, "rpm": "800-1000", "irrigation": True})
+        step_num += 1
+
+    # Step 6: Dense Bone Drill (only D1/D2)
+    if is_dense:
+        dense = _find_drill(proto["dense_bone_drills"], implant_diameter)
+        if dense:
+            steps.append({"step": step_num, "drill_type": "Dense Bone Drill", "code": dense["code"],
+                           "diameter": dense["diameter"], "depth": depth, "rpm": "800-1000", "irrigation": True})
+            step_num += 1
+
+    # Final: Implant Placement
+    steps.append({"step": step_num, "drill_type": "Implant Placement", "code": "—",
+                   "diameter": implant_diameter, "depth": depth, "rpm": "25-30", "irrigation": False})
+    return steps
+
 @api_router.post("/drilling-protocols/generate")
 async def generate_drilling_protocol(
     body: dict,
@@ -2168,12 +2248,14 @@ async def generate_drilling_protocol(
     if not proto:
         raise HTTPException(status_code=404, detail=f"No drilling protocol available for {brand} {system}")
 
-    if "Short" in system:
+    if "Short" in system and "Conelog" not in system:
         steps = _generate_short_protocol(proto, diameter, length, bone)
+    elif "Progressive" in system or brand == "Conelog":
+        steps = _generate_conelog_protocol(proto, diameter, length, bone)
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
-    protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
+    protocol_type = "Soft Bone Protocol" if ("Progressive" in system or brand == "Conelog") and bone in ("D3", "D4") else "Standard Protocol" if ("Progressive" in system or brand == "Conelog") else ("Reduced Protocol" if bone == "D4" else "Conventional Protocol")
 
     return {
         "system_name": proto["system_name"],
@@ -2233,12 +2315,14 @@ async def export_drilling_pdf(
     if not proto:
         raise HTTPException(status_code=404, detail="No protocol available")
 
-    if "Short" in system:
+    if "Short" in system and "Conelog" not in system:
         steps = _generate_short_protocol(proto, diameter, length, bone)
+    elif "Progressive" in system or brand == "Conelog":
+        steps = _generate_conelog_protocol(proto, diameter, length, bone)
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
-    protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
+    protocol_type = "Soft Bone Protocol" if ("Progressive" in system or brand == "Conelog") and bone in ("D3", "D4") else "Standard Protocol" if ("Progressive" in system or brand == "Conelog") else ("Reduced Protocol" if bone == "D4" else "Conventional Protocol")
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=20*mm, bottomMargin=15*mm,
                             leftMargin=15*mm, rightMargin=15*mm)
