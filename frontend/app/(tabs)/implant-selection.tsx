@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  FlatList,
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
@@ -420,12 +421,18 @@ export default function ImplantSelectionScreen() {
                   </TouchableOpacity>
                 )}
               </View>
-              <ScrollView style={s.modalScroll} showsVerticalScrollIndicator bounces nestedScrollEnabled>
-                {systems.filter((it) => {
+              <FlatList
+                style={s.modalScroll}
+                data={systems.filter((it) => {
                   if (!searchQuery.trim()) return true;
                   const q = searchQuery.toLowerCase();
                   return it.brand.toLowerCase().includes(q) || it.system.toLowerCase().includes(q) || (it.indication || '').toLowerCase().includes(q);
-                }).map((item, i) => {
+                })}
+                keyExtractor={(item, i) => `${item.brand}-${item.system}-${i}`}
+                showsVerticalScrollIndicator
+                keyboardShouldPersistTaps="handled"
+                ListFooterComponent={<View style={{ height: 30 }} />}
+                renderItem={({ item, index: i }) => {
                   const isSel = cSystem?.brand === item.brand && cSystem?.system === item.system;
                   const isRestricted = item.restricted_teeth && cTooth && !item.restricted_teeth.includes(cTooth);
                   return (
@@ -449,9 +456,8 @@ export default function ImplantSelectionScreen() {
                       {isSel && <Ionicons name="checkmark-circle" size={22} color="#1E88E5" />}
                     </TouchableOpacity>
                   );
-                })}
-                <View style={{ height: 30 }} />
-              </ScrollView>
+                }}
+              />
             </Pressable>
           </Pressable>
         </Modal>
@@ -1106,13 +1112,13 @@ const s = StyleSheet.create({
 
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '70%', paddingBottom: 30 },
+  modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%', paddingBottom: 30, flex: 0 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 18 },
   modalTitle: { fontSize: 18, fontWeight: '700', color: '#263238' },
   modalDiv: { height: 1, backgroundColor: '#F0F0F0' },
   searchBar: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginVertical: 10, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#F5F5F5', borderRadius: 10, gap: 8 },
   searchInput: { flex: 1, fontSize: 15, color: '#263238' },
-  modalScroll: { paddingHorizontal: 8 },
+  modalScroll: { paddingHorizontal: 8, flexGrow: 1 },
   ddItem: { flexDirection: 'row', alignItems: 'center', padding: 14, borderBottomWidth: 1, borderBottomColor: '#F0F0F0', marginHorizontal: 8, borderRadius: 8 },
   ddItemActive: { backgroundColor: '#E3F2FD' },
   ddItemRestricted: { backgroundColor: '#FAFAFA', opacity: 0.6 },
