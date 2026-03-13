@@ -124,6 +124,9 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - [x] Frontend: Full Drilling Protocol screen (DrillingProtocol.tsx) with bone density selector, step-by-step timeline, navigation, quick reference, and Export PDF
 - [x] End-to-end tested: Login → Implant tab → Search → Select → Protocol → PDF Export (100% pass rate)
 - [x] Bug fix: "Let Me Choose" now shows all available sizes when no exact matches (e.g., BioHorizons Tapered Short) with info note, enabling drilling protocol access
+- [x] Updated implant library: 438→485 records, 42→45 systems. Added BioHorizons Tapered Pro Conical RBT (25 sizes), BioHorizons Tapered Short Conical RBT (3 sizes), Conelog Progressive Line (17 sizes)
+- [x] Drilling protocol aliases: Conical RBT systems share protocols with their non-RBT counterparts
+- [x] IMPLANT_INDICATIONS added for all 3 new systems
 
 ## Key API Endpoints — Implant Library
 - `GET /api/implant-library/systems` - Returns 42 implant systems with indications and restricted_teeth
