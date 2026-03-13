@@ -128,6 +128,7 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - [x] Drilling protocol aliases: Conical RBT systems share protocols with their non-RBT counterparts
 - [x] IMPLANT_INDICATIONS added for all 3 new systems
 - [x] Conelog Progressive Line drilling protocol: Full implementation with bone-density-dependent algorithm (D1/D2 standard with dense bone drill, D3/D4 soft bone with under-preparation), 4 diameters (3.3/3.8/4.3/5.0), 5 lengths (7/9/11/13/16), progressive twist drill sequence, profile drills, PDF export
+- [x] Neodent Grand Morse drilling protocols: 6 systems (Helix GM Acqua/Neoporous, Drive GM Acqua/NeoPorous, Titamax GM Acqua/NeoPorous) with 3 distinct engines: Helix (progressive under-osteotomy, D1/D2 adds contour drill, D4 skips final), Drive (soft bone optimized, D1/D2 adds final drill), Titamax (dense bone, combination drills). Surface type doesn't affect protocol. RPM: D1/D2=800-1200, D3/D4=500-800, Placement=30. Torque: 60 Ncm.
 - [x] Dropdown UI fix: Replaced ScrollView with FlatList for reliable rendering of all 45 systems on mobile; increased modal height to 80%
 
 ## Key API Endpoints — Implant Library
