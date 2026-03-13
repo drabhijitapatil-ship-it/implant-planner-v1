@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Response
 from fastapi import status as http_status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import FileResponse
@@ -1573,8 +1573,10 @@ IMPLANT_INDICATIONS = {
 }
 
 @api_router.get("/implant-library/systems")
-async def get_implant_systems(current_user: dict = Depends(get_current_user)):
+async def get_implant_systems(response: Response, current_user: dict = Depends(get_current_user)):
     """Return implant systems grouped by brand+system with indications and restrictions."""
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
     pipeline = [
         {"$group": {
             "_id": {"brand": "$brand", "system": "$system"},
@@ -2500,38 +2502,39 @@ async def seed_on_startup():
     else:
         logging.info(f"Users collection has {user_count} documents — skipping seed.")
 
-    # --- Seed implant library ---
+    # --- Seed implant library (always re-seed to ensure latest data) ---
     implant_count = await db.implant_library.count_documents({})
-    if implant_count == 0:
-        xlsx_path = ROOT_DIR / "implant_library_latest.xlsx"
-        if xlsx_path.exists():
-            logging.info("No implant data found — seeding from XLSX...")
-            df = pd.read_excel(xlsx_path, skiprows=0)
-            df.columns = [c.strip() for c in df.columns]
-            brand_col = [c for c in df.columns if "company" in c.lower()][0]
-            system_col = [c for c in df.columns if "system" in c.lower() or "name" in c.lower()][0]
-            diam_col = [c for c in df.columns if "diameter" in c.lower()][0]
-            len_col = [c for c in df.columns if "length" in c.lower()][0]
+    xlsx_path = ROOT_DIR / "implant_library_latest.xlsx"
+    if xlsx_path.exists():
+        df = pd.read_excel(xlsx_path, skiprows=0)
+        df.columns = [c.strip() for c in df.columns]
+        brand_col = [c for c in df.columns if "company" in c.lower()][0]
+        system_col = [c for c in df.columns if "system" in c.lower() or "name" in c.lower()][0]
+        diam_col = [c for c in df.columns if "diameter" in c.lower()][0]
+        len_col = [c for c in df.columns if "length" in c.lower()][0]
 
-            records = []
-            seen = set()
-            for _, row in df.iterrows():
-                try:
-                    brand = str(row[brand_col]).strip()
-                    system = str(row[system_col]).strip()
-                    diameter = round(float(row[diam_col]), 2)
-                    length = round(float(row[len_col]), 2)
-                    key = (brand, system, diameter, length)
-                    if key not in seen:
-                        seen.add(key)
-                        records.append({"brand": brand, "system": system, "diameter": diameter, "length": length})
-                except (ValueError, TypeError):
-                    continue
+        records = []
+        seen = set()
+        for _, row in df.iterrows():
+            try:
+                brand = str(row[brand_col]).strip()
+                system = str(row[system_col]).strip()
+                diameter = round(float(row[diam_col]), 2)
+                length = round(float(row[len_col]), 2)
+                key = (brand, system, diameter, length)
+                if key not in seen:
+                    seen.add(key)
+                    records.append({"brand": brand, "system": system, "diameter": diameter, "length": length})
+            except (ValueError, TypeError):
+                continue
 
+        if len(records) != implant_count:
+            logging.info(f"Implant library mismatch (DB: {implant_count}, XLSX: {len(records)}) — re-seeding...")
+            await db.implant_library.drop()
             if records:
                 await db.implant_library.insert_many(records)
-            logging.info(f"Seeded {len(records)} implant records.")
+            logging.info(f"Re-seeded {len(records)} implant records.")
         else:
-            logging.warning(f"XLSX file not found at {xlsx_path} — skipping implant seed.")
+            logging.info(f"Implant library has {implant_count} documents — up to date.")
     else:
-        logging.info(f"Implant library has {implant_count} documents — skipping seed.")
+        logging.warning(f"XLSX file not found at {xlsx_path} — skipping implant seed.")
