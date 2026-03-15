@@ -160,6 +160,7 @@ class ApprovalAction(BaseModel):
 class Phase2Submit(BaseModel):
     checklist_surgical: ChecklistSection
     remark: Optional[str] = None
+    torque_values: Optional[List[float]] = None
 
 class Stage2SurgicalSubmit(BaseModel):
     checklist: ChecklistSection
@@ -168,6 +169,25 @@ class Stage2SurgicalSubmit(BaseModel):
 class Stage2ProstheticSubmit(BaseModel):
     checklist: ChecklistSection
     remark: Optional[str] = None
+    faculty_remark: Optional[str] = None
+    incharge_remark: Optional[str] = None
+    final_prosthetic_plan: Optional[str] = None
+
+class ImplantPlanItem(BaseModel):
+    position: str  # FDI tooth number e.g. "14"
+    brand: str
+    system: str
+    diameter: float
+    length: float
+    bone_width: Optional[float] = None
+    bone_height: Optional[float] = None
+    bone_type: Optional[str] = None
+    risk_level: Optional[str] = None
+    risk_score: Optional[int] = None
+
+class ImplantPlanSave(BaseModel):
+    implants: List[ImplantPlanItem]
+
 
 class FinalCommentSubmit(BaseModel):
     comment: str
@@ -1079,6 +1099,71 @@ ALBUM_CAPTIONS = {
 }
 
 
+# ── Implant Plan Management ──────────────────────────────────────────
+@api_router.post("/procedures/{procedure_id}/implant-plan")
+async def save_implant_plan(
+    procedure_id: str,
+    plan: ImplantPlanSave,
+    current_user: dict = Depends(get_current_user),
+):
+    """Save or update implant plans (1-6 implants) for a procedure."""
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0, "student_id": 1})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if current_user["role"] == "student" and proc.get("student_id") != current_user["_id"]:
+        raise HTTPException(status_code=403, detail="You can only modify your own procedures")
+    if len(plan.implants) < 1 or len(plan.implants) > 6:
+        raise HTTPException(status_code=400, detail="Must plan between 1 and 6 implants")
+
+    # Validate unique positions
+    positions = [imp.position for imp in plan.implants]
+    if len(positions) != len(set(positions)):
+        raise HTTPException(status_code=400, detail="Each implant must have a unique tooth position")
+
+    implant_docs = []
+    for imp in plan.implants:
+        implant_docs.append({
+            "position": imp.position,
+            "brand": imp.brand,
+            "system": imp.system,
+            "diameter": imp.diameter,
+            "length": imp.length,
+            "bone_width": imp.bone_width,
+            "bone_height": imp.bone_height,
+            "bone_type": imp.bone_type,
+            "risk_level": imp.risk_level,
+            "risk_score": imp.risk_score,
+        })
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {
+            "implant_plans": implant_docs,
+            "number_of_implants": len(implant_docs),
+        }},
+    )
+    return {"message": "Implant plan saved", "count": len(implant_docs)}
+
+
+@api_router.get("/procedures/{procedure_id}/implant-plan")
+async def get_implant_plan(
+    procedure_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Retrieve the implant plan for a procedure."""
+    proc = await db.procedures.find_one(
+        {"_id": ObjectId(procedure_id)},
+        {"_id": 0, "implant_plans": 1, "number_of_implants": 1},
+    )
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    return {
+        "implant_plans": proc.get("implant_plans", []),
+        "number_of_implants": proc.get("number_of_implants", 0),
+    }
+
+
+
 # ── Photo Step Definitions API ───────────────────────────────────────
 @api_router.get("/photo-steps/{phase}")
 async def get_photo_steps(phase: int, current_user: dict = Depends(get_current_user)):
@@ -1670,6 +1755,9 @@ async def submit_phase2(
     
     if phase2_data.remark:
         update_data["phase2_remark"] = phase2_data.remark
+
+    if phase2_data.torque_values:
+        update_data["torque_values"] = phase2_data.torque_values
     
     await db.procedures.update_one(
         {"_id": ObjectId(procedure_id)},
@@ -1793,6 +1881,12 @@ async def submit_stage2_prosthetic(
     }
     if data.remark:
         update_data["stage2_prosthetic_remark"] = data.remark
+    if data.faculty_remark:
+        update_data["stage2_prosthetic_faculty_remark"] = data.faculty_remark
+    if data.incharge_remark:
+        update_data["stage2_prosthetic_incharge_remark"] = data.incharge_remark
+    if data.final_prosthetic_plan:
+        update_data["final_prosthetic_plan"] = data.final_prosthetic_plan
 
     await db.procedures.update_one({"_id": ObjectId(procedure_id)}, {"$set": update_data})
 

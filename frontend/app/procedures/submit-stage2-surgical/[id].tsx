@@ -79,15 +79,15 @@ export default function Stage2SurgicalSubmissionScreen() {
           />
 
           <View style={styles.form}>
-            <Text style={styles.label}>Additional Remarks (Optional)</Text>
+            <Text style={styles.label}>Student Clinical Assessment</Text>
             <TextInput
               style={[styles.input, styles.textArea]}
               value={remark}
               onChangeText={setRemark}
-              placeholder="Any additional notes about the second stage surgery..."
+              placeholder="Clinical assessment findings, healing evaluation, soft tissue status..."
               multiline
               numberOfLines={4}
-              data-testid="stage2-surgical-remark"
+              data-testid="stage2-surgical-clinical-assessment"
             />
           </View>
 

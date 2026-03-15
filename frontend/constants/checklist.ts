@@ -26,6 +26,10 @@ export const CHECKLIST_DATA = {
       { id: 'post_op_instructions', label: 'Post-operative Instructions and Medication Prescription' },
       { id: 'post_cleaning', label: 'Post-operative cleaning of implant room, instruments, and equipment' },
     ],
+    additionalFields: [
+      { id: 'student_notes', label: 'Post-Surgical Notes by Student' },
+      { id: 'faculty_remark', label: 'Remarks by Faculty' },
+    ],
   },
   second_stage: {
     title: 'Phase 3: Second Stage Surgical Protocol',
@@ -36,6 +40,10 @@ export const CHECKLIST_DATA = {
       { id: 'scan_impressions', label: 'Scan/Impressions Made' },
       { id: 'temporary_prosthesis', label: 'Temporary Prosthesis Delivered' },
       { id: 'patient_consent', label: 'Patient consent' },
+    ],
+    additionalFields: [
+      { id: 'student_clinical_assessment', label: 'Student Clinical Assessment' },
+      { id: 'faculty_remark', label: 'Faculty Remark' },
     ],
   },
   prosthetic_phase: {
@@ -50,6 +58,11 @@ export const CHECKLIST_DATA = {
       { id: 'jig_trial', label: "Jig Trial Done - Sheffield's Test and Radiographic Assessment" },
       { id: 'occlusion_evaluated', label: 'Occlusion Evaluation Done' },
       { id: 'final_cementation', label: 'Final Cementation/Screwing of the Prosthesis' },
+    ],
+    additionalFields: [
+      { id: 'student_remark', label: 'Student Remark' },
+      { id: 'faculty_remark', label: 'Faculty Remark' },
+      { id: 'incharge_remark', label: 'Implant Incharge Remark' },
     ],
   },
 };
