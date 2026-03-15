@@ -516,10 +516,10 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
         
         # Saturday: only 9:30 AM slot
         if procedure_datetime.weekday() == 5:  # Saturday
-            if procedure.procedure_time != "09:30":
+            if procedure.procedure_time != "10:00":
                 raise HTTPException(
                     status_code=400,
-                    detail="Only 9:30 AM slot is available on Saturdays."
+                    detail="Only 10:00 AM slot is available on Saturdays."
                 )
         
         # 24-hour restriction for students only
