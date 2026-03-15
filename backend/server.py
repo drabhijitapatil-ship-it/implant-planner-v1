@@ -1099,6 +1099,115 @@ ALBUM_CAPTIONS = {
 }
 
 
+
+# ── Checklist File Upload Management ─────────────────────────────────
+CHECKLIST_UPLOADS_DIR = ROOT_DIR / 'uploads' / 'checklist_files'
+CHECKLIST_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+ALLOWED_CHECKLIST_EXTENSIONS = {'.pdf', '.ppt', '.pptx', '.doc', '.docx', '.jpg', '.jpeg', '.png', '.heic'}
+MAX_CHECKLIST_FILE_SIZE = 25 * 1024 * 1024  # 25 MB
+
+@api_router.post("/procedures/{procedure_id}/checklist-files/{item_id}")
+async def upload_checklist_file(
+    procedure_id: str,
+    item_id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+):
+    """Upload a file for a specific checklist item (e.g. academic_readiness, hematological, radiographic)."""
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0, "student_id": 1})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if current_user["role"] == "student" and proc.get("student_id") != current_user["_id"]:
+        raise HTTPException(status_code=403, detail="You can only modify your own procedures")
+
+    # Validate file extension
+    ext = Path(file.filename).suffix.lower() if file.filename else ""
+    if ext not in ALLOWED_CHECKLIST_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"File type not allowed. Allowed: {', '.join(ALLOWED_CHECKLIST_EXTENSIONS)}")
+
+    contents = await file.read()
+    if len(contents) > MAX_CHECKLIST_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File size exceeds 25 MB limit")
+
+    import uuid
+    unique_id = uuid.uuid4().hex[:8]
+    filename = f"{procedure_id}_{item_id}_{unique_id}{ext}"
+    filepath = CHECKLIST_UPLOADS_DIR / filename
+    with open(filepath, "wb") as f:
+        f.write(contents)
+
+    file_record = {
+        "item_id": item_id,
+        "filename": filename,
+        "original_name": file.filename,
+        "content_type": file.content_type or "application/octet-stream",
+        "size": len(contents),
+        "uploaded_at": datetime.utcnow().isoformat(),
+    }
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$push": {"checklist_files": file_record}},
+    )
+    return {"message": "File uploaded", "filename": filename, "original_name": file.filename}
+
+
+@api_router.get("/procedures/{procedure_id}/checklist-files")
+async def list_checklist_files(
+    procedure_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """List all checklist files for a procedure, grouped by item_id."""
+    proc = await db.procedures.find_one(
+        {"_id": ObjectId(procedure_id)},
+        {"_id": 0, "checklist_files": 1},
+    )
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    files = proc.get("checklist_files", [])
+    grouped: dict = {}
+    for f in files:
+        item = f.get("item_id", "unknown")
+        if item not in grouped:
+            grouped[item] = []
+        grouped[item].append(f)
+    return {"files": grouped}
+
+
+@api_router.delete("/procedures/{procedure_id}/checklist-files/{item_id}/{filename}")
+async def delete_checklist_file(
+    procedure_id: str,
+    item_id: str,
+    filename: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Delete a checklist file."""
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0, "student_id": 1})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if current_user["role"] == "student" and proc.get("student_id") != current_user["_id"]:
+        raise HTTPException(status_code=403, detail="You can only modify your own procedures")
+
+    filepath = CHECKLIST_UPLOADS_DIR / filename
+    if filepath.exists():
+        filepath.unlink()
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$pull": {"checklist_files": {"filename": filename, "item_id": item_id}}},
+    )
+    return {"message": "File deleted"}
+
+
+@api_router.get("/checklist-files/{filename}")
+async def serve_checklist_file(filename: str):
+    """Serve a checklist file."""
+    filepath = CHECKLIST_UPLOADS_DIR / filename
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(str(filepath))
+
+
 # ── Implant Plan Management ──────────────────────────────────────────
 @api_router.post("/procedures/{procedure_id}/implant-plan")
 async def save_implant_plan(
