@@ -112,6 +112,28 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - [ ] P2: Break down backend/server.py monolith into routers/models/services
 - [ ] P2: Modularize frontend/app/new-procedure.tsx form logic
 
+## Completed Features — Clinical Case Album Generator (March 2026)
+- [x] Backend: PHOTO_STEPS data structure with 44 photo steps across 4 phases (14+12+7+11)
+- [x] Backend: ALBUM_CAPTIONS dictionary for figure captions in PDF generation
+- [x] Backend: POST /api/procedures/{id}/photos/{step_id} - Upload photo with validation (student only, file type/size checks)
+- [x] Backend: DELETE /api/procedures/{id}/photos/{step_id}/{filename} - Delete photo (removes DB record + file)
+- [x] Backend: GET /api/procedures/{id}/photos - List all photos grouped by step with progress info
+- [x] Backend: GET /api/photo-steps - Returns all photo step definitions
+- [x] Backend: GET /api/photo-steps/{phase} - Returns phase-specific steps
+- [x] Backend: GET /api/photos/{filename} - Serve uploaded photo files
+- [x] Backend: POST /api/procedures/{id}/generate-album - Generate PDF album (fixed UnicodeEncode + missing import bugs)
+- [x] Frontend: CasePhotoAlbum component (components/CasePhotoAlbum.tsx) with:
+  - 4 collapsible phase sections with color-coded indicators
+  - Per-phase progress bars and photo counts
+  - Per-step expandable cards with purpose/armamentarium/capture instructions
+  - Photo thumbnails with horizontal scroll preview
+  - Upload button (student owners only) using expo-image-picker
+  - Delete photo capability (student owners only)
+  - Generate Case Album PDF button with blob download
+- [x] Frontend: CasePhotoAlbum integrated into procedure detail page (app/procedures/[id].tsx)
+- [x] Permission checks: Students can upload/delete own photos; non-students read-only
+- [x] Tested: 20/20 backend tests passed, frontend UI fully verified (iteration 20)
+
 ## Completed Features — Drilling Protocol (March 2026)
 - [x] Backend: Drilling protocol data for BioHorizons Tapered Pro Conical RBT and Tapered Short RBT
 - [x] Backend: POST /api/drilling-protocols/generate — generates step-by-step drill sequence for implant + bone density
@@ -145,3 +167,12 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - All user-facing labels use "Phase 3" and "Phase 4" terminology
 - Do NOT modify `app.config.js` (deployment monkey-patching)
 - XLSX brand name "Noble Biocare" in data has extra 'l' vs user spec "Nobel Biocare"
+
+## Key API Endpoints — Clinical Photo Album
+- `GET /api/photo-steps` - Returns all 44 photo step definitions across 4 phases
+- `GET /api/photo-steps/{phase}` - Returns phase-specific steps (1-4)
+- `POST /api/procedures/{id}/photos/{step_id}` - Upload photo (student only)
+- `DELETE /api/procedures/{id}/photos/{step_id}/{filename}` - Delete photo (student only)
+- `GET /api/procedures/{id}/photos` - List all photos grouped by step with progress
+- `GET /api/photos/{filename}` - Serve uploaded photo file
+- `POST /api/procedures/{id}/generate-album` - Generate PDF album with all photos
