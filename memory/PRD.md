@@ -107,10 +107,8 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - Nurse: priya.sharma@dental.edu / Nurse@123
 
 ## Backlog / Future
-- [ ] P0: Update Phase 2-4 submit forms with new checklist items (Phase 2: torque values, Phase 3/4: new fields per spec)
-- [ ] P0: Integrate Implant Selection workflow into Phase 1 (1-6 implants with positions, risk assessment, drilling protocol)
 - [ ] P1: Case Completion engine (badge generation, full PDF report on Phase 4 approval)
-- [ ] P1: File upload support in Phase 1 checklist items (Academic Readiness PPT/PDF, Hematology report, etc.)
+- [ ] P1: File upload support in Phase 1 checklist items (Academic Readiness PPT/PDF, Hematology report, CBCT, etc.)
 - [ ] P1: Add more drilling protocol data for other implant systems (awaiting user data)
 - [ ] P2: Data cleanup (remove duplicate users from earlier runs)
 - [ ] P2: Break down backend/server.py monolith into routers/models/services
@@ -155,6 +153,25 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - [x] Frontend: Time slots updated - Mon-Fri: 10AM+2PM, Saturday: 10AM only
 - [x] Frontend: constants/checklist.ts updated with getProstheticOptions(), PROCEDURE_TYPES, LOADING_TYPES
 - [x] Tested: 15/15 backend tests passed, all frontend UI verified (iteration 21)
+
+## Completed Features — Implant Planning & Phase Form Updates (March 2026)
+- [x] Backend: POST /api/procedures/{id}/implant-plan - Save 1-6 implants with validation (unique positions, max 6)
+- [x] Backend: GET /api/procedures/{id}/implant-plan - Retrieve saved plans
+- [x] Backend: Phase2Submit model updated with torque_values: List[float]
+- [x] Backend: Stage2ProstheticSubmit updated with faculty_remark, incharge_remark, final_prosthetic_plan
+- [x] Frontend: CaseImplantPlanning component with:
+  - Mini FDI dental chart for tooth selection (disabled for already-used positions)
+  - "Let Me Choose" / "Suggest Me" mode toggle
+  - System search with brand/system filtering
+  - Bone width/height/type inputs
+  - Risk assessment calculation with color-coded result
+  - Add/Edit/Delete implant cards with position, brand, system, dimensions
+  - Count badge (X/6)
+- [x] Frontend: Phase 2 submit form updated with dynamic torque value inputs (10-90 Ncm per implant, labeled with tooth position)
+- [x] Frontend: Phase 3 submit form updated with Student Clinical Assessment text field
+- [x] Frontend: Phase 4 submit form updated with Final Prosthetic Plan dropdown + Student/Faculty/Incharge remark fields
+- [x] Frontend: Checklist additionalFields added for Phase 2-4
+- [x] Tested: 15/15 backend tests passed, all frontend verified (iteration 22)
 
 ## Completed Features — Drilling Protocol (March 2026)
 - [x] Backend: Drilling protocol data for BioHorizons Tapered Pro Conical RBT and Tapered Short RBT
