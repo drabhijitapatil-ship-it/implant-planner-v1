@@ -113,6 +113,7 @@ export default function Phase2SubmissionScreen() {
             checklist={checklist}
             onChecklistChange={setChecklist}
             phase={2}
+            procedureId={id as string}
           />
 
           {/* Torque Values Section */}

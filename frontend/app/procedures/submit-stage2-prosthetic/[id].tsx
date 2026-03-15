@@ -125,6 +125,7 @@ export default function Stage2ProstheticSubmissionScreen() {
             checklist={checklist}
             onChecklistChange={setChecklist}
             stage2Section="prosthetic_phase"
+            procedureId={id as string}
           />
 
           <View style={styles.form}>

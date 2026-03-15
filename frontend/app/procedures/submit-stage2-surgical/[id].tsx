@@ -76,6 +76,7 @@ export default function Stage2SurgicalSubmissionScreen() {
             checklist={checklist}
             onChecklistChange={setChecklist}
             stage2Section="second_stage"
+            procedureId={id as string}
           />
 
           <View style={styles.form}>
