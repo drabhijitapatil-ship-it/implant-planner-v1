@@ -651,12 +651,30 @@ export default function ProcedureDetailScreen() {
           status={procedure.status}
         />
 
-        {/* Implant Planning */}
-        <CaseImplantPlanning
-          procedureId={id as string}
-          isOwner={user?.id === procedure.student_id}
-          userRole={user?.role || ''}
-        />
+        {/* Implant Planning - Part of Phase 1 Workflow */}
+        {procedure.status === 'pending_phase1' && (
+          <View style={{ marginTop: 4 }}>
+            <View style={{ backgroundColor: '#E3F2FD', padding: 12, marginBottom: 0 }}>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', textAlign: 'center' }}>
+                Phase 1 Required: Complete Implant Planning Below
+              </Text>
+            </View>
+            <CaseImplantPlanning
+              procedureId={id as string}
+              isOwner={user?.id === procedure.student_id}
+              userRole={user?.role || ''}
+            />
+          </View>
+        )}
+
+        {/* Implant Planning - Read-only view for later phases */}
+        {procedure.status !== 'pending_phase1' && (
+          <CaseImplantPlanning
+            procedureId={id as string}
+            isOwner={false}
+            userRole={user?.role || ''}
+          />
+        )}
 
         {/* Clinical Photo Album */}
         <CasePhotoAlbum

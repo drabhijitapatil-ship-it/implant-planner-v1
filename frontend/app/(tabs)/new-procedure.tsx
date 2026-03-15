@@ -70,8 +70,10 @@ export default function NewProcedureScreen() {
   }, [formData.implant_procedure_type, formData.loading_type]);
 
   useEffect(() => {
-    loadUsers();
-  }, []);
+    if (user) {
+      loadUsers();
+    }
+  }, [user]);
 
   // Clear prosthetic_plan when options change and current selection is no longer valid
   useEffect(() => {

@@ -107,11 +107,28 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - Nurse: priya.sharma@dental.edu / Nurse@123
 
 ## Backlog / Future
-- [ ] P1: File upload support in Phase 1 checklist items (Academic Readiness PPT/PDF, Hematology report, CBCT, etc.)
 - [ ] P1: Add more drilling protocol data for other implant systems (awaiting user data)
 - [ ] P2: Data cleanup (remove duplicate users from earlier runs)
 - [ ] P2: Break down backend/server.py monolith into routers/models/services
 - [ ] P2: Modularize frontend form logic
+
+## Completed Features — Checklist File Upload Support (March 2026)
+- [x] Backend: POST /api/procedures/{id}/checklist-files/{item_id} - Upload file for checklist item
+  - Allowed: .pdf, .ppt, .pptx, .doc, .docx, .jpg, .jpeg, .png, .heic (max 25MB)
+  - Student ownership validation (only case owner can upload/delete)
+  - Files stored in /app/backend/uploads/checklist_files/
+- [x] Backend: GET /api/procedures/{id}/checklist-files - List files grouped by item_id
+- [x] Backend: DELETE /api/procedures/{id}/checklist-files/{item_id}/{filename} - Delete file (DB + filesystem)
+- [x] Backend: GET /api/checklist-files/{filename} - Serve uploaded file
+- [x] Frontend: ChecklistForm component updated with file upload support
+  - Items with hasUpload:true show upload hint ("Attach: PPT, PDF" etc.)
+  - Upload button using expo-document-picker
+  - Uploaded file list with name, size, delete button
+  - Works for Phase 1 items: academic_readiness, hematological, radiographic, cbct, realguide
+  - All Phase 2/3/4 submit forms pass procedureId for potential future upload items
+- [x] Frontend: Phase 1 checklist updated to 11 items (added CBCT Slices and Report)
+- [x] Frontend: RealGuide item now supports file upload
+- [x] Tested: 26/26 backend tests passed (including ownership validation, extension filtering), frontend verified (iteration 24)
 
 ## Completed Features — Case Completion Engine (March 2026)
 - [x] Backend: Badge generation on Phase 4 completion (stored in 'badges' collection)

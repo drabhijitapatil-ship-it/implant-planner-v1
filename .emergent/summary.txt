@@ -1,86 +1,108 @@
 <analysis>**original_problem_statement:**
-The user is building a comprehensive mobile application for the Department of Prosthodontics. The latest feature request is to add a Clinical Case Album Generator. This involves adding a series of photo upload steps to each of the four phases of a clinical case (Pre-Surgical, Surgical, Second Stage, Prosthetic). After completing all phases, the app should be able to generate a multi-page PDF album containing the case details and all uploaded photos with auto-generated captions.
+The user is overhauling the New Case workflow for their prosthodontics mobile application. The initial request was to add a Clinical Case Album Generator. This has since expanded to a complete redesign of the case creation and management process, specified in a detailed document.
 
 **PRODUCT REQUIREMENTS (as of the latest user request):**
+The application should have a multi-step New Case workflow:
+1.  **New Case Form:** A redesigned form with conditional logic for prosthetic plans based on the chosen procedure type.
+2.  **Phase-Based Workflow:** Cases progress through four distinct phases (Pre-Surgical, Surgical, Second Stage, Prosthetic), each with its own checklist and approval process.
+3.  **Implant Selection Integration:** The existing Implant Selection feature must be integrated into the Phase 1 workflow.
+4.  **Checklist File Uploads:** Specific checklist items (e.g., reports, plans) require file upload functionality.
+5.  **Case Completion Engine:** Upon final approval of Phase 4, the system should generate a completion badge and a comprehensive PDF case report.
+6.  **Clinical Photo Album:** A separate feature to upload and manage 26 distinct clinical photos across the four phases, and generate a PDF photo album. This part is already complete.
 
-1.  **New Case Workflow Overhaul:**
-    *   Integrate a multi-step photography workflow into the existing New Case feature.
-    *   There are 26 distinct photo steps distributed across four phases.
-    *   Each photo step includes three prompts for the user: Purpose of photograph, Armamentarium required, and How to capture properly.
-
-2.  **Clinical Case Album Generation:**
-    *   After a case is completed, the system must generate a PDF clinical case album.
-    *   The album will have a standard structure: Title Page, Patient Details, and one page for each of the four photographic phases.
-    *   Photos will be laid out in the PDF with automatically generated figure captions (e.g., Figure 1 – Preoperative frontal intraoral view.).
-    *   Photos will be stored on the server in a structured folder system per case.
-
-3.  **Backend Implementation:**
-    *   A backend endpoint is required to store the uploaded photos for each step.
-    *   A backend endpoint is required to generate and serve the final PDF album.
-    *   The backend must manage the structured data defining all photography steps and prompts.
+The user's most recent message reported three specific issues with the latest implementation that need to be addressed.
 
 **User's preferred language**: English
 
 **what currently exists?**
-The application is a full-stack Expo (React Native) and FastAPI app with a MongoDB database. The backend is a monolithic  file containing all API endpoints and business logic. The backend foundation (Phase A) for the new Clinical Case Album Generator has been implemented. This includes:
-*   A comprehensive data structure in  defining all 26 photography steps.
-*   A new endpoint () for uploading photos.
-*   A new endpoint () for generating the PDF album.
+The application is a full-stack Expo (React Native) and FastAPI app with a MongoDB database. The backend is a monolithic .
 
-However, the album generation endpoint is currently broken. The frontend has not yet been modified to include the new photography workflow.
+The following features have been implemented in this session:
+*   **Clinical Case Album Generator:** The backend PDF generation bug was fixed, and a new frontend component () was created and integrated to manage photo uploads and album generation. This feature is complete.
+*   **New Case Workflow Overhaul:**
+    *   The New Case form () has been completely rewritten with new fields and dynamic logic.
+    *   Backend endpoints and models have been updated to support the new form structure, phase submissions (with new fields like torque values), and checklist file uploads.
+    *   New frontend components for implant planning () and case completion () have been created and added to the procedure detail page.
+    *   Checklist forms have been updated to support file uploads.
+
+However, the New Procedure form is currently blocked by a bug, and some implementation details do not match the user's latest request.
 
 **Last working item**:
-- **Last item agent was working:** Debugging the new  endpoint. The endpoint was failing with a  when trying to generate the PDF because the  library cannot handle Unicode characters (like '–') in the text with its default font. The agent attempted to fix this by adding a  text sanitization function but did not apply it comprehensively, and the issue persists.
+- **Last item agent was working:** The agent was investigating three issues reported by the user in their last message:
+    1.  The Supervising Faculty and Implant Incharge dropdowns on the New Procedure form are not populating with options.
+    2.  The Implant Selection workflow was not integrated into Phase 1 correctly.
+    3.  A request to remove the file upload option for CBCT Slices and Report.
+    The agent confirmed via  that the backend API for the dropdowns is returning data, indicating a frontend issue.
 - **Status:** IN PROGRESS
-- **Agent Testing Done:** Y (partially for the backend, but album generation fails)
-- **Which testing method agent to use?** backend testing agent. The immediate task is to fix the PDF generation bug. The agent should use  to reproduce the error, apply the fix in , and then verify with  again. Once the backend is stable, the frontend implementation is a large task that will require .
+- **Agent Testing Done:** N
+- **Which testing method agent to use?** frontend testing agent. After the fixes are applied, a full regression test is needed to verify the entire New Case workflow, including the form, dropdowns, and component integrations.
 - **User Testing Done:** N
 
 **All Pending/In progress Issue list**:
-- **Issue 1:** PDF Album Generation Fails with Unicode Error (P0)
+- **Issue 1:** Supervising Faculty and Implant Incharge dropdowns on New Procedure form are empty (P0)
+- **Issue 2:** Remove file upload for CBCT Slices and Report from Phase 1 checklist (P0)
+- **Issue 3:** Implant Selection workflow is not correctly integrated into the Phase 1 process (P1)
 
 **Issues Detail:**
 - **Issue 1:**
-    - **Attempted fixes:** The agent created a  function to sanitize text by encoding to 'latin-1' and ignoring errors. However, this function was applied inconsistently across the multiple text-writing calls in the PDF generation logic (, , etc.). The fix was incomplete, and the error likely persists in an unsanitized string.
+    - **Attempted fixes:** The agent verified that the backend APIs (, ) are returning the correct user data. The issue is confirmed to be on the frontend. No code fix has been attempted yet.
     - **Next debug checklist:**
-        1.  Locate the  function in .
-        2.  Ensure that **every single string** passed to an FPDF method (like , , , ) is wrapped with the  function. This includes static titles, dynamic data from the database, and generated captions.
-        3.  Pay special attention to the page titles like , as the '–' character was the original cause.
-        4.  Restart the backend and re-run the  command to test the  endpoint.
-    - **Why fix this issue and what will be achieved with the fix?** Fixing this bug is critical to completing the backend portion (Phase A) of the Clinical Case Album Generator feature. It unblocks the entire feature and allows the frontend development to begin.
+        1.  Examine .
+        2.  Check the  hooks that fetch the faculty/in-charge lists.
+        3.  Verify that the component's state is being updated with the fetched data.
+        4.  Debug the  components to understand why the options are not being rendered from the state variables.
+    - **Why fix this issue and what will be achieved with the fix?** This is a critical blocker. The user cannot create a new case because these are mandatory fields. Fixing it will unblock the entire New Case workflow.
     - **Status:** IN PROGRESS
     - **Is recurring issue?** N
-    - **Should Test frontend/backend/both after fix?** Backend
+    - **Should Test frontend/backend/both after fix?** Frontend
+    - **Blocked on other issue:** None
+
+- **Issue 2:**
+    - **Attempted fixes:** None.
+    - **Next debug checklist:**
+        1.  Edit .
+        2.  Locate the item corresponding to Radiographic Investigations and Evaluation Done (which replaced the old CBCT item).
+        3.  Remove the  property from this item to disable the file upload button.
+    - **Why fix this issue and what will be achieved with the fix?** To align the form with the user's updated and simplified requirements for the checklist.
+    - **Status:** NOT STARTED
+    - **Is recurring issue?** N
+    - **Should Test frontend/backend/both after fix?** Frontend
+    - **Blocked on other issue:** None
+
+- **Issue 3:**
+    - **Attempted fixes:** The agent implemented the  component as a standalone section on the procedure detail page (). This does not match the user's desired workflow.
+    - **Next debug checklist:**
+        1.  Remove the  component from .
+        2.  Integrate the component or its logic into the Phase 1 submission flow. This will likely involve showing it as a modal or a new step after the initial procedure is created but before Phase 1 is submitted for approval.
+        3.  This may require changes in  or the logic within  that handles phase submissions.
+    - **Why fix this issue and what will be achieved with the fix?** To correct the application's workflow to match the user's specification, ensuring implant planning is a distinct step within Phase 1.
+    - **Status:** NOT STARTED
+    - **Is recurring issue?** N
+    - **Should Test frontend/backend/both after fix?** Frontend
     - **Blocked on other issue:** None
 
 **In progress Task List**:
-- **Task 1:** Implement the Clinical Case Album Generator feature.
-
-**Task Detail:**
-- **Task 1:**
-    - **Where to resume:** Resume in  to fix the PDF generation bug described in Issue 1. Once fixed, the work moves to the frontend.
-    - **What will be achieved with this?** A complete end-to-end feature for clinical photography and album generation.
-    - **Status:** IN PROGRESS (Backend implemented but blocked by a bug, Frontend not started).
-    - **Should Test frontend/backend/both after fix?** Both
-    - **Blocked on something:** The PDF generation bug in the backend.
+- **Task 1:** Overhaul New Case Workflow
+    - **Where to resume:** Resume by fixing the three pending issues listed above, starting with the blocking dropdown bug.
+    - **What will be achieved with this?** A fully functional and user-approved New Case creation and management workflow.
+    - **Status:** IN PROGRESS
+    - **Should Test frontend/backend/both after fix?** Frontend
+    - **Blocked on something:** Blocked by Issue 1.
 
 **Upcoming and Future Tasks**
-- **Upcoming Tasks:**
-  - **P0: Clinical Album Frontend - Photo Upload UI (Phase B):** Modify the New Case workflow in the frontend ( or new components) to include UI for uploading photos for each of the 26 steps. This will involve creating a component that displays the step's purpose, armamentarium, and instructions, along with an upload button that calls the  endpoint.
-  - **P1: Clinical Album Frontend - Album Viewer (Phase C):** Create a new UI view where users can see a list of completed cases and trigger the generation/download of the PDF album by calling .
 - **Future Tasks:**
-  - **P2: Backend Refactoring:** Decompose the monolithic  into a standard FastAPI project structure (routers, models, services).
-  - **P2: Data Cleanup:** Create a one-time script to find and remove any duplicate user entries from the database.
-  - **P2: Frontend Refactoring:** Modularize the complex form logic in .
+    - **P2: Notification System:** Implement a notification system for phase approvals and case status changes as described in the user's specification.
+    - **P2: Backend Refactoring:** Decompose the monolithic  into a standard FastAPI project structure (routers, models, services) for better maintainability.
+    - **P2: Frontend Refactoring:** Modularize the complex logic in  and .
+    - **P2: Data Cleanup:** Create a one-time script to find and remove any duplicate user entries from the database.
 
 **Completed work in this session**
-- **Drilling Protocol Frontend:** Implemented the full frontend UI for the drilling protocol feature in , allowing users to select an implant, view the protocol, and export a PDF.
-- **Bug Fix (Implant Dropdown):** Resolved a persistent issue where users saw only 42 out of 45 implant systems. The fix involved forcing the database to re-seed from the XLSX file on every startup and adding no-cache headers to the API endpoint.
-- **Drilling Protocol Data Expansion:** Added backend logic and data for two new major implant systems:
-    - **Conelog Progressive Line:** Implemented the unique drilling logic based on bone type.
-    - **Neodent Grand Morse (6 variations):** Implemented three distinct protocol engines (for Helix, Drive, and Titamax) to handle all 6 implant variations.
-- **Implant Library Update:** Updated the backend to use a new user-provided , successfully adding several new implant systems and making them available in both the Let Me Choose and Suggest Me workflows.
-- **Backend Foundation (Clinical Case Album):** Implemented the initial backend structure (Phase A) for the new album generator feature, including data models and API endpoints for photo management and PDF generation (currently blocked by a bug).
+- **Clinical Case Album Generator:** Fixed a critical backend  in PDF generation and implemented the complete frontend UI for managing and viewing the photo album.
+- **New Case Form Overhaul:** Completely rewrote the New Case form () with a new field structure and conditional logic for prosthetic plans.
+- **Implant Planning Integration (Initial Version):** Created backend endpoints and a frontend component () for saving implant plans to a case.
+- **Phase 2-4 Form Updates:** Updated backend models and created new frontend forms () to support additional data entry like torque values and clinical remarks.
+- **Case Completion Engine:** Implemented the backend logic and frontend UI () to generate a completion badge and a full PDF case report when a case is finished.
+- **Checklist File Uploads:** Added backend infrastructure and updated the frontend  to support file uploads for specific checklist items.
 
 **Earlier issues found/mentioned but not fixed**
 - None.
@@ -92,78 +114,79 @@ However, the album generation endpoint is currently broken. The frontend has not
 
 
 **Key Technical Concepts**
-- **Frontend:** React Native, Expo, Expo Router
-- **Backend:** FastAPI, Motor (async MongoDB),  for PDF generation
+- **Frontend:** React Native, Expo, Expo Router, Axios for API calls, , .
+- **Backend:** FastAPI, Motor (async MongoDB),  for PDF generation, Pydantic for data validation.
 - **Database:** MongoDB
-- **Key Architecture Pattern:** Monolithic backend in  with embedded data dictionaries and complex procedural logic. File uploads are stored on the local filesystem in the  directory.
+- **Architecture:** Monolithic backend (), component-based frontend.
 
 **key DB schema**
-- **procedures:**  (The  field is new and stores records of uploaded clinical photos).
+- **procedures:** 
+- **badges:**  (New collection)
 - **users:** 
-- **implants:** 
 
 **changes in tech stack**
-- No new packages were added, but the usage of  for complex report generation has become more prominent.
+- No new technologies added. Existing libraries  and  were utilized.
 
 **All files of reference**
-- ****: The only backend file. The current bug is in the  function.
-- ****: The primary frontend file that will need to be modified for the photo upload feature.
-- ****: The file containing the recently completed drilling protocol feature.
-- : The user document specifying the requirements for the Clinical Case Album Generator.
+- ****: Location of the primary blocking bug (empty dropdowns).
+- ****: Needs to be edited to remove the CBCT file upload.
+- ****: Contains the  component that needs to be moved.
+- ****: The component to be reintegrated into the Phase 1 workflow.
+- ****: The single source of all backend logic.
 
 **Areas that need refactoring**:
-- **Critical:**  is now extremely large and unmaintainable. It urgently needs to be broken down into separate files for routes, models, services, and data definitions (like drilling protocols and photo steps).
-- **High:**  is very complex.
-- **Upcoming:**  will become very complex if the new photo upload feature is not implemented in a modular way.
+- **Critical:**  is exceedingly large and needs to be broken into a proper FastAPI project structure (routers, services, models).
+- **High:** The logic in  is very complex and should be modularized with custom hooks.
 
 **key api endpoints**
-- ****: (New) Uploads a photo for a specific phase and step of a case.
-- ****: (New, **BROKEN**) Generates and returns a PDF album for a case.
-- ****: (New) Returns the JSON definition of all photo steps.
-- ****: Fetches drilling sequence for a given implant.
-- ****: Generates a PDF of a given drilling protocol.
+- ****: Fetches users for the Supervising Faculty dropdown. Confirmed to be working.
+- ****: Fetches users for the Implant Incharge dropdown. Confirmed to be working.
+- ****: (Modified) Creates a new procedure with the overhauled data structure.
+- ****: (New) Saves implant selections to a procedure.
+- ****: (New) Uploads a file for a specific checklist item.
+- ****: (New) Generates a full PDF case report for a completed case.
 
 **Critical Info for New Agent**
-- **Your immediate priority is to fix the PDF generation bug in **. The root cause is a  from . The previous agent's attempt to sanitize strings with a  function was incomplete. You must ensure **all** string data passed to the PDF library is sanitized before proceeding.
-- Once the backend is fixed and verified with , you will move on to the frontend implementation of the Clinical Case Album Generator (Phase B), starting with the photo upload UI in the New Case workflow.
-- Do not modify the existing [13:31:13] Starting project at /app/frontend command. A user request to change it was a red herring; the real issue causing errors was in the application code, not the environment setup.
+- **Your immediate priority is to fix the three issues from the user's last message.**
+    1.  **Fix Dropdowns (P0 Blocker):** The faculty/in-charge dropdowns in  are empty. This is a frontend rendering bug, as the backend API is providing data. This blocks all new case creation.
+    2.  **Remove CBCT Upload (P0):** Edit  to remove the  flag from the Radiographic Investigations checklist item.
+    3.  **Re-integrate Implant Planning (P1):** The user wants the  component to be part of the Phase 1 workflow, not a separate section on the detail page. You will need to move this component's integration point.
+- Address the P0 blocker first, then the other two issues.
 
 **documents and test reports created in this job**
 - 
 - 
 - 
+- 
+- 
 
 **Last 10 User Messages and any pending HUMAN messages**
-- **User (318):** Provided detailed specifications and data for adding drilling protocols for 6 new Neodent Grand Morse implant systems.
-- **Agent (319-372):** Successfully implemented and tested the new Neodent drilling protocols on the backend.
-- **User (373):** Reported an error with [13:31:14] Starting project at /app/frontend, suspecting an authentication issue.
-- **Agent (374-377):** Investigated and correctly identified this was a misinterpretation; the error was unrelated to the tunnel command.
-- **User (378):** Introduced the major new feature request: Clinical Case Album Generator, and uploaded a Word document with full specifications.
-- **Agent (379-382):** Analyzed the request and presented a multi-phase plan (A: Backend, B: Frontend Upload, C: Frontend Viewer).
-- **User (383):** Approved the plan, asking to start with Phase A.
-- **Agent (384-463):** Began implementing the backend. Created the necessary data structures and API endpoints. Encountered and started debugging a  during PDF album generation, leaving the feature in a broken state.
+1.  **Agent (364):** Completed implementation of the checklist file upload feature and reported that all tests passed.
+2.  **User (369):** Reported three issues: (1) Faculty/Incharge dropdowns are empty. (2) Implant selection workflow is not integrated correctly into Phase 1. (3) Requested removal of the CBCT Slices and Report upload option.
+3.  **Agent (370-373):** Began investigating the user's feedback, starting with the dropdown issue. Confirmed via a  test that the backend API providing data for the dropdowns is working correctly, isolating the problem to the frontend. The agent was preparing to fix all three issues in parallel.
 
 **Project Health Check:**
-- **Broken:** The primary new feature, Clinical Case Album Generator, is non-functional due to a bug in the  PDF generation endpoint.
+- **Broken:** The core New Procedure workflow is blocked due to non-functional mandatory dropdown fields.
 - **Mocked:** None.
 
 **3rd Party Integrations**
 -  (Python, for PDF generation)
+- ,  (Backend data seeding)
+- ,  (Frontend file selection)
 -  (Frontend vector icons)
 -  (Frontend navigation)
-- ,  (Backend data seeding)
 
 **Testing status**
-- **Testing agent used after significant changes:** YES, comprehensive tests were run after adding the Neodent drilling protocols, with 100% success.
+- **Testing agent used after significant changes:** YES. The agent ran the testing agent after each major feature was completed during this session, with all tests passing prior to the latest user feedback.
 - **Troubleshoot agent used after agent stuck in loop:** NO.
 - **Test files created:** None.
-- **Known regressions:** None.
+- **Known regressions:** Yes, the faculty/incharge dropdowns were working in a previous state but are now broken after the form overhaul.
 
 **Credentials to test flow:**
-The default password is  for most users and  for .
-- **Administrator / Implant Incharge:** 
-- **Supervisors:** , 
-- **Students:** , 
+- **Administrator / Implant Incharge:**  / 
+- **Supervisors:** ,  / 
+- **Students:**  (email: ),  (email: ) / 
 
 **What agent forgot to execute**
-The agent did not comprehensively fix the  in the PDF generation function. It made several partial attempts to apply a sanitization function () instead of stopping, analyzing all text inputs to the  class, and applying the fix to every single one in a single, verified code change. This led to wasted steps and left the feature broken.</analysis>
+- The agent failed to perform a final manual check or include a specific test for the dropdowns in  after the major rewrite, leading to the regression.
+- The agent misinterpreted the user's workflow requirement for implant selection, implementing it as a separate section on the detail page instead of integrating it directly into the Phase 1 submission process.</analysis>
