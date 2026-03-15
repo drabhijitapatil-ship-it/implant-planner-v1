@@ -6,7 +6,7 @@
     "production": {
       "distribution": "store",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://drill-sequence.preview.emergentagent.com"
+        "EXPO_PUBLIC_BACKEND_URL": "https://prosth-case-album.preview.emergentagent.com"
       }
     },
     "preview": {
