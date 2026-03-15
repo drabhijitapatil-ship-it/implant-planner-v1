@@ -1164,6 +1164,268 @@ async def get_implant_plan(
 
 
 
+# ── Badge & Case Report ─────────────────────────────────────────────
+@api_router.get("/procedures/{procedure_id}/badge")
+async def get_procedure_badge(
+    procedure_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Get the completion badge for a procedure."""
+    badge = await db.badges.find_one(
+        {"procedure_id": procedure_id},
+        {"_id": 0},
+    )
+    if not badge:
+        return {"badge": None}
+    if isinstance(badge.get("completed_at"), datetime):
+        badge["completed_at"] = badge["completed_at"].isoformat()
+    if isinstance(badge.get("created_at"), datetime):
+        badge["created_at"] = badge["created_at"].isoformat()
+    return {"badge": badge}
+
+
+@api_router.post("/procedures/{procedure_id}/case-report")
+async def generate_case_report(
+    procedure_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Generate a comprehensive Case Report PDF."""
+    procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+
+    def safe(text):
+        if not isinstance(text, str):
+            text = str(text)
+        return text.encode("latin-1", "replace").decode("latin-1")
+
+    def add_section_title(title, r=0, g=51, b=153):
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.set_text_color(r, g, b)
+        pdf.cell(0, 10, safe(title), ln=True)
+        pdf.set_draw_color(r, g, b)
+        pdf.line(pdf.get_x(), pdf.get_y(), pdf.get_x() + 180, pdf.get_y())
+        pdf.ln(4)
+        pdf.set_text_color(0, 0, 0)
+
+    def add_field(label, value):
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(60, 7, safe(label + ":"), ln=False)
+        pdf.set_font("Helvetica", "", 10)
+        pdf.cell(0, 7, safe(str(value) if value else "N/A"), ln=True)
+
+    def add_checklist_section(title, checklist_data):
+        if not checklist_data:
+            return
+        pdf.set_font("Helvetica", "BI", 11)
+        pdf.cell(0, 8, safe(title), ln=True)
+        items = checklist_data.get("items", [])
+        if isinstance(items, list):
+            for item in items:
+                if isinstance(item, dict):
+                    checked = item.get("checked", False)
+                    label = item.get("label", item.get("id", ""))
+                    marker = "[X]" if checked else "[ ]"
+                    pdf.set_font("Helvetica", "", 9)
+                    pdf.cell(0, 6, safe(f"  {marker} {label}"), ln=True)
+                elif isinstance(item, str):
+                    pdf.set_font("Helvetica", "", 9)
+                    pdf.cell(0, 6, safe(f"  [X] {item}"), ln=True)
+        pdf.ln(3)
+
+    # ── Page 1: Title Page ──────────────────────────────────
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 24)
+    pdf.set_text_color(0, 51, 153)
+    pdf.cell(0, 20, "", ln=True)
+    pdf.cell(0, 15, safe("Implant Case Report"), ln=True, align="C")
+    pdf.set_font("Helvetica", "", 14)
+    pdf.set_text_color(80, 80, 80)
+    pdf.cell(0, 10, safe("Department of Prosthodontics"), ln=True, align="C")
+    pdf.ln(10)
+
+    # Case ID
+    case_id = procedure.get("badge_case_id", f"IMP{procedure_id[-4:].upper()}")
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.set_text_color(0, 0, 0)
+    pdf.cell(0, 12, safe(f"Case ID: {case_id}"), ln=True, align="C")
+    pdf.ln(8)
+
+    # Patient & Clinician Summary Box
+    pdf.set_fill_color(240, 245, 255)
+    pdf.rect(15, pdf.get_y(), 180, 50, "F")
+    y_start = pdf.get_y() + 5
+    pdf.set_xy(20, y_start)
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(80, 7, safe(f"Patient: {procedure.get('patient_name', 'N/A')}"))
+    pdf.cell(80, 7, safe(f"Reg: {procedure.get('registration_number', 'N/A')}"), ln=True)
+    pdf.set_x(20)
+    pdf.cell(80, 7, safe(f"PG Student: {procedure.get('student_name', 'N/A')}"))
+    pdf.cell(80, 7, safe(f"Supervisor: {procedure.get('supervisor_name', 'N/A')}"), ln=True)
+    pdf.set_x(20)
+    pdf.cell(80, 7, safe(f"Implant Incharge: {procedure.get('implant_incharge_name', 'N/A')}"))
+    pdf.cell(80, 7, safe(f"Procedure: {procedure.get('implant_procedure_type', 'N/A')}"), ln=True)
+    pdf.set_x(20)
+    loading = ", ".join(procedure.get("loading_type", [])) or "N/A"
+    pdf.cell(80, 7, safe(f"Loading: {loading}"))
+    prosthetic = procedure.get("final_prosthetic_plan", "") or procedure.get("prosthetic_plan", "") or "N/A"
+    pdf.cell(80, 7, safe(f"Prosthetic Plan: {prosthetic}"), ln=True)
+    pdf.set_y(y_start + 55)
+
+    status_text = "COMPLETED" if procedure.get("status") == "completed" else procedure.get("status", "").upper()
+    pdf.set_font("Helvetica", "B", 12)
+    color = (0, 153, 0) if procedure.get("status") == "completed" else (200, 120, 0)
+    pdf.set_text_color(*color)
+    pdf.cell(0, 10, safe(f"Status: {status_text}"), ln=True, align="C")
+    pdf.set_text_color(0, 0, 0)
+
+    # ── Page 2: Patient & Treatment Details ──────────────────
+    pdf.add_page()
+    add_section_title("Patient & Treatment Details")
+    add_field("Patient Name", procedure.get("patient_name"))
+    add_field("Registration Number", procedure.get("registration_number"))
+    add_field("PG Student", procedure.get("student_name"))
+    add_field("Supervising Faculty", procedure.get("supervisor_name"))
+    add_field("Implant Incharge", procedure.get("implant_incharge_name"))
+    add_field("Procedure Date", procedure.get("procedure_date"))
+    add_field("Procedure Time", procedure.get("procedure_time"))
+    add_field("Receipt Number", procedure.get("receipt_number"))
+    add_field("Amount Paid", procedure.get("amount_paid"))
+    add_field("Procedure Type", procedure.get("implant_procedure_type"))
+    add_field("Loading Type", ", ".join(procedure.get("loading_type", [])))
+    add_field("Prosthetic Plan", prosthetic)
+    add_field("Bone Graft Specifications", procedure.get("bone_graft_specifications"))
+    pdf.ln(4)
+
+    # ── Implant Planning Section ─────────────────────────────
+    implant_plans = procedure.get("implant_plans", [])
+    if implant_plans:
+        add_section_title("Implant Planning", 0, 102, 204)
+        add_field("Number of Implants", len(implant_plans))
+        pdf.ln(2)
+        for i, imp in enumerate(implant_plans):
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.set_fill_color(230, 240, 255)
+            pdf.cell(0, 7, safe(f"  Implant {i+1} - Tooth {imp.get('position', '?')}"), ln=True, fill=True)
+            pdf.set_font("Helvetica", "", 9)
+            pdf.cell(0, 6, safe(f"    System: {imp.get('brand', '')} - {imp.get('system', '')}"), ln=True)
+            pdf.cell(0, 6, safe(f"    Diameter: {imp.get('diameter', '')}mm | Length: {imp.get('length', '')}mm"), ln=True)
+            if imp.get("bone_width"):
+                pdf.cell(0, 6, safe(f"    Bone: {imp.get('bone_width')}mm W x {imp.get('bone_height', '')}mm H | Type: {imp.get('bone_type', '')}"), ln=True)
+            if imp.get("risk_level"):
+                pdf.cell(0, 6, safe(f"    Risk: {imp.get('risk_level')} (Score: {imp.get('risk_score', '')}/15)"), ln=True)
+            pdf.ln(2)
+
+    # ── Phase 1: Pre-Surgical ────────────────────────────────
+    pdf.add_page()
+    add_section_title("Phase 1 - Pre-Surgical Protocol", 0, 122, 255)
+    checklist = procedure.get("checklist", {})
+    if isinstance(checklist, dict):
+        add_checklist_section("Pre-Surgical Checklist", checklist.get("pre_surgical"))
+    phase1_date = procedure.get("phase1_completed_at")
+    if phase1_date:
+        add_field("Phase 1 Completed", phase1_date.isoformat() if isinstance(phase1_date, datetime) else str(phase1_date))
+
+    # ── Phase 2: Surgical ────────────────────────────────────
+    add_section_title("Phase 2 - Surgical Protocol", 255, 107, 53)
+    checklist_s = procedure.get("checklist_surgical")
+    if checklist_s:
+        add_checklist_section("Surgical Checklist", checklist_s)
+    torque = procedure.get("torque_values", [])
+    if torque:
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(0, 7, safe("Torque Values (Ncm):"), ln=True)
+        pdf.set_font("Helvetica", "", 9)
+        for i, tv in enumerate(torque):
+            pos_label = ""
+            if i < len(implant_plans):
+                pos_label = f" (Tooth {implant_plans[i].get('position', '')})"
+            pdf.cell(0, 6, safe(f"  Implant {i+1}{pos_label}: {tv} Ncm"), ln=True)
+        pdf.ln(2)
+    if procedure.get("phase2_remark"):
+        add_field("Post-Surgical Notes", procedure.get("phase2_remark"))
+    phase2_date = procedure.get("phase2_completed_at")
+    if phase2_date:
+        add_field("Phase 2 Completed", phase2_date.isoformat() if isinstance(phase2_date, datetime) else str(phase2_date))
+
+    # ── Phase 3: Second Stage ────────────────────────────────
+    pdf.add_page()
+    add_section_title("Phase 3 - Second Stage Surgery", 33, 150, 243)
+    checklist_ss = procedure.get("checklist_stage2_surgical")
+    if checklist_ss:
+        add_checklist_section("Second Stage Checklist", checklist_ss)
+    if procedure.get("stage2_surgical_remark"):
+        add_field("Student Clinical Assessment", procedure.get("stage2_surgical_remark"))
+    phase3_date = procedure.get("stage2_surgical_completed_at")
+    if phase3_date:
+        add_field("Phase 3 Completed", phase3_date.isoformat() if isinstance(phase3_date, datetime) else str(phase3_date))
+
+    # ── Phase 4: Prosthetic ──────────────────────────────────
+    add_section_title("Phase 4 - Prosthetic Protocol", 156, 39, 176)
+    checklist_sp = procedure.get("checklist_stage2_prosthetic")
+    if checklist_sp:
+        add_checklist_section("Prosthetic Checklist", checklist_sp)
+    if procedure.get("final_prosthetic_plan"):
+        add_field("Final Prosthetic Plan", procedure.get("final_prosthetic_plan"))
+    if procedure.get("stage2_prosthetic_remark"):
+        add_field("Student Remark", procedure.get("stage2_prosthetic_remark"))
+    if procedure.get("stage2_prosthetic_faculty_remark"):
+        add_field("Faculty Remark", procedure.get("stage2_prosthetic_faculty_remark"))
+    if procedure.get("stage2_prosthetic_incharge_remark"):
+        add_field("Incharge Remark", procedure.get("stage2_prosthetic_incharge_remark"))
+    phase4_date = procedure.get("treatment_completed_at")
+    if phase4_date:
+        add_field("Treatment Completed", phase4_date.isoformat() if isinstance(phase4_date, datetime) else str(phase4_date))
+
+    # ── Final Page: Faculty Remarks & Confirmation ───────────
+    pdf.add_page()
+    add_section_title("Summary & Confirmation", 0, 100, 0)
+    pdf.set_font("Helvetica", "", 11)
+    pdf.multi_cell(0, 7, safe(
+        "This is to confirm that the above-mentioned post-graduate student has "
+        "satisfactorily completed the implant case as per the Department of Prosthodontics "
+        "Standard Operating Protocol. All four phases of the treatment protocol have been "
+        "reviewed and approved by the supervising faculty and implant incharge."
+    ))
+    pdf.ln(15)
+
+    # Signature lines
+    for title, name in [
+        ("PG Student", procedure.get("student_name", "")),
+        ("Supervising Faculty", procedure.get("supervisor_name", "")),
+        ("Implant Incharge", procedure.get("implant_incharge_name", "")),
+    ]:
+        pdf.set_font("Helvetica", "", 10)
+        pdf.cell(60, 6, safe(f"{title}:"), ln=False)
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(0, 6, safe(name), ln=True)
+        pdf.line(pdf.get_x(), pdf.get_y() + 12, pdf.get_x() + 60, pdf.get_y() + 12)
+        pdf.ln(18)
+
+    # Date
+    pdf.set_font("Helvetica", "", 10)
+    completed_str = ""
+    if procedure.get("treatment_completed_at"):
+        d = procedure["treatment_completed_at"]
+        completed_str = d.strftime("%B %d, %Y") if isinstance(d, datetime) else str(d)
+    pdf.cell(0, 6, safe(f"Date: {completed_str}"), ln=True)
+
+    buf = io.BytesIO()
+    pdf.output(buf)
+    buf.seek(0)
+
+    report_name = f"CaseReport_{case_id}_{procedure.get('patient_name', 'patient').replace(' ', '_')}.pdf"
+    return StreamingResponse(
+        buf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{report_name}"'},
+    )
+
+
+
 # ── Photo Step Definitions API ───────────────────────────────────────
 @api_router.get("/photo-steps/{phase}")
 async def get_photo_steps(phase: int, current_user: dict = Depends(get_current_user)):
@@ -2058,6 +2320,25 @@ async def approve_stage2_prosthetic(
             update_fields["status"] = "completed"
             update_fields["stage2_prosthetic_completed_at"] = datetime.utcnow()
             update_fields["treatment_completed_at"] = datetime.utcnow()
+
+            # Generate completion badge
+            case_id = f"IMP{procedure_id[-4:].upper()}"
+            badge = {
+                "procedure_id": procedure_id,
+                "type": "Implant Case Completed",
+                "case_id": case_id,
+                "student_name": procedure.get("student_name", ""),
+                "student_id": procedure.get("student_id", ""),
+                "patient_name": procedure.get("patient_name", ""),
+                "supervisor_name": procedure.get("supervisor_name", ""),
+                "implant_incharge_name": procedure.get("implant_incharge_name", ""),
+                "implant_procedure_type": procedure.get("implant_procedure_type", ""),
+                "number_of_implants": procedure.get("number_of_implants", 0),
+                "completed_at": datetime.utcnow(),
+                "created_at": datetime.utcnow(),
+            }
+            await db.badges.insert_one(badge)
+            update_fields["badge_case_id"] = case_id
 
             # Notify all parties
             await db.notifications.insert_one({
