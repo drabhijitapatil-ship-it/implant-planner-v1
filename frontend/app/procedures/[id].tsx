@@ -20,6 +20,7 @@ import { generateProcedurePDF } from '../../utils/pdfGenerator';
 import BackToDashboard from '../../components/BackToDashboard';
 import CasePhotoAlbum from '../../components/CasePhotoAlbum';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';
+import CaseCompletionBadge from '../../components/CaseCompletionBadge';
 import * as Linking from 'expo-linking';
 
 export default function ProcedureDetailScreen() {
@@ -643,6 +644,12 @@ export default function ProcedureDetailScreen() {
             {renderChecklistSection('prosthetic_phase', 'Phase 4: Prosthetic Protocol')}
           </>
         )}
+
+        {/* Case Completion Badge & Report */}
+        <CaseCompletionBadge
+          procedureId={id as string}
+          status={procedure.status}
+        />
 
         {/* Implant Planning */}
         <CaseImplantPlanning
