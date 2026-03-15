@@ -1,254 +1,58 @@
-# Dental Implant Management App - PRD
+# Prosthodontics Case Management App - PRD
 
 ## Original Problem Statement
-Build a mobile app using Expo for the Department of Prosthodontics to plan and manage dental implant procedures with multi-phase approval workflows.
+Overhauling the "New Case" workflow for a prosthodontics mobile application. Initially a "Clinical Case Album Generator" request, expanded to a complete redesign of case creation and management.
 
-## User Roles & Access Control
-- **PG Student**: Creates procedures, submits checklists for each phase
-- **Supervisor**: Approves/rejects each phase (assigned per procedure)
-- **Implant Incharge**: Approves/rejects each phase (assigned per procedure)
-- **Administrator**: Full access, user management
-- **Nurse**: Read-only access to approved/completed procedures
-
-## Core Workflow (4-Phase)
-1. **Phase 1 (Pre-surgical Protocol)**: Student creates procedure -> Dual approval (Supervisor + Implant Incharge)
-2. **Phase 2 (Surgical Protocol)**: Student submits surgical checklist -> Dual approval
-3. **Phase 3 (Second Stage Surgical Protocol)**: Student submits healing/exposure checklist -> Dual approval
-4. **Phase 4 (Prosthetic Protocol)**: Student submits prosthetic checklist -> Dual approval -> Treatment Complete
+## Core Requirements
+1. **New Case Form:** Redesigned form with conditional logic for prosthetic plans based on procedure type
+2. **Phase-Based Workflow:** Cases progress through 4 phases (Pre-Surgical, Surgical, Second Stage, Prosthetic)
+3. **Implant Selection Integration:** Integrated into Phase 1 workflow
+4. **Checklist File Uploads:** Specific checklist items require file upload
+5. **Case Completion Engine:** Generates completion badge and PDF case report
+6. **Clinical Photo Album:** Upload and manage 26 clinical photos across 4 phases, generate PDF album
 
 ## Tech Stack
-- **Frontend**: React Native, Expo SDK 54, Expo Router
-- **Backend**: FastAPI, Python, Motor (async MongoDB), JWT auth
-- **Database**: MongoDB
-- **Deployment**: Emergent Native Deployments (EAS Build)
+- **Frontend:** React Native, Expo, Expo Router, Axios
+- **Backend:** FastAPI, Motor (async MongoDB), fpdf2
+- **Database:** MongoDB
 
 ## Architecture
 ```
 /app
 ├── backend/
-│   ├── server.py          # Monolithic FastAPI (all endpoints)
-│   ├── setup_users.py     # Seeds user data
-│   └── tests/             # Pytest test files
+│   ├── server.py             # Monolithic FastAPI app
+│   ├── uploads/case_photos/
+│   └── uploads/checklist_files/
 ├── frontend/
-│   ├── app/               # Expo Router pages
-│   │   ├── (tabs)/        # Dashboard, Procedures, Notifications, User Management, Profile tabs
-│   │   └── procedures/    # Procedure detail, submit forms
-│   ├── components/        # Shared components (ChecklistForm, BackToDashboard)
-│   ├── constants/         # checklist.ts (statuses, labels, checklist items, roles)
-│   ├── contexts/          # AuthContext
-│   └── utils/             # api.ts, pdfGenerator.ts
+│   ├── app/(tabs)/           # Tab-based navigation
+│   ├── app/procedures/       # Procedure detail + phase forms
+│   ├── components/           # Reusable components
+│   ├── constants/checklist.ts # Checklist definitions
+│   ├── contexts/AuthContext.tsx
+│   └── utils/api.ts
 ```
 
-## Key API Endpoints
-- `POST /api/auth/login` - JWT login
-- `POST /api/procedures` - Create procedure (student only)
-- `POST /api/procedures/{id}/approve` - Phase 1/2 approval
-- `POST /api/procedures/{id}/submit-phase2` - Submit Phase 2 checklist
-- `POST /api/procedures/{id}/stage2/surgical` - Submit Phase 3 checklist
-- `POST /api/procedures/{id}/stage2/surgical/approve` - Phase 3 approval
-- `POST /api/procedures/{id}/stage2/prosthetic` - Submit Phase 4 checklist
-- `POST /api/procedures/{id}/stage2/prosthetic/approve` - Phase 4 approval
-- `POST /api/procedures/{id}/upload-cbct` - Upload CBCT file (student only, owner only)
-- `GET /api/uploads/{filename}` - Download CBCT file (authorized users only)
-- `GET /api/dashboard/stats` - Dashboard statistics
-- `GET /api/notifications` - User notifications
-- `GET /api/users` - List users (all authenticated)
-- `POST /api/users` - Create user (admin/implant_incharge only)
-- `PUT /api/users/{id}` - Update user name/role/password (admin/implant_incharge only)
-- `DELETE /api/users/{id}` - Delete user (admin/implant_incharge only)
+## What's Implemented (Complete)
+- Clinical Case Album Generator (backend PDF + frontend UI)
+- New Case Form with conditional prosthetic plan logic
+- Phase 2-4 submission forms with torque values and clinical remarks
+- Case Completion Engine (badge + PDF report)
+- Checklist File Uploads
+- Implant Planning component (CaseImplantPlanning.tsx)
+- Treatment timeline/progress tracker on detail page
 
-## Completed Features
-- [x] JWT authentication with 5 roles
-- [x] Procedure creation with scheduling restrictions
-- [x] Phase 1-4 dual approval workflow
-- [x] Push notifications via Expo
-- [x] Patient search on dashboard
-- [x] User avatar with initials fallback
-- [x] Visual treatment timeline on procedure detail
-- [x] PDF export of complete procedure
-- [x] Phase 3/4 rename (from "Stage 2") - All labels updated
-- [x] Interactive dashboard stat tiles (navigate to filtered procedures)
-- [x] Status badge position fix (proper SafeAreaView padding)
-- [x] User Management tab (admin/implant_incharge: list, create, edit, delete users)
-- [x] Edit user functionality (change name, role, reset password)
+## Bug Fixes Applied (March 15, 2026)
+1. **Faculty/Incharge Dropdowns (P0):** Fixed race condition where `/api/users` was called before auth token was available. Changed useEffect to depend on `user` from AuthContext.
+2. **CBCT Upload Removed (P0):** Removed `hasUpload: true` from "Radiographic Investigations" in checklist.ts
+3. **Implant Planning Phase 1 Integration (P1):** CaseImplantPlanning now shown prominently with Phase 1 banner during `pending_phase1` status; shown read-only in later phases
 
-- [x] CBCT file upload on new procedure form (PDF, PNG, JPEG, HEIF up to 25MB)
-- [x] CBCT file visible to supervisor/implant_incharge on procedure detail page
-- [x] Login page updated with college name
+## Test Credentials
+- **Admin/Implant Incharge:** abhijit.patil@dental.edu / Admin@123
+- **Student:** gaurav.pandey@student.dental.edu / Student@123
+- **Supervisors:** vasantha.n@dental.edu, rajeshree.jadhav@dental.edu
 
-- [x] Implant Selection module with complete multi-step workflow
-- [x] Step 1: FDI dental chart (28 teeth) with tooth-wise recommendation (diameter + length ranges)
-- [x] Step 2: Implant system dropdown with search (42 systems from XLSX)
-- [x] Step 3: Bone width/height input with algorithm-based filtering
-- [x] Step 4: Results display with recommended implant, clinical guidance, safety notes, all sizes
-- [x] Backend: /api/implant-library/systems, /tooth-recommendations, /suggest endpoints
-- [x] Suggestion engine: Bone width algorithm (<5->3.0-3.5, 5-6->3.75-4.0, 6-7->4.0-4.5, >=7->4.5-6.0), Bone height (>=13->Long, >=10->Standard, >=8->Short), 2mm safety clearance
-- [x] Tooth-specific range intersection for diameter and length
-- [x] Copy recommendation to clipboard, New Selection reset
-- [x] Implant library: 42 systems, 438 records from implant_library_latest.xlsx
-- [x] Auto-seed on startup: Users (20 accounts) and Implant Library (438 records) seeded when production DB is empty
-- [x] Tab navigation: Admin/Incharge see Users tab, Nurses hidden from New Case/Implants
-- [x] Implant system-specific indications: 17 systems with clinical indications (bone type, immediate placement, etc.)
-- [x] Auto-restrict NobelActive NP to teeth 41,42,31,32,12,22 and Osstem MS to teeth 31,32,33,41,42,43
-- [x] Indications displayed in dropdown, selected system area, and results screen
-- [x] Two-tab Implant Selection: "Let Me Choose" (manual) + "Suggest Me" (auto-suggestion)
-- [x] "Suggest Me" tab: Select Tooth → Procedure Type (multi-select, 6 options) → Bone Type (D1-D4) → Bone Measurements → Auto-suggest from all systems
-- [x] Procedure-bone type compatibility validation (Indication Dictionary): Immediate(D1-D3), Sinus Lift(D3-D4), etc.
-- [x] Backend: POST /api/implant-library/suggest-auto, GET /api/implant-library/procedure-options
-- [x] Implant Risk Calculator in "Let Me Choose" results: 5-factor scoring (Width, Height, Density, Procedure, Tooth Position), total 5-15, Low/Moderate/High with color-coded visual meter and suggested actions
-- [x] Implant Risk Calculator also in "Suggest Me" results: auto-populates bone type from input, procedure selector if multiple chosen
-- [x] Backend: POST /api/implant-library/calculate-risk endpoint
-
-## Credentials
-- Student: gaurav.pandey@student.dental.edu / Student@123
-- Supervisor: vasantha.n@dental.edu / Supervisor@123
-- Implant Incharge: abhijit.patil@dental.edu / Admin@123
-- Administrator: ajay.sabane@dental.edu / Admin@123
-- Nurse: priya.sharma@dental.edu / Nurse@123
-
-## Backlog / Future
-- [ ] P1: Add more drilling protocol data for other implant systems (awaiting user data)
-- [ ] P2: Data cleanup (remove duplicate users from earlier runs)
-- [ ] P2: Break down backend/server.py monolith into routers/models/services
-- [ ] P2: Modularize frontend form logic
-
-## Completed Features — Checklist File Upload Support (March 2026)
-- [x] Backend: POST /api/procedures/{id}/checklist-files/{item_id} - Upload file for checklist item
-  - Allowed: .pdf, .ppt, .pptx, .doc, .docx, .jpg, .jpeg, .png, .heic (max 25MB)
-  - Student ownership validation (only case owner can upload/delete)
-  - Files stored in /app/backend/uploads/checklist_files/
-- [x] Backend: GET /api/procedures/{id}/checklist-files - List files grouped by item_id
-- [x] Backend: DELETE /api/procedures/{id}/checklist-files/{item_id}/{filename} - Delete file (DB + filesystem)
-- [x] Backend: GET /api/checklist-files/{filename} - Serve uploaded file
-- [x] Frontend: ChecklistForm component updated with file upload support
-  - Items with hasUpload:true show upload hint ("Attach: PPT, PDF" etc.)
-  - Upload button using expo-document-picker
-  - Uploaded file list with name, size, delete button
-  - Works for Phase 1 items: academic_readiness, hematological, radiographic, cbct, realguide
-  - All Phase 2/3/4 submit forms pass procedureId for potential future upload items
-- [x] Frontend: Phase 1 checklist updated to 11 items (added CBCT Slices and Report)
-- [x] Frontend: RealGuide item now supports file upload
-- [x] Tested: 26/26 backend tests passed (including ownership validation, extension filtering), frontend verified (iteration 24)
-
-## Completed Features — Case Completion Engine (March 2026)
-- [x] Backend: Badge generation on Phase 4 completion (stored in 'badges' collection)
-  - Badge includes: case_id (IMP{last4}), student, procedure type, implant count, completion date
-  - badge_case_id stored on procedure document for reference
-- [x] Backend: GET /api/procedures/{id}/badge - Retrieve badge (null for non-completed, full badge for completed)
-- [x] Backend: POST /api/procedures/{id}/case-report - Generate comprehensive multi-page PDF
-  - Title Page with case ID, patient/clinician summary, status
-  - Patient & Treatment Details page (all fields including procedure type, loading, prosthetic plan)
-  - Implant Planning section (all implants with system, dimensions, bone data, risk)
-  - Phase 1: Pre-Surgical Protocol with checklist
-  - Phase 2: Surgical Protocol with checklist + torque values per implant
-  - Phase 3: Second Stage Surgery with checklist + clinical assessment
-  - Phase 4: Prosthetic Protocol with checklist + prosthetic plan + all remarks
-  - Summary & Confirmation page with signature lines and date
-- [x] Frontend: CaseCompletionBadge component
-  - Gold ribbon badge card for completed cases (case ID, student, procedure type, implants, date)
-  - Download Case Report PDF button (works for all statuses, not just completed)
-  - Blob download for web platform
-- [x] Frontend: Integrated into procedure detail page
-- [x] Tested: 10/10 backend tests passed, all frontend verified (iteration 23)
-
-## Completed Features — Clinical Case Album Generator (March 2026)
-- [x] Backend: PHOTO_STEPS data structure with 44 photo steps across 4 phases (14+12+7+11)
-- [x] Backend: ALBUM_CAPTIONS dictionary for figure captions in PDF generation
-- [x] Backend: POST /api/procedures/{id}/photos/{step_id} - Upload photo with validation (student only, file type/size checks)
-- [x] Backend: DELETE /api/procedures/{id}/photos/{step_id}/{filename} - Delete photo (removes DB record + file)
-- [x] Backend: GET /api/procedures/{id}/photos - List all photos grouped by step with progress info
-- [x] Backend: GET /api/photo-steps - Returns all photo step definitions
-- [x] Backend: GET /api/photo-steps/{phase} - Returns phase-specific steps
-- [x] Backend: GET /api/photos/{filename} - Serve uploaded photo files
-- [x] Backend: POST /api/procedures/{id}/generate-album - Generate PDF album (fixed UnicodeEncode + missing import bugs)
-- [x] Frontend: CasePhotoAlbum component (components/CasePhotoAlbum.tsx) with:
-  - 4 collapsible phase sections with color-coded indicators
-  - Per-phase progress bars and photo counts
-  - Per-step expandable cards with purpose/armamentarium/capture instructions
-  - Photo thumbnails with horizontal scroll preview
-  - Upload button (student owners only) using expo-image-picker
-  - Delete photo capability (student owners only)
-  - Generate Case Album PDF button with blob download
-- [x] Frontend: CasePhotoAlbum integrated into procedure detail page (app/procedures/[id].tsx)
-- [x] Permission checks: Students can upload/delete own photos; non-students read-only
-- [x] Tested: 20/20 backend tests passed, frontend UI fully verified (iteration 20)
-
-## Completed Features — New Case Form Overhaul (March 2026)
-- [x] Backend: Updated ProcedureCreate model with new fields: implant_procedure_type (required), loading_type[] (required), prosthetic_plan (optional)
-- [x] Backend: Validation for 9 procedure types and 2 loading types
-- [x] Backend: GET /api/case-form-options - Returns all dropdown data (procedure types, loading types, prosthetic options)
-- [x] Backend: GET /api/prosthetic-options - Conditional prosthetic plan options based on procedure type + loading type
-- [x] Backend: PROSTHETIC_OPTIONS with 4 categories (single_crown, bridge, immediate_loading, full_arch)
-- [x] Backend: Saturday validation updated to 10:00 AM only (was 09:30)
-- [x] Frontend: Complete New Procedure form rewrite with 6 sections
-- [x] Frontend: Procedure Type dropdown (9 options from spec)
-- [x] Frontend: Loading Type multi-select chips (Immediate Loading, Delayed Loading)
-- [x] Frontend: Prosthetic Treatment Plan conditional dropdown (4 conditional logic rules)
-- [x] Frontend: Bone Graft/Membrane Specifications kept as optional field
-- [x] Frontend: Removed fields: implant_site, implant_region, implant_company, IOS file upload, CBCT file upload
-- [x] Frontend: Updated Phase 1 checklist (10 items per spec)
-- [x] Frontend: Time slots updated - Mon-Fri: 10AM+2PM, Saturday: 10AM only
-- [x] Frontend: constants/checklist.ts updated with getProstheticOptions(), PROCEDURE_TYPES, LOADING_TYPES
-- [x] Tested: 15/15 backend tests passed, all frontend UI verified (iteration 21)
-
-## Completed Features — Implant Planning & Phase Form Updates (March 2026)
-- [x] Backend: POST /api/procedures/{id}/implant-plan - Save 1-6 implants with validation (unique positions, max 6)
-- [x] Backend: GET /api/procedures/{id}/implant-plan - Retrieve saved plans
-- [x] Backend: Phase2Submit model updated with torque_values: List[float]
-- [x] Backend: Stage2ProstheticSubmit updated with faculty_remark, incharge_remark, final_prosthetic_plan
-- [x] Frontend: CaseImplantPlanning component with:
-  - Mini FDI dental chart for tooth selection (disabled for already-used positions)
-  - "Let Me Choose" / "Suggest Me" mode toggle
-  - System search with brand/system filtering
-  - Bone width/height/type inputs
-  - Risk assessment calculation with color-coded result
-  - Add/Edit/Delete implant cards with position, brand, system, dimensions
-  - Count badge (X/6)
-- [x] Frontend: Phase 2 submit form updated with dynamic torque value inputs (10-90 Ncm per implant, labeled with tooth position)
-- [x] Frontend: Phase 3 submit form updated with Student Clinical Assessment text field
-- [x] Frontend: Phase 4 submit form updated with Final Prosthetic Plan dropdown + Student/Faculty/Incharge remark fields
-- [x] Frontend: Checklist additionalFields added for Phase 2-4
-- [x] Tested: 15/15 backend tests passed, all frontend verified (iteration 22)
-
-## Completed Features — Drilling Protocol (March 2026)
-- [x] Backend: Drilling protocol data for BioHorizons Tapered Pro Conical RBT and Tapered Short RBT
-- [x] Backend: POST /api/drilling-protocols/generate — generates step-by-step drill sequence for implant + bone density
-- [x] Backend: POST /api/drilling-protocols/export-pdf — generates downloadable PDF of drilling protocol
-- [x] Backend: GET /api/drilling-protocols/available — returns list of systems with protocols
-- [x] Frontend: Top 5 results display with "Show More" button in both "Let Me Choose" and "Suggest Me" tabs
-- [x] Frontend: Selectable implant cards with radio-button UI in both result workflows
-- [x] Frontend: "Best" badge on top-ranked implant
-- [x] Frontend: "Give Drilling Protocol" button appears after implant selection
-- [x] Frontend: Full Drilling Protocol screen (DrillingProtocol.tsx) with bone density selector, step-by-step timeline, navigation, quick reference, and Export PDF
-- [x] End-to-end tested: Login → Implant tab → Search → Select → Protocol → PDF Export (100% pass rate)
-- [x] Bug fix: "Let Me Choose" now shows all available sizes when no exact matches (e.g., BioHorizons Tapered Short) with info note, enabling drilling protocol access
-- [x] Updated implant library: 438→485 records, 42→45 systems. Added BioHorizons Tapered Pro Conical RBT (25 sizes), BioHorizons Tapered Short Conical RBT (3 sizes), Conelog Progressive Line (17 sizes)
-- [x] Drilling protocol aliases: Conical RBT systems share protocols with their non-RBT counterparts
-- [x] IMPLANT_INDICATIONS added for all 3 new systems
-- [x] Conelog Progressive Line drilling protocol: Full implementation with bone-density-dependent algorithm (D1/D2 standard with dense bone drill, D3/D4 soft bone with under-preparation), 4 diameters (3.3/3.8/4.3/5.0), 5 lengths (7/9/11/13/16), progressive twist drill sequence, profile drills, PDF export
-- [x] Neodent Grand Morse drilling protocols: 6 systems (Helix GM Acqua/Neoporous, Drive GM Acqua/NeoPorous, Titamax GM Acqua/NeoPorous) with 3 distinct engines: Helix (progressive under-osteotomy, D1/D2 adds contour drill, D4 skips final), Drive (soft bone optimized, D1/D2 adds final drill), Titamax (dense bone, combination drills). Surface type doesn't affect protocol. RPM: D1/D2=800-1200, D3/D4=500-800, Placement=30. Torque: 60 Ncm.
-- [x] Dropdown UI fix: Replaced ScrollView with FlatList for reliable rendering of all 45 systems on mobile; increased modal height to 80%
-
-## Key API Endpoints — Implant Library
-- `GET /api/implant-library/systems` - Returns 42 implant systems with indications and restricted_teeth
-- `GET /api/implant-library/tooth-recommendations` - Returns 28 FDI tooth entries with region, diameter range, length range
-- `GET /api/implant-library/tooth-recommendations/{tooth}` - Returns single tooth recommendation
-- `GET /api/implant-library/suggest?brand=X&system=Y&bone_width=Z&bone_height=W&tooth=T` - "Let Me Choose" engine with tooth intersection
-- `POST /api/implant-library/suggest-auto` - "Suggest Me" engine: validates procedure+bone type, filters all systems by diameter/length
-- `GET /api/implant-library/procedure-options` - Returns 6 procedures, 4 bone types, compatibility dict
-- `POST /api/implant-library/calculate-risk` - Risk Calculator: 5-factor scoring (Width, Height, Density, Procedure, Tooth) → Low/Moderate/High
-
-## Important Notes
-- Internal status codes use `stage2_surgical`/`stage2_prosthetic` for DB stability
-- All user-facing labels use "Phase 3" and "Phase 4" terminology
-- Do NOT modify `app.config.js` (deployment monkey-patching)
-- XLSX brand name "Noble Biocare" in data has extra 'l' vs user spec "Nobel Biocare"
-
-## Key API Endpoints — Clinical Photo Album
-- `GET /api/photo-steps` - Returns all 44 photo step definitions across 4 phases
-- `GET /api/photo-steps/{phase}` - Returns phase-specific steps (1-4)
-- `POST /api/procedures/{id}/photos/{step_id}` - Upload photo (student only)
-- `DELETE /api/procedures/{id}/photos/{step_id}/{filename}` - Delete photo (student only)
-- `GET /api/procedures/{id}/photos` - List all photos grouped by step with progress
-- `GET /api/photos/{filename}` - Serve uploaded photo file
-- `POST /api/procedures/{id}/generate-album` - Generate PDF album with all photos
+## Backlog (Prioritized)
+- **P2:** Notification system for phase approvals/status changes
+- **P2:** Backend refactoring (decompose monolithic server.py into routers/models/services)
+- **P2:** Frontend refactoring (modularize complex components with custom hooks)
+- **P2:** Data cleanup (remove duplicate user entries)
