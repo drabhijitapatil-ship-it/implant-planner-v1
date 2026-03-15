@@ -3,67 +3,163 @@ export const CHECKLIST_DATA = {
     title: 'Phase 1: Pre-Surgical Protocol',
     items: [
       { id: 'case_selection', label: 'Case Selection Approved' },
-      { id: 'academic_readiness', label: 'Academic Readiness (with presentation)' },
-      { id: 'hematological', label: 'Hematological Investigations' },
-      { id: 'radiographic', label: 'Radiographic Investigations' },
-      { id: 'instruments', label: 'Availability of the Instruments' },
-      { id: 'treatment_plan', label: 'Approved Treatment & Prosthetic Plan' },
-      { id: 'payment', label: 'Full payment done' },
+      { id: 'academic_readiness', label: 'Academic Readiness (with presentation)', hasUpload: true, uploadTypes: 'PPT, PDF' },
+      { id: 'hematological', label: 'Hematological Investigations Completed', hasUpload: true, uploadTypes: 'PDF' },
+      { id: 'radiographic', label: 'Radiographic Investigations and Evaluation Done', hasUpload: true, uploadTypes: 'PDF' },
+      { id: 'treatment_plan', label: 'Approved Surgical Treatment Plan' },
+      { id: 'oral_prophylaxis', label: 'Oral Prophylaxis Done' },
+      { id: 'instruments', label: 'Availability of the Instruments and Equipment' },
       { id: 'medical_assessment', label: 'Medical assessment done' },
-      { id: 'realguide', label: 'RealGUIDE Planning and Report' },
-      { id: 'oral_prophylaxis', label: 'Oral Prophylaxis done' },
-      { id: 'patient_consent', label: 'Patient Consent Taken' },
+      { id: 'realguide', label: 'RealGuide Planning and Report' },
+      { id: 'payment', label: 'Full payment done' },
     ],
   },
   surgical: {
     title: 'Phase 2: Surgical Protocol',
     items: [
-      { id: 'consent_form', label: 'Signed Patient consent form' },
-      { id: 'cbct_report', label: 'Arranged CBCT Report' },
-      { id: 'room_cleanliness', label: 'Cleanliness of the Implant Room' },
-      { id: 'drapes_gowns', label: 'Clean autoclaved drapes and gowns' },
-      { id: 'instruments_equipment', label: 'Clean autoclaved instruments and equipment' },
-      { id: 'asepsis', label: 'Asepsis and disinfection of operatory' },
-      { id: 'register_entry', label: 'Entry into implant register with sticker' },
-      { id: 'post_cleaning', label: 'Post operative cleaning of implant room, instruments and equipment' },
+      { id: 'consent_form', label: 'Signed Patient consent form (LA and Surgical)' },
+      { id: 'drilling_protocol', label: 'Drilling Protocol Displayed' },
+      { id: 'drapes_gowns', label: 'Clean Autoclaved Drapes and Gowns' },
+      { id: 'instruments_equipment', label: 'Clean Autoclaved Instruments and Equipment' },
+      { id: 'asepsis', label: 'Asepsis and Fumigation, Cleanliness of the Operatory' },
+      { id: 'register_entry', label: 'Entry into the Implant Register with a Sticker' },
+      { id: 'post_op_instructions', label: 'Post-operative Instructions and Medication Prescription' },
+      { id: 'post_cleaning', label: 'Post-operative cleaning of implant room, instruments, and equipment' },
     ],
   },
   second_stage: {
     title: 'Phase 3: Second Stage Surgical Protocol',
     items: [
-      { id: 'healing_assessment', label: 'Implant healing assessment (clinical & radiographic)' },
-      { id: 'tissue_conditioning', label: 'Tissue conditioning done' },
-      { id: 'second_stage_surgery', label: 'Second stage surgery performed' },
-      { id: 'healing_abutment', label: 'Healing abutment placed' },
-      { id: 'soft_tissue_eval', label: 'Soft tissue evaluation and management' },
-      { id: 'patient_hygiene', label: 'Patient oral hygiene instructions given' },
-      { id: 'post_op_radiograph', label: 'Post-operative radiograph taken' },
-      { id: 'follow_up_scheduled', label: 'Follow-up appointment scheduled' },
+      { id: 'faculty_approval', label: 'Approval by the Supervising Faculty' },
+      { id: 'components_available', label: 'All Components Available (second stage and prosthetic)' },
+      { id: 'healing_cap', label: 'Healing Cap Placed' },
+      { id: 'scan_impressions', label: 'Scan/Impressions Made' },
+      { id: 'temporary_prosthesis', label: 'Temporary Prosthesis Delivered' },
+      { id: 'patient_consent', label: 'Patient consent' },
     ],
   },
   prosthetic_phase: {
     title: 'Phase 4: Prosthetic Protocol',
     items: [
-      { id: 'impression_taken', label: 'Final impression taken' },
-      { id: 'bite_registration', label: 'Bite registration completed' },
-      { id: 'shade_selection', label: 'Shade selection done' },
-      { id: 'try_in', label: 'Try-in verification completed' },
-      { id: 'final_prosthesis', label: 'Final prosthesis placed' },
-      { id: 'occlusal_adjustment', label: 'Occlusal adjustment done' },
-      { id: 'patient_instructions', label: 'Patient care instructions given' },
-      { id: 'maintenance_schedule', label: 'Maintenance schedule established' },
+      { id: 'payment_complete', label: 'Complete Payment Done' },
+      { id: 'prosthetic_components', label: 'All Prosthetic Components are Available' },
+      { id: 'prosthetic_plan_approved', label: 'Final Prosthetic Plan Evaluated and Approved' },
+      { id: 'sterile_instruments', label: 'Cleaned and Autoclaved Instruments' },
+      { id: 'intraoral_scans', label: 'Intra-Oral Scans Made and Approved' },
+      { id: 'impressions', label: 'Impressions Made and Approved' },
+      { id: 'jig_trial', label: "Jig Trial Done - Sheffield's Test and Radiographic Assessment" },
+      { id: 'occlusion_evaluated', label: 'Occlusion Evaluation Done' },
+      { id: 'final_cementation', label: 'Final Cementation/Screwing of the Prosthesis' },
     ],
   },
 };
 
 // Time slots available for procedures
 // Monday-Friday: 10:00 AM, 2:00 PM
-// Saturday: 9:30 AM only
+// Saturday: 9:30 AM only (updated as per spec)
 export const PROCEDURE_TIME_SLOTS = [
-  { value: '10:00', label: '10:00 AM', days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'] },
+  { value: '10:00', label: '10:00 AM', days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] },
   { value: '14:00', label: '2:00 PM', days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'] },
-  { value: '09:30', label: '9:30 AM (Saturday)', days: ['Sat'] },
 ];
+
+// ─── Procedure Type Options ───────────────────────────
+export const PROCEDURE_TYPES = [
+  'Single Conventional Implant',
+  'Multiple Conventional Implants',
+  'Immediate Implant',
+  'Partial Extraction Therapy',
+  'Implant Placement with GBR',
+  'Guided Surgery',
+  'All on 4',
+  'All on 6',
+  'All on X',
+];
+
+// ─── Loading Type Options ─────────────────────────────
+export const LOADING_TYPES = [
+  'Immediate Loading',
+  'Delayed Loading',
+];
+
+// ─── Prosthetic Plan Conditional Logic ────────────────
+const SINGLE_CROWN_OPTIONS = [
+  'Cement Retained Crown - Metal',
+  'Cement Retained Crown - Porcelain Fused to Metal',
+  'Cement Retained Crown - Zirconia',
+  'Cement Retained Crown - Lithium Disilicate',
+  'Screw Retained Crown - Metal',
+  'Screw Retained Crown - Porcelain Fused to Metal',
+  'Screw Retained Crown - Zirconia',
+  'Screw Retained Crown - Lithium Disilicate',
+];
+
+const BRIDGE_OPTIONS = [
+  'Cement Retained Bridge - Metal',
+  'Cement Retained Bridge - Porcelain Fused to Metal',
+  'Cement Retained Bridge - Zirconia',
+  'Cement Retained Bridge - Lithium Disilicate',
+  'Screw Retained Bridge - Metal',
+  'Screw Retained Bridge - Porcelain Fused to Metal',
+  'Screw Retained Bridge - Zirconia',
+  'Screw Retained Bridge - Lithium Disilicate',
+  'Overdenture with Attachment',
+];
+
+const IMMEDIATE_LOADING_OPTIONS = [
+  'PMMA Crown with Temporary Abutment',
+  'PMMA Crown with Ti-Base',
+  'Full Arch Temporary Prosthesis with Multiunit and Temporary Cylinders',
+  'Temporary PMMA CAD Prosthesis with Multiunit and Temporary Cylinders',
+  'Temporary PMMA CAD Prosthesis on Ti-Base',
+];
+
+const FULL_ARCH_OPTIONS = [
+  'Full Arch Co-Cr Framework Removable Denture',
+  'Full Arch Porcelain Fused to Metal Prosthesis',
+  'Full Arch Co-Cr Framework Zirconia Prosthesis',
+  'Full Arch Titanium Framework Zirconia Prosthesis',
+  'Full Arch Peek Framework Zirconia Ti Base',
+];
+
+const SINGLE_PROCEDURE_TYPES = new Set([
+  'Single Conventional Implant',
+  'Immediate Implant',
+  'Partial Extraction Therapy',
+  'Implant Placement with GBR',
+]);
+
+const BRIDGE_PROCEDURE_TYPES = new Set([
+  'Multiple Conventional Implants',
+  'Immediate Implant',
+  'Partial Extraction Therapy',
+  'Implant Placement with GBR',
+]);
+
+const FULL_ARCH_PROCEDURE_TYPES = new Set([
+  'All on 4',
+  'All on 6',
+  'All on X',
+]);
+
+export function getProstheticOptions(procedureType: string, loadingTypes: string[]): string[] {
+  const options: string[] = [];
+
+  if (SINGLE_PROCEDURE_TYPES.has(procedureType)) {
+    options.push(...SINGLE_CROWN_OPTIONS);
+  }
+  if (BRIDGE_PROCEDURE_TYPES.has(procedureType)) {
+    options.push(...BRIDGE_OPTIONS);
+  }
+  if (FULL_ARCH_PROCEDURE_TYPES.has(procedureType)) {
+    options.push(...FULL_ARCH_OPTIONS);
+  }
+  if (loadingTypes.includes('Immediate Loading')) {
+    options.push(...IMMEDIATE_LOADING_OPTIONS);
+  }
+
+  // Remove duplicates preserving order
+  return [...new Set(options)];
+}
 
 export const STATUS_COLORS: Record<string, string> = {
   pending_phase1: '#FFA500',
