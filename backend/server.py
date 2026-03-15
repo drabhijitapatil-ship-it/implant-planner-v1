@@ -1,8 +1,9 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Response
 from fastapi import status as http_status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from dotenv import load_dotenv
+import io
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
@@ -1192,7 +1193,7 @@ async def generate_album(
         phase_data = PHOTO_STEPS[phase_num]
         pdf.add_page()
         pdf.set_font("Helvetica", "B", 16)
-        pdf.cell(0, 12, f"Phase {phase_num} - {phase_data['name']}", ln=True)
+        pdf.cell(0, 12, _safe(f"Phase {phase_num} - {phase_data['name']}"), ln=True)
         pdf.line(10, pdf.get_y(), 200, pdf.get_y())
         pdf.cell(0, 3, "", ln=True)
 
@@ -2980,9 +2981,6 @@ async def export_drilling_pdf(
     from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import mm
-    from fastapi.responses import StreamingResponse
-    import io
-
     brand = body.get("brand", "")
     system = body.get("system", "")
     diameter = float(body.get("diameter", 0))
