@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 
 # API Configuration - Using external API as specified in system requirements
-API_BASE_URL = "https://drill-sequence.preview.emergentagent.com/api"
+API_BASE_URL = "https://prosth-case-album.preview.emergentagent.com/api"
 
 # Test Credentials from review request
 STUDENT_CREDENTIALS = {

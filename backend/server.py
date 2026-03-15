@@ -11,7 +11,8 @@ import uuid
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from fpdf import FPDF
 from passlib.context import CryptContext
 import jwt
 from bson import ObjectId
@@ -714,6 +715,548 @@ async def serve_upload(filename: str, current_user: dict = Depends(get_current_u
             raise HTTPException(status_code=403, detail="Access denied")
     
     return FileResponse(file_path, filename=procedure.get("cbct_original_name", filename) if procedure else filename)
+
+
+# ── Clinical Case Album: Photo Step Definitions ─────────────────────
+PHOTO_STEPS = {
+    1: {  # Phase 1 — Pre-Surgical Documentation
+        "name": "Pre-Surgical Documentation",
+        "steps": [
+            {"id": "p1_extraoral_rest", "label": "Full Face at Rest", "category": "Extraoral",
+             "purpose": "Document baseline facial profile.",
+             "armamentarium": ["DSLR / phone camera", "Neutral background"],
+             "prompt": "Patient seated upright. Frankfort horizontal plane parallel to floor. Camera at eye level."},
+            {"id": "p1_extraoral_smile", "label": "Full Face Smile", "category": "Extraoral",
+             "purpose": "Evaluate esthetics and smile line.",
+             "armamentarium": ["Camera", "Neutral background"],
+             "prompt": "Ask patient to give natural smile. Capture entire face including lips and chin."},
+            {"id": "p1_extraoral_profile", "label": "Profile View", "category": "Extraoral",
+             "purpose": "Document lateral facial profile.",
+             "armamentarium": ["Camera", "Neutral background"],
+             "prompt": "Patient facing 90 degrees. Capture full profile from ear to chin."},
+            {"id": "p1_intraoral_frontal", "label": "Frontal Intraoral View", "category": "Intraoral",
+             "purpose": "Document frontal occlusion.",
+             "armamentarium": ["Cheek retractors", "Camera with macro lens"],
+             "prompt": "Place cheek retractors symmetrically. Ask patient to bite in centric occlusion. Capture from front showing both arches."},
+            {"id": "p1_intraoral_right", "label": "Right Buccal View", "category": "Intraoral",
+             "purpose": "Document right lateral occlusion.",
+             "armamentarium": ["Cheek retractors", "Intraoral mirror (optional)"],
+             "prompt": "Patient in centric occlusion. Mirror or camera aligned with buccal surfaces. Capture canine to molar region clearly."},
+            {"id": "p1_intraoral_left", "label": "Left Buccal View", "category": "Intraoral",
+             "purpose": "Document left lateral occlusion.",
+             "armamentarium": ["Cheek retractors", "Intraoral mirror"],
+             "prompt": "Retract cheek completely. Ensure occlusal plane horizontal. Capture entire left posterior segment."},
+            {"id": "p1_intraoral_maxillary", "label": "Maxillary Occlusal View", "category": "Intraoral",
+             "purpose": "Document maxillary arch occlusal surface.",
+             "armamentarium": ["Occlusal mirror", "Cheek retractors", "Air syringe"],
+             "prompt": "Place mirror parallel to occlusal plane. Dry teeth before capturing. Capture entire maxillary arch."},
+            {"id": "p1_intraoral_mandibular", "label": "Mandibular Occlusal View", "category": "Intraoral",
+             "purpose": "Document mandibular arch occlusal surface.",
+             "armamentarium": ["Occlusal mirror", "Cheek retractors"],
+             "prompt": "Tilt mirror slightly upward. Capture full mandibular arch including molars."},
+            {"id": "p1_implant_site", "label": "Implant Site Close-Up", "category": "Intraoral",
+             "purpose": "Document edentulous ridge at implant site.",
+             "armamentarium": ["Cheek retractors", "Macro lens"],
+             "prompt": "Focus on edentulous ridge. Ensure gingival margins clearly visible."},
+            {"id": "p1_diag_opg", "label": "OPG Radiograph", "category": "Diagnostic",
+             "purpose": "Panoramic radiographic documentation.",
+             "armamentarium": ["OPG radiograph upload"],
+             "prompt": "Upload OPG radiograph image or scan."},
+            {"id": "p1_diag_cbct", "label": "CBCT Screenshot", "category": "Diagnostic",
+             "purpose": "CBCT documentation.",
+             "armamentarium": ["CBCT screenshot"],
+             "prompt": "Upload CBCT screenshot showing implant site."},
+            {"id": "p1_diag_cbct_cross", "label": "CBCT Cross-Section", "category": "Diagnostic",
+             "purpose": "CBCT cross-section at implant site.",
+             "armamentarium": ["CBCT cross-section image"],
+             "prompt": "Upload CBCT cross-section showing implant site bone dimensions."},
+            {"id": "p1_diag_planning", "label": "Digital Planning Screenshot", "category": "Diagnostic",
+             "purpose": "Digital implant planning documentation.",
+             "armamentarium": ["Digital planning software screenshot"],
+             "prompt": "Upload screenshot from digital planning software (if applicable)."},
+            {"id": "p1_diag_guide", "label": "Surgical Guide Design", "category": "Diagnostic",
+             "purpose": "Surgical guide design documentation.",
+             "armamentarium": ["Surgical guide design file"],
+             "prompt": "Upload surgical guide design image (if applicable)."},
+        ],
+    },
+    2: {  # Phase 2 — Surgical Documentation
+        "name": "Surgical Documentation",
+        "steps": [
+            {"id": "p2_pre_tray", "label": "Surgical Tray Setup", "category": "Pre-Surgical",
+             "purpose": "Document surgical instrument preparation.",
+             "armamentarium": ["Camera", "Surgical tray"],
+             "prompt": "Capture complete surgical tray setup with all instruments visible."},
+            {"id": "p2_pre_kit", "label": "Implant Kit Display", "category": "Pre-Surgical",
+             "purpose": "Document implant kit and components.",
+             "armamentarium": ["Camera", "Implant kit"],
+             "prompt": "Display implant kit with drill sequence visible."},
+            {"id": "p2_pre_asepsis", "label": "Operatory Asepsis Setup", "category": "Pre-Surgical",
+             "purpose": "Document aseptic preparation.",
+             "armamentarium": ["Camera"],
+             "prompt": "Capture operatory after asepsis and fumigation setup."},
+            {"id": "p2_ridge", "label": "Edentulous Ridge Before Incision", "category": "Intra-operative",
+             "purpose": "Document ridge contour before surgery.",
+             "armamentarium": ["Cheek retractors", "Surgical suction"],
+             "prompt": "Dry surgical field. Capture ridge contour clearly."},
+            {"id": "p2_incision", "label": "Crestal Incision", "category": "Intra-operative",
+             "purpose": "Document incision line.",
+             "armamentarium": ["Cheek retractors", "Surgical light"],
+             "prompt": "Capture incision line clearly. Ensure minimal blood obscuring view."},
+            {"id": "p2_flap", "label": "Flap Reflection", "category": "Intra-operative",
+             "purpose": "Document bone exposure.",
+             "armamentarium": ["Minnesota retractor", "Surgical suction"],
+             "prompt": "Expose bone fully. Capture ridge anatomy."},
+            {"id": "p2_osteotomy", "label": "Osteotomy Preparation", "category": "Intra-operative",
+             "purpose": "Document drilling procedure.",
+             "armamentarium": ["Implant drill kit", "Suction"],
+             "prompt": "Capture drill entering osteotomy site. Keep camera perpendicular to ridge."},
+            {"id": "p2_placement", "label": "Implant Placement", "category": "Intra-operative",
+             "purpose": "Document implant fixture insertion.",
+             "armamentarium": ["Implant driver", "Surgical suction"],
+             "prompt": "Capture implant fixture partially visible in osteotomy. Ensure implant threads visible."},
+            {"id": "p2_verification", "label": "Implant Position Verification", "category": "Intra-operative",
+             "purpose": "Verify final implant position.",
+             "armamentarium": [],
+             "prompt": "Capture final implant position within bone. Show surrounding ridge clearly."},
+            {"id": "p2_cover_screw", "label": "Cover Screw Placement", "category": "Intra-operative",
+             "purpose": "Document cover screw seating.",
+             "armamentarium": ["Cover screw driver"],
+             "prompt": "Capture cover screw seated on implant."},
+            {"id": "p2_suturing", "label": "Suturing", "category": "Intra-operative",
+             "purpose": "Document wound closure.",
+             "armamentarium": ["Suture kit"],
+             "prompt": "Capture sutures approximating flap margins. Avoid blood pooling in field."},
+            {"id": "p2_postop", "label": "Immediate Postoperative", "category": "Postoperative",
+             "purpose": "Document immediate post-surgical state.",
+             "armamentarium": ["Camera"],
+             "prompt": "Capture immediate postoperative intraoral view."},
+        ],
+    },
+    3: {  # Phase 3 — Second Stage Surgery
+        "name": "Second Stage Surgery",
+        "steps": [
+            {"id": "p3_before_uncover", "label": "Implant Site Before Uncovering", "category": "Pre-operative",
+             "purpose": "Document implant site before second stage.",
+             "armamentarium": ["Cheek retractors"],
+             "prompt": "Capture healed implant site before uncovering."},
+            {"id": "p3_exposure", "label": "Implant Exposure", "category": "Intra-operative",
+             "purpose": "Document implant platform exposure.",
+             "armamentarium": ["Tissue punch / surgical instrument", "Cheek retractors"],
+             "prompt": "Expose implant platform clearly. Capture implant connection."},
+            {"id": "p3_healing_abutment", "label": "Healing Abutment Placement", "category": "Intra-operative",
+             "purpose": "Document healing abutment seating.",
+             "armamentarium": ["Healing cap driver"],
+             "prompt": "Capture healing abutment seated on implant. Ensure soft tissue margins visible."},
+            {"id": "p3_soft_tissue", "label": "Soft Tissue Healing", "category": "Follow-up",
+             "purpose": "Document peri-implant soft tissue contour.",
+             "armamentarium": [],
+             "prompt": "Capture peri-implant gingival contour."},
+            {"id": "p3_scan_body", "label": "Scan Body Placement", "category": "Impression",
+             "purpose": "Document scan body placement.",
+             "armamentarium": ["Scan body", "Intraoral scanner"],
+             "prompt": "Capture scan body seated correctly."},
+            {"id": "p3_digital_scan", "label": "Digital Scan", "category": "Impression",
+             "purpose": "Document digital impression.",
+             "armamentarium": ["Intraoral scanner"],
+             "prompt": "Capture intraoral scanner screen showing digital impression."},
+            {"id": "p3_temp_prosthesis", "label": "Temporary Prosthesis Delivery", "category": "Prosthetic",
+             "purpose": "Document temporary crown/prosthesis.",
+             "armamentarium": [],
+             "prompt": "Capture temporary crown in occlusion."},
+        ],
+    },
+    4: {  # Phase 4 — Prosthetic Rehabilitation
+        "name": "Prosthetic Rehabilitation",
+        "steps": [
+            {"id": "p4_abutment", "label": "Abutment Placement", "category": "Laboratory/Clinical",
+             "purpose": "Document abutment seating.",
+             "armamentarium": ["Abutment", "Driver"],
+             "prompt": "Capture abutment seated on implant. Show emergence profile."},
+            {"id": "p4_framework", "label": "Framework Try-In", "category": "Laboratory/Clinical",
+             "purpose": "Document framework fit.",
+             "armamentarium": ["Framework"],
+             "prompt": "Capture framework seated. Check marginal fit."},
+            {"id": "p4_jig_trial", "label": "Jig Trial", "category": "Laboratory/Clinical",
+             "purpose": "Verify passive fit.",
+             "armamentarium": ["Verification jig"],
+             "prompt": "Capture jig trial. Document Sheffield's test."},
+            {"id": "p4_tryin", "label": "Crown / Bridge Try-In", "category": "Laboratory/Clinical",
+             "purpose": "Evaluate prosthesis fit before cementation.",
+             "armamentarium": [],
+             "prompt": "Capture prosthesis seated without cement. Evaluate margins."},
+            {"id": "p4_occlusion", "label": "Occlusion Evaluation", "category": "Laboratory/Clinical",
+             "purpose": "Document occlusal contacts.",
+             "armamentarium": ["Articulating paper"],
+             "prompt": "Capture occlusal contacts."},
+            {"id": "p4_cementation", "label": "Screw Tightening / Cementation", "category": "Laboratory/Clinical",
+             "purpose": "Document final fixation.",
+             "armamentarium": ["Torque wrench / Cement"],
+             "prompt": "Capture screw tightening or cementation process."},
+            {"id": "p4_final_frontal", "label": "Frontal Intraoral (Final)", "category": "Final Documentation",
+             "purpose": "Final frontal documentation.",
+             "armamentarium": ["Cheek retractors"],
+             "prompt": "Capture frontal intraoral view showing final restoration."},
+            {"id": "p4_final_right", "label": "Right Lateral Occlusion (Final)", "category": "Final Documentation",
+             "purpose": "Final right lateral documentation.",
+             "armamentarium": ["Cheek retractors"],
+             "prompt": "Capture right lateral view in occlusion."},
+            {"id": "p4_final_left", "label": "Left Lateral Occlusion (Final)", "category": "Final Documentation",
+             "purpose": "Final left lateral documentation.",
+             "armamentarium": ["Cheek retractors"],
+             "prompt": "Capture left lateral view in occlusion."},
+            {"id": "p4_final_occlusal", "label": "Occlusal View (Final)", "category": "Final Documentation",
+             "purpose": "Final occlusal documentation.",
+             "armamentarium": ["Occlusal mirror"],
+             "prompt": "Capture occlusal view of final restoration."},
+            {"id": "p4_final_smile", "label": "Final Smile", "category": "Final Documentation",
+             "purpose": "Document final esthetic result.",
+             "armamentarium": ["Camera", "Neutral background"],
+             "prompt": "Capture full smile showing implant restoration."},
+        ],
+    },
+}
+
+# Figure captions for album generation (auto-generated)
+ALBUM_CAPTIONS = {
+    "p1_extraoral_rest": "Full face at rest – baseline facial profile",
+    "p1_extraoral_smile": "Full face smile – esthetic evaluation",
+    "p1_extraoral_profile": "Profile view – lateral facial assessment",
+    "p1_intraoral_frontal": "Preoperative frontal intraoral view",
+    "p1_intraoral_right": "Right buccal view in centric occlusion",
+    "p1_intraoral_left": "Left buccal view in centric occlusion",
+    "p1_intraoral_maxillary": "Maxillary occlusal mirror view",
+    "p1_intraoral_mandibular": "Mandibular occlusal mirror view",
+    "p1_implant_site": "Implant site close-up – edentulous ridge",
+    "p1_diag_opg": "OPG radiograph",
+    "p1_diag_cbct": "CBCT screenshot",
+    "p1_diag_cbct_cross": "CBCT cross-section showing implant site",
+    "p1_diag_planning": "Digital implant planning",
+    "p1_diag_guide": "Surgical guide design",
+    "p2_pre_tray": "Surgical tray setup",
+    "p2_pre_kit": "Implant kit display with drill sequence",
+    "p2_pre_asepsis": "Operatory asepsis setup",
+    "p2_ridge": "Edentulous ridge before incision",
+    "p2_incision": "Crestal incision",
+    "p2_flap": "Flap reflection exposing alveolar bone",
+    "p2_osteotomy": "Osteotomy preparation using sequential drilling protocol",
+    "p2_placement": "Implant placement into osteotomy site",
+    "p2_verification": "Implant position verification",
+    "p2_cover_screw": "Cover screw placement",
+    "p2_suturing": "Flap closure with sutures",
+    "p2_postop": "Immediate postoperative view",
+    "p3_before_uncover": "Implant site before uncovering",
+    "p3_exposure": "Implant exposure – platform visible",
+    "p3_healing_abutment": "Healing abutment placed to facilitate gingival contour",
+    "p3_soft_tissue": "Peri-implant soft tissue healing",
+    "p3_scan_body": "Scan body placement for digital impression",
+    "p3_digital_scan": "Digital impression capture",
+    "p3_temp_prosthesis": "Temporary prosthesis delivery",
+    "p4_abutment": "Abutment placement – emergence profile",
+    "p4_framework": "Framework try-in – marginal fit evaluation",
+    "p4_jig_trial": "Jig trial – passive fit verification",
+    "p4_tryin": "Crown/bridge try-in before cementation",
+    "p4_occlusion": "Occlusal contacts evaluation",
+    "p4_cementation": "Final prosthesis – screw tightening / cementation",
+    "p4_final_frontal": "Final frontal intraoral view",
+    "p4_final_right": "Final right lateral occlusion",
+    "p4_final_left": "Final left lateral occlusion",
+    "p4_final_occlusal": "Final occlusal view",
+    "p4_final_smile": "Final smile showing implant restoration",
+}
+
+
+# ── Photo Step Definitions API ───────────────────────────────────────
+@api_router.get("/photo-steps/{phase}")
+async def get_photo_steps(phase: int, current_user: dict = Depends(get_current_user)):
+    """Return photo step definitions for a given phase (1-4)."""
+    if phase not in PHOTO_STEPS:
+        raise HTTPException(status_code=400, detail=f"Invalid phase: {phase}. Must be 1-4.")
+    return PHOTO_STEPS[phase]
+
+
+@api_router.get("/photo-steps")
+async def get_all_photo_steps(current_user: dict = Depends(get_current_user)):
+    """Return all photo step definitions for all phases."""
+    return PHOTO_STEPS
+
+
+# ── Photo Upload / Management ────────────────────────────────────────
+PHOTO_UPLOADS_DIR = ROOT_DIR / 'uploads' / 'photos'
+PHOTO_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+PHOTO_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.heif', '.heic'}
+MAX_PHOTO_SIZE = 15 * 1024 * 1024  # 15MB per photo
+
+
+@api_router.post("/procedures/{procedure_id}/photos/{step_id}")
+async def upload_photo(
+    procedure_id: str,
+    step_id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+):
+    """Upload a photo for a specific step in a procedure."""
+    if current_user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Only students can upload photos")
+
+    procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if procedure["student_id"] != current_user["_id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Validate step_id exists in any phase
+    valid_ids = set()
+    for phase_data in PHOTO_STEPS.values():
+        for step in phase_data["steps"]:
+            valid_ids.add(step["id"])
+    if step_id not in valid_ids:
+        raise HTTPException(status_code=400, detail=f"Invalid step_id: {step_id}")
+
+    ext = Path(file.filename).suffix.lower()
+    if ext not in PHOTO_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"File type not allowed. Allowed: {', '.join(PHOTO_EXTENSIONS)}")
+
+    contents = await file.read()
+    if len(contents) > MAX_PHOTO_SIZE:
+        raise HTTPException(status_code=400, detail="Photo exceeds 15MB limit")
+
+    unique_name = f"{procedure_id}_{step_id}_{uuid.uuid4().hex[:8]}{ext}"
+    file_path = PHOTO_UPLOADS_DIR / unique_name
+    with open(file_path, "wb") as f:
+        f.write(contents)
+
+    # Store in procedure's photos subdocument
+    photo_record = {
+        "step_id": step_id,
+        "filename": unique_name,
+        "original_name": file.filename,
+        "content_type": file.content_type,
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
+        "uploaded_by": current_user["_id"],
+    }
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {
+            "$push": {f"photos.{step_id}": photo_record},
+            "$set": {"updated_at": datetime.now(timezone.utc).isoformat()},
+        },
+    )
+
+    return {"message": "Photo uploaded", "step_id": step_id, "filename": unique_name}
+
+
+@api_router.delete("/procedures/{procedure_id}/photos/{step_id}/{filename}")
+async def delete_photo(
+    procedure_id: str,
+    step_id: str,
+    filename: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Delete a specific photo."""
+    if current_user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Only students can delete photos")
+
+    procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if procedure["student_id"] != current_user["_id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Remove from DB
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$pull": {f"photos.{step_id}": {"filename": filename}}},
+    )
+
+    # Remove file
+    file_path = PHOTO_UPLOADS_DIR / filename
+    if file_path.exists():
+        file_path.unlink()
+
+    return {"message": "Photo deleted"}
+
+
+@api_router.get("/procedures/{procedure_id}/photos")
+async def get_procedure_photos(
+    procedure_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Get all photos for a procedure, grouped by step_id."""
+    procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0, "photos": 1})
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    photos = procedure.get("photos", {})
+
+    # Build response with step metadata
+    result = {}
+    for phase_num, phase_data in PHOTO_STEPS.items():
+        phase_photos = []
+        for step in phase_data["steps"]:
+            step_photos = photos.get(step["id"], [])
+            phase_photos.append({
+                "step_id": step["id"],
+                "label": step["label"],
+                "category": step["category"],
+                "caption": ALBUM_CAPTIONS.get(step["id"], step["label"]),
+                "photos": step_photos,
+                "has_photo": len(step_photos) > 0,
+            })
+        result[str(phase_num)] = {
+            "name": phase_data["name"],
+            "steps": phase_photos,
+            "total": len(phase_photos),
+            "completed": sum(1 for s in phase_photos if s["has_photo"]),
+        }
+
+    return result
+
+
+@api_router.get("/photos/{filename}")
+async def serve_photo(filename: str, current_user: dict = Depends(get_current_user)):
+    """Serve a photo file."""
+    file_path = PHOTO_UPLOADS_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Photo not found")
+    return FileResponse(file_path)
+
+
+# ── Clinical Case Album PDF Generation ───────────────────────────────
+@api_router.post("/procedures/{procedure_id}/generate-album")
+async def generate_album(
+    procedure_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Generate a Clinical Case Album PDF for a completed procedure."""
+    procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    photos = procedure.get("photos", {})
+    patient_name = procedure.get("patient_name", "Unknown")
+    student_name = procedure.get("student_name", "Unknown")
+    reg_number = procedure.get("registration_number", "")
+    supervisor_name = procedure.get("supervisor_name", "")
+    implant_incharge_name = procedure.get("implant_incharge_name", "")
+
+    def _safe(text):
+        """Sanitize text for PDF (replace unicode chars unsupported by Helvetica)."""
+        return str(text).replace("\u2013", "-").replace("\u2014", "-").replace("\u2018", "'").replace("\u2019", "'").replace("\u201c", '"').replace("\u201d", '"')
+
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+
+    # Page 1 — Cover
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 24)
+    pdf.cell(0, 40, "", ln=True)
+    pdf.cell(0, 15, "Clinical Case Album", ln=True, align="C")
+    pdf.set_font("Helvetica", "", 14)
+    pdf.cell(0, 10, "", ln=True)
+    pdf.cell(0, 10, _safe(f"Patient: {patient_name}"), ln=True, align="C")
+    pdf.cell(0, 10, _safe(f"Registration: {reg_number}"), ln=True, align="C")
+    pdf.cell(0, 10, "", ln=True)
+    pdf.cell(0, 10, _safe(f"Post-Graduate Student: {student_name}"), ln=True, align="C")
+    pdf.cell(0, 10, _safe(f"Supervising Faculty: {supervisor_name}"), ln=True, align="C")
+    pdf.cell(0, 10, _safe(f"Implant In-Charge: {implant_incharge_name}"), ln=True, align="C")
+    pdf.cell(0, 10, "", ln=True)
+    pdf.set_font("Helvetica", "", 11)
+    pdf.cell(0, 10, f"Department of Prosthodontics", ln=True, align="C")
+    pdf.cell(0, 10, f"Generated: {datetime.now(timezone.utc).strftime('%B %d, %Y')}", ln=True, align="C")
+
+    # Page 2 — Patient & Treatment Details
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(0, 12, "Patient & Treatment Details", ln=True)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.set_font("Helvetica", "", 11)
+    pdf.cell(0, 3, "", ln=True)
+    details = [
+        ("Patient Name", patient_name),
+        ("Registration Number", reg_number),
+        ("Implant Site", procedure.get("implant_site", "")),
+        ("Implant Region", procedure.get("implant_region", "")),
+        ("Implant Company", procedure.get("implant_company", "")),
+        ("Procedure Date", procedure.get("procedure_date", "")),
+    ]
+    for label, value in details:
+        if value:
+            pdf.cell(60, 8, _safe(f"{label}:"), ln=False)
+            pdf.cell(0, 8, _safe(str(value)), ln=True)
+
+    # Pages 3-6 — Phase photos
+    figure_num = 1
+    for phase_num in [1, 2, 3, 4]:
+        phase_data = PHOTO_STEPS[phase_num]
+        pdf.add_page()
+        pdf.set_font("Helvetica", "B", 16)
+        pdf.cell(0, 12, f"Phase {phase_num} - {phase_data['name']}", ln=True)
+        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+        pdf.cell(0, 3, "", ln=True)
+
+        has_photos_in_phase = False
+        for step in phase_data["steps"]:
+            step_photos = photos.get(step["id"], [])
+            if step_photos:
+                has_photos_in_phase = True
+                for photo_rec in step_photos:
+                    photo_path = PHOTO_UPLOADS_DIR / photo_rec["filename"]
+                    caption = ALBUM_CAPTIONS.get(step["id"], step["label"])
+
+                    if pdf.get_y() > 220:
+                        pdf.add_page()
+
+                    if photo_path.exists():
+                        try:
+                            pdf.image(str(photo_path), x=10, y=pdf.get_y(), w=80)
+                            pdf.set_y(pdf.get_y() + 62)
+                        except Exception:
+                            pdf.set_font("Helvetica", "I", 10)
+                            pdf.cell(0, 8, f"[Image could not be embedded: {photo_rec['filename']}]", ln=True)
+
+                    pdf.set_font("Helvetica", "I", 10)
+                    pdf.cell(0, 6, _safe(f"Figure {figure_num} - {caption}"), ln=True)
+                    pdf.cell(0, 3, "", ln=True)
+                    figure_num += 1
+
+        if not has_photos_in_phase:
+            pdf.set_font("Helvetica", "I", 11)
+            pdf.cell(0, 10, "No photos uploaded for this phase.", ln=True)
+
+    # Final page — Outcome summary
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(0, 12, "Final Outcome", ln=True)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.set_font("Helvetica", "", 11)
+    pdf.cell(0, 3, "", ln=True)
+    pdf.cell(0, 8, _safe(f"Case Status: {procedure.get('status', 'In Progress')}"), ln=True)
+    pdf.cell(0, 8, _safe(f"Total Figures: {figure_num - 1}"), ln=True)
+    pdf.cell(0, 15, "", ln=True)
+
+    # Signatures
+    pdf.set_font("Helvetica", "", 11)
+    pdf.cell(0, 8, _safe(f"Post-Graduate Student: {student_name}"), ln=True)
+    pdf.cell(0, 8, _safe(f"Supervising Faculty: {supervisor_name}"), ln=True)
+    pdf.cell(0, 8, _safe(f"Implant In-Charge: {implant_incharge_name}"), ln=True)
+    pdf.cell(0, 15, "", ln=True)
+    pdf.set_font("Helvetica", "I", 9)
+    pdf.cell(0, 6, "This is to confirm that the above post-graduate student satisfactorily completed", ln=True)
+    pdf.cell(0, 6, "all work for the above patient under our supervision and guidance.", ln=True)
+
+    buf = io.BytesIO()
+    buf.write(pdf.output())
+    buf.seek(0)
+
+    album_name = f"CaseAlbum_{patient_name.replace(' ', '_')}_{reg_number}.pdf"
+    return StreamingResponse(
+        buf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{album_name}"'},
+    )
+
 
 # Approval Routes
 @api_router.post("/procedures/{procedure_id}/approve")
