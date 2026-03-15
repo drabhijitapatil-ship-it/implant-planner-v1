@@ -107,10 +107,14 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - Nurse: priya.sharma@dental.edu / Nurse@123
 
 ## Backlog / Future
+- [ ] P0: Update Phase 2-4 submit forms with new checklist items (Phase 2: torque values, Phase 3/4: new fields per spec)
+- [ ] P0: Integrate Implant Selection workflow into Phase 1 (1-6 implants with positions, risk assessment, drilling protocol)
+- [ ] P1: Case Completion engine (badge generation, full PDF report on Phase 4 approval)
+- [ ] P1: File upload support in Phase 1 checklist items (Academic Readiness PPT/PDF, Hematology report, etc.)
 - [ ] P1: Add more drilling protocol data for other implant systems (awaiting user data)
 - [ ] P2: Data cleanup (remove duplicate users from earlier runs)
 - [ ] P2: Break down backend/server.py monolith into routers/models/services
-- [ ] P2: Modularize frontend/app/new-procedure.tsx form logic
+- [ ] P2: Modularize frontend form logic
 
 ## Completed Features — Clinical Case Album Generator (March 2026)
 - [x] Backend: PHOTO_STEPS data structure with 44 photo steps across 4 phases (14+12+7+11)
@@ -133,6 +137,24 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - [x] Frontend: CasePhotoAlbum integrated into procedure detail page (app/procedures/[id].tsx)
 - [x] Permission checks: Students can upload/delete own photos; non-students read-only
 - [x] Tested: 20/20 backend tests passed, frontend UI fully verified (iteration 20)
+
+## Completed Features — New Case Form Overhaul (March 2026)
+- [x] Backend: Updated ProcedureCreate model with new fields: implant_procedure_type (required), loading_type[] (required), prosthetic_plan (optional)
+- [x] Backend: Validation for 9 procedure types and 2 loading types
+- [x] Backend: GET /api/case-form-options - Returns all dropdown data (procedure types, loading types, prosthetic options)
+- [x] Backend: GET /api/prosthetic-options - Conditional prosthetic plan options based on procedure type + loading type
+- [x] Backend: PROSTHETIC_OPTIONS with 4 categories (single_crown, bridge, immediate_loading, full_arch)
+- [x] Backend: Saturday validation updated to 10:00 AM only (was 09:30)
+- [x] Frontend: Complete New Procedure form rewrite with 6 sections
+- [x] Frontend: Procedure Type dropdown (9 options from spec)
+- [x] Frontend: Loading Type multi-select chips (Immediate Loading, Delayed Loading)
+- [x] Frontend: Prosthetic Treatment Plan conditional dropdown (4 conditional logic rules)
+- [x] Frontend: Bone Graft/Membrane Specifications kept as optional field
+- [x] Frontend: Removed fields: implant_site, implant_region, implant_company, IOS file upload, CBCT file upload
+- [x] Frontend: Updated Phase 1 checklist (10 items per spec)
+- [x] Frontend: Time slots updated - Mon-Fri: 10AM+2PM, Saturday: 10AM only
+- [x] Frontend: constants/checklist.ts updated with getProstheticOptions(), PROCEDURE_TYPES, LOADING_TYPES
+- [x] Tested: 15/15 backend tests passed, all frontend UI verified (iteration 21)
 
 ## Completed Features — Drilling Protocol (March 2026)
 - [x] Backend: Drilling protocol data for BioHorizons Tapered Pro Conical RBT and Tapered Short RBT
