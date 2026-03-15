@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -22,8 +22,12 @@ import { useRouter } from 'expo-router';
 import { format, addDays } from 'date-fns';
 import { Calendar } from 'react-native-calendars';
 import { Ionicons } from '@expo/vector-icons';
-import { PROCEDURE_TIME_SLOTS } from '../../constants/checklist';
-import * as DocumentPicker from 'expo-document-picker';
+import {
+  PROCEDURE_TIME_SLOTS,
+  PROCEDURE_TYPES,
+  LOADING_TYPES,
+  getProstheticOptions,
+} from '../../constants/checklist';
 
 export default function NewProcedureScreen() {
   const { user } = useAuth();
@@ -35,10 +39,11 @@ export default function NewProcedureScreen() {
   const [showCalendar, setShowCalendar] = useState(false);
   const [showInstructorDropdown, setShowInstructorDropdown] = useState(false);
   const [showInchargeDropdown, setShowInchargeDropdown] = useState(false);
-  
-  // Calculate minimum date (24 hours from now for students)
+  const [showProcedureTypeDropdown, setShowProcedureTypeDropdown] = useState(false);
+  const [showProstheticDropdown, setShowProstheticDropdown] = useState(false);
+
   const minDate = format(addDays(new Date(), 1), 'yyyy-MM-dd');
-  
+
   const [formData, setFormData] = useState({
     patient_name: '',
     registration_number: '',
@@ -46,42 +51,45 @@ export default function NewProcedureScreen() {
     supervisor_name: '',
     implant_incharge_id: '',
     implant_incharge_name: '',
-    implant_site: '',
     receipt_number: '',
     amount_paid: '',
     procedure_date: minDate,
     procedure_time: '10:00',
-    implant_region: '',
-    implant_company: '',
+    implant_procedure_type: '',
+    loading_type: [] as string[],
+    prosthetic_plan: '',
     bone_graft_specifications: '',
-    remark: '',
   });
 
   const [checklist, setChecklist] = useState({});
   const [fieldErrors, setFieldErrors] = useState<{[key: string]: boolean}>({});
-  const [cbctFile, setCbctFile] = useState<any>(null);
-  const [iosFile, setIosFile] = useState<any>(null);
-  const [uploading, setUploading] = useState(false);
+
+  // Compute prosthetic options based on current selections
+  const prostheticOptions = useMemo(() => {
+    return getProstheticOptions(formData.implant_procedure_type, formData.loading_type);
+  }, [formData.implant_procedure_type, formData.loading_type]);
 
   useEffect(() => {
     loadUsers();
   }, []);
 
+  // Clear prosthetic_plan when options change and current selection is no longer valid
+  useEffect(() => {
+    if (formData.prosthetic_plan && !prostheticOptions.includes(formData.prosthetic_plan)) {
+      setFormData((prev) => ({ ...prev, prosthetic_plan: '' }));
+    }
+  }, [prostheticOptions]);
+
   const loadUsers = async () => {
     try {
       const usersRes = await api.get('/users');
       const allUsers = usersRes.data;
-      
-      // Supervisors include: supervisor role AND administrator role (Dr. Abhijit Patil appears here too)
-      const supervisorList = allUsers.filter((u: any) => 
+      const supervisorList = allUsers.filter((u: any) =>
         u.role === 'supervisor' || u.role === 'administrator' || u.role === 'implant_incharge'
       );
-      
-      // Implant Incharges include: implant_incharge role AND administrator role
-      const inchargeList = allUsers.filter((u: any) => 
+      const inchargeList = allUsers.filter((u: any) =>
         u.role === 'implant_incharge' || u.role === 'administrator'
       );
-      
       setInstructors(supervisorList);
       setImplantIncharges(inchargeList);
     } catch (error) {
@@ -91,10 +99,7 @@ export default function NewProcedureScreen() {
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
-    // Clear error when field is filled
-    if (value) {
-      setFieldErrors((prev) => ({ ...prev, [field]: false }));
-    }
+    if (value) setFieldErrors((prev) => ({ ...prev, [field]: false }));
   };
 
   const handleInstructorChange = (supervisorId: string) => {
@@ -104,10 +109,7 @@ export default function NewProcedureScreen() {
       supervisor_id: supervisorId,
       supervisor_name: supervisor ? (supervisor as any).name : '',
     }));
-    // Clear error when field is filled
-    if (supervisorId) {
-      setFieldErrors((prev) => ({ ...prev, supervisor_id: false }));
-    }
+    if (supervisorId) setFieldErrors((prev) => ({ ...prev, supervisor_id: false }));
   };
 
   const handleImplantInchargeChange = (inchargeId: string) => {
@@ -117,22 +119,17 @@ export default function NewProcedureScreen() {
       implant_incharge_id: inchargeId,
       implant_incharge_name: incharge ? (incharge as any).name : '',
     }));
-    // Clear error when field is filled
-    if (inchargeId) {
-      setFieldErrors((prev) => ({ ...prev, implant_incharge_id: false }));
-    }
+    if (inchargeId) setFieldErrors((prev) => ({ ...prev, implant_incharge_id: false }));
   };
 
   const handleDateSelect = (day: any) => {
-    // Block Sundays
     const selectedDate = new Date(day.dateString);
     if (selectedDate.getUTCDay() === 0) {
       Alert.alert('Not Available', 'No scheduling is available on Sundays.');
       return;
     }
-    // If Saturday, auto-set time to 9:30 AM
     if (selectedDate.getUTCDay() === 6) {
-      setFormData((prev) => ({ ...prev, procedure_date: day.dateString, procedure_time: '09:30' }));
+      setFormData((prev) => ({ ...prev, procedure_date: day.dateString, procedure_time: '10:00' }));
     } else {
       setFormData((prev) => ({ ...prev, procedure_date: day.dateString }));
     }
@@ -147,10 +144,32 @@ export default function NewProcedureScreen() {
   };
 
   const getAvailableTimeSlots = () => {
-    if (isSaturday()) {
-      return PROCEDURE_TIME_SLOTS.filter(s => s.value === '09:30');
+    const dayName = (() => {
+      try {
+        const d = new Date(formData.procedure_date);
+        return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()];
+      } catch { return 'Mon'; }
+    })();
+    return PROCEDURE_TIME_SLOTS.filter(s => s.days.includes(dayName));
+  };
+
+  const toggleLoadingType = (lt: string) => {
+    setFormData((prev) => {
+      const current = prev.loading_type;
+      const updated = current.includes(lt)
+        ? current.filter(t => t !== lt)
+        : [...current, lt];
+      return { ...prev, loading_type: updated };
+    });
+  };
+
+  const formatDisplayDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      return format(date, 'EEEE, MMMM d, yyyy');
+    } catch {
+      return dateString;
     }
-    return PROCEDURE_TIME_SLOTS.filter(s => s.value !== '09:30');
   };
 
   const validateForm = () => {
@@ -159,39 +178,35 @@ export default function NewProcedureScreen() {
       { field: 'registration_number', label: 'Registration Number' },
       { field: 'supervisor_id', label: 'Supervisor' },
       { field: 'implant_incharge_id', label: 'Implant Incharge' },
-      { field: 'implant_site', label: 'Implant Site' },
       { field: 'receipt_number', label: 'Receipt Number' },
       { field: 'amount_paid', label: 'Amount Paid' },
       { field: 'procedure_date', label: 'Procedure Date' },
       { field: 'procedure_time', label: 'Procedure Time' },
-      { field: 'implant_region', label: 'Implant Region' },
-      { field: 'implant_company', label: 'Implant Company' },
-      { field: 'bone_graft_specifications', label: 'Bone Graft/Membrane Specifications' },
+      { field: 'implant_procedure_type', label: 'Type of Implant Procedure' },
     ];
 
     const errors: {[key: string]: boolean} = {};
     const missingFields: string[] = [];
 
     for (const { field, label } of requiredFields) {
-      if (!formData[field as keyof typeof formData]) {
+      const val = formData[field as keyof typeof formData];
+      if (!val || (typeof val === 'string' && !val.trim())) {
         errors[field] = true;
         missingFields.push(label);
       }
     }
 
-    if (!iosFile) {
-      missingFields.push('IOS or Intra-oral Photos');
-    }
-    if (!cbctFile) {
-      missingFields.push('CBCT Slides and Report');
+    if (formData.loading_type.length === 0) {
+      errors['loading_type'] = true;
+      missingFields.push('Type of Loading');
     }
 
     setFieldErrors(errors);
 
     if (missingFields.length > 0) {
       Alert.alert(
-        'Required Fields Missing', 
-        `Please fill in the following fields:\n\n• ${missingFields.join('\n• ')}`
+        'Required Fields Missing',
+        `Please fill in the following fields:\n\n${missingFields.map(f => `- ${f}`).join('\n')}`
       );
       return false;
     }
@@ -201,66 +216,31 @@ export default function NewProcedureScreen() {
 
   const handleSubmit = async () => {
     if (!validateForm()) return;
-
     setLoading(true);
     try {
       const payload = {
-        ...formData,
-        student_name: user?.name || '',
-        amount_paid: parseFloat(formData.amount_paid),
+        student_name: user?.name || user?.full_name || '',
+        patient_name: formData.patient_name,
+        registration_number: formData.registration_number,
+        supervisor_id: formData.supervisor_id,
+        supervisor_name: formData.supervisor_name,
+        implant_incharge_id: formData.implant_incharge_id,
+        implant_incharge_name: formData.implant_incharge_name,
+        receipt_number: formData.receipt_number,
+        amount_paid: parseFloat(formData.amount_paid) || 0,
+        procedure_date: formData.procedure_date,
+        procedure_time: formData.procedure_time,
+        implant_procedure_type: formData.implant_procedure_type,
+        loading_type: formData.loading_type,
+        prosthetic_plan: formData.prosthetic_plan,
+        bone_graft_specifications: formData.bone_graft_specifications,
         checklist,
       };
 
-      const res = await api.post('/procedures', payload);
-      const procedureId = res.data?.id || res.data?._id;
-
-      // Upload IOS file if selected
-      if (iosFile && procedureId) {
-        try {
-          setUploading(true);
-          const iosForm = new FormData();
-          iosForm.append('file', {
-            uri: iosFile.uri,
-            name: iosFile.name,
-            type: iosFile.mimeType || 'application/octet-stream',
-          } as any);
-          await api.post(`/procedures/${procedureId}/upload-ios`, iosForm, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          });
-        } catch (uploadErr) {
-          console.error('IOS upload error:', uploadErr);
-          Alert.alert('Warning', 'Procedure created but IOS photo upload failed.');
-        } finally {
-          setUploading(false);
-        }
-      }
-
-      // Upload CBCT file if selected
-      if (cbctFile && procedureId) {
-        try {
-          setUploading(true);
-          const uploadForm = new FormData();
-          uploadForm.append('file', {
-            uri: cbctFile.uri,
-            name: cbctFile.name,
-            type: cbctFile.mimeType || 'application/octet-stream',
-          } as any);
-          await api.post(`/procedures/${procedureId}/upload-cbct`, uploadForm, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          });
-        } catch (uploadErr) {
-          console.error('CBCT upload error:', uploadErr);
-          Alert.alert('Warning', 'Procedure created but CBCT file upload failed. You can re-upload later.');
-        } finally {
-          setUploading(false);
-        }
-      }
+      await api.post('/procedures', payload);
 
       Alert.alert('Success', 'Procedure submitted successfully!', [
-        {
-          text: 'OK',
-          onPress: () => router.push('/(tabs)/procedures'),
-        },
+        { text: 'OK', onPress: () => router.push('/(tabs)/procedures') },
       ]);
     } catch (error: any) {
       console.error('Submit error:', error.response?.data);
@@ -280,65 +260,64 @@ export default function NewProcedureScreen() {
     }
   };
 
-  const pickCbctFile = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'image/png', 'image/jpeg', 'image/heif', 'image/heic'],
-        copyToCacheDirectory: true,
-      });
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const file = result.assets[0];
-        if (file.size && file.size > 25 * 1024 * 1024) {
-          Alert.alert('File Too Large', 'Maximum file size is 25MB');
-          return;
-        }
-        setCbctFile(file);
-      }
-    } catch (err) {
-      console.error('Document picker error:', err);
-    }
-  };
-
-  const pickIosFile = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['image/png', 'image/jpeg', 'image/heif', 'image/heic'],
-        copyToCacheDirectory: true,
-      });
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const file = result.assets[0];
-        if (file.size && file.size > 25 * 1024 * 1024) {
-          Alert.alert('File Too Large', 'Maximum file size is 25MB');
-          return;
-        }
-        setIosFile(file);
-      }
-    } catch (err) {
-      console.error('Document picker error:', err);
-    }
-  };
-
-  const formatDisplayDate = (dateString: string) => {
-    try {
-      const date = new Date(dateString);
-      return format(date, 'EEEE, MMMM d, yyyy');
-    } catch {
-      return dateString;
-    }
-  };
-
-  const getTimeSlotLabel = (value: string) => {
-    const slot = PROCEDURE_TIME_SLOTS.find(s => s.value === value);
-    return slot ? slot.label : value;
-  };
+  // ─── Render Helper: Dropdown Modal ─────────────────────
+  const renderDropdownModal = (
+    visible: boolean,
+    onClose: () => void,
+    title: string,
+    data: any[],
+    selectedId: string,
+    onSelect: (item: any) => void,
+    showRole = true
+  ) => (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.dropdownModal}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>{title}</Text>
+            <TouchableOpacity onPress={onClose}>
+              <Ionicons name="close" size={24} color="#333" />
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={data}
+            keyExtractor={(item: any) => item.id || item}
+            renderItem={({ item }: any) => {
+              const id = typeof item === 'string' ? item : item.id;
+              const label = typeof item === 'string' ? item : item.name;
+              const isSelected = selectedId === id;
+              return (
+                <TouchableOpacity
+                  style={[styles.dropdownItem, isSelected && styles.dropdownItemSelected]}
+                  onPress={() => { onSelect(item); onClose(); }}
+                >
+                  <View style={styles.dropdownItemContent}>
+                    {typeof item !== 'string' && (
+                      <Ionicons name="person-circle" size={32} color={isSelected ? '#007AFF' : '#666'} />
+                    )}
+                    <View>
+                      <Text style={[styles.dropdownItemText, isSelected && styles.dropdownItemTextSelected]}>
+                        {label}
+                      </Text>
+                      {showRole && typeof item !== 'string' && item.role && (
+                        <Text style={styles.dropdownItemRole}>{item.role}</Text>
+                      )}
+                    </View>
+                  </View>
+                  {isSelected && <Ionicons name="checkmark-circle" size={24} color="#007AFF" />}
+                </TouchableOpacity>
+              );
+            }}
+          />
+        </View>
+      </View>
+    </Modal>
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <BackToDashboard />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
-      >
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardView}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.header}>
             <Text style={styles.title}>New Procedure</Text>
@@ -346,49 +325,47 @@ export default function NewProcedureScreen() {
           </View>
 
           <View style={styles.form}>
+            {/* ── Patient Information ─── */}
             <Text style={styles.sectionTitle}>Patient Information</Text>
 
             <Text style={styles.label}>Patient Name *</Text>
             <TextInput
               style={[styles.input, fieldErrors.patient_name && styles.inputError]}
               value={formData.patient_name}
-              onChangeText={(value) => handleInputChange('patient_name', value)}
+              onChangeText={(v) => handleInputChange('patient_name', v)}
               placeholder="Enter patient name"
+              data-testid="input-patient-name"
             />
 
             <Text style={styles.label}>Registration Number *</Text>
             <TextInput
               style={[styles.input, fieldErrors.registration_number && styles.inputError]}
               value={formData.registration_number}
-              onChangeText={(value) => handleInputChange('registration_number', value)}
+              onChangeText={(v) => handleInputChange('registration_number', v)}
               placeholder="Enter registration number"
+              data-testid="input-registration-number"
             />
 
-            <Text style={styles.label}>Implant Site *</Text>
-            <TextInput
-              style={[styles.input, fieldErrors.implant_site && styles.inputError]}
-              value={formData.implant_site}
-              onChangeText={(value) => handleInputChange('implant_site', value)}
-              placeholder="Enter implant site (e.g., #16)"
-            />
-
+            {/* ── Faculty ─── */}
             <Text style={styles.sectionTitle}>Faculty</Text>
 
-            <Text style={styles.label}>Supervisor *</Text>
-            <TouchableOpacity 
+            <Text style={styles.label}>Supervising Faculty *</Text>
+            <TouchableOpacity
               style={[styles.dropdownButton, fieldErrors.supervisor_id && styles.inputError]}
               onPress={() => setShowInstructorDropdown(true)}
+              data-testid="select-supervisor"
             >
               <Text style={formData.supervisor_name ? styles.dropdownText : styles.dropdownPlaceholder}>
-                {formData.supervisor_name || 'Select Supervisor'}
+                {formData.supervisor_name || 'Select Supervising Faculty'}
               </Text>
               <Ionicons name="chevron-down" size={20} color="#666" />
             </TouchableOpacity>
 
             <Text style={styles.label}>Implant Incharge *</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.dropdownButton, fieldErrors.implant_incharge_id && styles.inputError]}
               onPress={() => setShowInchargeDropdown(true)}
+              data-testid="select-incharge"
             >
               <Text style={formData.implant_incharge_name ? styles.dropdownText : styles.dropdownPlaceholder}>
                 {formData.implant_incharge_name || 'Select Implant Incharge'}
@@ -396,38 +373,39 @@ export default function NewProcedureScreen() {
               <Ionicons name="chevron-down" size={20} color="#666" />
             </TouchableOpacity>
 
+            {/* ── Payment Details ─── */}
             <Text style={styles.sectionTitle}>Payment Details</Text>
 
             <Text style={styles.label}>Receipt Number *</Text>
             <TextInput
               style={[styles.input, fieldErrors.receipt_number && styles.inputError]}
               value={formData.receipt_number}
-              onChangeText={(value) => handleInputChange('receipt_number', value)}
+              onChangeText={(v) => handleInputChange('receipt_number', v)}
               placeholder="Enter receipt number"
+              data-testid="input-receipt-number"
             />
 
             <Text style={styles.label}>Amount Paid (INR) *</Text>
             <TextInput
               style={[styles.input, fieldErrors.amount_paid && styles.inputError]}
               value={formData.amount_paid}
-              onChangeText={(value) => handleInputChange('amount_paid', value)}
+              onChangeText={(v) => handleInputChange('amount_paid', v)}
               placeholder="Enter amount"
               keyboardType="numeric"
+              data-testid="input-amount-paid"
             />
 
+            {/* ── Schedule ─── */}
             <Text style={styles.sectionTitle}>Schedule</Text>
 
             <Text style={styles.label}>Procedure Date *</Text>
-            <TouchableOpacity 
-              style={styles.datePickerButton}
-              onPress={() => setShowCalendar(true)}
-            >
+            <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowCalendar(true)} data-testid="select-date">
               <Ionicons name="calendar" size={20} color="#007AFF" />
               <Text style={styles.datePickerText}>{formatDisplayDate(formData.procedure_date)}</Text>
               <Ionicons name="chevron-down" size={20} color="#666" />
             </TouchableOpacity>
             <Text style={styles.helperText}>
-              Note: Students must schedule at least 24 hours in advance. No scheduling on Sundays. Saturdays: 9:30 AM only.
+              Mon-Fri: 10:00 AM &amp; 2:00 PM | Saturday: 10:00 AM only | No Sundays
             </Text>
 
             <Text style={styles.label}>Procedure Time *</Text>
@@ -435,121 +413,88 @@ export default function NewProcedureScreen() {
               {getAvailableTimeSlots().map((slot) => (
                 <TouchableOpacity
                   key={slot.value}
-                  style={[
-                    styles.timeSlotButton,
-                    formData.procedure_time === slot.value && styles.timeSlotButtonActive,
-                  ]}
+                  style={[styles.timeSlotButton, formData.procedure_time === slot.value && styles.timeSlotButtonActive]}
                   onPress={() => handleInputChange('procedure_time', slot.value)}
+                  data-testid={`time-slot-${slot.value}`}
                 >
-                  <Ionicons 
-                    name="time" 
-                    size={18} 
-                    color={formData.procedure_time === slot.value ? '#FFF' : '#007AFF'} 
-                  />
-                  <Text
-                    style={[
-                      styles.timeSlotText,
-                      formData.procedure_time === slot.value && styles.timeSlotTextActive,
-                    ]}
-                  >
+                  <Ionicons name="time" size={18} color={formData.procedure_time === slot.value ? '#FFF' : '#007AFF'} />
+                  <Text style={[styles.timeSlotText, formData.procedure_time === slot.value && styles.timeSlotTextActive]}>
                     {slot.label}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
 
-            <Text style={styles.sectionTitle}>IOS or Intra-oral Photos *</Text>
+            {/* ── Procedure Details ─── */}
+            <Text style={styles.sectionTitle}>Procedure Details</Text>
+
+            <Text style={styles.label}>Type of Implant Procedure *</Text>
             <TouchableOpacity
-              style={styles.filePickerButton}
-              onPress={pickIosFile}
-              data-testid="ios-file-picker"
+              style={[styles.dropdownButton, fieldErrors.implant_procedure_type && styles.inputError]}
+              onPress={() => setShowProcedureTypeDropdown(true)}
+              data-testid="select-procedure-type"
             >
-              <Ionicons name="camera" size={22} color={iosFile ? '#4CAF50' : '#007AFF'} />
-              <View style={{ flex: 1 }}>
-                <Text style={iosFile ? styles.filePickerTextSelected : styles.filePickerText}>
-                  {iosFile ? iosFile.name : 'Tap to select photo'}
-                </Text>
-                <Text style={styles.helperText}>
-                  PNG, JPEG, HEIF (Max 25MB)
-                </Text>
-              </View>
-              {iosFile && (
-                <TouchableOpacity
-                  onPress={() => setIosFile(null)}
-                  style={styles.fileRemoveBtn}
-                  data-testid="ios-file-remove"
-                >
-                  <Ionicons name="close-circle" size={22} color="#F44336" />
-                </TouchableOpacity>
-              )}
+              <Text style={formData.implant_procedure_type ? styles.dropdownText : styles.dropdownPlaceholder}>
+                {formData.implant_procedure_type || 'Select Procedure Type'}
+              </Text>
+              <Ionicons name="chevron-down" size={20} color="#666" />
             </TouchableOpacity>
 
-            <Text style={styles.sectionTitle}>CBCT Slides and Report *</Text>
-            <TouchableOpacity
-              style={styles.filePickerButton}
-              onPress={pickCbctFile}
-              data-testid="cbct-file-picker"
-            >
-              <Ionicons name="document-attach" size={22} color={cbctFile ? '#4CAF50' : '#007AFF'} />
-              <View style={{ flex: 1 }}>
-                <Text style={cbctFile ? styles.filePickerTextSelected : styles.filePickerText}>
-                  {cbctFile ? cbctFile.name : 'Tap to select file'}
-                </Text>
-                <Text style={styles.helperText}>
-                  PDF, PNG, JPEG, HEIF (Max 25MB)
-                </Text>
-              </View>
-              {cbctFile && (
+            <Text style={styles.label}>Type of Loading *</Text>
+            <View style={[styles.loadingTypeContainer, fieldErrors.loading_type && styles.inputError]}>
+              {LOADING_TYPES.map((lt) => {
+                const isSelected = formData.loading_type.includes(lt);
+                return (
+                  <TouchableOpacity
+                    key={lt}
+                    style={[styles.loadingTypeChip, isSelected && styles.loadingTypeChipActive]}
+                    onPress={() => toggleLoadingType(lt)}
+                    data-testid={`loading-type-${lt.replace(/\s/g, '-').toLowerCase()}`}
+                  >
+                    <Ionicons
+                      name={isSelected ? 'checkbox' : 'square-outline'}
+                      size={20}
+                      color={isSelected ? '#007AFF' : '#999'}
+                    />
+                    <Text style={[styles.loadingTypeText, isSelected && styles.loadingTypeTextActive]}>
+                      {lt}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <Text style={styles.helperText}>Select one or both loading types</Text>
+
+            {prostheticOptions.length > 0 && (
+              <>
+                <Text style={styles.label}>Prosthetic Treatment Plan</Text>
                 <TouchableOpacity
-                  onPress={() => setCbctFile(null)}
-                  style={styles.fileRemoveBtn}
-                  data-testid="cbct-file-remove"
+                  style={styles.dropdownButton}
+                  onPress={() => setShowProstheticDropdown(true)}
+                  data-testid="select-prosthetic-plan"
                 >
-                  <Ionicons name="close-circle" size={22} color="#F44336" />
+                  <Text style={formData.prosthetic_plan ? styles.dropdownText : styles.dropdownPlaceholder}>
+                    {formData.prosthetic_plan || 'Select Prosthetic Plan'}
+                  </Text>
+                  <Ionicons name="chevron-down" size={20} color="#666" />
                 </TouchableOpacity>
-              )}
-            </TouchableOpacity>
+              </>
+            )}
 
-            <Text style={styles.sectionTitle}>Implant Details (Mandatory)</Text>
-
-            <Text style={styles.label}>Implant Region *</Text>
+            <Text style={styles.label}>Bone Graft/Membrane Specifications (Optional)</Text>
             <TextInput
-              style={[styles.input, fieldErrors.implant_region && styles.inputError]}
-              value={formData.implant_region}
-              onChangeText={(value) => handleInputChange('implant_region', value)}
-              placeholder="Enter implant region (e.g., Lower Right Molar)"
-            />
-
-            <Text style={styles.label}>Implant Company *</Text>
-            <TextInput
-              style={[styles.input, fieldErrors.implant_company && styles.inputError]}
-              value={formData.implant_company}
-              onChangeText={(value) => handleInputChange('implant_company', value)}
-              placeholder="Enter implant company (e.g., Nobel Biocare)"
-            />
-
-            <Text style={styles.label}>Bone Graft/Membrane Specifications *</Text>
-            <TextInput
-              style={[styles.input, styles.textArea, fieldErrors.bone_graft_specifications && styles.inputError]}
+              style={[styles.input, styles.textArea]}
               value={formData.bone_graft_specifications}
-              onChangeText={(value) => handleInputChange('bone_graft_specifications', value)}
+              onChangeText={(v) => handleInputChange('bone_graft_specifications', v)}
               placeholder="Enter bone graft/membrane specifications"
               multiline
               numberOfLines={3}
+              data-testid="input-bone-graft"
             />
 
-            <Text style={styles.label}>Additional Remarks (Optional)</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={formData.remark}
-              onChangeText={(value) => handleInputChange('remark', value)}
-              placeholder="Enter any additional remarks"
-              multiline
-              numberOfLines={2}
-            />
-
-            <ChecklistForm 
-              checklist={checklist} 
+            {/* ── Phase 1 Checklist ─── */}
+            <ChecklistForm
+              checklist={checklist}
               onChecklistChange={setChecklist}
               phase={1}
             />
@@ -558,6 +503,7 @@ export default function NewProcedureScreen() {
               style={[styles.submitButton, loading && styles.buttonDisabled]}
               onPress={handleSubmit}
               disabled={loading}
+              data-testid="submit-procedure-btn"
             >
               {loading ? (
                 <ActivityIndicator color="#FFF" />
@@ -570,12 +516,7 @@ export default function NewProcedureScreen() {
       </KeyboardAvoidingView>
 
       {/* Calendar Modal */}
-      <Modal
-        visible={showCalendar}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowCalendar(false)}
-      >
+      <Modal visible={showCalendar} animationType="slide" transparent onRequestClose={() => setShowCalendar(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.calendarModal}>
             <View style={styles.modalHeader}>
@@ -587,124 +528,98 @@ export default function NewProcedureScreen() {
             <Calendar
               minDate={minDate}
               onDayPress={handleDateSelect}
-              markedDates={{
-                [formData.procedure_date]: { selected: true, selectedColor: '#007AFF' },
-              }}
-              theme={{
-                todayTextColor: '#007AFF',
-                selectedDayBackgroundColor: '#007AFF',
-                arrowColor: '#007AFF',
+              markedDates={{ [formData.procedure_date]: { selected: true, selectedColor: '#007AFF' } }}
+              theme={{ todayTextColor: '#007AFF', selectedDayBackgroundColor: '#007AFF', arrowColor: '#007AFF' }}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Supervisor Dropdown */}
+      {renderDropdownModal(
+        showInstructorDropdown,
+        () => setShowInstructorDropdown(false),
+        'Select Supervising Faculty',
+        instructors,
+        formData.supervisor_id,
+        (item: any) => handleInstructorChange(item.id)
+      )}
+
+      {/* Implant Incharge Dropdown */}
+      {renderDropdownModal(
+        showInchargeDropdown,
+        () => setShowInchargeDropdown(false),
+        'Select Implant Incharge',
+        implantIncharges,
+        formData.implant_incharge_id,
+        (item: any) => handleImplantInchargeChange(item.id)
+      )}
+
+      {/* Procedure Type Dropdown */}
+      <Modal visible={showProcedureTypeDropdown} animationType="slide" transparent onRequestClose={() => setShowProcedureTypeDropdown(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.dropdownModal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Procedure Type</Text>
+              <TouchableOpacity onPress={() => setShowProcedureTypeDropdown(false)}>
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={PROCEDURE_TYPES}
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => {
+                const isSelected = formData.implant_procedure_type === item;
+                return (
+                  <TouchableOpacity
+                    style={[styles.dropdownItem, isSelected && styles.dropdownItemSelected]}
+                    onPress={() => {
+                      handleInputChange('implant_procedure_type', item);
+                      setShowProcedureTypeDropdown(false);
+                    }}
+                  >
+                    <Text style={[styles.dropdownItemText, isSelected && styles.dropdownItemTextSelected]}>
+                      {item}
+                    </Text>
+                    {isSelected && <Ionicons name="checkmark-circle" size={24} color="#007AFF" />}
+                  </TouchableOpacity>
+                );
               }}
             />
           </View>
         </View>
       </Modal>
 
-      {/* Supervisor Dropdown Modal */}
-      <Modal
-        visible={showInstructorDropdown}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowInstructorDropdown(false)}
-      >
+      {/* Prosthetic Plan Dropdown */}
+      <Modal visible={showProstheticDropdown} animationType="slide" transparent onRequestClose={() => setShowProstheticDropdown(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.dropdownModal}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Supervisor</Text>
-              <TouchableOpacity onPress={() => setShowInstructorDropdown(false)}>
+              <Text style={styles.modalTitle}>Select Prosthetic Treatment Plan</Text>
+              <TouchableOpacity onPress={() => setShowProstheticDropdown(false)}>
                 <Ionicons name="close" size={24} color="#333" />
               </TouchableOpacity>
             </View>
             <FlatList
-              data={instructors}
-              keyExtractor={(item: any) => item.id}
-              renderItem={({ item }: any) => (
-                <TouchableOpacity
-                  style={[
-                    styles.dropdownItem,
-                    formData.supervisor_id === item.id && styles.dropdownItemSelected,
-                  ]}
-                  onPress={() => {
-                    handleInstructorChange(item.id);
-                    setShowInstructorDropdown(false);
-                  }}
-                >
-                  <View style={styles.dropdownItemContent}>
-                    <Ionicons 
-                      name="person-circle" 
-                      size={32} 
-                      color={formData.supervisor_id === item.id ? '#007AFF' : '#666'} 
-                    />
-                    <View>
-                      <Text style={[
-                        styles.dropdownItemText,
-                        formData.supervisor_id === item.id && styles.dropdownItemTextSelected,
-                      ]}>
-                        {item.name}
-                      </Text>
-                      <Text style={styles.dropdownItemRole}>{item.role}</Text>
-                    </View>
-                  </View>
-                  {formData.supervisor_id === item.id && (
-                    <Ionicons name="checkmark-circle" size={24} color="#007AFF" />
-                  )}
-                </TouchableOpacity>
-              )}
-            />
-          </View>
-        </View>
-      </Modal>
-
-      {/* Implant Incharge Dropdown Modal */}
-      <Modal
-        visible={showInchargeDropdown}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowInchargeDropdown(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.dropdownModal}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Implant Incharge</Text>
-              <TouchableOpacity onPress={() => setShowInchargeDropdown(false)}>
-                <Ionicons name="close" size={24} color="#333" />
-              </TouchableOpacity>
-            </View>
-            <FlatList
-              data={implantIncharges}
-              keyExtractor={(item: any) => item.id}
-              renderItem={({ item }: any) => (
-                <TouchableOpacity
-                  style={[
-                    styles.dropdownItem,
-                    formData.implant_incharge_id === item.id && styles.dropdownItemSelected,
-                  ]}
-                  onPress={() => {
-                    handleImplantInchargeChange(item.id);
-                    setShowInchargeDropdown(false);
-                  }}
-                >
-                  <View style={styles.dropdownItemContent}>
-                    <Ionicons 
-                      name="person-circle" 
-                      size={32} 
-                      color={formData.implant_incharge_id === item.id ? '#007AFF' : '#666'} 
-                    />
-                    <View>
-                      <Text style={[
-                        styles.dropdownItemText,
-                        formData.implant_incharge_id === item.id && styles.dropdownItemTextSelected,
-                      ]}>
-                        {item.name}
-                      </Text>
-                      <Text style={styles.dropdownItemRole}>{item.role}</Text>
-                    </View>
-                  </View>
-                  {formData.implant_incharge_id === item.id && (
-                    <Ionicons name="checkmark-circle" size={24} color="#007AFF" />
-                  )}
-                </TouchableOpacity>
-              )}
+              data={prostheticOptions}
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => {
+                const isSelected = formData.prosthetic_plan === item;
+                return (
+                  <TouchableOpacity
+                    style={[styles.dropdownItem, isSelected && styles.dropdownItemSelected]}
+                    onPress={() => {
+                      handleInputChange('prosthetic_plan', item);
+                      setShowProstheticDropdown(false);
+                    }}
+                  >
+                    <Text style={[styles.dropdownItemText, isSelected && styles.dropdownItemTextSelected]}>
+                      {item}
+                    </Text>
+                    {isSelected && <Ionicons name="checkmark-circle" size={24} color="#007AFF" />}
+                  </TouchableOpacity>
+                );
+              }}
             />
           </View>
         </View>
@@ -714,29 +629,12 @@ export default function NewProcedureScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F5F5',
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 16,
-  },
-  header: {
-    marginBottom: 24,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#1A1A1A',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
-  },
+  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  keyboardView: { flex: 1 },
+  scrollContent: { padding: 16 },
+  header: { marginBottom: 24 },
+  title: { fontSize: 28, fontWeight: 'bold', color: '#1A1A1A' },
+  subtitle: { fontSize: 14, color: '#666', marginTop: 4 },
   form: {
     backgroundColor: '#FFF',
     borderRadius: 16,
@@ -757,13 +655,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E0E0E0',
     paddingBottom: 8,
   },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#333',
-    marginBottom: 6,
-    marginTop: 12,
-  },
+  label: { fontSize: 14, fontWeight: '500', color: '#333', marginBottom: 6, marginTop: 12 },
   input: {
     borderWidth: 1,
     borderColor: '#DDD',
@@ -772,15 +664,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: '#FAFAFA',
   },
-  inputError: {
-    borderColor: '#DC3545',
-    borderWidth: 2,
-    backgroundColor: '#FFF5F5',
-  },
-  textArea: {
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
+  inputError: { borderColor: '#DC3545', borderWidth: 2, backgroundColor: '#FFF5F5' },
+  textArea: { minHeight: 80, textAlignVertical: 'top' },
   dropdownButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -791,14 +676,8 @@ const styles = StyleSheet.create({
     padding: 14,
     backgroundColor: '#FAFAFA',
   },
-  dropdownText: {
-    fontSize: 16,
-    color: '#333',
-  },
-  dropdownPlaceholder: {
-    fontSize: 16,
-    color: '#999',
-  },
+  dropdownText: { fontSize: 16, color: '#333', flex: 1 },
+  dropdownPlaceholder: { fontSize: 16, color: '#999', flex: 1 },
   dropdownModal: {
     backgroundColor: '#FFF',
     borderRadius: 16,
@@ -813,37 +692,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
   },
-  dropdownItemSelected: {
-    backgroundColor: '#F0F8FF',
-  },
-  dropdownItemContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  dropdownItemText: {
-    fontSize: 16,
-    color: '#333',
-    fontWeight: '500',
-  },
-  dropdownItemTextSelected: {
-    color: '#007AFF',
-  },
-  dropdownItemRole: {
-    fontSize: 12,
-    color: '#888',
-    marginTop: 2,
-  },
-  pickerContainer: {
-    borderWidth: 1,
-    borderColor: '#DDD',
-    borderRadius: 8,
-    backgroundColor: '#FAFAFA',
-    overflow: 'hidden',
-  },
-  picker: {
-    height: 50,
-  },
+  dropdownItemSelected: { backgroundColor: '#F0F8FF' },
+  dropdownItemContent: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  dropdownItemText: { fontSize: 16, color: '#333', fontWeight: '500' },
+  dropdownItemTextSelected: { color: '#007AFF' },
+  dropdownItemRole: { fontSize: 12, color: '#888', marginTop: 2 },
   datePickerButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -854,21 +707,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#FAFAFA',
     gap: 8,
   },
-  datePickerText: {
-    flex: 1,
-    fontSize: 16,
-    color: '#333',
-  },
-  helperText: {
-    fontSize: 12,
-    color: '#888',
-    marginTop: 4,
-    fontStyle: 'italic',
-  },
-  timeSlotContainer: {
-    flexDirection: 'row',
-    gap: 12,
-  },
+  datePickerText: { flex: 1, fontSize: 16, color: '#333' },
+  helperText: { fontSize: 12, color: '#888', marginTop: 4, fontStyle: 'italic' },
+  timeSlotContainer: { flexDirection: 'row', gap: 12 },
   timeSlotButton: {
     flex: 1,
     flexDirection: 'row',
@@ -881,40 +722,32 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: '#FFF',
   },
-  timeSlotButtonActive: {
-    backgroundColor: '#007AFF',
+  timeSlotButtonActive: { backgroundColor: '#007AFF' },
+  timeSlotText: { fontSize: 16, fontWeight: '600', color: '#007AFF' },
+  timeSlotTextActive: { color: '#FFF' },
+  loadingTypeContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    padding: 4,
+    borderRadius: 8,
   },
-  timeSlotText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#007AFF',
-  },
-  timeSlotTextActive: {
-    color: '#FFF',
-  },
-  filePickerButton: {
+  loadingTypeChip: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
     borderWidth: 1.5,
     borderColor: '#DDD',
     borderRadius: 10,
-    borderStyle: 'dashed',
     padding: 14,
     backgroundColor: '#FAFAFA',
-    gap: 10,
   },
-  filePickerText: {
-    fontSize: 15,
-    color: '#999',
+  loadingTypeChipActive: {
+    borderColor: '#007AFF',
+    backgroundColor: '#F0F8FF',
   },
-  filePickerTextSelected: {
-    fontSize: 15,
-    color: '#333',
-    fontWeight: '500',
-  },
-  fileRemoveBtn: {
-    padding: 4,
-  },
+  loadingTypeText: { fontSize: 14, fontWeight: '500', color: '#666' },
+  loadingTypeTextActive: { color: '#007AFF' },
   submitButton: {
     backgroundColor: '#007AFF',
     borderRadius: 12,
@@ -922,25 +755,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 24,
   },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  submitButtonText: {
-    color: '#FFF',
-    fontSize: 18,
-    fontWeight: '600',
-  },
+  buttonDisabled: { opacity: 0.6 },
+  submitButtonText: { color: '#FFF', fontSize: 18, fontWeight: '600' },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     padding: 20,
   },
-  calendarModal: {
-    backgroundColor: '#FFF',
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
+  calendarModal: { backgroundColor: '#FFF', borderRadius: 16, overflow: 'hidden' },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -949,9 +772,5 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-  },
+  modalTitle: { fontSize: 18, fontWeight: '600', color: '#333' },
 });

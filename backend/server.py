@@ -117,15 +117,19 @@ class ProcedureCreate(BaseModel):
     supervisor_name: str
     implant_incharge_id: str
     implant_incharge_name: str
-    implant_site: str
     receipt_number: str
     amount_paid: float
     procedure_date: str
     procedure_time: str
+    implant_procedure_type: str
+    loading_type: List[str] = []
+    prosthetic_plan: str = ""
+    bone_graft_specifications: Optional[str] = ""
     checklist: Optional[Checklist] = None
+    # Legacy fields kept optional for backward compat with existing data
+    implant_site: Optional[str] = ""
     implant_region: Optional[str] = ""
     implant_company: Optional[str] = ""
-    bone_graft_specifications: Optional[str] = ""
     remark: Optional[str] = ""
 
 class ProcedureUpdate(BaseModel):
@@ -135,15 +139,18 @@ class ProcedureUpdate(BaseModel):
     supervisor_name: Optional[str] = None
     implant_incharge_id: Optional[str] = None
     implant_incharge_name: Optional[str] = None
-    implant_site: Optional[str] = None
     receipt_number: Optional[str] = None
     amount_paid: Optional[float] = None
     procedure_date: Optional[str] = None
     procedure_time: Optional[str] = None
+    implant_procedure_type: Optional[str] = None
+    loading_type: Optional[List[str]] = None
+    prosthetic_plan: Optional[str] = None
+    bone_graft_specifications: Optional[str] = None
     checklist: Optional[Checklist] = None
+    implant_site: Optional[str] = None
     implant_region: Optional[str] = None
     implant_company: Optional[str] = None
-    bone_graft_specifications: Optional[str] = None
     remark: Optional[str] = None
 
 class ApprovalAction(BaseModel):
@@ -392,6 +399,103 @@ async def update_user(user_id: str, user: UserUpdate, current_user: dict = Depen
     
     return {"message": "User updated successfully"}
 
+
+# ─── Prosthetic Plan Options Data ──────────────────────────────────
+PROSTHETIC_OPTIONS = {
+    "single_crown": [
+        "Cement Retained Crown - Metal",
+        "Cement Retained Crown - Porcelain Fused to Metal",
+        "Cement Retained Crown - Zirconia",
+        "Cement Retained Crown - Lithium Disilicate",
+        "Screw Retained Crown - Metal",
+        "Screw Retained Crown - Porcelain Fused to Metal",
+        "Screw Retained Crown - Zirconia",
+        "Screw Retained Crown - Lithium Disilicate",
+    ],
+    "bridge": [
+        "Cement Retained Bridge - Metal",
+        "Cement Retained Bridge - Porcelain Fused to Metal",
+        "Cement Retained Bridge - Zirconia",
+        "Cement Retained Bridge - Lithium Disilicate",
+        "Screw Retained Bridge - Metal",
+        "Screw Retained Bridge - Porcelain Fused to Metal",
+        "Screw Retained Bridge - Zirconia",
+        "Screw Retained Bridge - Lithium Disilicate",
+        "Overdenture with Attachment",
+    ],
+    "immediate_loading": [
+        "PMMA Crown with Temporary Abutment",
+        "PMMA Crown with Ti-Base",
+        "Full Arch Temporary Prosthesis with Multiunit and Temporary Cylinders",
+        "Temporary PMMA CAD Prosthesis with Multiunit and Temporary Cylinders",
+        "Temporary PMMA CAD Prosthesis on Ti-Base",
+    ],
+    "full_arch": [
+        "Full Arch Co-Cr Framework Removable Denture",
+        "Full Arch Porcelain Fused to Metal Prosthesis",
+        "Full Arch Co-Cr Framework Zirconia Prosthesis",
+        "Full Arch Titanium Framework Zirconia Prosthesis",
+        "Full Arch Peek Framework Zirconia Ti Base",
+    ],
+}
+
+PROCEDURE_TYPES = [
+    "Single Conventional Implant",
+    "Multiple Conventional Implants",
+    "Immediate Implant",
+    "Partial Extraction Therapy",
+    "Implant Placement with GBR",
+    "Guided Surgery",
+    "All on 4",
+    "All on 6",
+    "All on X",
+]
+
+LOADING_TYPES = ["Immediate Loading", "Delayed Loading"]
+
+@api_router.get("/case-form-options")
+async def get_case_form_options():
+    """Return all dropdown options for the New Case form."""
+    return {
+        "procedure_types": PROCEDURE_TYPES,
+        "loading_types": LOADING_TYPES,
+        "prosthetic_options": PROSTHETIC_OPTIONS,
+    }
+
+@api_router.get("/prosthetic-options")
+async def get_prosthetic_options(procedure_type: str = "", loading_type: str = ""):
+    """Return prosthetic plan options based on procedure type and loading type."""
+    options = []
+    single_types = {
+        "Single Conventional Implant", "Immediate Implant",
+        "Partial Extraction Therapy", "Implant Placement with GBR",
+    }
+    bridge_types = {
+        "Multiple Conventional Implants", "Immediate Implant",
+        "Partial Extraction Therapy", "Implant Placement with GBR",
+    }
+    full_arch_types = {"All on 4", "All on 6", "All on X"}
+
+    if procedure_type in single_types:
+        options.extend(PROSTHETIC_OPTIONS["single_crown"])
+    if procedure_type in bridge_types:
+        options.extend(PROSTHETIC_OPTIONS["bridge"])
+    if procedure_type in full_arch_types:
+        options.extend(PROSTHETIC_OPTIONS["full_arch"])
+    # Immediate loading options always available when Immediate Loading is selected
+    loading_list = loading_type.split(",") if loading_type else []
+    if "Immediate Loading" in loading_list:
+        options.extend(PROSTHETIC_OPTIONS["immediate_loading"])
+    # Remove duplicates preserving order
+    seen = set()
+    unique = []
+    for o in options:
+        if o not in seen:
+            seen.add(o)
+            unique.append(o)
+    return {"options": unique}
+
+
 # Procedure Routes
 @api_router.post("/procedures")
 async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depends(get_current_user)):
@@ -429,12 +533,20 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
         pass  # If date parsing fails, let it proceed (will be caught by validation)
     
     # Validate mandatory fields
-    if not procedure.implant_region or procedure.implant_region.strip() == "":
-        raise HTTPException(status_code=400, detail="Implant Region is a mandatory field")
-    if not procedure.implant_company or procedure.implant_company.strip() == "":
-        raise HTTPException(status_code=400, detail="Implant Company is a mandatory field")
-    if not procedure.bone_graft_specifications or procedure.bone_graft_specifications.strip() == "":
-        raise HTTPException(status_code=400, detail="Bone Graft/Membrane Specifications is a mandatory field")
+    valid_procedure_types = [
+        "Single Conventional Implant", "Multiple Conventional Implants",
+        "Immediate Implant", "Partial Extraction Therapy",
+        "Implant Placement with GBR", "Guided Surgery",
+        "All on 4", "All on 6", "All on X",
+    ]
+    if procedure.implant_procedure_type not in valid_procedure_types:
+        raise HTTPException(status_code=400, detail=f"Invalid implant procedure type: {procedure.implant_procedure_type}")
+
+    valid_loading = {"Immediate Loading", "Delayed Loading"}
+    if procedure.loading_type:
+        for lt in procedure.loading_type:
+            if lt not in valid_loading:
+                raise HTTPException(status_code=400, detail=f"Invalid loading type: {lt}")
     
     procedure_dict = procedure.model_dump()
     procedure_dict.update({
