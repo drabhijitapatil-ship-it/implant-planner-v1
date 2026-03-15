@@ -107,12 +107,32 @@ Build a mobile app using Expo for the Department of Prosthodontics to plan and m
 - Nurse: priya.sharma@dental.edu / Nurse@123
 
 ## Backlog / Future
-- [ ] P1: Case Completion engine (badge generation, full PDF report on Phase 4 approval)
 - [ ] P1: File upload support in Phase 1 checklist items (Academic Readiness PPT/PDF, Hematology report, CBCT, etc.)
 - [ ] P1: Add more drilling protocol data for other implant systems (awaiting user data)
 - [ ] P2: Data cleanup (remove duplicate users from earlier runs)
 - [ ] P2: Break down backend/server.py monolith into routers/models/services
 - [ ] P2: Modularize frontend form logic
+
+## Completed Features — Case Completion Engine (March 2026)
+- [x] Backend: Badge generation on Phase 4 completion (stored in 'badges' collection)
+  - Badge includes: case_id (IMP{last4}), student, procedure type, implant count, completion date
+  - badge_case_id stored on procedure document for reference
+- [x] Backend: GET /api/procedures/{id}/badge - Retrieve badge (null for non-completed, full badge for completed)
+- [x] Backend: POST /api/procedures/{id}/case-report - Generate comprehensive multi-page PDF
+  - Title Page with case ID, patient/clinician summary, status
+  - Patient & Treatment Details page (all fields including procedure type, loading, prosthetic plan)
+  - Implant Planning section (all implants with system, dimensions, bone data, risk)
+  - Phase 1: Pre-Surgical Protocol with checklist
+  - Phase 2: Surgical Protocol with checklist + torque values per implant
+  - Phase 3: Second Stage Surgery with checklist + clinical assessment
+  - Phase 4: Prosthetic Protocol with checklist + prosthetic plan + all remarks
+  - Summary & Confirmation page with signature lines and date
+- [x] Frontend: CaseCompletionBadge component
+  - Gold ribbon badge card for completed cases (case ID, student, procedure type, implants, date)
+  - Download Case Report PDF button (works for all statuses, not just completed)
+  - Blob download for web platform
+- [x] Frontend: Integrated into procedure detail page
+- [x] Tested: 10/10 backend tests passed, all frontend verified (iteration 23)
 
 ## Completed Features — Clinical Case Album Generator (March 2026)
 - [x] Backend: PHOTO_STEPS data structure with 44 photo steps across 4 phases (14+12+7+11)
