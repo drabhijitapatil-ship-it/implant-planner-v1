@@ -18,6 +18,7 @@ import { STATUS_COLORS, STATUS_LABELS, CHECKLIST_DATA } from '../../constants/ch
 import { format } from 'date-fns';
 import { generateProcedurePDF } from '../../utils/pdfGenerator';
 import BackToDashboard from '../../components/BackToDashboard';
+import CasePhotoAlbum from '../../components/CasePhotoAlbum';
 import * as Linking from 'expo-linking';
 
 export default function ProcedureDetailScreen() {
@@ -641,6 +642,13 @@ export default function ProcedureDetailScreen() {
             {renderChecklistSection('prosthetic_phase', 'Phase 4: Prosthetic Protocol')}
           </>
         )}
+
+        {/* Clinical Photo Album */}
+        <CasePhotoAlbum
+          procedureId={id as string}
+          isOwner={user?.id === procedure.student_id}
+          userRole={user?.role || ''}
+        />
 
         {canApprove() && !showRejectDialog && (
           <View style={styles.actionButtons}>
