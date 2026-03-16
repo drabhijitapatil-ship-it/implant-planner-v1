@@ -170,7 +170,8 @@ export default function ProcedureDetailScreen() {
   
   const canExportPDF = () => {
     if (!procedure) return false;
-    return procedure.status === 'completed' || procedure.status === 'phase2_approved';
+    const pdfStatuses = ['phase2_approved', 'pending_stage2_surgical', 'stage2_surgical_approved', 'pending_stage2_prosthetic', 'completed'];
+    return pdfStatuses.includes(procedure.status);
   };
   
   const handleExportPDF = async () => {
@@ -703,6 +704,7 @@ export default function ProcedureDetailScreen() {
               isOwner={user?.id === procedure.student_id}
               userRole={user?.role || ''}
               torqueValues={procedure.torque_values}
+              procedureStatus={procedure.status}
             />
           </View>
         )}
@@ -714,6 +716,7 @@ export default function ProcedureDetailScreen() {
             isOwner={user?.id === procedure.student_id}
             userRole={user?.role || ''}
             torqueValues={procedure.torque_values}
+            procedureStatus={procedure.status}
           />
         )}
 

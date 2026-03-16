@@ -30,7 +30,6 @@ interface Props {
 export default function CaseCompletionBadge({ procedureId, status }: Props) {
   const [badge, setBadge] = useState<Badge | null>(null);
   const [loading, setLoading] = useState(false);
-  const [reportLoading, setReportLoading] = useState(false);
   const [albumLoading, setAlbumLoading] = useState(false);
 
   useEffect(() => {
@@ -45,35 +44,6 @@ export default function CaseCompletionBadge({ procedureId, status }: Props) {
     } catch { /* ignore */ }
     finally { setLoading(false); }
   };
-
-  const handleDownloadReport = useCallback(async () => {
-    setReportLoading(true);
-    try {
-      const response = await api.post(
-        `/procedures/${procedureId}/case-report`,
-        {},
-        { responseType: 'blob' }
-      );
-      if (typeof window !== 'undefined' && window.URL) {
-        const blob = new Blob([response.data], { type: 'application/pdf' });
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `CaseReport_${badge?.case_id || procedureId}.pdf`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-        Alert.alert('Success', 'Case Report PDF downloaded.');
-      } else {
-        Alert.alert('Report Generated', 'Download on web for best experience.');
-      }
-    } catch {
-      Alert.alert('Error', 'Failed to generate case report.');
-    } finally {
-      setReportLoading(false);
-    }
-  }, [procedureId, badge]);
 
   const handleDownloadAlbum = useCallback(async () => {
     setAlbumLoading(true);
@@ -104,42 +74,9 @@ export default function CaseCompletionBadge({ procedureId, status }: Props) {
     }
   }, [procedureId, badge]);
 
-  // Only show for completed procedures OR when generating report for any case
+  // Only show for completed procedures
   if (status !== 'completed') {
-    return (
-      <View style={st.reportOnlyContainer}>
-        <TouchableOpacity
-          style={st.reportButton}
-          onPress={handleDownloadReport}
-          disabled={reportLoading}
-          data-testid="download-case-report-btn"
-        >
-          {reportLoading ? (
-            <ActivityIndicator color="#FFF" size="small" />
-          ) : (
-            <>
-              <Ionicons name="document-text" size={20} color="#FFF" />
-              <Text style={st.reportButtonText}>Download Case Report PDF</Text>
-            </>
-          )}
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={st.albumButton}
-          onPress={handleDownloadAlbum}
-          disabled={albumLoading}
-          data-testid="download-photo-album-btn"
-        >
-          {albumLoading ? (
-            <ActivityIndicator color="#FFF" size="small" />
-          ) : (
-            <>
-              <Ionicons name="images" size={20} color="#FFF" />
-              <Text style={st.reportButtonText}>Download Photo Album</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
-    );
+    return null;
   }
 
   if (loading) {
@@ -198,24 +135,7 @@ export default function CaseCompletionBadge({ procedureId, status }: Props) {
         </View>
       )}
 
-      {/* Download Report Button */}
-      <TouchableOpacity
-        style={st.reportButton}
-        onPress={handleDownloadReport}
-        disabled={reportLoading}
-        data-testid="download-case-report-btn"
-      >
-        {reportLoading ? (
-          <ActivityIndicator color="#FFF" size="small" />
-        ) : (
-          <>
-            <Ionicons name="document-text" size={20} color="#FFF" />
-            <Text style={st.reportButtonText}>Download Case Report PDF</Text>
-          </>
-        )}
-      </TouchableOpacity>
-
-      {/* Download Photo Album Button */}
+      {/* Download Photo Album Button - only for completed cases */}
       <TouchableOpacity
         style={st.albumButton}
         onPress={handleDownloadAlbum}
@@ -238,7 +158,6 @@ export default function CaseCompletionBadge({ procedureId, status }: Props) {
 const st = StyleSheet.create({
   container: { marginBottom: 12 },
   loadingBox: { padding: 20, alignItems: 'center' },
-  reportOnlyContainer: { marginBottom: 12, paddingHorizontal: 16 },
   badgeCard: {
     backgroundColor: '#FFFDF0',
     borderWidth: 2,
@@ -271,15 +190,10 @@ const st = StyleSheet.create({
   },
   noBadgeTitle: { fontSize: 16, fontWeight: '700', color: '#2E7D32' },
   noBadgeText: { fontSize: 13, color: '#4CAF50' },
-  reportButton: {
-    backgroundColor: '#1565C0',
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, marginHorizontal: 16, marginTop: 12, padding: 14, borderRadius: 12,
-  },
   albumButton: {
     backgroundColor: '#2E7D32',
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, marginHorizontal: 16, marginTop: 8, padding: 14, borderRadius: 12,
+    gap: 8, marginHorizontal: 16, marginTop: 12, padding: 14, borderRadius: 12,
   },
   reportButtonText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
 });
