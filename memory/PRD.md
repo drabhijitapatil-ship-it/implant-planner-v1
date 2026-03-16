@@ -28,6 +28,12 @@ A mobile application for prosthodontics departments to manage implant cases thro
 - Push notifications (Expo Push API)
 - Delayed Phase 1 Approval Workflow (cases start as "draft", approval sent after implant planning)
 - **Draft Cases section on student dashboard** — shows incomplete cases with quick "Send for Approval" action + tap to navigate to case detail
+- Username-based login support + case-insensitive password matching
+- **Phase A — New Case Workflow Changes:**
+  - Removed attachment upload from checklist items #3 (Hematological Investigations) and #9 (RealGuide Planning)
+  - Fixed Add Implant Position modal header overlap with mobile status bar (useSafeAreaInsets)
+  - Added "Generate Drilling Protocol" button on each saved implant card
+  - Phase-wise photo upload with camera capture and library pick support
 
 ## Key Endpoints
 - `POST /api/procedures` — Create case (status: "draft")
