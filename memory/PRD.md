@@ -6,7 +6,7 @@ Overhauling the "New Case" workflow for a prosthodontics mobile application. Ini
 ## Core Requirements
 1. **New Case Form:** Redesigned form with conditional logic for prosthetic plans based on procedure type
 2. **Phase-Based Workflow:** Cases progress through 4 phases (Pre-Surgical, Surgical, Second Stage, Prosthetic)
-3. **Implant Selection Integration:** Integrated into Phase 1 workflow AND as Step 2 in the New Case wizard
+3. **Implant Selection Integration:** Integrated into Phase 1 workflow AND as Step 2 in the New Case wizard, plus standalone tab
 4. **Checklist File Uploads:** Specific checklist items require file upload
 5. **Case Completion Engine:** Generates completion badge and PDF case report
 6. **Clinical Photo Album:** Upload and manage 26 clinical photos across 4 phases, generate PDF album
@@ -34,26 +34,34 @@ Overhauling the "New Case" workflow for a prosthodontics mobile application. Ini
 
 ## What's Implemented (Complete)
 - Clinical Case Album Generator (backend PDF + frontend UI)
-- New Case Form with 2-step wizard (Step 1: Case Details + Checklist, Step 2: Implant Selection)
+- New Case Form with 2-step wizard (Step 1: Case Details + Checklist, Step 2: Implant Selection with all 45 systems)
 - Phase 2-4 submission forms with torque values and clinical remarks
 - Case Completion Engine (badge + PDF report)
 - Checklist File Uploads
-- Implant Planning component integrated into New Case workflow AND as standalone on detail page
+- Implant Planning component integrated into New Case workflow AND as standalone on detail page + standalone tab
 - Phase 1 banner on procedure detail page for pending_phase1 procedures
-- Standalone Implant Selection tab in bottom navigation
+- Faculty/Incharge dropdowns working (auth-dependent loading)
 
-## Bug Fixes & Changes (March 16, 2026)
-1. **Faculty/Incharge Dropdowns (P0):** Fixed race condition - useEffect depends on `user` from AuthContext
-2. **CBCT Upload Removed (P0):** Removed hasUpload from "Radiographic Investigations" in checklist.ts
-3. **Implant Planning Phase 1 Integration (P1):** CaseImplantPlanning shows with Phase 1 banner during pending_phase1; shown as standalone for other phases
-4. **2-Step New Case Wizard:** Step 1 = Case details + Phase 1 checklist, Step 2 = Implant Selection (after procedure creation). Submit button reads "Submit & Continue to Implant Selection"
-5. **Loading Type Styling Fix:** Immediate/Delayed Loading chips properly contained in bordered container (borderStyle: solid added for React Native Web)
-6. **Standalone Implant Selection Preserved:** Implant Selection tab remains accessible alongside new workflow integration
+## Bug Fixes & Changes
+### March 15, 2026
+1. Faculty/Incharge Dropdowns (P0): Fixed race condition - useEffect depends on `user`
+2. CBCT Upload Removed (P0): Removed hasUpload from "Radiographic Investigations"
+3. Implant Planning Phase 1 Integration (P1): Conditional rendering with Phase 1 banner
+
+### March 16, 2026
+4. 2-Step New Case Wizard: Step 1 = Case details + Phase 1 checklist, Step 2 = Implant Selection
+5. Loading Type Styling Fix: Chips contained in bordered container (borderStyle: solid)
+6. Standalone Implant Selection Preserved: Always visible on detail page + standalone tab
+7. **All 45 Implant Systems in Dropdown**: Changed `Promise.all` to `Promise.allSettled` in CaseImplantPlanning.loadData() so systems load even if implant-plan fetch fails for new procedures
+
+## Implant Library Stats
+- 45 unique brand-system combinations
+- 485 total implant records (sizes)
+- 15 brands: Alpha Bio, B&B Dental, BioHorizons, Blue Sky Bio, Bredent, Conelog, Cowellmedi, Dentium, Dentsply Sirona, MIS, Megagen, NeoBiotech, Neodent, Noble Biocare, Osstem, Straumann, Zimmer Biomet
 
 ## Test Credentials
 - **Admin/Implant Incharge:** abhijit.patil@dental.edu / Admin@123
 - **Student:** gaurav.pandey@student.dental.edu / Student@123
-- **Supervisors:** vasantha.n@dental.edu, rajeshree.jadhav@dental.edu
 
 ## Backlog (Prioritized)
 - **P2:** Notification system for phase approvals/status changes
