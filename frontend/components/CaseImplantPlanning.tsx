@@ -328,9 +328,9 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
           <Text style={ms.stepIndicator}>Step {step}/4</Text>
         </View>
 
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={ms.scroll}>
-          <View style={{ flex: 1, justifyContent: 'center', minHeight: '100%' } as any}>
-          {/* STEP 1: Select Tooth */}
+        {/* Single flex container */}
+        <View style={{ flex: 1, paddingHorizontal: 16, paddingBottom: 16, paddingTop: step === 1 ? 130 : 16 }}>
+          {/* STEP 1: Tooth Selection */}
           {step === 1 && (
             <View>
               <Text style={ms.stepTitle}>Select Tooth Position</Text>
@@ -356,6 +356,10 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
               </TouchableOpacity>
             </View>
           )}
+
+          {/* STEPS 2-4: Scrollable */}
+          {step > 1 && (
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={ms.scroll}>
 
           {/* STEP 2: Select Mode & System */}
           {step === 2 && (
@@ -551,8 +555,9 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
               </View>
             </View>
           )}
-          </View>
         </ScrollView>
+        )}
+        </View>
 
         {/* System Dropdown Modal */}
         <Modal visible={showSystemDD} animationType="slide" transparent onRequestClose={() => setShowSystemDD(false)}>
