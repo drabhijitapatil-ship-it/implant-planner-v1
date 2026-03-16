@@ -328,7 +328,7 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
           <Text style={ms.stepIndicator}>Step {step}/4</Text>
         </View>
 
-        <ScrollView contentContainerStyle={ms.scroll}>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={ms.scroll}>
           {/* STEP 1: Select Tooth */}
           {step === 1 && (
             <View>
