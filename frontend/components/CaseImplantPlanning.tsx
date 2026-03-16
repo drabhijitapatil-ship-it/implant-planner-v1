@@ -41,6 +41,7 @@ interface Props {
   isOwner: boolean;
   userRole: string;
   torqueValues?: number[];
+  procedureStatus?: string;
 }
 
 // ── Drilling Protocol Generator ────────────────────────────
@@ -96,7 +97,7 @@ function generateDrillingProtocol(brand: string, system: string, diameter: numbe
   return protocol;
 }
 
-export default function CaseImplantPlanning({ procedureId, isOwner, userRole, torqueValues }: Props) {
+export default function CaseImplantPlanning({ procedureId, isOwner, userRole, torqueValues, procedureStatus }: Props) {
   const [plans, setPlans] = useState<ImplantPlanItem[]>([]);
   const [systems, setSystems] = useState<ImplantSystem[]>([]);
   const [toothRecs, setToothRecs] = useState<Record<string,any>>({});
@@ -106,7 +107,10 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
   const [showAddModal, setShowAddModal] = useState(false);
   const [expandedProtocol, setExpandedProtocol] = useState<number | null>(null);
 
-  const canEdit = isOwner && userRole === 'student';
+  // Editable until Phase 2 is approved; students (owner) and supervisors can edit
+  const editableStatuses = ['draft', 'pending_phase1', 'phase1_approved', 'pending_phase2'];
+  const statusAllowsEdit = !procedureStatus || editableStatuses.includes(procedureStatus);
+  const canEdit = statusAllowsEdit && ((isOwner && userRole === 'student') || userRole === 'supervisor');
 
   const loadData = useCallback(async () => {
     try {
@@ -543,6 +547,24 @@ function ModalContent(props: any) {
                     <Ionicons name="chevron-down" size={20} color="#666" />
                   </TouchableOpacity>
 
+                  {/* Show all available options of the selected system */}
+                  {selectedSystem && (
+                    <View style={ms.systemOptionsBox} data-testid="system-options-list">
+                      <Text style={ms.systemOptionsTitle}>Available Options: {selectedSystem.brand} - {selectedSystem.system}</Text>
+                      <View style={ms.systemOptionsGrid}>
+                        <View style={ms.systemOptionsCol}>
+                          <Text style={ms.systemOptionsLabel}>Diameters (mm)</Text>
+                          <Text style={ms.systemOptionsValues}>{selectedSystem.diameters.join(', ')}</Text>
+                        </View>
+                        <View style={ms.systemOptionsCol}>
+                          <Text style={ms.systemOptionsLabel}>Lengths (mm)</Text>
+                          <Text style={ms.systemOptionsValues}>{selectedSystem.lengths.join(', ')}</Text>
+                        </View>
+                      </View>
+                      <Text style={ms.systemOptionsCount}>{selectedSystem.count} size combinations available</Text>
+                    </View>
+                  )}
+
                   {/* Drilling Protocol - shown after system is selected */}
                   {selectedSystem && (
                     <View style={ms.protocolBox} data-testid="drilling-protocol">
@@ -638,7 +660,7 @@ function ModalContent(props: any) {
               {(() => {
                 const implants = mode === 'choose'
                   ? (result.recommended?.length ? result.recommended : result.all_options || [])
-                  : (result.suggestions || []).flatMap((s: any) => (s.implants || []).map((imp: any) => ({ ...imp, brand: s.brand, system: s.system })));
+                  : (result.recommended_systems || []).flatMap((s: any) => (s.implants || []).map((imp: any) => ({ ...imp, brand: s.brand, system: s.system })));
                 if (implants.length === 0) return <Text style={ms.noResults}>No implants found for these measurements.</Text>;
                 return implants.slice(0, 10).map((imp: any, i: number) => {
                   const isSelected = selectedImplant?.diameter === imp.diameter && selectedImplant?.length === imp.length && selectedImplant?.brand === imp.brand;
@@ -921,6 +943,13 @@ const ms = StyleSheet.create({
   dropdown: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#DDD', borderRadius: 10, padding: 14, backgroundColor: '#FFF', marginBottom: 12 },
   ddText: { fontSize: 15, color: '#333', flex: 1 },
   ddPlaceholder: { fontSize: 15, color: '#999', flex: 1 },
+  systemOptionsBox: { backgroundColor: '#F0F8FF', borderWidth: 1, borderColor: '#B3D4FC', borderRadius: 10, padding: 12, marginBottom: 12 },
+  systemOptionsTitle: { fontSize: 13, fontWeight: '700', color: '#1565C0', marginBottom: 8 },
+  systemOptionsGrid: { flexDirection: 'row', gap: 12 },
+  systemOptionsCol: { flex: 1 },
+  systemOptionsLabel: { fontSize: 11, fontWeight: '600', color: '#666', marginBottom: 4 },
+  systemOptionsValues: { fontSize: 13, color: '#333', fontWeight: '500' },
+  systemOptionsCount: { fontSize: 11, color: '#888', marginTop: 8, fontStyle: 'italic' },
   inputLabel: { fontSize: 14, fontWeight: '600', color: '#444', marginTop: 12, marginBottom: 6 },
   input: { borderWidth: 1, borderColor: '#DDD', borderRadius: 10, padding: 12, fontSize: 16, backgroundColor: '#FFF' },
   procChip: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: 8, marginBottom: 4, backgroundColor: '#F8F8F8' },

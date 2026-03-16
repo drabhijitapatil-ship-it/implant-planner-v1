@@ -78,6 +78,42 @@ export const generateProcedurePDF = async (procedure: any) => {
             ${procedure.implant_company ? `<p class="info-value"><strong>Company:</strong> ${procedure.implant_company}</p>` : ''}
           </div>` : ''}
 
+          ${procedure.implant_plans?.length ? `
+          <div class="section">
+            <div class="section-title">Implant Selection Details</div>
+            <table style="width:100%;border-collapse:collapse;">
+              <tr style="background:#E3F2FD;">
+                <th style="border:1px solid #ddd;padding:6px;text-align:left;font-size:11px;">Position</th>
+                <th style="border:1px solid #ddd;padding:6px;text-align:left;font-size:11px;">Brand</th>
+                <th style="border:1px solid #ddd;padding:6px;text-align:left;font-size:11px;">System</th>
+                <th style="border:1px solid #ddd;padding:6px;text-align:left;font-size:11px;">Diameter</th>
+                <th style="border:1px solid #ddd;padding:6px;text-align:left;font-size:11px;">Length</th>
+                ${procedure.torque_values?.length ? '<th style="border:1px solid #ddd;padding:6px;text-align:left;font-size:11px;">Torque</th>' : ''}
+              </tr>
+              ${procedure.implant_plans.map((imp: any, idx: number) => `
+              <tr>
+                <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${imp.position}</td>
+                <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${imp.brand}</td>
+                <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${imp.system}</td>
+                <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${imp.diameter}mm</td>
+                <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${imp.length}mm</td>
+                ${procedure.torque_values?.length ? `<td style="border:1px solid #ddd;padding:6px;font-size:11px;font-weight:bold;color:#E65100;">${procedure.torque_values[idx] !== undefined ? procedure.torque_values[idx] + ' Ncm' : '-'}</td>` : ''}
+              </tr>`).join('')}
+            </table>
+          </div>` : ''}
+
+          ${procedure.torque_values?.length && !procedure.implant_plans?.length ? `
+          <div class="section">
+            <div class="section-title">Torque Values Achieved</div>
+            ${procedure.torque_values.map((tv: number, idx: number) => `<p class="info-value"><strong>Implant ${idx + 1}:</strong> ${tv} Ncm</p>`).join('')}
+          </div>` : ''}
+
+          ${procedure.final_prosthetic_plan ? `
+          <div class="section">
+            <div class="section-title">Final Prosthetic Plan</div>
+            <p class="info-value" style="font-size:14px;font-weight:bold;">${procedure.final_prosthetic_plan}</p>
+          </div>` : ''}
+
           ${procedure.bone_graft_specifications ? `
           <div class="section">
             <div class="section-title">Bone Graft/Membrane Specifications</div>
@@ -115,6 +151,12 @@ export const generateProcedurePDF = async (procedure: any) => {
           <div class="section">
             <div class="section-title">Stage 1 Remarks</div>
             <p class="info-value">${procedure.remark}</p>
+          </div>` : ''}
+
+          ${procedure.phase2_remark ? `
+          <div class="section">
+            <div class="section-title">Phase 2 - Post-Surgical Notes by Student</div>
+            <p class="info-value">${procedure.phase2_remark}</p>
           </div>` : ''}
 
           ${procedure.checklist?.second_stage || procedure.checklist?.prosthetic_phase ? `
