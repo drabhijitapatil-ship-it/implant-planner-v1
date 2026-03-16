@@ -151,6 +151,9 @@ export default function LoginScreen() {
                     placeholderTextColor="#90A4AE"
                     secureTextEntry
                     autoCapitalize="none"
+                    autoCorrect={false}
+                    autoComplete="off"
+                    textContentType="password"
                     data-testid="login-password-input"
                   />
                 </View>

@@ -266,11 +266,11 @@ async def register(user: UserRegister):
 
 @api_router.post("/auth/login")
 async def login(user: UserLogin):
-    identifier = user.email.strip()
-    password = user.password.strip()
+    identifier = user.email.strip().replace('\u200b', '').replace('\ufeff', '')
+    password = user.password.strip().replace('\u200b', '').replace('\ufeff', '')
     db_user = None
 
-    logging.info(f"Login attempt: identifier='{identifier}' (len={len(identifier)}, repr={repr(identifier)})")
+    logging.info(f"Login attempt: identifier='{identifier}' (len={len(identifier)}, repr={repr(identifier)}, pw_len={len(password)}, pw_repr={repr(password)})")
 
     # 1) Try exact email match
     db_user = await db.users.find_one({"email": identifier})
