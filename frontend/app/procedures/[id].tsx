@@ -33,6 +33,7 @@ export default function ProcedureDetailScreen() {
   const [actionLoading, setActionLoading] = useState(false);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [rejectionType, setRejectionType] = useState<'permanent' | 'reconsider' | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
 
   useEffect(() => {
@@ -81,16 +82,23 @@ export default function ProcedureDetailScreen() {
       Alert.alert('Error', 'Please provide a reason for rejection');
       return;
     }
+    if (!rejectionType) {
+      Alert.alert('Error', 'Please select a rejection type');
+      return;
+    }
 
     setActionLoading(true);
     try {
       await api.post(getApproveEndpoint(), {
         action: 'reject',
         rejection_reason: rejectionReason,
+        rejection_type: rejectionType,
       });
-      Alert.alert('Success', 'Procedure rejected');
+      const typeLabel = rejectionType === 'permanent' ? 'permanently rejected' : 'rejected with consideration';
+      Alert.alert('Success', `Procedure ${typeLabel}`);
       setShowRejectDialog(false);
       setRejectionReason('');
+      setRejectionType(null);
       loadProcedure();
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.detail || 'Failed to reject procedure');
@@ -417,6 +425,64 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
         
+        {/* Permanently Rejected Banner */}
+        {procedure.status === 'permanently_rejected' && (
+          <View style={{ margin: 16, padding: 16, backgroundColor: '#FFEBEE', borderRadius: 12, borderWidth: 2, borderColor: '#D32F2F' }} data-testid="permanent-rejection-banner">
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <Ionicons name="ban" size={22} color="#D32F2F" />
+              <Text style={{ fontSize: 16, fontWeight: '700', color: '#B71C1C' }}>Permanently Rejected</Text>
+            </View>
+            <Text style={{ fontSize: 13, color: '#C62828', marginBottom: 6 }}>
+              Phase {procedure.rejected_phase?.replace('phase', '') || '?'} was permanently rejected by {procedure.rejected_by || procedure.phase2_rejected_by || procedure.stage2_surgical_rejected_by || procedure.stage2_prosthetic_rejected_by || 'reviewer'}.
+            </Text>
+            <View style={{ backgroundColor: '#FFF', padding: 10, borderRadius: 8 }}>
+              <Text style={{ fontSize: 12, color: '#666', fontWeight: '600' }}>Reason:</Text>
+              <Text style={{ fontSize: 13, color: '#333', marginTop: 2 }}>
+                {procedure.rejection_reason || procedure.phase2_rejection_reason || procedure.stage2_surgical_rejection_reason || procedure.stage2_prosthetic_rejection_reason || 'No reason provided'}
+              </Text>
+            </View>
+            <Text style={{ fontSize: 11, color: '#999', marginTop: 8, fontStyle: 'italic' }}>This case cannot proceed further.</Text>
+          </View>
+        )}
+
+        {/* Rejected with Consideration Banner */}
+        {procedure.rejected_phase && procedure.status !== 'permanently_rejected' && (
+          (() => {
+            const phase = procedure.rejected_phase;
+            const isReconsider =
+              (phase === 'phase1' && procedure.rejection_type === 'reconsider') ||
+              (phase === 'phase2' && procedure.phase2_rejection_type === 'reconsider') ||
+              (phase === 'phase3' && procedure.stage2_surgical_rejection_type === 'reconsider') ||
+              (phase === 'phase4' && procedure.stage2_prosthetic_rejection_type === 'reconsider');
+            const reason = phase === 'phase1' ? procedure.rejection_reason :
+              phase === 'phase2' ? procedure.phase2_rejection_reason :
+              phase === 'phase3' ? procedure.stage2_surgical_rejection_reason :
+              procedure.stage2_prosthetic_rejection_reason;
+            const rejBy = phase === 'phase1' ? procedure.rejected_by :
+              phase === 'phase2' ? procedure.phase2_rejected_by :
+              phase === 'phase3' ? procedure.stage2_surgical_rejected_by :
+              procedure.stage2_prosthetic_rejected_by;
+
+            if (!isReconsider) return null;
+            return (
+              <View style={{ margin: 16, padding: 16, backgroundColor: '#FFF3E0', borderRadius: 12, borderWidth: 2, borderColor: '#F57C00' }} data-testid="reconsider-rejection-banner">
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <Ionicons name="refresh" size={22} color="#E65100" />
+                  <Text style={{ fontSize: 16, fontWeight: '700', color: '#E65100' }}>Revision Requested</Text>
+                </View>
+                <Text style={{ fontSize: 13, color: '#BF360C', marginBottom: 6 }}>
+                  Phase {phase.replace('phase', '')} was sent back for revision by {rejBy || 'reviewer'}.
+                </Text>
+                <View style={{ backgroundColor: '#FFF', padding: 10, borderRadius: 8 }}>
+                  <Text style={{ fontSize: 12, color: '#666', fontWeight: '600' }}>Feedback:</Text>
+                  <Text style={{ fontSize: 13, color: '#333', marginTop: 2 }}>{reason || 'No reason provided'}</Text>
+                </View>
+                <Text style={{ fontSize: 11, color: '#888', marginTop: 8 }}>Please make the required changes and resubmit this phase for approval.</Text>
+              </View>
+            );
+          })()
+        )}
+
         {/* Submit Phase 2 Button for Students - GREEN COLOR */}
         {canSubmitPhase2() && (
           <View style={styles.phase2ButtonContainer}>
@@ -760,37 +826,93 @@ export default function ProcedureDetailScreen() {
 
         {showRejectDialog && (
           <View style={styles.rejectDialog}>
-            <Text style={styles.dialogTitle}>Reason for Rejection</Text>
-            <TextInput
-              style={styles.dialogInput}
-              value={rejectionReason}
-              onChangeText={setRejectionReason}
-              placeholder="Enter reason for rejection"
-              multiline
-              numberOfLines={4}
-            />
-            <View style={styles.dialogButtons}>
-              <TouchableOpacity
-                style={styles.dialogCancelButton}
-                onPress={() => {
-                  setShowRejectDialog(false);
-                  setRejectionReason('');
-                }}
-              >
-                <Text style={styles.dialogCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.dialogConfirmButton, actionLoading && styles.buttonDisabled]}
-                onPress={handleReject}
-                disabled={actionLoading}
-              >
-                {actionLoading ? (
-                  <ActivityIndicator color="#FFF" />
-                ) : (
-                  <Text style={styles.dialogConfirmText}>Confirm Rejection</Text>
-                )}
-              </TouchableOpacity>
-            </View>
+            {!rejectionType ? (
+              <>
+                <Text style={styles.dialogTitle}>Select Rejection Type</Text>
+                <TouchableOpacity
+                  style={styles.rejectPermanentBtn}
+                  onPress={() => setRejectionType('permanent')}
+                  data-testid="reject-permanently-btn"
+                >
+                  <Ionicons name="ban" size={20} color="#FFF" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rejectTypeBtnText}>Reject Permanently</Text>
+                    <Text style={styles.rejectTypeDesc}>Case will be stopped. No further phases can proceed.</Text>
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.rejectReconsiderBtn}
+                  onPress={() => setRejectionType('reconsider')}
+                  data-testid="reject-reconsider-btn"
+                >
+                  <Ionicons name="refresh" size={20} color="#FFF" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rejectTypeBtnText}>Reject with Consideration</Text>
+                    <Text style={styles.rejectTypeDesc}>Student can edit the rejected phase and resubmit.</Text>
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.dialogCancelButton}
+                  onPress={() => { setShowRejectDialog(false); setRejectionType(null); }}
+                >
+                  <Text style={styles.dialogCancelText}>Cancel</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                  <Ionicons
+                    name={rejectionType === 'permanent' ? 'ban' : 'refresh'}
+                    size={20}
+                    color={rejectionType === 'permanent' ? '#D32F2F' : '#F57C00'}
+                  />
+                  <Text style={styles.dialogTitle}>
+                    {rejectionType === 'permanent' ? 'Reject Permanently' : 'Reject with Consideration'}
+                  </Text>
+                </View>
+                <View style={{ backgroundColor: rejectionType === 'permanent' ? '#FFEBEE' : '#FFF3E0', padding: 10, borderRadius: 8, marginBottom: 12 }}>
+                  <Text style={{ fontSize: 12, color: rejectionType === 'permanent' ? '#C62828' : '#E65100' }}>
+                    {rejectionType === 'permanent'
+                      ? 'This action is final. The case cannot be moved forward after permanent rejection.'
+                      : 'The student will be notified and can edit this phase based on your feedback, then resubmit for approval.'}
+                  </Text>
+                </View>
+                <TextInput
+                  style={styles.dialogInput}
+                  value={rejectionReason}
+                  onChangeText={setRejectionReason}
+                  placeholder={rejectionType === 'permanent' ? 'Enter reason for permanent rejection' : 'Enter reason for reconsideration'}
+                  multiline
+                  numberOfLines={4}
+                  data-testid="rejection-reason-input"
+                />
+                <View style={styles.dialogButtons}>
+                  <TouchableOpacity
+                    style={styles.dialogCancelButton}
+                    onPress={() => { setRejectionType(null); setRejectionReason(''); }}
+                  >
+                    <Text style={styles.dialogCancelText}>Back</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      rejectionType === 'permanent' ? styles.dialogConfirmButton : styles.dialogReconsiderConfirmBtn,
+                      actionLoading && styles.buttonDisabled
+                    ]}
+                    onPress={handleReject}
+                    disabled={actionLoading}
+                    data-testid="confirm-rejection-btn"
+                  >
+                    {actionLoading ? (
+                      <ActivityIndicator color="#FFF" />
+                    ) : (
+                      <Text style={styles.dialogConfirmText}>
+                        {rejectionType === 'permanent' ? 'Reject Permanently' : 'Reject & Request Revision'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </View>
         )}
 
@@ -1158,8 +1280,43 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 12,
     borderRadius: 8,
-    backgroundColor: '#F44336',
+    backgroundColor: '#D32F2F',
     alignItems: 'center',
+  },
+  dialogReconsiderConfirmBtn: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#F57C00',
+    alignItems: 'center',
+  },
+  rejectPermanentBtn: {
+    backgroundColor: '#D32F2F',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+  rejectReconsiderBtn: {
+    backgroundColor: '#F57C00',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 10,
+    marginBottom: 12,
+  },
+  rejectTypeBtnText: {
+    color: '#FFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  rejectTypeDesc: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 11,
+    marginTop: 2,
   },
   dialogConfirmText: {
     color: '#FFF',

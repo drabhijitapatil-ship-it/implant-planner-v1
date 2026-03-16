@@ -157,6 +157,7 @@ class ProcedureUpdate(BaseModel):
 class ApprovalAction(BaseModel):
     action: str  # approve or reject
     rejection_reason: Optional[str] = None
+    rejection_type: Optional[str] = None  # "permanent" or "reconsider"
 
 class Phase2Submit(BaseModel):
     checklist_surgical: ChecklistSection
@@ -204,6 +205,53 @@ class NotificationResponse(BaseModel):
 
 class PushTokenRegister(BaseModel):
     push_token: str
+
+
+# Helper to notify the case creator about rejection
+async def notify_rejection(procedure: dict, procedure_id: str, phase_label: str, rejection_type: str, rejection_reason: str, rejected_by: str):
+    """Send rejection notification to the case creator (student or faculty who created it)."""
+    type_label = "permanently rejected" if rejection_type == "permanent" else "rejected with consideration"
+    
+    # Determine the case creator to notify
+    notify_ids = []
+    creator_id = procedure.get("student_id") or procedure.get("created_by_id")
+    if creator_id:
+        notify_ids.append(creator_id)
+    
+    # Also notify the other approver
+    other_ids = [procedure.get("implant_incharge_id"), procedure.get("supervisor_id")]
+    
+    for uid in notify_ids:
+        if uid:
+            await db.notifications.insert_one({
+                "user_id": uid,
+                "procedure_id": procedure_id,
+                "message": f"{phase_label}: Case {type_label} by {rejected_by}. Reason: {rejection_reason}",
+                "type": "rejected",
+                "read": False,
+                "created_at": datetime.utcnow()
+            })
+    
+    for uid in other_ids:
+        if uid and uid != creator_id:
+            await db.notifications.insert_one({
+                "user_id": uid,
+                "procedure_id": procedure_id,
+                "message": f"{phase_label}: Case for {procedure['patient_name']} was {type_label} by {rejected_by}",
+                "type": "rejected",
+                "read": False,
+                "created_at": datetime.utcnow()
+            })
+    
+    # Push notification to creator
+    if creator_id:
+        resubmit_note = " You can make changes and resubmit." if rejection_type == "reconsider" else ""
+        await send_expo_push_notifications(
+            [creator_id],
+            f"{phase_label} {'Rejected' if rejection_type == 'permanent' else 'Needs Revision'}",
+            f"{type_label.capitalize()} by {rejected_by}. {rejection_reason}{resubmit_note}",
+            {"procedure_id": procedure_id, "type": "rejected"},
+        )
 
 # Expo Push Notification Helper
 async def send_expo_push_notifications(user_ids: List[str], title: str, body: str, data: Optional[Dict] = None):
@@ -2027,41 +2075,40 @@ async def approve_procedure(
                 {"$set": update_fields}
             )
         else:
-            # Reject
-            await db.procedures.update_one(
-                {"_id": ObjectId(procedure_id)},
-                {
-                    "$set": {
-                        "status": "rejected",
+            # Reject Phase 1
+            rej_type = action.rejection_type or "permanent"
+            if rej_type == "reconsider":
+                # Soft reject: go back to draft so student can edit and resubmit
+                await db.procedures.update_one(
+                    {"_id": ObjectId(procedure_id)},
+                    {"$set": {
+                        "status": "draft",
                         "rejection_reason": action.rejection_reason,
+                        "rejection_type": "reconsider",
                         "rejected_by": current_user["name"],
                         "rejected_at": datetime.utcnow(),
+                        "rejected_phase": "phase1",
+                        "supervisor_phase1_approved": False,
+                        "implant_incharge_phase1_approved": False,
                         "updated_at": datetime.utcnow()
-                    }
-                }
-            )
+                    }}
+                )
+            else:
+                # Permanent reject: case stops here
+                await db.procedures.update_one(
+                    {"_id": ObjectId(procedure_id)},
+                    {"$set": {
+                        "status": "permanently_rejected",
+                        "rejection_reason": action.rejection_reason,
+                        "rejection_type": "permanent",
+                        "rejected_by": current_user["name"],
+                        "rejected_at": datetime.utcnow(),
+                        "rejected_phase": "phase1",
+                        "updated_at": datetime.utcnow()
+                    }}
+                )
             
-            # Notify student
-            if procedure.get("student_id"):
-                await db.notifications.insert_one({
-                    "user_id": procedure["student_id"],
-                    "procedure_id": procedure_id,
-                    "message": f"Phase 1: Procedure rejected by {current_user['name']}. Reason: {action.rejection_reason}",
-                    "type": "rejected",
-                    "read": False,
-                    "created_at": datetime.utcnow()
-                })
-            
-            # Notify the other approver
-            other_approver_id = procedure["implant_incharge_id"] if is_supervisor else procedure["supervisor_id"]
-            await db.notifications.insert_one({
-                "user_id": other_approver_id,
-                "procedure_id": procedure_id,
-                "message": f"Phase 1: Procedure for {procedure['patient_name']} was rejected by {current_user['name']}",
-                "type": "rejected",
-                "read": False,
-                "created_at": datetime.utcnow()
-            })
+            await notify_rejection(procedure, procedure_id, "Phase 1", rej_type, action.rejection_reason or "", current_user["name"])
     
     elif procedure["status"] == "pending_phase2":
         # Phase 2: Surgical protocol approval
@@ -2153,39 +2200,39 @@ async def approve_procedure(
             )
         else:
             # Reject Phase 2
-            await db.procedures.update_one(
-                {"_id": ObjectId(procedure_id)},
-                {
-                    "$set": {
-                        "status": "rejected",
-                        "rejection_reason": action.rejection_reason,
-                        "rejected_by": current_user["name"],
-                        "rejected_at": datetime.utcnow(),
+            rej_type = action.rejection_type or "permanent"
+            if rej_type == "reconsider":
+                # Soft reject: go back to phase1_approved so student can re-submit Phase 2
+                await db.procedures.update_one(
+                    {"_id": ObjectId(procedure_id)},
+                    {"$set": {
+                        "status": "phase1_approved",
+                        "phase2_rejection_reason": action.rejection_reason,
+                        "phase2_rejection_type": "reconsider",
+                        "phase2_rejected_by": current_user["name"],
+                        "phase2_rejected_at": datetime.utcnow(),
+                        "rejected_phase": "phase2",
+                        "supervisor_phase2_approved": False,
+                        "implant_incharge_phase2_approved": False,
                         "updated_at": datetime.utcnow()
-                    }
-                }
-            )
+                    }}
+                )
+            else:
+                # Permanent reject
+                await db.procedures.update_one(
+                    {"_id": ObjectId(procedure_id)},
+                    {"$set": {
+                        "status": "permanently_rejected",
+                        "phase2_rejection_reason": action.rejection_reason,
+                        "phase2_rejection_type": "permanent",
+                        "phase2_rejected_by": current_user["name"],
+                        "phase2_rejected_at": datetime.utcnow(),
+                        "rejected_phase": "phase2",
+                        "updated_at": datetime.utcnow()
+                    }}
+                )
             
-            # Notify student
-            await db.notifications.insert_one({
-                "user_id": procedure["student_id"],
-                "procedure_id": procedure_id,
-                "message": f"Phase 2: Procedure rejected by {current_user['name']}. Reason: {action.rejection_reason}",
-                "type": "rejected",
-                "read": False,
-                "created_at": datetime.utcnow()
-            })
-            
-            # Notify the other approver
-            other_approver_id = procedure["implant_incharge_id"] if is_supervisor else procedure["supervisor_id"]
-            await db.notifications.insert_one({
-                "user_id": other_approver_id,
-                "procedure_id": procedure_id,
-                "message": f"Phase 2: Procedure for {procedure['patient_name']} was rejected by {current_user['name']}",
-                "type": "rejected",
-                "read": False,
-                "created_at": datetime.utcnow()
-            })
+            await notify_rejection(procedure, procedure_id, "Phase 2", rej_type, action.rejection_reason or "", current_user["name"])
     else:
         raise HTTPException(status_code=400, detail="Procedure cannot be approved in current status")
     
@@ -2526,24 +2573,37 @@ async def approve_stage2_surgical(
 
         await db.procedures.update_one({"_id": ObjectId(procedure_id)}, {"$set": update_fields})
     else:
-        await db.procedures.update_one(
-            {"_id": ObjectId(procedure_id)},
-            {"$set": {
-                "status": "stage2_surgical_rejected",
-                "stage2_surgical_rejection_reason": action.rejection_reason,
-                "stage2_surgical_rejected_by": current_user["name"],
-                "stage2_surgical_rejected_at": datetime.utcnow(),
-                "updated_at": datetime.utcnow()
-            }}
-        )
-        await db.notifications.insert_one({
-            "user_id": procedure["student_id"],
-            "procedure_id": procedure_id,
-            "message": f"Phase 3: Rejected by {current_user['name']}. Reason: {action.rejection_reason}",
-            "type": "rejected",
-            "read": False,
-            "created_at": datetime.utcnow()
-        })
+        rej_type = action.rejection_type or "permanent"
+        if rej_type == "reconsider":
+            # Soft reject: go back to phase2_approved so student can re-submit Phase 3
+            await db.procedures.update_one(
+                {"_id": ObjectId(procedure_id)},
+                {"$set": {
+                    "status": "phase2_approved",
+                    "stage2_surgical_rejection_reason": action.rejection_reason,
+                    "stage2_surgical_rejection_type": "reconsider",
+                    "stage2_surgical_rejected_by": current_user["name"],
+                    "stage2_surgical_rejected_at": datetime.utcnow(),
+                    "rejected_phase": "phase3",
+                    "updated_at": datetime.utcnow()
+                }}
+            )
+        else:
+            # Permanent reject
+            await db.procedures.update_one(
+                {"_id": ObjectId(procedure_id)},
+                {"$set": {
+                    "status": "permanently_rejected",
+                    "stage2_surgical_rejection_reason": action.rejection_reason,
+                    "stage2_surgical_rejection_type": "permanent",
+                    "stage2_surgical_rejected_by": current_user["name"],
+                    "stage2_surgical_rejected_at": datetime.utcnow(),
+                    "rejected_phase": "phase3",
+                    "updated_at": datetime.utcnow()
+                }}
+            )
+        
+        await notify_rejection(procedure, procedure_id, "Phase 3", rej_type, action.rejection_reason or "", current_user["name"])
 
     updated = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     updated["_id"] = str(updated["_id"])
@@ -2656,24 +2716,37 @@ async def approve_stage2_prosthetic(
 
         await db.procedures.update_one({"_id": ObjectId(procedure_id)}, {"$set": update_fields})
     else:
-        await db.procedures.update_one(
-            {"_id": ObjectId(procedure_id)},
-            {"$set": {
-                "status": "stage2_prosthetic_rejected",
-                "stage2_prosthetic_rejection_reason": action.rejection_reason,
-                "stage2_prosthetic_rejected_by": current_user["name"],
-                "stage2_prosthetic_rejected_at": datetime.utcnow(),
-                "updated_at": datetime.utcnow()
-            }}
-        )
-        await db.notifications.insert_one({
-            "user_id": procedure["student_id"],
-            "procedure_id": procedure_id,
-            "message": f"Phase 4: Rejected by {current_user['name']}. Reason: {action.rejection_reason}",
-            "type": "rejected",
-            "read": False,
-            "created_at": datetime.utcnow()
-        })
+        rej_type = action.rejection_type or "permanent"
+        if rej_type == "reconsider":
+            # Soft reject: go back to stage2_surgical_approved so student can re-submit Phase 4
+            await db.procedures.update_one(
+                {"_id": ObjectId(procedure_id)},
+                {"$set": {
+                    "status": "stage2_surgical_approved",
+                    "stage2_prosthetic_rejection_reason": action.rejection_reason,
+                    "stage2_prosthetic_rejection_type": "reconsider",
+                    "stage2_prosthetic_rejected_by": current_user["name"],
+                    "stage2_prosthetic_rejected_at": datetime.utcnow(),
+                    "rejected_phase": "phase4",
+                    "updated_at": datetime.utcnow()
+                }}
+            )
+        else:
+            # Permanent reject
+            await db.procedures.update_one(
+                {"_id": ObjectId(procedure_id)},
+                {"$set": {
+                    "status": "permanently_rejected",
+                    "stage2_prosthetic_rejection_reason": action.rejection_reason,
+                    "stage2_prosthetic_rejection_type": "permanent",
+                    "stage2_prosthetic_rejected_by": current_user["name"],
+                    "stage2_prosthetic_rejected_at": datetime.utcnow(),
+                    "rejected_phase": "phase4",
+                    "updated_at": datetime.utcnow()
+                }}
+            )
+        
+        await notify_rejection(procedure, procedure_id, "Phase 4", rej_type, action.rejection_reason or "", current_user["name"])
 
     updated = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     updated["_id"] = str(updated["_id"])
