@@ -267,20 +267,32 @@ async def register(user: UserRegister):
 @api_router.post("/auth/login")
 async def login(user: UserLogin):
     identifier = user.email.strip()
+    password = user.password.strip()
     db_user = None
+
+    logging.info(f"Login attempt: identifier='{identifier}' (len={len(identifier)}, repr={repr(identifier)})")
 
     # 1) Try exact email match
     db_user = await db.users.find_one({"email": identifier})
 
-    # 2) Try case-insensitive username match
+    # 2) Try case-insensitive email match (for mobile keyboards that may change case)
+    if not db_user:
+        db_user = await db.users.find_one({"email": {"$regex": f"^{re.escape(identifier)}$", "$options": "i"}})
+
+    # 3) Try case-insensitive username match
     if not db_user:
         db_user = await db.users.find_one({"username": {"$regex": f"^{re.escape(identifier)}$", "$options": "i"}})
 
-    # 3) If not found and input lacks '@', try case-insensitive name match
+    # 4) If not found and input lacks '@', try case-insensitive name match
     if not db_user and "@" not in identifier:
         db_user = await db.users.find_one({"name": {"$regex": re.escape(identifier), "$options": "i"}})
 
-    if not db_user or not verify_password(user.password, db_user["password_hash"]):
+    if not db_user:
+        logging.warning(f"Login failed: no user found for '{identifier}'")
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    if not verify_password(password, db_user["password_hash"]):
+        logging.warning(f"Login failed: wrong password for user '{db_user['name']}' (identifier='{identifier}')")
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     # Create token
