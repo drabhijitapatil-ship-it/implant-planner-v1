@@ -87,13 +87,27 @@ export default function CasePhotoAlbum({ procedureId, isOwner, userRole }: Props
     loadData();
   }, [loadData]);
 
-  const pickAndUpload = async (stepId: string) => {
+  const pickAndUpload = async (stepId: string, source: 'library' | 'camera') => {
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        quality: 0.8,
-        allowsEditing: false,
-      });
+      let result;
+      if (source === 'camera') {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) {
+          Alert.alert('Permission Required', 'Camera access is needed to take photos.');
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ['images'],
+          quality: 0.8,
+          allowsEditing: false,
+        });
+      } else {
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          quality: 0.8,
+          allowsEditing: false,
+        });
+      }
       if (result.canceled || !result.assets?.[0]) return;
 
       const asset = result.assets[0];
@@ -348,25 +362,40 @@ export default function CasePhotoAlbum({ procedureId, isOwner, userRole }: Props
                             </ScrollView>
                           )}
 
-                          {/* Upload Button */}
+                          {/* Upload Buttons */}
                           {canUpload && (
-                            <TouchableOpacity
-                              style={styles.uploadBtn}
-                              onPress={() => pickAndUpload(step.step_id)}
-                              disabled={uploading === step.step_id}
-                              data-testid={`upload-btn-${step.step_id}`}
-                            >
-                              {uploading === step.step_id ? (
-                                <ActivityIndicator size="small" color="#007AFF" />
-                              ) : (
-                                <>
-                                  <Ionicons name="cloud-upload-outline" size={18} color="#007AFF" />
-                                  <Text style={styles.uploadBtnText}>
-                                    {step.has_photo ? 'Add Another Photo' : 'Upload Photo'}
-                                  </Text>
-                                </>
-                              )}
-                            </TouchableOpacity>
+                            <View style={styles.uploadRow}>
+                              <TouchableOpacity
+                                style={styles.uploadBtn}
+                                onPress={() => pickAndUpload(step.step_id, 'camera')}
+                                disabled={uploading === step.step_id}
+                                data-testid={`camera-btn-${step.step_id}`}
+                              >
+                                {uploading === step.step_id ? (
+                                  <ActivityIndicator size="small" color="#007AFF" />
+                                ) : (
+                                  <>
+                                    <Ionicons name="camera" size={18} color="#007AFF" />
+                                    <Text style={styles.uploadBtnText}>Take Photo</Text>
+                                  </>
+                                )}
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={styles.uploadBtn}
+                                onPress={() => pickAndUpload(step.step_id, 'library')}
+                                disabled={uploading === step.step_id}
+                                data-testid={`upload-btn-${step.step_id}`}
+                              >
+                                {uploading === step.step_id ? (
+                                  <ActivityIndicator size="small" color="#007AFF" />
+                                ) : (
+                                  <>
+                                    <Ionicons name="images-outline" size={18} color="#007AFF" />
+                                    <Text style={styles.uploadBtnText}>Library</Text>
+                                  </>
+                                )}
+                              </TouchableOpacity>
+                            </View>
                           )}
                         </View>
                       )}
@@ -590,6 +619,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   uploadBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -600,6 +630,10 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#007AFF',
     borderStyle: 'dashed',
+  },
+  uploadRow: {
+    flexDirection: 'row',
+    gap: 8,
   },
   uploadBtnText: {
     fontSize: 13,

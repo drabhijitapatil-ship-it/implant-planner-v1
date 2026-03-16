@@ -18,6 +18,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import api from '../../utils/api';
 import ChecklistForm from '../../components/ChecklistForm';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';
+import CasePhotoAlbum from '../../components/CasePhotoAlbum';
 import BackToDashboard from '../../components/BackToDashboard';
 import { useRouter } from 'expo-router';
 import { format, addDays } from 'date-fns';
@@ -570,6 +571,19 @@ export default function NewProcedureScreen() {
                 userRole="student"
               />
 
+              {/* Phase-wise Photo Upload */}
+              <View style={styles.photoSection}>
+                <Text style={styles.photoSectionTitle}>Clinical Photo Upload</Text>
+                <Text style={styles.photoSectionSubtitle}>
+                  Upload phase-wise photographs from camera or library
+                </Text>
+              </View>
+              <CasePhotoAlbum
+                procedureId={newProcedureId}
+                isOwner={true}
+                userRole="student"
+              />
+
               <View style={styles.step2Actions}>
                 <TouchableOpacity
                   style={[styles.approvalBtn, submittingApproval && styles.buttonDisabled]}
@@ -958,6 +972,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+  },
+  photoSection: {
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 4,
+  },
+  photoSectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  photoSectionSubtitle: {
+    fontSize: 13,
+    color: '#888',
+    marginTop: 2,
   },
   approvalBtnText: {
     color: '#FFF',

@@ -12,7 +12,7 @@ import {
   ScrollView,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../utils/api';
 
@@ -103,6 +103,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole }: 
   const [saving, setSaving] = useState(false);
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [expandedProtocol, setExpandedProtocol] = useState<number | null>(null);
 
   const canEdit = isOwner && userRole === 'student';
 
@@ -227,6 +228,52 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole }: 
                   <Ionicons name="trash-outline" size={16} color="#F44336" />
                   <Text style={st.deleteBtnText}>Remove</Text>
                 </TouchableOpacity>
+                <TouchableOpacity
+                  style={st.protocolBtn}
+                  onPress={() => setExpandedProtocol(expandedProtocol === idx ? null : idx)}
+                  data-testid={`protocol-btn-${idx}`}
+                >
+                  <Ionicons name="construct" size={16} color="#5C6BC0" />
+                  <Text style={st.protocolBtnText}>Drilling Protocol</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            {!canEdit && (
+              <View style={st.implantActions}>
+                <TouchableOpacity
+                  style={st.protocolBtn}
+                  onPress={() => setExpandedProtocol(expandedProtocol === idx ? null : idx)}
+                  data-testid={`protocol-btn-${idx}`}
+                >
+                  <Ionicons name="construct" size={16} color="#5C6BC0" />
+                  <Text style={st.protocolBtnText}>Drilling Protocol</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            {expandedProtocol === idx && plan.bone_type && (
+              <View style={st.inlineProtocol}>
+                <View style={st.inlineProtocolHeader}>
+                  <Ionicons name="construct" size={16} color="#1565C0" />
+                  <Text style={st.inlineProtocolTitle}>Drilling Sequence: {plan.brand} {plan.diameter}mm ({plan.bone_type})</Text>
+                </View>
+                {generateDrillingProtocol(plan.brand, plan.system, plan.diameter, plan.bone_type).map((p) => (
+                  <View key={p.step} style={st.protocolStepRow}>
+                    <View style={st.protocolStepBadge}>
+                      <Text style={st.protocolStepBadgeText}>{p.step}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={st.protocolDrillText}>{p.drill}</Text>
+                      <Text style={st.protocolMetaText}>{p.speed} | {p.depth}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+            {expandedProtocol === idx && !plan.bone_type && (
+              <View style={st.inlineProtocol}>
+                <Text style={{ fontSize: 12, color: '#999', textAlign: 'center', padding: 8 }}>
+                  Bone type not set. Edit this implant to set bone type for drilling protocol.
+                </Text>
               </View>
             )}
           </View>
@@ -373,7 +420,55 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <SafeAreaView style={ms.container} edges={['top']}>
+      <ModalContent
+        visible={visible}
+        onClose={onClose}
+        onSave={onSave}
+        systems={systems}
+        toothRecs={toothRecs}
+        usedPositions={usedPositions}
+        editItem={editItem}
+        step={step} setStep={setStep}
+        position={position} setPosition={setPosition}
+        mode={mode} setMode={setMode}
+        selectedSystem={selectedSystem} setSelectedSystem={setSelectedSystem}
+        boneWidth={boneWidth} setBoneWidth={setBoneWidth}
+        boneHeight={boneHeight} setBoneHeight={setBoneHeight}
+        boneType={boneType} setBoneType={setBoneType}
+        searching={searching}
+        result={result}
+        selectedImplant={selectedImplant} setSelectedImplant={setSelectedImplant}
+        riskResult={riskResult}
+        riskLoading={riskLoading}
+        showSystemDD={showSystemDD} setShowSystemDD={setShowSystemDD}
+        systemSearch={systemSearch} setSystemSearch={setSystemSearch}
+        sProcedures={sProcedures} setSProcedures={setSProcedures}
+        handleSearch={handleSearch}
+        handleCalcRisk={handleCalcRisk}
+        handleConfirm={handleConfirm}
+        toothInfo={toothInfo}
+      />
+    </Modal>
+  );
+}
+
+// Separate inner component to use hooks inside Modal
+function ModalContent(props: any) {
+  const insets = useSafeAreaInsets();
+  const {
+    onClose, editItem, step, setStep, position, setPosition, mode, setMode,
+    selectedSystem, setSelectedSystem, boneWidth, setBoneWidth, boneHeight, setBoneHeight,
+    boneType, setBoneType, searching, result, selectedImplant, setSelectedImplant,
+    riskResult, riskLoading, showSystemDD, setShowSystemDD, systemSearch, setSystemSearch,
+    sProcedures, setSProcedures, handleSearch, handleCalcRisk, handleConfirm, toothInfo,
+    systems, usedPositions, onSave,
+  } = props;
+
+  const BONE_TYPES = ['D1','D2','D3','D4'];
+  const PROCEDURES = ['Conventional Implant Placement','Conventional Implant Placement with Bone Graft','Immediate Implant Placement','Immediate Implant Placement with Bone Graft','Sinus Lift','Restricted Bone Height'];
+
+  return (
+    <View style={[ms.container, { paddingTop: Math.max(insets.top, 20) }]}>
         {/* Header */}
         <View style={ms.header}>
           <TouchableOpacity onPress={onClose} style={ms.closeBtn} data-testid="modal-close-btn">
@@ -690,8 +785,7 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
             </View>
           </View>
         </Modal>
-      </SafeAreaView>
-    </Modal>
+      </View>
   );
 }
 
@@ -777,6 +871,16 @@ const st = StyleSheet.create({
   editBtnText: { fontSize: 12, color: '#1E88E5', fontWeight: '600' },
   deleteBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   deleteBtnText: { fontSize: 12, color: '#F44336', fontWeight: '600' },
+  protocolBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#E8EAF6', borderRadius: 6, padding: 6, paddingHorizontal: 10 },
+  protocolBtnText: { fontSize: 12, color: '#5C6BC0', fontWeight: '600' },
+  inlineProtocol: { marginTop: 10, backgroundColor: '#F5F7FF', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#E0E4F2' },
+  inlineProtocolHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  inlineProtocolTitle: { fontSize: 13, fontWeight: '600', color: '#1565C0', flex: 1 },
+  protocolStepRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  protocolStepBadge: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#1565C0', alignItems: 'center', justifyContent: 'center' },
+  protocolStepBadgeText: { fontSize: 11, color: '#FFF', fontWeight: '700' },
+  protocolDrillText: { fontSize: 13, fontWeight: '600', color: '#333' },
+  protocolMetaText: { fontSize: 11, color: '#888' },
   emptyState: { backgroundColor: '#FFF', padding: 30, alignItems: 'center', gap: 8 },
   emptyText: { fontSize: 15, fontWeight: '600', color: '#999' },
   emptySubtext: { fontSize: 12, color: '#BBB' },
