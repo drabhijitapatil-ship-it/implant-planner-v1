@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePushNotifications } from '../../utils/usePushNotifications';
 import ImplantIcon from '../../components/ImplantIcon';
+import api from '../../utils/api';
 
 // ── Side Drawer Menu ───────────────────────────────────────
 function DrawerMenu({
@@ -167,10 +168,24 @@ export default function TabsLayout() {
   const router = useRouter();
   usePushNotifications(token);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const role = user?.role;
   const isAdmin = role === 'administrator' || role === 'implant_incharge';
   const isNurse = role === 'nurse';
+
+  const fetchUnreadCount = useCallback(async () => {
+    try {
+      const res = await api.get('/notifications/unread-count');
+      setUnreadCount(res.data.count || 0);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, [fetchUnreadCount]);
 
   const roleName = (role || '').replace(/_/g, ' ');
 
@@ -275,8 +290,20 @@ export default function TabsLayout() {
           options={{
             title: 'Alerts',
             tabBarIcon: ({ color }) => (
-              <Ionicons name="notifications-outline" size={24} color={color} />
+              <View>
+                <Ionicons name="notifications-outline" size={24} color={color} />
+                {unreadCount > 0 && (
+                  <View style={badgeStyles.badge} data-testid="alerts-badge">
+                    <Text style={badgeStyles.badgeText}>
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </Text>
+                  </View>
+                )}
+              </View>
             ),
+          }}
+          listeners={{
+            tabPress: () => { setTimeout(fetchUnreadCount, 1000); },
           }}
         />
         {/* Hidden from bottom bar — accessible via side drawer */}
@@ -298,3 +325,25 @@ export default function TabsLayout() {
     </>
   );
 }
+
+const badgeStyles = StyleSheet.create({
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -8,
+    backgroundColor: '#F44336',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: '#FFF',
+  },
+  badgeText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+});

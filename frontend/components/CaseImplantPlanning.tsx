@@ -40,6 +40,7 @@ interface Props {
   procedureId: string;
   isOwner: boolean;
   userRole: string;
+  torqueValues?: number[];
 }
 
 // ── Drilling Protocol Generator ────────────────────────────
@@ -95,7 +96,7 @@ function generateDrillingProtocol(brand: string, system: string, diameter: numbe
   return protocol;
 }
 
-export default function CaseImplantPlanning({ procedureId, isOwner, userRole }: Props) {
+export default function CaseImplantPlanning({ procedureId, isOwner, userRole, torqueValues }: Props) {
   const [plans, setPlans] = useState<ImplantPlanItem[]>([]);
   const [systems, setSystems] = useState<ImplantSystem[]>([]);
   const [toothRecs, setToothRecs] = useState<Record<string,any>>({});
@@ -217,6 +218,12 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole }: 
               {plan.bone_width && <Text style={st.detailText}>Bone: {plan.bone_width}mm W x {plan.bone_height}mm H</Text>}
               {plan.bone_type && <Text style={st.detailText}>Bone Type: {plan.bone_type}</Text>}
               {plan.risk_score !== undefined && plan.risk_score !== null && <Text style={st.detailText}>Risk Score: {plan.risk_score}/15</Text>}
+              {torqueValues && torqueValues[idx] !== undefined && (
+                <View style={st.torqueRow} data-testid={`implant-torque-${idx}`}>
+                  <Ionicons name="speedometer" size={14} color="#FF6D00" />
+                  <Text style={st.torqueText}>Torque: <Text style={st.torqueValue}>{torqueValues[idx]} Ncm</Text></Text>
+                </View>
+              )}
             </View>
             {canEdit && (
               <View style={st.implantActions}>
@@ -866,6 +873,9 @@ const st = StyleSheet.create({
   riskBadgeText: { fontSize: 11, fontWeight: '700' },
   implantDetails: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8, paddingLeft: 48 },
   detailText: { fontSize: 11, color: '#888', backgroundColor: '#F5F5F5', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 },
+  torqueRow: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FFF3E0', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
+  torqueText: { fontSize: 11, color: '#BF360C', fontWeight: '500' },
+  torqueValue: { fontSize: 13, fontWeight: '700', color: '#E65100' },
   implantActions: { flexDirection: 'row', gap: 12, marginTop: 10, paddingLeft: 48 },
   editBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   editBtnText: { fontSize: 12, color: '#1E88E5', fontWeight: '600' },

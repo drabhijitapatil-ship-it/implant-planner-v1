@@ -55,9 +55,10 @@ interface Props {
   procedureId: string;
   isOwner: boolean;
   userRole: string;
+  procedureStatus?: string;
 }
 
-export default function CasePhotoAlbum({ procedureId, isOwner, userRole }: Props) {
+export default function CasePhotoAlbum({ procedureId, isOwner, userRole, procedureStatus }: Props) {
   const [photos, setPhotos] = useState<Record<string, PhaseInfo>>({});
   const [stepDefs, setStepDefs] = useState<Record<string, PhaseStepDef>>({});
   const [expandedPhase, setExpandedPhase] = useState<string | null>(null);
@@ -67,6 +68,7 @@ export default function CasePhotoAlbum({ procedureId, isOwner, userRole }: Props
   const [albumLoading, setAlbumLoading] = useState(false);
 
   const canUpload = isOwner && userRole === 'student';
+  const isReviewer = userRole === 'supervisor' || userRole === 'implant_incharge';
 
   const loadData = useCallback(async () => {
     try {
@@ -76,12 +78,24 @@ export default function CasePhotoAlbum({ procedureId, isOwner, userRole }: Props
       ]);
       setPhotos(photosRes.data);
       setStepDefs(stepsRes.data);
+
+      // Auto-expand the relevant phase for reviewers during approval
+      if (isReviewer && procedureStatus) {
+        const statusToPhase: Record<string, string> = {
+          pending_phase1: '1',
+          pending_phase2: '2',
+          pending_stage2_surgical: '3',
+          pending_stage2_prosthetic: '4',
+        };
+        const autoPhase = statusToPhase[procedureStatus];
+        if (autoPhase) setExpandedPhase(autoPhase);
+      }
     } catch (err) {
       console.error('Failed to load album data:', err);
     } finally {
       setLoading(false);
     }
-  }, [procedureId]);
+  }, [procedureId, isReviewer, procedureStatus]);
 
   useEffect(() => {
     loadData();
@@ -227,6 +241,16 @@ export default function CasePhotoAlbum({ procedureId, isOwner, userRole }: Props
           <Text style={styles.badgeText}>{getTotalPhotos()}/{getTotalSteps()}</Text>
         </View>
       </View>
+
+      {/* Reviewer prompt */}
+      {isReviewer && getTotalPhotos() > 0 && (procedureStatus || '').startsWith('pending') && (
+        <View style={{ backgroundColor: '#E8F5E9', padding: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }} data-testid="photo-review-prompt">
+          <Ionicons name="eye" size={16} color="#2E7D32" />
+          <Text style={{ fontSize: 12, color: '#2E7D32', flex: 1 }}>
+            {getTotalPhotos()} photo(s) uploaded by student. Tap phases below to review.
+          </Text>
+        </View>
+      )}
 
       {/* Phase Sections */}
       {phaseKeys.map((phaseKey) => {

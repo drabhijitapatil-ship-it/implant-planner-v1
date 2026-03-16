@@ -534,6 +534,25 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
+        {/* Torque Values Achieved - visible to supervisors during approval and to students after approval */}
+        {procedure.torque_values && procedure.torque_values.length > 0 && (
+          <View style={styles.section} data-testid="torque-values-section">
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <Ionicons name="speedometer" size={20} color="#FF6D00" />
+              <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#E65100' }]}>Torque Values Achieved</Text>
+            </View>
+            {procedure.torque_values.map((tv: number, idx: number) => (
+              <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: idx < procedure.torque_values.length - 1 ? 1 : 0, borderBottomColor: '#F0F0F0' }}>
+                <View style={{ backgroundColor: '#FFF3E0', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, marginRight: 12 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#BF360C' }}>Implant {idx + 1}</Text>
+                </View>
+                <Text style={{ fontSize: 18, fontWeight: '700', color: '#E65100' }}>{tv}</Text>
+                <Text style={{ fontSize: 13, color: '#888', marginLeft: 4 }}>Ncm</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
         {procedure.ios_file && (
           <View style={styles.section} data-testid="ios-file-section">
             <Text style={styles.sectionTitle}>IOS or Intra-oral Photos</Text>
@@ -588,6 +607,13 @@ export default function ProcedureDetailScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Phase 1 Remarks</Text>
             <Text style={styles.specText}>{procedure.remark}</Text>
+          </View>
+        )}
+
+        {procedure.phase2_remark && (
+          <View style={styles.section} data-testid="phase2-remark-section">
+            <Text style={styles.sectionTitle}>Phase 2 - Post-Surgical Notes by Student</Text>
+            <Text style={styles.specText}>{procedure.phase2_remark}</Text>
           </View>
         )}
 
@@ -663,6 +689,7 @@ export default function ProcedureDetailScreen() {
               procedureId={id as string}
               isOwner={user?.id === procedure.student_id}
               userRole={user?.role || ''}
+              torqueValues={procedure.torque_values}
             />
           </View>
         )}
@@ -673,6 +700,7 @@ export default function ProcedureDetailScreen() {
             procedureId={id as string}
             isOwner={user?.id === procedure.student_id}
             userRole={user?.role || ''}
+            torqueValues={procedure.torque_values}
           />
         )}
 
@@ -681,6 +709,7 @@ export default function ProcedureDetailScreen() {
           procedureId={id as string}
           isOwner={user?.id === procedure.student_id}
           userRole={user?.role || ''}
+          procedureStatus={procedure.status}
         />
 
         {canApprove() && !showRejectDialog && (
