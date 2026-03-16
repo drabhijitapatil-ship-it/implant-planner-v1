@@ -12,7 +12,7 @@ import sys
 import time
 
 # Configuration
-BASE_URL = "https://implant-phase1.preview.emergentagent.com/api"
+BASE_URL = "https://torque-visibility.preview.emergentagent.com/api"
 HEADERS = {"Content-Type": "application/json"}
 
 # Test credentials from the review request
