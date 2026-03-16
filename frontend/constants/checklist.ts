@@ -175,6 +175,7 @@ export function getProstheticOptions(procedureType: string, loadingTypes: string
 }
 
 export const STATUS_COLORS: Record<string, string> = {
+  draft: '#78909C',
   pending_phase1: '#FFA500',
   phase1_approved: '#4CAF50',
   pending_phase2: '#FFD700',
@@ -190,6 +191,7 @@ export const STATUS_COLORS: Record<string, string> = {
 };
 
 export const STATUS_LABELS: Record<string, string> = {
+  draft: 'Draft',
   pending_phase1: 'Phase 1: Pending Approval',
   phase1_approved: 'Phase 1: Approved - Ready for Phase 2',
   pending_phase2: 'Phase 2: Pending Approval',

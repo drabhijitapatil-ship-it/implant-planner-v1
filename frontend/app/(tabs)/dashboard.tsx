@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   TextInput,
   Image,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar } from 'react-native-calendars';
@@ -27,6 +28,7 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [approvingDraftId, setApprovingDraftId] = useState<string | null>(null);
   const { user } = useAuth();
   const router = useRouter();
 
@@ -63,6 +65,25 @@ export default function DashboardScreen() {
       proc.registration_number?.toLowerCase().includes(q)
     );
   }, [searchQuery, procedures]);
+
+  const draftCases = useMemo(() => {
+    if (user?.role !== 'student') return [];
+    return procedures.filter((proc: any) => proc.status === 'draft');
+  }, [procedures, user]);
+
+  const handleSendForApproval = async (procId: string) => {
+    setApprovingDraftId(procId);
+    try {
+      await api.post(`/procedures/${procId}/request-phase1-approval`);
+      Alert.alert('Approval Requested', 'Case sent for Phase 1 approval.');
+      loadData();
+    } catch (err: any) {
+      const msg = err.response?.data?.detail || 'Failed to request approval';
+      Alert.alert('Error', String(msg));
+    } finally {
+      setApprovingDraftId(null);
+    }
+  };
 
   const markedDates = procedures.reduce((acc: any, proc: any) => {
     const date = proc.procedure_date;
@@ -251,6 +272,55 @@ export default function DashboardScreen() {
                 <Text style={styles.statLabel}>Rejected</Text>
               </TouchableOpacity>
             </View>
+
+            {/* Draft Cases (Students only) */}
+            {draftCases.length > 0 && (
+              <View style={styles.draftSection} data-testid="draft-cases-section">
+                <View style={styles.draftHeader}>
+                  <Ionicons name="document-text-outline" size={20} color="#78909C" />
+                  <Text style={styles.draftSectionTitle}>Draft Cases ({draftCases.length})</Text>
+                </View>
+                {draftCases.map((proc: any) => (
+                  <TouchableOpacity
+                    key={proc.id}
+                    style={styles.draftCard}
+                    onPress={() => router.push(`/procedures/${proc.id}`)}
+                    data-testid={`draft-card-${proc.id}`}
+                  >
+                    <View style={styles.draftCardBody}>
+                      <View style={styles.draftCardInfo}>
+                        <Text style={styles.draftPatientName}>{proc.patient_name}</Text>
+                        <Text style={styles.draftDetail}>{proc.implant_procedure_type}</Text>
+                        <Text style={styles.draftDetail}>
+                          Scheduled: {proc.procedure_date} at {proc.procedure_time}
+                        </Text>
+                      </View>
+                      <View style={styles.draftBadge}>
+                        <Text style={styles.draftBadgeText}>Draft</Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.draftApproveBtn, approvingDraftId === proc.id && { opacity: 0.6 }]}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handleSendForApproval(proc.id);
+                      }}
+                      disabled={approvingDraftId === proc.id}
+                      data-testid={`draft-approve-btn-${proc.id}`}
+                    >
+                      {approvingDraftId === proc.id ? (
+                        <ActivityIndicator size="small" color="#FFF" />
+                      ) : (
+                        <>
+                          <Ionicons name="send" size={14} color="#FFF" />
+                          <Text style={styles.draftApproveBtnText}>Send for Approval</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
 
             {/* Calendar */}
             <View style={styles.calendarContainer}>
@@ -496,5 +566,79 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginTop: 4,
+  },
+  draftSection: {
+    paddingHorizontal: 16,
+    paddingBottom: 4,
+  },
+  draftHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
+  draftSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#546E7A',
+  },
+  draftCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    borderLeftWidth: 4,
+    borderLeftColor: '#78909C',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  draftCardBody: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
+  draftCardInfo: {
+    flex: 1,
+    marginRight: 10,
+  },
+  draftPatientName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1A1A1A',
+    marginBottom: 3,
+  },
+  draftDetail: {
+    fontSize: 13,
+    color: '#888',
+    marginTop: 1,
+  },
+  draftBadge: {
+    backgroundColor: '#ECEFF1',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  draftBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#78909C',
+  },
+  draftApproveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#34A853',
+    borderRadius: 8,
+    paddingVertical: 9,
+    gap: 6,
+  },
+  draftApproveBtnText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });
