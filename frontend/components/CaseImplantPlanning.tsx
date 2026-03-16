@@ -53,14 +53,14 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole }: 
 
   const loadData = useCallback(async () => {
     try {
-      const [planRes, sysRes, toothRes] = await Promise.all([
+      const [planRes, sysRes, toothRes] = await Promise.allSettled([
         api.get(`/procedures/${procedureId}/implant-plan`),
         api.get('/implant-library/systems'),
         api.get('/implant-library/tooth-recommendations'),
       ]);
-      setPlans(planRes.data.implant_plans || []);
-      setSystems(sysRes.data || []);
-      setToothRecs(toothRes.data || {});
+      if (planRes.status === 'fulfilled') setPlans(planRes.value.data.implant_plans || []);
+      if (sysRes.status === 'fulfilled') setSystems(sysRes.value.data || []);
+      if (toothRes.status === 'fulfilled') setToothRecs(toothRes.value.data || {});
     } catch (err) {
       console.error('Failed to load implant planning data:', err);
     } finally {
