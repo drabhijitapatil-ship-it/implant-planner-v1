@@ -2636,11 +2636,14 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     approved = await db.procedures.count_documents({**query, "status": {"$in": ["phase1_approved", "phase2_approved", "stage2_surgical_approved", "completed"]}})
     rejected = await db.procedures.count_documents({**query, "status": {"$in": ["rejected", "stage2_surgical_rejected", "stage2_prosthetic_rejected"]}})
     
+    drafts = await db.procedures.count_documents({**query, "status": "draft"})
+
     return {
         "total": total,
         "pending": pending,
         "approved": approved,
-        "rejected": rejected
+        "rejected": rejected,
+        "drafts": drafts,
     }
 
 
