@@ -1,15 +1,16 @@
 # Prosthodontics Case Management App - PRD
 
 ## Original Problem Statement
-Overhauling the "New Case" workflow for a prosthodontics mobile application. Initially a "Clinical Case Album Generator" request, expanded to a complete redesign of case creation and management.
+Overhauling the "New Case" workflow for a prosthodontics mobile application. Multi-phase case management with implant planning, checklists, and clinical documentation.
 
 ## Core Requirements
-1. **New Case Form:** Redesigned form with conditional logic for prosthetic plans based on procedure type
-2. **Phase-Based Workflow:** Cases progress through 4 phases (Pre-Surgical, Surgical, Second Stage, Prosthetic)
-3. **Implant Selection Integration:** Integrated into Phase 1 workflow AND as Step 2 in the New Case wizard, plus standalone tab
-4. **Checklist File Uploads:** Specific checklist items require file upload
-5. **Case Completion Engine:** Generates completion badge and PDF case report
-6. **Clinical Photo Album:** Upload and manage 26 clinical photos across 4 phases, generate PDF album
+1. **New Case Form:** 2-step wizard (Case Details + Implant Selection) with conditional prosthetic plans
+2. **Phase-Based Workflow:** 4 phases (Pre-Surgical, Surgical, Second Stage, Prosthetic)
+3. **Implant Selection:** Integrated into Phase 1, New Case wizard Step 2, and standalone tab
+4. **Drilling Protocol:** System-specific drilling sequence generated after implant system selection
+5. **Checklist File Uploads:** Specific items require file upload
+6. **Case Completion Engine:** Badge + PDF report
+7. **Clinical Photo Album:** 26 photos across 4 phases + PDF generation
 
 ## Tech Stack
 - Frontend: React Native, Expo, Expo Router, Axios
@@ -17,31 +18,34 @@ Overhauling the "New Case" workflow for a prosthodontics mobile application. Ini
 - Database: MongoDB
 
 ## What's Implemented (Complete)
-- Clinical Case Album Generator (backend PDF + frontend UI)
-- New Case Form with 2-step wizard (Step 1: Case Details + Checklist, Step 2: Implant Selection with all 45 systems)
+- Clinical Case Album Generator (PDF + frontend UI)
+- 2-step New Case wizard (Step 1: Case Details + Checklist, Step 2: Implant Selection with drilling protocol)
 - Phase 2-4 submission forms with torque values and clinical remarks
 - Case Completion Engine (badge + PDF report)
 - Checklist File Uploads
 - Implant Planning: integrated into New Case workflow + standalone on detail page + standalone tab
-- Faculty/Incharge dropdowns working (auth-dependent loading)
+- Drilling Protocol: auto-generated based on brand, diameter, bone type (D1-D4)
+- Faculty/Incharge dropdowns (auth-dependent loading)
 
 ## Bug Fixes & Changes
 ### March 15, 2026
-1. Faculty/Incharge Dropdowns (P0): Fixed race condition - useEffect depends on `user`
-2. CBCT Upload Removed (P0): Removed hasUpload from "Radiographic Investigations"
-3. Implant Planning Phase 1 Integration (P1): Conditional rendering with Phase 1 banner
+1. Faculty/Incharge Dropdowns: Fixed race condition - useEffect depends on `user`
+2. CBCT Upload Removed: Removed hasUpload from "Radiographic Investigations"
+3. Implant Planning Phase 1 Integration: Conditional rendering with Phase 1 banner
 
 ### March 16, 2026
-4. 2-Step New Case Wizard: Step 1 = Case details + Phase 1 checklist, Step 2 = Implant Selection
-5. Loading Type Styling Fix: Chips contained in bordered container (borderWidth: 1.5, borderColor: #C5CDD5, bg: #F4F6F8, white chip backgrounds for contrast)
-6. Standalone Implant Selection Preserved: Always visible on detail page + standalone tab
-7. All 45 Implant Systems in Dropdown: Changed Promise.all to Promise.allSettled
-8. Dental Chart Positioning: Fixed modal paddingTop: 130 for proper vertical centering (RN Web padding shorthand override workaround)
+4. 2-Step New Case Wizard: Step 1 = Case details + Checklist, Step 2 = Implant Selection
+5. Loading Type Styling: Bordered container (borderWidth: 1.5, borderColor: #C5CDD5, bg: #F4F6F8)
+6. All 45 Implant Systems: Promise.allSettled for independent loading
+7. Dental Chart Positioning: paddingTop: 130 (RN Web padding shorthand workaround)
+8. **Modal Header SafeArea**: Wrapped in SafeAreaView edges=['top'] to prevent status bar overlap
+9. **Close Button Accessibility**: Larger padding (8px) on X button for easier tapping
+10. **Drilling Protocol Generator**: System-specific sequential drill steps in Step 2 after system selection
 
-## RN Web Gotchas Documented
-- padding shorthand overrides paddingTop in atomic CSS — use paddingHorizontal/paddingBottom/paddingTop separately
+## RN Web Gotchas
+- padding shorthand overrides paddingTop — use paddingHorizontal/paddingBottom/paddingTop separately
 - justifyContent: 'center' in StyleSheet.create gets dropped in Modal contexts
-- flex: 1 on conditional Views doesn't work — use fixed dimensions/padding instead
+- flex: 1 on conditional Views doesn't work — use fixed dimensions/padding
 
 ## Test Credentials
 - Admin: abhijit.patil@dental.edu / Admin@123
@@ -52,3 +56,4 @@ Overhauling the "New Case" workflow for a prosthodontics mobile application. Ini
 - P2: Backend refactoring (decompose monolithic server.py)
 - P2: Frontend refactoring (modularize complex components)
 - P2: Data cleanup (remove duplicate user entries)
+- P3: Minor - Procedure card text rendering vertically in My Cases (RN Web flexbox issue)
