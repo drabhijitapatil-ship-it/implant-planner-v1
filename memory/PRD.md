@@ -27,6 +27,7 @@ A mobile application for prosthodontics departments to manage implant cases thro
 - User management (CRUD)
 - Push notifications (Expo Push API)
 - Delayed Phase 1 Approval Workflow (cases start as "draft", approval sent after implant planning)
+- **Draft Cases section on student dashboard** — shows incomplete cases with quick "Send for Approval" action + tap to navigate to case detail
 
 ## Key Endpoints
 - `POST /api/procedures` — Create case (status: "draft")
