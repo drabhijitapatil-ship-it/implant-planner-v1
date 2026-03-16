@@ -34,19 +34,32 @@ A mobile application for prosthodontics departments to manage implant cases thro
   - Fixed Add Implant Position modal header overlap with mobile status bar (useSafeAreaInsets)
   - Added "Generate Drilling Protocol" button on each saved implant card
   - Phase-wise photo upload with camera capture and library pick support
+- **Phase B — Data Visibility & UI Cleanup (Feb 2026):**
+  - Task 5: Photo visibility for Supervisors/In-Charges — auto-expand relevant phase during approval, review prompt banner
+  - Task 6: Notification badge count on Alerts tab — polls every 30s, resets on tab press
+  - Task 7: Removed duplicate "Post-Surgical Notes by Student" from Phase 2 surgical checklist (kept standalone remark field)
+  - Task 8: Torque values per implant visible in procedure detail and implant planning cards for all roles after Phase 2 submission
+  - Added Phase 2 remark display in procedure detail page
 
 ## Key Endpoints
 - `POST /api/procedures` — Create case (status: "draft")
 - `POST /api/procedures/{id}/request-phase1-approval` — Draft -> pending_phase1
 - `POST /api/procedures/{id}/approve` — Phase approval/rejection
-- `POST /api/procedures/{id}/submit-phase2` — Submit surgical protocol
+- `POST /api/procedures/{id}/submit-phase2` — Submit surgical protocol (with torque_values)
 - `POST /api/procedures/{id}/implant-plan` — Save implant plans
+- `GET /api/notifications/unread-count` — Unread notification count
 
 ## Status Flow
 `draft` -> `pending_phase1` -> `phase1_approved` -> `pending_phase2` -> `phase2_approved` -> `pending_stage2_surgical` -> `stage2_surgical_approved` -> `pending_stage2_prosthetic` -> `completed`
 
 ## Backlog
-- P2: Notification system enhancements
-- P2: Backend refactoring (decompose server.py into routers/models/services)
-- P2: Frontend refactoring (modularize new-procedure.tsx)
-- P2: Data cleanup (duplicate user removal)
+### P0 - Phase C (Upcoming)
+- Task 9: De-duplicate remark sections in Phase 4 (prosthetic_phase additionalFields)
+- Task 10: Final prosthesis always visible to everyone
+- Task 11: Post-completion case summary (all details visible, photos excluded from PDF)
+- Task 12: Download all case photos as album (separate from PDF)
+
+### P2 - Refactoring
+- Backend refactoring (decompose server.py into routers/models/services)
+- Frontend refactoring (modularize new-procedure.tsx, [procedureId].tsx)
+- Data cleanup (duplicate user removal)
