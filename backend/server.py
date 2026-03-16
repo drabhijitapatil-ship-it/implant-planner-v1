@@ -13,6 +13,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta, timezone
+import re
 from fpdf import FPDF
 from passlib.context import CryptContext
 import jwt
@@ -271,11 +272,13 @@ async def login(user: UserLogin):
     # 1) Try exact email match
     db_user = await db.users.find_one({"email": identifier})
 
-    # 2) If not found and input lacks '@', try case-insensitive name match
+    # 2) Try case-insensitive username match
+    if not db_user:
+        db_user = await db.users.find_one({"username": {"$regex": f"^{re.escape(identifier)}$", "$options": "i"}})
+
+    # 3) If not found and input lacks '@', try case-insensitive name match
     if not db_user and "@" not in identifier:
-        import re
-        escaped = re.escape(identifier)
-        db_user = await db.users.find_one({"name": {"$regex": escaped, "$options": "i"}})
+        db_user = await db.users.find_one({"name": {"$regex": re.escape(identifier), "$options": "i"}})
 
     if not db_user or not verify_password(user.password, db_user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -3801,29 +3804,30 @@ async def seed_on_startup():
     if user_count == 0:
         logging.info("No users found — seeding default users...")
         users_data = [
-            {"name": "Dr. Abhijit Patil", "email": "abhijit.patil@dental.edu", "password": "Admin@123", "role": "implant_incharge"},
-            {"name": "Dr. Ajay Sabane", "email": "ajay.sabane@dental.edu", "password": "Admin@123", "role": "administrator"},
-            {"name": "Dr. Rajeshree Jadhav", "email": "rajeshree.jadhav@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
-            {"name": "Dr. Vasantha N", "email": "vasantha.n@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
-            {"name": "Dr. Rupali Patil", "email": "rupali.patil@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
-            {"name": "Dr. Pankaj Kadam", "email": "pankaj.kadam@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
-            {"name": "Dr. Gaurav Pandey", "email": "gaurav.pandey@student.dental.edu", "password": "Student@123", "role": "student"},
-            {"name": "Dr. Anand Kurum", "email": "anand.kurum@student.dental.edu", "password": "Student@123", "role": "student"},
-            {"name": "Dr. Manasi Dhiren", "email": "manasi.dhiren@student.dental.edu", "password": "Student@123", "role": "student"},
-            {"name": "Dr. Atharva Mahadik", "email": "atharva.mahadik@student.dental.edu", "password": "Student@123", "role": "student"},
-            {"name": "Dr. Vaibhav Deshpande", "email": "vaibhav.deshpande@student.dental.edu", "password": "Student@123", "role": "student"},
-            {"name": "Dr. Yashica Jain", "email": "yashica.jain@student.dental.edu", "password": "Student@123", "role": "student"},
-            {"name": "Dr. Renuka Bodakhe", "email": "renuka.bodakhe@student.dental.edu", "password": "Student@123", "role": "student"},
-            {"name": "Dr. Shritej Sevakari", "email": "shritej.sevakari@student.dental.edu", "password": "Student@123", "role": "student"},
-            {"name": "Dr. Aaditya Patil", "email": "aaditya.patil@student.dental.edu", "password": "Student@123", "role": "student"},
-            {"name": "Dr. Kunal Parikh", "email": "kunal.parikh@student.dental.edu", "password": "Student@123", "role": "student"},
-            {"name": "Dr. Krishana Mehta", "email": "krishana.mehta@student.dental.edu", "password": "Student@123", "role": "student"},
-            {"name": "Dr. Sakshi Lohade", "email": "sakshi.lohade@student.dental.edu", "password": "Student@123", "role": "student"},
-            {"name": "Nurse 1", "email": "nurse1@dental.edu", "password": "Nurse@123", "role": "nurse"},
-            {"name": "Nurse 2", "email": "nurse2@dental.edu", "password": "Nurse@123", "role": "nurse"},
+            {"name": "Dr. Abhijit Patil", "username": "Abhijit.patil", "email": "abhijit.patil@dental.edu", "password": "Admin@123", "role": "implant_incharge"},
+            {"name": "Dr. Ajay Sabane", "username": "Ajay.sabane", "email": "ajay.sabane@dental.edu", "password": "Admin@123", "role": "implant_incharge"},
+            {"name": "Dr. Paresh Gandhi", "username": "Paresh.gandhi", "email": "paresh.gandhi@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
+            {"name": "Dr. Rajshree Jadhav", "username": "Rajshree.jadhav", "email": "rajshree.jadhav@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
+            {"name": "Dr. Vasantha N", "username": "Vasantha.n", "email": "vasantha.n@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
+            {"name": "Dr. Rupali Patil", "username": "Rupali.patil", "email": "rupali.patil@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
+            {"name": "Dr. Pankaj Kadam", "username": "Pankaj.kadam", "email": "pankaj.kadam@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
+            {"name": "Dr. Gaurav Pandey", "username": "Gaurav.pandey", "email": "gaurav.pandey@student.dental.edu", "password": "Student@123", "role": "student"},
+            {"name": "Dr. Atharva Mahadik", "username": "Atharva.mahadik", "email": "atharva.mahadik@student.dental.edu", "password": "Student@123", "role": "student"},
+            {"name": "Dr. Anand Kurum", "username": "Anand.kurum", "email": "anand.kurum@student.dental.edu", "password": "Student@123", "role": "student"},
+            {"name": "Dr. Yashica Jain", "username": "Yashica.jain", "email": "yashica.jain@student.dental.edu", "password": "Student@123", "role": "student"},
+            {"name": "Dr. Vaibhav Deshpande", "username": "Vaibhav.deshpande", "email": "vaibhav.deshpande@student.dental.edu", "password": "Student@123", "role": "student"},
+            {"name": "Dr. Manasi Dhiren", "username": "Manasi.dhiren", "email": "manasi.dhiren@student.dental.edu", "password": "Student@123", "role": "student"},
+            {"name": "Dr. Renuka Bodakhe", "username": "Renuka.bodakhe", "email": "renuka.bodakhe@student.dental.edu", "password": "Student@123", "role": "student"},
+            {"name": "Dr. Shritej Shevakari", "username": "Shritej.shevakari", "email": "shritej.shevakari@student.dental.edu", "password": "Student@123", "role": "student"},
+            {"name": "Dr. Aaditya Patil", "username": "Aaditya.patil", "email": "aaditya.patil@student.dental.edu", "password": "Student@123", "role": "student"},
+            {"name": "Dr. Kunal Parikh", "username": "Kunal.parikh", "email": "kunal.parikh@student.dental.edu", "password": "Student@123", "role": "student"},
+            {"name": "Dr. Krishna Mehta", "username": "Krishna.mehta", "email": "krishna.mehta@student.dental.edu", "password": "Student@123", "role": "student"},
+            {"name": "Dr. Sakshi Lohade", "username": "Sakshi.lohade", "email": "sakshi.lohade@student.dental.edu", "password": "Student@123", "role": "student"},
+            {"name": "Nurse 1", "username": "Nurse.1", "email": "nurse.1@dental.edu", "password": "Nurse@123", "role": "nurse"},
+            {"name": "Nurse 2", "username": "Nurse.2", "email": "nurse.2@dental.edu", "password": "Nurse@123", "role": "nurse"},
         ]
         docs = [
-            {"name": u["name"], "email": u["email"], "password_hash": pwd_context.hash(u["password"]), "role": u["role"]}
+            {"name": u["name"], "username": u["username"], "email": u["email"], "password_hash": pwd_context.hash(u["password"]), "role": u["role"], "profile_photo": None}
             for u in users_data
         ]
         await db.users.insert_many(docs)
