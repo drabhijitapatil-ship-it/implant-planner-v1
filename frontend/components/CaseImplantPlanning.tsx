@@ -107,10 +107,11 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
   const [showAddModal, setShowAddModal] = useState(false);
   const [expandedProtocol, setExpandedProtocol] = useState<number | null>(null);
 
-  // Editable until Phase 2 is approved; students (owner) and supervisors can edit
+  // Editable: students until Phase 2 approved; supervisors/incharge at all stages
   const editableStatuses = ['draft', 'pending_phase1', 'phase1_approved', 'pending_phase2'];
-  const statusAllowsEdit = !procedureStatus || editableStatuses.includes(procedureStatus);
-  const canEdit = statusAllowsEdit && ((isOwner && userRole === 'student') || userRole === 'supervisor');
+  const isStudentEdit = isOwner && userRole === 'student' && (!procedureStatus || editableStatuses.includes(procedureStatus));
+  const isFacultyEdit = userRole === 'supervisor' || userRole === 'implant_incharge';
+  const canEdit = isStudentEdit || isFacultyEdit;
 
   const loadData = useCallback(async () => {
     try {
