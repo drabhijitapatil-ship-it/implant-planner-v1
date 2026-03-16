@@ -35,6 +35,11 @@ export default function NewProcedureScreen() {
   const { user } = useAuth();
   const router = useRouter();
 
+  const isStudent = user?.role === 'student';
+  const isSupervisor = user?.role === 'supervisor';
+  const isIncharge = user?.role === 'implant_incharge' || user?.role === 'administrator';
+  const isFaculty = isSupervisor || isIncharge;
+
   const [loading, setLoading] = useState(false);
   const [instructors, setInstructors] = useState([]);
   const [implantIncharges, setImplantIncharges] = useState([]);
@@ -49,7 +54,7 @@ export default function NewProcedureScreen() {
   const [newProcedureId, setNewProcedureId] = useState<string | null>(null);
   const [submittingApproval, setSubmittingApproval] = useState(false);
 
-  const minDate = format(addDays(new Date(), 1), 'yyyy-MM-dd');
+  const minDate = isStudent ? format(addDays(new Date(), 1), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
 
   const [formData, setFormData] = useState({
     patient_name: '',
@@ -79,6 +84,21 @@ export default function NewProcedureScreen() {
   useEffect(() => {
     if (user) {
       loadUsers();
+      // Auto-fill supervisor/incharge fields for faculty
+      if (isSupervisor && user.id) {
+        setFormData(prev => ({
+          ...prev,
+          supervisor_id: user.id,
+          supervisor_name: user.name || user.full_name || '',
+        }));
+      }
+      if (isIncharge && user.id) {
+        setFormData(prev => ({
+          ...prev,
+          implant_incharge_id: user.id,
+          implant_incharge_name: user.name || user.full_name || '',
+        }));
+      }
     }
   }, [user]);
 
@@ -228,7 +248,7 @@ export default function NewProcedureScreen() {
     setLoading(true);
     try {
       const payload = {
-        student_name: user?.name || user?.full_name || '',
+        student_name: isStudent ? (user?.name || user?.full_name || '') : '',
         patient_name: formData.patient_name,
         registration_number: formData.registration_number,
         supervisor_id: formData.supervisor_id,
@@ -248,8 +268,15 @@ export default function NewProcedureScreen() {
 
       const response = await api.post('/procedures', payload);
       const procedureId = response.data?.id || response.data?._id;
+      const createdStatus = response.data?.status;
 
-      if (procedureId) {
+      if (isIncharge && createdStatus === 'completed') {
+        // Implant In-Charge: auto-completed, go to detail
+        Alert.alert('Case Created', 'Case has been created and auto-approved. All phases are complete.', [
+          { text: 'View Case', onPress: () => router.push(`/procedures/${procedureId}`) },
+          { text: 'OK', onPress: () => router.push('/(tabs)/procedures') },
+        ]);
+      } else if (procedureId) {
         setNewProcedureId(procedureId);
         setWizardStep(2);
       } else {
@@ -353,8 +380,28 @@ export default function NewProcedureScreen() {
             <>
               <View style={styles.header}>
                 <Text style={styles.title}>New Procedure</Text>
-                <Text style={styles.subtitle}>Fill in all required information</Text>
+                <Text style={styles.subtitle}>
+                  {isStudent ? 'Fill in all required information' :
+                   isSupervisor ? 'Schedule a new case (Implant In-Charge approval required)' :
+                   'Schedule a new case (Auto-approved on creation)'}
+                </Text>
               </View>
+
+              {isFaculty && (
+                <View style={{ backgroundColor: isSupervisor ? '#E3F2FD' : '#E8F5E9', padding: 12, marginHorizontal: 16, borderRadius: 10, marginBottom: 8 }} data-testid="faculty-create-banner">
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Ionicons name={isSupervisor ? 'school' : 'shield-checkmark'} size={18} color={isSupervisor ? '#1565C0' : '#2E7D32'} />
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: isSupervisor ? '#1565C0' : '#2E7D32' }}>
+                      {isSupervisor ? 'Creating as Supervisor' : 'Creating as Implant In-Charge'}
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 11, color: '#666', marginTop: 4 }}>
+                    {isSupervisor
+                      ? 'Your approval is implicit. Only Implant In-Charge needs to approve each phase.'
+                      : 'All phases will be auto-approved upon creation.'}
+                  </Text>
+                </View>
+              )}
 
               <View style={styles.form}>
                 {/* ── Patient Information ─── */}
@@ -381,7 +428,14 @@ export default function NewProcedureScreen() {
                 {/* ── Faculty ─── */}
                 <Text style={styles.sectionTitle}>Faculty</Text>
 
+                {/* Supervisor Selection - shown for students, auto-filled & locked for supervisors */}
                 <Text style={styles.label}>Supervising Faculty *</Text>
+                {isSupervisor ? (
+                  <View style={[styles.dropdownButton, { backgroundColor: '#F0F0F0' }]}>
+                    <Text style={styles.dropdownText}>{formData.supervisor_name} (You)</Text>
+                    <Ionicons name="lock-closed" size={16} color="#999" />
+                  </View>
+                ) : (
                 <TouchableOpacity
                   style={[styles.dropdownButton, fieldErrors.supervisor_id && styles.inputError]}
                   onPress={() => setShowInstructorDropdown(true)}
@@ -392,8 +446,15 @@ export default function NewProcedureScreen() {
                   </Text>
                   <Ionicons name="chevron-down" size={20} color="#666" />
                 </TouchableOpacity>
+                )}
 
                 <Text style={styles.label}>Implant Incharge *</Text>
+                {isIncharge ? (
+                  <View style={[styles.dropdownButton, { backgroundColor: '#F0F0F0' }]}>
+                    <Text style={styles.dropdownText}>{formData.implant_incharge_name} (You)</Text>
+                    <Ionicons name="lock-closed" size={16} color="#999" />
+                  </View>
+                ) : (
                 <TouchableOpacity
                   style={[styles.dropdownButton, fieldErrors.implant_incharge_id && styles.inputError]}
                   onPress={() => setShowInchargeDropdown(true)}
@@ -404,6 +465,7 @@ export default function NewProcedureScreen() {
                   </Text>
                   <Ionicons name="chevron-down" size={20} color="#666" />
                 </TouchableOpacity>
+                )}
 
                 {/* ── Payment Details ─── */}
                 <Text style={styles.sectionTitle}>Payment Details</Text>

@@ -111,7 +111,7 @@ class Checklist(BaseModel):
     surgical: Optional[ChecklistSection] = None
 
 class ProcedureCreate(BaseModel):
-    student_name: str
+    student_name: Optional[str] = ""
     patient_name: str
     registration_number: str
     supervisor_id: str
@@ -562,9 +562,14 @@ async def get_prosthetic_options(procedure_type: str = "", loading_type: str = "
 # Procedure Routes
 @api_router.post("/procedures")
 async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depends(get_current_user)):
-    # Only students can create procedures
-    if current_user["role"] != "student":
-        raise HTTPException(status_code=403, detail="Only students can create procedures")
+    # Students, supervisors, and implant_incharge can create procedures
+    allowed_roles = {"student", "supervisor", "implant_incharge", "administrator"}
+    if current_user["role"] not in allowed_roles:
+        raise HTTPException(status_code=403, detail="You do not have permission to create procedures")
+    
+    is_student = current_user["role"] == "student"
+    is_supervisor = current_user["role"] == "supervisor"
+    is_incharge = current_user["role"] in ("implant_incharge", "administrator")
     
     # Check scheduling restrictions
     try:
@@ -586,12 +591,13 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
                 )
         
         # 24-hour restriction for students only
-        hours_until_procedure = (procedure_datetime - datetime.now()).total_seconds() / 3600
-        if hours_until_procedure < 24:
-            raise HTTPException(
-                status_code=400, 
-                detail="Students cannot schedule procedures less than 24 hours in advance. Please select a date at least 24 hours from now."
-            )
+        if is_student:
+            hours_until_procedure = (procedure_datetime - datetime.now()).total_seconds() / 3600
+            if hours_until_procedure < 24:
+                raise HTTPException(
+                    status_code=400, 
+                    detail="Students cannot schedule procedures less than 24 hours in advance. Please select a date at least 24 hours from now."
+                )
     except ValueError:
         pass  # If date parsing fails, let it proceed (will be caught by validation)
     
@@ -612,30 +618,100 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
                 raise HTTPException(status_code=400, detail=f"Invalid loading type: {lt}")
     
     procedure_dict = procedure.model_dump()
-    procedure_dict.update({
-        "student_id": current_user["_id"],
-        "status": "draft",  # Draft until student completes implant planning and requests approval
-        "current_phase": 1,
-        "supervisor_phase1_approved": False,
-        "implant_incharge_phase1_approved": False,
-        "supervisor_phase2_approved": False,
-        "implant_incharge_phase2_approved": False,
-        "created_at": datetime.utcnow(),
-        "updated_at": datetime.utcnow()
-    })
+    
+    if is_student:
+        # Student creates: standard draft flow
+        procedure_dict.update({
+            "student_id": current_user["_id"],
+            "student_name": procedure.student_name or current_user["name"],
+            "status": "draft",
+            "current_phase": 1,
+            "supervisor_phase1_approved": False,
+            "implant_incharge_phase1_approved": False,
+            "supervisor_phase2_approved": False,
+            "implant_incharge_phase2_approved": False,
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow(),
+            "created_by_role": "student",
+        })
+    elif is_supervisor:
+        # Supervisor creates: supervisor approval implicit, only incharge needs to approve
+        procedure_dict.update({
+            "student_id": None,
+            "student_name": procedure.student_name or "",
+            "status": "draft",
+            "current_phase": 1,
+            "supervisor_phase1_approved": True,
+            "supervisor_phase1_approved_at": datetime.utcnow(),
+            "implant_incharge_phase1_approved": False,
+            "supervisor_phase2_approved": True,
+            "supervisor_phase2_approved_at": datetime.utcnow(),
+            "implant_incharge_phase2_approved": False,
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow(),
+            "created_by_role": "supervisor",
+            "created_by_id": current_user["_id"],
+            "created_by_name": current_user["name"],
+        })
+    elif is_incharge:
+        # Implant In-Charge creates: all phases auto-approved, goes to completed
+        procedure_dict.update({
+            "student_id": None,
+            "student_name": procedure.student_name or "",
+            "status": "completed",
+            "current_phase": 4,
+            "supervisor_phase1_approved": True,
+            "supervisor_phase1_approved_at": datetime.utcnow(),
+            "implant_incharge_phase1_approved": True,
+            "implant_incharge_phase1_approved_at": datetime.utcnow(),
+            "supervisor_phase2_approved": True,
+            "supervisor_phase2_approved_at": datetime.utcnow(),
+            "implant_incharge_phase2_approved": True,
+            "implant_incharge_phase2_approved_at": datetime.utcnow(),
+            "phase1_completed_at": datetime.utcnow(),
+            "phase2_completed_at": datetime.utcnow(),
+            "fully_completed_at": datetime.utcnow(),
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow(),
+            "created_by_role": "implant_incharge",
+            "created_by_id": current_user["_id"],
+            "created_by_name": current_user["name"],
+        })
     
     result = await db.procedures.insert_one(procedure_dict)
     procedure_id = str(result.inserted_id)
     
-    # Notification for supervisor assignment only (approval request deferred to /request-phase1-approval)
-    await db.notifications.insert_one({
-        "user_id": procedure.supervisor_id,
-        "procedure_id": procedure_id,
-        "message": f"You have been assigned as Instructor for a new procedure by {procedure.student_name} for patient {procedure.patient_name}",
-        "type": "assignment",
-        "read": False,
-        "created_at": datetime.utcnow()
-    })
+    # Notifications
+    if is_student:
+        # Notify supervisor assignment
+        await db.notifications.insert_one({
+            "user_id": procedure.supervisor_id,
+            "procedure_id": procedure_id,
+            "message": f"You have been assigned as Instructor for a new procedure by {procedure.student_name} for patient {procedure.patient_name}",
+            "type": "assignment",
+            "read": False,
+            "created_at": datetime.utcnow()
+        })
+    elif is_supervisor:
+        # Notify implant incharge that a supervisor created a case needing their approval
+        await db.notifications.insert_one({
+            "user_id": procedure.implant_incharge_id,
+            "procedure_id": procedure_id,
+            "message": f"New case scheduled by {current_user['name']} for patient {procedure.patient_name}. Your approval is required for all phases.",
+            "type": "assignment",
+            "read": False,
+            "created_at": datetime.utcnow()
+        })
+    elif is_incharge:
+        # Notify supervisor about the auto-completed case
+        await db.notifications.insert_one({
+            "user_id": procedure.supervisor_id,
+            "procedure_id": procedure_id,
+            "message": f"Case for patient {procedure.patient_name} was created and auto-completed by Implant In-Charge {current_user['name']}.",
+            "type": "approved",
+            "read": False,
+            "created_at": datetime.utcnow()
+        })
     
     procedure_dict["_id"] = procedure_id
     procedure_dict["id"] = procedure_id
@@ -653,7 +729,10 @@ async def get_procedures(
     if current_user["role"] == "student":
         query["student_id"] = current_user["_id"]
     elif current_user["role"] == "supervisor":
-        query["supervisor_id"] = current_user["_id"]
+        query["$or"] = [
+            {"supervisor_id": current_user["_id"]},
+            {"created_by_id": current_user["_id"]},
+        ]
     elif current_user["role"] == "nurse":
         # Nurses can only see fully approved/completed procedures
         query["status"] = {"$in": ["phase1_approved", "phase2_approved", "approved", "stage2_surgical_approved", "completed"]}
@@ -1231,16 +1310,21 @@ async def save_implant_plan(
     current_user: dict = Depends(get_current_user),
 ):
     """Save or update implant plans (1-6 implants) for a procedure."""
-    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0, "student_id": 1, "status": 1})
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0, "student_id": 1, "status": 1, "supervisor_id": 1, "implant_incharge_id": 1})
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
-    if current_user["role"] == "student" and proc.get("student_id") != current_user["_id"]:
-        raise HTTPException(status_code=403, detail="You can only modify your own procedures")
 
-    # Lock implant plan editing after Phase 2 is approved
-    editable_statuses = {"draft", "pending_phase1", "phase1_approved", "pending_phase2"}
-    if proc.get("status") not in editable_statuses:
-        raise HTTPException(status_code=403, detail="Implant plan cannot be modified after Phase 2 approval")
+    is_assigned_faculty = current_user["_id"] in (proc.get("supervisor_id"), proc.get("implant_incharge_id"))
+    is_student_owner = current_user["role"] == "student" and proc.get("student_id") == current_user["_id"]
+
+    if not is_assigned_faculty and not is_student_owner:
+        raise HTTPException(status_code=403, detail="You do not have permission to modify this implant plan")
+
+    # Students locked after Phase 2 approval; supervisors/incharge can edit at all stages
+    if is_student_owner and not is_assigned_faculty:
+        editable_statuses = {"draft", "pending_phase1", "phase1_approved", "pending_phase2"}
+        if proc.get("status") not in editable_statuses:
+            raise HTTPException(status_code=403, detail="Implant plan cannot be modified after Phase 2 approval")
 
     if len(plan.implants) < 1 or len(plan.implants) > 6:
         raise HTTPException(status_code=400, detail="Must plan between 1 and 6 implants")
@@ -1906,36 +1990,37 @@ async def approve_procedure(
                 update_fields["status"] = "phase1_approved"
                 update_fields["phase1_completed_at"] = datetime.utcnow()
                 
-                # Notify student that Phase 1 is approved
-                await db.notifications.insert_one({
-                    "user_id": procedure["student_id"],
-                    "procedure_id": procedure_id,
-                    "message": "Phase 1 (Pre-surgical) approved! You can now submit Phase 2 (Surgical) after completing the procedure.",
-                    "type": "approved",
-                    "read": False,
-                    "created_at": datetime.utcnow()
-                })
-                # Push notify student
-                await send_expo_push_notifications(
-                    [procedure["student_id"]],
-                    "Phase 1 Approved!",
-                    "Pre-surgical protocol approved. You can now submit Phase 2.",
-                    {"procedure_id": procedure_id, "type": "approved"},
-                )
+                # Notify student that Phase 1 is approved (if student exists)
+                if procedure.get("student_id"):
+                    await db.notifications.insert_one({
+                        "user_id": procedure["student_id"],
+                        "procedure_id": procedure_id,
+                        "message": "Phase 1 (Pre-surgical) approved! You can now submit Phase 2 (Surgical) after completing the procedure.",
+                        "type": "approved",
+                        "read": False,
+                        "created_at": datetime.utcnow()
+                    })
+                    await send_expo_push_notifications(
+                        [procedure["student_id"]],
+                        "Phase 1 Approved!",
+                        "Pre-surgical protocol approved. You can now submit Phase 2.",
+                        {"procedure_id": procedure_id, "type": "approved"},
+                    )
             else:
                 # One approved, waiting for the other
                 approver_name = current_user["name"]
                 waiting_for = "implant incharge" if supervisor_approved else "supervisor"
                 
-                # Notify student of partial approval
-                await db.notifications.insert_one({
-                    "user_id": procedure["student_id"],
-                    "procedure_id": procedure_id,
-                    "message": f"Phase 1: Approved by {approver_name}. Waiting for {waiting_for} approval.",
-                    "type": "approved",
-                    "read": False,
-                    "created_at": datetime.utcnow()
-                })
+                # Notify student of partial approval (if student exists)
+                if procedure.get("student_id"):
+                    await db.notifications.insert_one({
+                        "user_id": procedure["student_id"],
+                        "procedure_id": procedure_id,
+                        "message": f"Phase 1: Approved by {approver_name}. Waiting for {waiting_for} approval.",
+                        "type": "approved",
+                        "read": False,
+                        "created_at": datetime.utcnow()
+                    })
             
             await db.procedures.update_one(
                 {"_id": ObjectId(procedure_id)},
@@ -1957,14 +2042,15 @@ async def approve_procedure(
             )
             
             # Notify student
-            await db.notifications.insert_one({
-                "user_id": procedure["student_id"],
-                "procedure_id": procedure_id,
-                "message": f"Phase 1: Procedure rejected by {current_user['name']}. Reason: {action.rejection_reason}",
-                "type": "rejected",
-                "read": False,
-                "created_at": datetime.utcnow()
-            })
+            if procedure.get("student_id"):
+                await db.notifications.insert_one({
+                    "user_id": procedure["student_id"],
+                    "procedure_id": procedure_id,
+                    "message": f"Phase 1: Procedure rejected by {current_user['name']}. Reason: {action.rejection_reason}",
+                    "type": "rejected",
+                    "read": False,
+                    "created_at": datetime.utcnow()
+                })
             
             # Notify the other approver
             other_approver_id = procedure["implant_incharge_id"] if is_supervisor else procedure["supervisor_id"]
