@@ -1,7 +1,7 @@
 import requests
 import json
 
-BASE_URL = "https://case-completion-lab.preview.emergentagent.com/api"
+BASE_URL = "https://implant-phase1.preview.emergentagent.com/api"
 
 def create_user(name, email, password, role):
     data = {

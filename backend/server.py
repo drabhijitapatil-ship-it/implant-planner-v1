@@ -571,7 +571,7 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
     procedure_dict = procedure.model_dump()
     procedure_dict.update({
         "student_id": current_user["_id"],
-        "status": "pending_phase1",  # Phase 1: Pre-surgical approval
+        "status": "draft",  # Draft until student completes implant planning and requests approval
         "current_phase": 1,
         "supervisor_phase1_approved": False,
         "implant_incharge_phase1_approved": False,
@@ -584,7 +584,7 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
     result = await db.procedures.insert_one(procedure_dict)
     procedure_id = str(result.inserted_id)
     
-    # Create notification for supervisor that they have been assigned
+    # Notification for supervisor assignment only (approval request deferred to /request-phase1-approval)
     await db.notifications.insert_one({
         "user_id": procedure.supervisor_id,
         "procedure_id": procedure_id,
@@ -593,34 +593,6 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
         "read": False,
         "created_at": datetime.utcnow()
     })
-    
-    # Create notifications for BOTH supervisor and implant incharge for approval
-    await db.notifications.insert_one({
-        "user_id": procedure.supervisor_id,
-        "procedure_id": procedure_id,
-        "message": f"Phase 1: New pre-surgical protocol submitted by {procedure.student_name} for patient {procedure.patient_name}",
-        "type": "approval_request",
-        "read": False,
-        "created_at": datetime.utcnow()
-    })
-    
-    await db.notifications.insert_one({
-        "user_id": procedure.implant_incharge_id,
-        "procedure_id": procedure_id,
-        "message": f"Phase 1: New pre-surgical protocol submitted by {procedure.student_name} for patient {procedure.patient_name}",
-        "type": "approval_request",
-        "read": False,
-        "created_at": datetime.utcnow()
-    })
-    
-    # Send push notifications to supervisor and implant incharge
-    push_recipients = list(set([procedure.supervisor_id, procedure.implant_incharge_id]))
-    await send_expo_push_notifications(
-        push_recipients,
-        "New Procedure Requires Approval",
-        f"Phase 1: {procedure.student_name} submitted a pre-surgical protocol for patient {procedure.patient_name}",
-        {"procedure_id": procedure_id, "type": "approval_request"},
-    )
     
     procedure_dict["_id"] = procedure_id
     procedure_dict["id"] = procedure_id
@@ -2086,6 +2058,67 @@ async def approve_procedure(
     updated_procedure["_id"] = str(updated_procedure["_id"])
     updated_procedure["id"] = updated_procedure["_id"]
     return updated_procedure
+
+# ── Request Phase 1 Approval (Draft → Pending Phase 1) ───────────
+@api_router.post("/procedures/{procedure_id}/request-phase1-approval")
+async def request_phase1_approval(
+    procedure_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Student sends the case for Phase 1 approval after completing implant planning."""
+    procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    if current_user["role"] != "student" or procedure["student_id"] != current_user["_id"]:
+        raise HTTPException(status_code=403, detail="Only the student who created this case can request approval")
+
+    if procedure["status"] != "draft":
+        raise HTTPException(status_code=400, detail="Case is not in draft status")
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {
+            "status": "pending_phase1",
+            "phase1_requested_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow(),
+        }},
+    )
+
+    student_name = procedure.get("student_name", "A student")
+    patient_name = procedure.get("patient_name", "")
+    msg = f"Phase 1 approval requested by {student_name} for patient {patient_name}"
+
+    await db.notifications.insert_one({
+        "user_id": procedure["supervisor_id"],
+        "procedure_id": procedure_id,
+        "message": msg,
+        "type": "approval_request",
+        "read": False,
+        "created_at": datetime.utcnow(),
+    })
+    await db.notifications.insert_one({
+        "user_id": procedure["implant_incharge_id"],
+        "procedure_id": procedure_id,
+        "message": msg,
+        "type": "approval_request",
+        "read": False,
+        "created_at": datetime.utcnow(),
+    })
+
+    push_recipients = list(set([procedure["supervisor_id"], procedure["implant_incharge_id"]]))
+    await send_expo_push_notifications(
+        push_recipients,
+        "Phase 1 Approval Requested",
+        msg,
+        {"procedure_id": procedure_id, "type": "approval_request"},
+    )
+
+    updated = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    updated["_id"] = str(updated["_id"])
+    updated["id"] = updated["_id"]
+    return updated
+
 
 # Phase 2 Submission Route
 @api_router.post("/procedures/{procedure_id}/submit-phase2")

@@ -46,6 +46,7 @@ export default function NewProcedureScreen() {
   // Step 2: Implant Planning after procedure creation
   const [wizardStep, setWizardStep] = useState<1 | 2>(1);
   const [newProcedureId, setNewProcedureId] = useState<string | null>(null);
+  const [submittingApproval, setSubmittingApproval] = useState(false);
 
   const minDate = format(addDays(new Date(), 1), 'yyyy-MM-dd');
 
@@ -554,13 +555,13 @@ export default function NewProcedureScreen() {
               <View style={styles.header}>
                 <Text style={styles.title}>Implant Selection</Text>
                 <Text style={styles.subtitle}>
-                  Case for {formData.patient_name} created successfully. Now plan your implants.
+                  Case for {formData.patient_name} created as draft. Plan your implants, then send for approval.
                 </Text>
               </View>
 
               <View style={styles.successBanner} data-testid="case-created-banner">
                 <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
-                <Text style={styles.successBannerText}>Case submitted for approval</Text>
+                <Text style={styles.successBannerText}>Case saved as draft</Text>
               </View>
 
               <CaseImplantPlanning
@@ -571,21 +572,43 @@ export default function NewProcedureScreen() {
 
               <View style={styles.step2Actions}>
                 <TouchableOpacity
-                  style={styles.step2DoneBtn}
-                  onPress={() => router.push(`/procedures/${newProcedureId}`)}
-                  data-testid="done-implant-btn"
+                  style={[styles.approvalBtn, submittingApproval && styles.buttonDisabled]}
+                  onPress={async () => {
+                    setSubmittingApproval(true);
+                    try {
+                      await api.post(`/procedures/${newProcedureId}/request-phase1-approval`);
+                      Alert.alert(
+                        'Approval Requested',
+                        'Your case has been sent for Phase 1 approval to the Supervisor and Implant Incharge.',
+                        [{ text: 'OK', onPress: () => router.push('/(tabs)/procedures') }]
+                      );
+                    } catch (err: any) {
+                      const msg = err.response?.data?.detail || 'Failed to request approval';
+                      Alert.alert('Error', String(msg));
+                    } finally {
+                      setSubmittingApproval(false);
+                    }
+                  }}
+                  disabled={submittingApproval}
+                  data-testid="send-phase1-approval-btn"
                 >
-                  <Ionicons name="checkmark-circle" size={20} color="#FFF" />
-                  <Text style={styles.step2DoneBtnText}>Done - View Case</Text>
+                  {submittingApproval ? (
+                    <ActivityIndicator color="#FFF" />
+                  ) : (
+                    <>
+                      <Ionicons name="send" size={20} color="#FFF" />
+                      <Text style={styles.approvalBtnText}>Send for Phase 1 Approval</Text>
+                    </>
+                  )}
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={styles.step2SkipBtn}
                   onPress={() => router.push('/(tabs)/procedures')}
-                  data-testid="skip-implant-btn"
+                  data-testid="save-draft-btn"
                 >
-                  <Text style={styles.step2SkipBtnText}>Skip for Now</Text>
-                  <Ionicons name="arrow-forward" size={16} color="#666" />
+                  <Text style={styles.step2SkipBtnText}>Save as Draft</Text>
+                  <Ionicons name="bookmark-outline" size={16} color="#666" />
                 </TouchableOpacity>
               </View>
             </>
@@ -927,8 +950,8 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingBottom: 32,
   },
-  step2DoneBtn: {
-    backgroundColor: '#007AFF',
+  approvalBtn: {
+    backgroundColor: '#34A853',
     borderRadius: 12,
     padding: 16,
     flexDirection: 'row',
@@ -936,7 +959,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
-  step2DoneBtnText: {
+  approvalBtnText: {
     color: '#FFF',
     fontSize: 16,
     fontWeight: '600',
