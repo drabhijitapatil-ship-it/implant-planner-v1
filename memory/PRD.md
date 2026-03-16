@@ -19,32 +19,41 @@ A mobile application for prosthodontics departments to manage implant cases thro
 - **Auth:** JWT-based
 
 ## What's Been Implemented
+
+### Foundation
 - Full case creation wizard (2-step)
 - Implant selection with FDI chart, drilling protocol generator
 - 4-phase approval workflow (Phase 1-4)
 - Clinical photo album (4 phases of photo documentation)
-- Case report PDF generation
-- User management (CRUD)
-- Push notifications (Expo Push API)
-- Delayed Phase 1 Approval Workflow (cases start as "draft", approval sent after implant planning)
-- **Draft Cases section on student dashboard**
-- Username-based login support + case-insensitive password matching
-- **Phase A — New Case Workflow Changes:**
-  - Removed attachment upload from checklist items #3 and #9
-  - Fixed Add Implant Position modal header overlap with mobile status bar
-  - Added "Generate Drilling Protocol" button on each saved implant card
-  - Phase-wise photo upload with camera capture and library pick support
-- **Phase B — Data Visibility & UI Cleanup (Feb 2026):**
-  - Task 5: Photo visibility for Supervisors/In-Charges — auto-expand relevant phase during approval, review prompt banner
-  - Task 6: Notification badge count on Alerts tab — polls every 30s, resets on tab press
-  - Task 7: Removed duplicate "Post-Surgical Notes by Student" from Phase 2 surgical checklist
-  - Task 8: Torque values per implant visible in procedure detail and implant planning cards
-  - Added Phase 2 remark display in procedure detail page
-- **Phase C — Case Summary & Downloads (Mar 2026):**
-  - Task 9: Removed duplicate Student/Faculty/Incharge remark additionalFields from Phase 4 prosthetic_phase checklist
-  - Task 10: Final Prosthetic Plan prominently displayed on procedure detail page (visible to all roles at all times)
-  - Task 11: Case report PDF excludes photos; all key details (Implant Selection, Torque, Final Prosthesis) visible in case summary
-  - Task 12: "Download Photo Album" button added to CaseCompletionBadge — separate from case report PDF, available for all cases
+- User management (CRUD), Push notifications (Expo Push API)
+- Username-based login + stale session validation
+- Draft Cases section on student dashboard
+
+### Phase A — New Case Workflow Changes
+- Removed attachment upload from checklist items #3 and #9
+- Fixed Add Implant Position modal header overlap (useSafeAreaInsets)
+- Added "Generate Drilling Protocol" button on each saved implant card
+- Phase-wise photo upload with camera capture and library pick support
+
+### Phase B — Data Visibility & UI Cleanup
+- Photo visibility for Supervisors/In-Charges — auto-expand during approval, review prompt
+- Notification badge count on Alerts tab — polls every 30s
+- Removed duplicate "Post-Surgical Notes by Student" from Phase 2 checklist
+- Torque values per implant visible in procedure detail and implant cards
+- Phase 2 remark display in procedure detail page
+
+### Phase C — Case Summary & Downloads
+- Removed duplicate remark additionalFields from Phase 4 prosthetic_phase checklist
+- Final Prosthetic Plan displayed on procedure detail page (all roles, all times)
+- Case report PDF excludes photos; all key details visible in case summary
+- "Download Photo Album" button in CaseCompletionBadge (completed cases only)
+
+### Workflow & PDF Refinements (Mar 2026)
+- **Implant plan lock:** Students and supervisors can edit/remove implant details until Phase 2 approved. Backend enforces 403 after phase2_approved. Frontend hides edit/remove UI.
+- **System options display:** Step 2 of Add Implant Position shows all available diameters/lengths of selected system
+- **Suggest Me fix:** Fixed key mismatch (`suggestions` -> `recommended_systems`) so auto-suggest engine works
+- **Download buttons cleanup:** Removed "Download Case Report PDF" button entirely. "Download Photo Album" only shows after case completion.
+- **Export PDF enhanced:** Available from phase2_approved through completed. Now includes implant selection table (position, brand, system, diameter, length), torque values, final prosthetic plan, and phase2 remarks.
 
 ## Key Endpoints
 - `POST /api/procedures` — Create case (status: "draft")
@@ -52,10 +61,11 @@ A mobile application for prosthodontics departments to manage implant cases thro
 - `POST /api/procedures/{id}/approve` — Phase approval/rejection
 - `POST /api/procedures/{id}/submit-phase2` — Submit surgical protocol (with torque_values)
 - `POST /api/procedures/{id}/stage2/prosthetic` — Submit Phase 4 (with final_prosthetic_plan)
-- `POST /api/procedures/{id}/implant-plan` — Save implant plans
+- `POST /api/procedures/{id}/implant-plan` — Save implant plans (locked after phase2_approved)
 - `GET /api/notifications/unread-count` — Unread notification count
-- `POST /api/procedures/{id}/case-report` — Generate case report PDF (no photos)
-- `POST /api/procedures/{id}/generate-album` — Generate photo album PDF (with photos)
+- `POST /api/procedures/{id}/generate-album` — Generate photo album PDF
+- `POST /api/implant-library/suggest-auto` — Auto-suggest implants (returns recommended_systems)
+- `GET /api/implant-library/systems` — List all systems with diameters/lengths/count
 
 ## Status Flow
 `draft` -> `pending_phase1` -> `phase1_approved` -> `pending_phase2` -> `phase2_approved` -> `pending_stage2_surgical` -> `stage2_surgical_approved` -> `pending_stage2_prosthetic` -> `completed`
