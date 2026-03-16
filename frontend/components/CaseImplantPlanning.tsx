@@ -369,7 +369,13 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
         if (editItem.risk_level) {
           setRiskResult({ risk_level: editItem.risk_level, total_score: editItem.risk_score });
         }
-        setStep(4); // Skip to review
+        // Pre-select the matching system in the dropdown
+        const matchingSystem = systems.find(s => s.brand === editItem.brand && s.system === editItem.system);
+        if (matchingSystem) {
+          setSelectedSystem(matchingSystem);
+        }
+        setMode('choose');
+        setStep(2); // Start at system selection so user can change system/dimensions
       } else {
         resetForm();
       }
@@ -757,9 +763,9 @@ function ModalContent(props: any) {
               )}
 
               <View style={ms.navRow}>
-                <TouchableOpacity style={ms.backBtn} onPress={() => editItem ? onClose() : setStep(3)}>
+                <TouchableOpacity style={ms.backBtn} onPress={() => setStep(3)}>
                   <Ionicons name="arrow-back" size={20} color="#666" />
-                  <Text style={ms.backBtnText}>{editItem ? 'Cancel' : 'Back'}</Text>
+                  <Text style={ms.backBtnText}>Back</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[ms.confirmBtn, ms.nextBtnFlex]} onPress={handleConfirm} data-testid="confirm-implant-btn">
                   <Ionicons name="checkmark-circle" size={20} color="#FFF" />

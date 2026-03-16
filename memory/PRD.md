@@ -37,6 +37,7 @@ A mobile application for prosthodontics departments to manage implant cases thro
 
 ### Permissions & Faculty Case Creation (Mar 2026)
 - **Implant plan edit lock:** Students locked after Phase 2 approval. Supervisors/In-Charges can edit at ALL stages. Backend enforces via role + status check.
+- **Edit implant flow fixed:** Edit now opens at Step 2 (System Selection) with pre-filled values, allowing users to change system, diameter, and length. Previously skipped to Step 4 (read-only summary).
 - **Faculty case creation:** Supervisors and Implant In-Charges can create New Cases (without a student).
   - **Supervisor creates:** status=draft, supervisor_phase1/2_approved pre-set. Only Implant In-Charge needs to approve each phase.
   - **Implant In-Charge creates:** status=completed, all phases auto-approved instantly.
