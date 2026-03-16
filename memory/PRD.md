@@ -27,38 +27,40 @@ A mobile application for prosthodontics departments to manage implant cases thro
 - User management (CRUD)
 - Push notifications (Expo Push API)
 - Delayed Phase 1 Approval Workflow (cases start as "draft", approval sent after implant planning)
-- **Draft Cases section on student dashboard** — shows incomplete cases with quick "Send for Approval" action + tap to navigate to case detail
+- **Draft Cases section on student dashboard**
 - Username-based login support + case-insensitive password matching
 - **Phase A — New Case Workflow Changes:**
-  - Removed attachment upload from checklist items #3 (Hematological Investigations) and #9 (RealGuide Planning)
-  - Fixed Add Implant Position modal header overlap with mobile status bar (useSafeAreaInsets)
+  - Removed attachment upload from checklist items #3 and #9
+  - Fixed Add Implant Position modal header overlap with mobile status bar
   - Added "Generate Drilling Protocol" button on each saved implant card
   - Phase-wise photo upload with camera capture and library pick support
 - **Phase B — Data Visibility & UI Cleanup (Feb 2026):**
   - Task 5: Photo visibility for Supervisors/In-Charges — auto-expand relevant phase during approval, review prompt banner
   - Task 6: Notification badge count on Alerts tab — polls every 30s, resets on tab press
-  - Task 7: Removed duplicate "Post-Surgical Notes by Student" from Phase 2 surgical checklist (kept standalone remark field)
-  - Task 8: Torque values per implant visible in procedure detail and implant planning cards for all roles after Phase 2 submission
+  - Task 7: Removed duplicate "Post-Surgical Notes by Student" from Phase 2 surgical checklist
+  - Task 8: Torque values per implant visible in procedure detail and implant planning cards
   - Added Phase 2 remark display in procedure detail page
+- **Phase C — Case Summary & Downloads (Mar 2026):**
+  - Task 9: Removed duplicate Student/Faculty/Incharge remark additionalFields from Phase 4 prosthetic_phase checklist
+  - Task 10: Final Prosthetic Plan prominently displayed on procedure detail page (visible to all roles at all times)
+  - Task 11: Case report PDF excludes photos; all key details (Implant Selection, Torque, Final Prosthesis) visible in case summary
+  - Task 12: "Download Photo Album" button added to CaseCompletionBadge — separate from case report PDF, available for all cases
 
 ## Key Endpoints
 - `POST /api/procedures` — Create case (status: "draft")
 - `POST /api/procedures/{id}/request-phase1-approval` — Draft -> pending_phase1
 - `POST /api/procedures/{id}/approve` — Phase approval/rejection
 - `POST /api/procedures/{id}/submit-phase2` — Submit surgical protocol (with torque_values)
+- `POST /api/procedures/{id}/stage2/prosthetic` — Submit Phase 4 (with final_prosthetic_plan)
 - `POST /api/procedures/{id}/implant-plan` — Save implant plans
 - `GET /api/notifications/unread-count` — Unread notification count
+- `POST /api/procedures/{id}/case-report` — Generate case report PDF (no photos)
+- `POST /api/procedures/{id}/generate-album` — Generate photo album PDF (with photos)
 
 ## Status Flow
 `draft` -> `pending_phase1` -> `phase1_approved` -> `pending_phase2` -> `phase2_approved` -> `pending_stage2_surgical` -> `stage2_surgical_approved` -> `pending_stage2_prosthetic` -> `completed`
 
 ## Backlog
-### P0 - Phase C (Upcoming)
-- Task 9: De-duplicate remark sections in Phase 4 (prosthetic_phase additionalFields)
-- Task 10: Final prosthesis always visible to everyone
-- Task 11: Post-completion case summary (all details visible, photos excluded from PDF)
-- Task 12: Download all case photos as album (separate from PDF)
-
 ### P2 - Refactoring
 - Backend refactoring (decompose server.py into routers/models/services)
 - Frontend refactoring (modularize new-procedure.tsx, [procedureId].tsx)
