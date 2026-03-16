@@ -44,6 +44,13 @@ A mobile application for prosthodontics departments to manage implant cases thro
   - Notifications handle null student_id gracefully.
 - Frontend adapted: auto-fill supervisor/incharge fields, locked dropdowns, faculty banner, no 24h restriction for faculty.
 
+### Two-Tier Rejection System (Mar 2026)
+- **Reject Permanently:** Case set to `permanently_rejected` (terminal status). No further phases can proceed. Reason stored, creator notified.
+- **Reject with Consideration:** Phase goes back to editable state (Phase 1→draft, Phase 2→phase1_approved, Phase 3→phase2_approved, Phase 4→stage2_surgical_approved). Approval flags reset. Student can edit and resubmit. Reason/feedback stored, creator notified.
+- Works for all 4 phases (Phase 1, 2, 3, 4). Both types require a reason.
+- Frontend: Two-step rejection modal (select type → enter reason). Permanent rejection banner (red) and revision-requested banner (orange) displayed on case detail page.
+- Notifications sent to case creator for both rejection types with reason included.
+
 ## Key Endpoints
 - `POST /api/procedures` — Create case (student/supervisor/incharge)
 - `POST /api/procedures/{id}/implant-plan` — Save implant plans (role-based lock)
