@@ -329,6 +329,7 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
         </View>
 
         <ScrollView style={{ flex: 1 }} contentContainerStyle={ms.scroll}>
+          <View style={{ flex: 1, justifyContent: 'center', minHeight: '100%' } as any}>
           {/* STEP 1: Select Tooth */}
           {step === 1 && (
             <View>
@@ -550,6 +551,7 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
               </View>
             </View>
           )}
+          </View>
         </ScrollView>
 
         {/* System Dropdown Modal */}
@@ -694,7 +696,7 @@ const ms = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E0E0E0' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#1A1A1A' },
   stepIndicator: { fontSize: 14, color: '#888', fontWeight: '600' },
-  scroll: { padding: 16, flexGrow: 1, justifyContent: 'center' },
+  scroll: { padding: 16 },
   stepTitle: { fontSize: 20, fontWeight: '700', color: '#1A1A1A', marginBottom: 16 },
   recBox: { backgroundColor: '#E3F2FD', borderRadius: 10, padding: 12, marginTop: 10 },
   recTitle: { fontSize: 14, fontWeight: '600', color: '#1565C0' },
