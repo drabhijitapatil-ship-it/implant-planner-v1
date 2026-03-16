@@ -86,7 +86,7 @@ class UserRegister(BaseModel):
     role: str  # student, supervisor, implant_incharge, administrator, nurse
 
 class UserLogin(BaseModel):
-    email: EmailStr
+    email: str  # accepts email or username
     password: str
 
 class UserResponse(BaseModel):
@@ -265,8 +265,18 @@ async def register(user: UserRegister):
 
 @api_router.post("/auth/login")
 async def login(user: UserLogin):
-    # Find user
-    db_user = await db.users.find_one({"email": user.email})
+    identifier = user.email.strip()
+    db_user = None
+
+    # 1) Try exact email match
+    db_user = await db.users.find_one({"email": identifier})
+
+    # 2) If not found and input lacks '@', try case-insensitive name match
+    if not db_user and "@" not in identifier:
+        import re
+        escaped = re.escape(identifier)
+        db_user = await db.users.find_one({"name": {"$regex": escaped, "$options": "i"}})
+
     if not db_user or not verify_password(user.password, db_user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
