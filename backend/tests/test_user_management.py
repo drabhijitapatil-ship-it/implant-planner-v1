@@ -14,7 +14,7 @@ import requests
 import os
 import uuid
 
-BASE_URL = "https://implant-phase1.preview.emergentagent.com"
+BASE_URL = "https://torque-visibility.preview.emergentagent.com"
 
 # Test credentials
 CREDENTIALS = {
