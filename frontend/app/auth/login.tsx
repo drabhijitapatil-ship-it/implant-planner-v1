@@ -73,10 +73,11 @@ export default function LoginScreen() {
     }
     setLoading(true);
     try {
-      await login(email, password);
+      await login(email.trim(), password.trim());
       router.replace('/(tabs)/dashboard');
     } catch (error: any) {
-      Alert.alert('Login Failed', error.message);
+      const detail = error.message || 'Unknown error';
+      Alert.alert('Login Failed', `${detail}\n\n(Debug: URL=${process.env.EXPO_PUBLIC_BACKEND_URL || 'NOT SET'})`);
     } finally {
       setLoading(false);
     }
