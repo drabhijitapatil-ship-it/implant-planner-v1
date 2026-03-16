@@ -27,7 +27,6 @@ export const CHECKLIST_DATA = {
       { id: 'post_cleaning', label: 'Post-operative cleaning of implant room, instruments, and equipment' },
     ],
     additionalFields: [
-      { id: 'student_notes', label: 'Post-Surgical Notes by Student' },
       { id: 'faculty_remark', label: 'Remarks by Faculty' },
     ],
   },
