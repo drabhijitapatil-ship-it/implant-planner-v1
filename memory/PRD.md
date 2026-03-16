@@ -6,7 +6,7 @@ Overhauling the "New Case" workflow for a prosthodontics mobile application. Ini
 ## Core Requirements
 1. **New Case Form:** Redesigned form with conditional logic for prosthetic plans based on procedure type
 2. **Phase-Based Workflow:** Cases progress through 4 phases (Pre-Surgical, Surgical, Second Stage, Prosthetic)
-3. **Implant Selection Integration:** Integrated into Phase 1 workflow
+3. **Implant Selection Integration:** Integrated into Phase 1 workflow AND as Step 2 in the New Case wizard
 4. **Checklist File Uploads:** Specific checklist items require file upload
 5. **Case Completion Engine:** Generates completion badge and PDF case report
 6. **Clinical Photo Album:** Upload and manage 26 clinical photos across 4 phases, generate PDF album
@@ -24,9 +24,9 @@ Overhauling the "New Case" workflow for a prosthodontics mobile application. Ini
 │   ├── uploads/case_photos/
 │   └── uploads/checklist_files/
 ├── frontend/
-│   ├── app/(tabs)/           # Tab-based navigation
+│   ├── app/(tabs)/           # Tab-based navigation (New Case, Implant Selection, etc.)
 │   ├── app/procedures/       # Procedure detail + phase forms
-│   ├── components/           # Reusable components
+│   ├── components/           # CaseImplantPlanning, CasePhotoAlbum, ChecklistForm, etc.
 │   ├── constants/checklist.ts # Checklist definitions
 │   ├── contexts/AuthContext.tsx
 │   └── utils/api.ts
@@ -34,17 +34,21 @@ Overhauling the "New Case" workflow for a prosthodontics mobile application. Ini
 
 ## What's Implemented (Complete)
 - Clinical Case Album Generator (backend PDF + frontend UI)
-- New Case Form with conditional prosthetic plan logic
+- New Case Form with 2-step wizard (Step 1: Case Details + Checklist, Step 2: Implant Selection)
 - Phase 2-4 submission forms with torque values and clinical remarks
 - Case Completion Engine (badge + PDF report)
 - Checklist File Uploads
-- Implant Planning component (CaseImplantPlanning.tsx)
-- Treatment timeline/progress tracker on detail page
+- Implant Planning component integrated into New Case workflow AND as standalone on detail page
+- Phase 1 banner on procedure detail page for pending_phase1 procedures
+- Standalone Implant Selection tab in bottom navigation
 
-## Bug Fixes Applied (March 15, 2026)
-1. **Faculty/Incharge Dropdowns (P0):** Fixed race condition where `/api/users` was called before auth token was available. Changed useEffect to depend on `user` from AuthContext.
-2. **CBCT Upload Removed (P0):** Removed `hasUpload: true` from "Radiographic Investigations" in checklist.ts
-3. **Implant Planning Phase 1 Integration (P1):** CaseImplantPlanning now shown prominently with Phase 1 banner during `pending_phase1` status; shown read-only in later phases
+## Bug Fixes & Changes (March 16, 2026)
+1. **Faculty/Incharge Dropdowns (P0):** Fixed race condition - useEffect depends on `user` from AuthContext
+2. **CBCT Upload Removed (P0):** Removed hasUpload from "Radiographic Investigations" in checklist.ts
+3. **Implant Planning Phase 1 Integration (P1):** CaseImplantPlanning shows with Phase 1 banner during pending_phase1; shown as standalone for other phases
+4. **2-Step New Case Wizard:** Step 1 = Case details + Phase 1 checklist, Step 2 = Implant Selection (after procedure creation). Submit button reads "Submit & Continue to Implant Selection"
+5. **Loading Type Styling Fix:** Immediate/Delayed Loading chips properly contained in bordered container (borderStyle: solid added for React Native Web)
+6. **Standalone Implant Selection Preserved:** Implant Selection tab remains accessible alongside new workflow integration
 
 ## Test Credentials
 - **Admin/Implant Incharge:** abhijit.patil@dental.edu / Admin@123
