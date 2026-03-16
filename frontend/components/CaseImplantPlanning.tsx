@@ -10,7 +10,9 @@ import {
   Modal,
   FlatList,
   ScrollView,
+  Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../utils/api';
 
@@ -38,6 +40,59 @@ interface Props {
   procedureId: string;
   isOwner: boolean;
   userRole: string;
+}
+
+// ── Drilling Protocol Generator ────────────────────────────
+// Generates a system-specific drilling sequence based on brand, implant diameter, and bone type
+function generateDrillingProtocol(brand: string, system: string, diameter: number, boneType: string): { step: number; drill: string; speed: string; depth: string; note: string }[] {
+  const d = diameter;
+  const isHardBone = boneType === 'D1' || boneType === 'D2';
+  const isSoftBone = boneType === 'D3' || boneType === 'D4';
+
+  // Base protocol varies by diameter and bone density
+  const protocol: { step: number; drill: string; speed: string; depth: string; note: string }[] = [];
+  let stepNum = 1;
+
+  // Step 1: Pilot Drill (universal)
+  protocol.push({ step: stepNum++, drill: 'Pilot Drill (2.0mm)', speed: '800-1000 RPM', depth: 'Full depth', note: 'Mark osteotomy site. Use copious irrigation.' });
+
+  // Step 2: Twist Drill
+  protocol.push({ step: stepNum++, drill: 'Twist Drill (2.0mm)', speed: '800 RPM', depth: 'Working length', note: 'Verify direction with paralleling pin.' });
+
+  // Step 3+: Sequential widening based on implant diameter
+  if (d >= 3.0) {
+    protocol.push({ step: stepNum++, drill: `Drill ${brand === 'Straumann' ? 'BL' : ''} 2.2mm`, speed: '600-800 RPM', depth: 'Working length', note: isHardBone ? 'Use intermittent drilling with irrigation.' : 'Light pressure for soft bone.' });
+  }
+  if (d >= 3.3) {
+    protocol.push({ step: stepNum++, drill: `Drill 2.8mm`, speed: '600-800 RPM', depth: 'Working length', note: 'Check paralleling pin alignment.' });
+  }
+  if (d >= 3.5) {
+    protocol.push({ step: stepNum++, drill: `Drill 3.2mm`, speed: '500-800 RPM', depth: 'Working length', note: isSoftBone ? 'Skip countersink for bone condensation.' : 'Standard sequence.' });
+  }
+  if (d >= 4.0) {
+    protocol.push({ step: stepNum++, drill: `Drill 3.5mm`, speed: '500-800 RPM', depth: 'Working length', note: isHardBone ? 'May require pre-tapping.' : 'Proceed with insertion.' });
+  }
+  if (d >= 4.5) {
+    protocol.push({ step: stepNum++, drill: `Drill 4.0mm`, speed: '500 RPM', depth: 'Working length', note: 'Final widening drill.' });
+  }
+  if (d >= 5.0) {
+    protocol.push({ step: stepNum++, drill: `Drill 4.5mm`, speed: '500 RPM', depth: 'Working length', note: 'Wide platform preparation.' });
+  }
+
+  // Countersink (conditional)
+  if (isHardBone && d >= 3.5) {
+    protocol.push({ step: stepNum++, drill: `Countersink (${d}mm)`, speed: '500 RPM', depth: '1-2mm', note: 'Crestal bone preparation. Only for D1/D2 bone.' });
+  }
+
+  // Bone Tap (D1 only)
+  if (boneType === 'D1') {
+    protocol.push({ step: stepNum++, drill: `Bone Tap (${d}mm)`, speed: '15-20 RPM', depth: 'Full depth', note: 'Required for D1 dense cortical bone.' });
+  }
+
+  // Implant Placement
+  protocol.push({ step: stepNum++, drill: `${system} Implant (${d}mm)`, speed: '15-25 RPM', depth: 'Final position', note: `Insert at 25-35 Ncm. Target ISQ > 65. ${isSoftBone ? 'Under-prepare by 1 step for primary stability.' : ''}` });
+
+  return protocol;
 }
 
 export default function CaseImplantPlanning({ procedureId, isOwner, userRole }: Props) {
@@ -318,10 +373,10 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={ms.container}>
+      <SafeAreaView style={ms.container} edges={['top']}>
         {/* Header */}
         <View style={ms.header}>
-          <TouchableOpacity onPress={onClose}>
+          <TouchableOpacity onPress={onClose} style={ms.closeBtn} data-testid="modal-close-btn">
             <Ionicons name="close" size={28} color="#333" />
           </TouchableOpacity>
           <Text style={ms.headerTitle}>{editItem ? 'Edit' : 'Add'} Implant Position</Text>
@@ -385,6 +440,39 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
                     </Text>
                     <Ionicons name="chevron-down" size={20} color="#666" />
                   </TouchableOpacity>
+
+                  {/* Drilling Protocol - shown after system is selected */}
+                  {selectedSystem && (
+                    <View style={ms.protocolBox} data-testid="drilling-protocol">
+                      <View style={ms.protocolHeader}>
+                        <Ionicons name="construct" size={18} color="#1565C0" />
+                        <Text style={ms.protocolTitle}>Drilling Protocol: {selectedSystem.brand} {selectedSystem.system}</Text>
+                      </View>
+                      <Text style={ms.protocolSubtitle}>
+                        Diameters: {selectedSystem.diameters.join(', ')}mm | Lengths: {selectedSystem.lengths.join(', ')}mm
+                      </Text>
+                      {selectedSystem.diameters.length > 0 && (
+                        <>
+                          <Text style={ms.protocolDiameterLabel}>
+                            Sequence for {selectedSystem.diameters[0]}mm (Bone: {boneType || 'D2'})
+                          </Text>
+                          {generateDrillingProtocol(selectedSystem.brand, selectedSystem.system, selectedSystem.diameters[0], boneType || 'D2').map((p) => (
+                            <View key={p.step} style={ms.protocolStep}>
+                              <View style={ms.protocolStepNum}>
+                                <Text style={ms.protocolStepNumText}>{p.step}</Text>
+                              </View>
+                              <View style={{ flex: 1 }}>
+                                <Text style={ms.protocolDrill}>{p.drill}</Text>
+                                <Text style={ms.protocolDetail}>{p.speed} | {p.depth}</Text>
+                                <Text style={ms.protocolNote}>{p.note}</Text>
+                              </View>
+                            </View>
+                          ))}
+                        </>
+                      )}
+                    </View>
+                  )}
+
                   <Text style={ms.inputLabel}>Bone Width (mm)</Text>
                   <TextInput style={ms.input} value={boneWidth} onChangeText={setBoneWidth} keyboardType="decimal-pad" placeholder="e.g. 7" data-testid="modal-bone-width" />
                   <Text style={ms.inputLabel}>Bone Height (mm)</Text>
@@ -602,7 +690,7 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
             </View>
           </View>
         </Modal>
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }
@@ -698,7 +786,8 @@ const st = StyleSheet.create({
 
 const ms = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F5F5' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E0E0E0' },
+  closeBtn: { padding: 8 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E0E0E0' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#1A1A1A' },
   stepIndicator: { fontSize: 14, color: '#888', fontWeight: '600' },
   scroll: { padding: 16 },
@@ -760,4 +849,16 @@ const ms = StyleSheet.create({
   ddItemRestricted: { opacity: 0.4 },
   ddItemTitle: { fontSize: 14, fontWeight: '600', color: '#333' },
   ddItemSub: { fontSize: 11, color: '#888', marginTop: 2 },
+  // Drilling Protocol styles
+  protocolBox: { backgroundColor: '#F5F9FE', borderRadius: 12, borderWidth: 1, borderColor: '#BBDEFB', padding: 14, marginBottom: 12, marginTop: 4 },
+  protocolHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  protocolTitle: { fontSize: 14, fontWeight: '700', color: '#1565C0' },
+  protocolSubtitle: { fontSize: 11, color: '#666', marginBottom: 8 },
+  protocolDiameterLabel: { fontSize: 12, fontWeight: '600', color: '#444', marginBottom: 8, backgroundColor: '#E3F2FD', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, alignSelf: 'flex-start', overflow: 'hidden' },
+  protocolStep: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 8 },
+  protocolStepNum: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#1E88E5', alignItems: 'center', justifyContent: 'center' },
+  protocolStepNumText: { color: '#FFF', fontSize: 11, fontWeight: '700' },
+  protocolDrill: { fontSize: 13, fontWeight: '600', color: '#333' },
+  protocolDetail: { fontSize: 11, color: '#666', marginTop: 1 },
+  protocolNote: { fontSize: 11, color: '#888', fontStyle: 'italic', marginTop: 2 },
 });
