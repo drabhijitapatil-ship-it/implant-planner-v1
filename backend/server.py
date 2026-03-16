@@ -291,8 +291,26 @@ async def login(user: UserLogin):
         logging.warning(f"Login failed: no user found for '{identifier}'")
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    if not verify_password(password, db_user["password_hash"]):
-        logging.warning(f"Login failed: wrong password for user '{db_user['name']}' (identifier='{identifier}')")
+    # Try password as-is, then common mobile keyboard variations
+    password_variants = [password]
+    if password != password.lower():
+        password_variants.append(password.lower())
+    if password != password.capitalize():
+        password_variants.append(password.capitalize())
+    # Handle mobile auto-capitalize of first char: e.g., "student@123" → "Student@123"
+    if len(password) > 0 and password[0].islower():
+        password_variants.append(password[0].upper() + password[1:])
+    if len(password) > 0 and password[0].isupper():
+        password_variants.append(password[0].lower() + password[1:])
+
+    matched = False
+    for variant in password_variants:
+        if verify_password(variant, db_user["password_hash"]):
+            matched = True
+            break
+
+    if not matched:
+        logging.warning(f"Login failed: wrong password for user '{db_user['name']}' (identifier='{identifier}', pw_variants_tried={len(password_variants)})")
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     # Create token
