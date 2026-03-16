@@ -39,9 +39,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const storedUser = await AsyncStorage.getItem('user');
       
       if (storedToken && storedUser) {
-        setToken(storedToken);
-        setUser(JSON.parse(storedUser));
-        axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+        // Validate the stored token is still valid
+        try {
+          const resp = await axios.get(`${EXPO_PUBLIC_BACKEND_URL}/api/auth/me`, {
+            headers: { Authorization: `Bearer ${storedToken}` },
+          });
+          setToken(storedToken);
+          setUser(resp.data);
+          axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+        } catch {
+          // Token invalid or user deleted — clear stale session
+          await AsyncStorage.removeItem('token');
+          await AsyncStorage.removeItem('user');
+        }
       }
     } catch (error) {
       console.error('Failed to load stored auth:', error);
