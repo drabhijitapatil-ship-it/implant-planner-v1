@@ -58,11 +58,6 @@ export const CHECKLIST_DATA = {
       { id: 'occlusion_evaluated', label: 'Occlusion Evaluation Done' },
       { id: 'final_cementation', label: 'Final Cementation/Screwing of the Prosthesis' },
     ],
-    additionalFields: [
-      { id: 'student_remark', label: 'Student Remark' },
-      { id: 'faculty_remark', label: 'Faculty Remark' },
-      { id: 'incharge_remark', label: 'Implant Incharge Remark' },
-    ],
   },
 };
 
