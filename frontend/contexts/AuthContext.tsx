@@ -61,12 +61,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const login = async (email: string, password: string) => {
+    const url = `${EXPO_PUBLIC_BACKEND_URL}/api/auth/login`;
+    console.log(`[AUTH] Login attempt to: ${url} with identifier: '${email}'`);
     try {
-      const response = await axios.post(`${EXPO_PUBLIC_BACKEND_URL}/api/auth/login`, {
+      const response = await axios.post(url, {
         email,
         password,
       });
 
+      console.log(`[AUTH] Login success for: ${response.data.user?.name}`);
       const { token: newToken, user: newUser } = response.data;
       
       await AsyncStorage.setItem('token', newToken);
@@ -76,6 +79,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(newUser);
       axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
     } catch (error: any) {
+      console.error(`[AUTH] Login error:`, error.message, error.response?.status, error.response?.data);
       throw new Error(error.response?.data?.detail || 'Login failed');
     }
   };
