@@ -534,6 +534,19 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
+        {/* Final Prosthetic Plan - always visible to everyone when set */}
+        {procedure.final_prosthetic_plan && (
+          <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#FF9800' }]} data-testid="final-prosthetic-plan-section">
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <Ionicons name="construct" size={20} color="#FF9800" />
+              <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#E65100' }]}>Final Prosthetic Plan</Text>
+            </View>
+            <View style={{ backgroundColor: '#FFF8E1', borderRadius: 8, padding: 12 }}>
+              <Text style={{ fontSize: 15, fontWeight: '600', color: '#333' }}>{procedure.final_prosthetic_plan}</Text>
+            </View>
+          </View>
+        )}
+
         {/* Torque Values Achieved - visible to supervisors during approval and to students after approval */}
         {procedure.torque_values && procedure.torque_values.length > 0 && (
           <View style={styles.section} data-testid="torque-values-section">

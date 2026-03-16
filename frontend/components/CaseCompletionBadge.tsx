@@ -31,6 +31,7 @@ export default function CaseCompletionBadge({ procedureId, status }: Props) {
   const [badge, setBadge] = useState<Badge | null>(null);
   const [loading, setLoading] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
+  const [albumLoading, setAlbumLoading] = useState(false);
 
   useEffect(() => {
     if (status === 'completed') loadBadge();
@@ -74,6 +75,35 @@ export default function CaseCompletionBadge({ procedureId, status }: Props) {
     }
   }, [procedureId, badge]);
 
+  const handleDownloadAlbum = useCallback(async () => {
+    setAlbumLoading(true);
+    try {
+      const response = await api.post(
+        `/procedures/${procedureId}/generate-album`,
+        {},
+        { responseType: 'blob' }
+      );
+      if (typeof window !== 'undefined' && window.URL) {
+        const blob = new Blob([response.data], { type: 'application/pdf' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `PhotoAlbum_${badge?.case_id || procedureId}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        Alert.alert('Success', 'Photo Album PDF downloaded.');
+      } else {
+        Alert.alert('Album Generated', 'Download on web for best experience.');
+      }
+    } catch {
+      Alert.alert('Error', 'Failed to generate photo album.');
+    } finally {
+      setAlbumLoading(false);
+    }
+  }, [procedureId, badge]);
+
   // Only show for completed procedures OR when generating report for any case
   if (status !== 'completed') {
     return (
@@ -90,6 +120,21 @@ export default function CaseCompletionBadge({ procedureId, status }: Props) {
             <>
               <Ionicons name="document-text" size={20} color="#FFF" />
               <Text style={st.reportButtonText}>Download Case Report PDF</Text>
+            </>
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={st.albumButton}
+          onPress={handleDownloadAlbum}
+          disabled={albumLoading}
+          data-testid="download-photo-album-btn"
+        >
+          {albumLoading ? (
+            <ActivityIndicator color="#FFF" size="small" />
+          ) : (
+            <>
+              <Ionicons name="images" size={20} color="#FFF" />
+              <Text style={st.reportButtonText}>Download Photo Album</Text>
             </>
           )}
         </TouchableOpacity>
@@ -165,7 +210,24 @@ export default function CaseCompletionBadge({ procedureId, status }: Props) {
         ) : (
           <>
             <Ionicons name="document-text" size={20} color="#FFF" />
-            <Text style={st.reportButtonText}>Download Full Case Report PDF</Text>
+            <Text style={st.reportButtonText}>Download Case Report PDF</Text>
+          </>
+        )}
+      </TouchableOpacity>
+
+      {/* Download Photo Album Button */}
+      <TouchableOpacity
+        style={st.albumButton}
+        onPress={handleDownloadAlbum}
+        disabled={albumLoading}
+        data-testid="download-photo-album-btn"
+      >
+        {albumLoading ? (
+          <ActivityIndicator color="#FFF" size="small" />
+        ) : (
+          <>
+            <Ionicons name="images" size={20} color="#FFF" />
+            <Text style={st.reportButtonText}>Download Photo Album</Text>
           </>
         )}
       </TouchableOpacity>
@@ -213,6 +275,11 @@ const st = StyleSheet.create({
     backgroundColor: '#1565C0',
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 8, marginHorizontal: 16, marginTop: 12, padding: 14, borderRadius: 12,
+  },
+  albumButton: {
+    backgroundColor: '#2E7D32',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, marginHorizontal: 16, marginTop: 8, padding: 14, borderRadius: 12,
   },
   reportButtonText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
 });
