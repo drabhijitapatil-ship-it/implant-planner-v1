@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import api from '../../utils/api';
 import ChecklistForm from '../../components/ChecklistForm';
+import CaseImplantPlanning from '../../components/CaseImplantPlanning';
 import BackToDashboard from '../../components/BackToDashboard';
 import { useRouter } from 'expo-router';
 import { format, addDays } from 'date-fns';
@@ -41,6 +42,10 @@ export default function NewProcedureScreen() {
   const [showInchargeDropdown, setShowInchargeDropdown] = useState(false);
   const [showProcedureTypeDropdown, setShowProcedureTypeDropdown] = useState(false);
   const [showProstheticDropdown, setShowProstheticDropdown] = useState(false);
+
+  // Step 2: Implant Planning after procedure creation
+  const [wizardStep, setWizardStep] = useState<1 | 2>(1);
+  const [newProcedureId, setNewProcedureId] = useState<string | null>(null);
 
   const minDate = format(addDays(new Date(), 1), 'yyyy-MM-dd');
 
@@ -239,11 +244,17 @@ export default function NewProcedureScreen() {
         checklist,
       };
 
-      await api.post('/procedures', payload);
+      const response = await api.post('/procedures', payload);
+      const procedureId = response.data?.id || response.data?._id;
 
-      Alert.alert('Success', 'Procedure submitted successfully!', [
-        { text: 'OK', onPress: () => router.push('/(tabs)/procedures') },
-      ]);
+      if (procedureId) {
+        setNewProcedureId(procedureId);
+        setWizardStep(2);
+      } else {
+        Alert.alert('Success', 'Procedure submitted successfully!', [
+          { text: 'OK', onPress: () => router.push('/(tabs)/procedures') },
+        ]);
+      }
     } catch (error: any) {
       console.error('Submit error:', error.response?.data);
       let errorMessage = 'Failed to submit procedure';
@@ -321,199 +332,261 @@ export default function NewProcedureScreen() {
       <BackToDashboard />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardView}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          <View style={styles.header}>
-            <Text style={styles.title}>New Procedure</Text>
-            <Text style={styles.subtitle}>Fill in all required information</Text>
+
+          {/* ── Step Indicator ─── */}
+          <View style={styles.stepIndicator} data-testid="wizard-step-indicator">
+            <View style={[styles.stepDot, styles.stepDotActive]} />
+            <View style={[styles.stepLine, wizardStep === 2 && styles.stepLineDone]} />
+            <View style={[styles.stepDot, wizardStep === 2 && styles.stepDotActive]} />
           </View>
+          <Text style={styles.stepLabel}>
+            {wizardStep === 1 ? 'Step 1: Case Details & Pre-Surgical Protocol' : 'Step 2: Implant Selection'}
+          </Text>
 
-          <View style={styles.form}>
-            {/* ── Patient Information ─── */}
-            <Text style={styles.sectionTitle}>Patient Information</Text>
+          {/* ══════════════ STEP 1: Case Form ══════════════ */}
+          {wizardStep === 1 && (
+            <>
+              <View style={styles.header}>
+                <Text style={styles.title}>New Procedure</Text>
+                <Text style={styles.subtitle}>Fill in all required information</Text>
+              </View>
 
-            <Text style={styles.label}>Patient Name *</Text>
-            <TextInput
-              style={[styles.input, fieldErrors.patient_name && styles.inputError]}
-              value={formData.patient_name}
-              onChangeText={(v) => handleInputChange('patient_name', v)}
-              placeholder="Enter patient name"
-              data-testid="input-patient-name"
-            />
+              <View style={styles.form}>
+                {/* ── Patient Information ─── */}
+                <Text style={styles.sectionTitle}>Patient Information</Text>
 
-            <Text style={styles.label}>Registration Number *</Text>
-            <TextInput
-              style={[styles.input, fieldErrors.registration_number && styles.inputError]}
-              value={formData.registration_number}
-              onChangeText={(v) => handleInputChange('registration_number', v)}
-              placeholder="Enter registration number"
-              data-testid="input-registration-number"
-            />
+                <Text style={styles.label}>Patient Name *</Text>
+                <TextInput
+                  style={[styles.input, fieldErrors.patient_name && styles.inputError]}
+                  value={formData.patient_name}
+                  onChangeText={(v) => handleInputChange('patient_name', v)}
+                  placeholder="Enter patient name"
+                  data-testid="input-patient-name"
+                />
 
-            {/* ── Faculty ─── */}
-            <Text style={styles.sectionTitle}>Faculty</Text>
+                <Text style={styles.label}>Registration Number *</Text>
+                <TextInput
+                  style={[styles.input, fieldErrors.registration_number && styles.inputError]}
+                  value={formData.registration_number}
+                  onChangeText={(v) => handleInputChange('registration_number', v)}
+                  placeholder="Enter registration number"
+                  data-testid="input-registration-number"
+                />
 
-            <Text style={styles.label}>Supervising Faculty *</Text>
-            <TouchableOpacity
-              style={[styles.dropdownButton, fieldErrors.supervisor_id && styles.inputError]}
-              onPress={() => setShowInstructorDropdown(true)}
-              data-testid="select-supervisor"
-            >
-              <Text style={formData.supervisor_name ? styles.dropdownText : styles.dropdownPlaceholder}>
-                {formData.supervisor_name || 'Select Supervising Faculty'}
-              </Text>
-              <Ionicons name="chevron-down" size={20} color="#666" />
-            </TouchableOpacity>
+                {/* ── Faculty ─── */}
+                <Text style={styles.sectionTitle}>Faculty</Text>
 
-            <Text style={styles.label}>Implant Incharge *</Text>
-            <TouchableOpacity
-              style={[styles.dropdownButton, fieldErrors.implant_incharge_id && styles.inputError]}
-              onPress={() => setShowInchargeDropdown(true)}
-              data-testid="select-incharge"
-            >
-              <Text style={formData.implant_incharge_name ? styles.dropdownText : styles.dropdownPlaceholder}>
-                {formData.implant_incharge_name || 'Select Implant Incharge'}
-              </Text>
-              <Ionicons name="chevron-down" size={20} color="#666" />
-            </TouchableOpacity>
-
-            {/* ── Payment Details ─── */}
-            <Text style={styles.sectionTitle}>Payment Details</Text>
-
-            <Text style={styles.label}>Receipt Number *</Text>
-            <TextInput
-              style={[styles.input, fieldErrors.receipt_number && styles.inputError]}
-              value={formData.receipt_number}
-              onChangeText={(v) => handleInputChange('receipt_number', v)}
-              placeholder="Enter receipt number"
-              data-testid="input-receipt-number"
-            />
-
-            <Text style={styles.label}>Amount Paid (INR) *</Text>
-            <TextInput
-              style={[styles.input, fieldErrors.amount_paid && styles.inputError]}
-              value={formData.amount_paid}
-              onChangeText={(v) => handleInputChange('amount_paid', v)}
-              placeholder="Enter amount"
-              keyboardType="numeric"
-              data-testid="input-amount-paid"
-            />
-
-            {/* ── Schedule ─── */}
-            <Text style={styles.sectionTitle}>Schedule</Text>
-
-            <Text style={styles.label}>Procedure Date *</Text>
-            <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowCalendar(true)} data-testid="select-date">
-              <Ionicons name="calendar" size={20} color="#007AFF" />
-              <Text style={styles.datePickerText}>{formatDisplayDate(formData.procedure_date)}</Text>
-              <Ionicons name="chevron-down" size={20} color="#666" />
-            </TouchableOpacity>
-            <Text style={styles.helperText}>
-              Mon-Fri: 10:00 AM &amp; 2:00 PM | Saturday: 10:00 AM only | No Sundays
-            </Text>
-
-            <Text style={styles.label}>Procedure Time *</Text>
-            <View style={styles.timeSlotContainer}>
-              {getAvailableTimeSlots().map((slot) => (
+                <Text style={styles.label}>Supervising Faculty *</Text>
                 <TouchableOpacity
-                  key={slot.value}
-                  style={[styles.timeSlotButton, formData.procedure_time === slot.value && styles.timeSlotButtonActive]}
-                  onPress={() => handleInputChange('procedure_time', slot.value)}
-                  data-testid={`time-slot-${slot.value}`}
+                  style={[styles.dropdownButton, fieldErrors.supervisor_id && styles.inputError]}
+                  onPress={() => setShowInstructorDropdown(true)}
+                  data-testid="select-supervisor"
                 >
-                  <Ionicons name="time" size={18} color={formData.procedure_time === slot.value ? '#FFF' : '#007AFF'} />
-                  <Text style={[styles.timeSlotText, formData.procedure_time === slot.value && styles.timeSlotTextActive]}>
-                    {slot.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* ── Procedure Details ─── */}
-            <Text style={styles.sectionTitle}>Procedure Details</Text>
-
-            <Text style={styles.label}>Type of Implant Procedure *</Text>
-            <TouchableOpacity
-              style={[styles.dropdownButton, fieldErrors.implant_procedure_type && styles.inputError]}
-              onPress={() => setShowProcedureTypeDropdown(true)}
-              data-testid="select-procedure-type"
-            >
-              <Text style={formData.implant_procedure_type ? styles.dropdownText : styles.dropdownPlaceholder}>
-                {formData.implant_procedure_type || 'Select Procedure Type'}
-              </Text>
-              <Ionicons name="chevron-down" size={20} color="#666" />
-            </TouchableOpacity>
-
-            <Text style={styles.label}>Type of Loading *</Text>
-            <View style={[styles.loadingTypeContainer, fieldErrors.loading_type && styles.inputError]}>
-              {LOADING_TYPES.map((lt) => {
-                const isSelected = formData.loading_type.includes(lt);
-                return (
-                  <TouchableOpacity
-                    key={lt}
-                    style={[styles.loadingTypeChip, isSelected && styles.loadingTypeChipActive]}
-                    onPress={() => toggleLoadingType(lt)}
-                    data-testid={`loading-type-${lt.replace(/\s/g, '-').toLowerCase()}`}
-                  >
-                    <Ionicons
-                      name={isSelected ? 'checkbox' : 'square-outline'}
-                      size={20}
-                      color={isSelected ? '#007AFF' : '#999'}
-                    />
-                    <Text style={[styles.loadingTypeText, isSelected && styles.loadingTypeTextActive]}>
-                      {lt}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            <Text style={styles.helperText}>Select one or both loading types</Text>
-
-            {prostheticOptions.length > 0 && (
-              <>
-                <Text style={styles.label}>Prosthetic Treatment Plan</Text>
-                <TouchableOpacity
-                  style={styles.dropdownButton}
-                  onPress={() => setShowProstheticDropdown(true)}
-                  data-testid="select-prosthetic-plan"
-                >
-                  <Text style={formData.prosthetic_plan ? styles.dropdownText : styles.dropdownPlaceholder}>
-                    {formData.prosthetic_plan || 'Select Prosthetic Plan'}
+                  <Text style={formData.supervisor_name ? styles.dropdownText : styles.dropdownPlaceholder}>
+                    {formData.supervisor_name || 'Select Supervising Faculty'}
                   </Text>
                   <Ionicons name="chevron-down" size={20} color="#666" />
                 </TouchableOpacity>
-              </>
-            )}
 
-            <Text style={styles.label}>Bone Graft/Membrane Specifications (Optional)</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={formData.bone_graft_specifications}
-              onChangeText={(v) => handleInputChange('bone_graft_specifications', v)}
-              placeholder="Enter bone graft/membrane specifications"
-              multiline
-              numberOfLines={3}
-              data-testid="input-bone-graft"
-            />
+                <Text style={styles.label}>Implant Incharge *</Text>
+                <TouchableOpacity
+                  style={[styles.dropdownButton, fieldErrors.implant_incharge_id && styles.inputError]}
+                  onPress={() => setShowInchargeDropdown(true)}
+                  data-testid="select-incharge"
+                >
+                  <Text style={formData.implant_incharge_name ? styles.dropdownText : styles.dropdownPlaceholder}>
+                    {formData.implant_incharge_name || 'Select Implant Incharge'}
+                  </Text>
+                  <Ionicons name="chevron-down" size={20} color="#666" />
+                </TouchableOpacity>
 
-            {/* ── Phase 1 Checklist ─── */}
-            <ChecklistForm
-              checklist={checklist}
-              onChecklistChange={setChecklist}
-              phase={1}
-            />
+                {/* ── Payment Details ─── */}
+                <Text style={styles.sectionTitle}>Payment Details</Text>
 
-            <TouchableOpacity
-              style={[styles.submitButton, loading && styles.buttonDisabled]}
-              onPress={handleSubmit}
-              disabled={loading}
-              data-testid="submit-procedure-btn"
-            >
-              {loading ? (
-                <ActivityIndicator color="#FFF" />
-              ) : (
-                <Text style={styles.submitButtonText}>Submit Procedure</Text>
-              )}
-            </TouchableOpacity>
-          </View>
+                <Text style={styles.label}>Receipt Number *</Text>
+                <TextInput
+                  style={[styles.input, fieldErrors.receipt_number && styles.inputError]}
+                  value={formData.receipt_number}
+                  onChangeText={(v) => handleInputChange('receipt_number', v)}
+                  placeholder="Enter receipt number"
+                  data-testid="input-receipt-number"
+                />
+
+                <Text style={styles.label}>Amount Paid (INR) *</Text>
+                <TextInput
+                  style={[styles.input, fieldErrors.amount_paid && styles.inputError]}
+                  value={formData.amount_paid}
+                  onChangeText={(v) => handleInputChange('amount_paid', v)}
+                  placeholder="Enter amount"
+                  keyboardType="numeric"
+                  data-testid="input-amount-paid"
+                />
+
+                {/* ── Schedule ─── */}
+                <Text style={styles.sectionTitle}>Schedule</Text>
+
+                <Text style={styles.label}>Procedure Date *</Text>
+                <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowCalendar(true)} data-testid="select-date">
+                  <Ionicons name="calendar" size={20} color="#007AFF" />
+                  <Text style={styles.datePickerText}>{formatDisplayDate(formData.procedure_date)}</Text>
+                  <Ionicons name="chevron-down" size={20} color="#666" />
+                </TouchableOpacity>
+                <Text style={styles.helperText}>
+                  Mon-Fri: 10:00 AM &amp; 2:00 PM | Saturday: 10:00 AM only | No Sundays
+                </Text>
+
+                <Text style={styles.label}>Procedure Time *</Text>
+                <View style={styles.timeSlotContainer}>
+                  {getAvailableTimeSlots().map((slot) => (
+                    <TouchableOpacity
+                      key={slot.value}
+                      style={[styles.timeSlotButton, formData.procedure_time === slot.value && styles.timeSlotButtonActive]}
+                      onPress={() => handleInputChange('procedure_time', slot.value)}
+                      data-testid={`time-slot-${slot.value}`}
+                    >
+                      <Ionicons name="time" size={18} color={formData.procedure_time === slot.value ? '#FFF' : '#007AFF'} />
+                      <Text style={[styles.timeSlotText, formData.procedure_time === slot.value && styles.timeSlotTextActive]}>
+                        {slot.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {/* ── Procedure Details ─── */}
+                <Text style={styles.sectionTitle}>Procedure Details</Text>
+
+                <Text style={styles.label}>Type of Implant Procedure *</Text>
+                <TouchableOpacity
+                  style={[styles.dropdownButton, fieldErrors.implant_procedure_type && styles.inputError]}
+                  onPress={() => setShowProcedureTypeDropdown(true)}
+                  data-testid="select-procedure-type"
+                >
+                  <Text style={formData.implant_procedure_type ? styles.dropdownText : styles.dropdownPlaceholder}>
+                    {formData.implant_procedure_type || 'Select Procedure Type'}
+                  </Text>
+                  <Ionicons name="chevron-down" size={20} color="#666" />
+                </TouchableOpacity>
+
+                <Text style={styles.label}>Type of Loading *</Text>
+                <View style={[styles.loadingTypeContainer, fieldErrors.loading_type && styles.inputError]}>
+                  {LOADING_TYPES.map((lt) => {
+                    const isSelected = formData.loading_type.includes(lt);
+                    return (
+                      <TouchableOpacity
+                        key={lt}
+                        style={[styles.loadingTypeChip, isSelected && styles.loadingTypeChipActive]}
+                        onPress={() => toggleLoadingType(lt)}
+                        data-testid={`loading-type-${lt.replace(/\s/g, '-').toLowerCase()}`}
+                      >
+                        <Ionicons
+                          name={isSelected ? 'checkbox' : 'square-outline'}
+                          size={20}
+                          color={isSelected ? '#007AFF' : '#999'}
+                        />
+                        <Text style={[styles.loadingTypeText, isSelected && styles.loadingTypeTextActive]}>
+                          {lt}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <Text style={styles.helperText}>Select one or both loading types</Text>
+
+                {prostheticOptions.length > 0 && (
+                  <>
+                    <Text style={styles.label}>Prosthetic Treatment Plan</Text>
+                    <TouchableOpacity
+                      style={styles.dropdownButton}
+                      onPress={() => setShowProstheticDropdown(true)}
+                      data-testid="select-prosthetic-plan"
+                    >
+                      <Text style={formData.prosthetic_plan ? styles.dropdownText : styles.dropdownPlaceholder}>
+                        {formData.prosthetic_plan || 'Select Prosthetic Plan'}
+                      </Text>
+                      <Ionicons name="chevron-down" size={20} color="#666" />
+                    </TouchableOpacity>
+                  </>
+                )}
+
+                <Text style={styles.label}>Bone Graft/Membrane Specifications (Optional)</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  value={formData.bone_graft_specifications}
+                  onChangeText={(v) => handleInputChange('bone_graft_specifications', v)}
+                  placeholder="Enter bone graft/membrane specifications"
+                  multiline
+                  numberOfLines={3}
+                  data-testid="input-bone-graft"
+                />
+
+                {/* ── Phase 1 Checklist ─── */}
+                <ChecklistForm
+                  checklist={checklist}
+                  onChecklistChange={setChecklist}
+                  phase={1}
+                />
+
+                <TouchableOpacity
+                  style={[styles.submitButton, loading && styles.buttonDisabled]}
+                  onPress={handleSubmit}
+                  disabled={loading}
+                  data-testid="submit-procedure-btn"
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#FFF" />
+                  ) : (
+                    <>
+                      <Text style={styles.submitButtonText}>Submit & Continue to Implant Selection</Text>
+                      <Ionicons name="arrow-forward" size={20} color="#FFF" style={{ marginLeft: 6 }} />
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+
+          {/* ══════════════ STEP 2: Implant Selection ══════════════ */}
+          {wizardStep === 2 && newProcedureId && (
+            <>
+              <View style={styles.header}>
+                <Text style={styles.title}>Implant Selection</Text>
+                <Text style={styles.subtitle}>
+                  Case for {formData.patient_name} created successfully. Now plan your implants.
+                </Text>
+              </View>
+
+              <View style={styles.successBanner} data-testid="case-created-banner">
+                <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+                <Text style={styles.successBannerText}>Case submitted for approval</Text>
+              </View>
+
+              <CaseImplantPlanning
+                procedureId={newProcedureId}
+                isOwner={true}
+                userRole="student"
+              />
+
+              <View style={styles.step2Actions}>
+                <TouchableOpacity
+                  style={styles.step2DoneBtn}
+                  onPress={() => router.push(`/procedures/${newProcedureId}`)}
+                  data-testid="done-implant-btn"
+                >
+                  <Ionicons name="checkmark-circle" size={20} color="#FFF" />
+                  <Text style={styles.step2DoneBtnText}>Done - View Case</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.step2SkipBtn}
+                  onPress={() => router.push('/(tabs)/procedures')}
+                  data-testid="skip-implant-btn"
+                >
+                  <Text style={styles.step2SkipBtnText}>Skip for Now</Text>
+                  <Ionicons name="arrow-forward" size={16} color="#666" />
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -730,8 +803,11 @@ const styles = StyleSheet.create({
   loadingTypeContainer: {
     flexDirection: 'row',
     gap: 12,
-    padding: 4,
-    borderRadius: 8,
+    padding: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#DDD',
+    backgroundColor: '#FAFAFA',
   },
   loadingTypeChip: {
     flex: 1,
@@ -756,6 +832,8 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
     marginTop: 24,
+    flexDirection: 'row',
+    justifyContent: 'center',
   },
   buttonDisabled: { opacity: 0.6 },
   submitButtonText: { color: '#FFF', fontSize: 18, fontWeight: '600' },
@@ -775,4 +853,92 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E0E0E0',
   },
   modalTitle: { fontSize: 18, fontWeight: '600', color: '#333' },
+  // Wizard step indicator
+  stepIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  stepDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#CCC',
+    borderWidth: 2,
+    borderColor: '#CCC',
+  },
+  stepDotActive: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+  stepLine: {
+    width: 60,
+    height: 3,
+    backgroundColor: '#CCC',
+    marginHorizontal: 4,
+  },
+  stepLineDone: {
+    backgroundColor: '#007AFF',
+  },
+  stepLabel: {
+    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#555',
+    marginBottom: 16,
+  },
+  // Success banner for Step 2
+  successBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E9',
+    borderRadius: 10,
+    padding: 14,
+    gap: 10,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#C8E6C9',
+  },
+  successBannerText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#2E7D32',
+  },
+  // Step 2 action buttons
+  step2Actions: {
+    marginTop: 20,
+    gap: 12,
+    paddingBottom: 32,
+  },
+  step2DoneBtn: {
+    backgroundColor: '#007AFF',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  step2DoneBtnText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  step2SkipBtn: {
+    borderWidth: 1.5,
+    borderColor: '#CCC',
+    borderRadius: 12,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  step2SkipBtnText: {
+    color: '#666',
+    fontSize: 15,
+    fontWeight: '500',
+  },
 });

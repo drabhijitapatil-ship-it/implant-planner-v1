@@ -667,11 +667,11 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
-        {/* Implant Planning - Read-only view for later phases */}
+        {/* Implant Planning - Standalone Section (always visible) */}
         {procedure.status !== 'pending_phase1' && (
           <CaseImplantPlanning
             procedureId={id as string}
-            isOwner={false}
+            isOwner={user?.id === procedure.student_id}
             userRole={user?.role || ''}
           />
         )}
