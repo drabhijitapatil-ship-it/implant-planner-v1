@@ -334,14 +334,17 @@ export default function NewProcedureScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent}>
 
           {/* ── Step Indicator ─── */}
-          <View style={styles.stepIndicator} data-testid="wizard-step-indicator">
-            <View style={[styles.stepDot, styles.stepDotActive]} />
-            <View style={[styles.stepLine, wizardStep === 2 && styles.stepLineDone]} />
-            <View style={[styles.stepDot, wizardStep === 2 && styles.stepDotActive]} />
+          <View style={styles.stepIndicatorBar}>
+            <View style={[styles.stepPill, styles.stepPillActive]}>
+              <Text style={styles.stepPillText}>1</Text>
+              <Text style={styles.stepPillLabel}>Case Details</Text>
+            </View>
+            <View style={[styles.stepConnector, wizardStep === 2 && styles.stepConnectorDone]} />
+            <View style={[styles.stepPill, wizardStep === 2 && styles.stepPillActive]}>
+              <Text style={[styles.stepPillText, wizardStep < 2 && { color: '#999' }]}>2</Text>
+              <Text style={[styles.stepPillLabel, wizardStep < 2 && { color: '#999' }]}>Implant Selection</Text>
+            </View>
           </View>
-          <Text style={styles.stepLabel}>
-            {wizardStep === 1 ? 'Step 1: Case Details & Pre-Surgical Protocol' : 'Step 2: Implant Selection'}
-          </Text>
 
           {/* ══════════════ STEP 1: Case Form ══════════════ */}
           {wizardStep === 1 && (
@@ -806,6 +809,7 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 10,
     borderWidth: 1,
+    borderStyle: 'solid',
     borderColor: '#DDD',
     backgroundColor: '#FAFAFA',
   },
@@ -854,40 +858,51 @@ const styles = StyleSheet.create({
   },
   modalTitle: { fontSize: 18, fontWeight: '600', color: '#333' },
   // Wizard step indicator
-  stepIndicator: {
+  stepIndicatorBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 16,
     marginTop: 4,
+    paddingHorizontal: 8,
   },
-  stepDot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#CCC',
-    borderWidth: 2,
-    borderColor: '#CCC',
+  stepPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F0F0',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    gap: 6,
   },
-  stepDotActive: {
+  stepPillActive: {
+    backgroundColor: '#E3F2FD',
+  },
+  stepPillText: {
+    fontSize: 13,
+    fontWeight: '700',
     backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
-  },
-  stepLine: {
-    width: 60,
-    height: 3,
-    backgroundColor: '#CCC',
-    marginHorizontal: 4,
-  },
-  stepLineDone: {
-    backgroundColor: '#007AFF',
-  },
-  stepLabel: {
+    color: '#FFF',
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     textAlign: 'center',
+    lineHeight: 22,
+    overflow: 'hidden',
+  },
+  stepPillLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#555',
-    marginBottom: 16,
+    color: '#333',
+  },
+  stepConnector: {
+    width: 30,
+    height: 2,
+    backgroundColor: '#DDD',
+    marginHorizontal: 6,
+  },
+  stepConnectorDone: {
+    backgroundColor: '#007AFF',
   },
   // Success banner for Step 2
   successBanner: {
