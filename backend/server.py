@@ -1231,11 +1231,17 @@ async def save_implant_plan(
     current_user: dict = Depends(get_current_user),
 ):
     """Save or update implant plans (1-6 implants) for a procedure."""
-    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0, "student_id": 1})
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0, "student_id": 1, "status": 1})
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
     if current_user["role"] == "student" and proc.get("student_id") != current_user["_id"]:
         raise HTTPException(status_code=403, detail="You can only modify your own procedures")
+
+    # Lock implant plan editing after Phase 2 is approved
+    editable_statuses = {"draft", "pending_phase1", "phase1_approved", "pending_phase2"}
+    if proc.get("status") not in editable_statuses:
+        raise HTTPException(status_code=403, detail="Implant plan cannot be modified after Phase 2 approval")
+
     if len(plan.implants) < 1 or len(plan.implants) > 6:
         raise HTTPException(status_code=400, detail="Must plan between 1 and 6 implants")
 
