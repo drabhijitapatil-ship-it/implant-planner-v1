@@ -21,7 +21,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const IMAGE_SIZE = SCREEN_WIDTH * 0.55;
+const IMAGE_SIZE = Math.min(SCREEN_WIDTH * 0.55, 220);
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -131,7 +131,7 @@ export default function LoginScreen() {
                     onChangeText={setEmail}
                     placeholder="Email / Username"
                     placeholderTextColor="#90A4AE"
-                    keyboardType="email-address"
+                    keyboardType="default"
                     autoCapitalize="none"
                     autoCorrect={false}
                     data-testid="login-email-input"
@@ -220,10 +220,9 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+    justifyContent: 'center',
   },
   content: {
-    flex: 1,
-    justifyContent: 'center',
     paddingHorizontal: 28,
     paddingVertical: 16,
   },
