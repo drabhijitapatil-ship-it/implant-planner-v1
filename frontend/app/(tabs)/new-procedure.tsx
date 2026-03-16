@@ -806,12 +806,12 @@ const styles = StyleSheet.create({
   loadingTypeContainer: {
     flexDirection: 'row',
     gap: 12,
-    padding: 8,
-    borderRadius: 10,
-    borderWidth: 1,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
     borderStyle: 'solid',
-    borderColor: '#DDD',
-    backgroundColor: '#FAFAFA',
+    borderColor: '#C5CDD5',
+    backgroundColor: '#F4F6F8',
   },
   loadingTypeChip: {
     flex: 1,
@@ -822,7 +822,7 @@ const styles = StyleSheet.create({
     borderColor: '#DDD',
     borderRadius: 10,
     padding: 14,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: '#FFF',
   },
   loadingTypeChipActive: {
     borderColor: '#007AFF',
