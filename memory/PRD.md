@@ -68,6 +68,11 @@ A mobile application for prosthodontics departments to manage implant cases thro
 ## Status Flow
 `draft` -> `pending_phase1` -> `phase1_approved` -> `pending_phase2` -> `phase2_approved` -> `pending_stage2_surgical` -> `stage2_surgical_approved` -> `pending_stage2_prosthetic` -> `completed`
 
+## Deployment Fixes (Mar 2026)
+- Fixed `.gitignore` blocking `.env` files from deployment
+- CORS origins now read from `CORS_ORIGINS` env variable
+- Aligned `package.json` start script with supervisor config (`--tunnel`)
+
 ## Backlog
 ### P2 - Refactoring
 - Backend refactoring (decompose server.py into routers/models/services)
