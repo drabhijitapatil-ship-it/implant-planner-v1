@@ -51,6 +51,12 @@ A mobile application for prosthodontics departments to manage implant cases thro
 - Frontend: Two-step rejection modal (select type → enter reason). Permanent rejection banner (red) and revision-requested banner (orange) displayed on case detail page.
 - Notifications sent to case creator for both rejection types with reason included.
 
+### ImplantLens – Clinical Case Album (Mar 2026)
+- New standalone feature accessible from hamburger menu
+- **Case Album Listing** (`/implantlens`): Lists all cases with photo completion progress bars, missing photo alerts (count + first 5 missing steps), search by patient/student name, and stats (Total/Complete/In Progress/No Photos)
+- **Case Album Detail** (`/implantlens/[caseId]`): Full-screen CasePhotoAlbum view with case info header and "Full Case" link
+- **Backend** `GET /api/implantlens/cases`: Returns cases with photo stats (photos_uploaded, photos_total, missing_count, missing_steps). Role-filtered: students see own, supervisors see assigned/created, admin/incharge see all.
+
 ## Key Endpoints
 - `POST /api/procedures` — Create case (student/supervisor/incharge)
 - `POST /api/procedures/{id}/implant-plan` — Save implant plans (role-based lock)
