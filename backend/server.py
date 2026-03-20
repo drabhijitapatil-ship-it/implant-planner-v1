@@ -1836,6 +1836,53 @@ async def get_procedure_photos(
     return result
 
 
+@api_router.get("/implantlens/cases")
+async def get_implantlens_cases(current_user: dict = Depends(get_current_user)):
+    """Get all cases with photo completion stats for ImplantLens album view."""
+    query = {}
+    if current_user["role"] == "student":
+        query["student_id"] = current_user["_id"]
+    elif current_user["role"] == "supervisor":
+        query["$or"] = [
+            {"supervisor_id": current_user["_id"]},
+            {"created_by_id": current_user["_id"]},
+        ]
+    # admin/implant_incharge see all
+
+    total_steps = sum(len(phase["steps"]) for phase in PHOTO_STEPS.values())
+
+    cursor = db.procedures.find(query, {"_id": 1, "patient_name": 1, "student_name": 1, "status": 1, "photos": 1, "implant_procedure_type": 1, "created_at": 1, "procedure_date": 1}).sort("created_at", -1)
+    cases = []
+    async for proc in cursor:
+        photos = proc.get("photos", {})
+        uploaded_count = sum(1 for step_id, step_photos in photos.items() if isinstance(step_photos, list) and len(step_photos) > 0)
+
+        # Collect missing steps
+        uploaded_step_ids = set(step_id for step_id, step_photos in photos.items() if isinstance(step_photos, list) and len(step_photos) > 0)
+        missing = []
+        for phase_num, phase_data in PHOTO_STEPS.items():
+            for step in phase_data["steps"]:
+                if step["id"] not in uploaded_step_ids:
+                    missing.append({"phase": phase_num, "label": step["label"]})
+
+        cases.append({
+            "id": str(proc["_id"]),
+            "patient_name": proc.get("patient_name", ""),
+            "student_name": proc.get("student_name", ""),
+            "status": proc.get("status", ""),
+            "implant_procedure_type": proc.get("implant_procedure_type", ""),
+            "procedure_date": proc.get("procedure_date", ""),
+            "photos_uploaded": uploaded_count,
+            "photos_total": total_steps,
+            "missing_count": len(missing),
+            "missing_steps": missing[:5],  # First 5 missing for preview
+        })
+
+    return {"cases": cases, "total_steps": total_steps}
+
+
+
+
 @api_router.get("/photos/{filename}")
 async def serve_photo(filename: str, current_user: dict = Depends(get_current_user)):
     """Serve a photo file."""
