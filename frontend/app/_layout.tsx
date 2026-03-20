@@ -1,6 +1,5 @@
 import { Stack } from 'expo-router';
 import { AuthProvider } from '../contexts/AuthContext';
-import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 export default function RootLayout() {
@@ -12,6 +11,11 @@ export default function RootLayout() {
           <Stack.Screen name="auth/login" />
           <Stack.Screen name="auth/register" />
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="implantlens" />
+          <Stack.Screen name="procedures/[id]" />
+          <Stack.Screen name="procedures/submit-phase2/[id]" />
+          <Stack.Screen name="procedures/submit-stage2-surgical/[id]" />
+          <Stack.Screen name="procedures/submit-stage2-prosthetic/[id]" />
         </Stack>
       </AuthProvider>
     </GestureHandlerRootView>
