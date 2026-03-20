@@ -6,7 +6,7 @@
     "production": {
       "distribution": "store",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://torque-visibility.preview.emergentagent.com"
+        "EXPO_PUBLIC_BACKEND_URL": "https://clinical-album.preview.emergentagent.com"
       }
     },
     "preview": {

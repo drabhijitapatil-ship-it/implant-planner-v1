@@ -17,7 +17,7 @@ import io
 from datetime import datetime, timedelta
 
 # API Base URL from environment
-BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://torque-visibility.preview.emergentagent.com").rstrip('/')
+BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://clinical-album.preview.emergentagent.com").rstrip('/')
 
 # Test credentials from the request
 STUDENT_EMAIL = "Gaurav.pandey"

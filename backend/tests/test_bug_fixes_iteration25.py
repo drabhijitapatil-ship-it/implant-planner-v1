@@ -12,7 +12,7 @@ import os
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 if not BASE_URL:
-    BASE_URL = "https://torque-visibility.preview.emergentagent.com"
+    BASE_URL = "https://clinical-album.preview.emergentagent.com"
 
 
 class TestBugFix1_FacultyDropdowns:
