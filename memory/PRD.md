@@ -72,6 +72,14 @@ A mobile application for prosthodontics departments to manage implant cases thro
 - Fixed `.gitignore` blocking `.env` files from deployment
 - CORS origins now read from `CORS_ORIGINS` env variable
 - Aligned `package.json` start script with supervisor config (`--tunnel`)
+- **Fixed ERR_NGROK_3200 / Expo Go tunnel failure:**
+  - Root cause: Expo SDK 54 bundles ngrok v2 binary (deprecated servers) + shared ngrok account (throttled)
+  - Fix: Installed ngrok v3 binary via `scripts/install-ngrok-v3.sh` (auto-detects architecture)
+  - Patched `@expo/cli` to use user's ngrok auth token via `EXPO_NGROK_AUTH_TOKEN` env var
+  - Patched `@expo/ngrok` for v3 API compatibility (cleaned tunnel config, kill stale processes)
+  - Skips custom subdomain on free tier (ngrok v3 free doesn't support subdomains)
+  - All patches persisted via `patch-package` in `frontend/patches/`
+  - `EXPO_NGROK_AUTH_TOKEN` env variable required in frontend/.env
 
 ## Backlog
 ### P2 - Refactoring
