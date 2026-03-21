@@ -77,7 +77,9 @@ export default function LoginScreen() {
       router.replace('/(tabs)/dashboard');
     } catch (error: any) {
       const detail = error.message || 'Unknown error';
-      Alert.alert('Login Failed', `${detail}\n\n(Debug: URL=${process.env.EXPO_PUBLIC_BACKEND_URL || 'NOT SET'})`);
+      const status = error.response?.status || 'no status';
+      const respData = JSON.stringify(error.response?.data || {});
+      Alert.alert('Login Failed', `${detail}\n\nStatus: ${status}\nIdentifier: "${email.trim()}" (len=${email.trim().length})\nURL: ${process.env.EXPO_PUBLIC_BACKEND_URL || 'NOT SET'}\nResp: ${respData.substring(0, 100)}`);
     } finally {
       setLoading(false);
     }
