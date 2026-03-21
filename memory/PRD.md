@@ -81,6 +81,18 @@ A mobile application for prosthodontics departments to manage implant cases thro
   - All patches persisted via `patch-package` in `frontend/patches/`
   - `EXPO_NGROK_AUTH_TOKEN` env variable required in frontend/.env
 
+## Backend Security & Hardening (Mar 2026)
+1. **Rate Limiting** — `slowapi` with `@limiter.limit("5/minute")` on `/auth/login` (SlowAPI + get_remote_address)
+2. **JWT Session Invalidation** — `jti` claim added to tokens; in-memory `token_blocklist` set; `/auth/logout` endpoint adds jti to blocklist; all protected routes check blocklist
+3. **Global Exception Handler** — `@app.exception_handler(Exception)` returns `{"error":"Internal server error","detail":str(exc)}` with 500; HTTPException handler returns clean JSON
+4. **Gunicorn Multi-Worker Config** — `gunicorn.conf.py` (2 workers, UvicornWorker, bind 0.0.0.0:8001) + `start.sh`
+5. **HTTPS Enforcement** — Startup check warns if any configured URL uses `http://` in production
+6. **Unicode Patient Names** — Regex `^[\w\s\-'.À-ÿ]+$` validates patient_name; Pydantic `field_validator` applied
+7. **Input Sanitisation** — `sanitize_input()` strips `<>"';` from all string inputs; `max_length` constraints on all fields (name:100, email:255, etc.); applied via Pydantic `field_validator` on all request models
+
+New dependencies: `slowapi==0.1.9`, `gunicorn==25.1.0`
+New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
+
 ## Backlog
 ### P2 - Refactoring
 - Backend refactoring (decompose server.py into routers/models/services)

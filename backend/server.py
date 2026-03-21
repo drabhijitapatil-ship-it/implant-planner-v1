@@ -1,7 +1,7 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Response
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Response, Request
 from fastapi import status as http_status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from dotenv import load_dotenv
 import io
 from starlette.middleware.cors import CORSMiddleware
@@ -10,7 +10,7 @@ import os
 import logging
 import uuid
 from pathlib import Path
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, field_validator
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta, timezone
 import re
@@ -19,6 +19,9 @@ from passlib.context import CryptContext
 import jwt
 from bson import ObjectId
 import httpx
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 ROOT_DIR = Path(__file__).parent
 UPLOADS_DIR = ROOT_DIR / 'uploads'
@@ -44,6 +47,33 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
+# --- Rate Limiter (SlowAPI) ---
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# --- Token Blocklist (JWT Session Invalidation) ---
+token_blocklist: set = set()
+
+# --- Global Exception Handlers ---
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(status_code=exc.status_code, content={"error": exc.detail, "detail": exc.detail})
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logging.error(f"Unhandled exception: {exc}", exc_info=True)
+    return JSONResponse(status_code=500, content={"error": "Internal server error", "detail": str(exc)})
+
+# --- Input Sanitisation ---
+PATIENT_NAME_REGEX = re.compile(r"^[\w\s\-'.À-ÿ]+$")
+
+def sanitize_input(value: str) -> str:
+    """Strip whitespace and remove dangerous characters from user input."""
+    value = value.strip()
+    value = re.sub(r'[<>"\';]', '', value)
+    return value
+
 # Health check endpoint for Kubernetes liveness/readiness probes
 @app.get("/")
 async def health_check():
@@ -58,14 +88,18 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def create_access_token(data: dict) -> str:
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire, "jti": str(uuid.uuid4())})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
         token = credentials.credentials
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        # Check if token is blocklisted (logout invalidation)
+        jti = payload.get("jti")
+        if jti and jti in token_blocklist:
+            raise HTTPException(status_code=401, detail="Token has been revoked")
         user_id = payload.get("user_id")
         if user_id is None:
             raise HTTPException(status_code=401, detail="Invalid token")
@@ -76,19 +110,26 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 # Models
 class UserRegister(BaseModel):
-    name: str
-    email: EmailStr
-    password: str
-    role: str  # student, supervisor, implant_incharge, administrator, nurse
+    name: str = Field(..., max_length=100)
+    email: EmailStr = Field(..., max_length=255)
+    password: str = Field(..., max_length=128)
+    role: str = Field(..., max_length=30)
+
+    @field_validator('name')
+    @classmethod
+    def sanitize_name(cls, v: str) -> str:
+        return sanitize_input(v)
 
 class UserLogin(BaseModel):
-    email: str  # accepts email or username
-    password: str
+    email: str = Field(..., max_length=255)  # accepts email or username
+    password: str = Field(..., max_length=128)
 
 class UserResponse(BaseModel):
     id: str
@@ -111,53 +152,97 @@ class Checklist(BaseModel):
     surgical: Optional[ChecklistSection] = None
 
 class ProcedureCreate(BaseModel):
-    student_name: Optional[str] = ""
-    patient_name: str
-    registration_number: str
-    supervisor_id: str
-    supervisor_name: str
-    implant_incharge_id: str
-    implant_incharge_name: str
-    receipt_number: str
+    student_name: Optional[str] = Field("", max_length=100)
+    patient_name: str = Field(..., max_length=100)
+    registration_number: str = Field(..., max_length=50)
+    supervisor_id: str = Field(..., max_length=50)
+    supervisor_name: str = Field(..., max_length=100)
+    implant_incharge_id: str = Field(..., max_length=50)
+    implant_incharge_name: str = Field(..., max_length=100)
+    receipt_number: str = Field(..., max_length=50)
     amount_paid: float
-    procedure_date: str
-    procedure_time: str
-    implant_procedure_type: str
+    procedure_date: str = Field(..., max_length=30)
+    procedure_time: str = Field(..., max_length=20)
+    implant_procedure_type: str = Field(..., max_length=100)
     loading_type: List[str] = []
-    prosthetic_plan: str = ""
-    bone_graft_specifications: Optional[str] = ""
+    prosthetic_plan: str = Field("", max_length=500)
+    bone_graft_specifications: Optional[str] = Field("", max_length=500)
     checklist: Optional[Checklist] = None
-    # Legacy fields kept optional for backward compat with existing data
-    implant_site: Optional[str] = ""
-    implant_region: Optional[str] = ""
-    implant_company: Optional[str] = ""
-    remark: Optional[str] = ""
+    implant_site: Optional[str] = Field("", max_length=50)
+    implant_region: Optional[str] = Field("", max_length=50)
+    implant_company: Optional[str] = Field("", max_length=100)
+    remark: Optional[str] = Field("", max_length=1000)
+
+    @field_validator('patient_name')
+    @classmethod
+    def validate_patient_name(cls, v: str) -> str:
+        v = sanitize_input(v)
+        if not PATIENT_NAME_REGEX.match(v):
+            raise ValueError("Patient name contains invalid characters")
+        return v
+
+    @field_validator('student_name', 'supervisor_name', 'implant_incharge_name')
+    @classmethod
+    def sanitize_names(cls, v: str) -> str:
+        if v:
+            return sanitize_input(v)
+        return v
+
+    @field_validator('registration_number', 'receipt_number', 'prosthetic_plan', 'bone_graft_specifications', 'remark')
+    @classmethod
+    def sanitize_text_fields(cls, v: str) -> str:
+        if v:
+            return sanitize_input(v)
+        return v
 
 class ProcedureUpdate(BaseModel):
-    patient_name: Optional[str] = None
-    registration_number: Optional[str] = None
-    supervisor_id: Optional[str] = None
-    supervisor_name: Optional[str] = None
-    implant_incharge_id: Optional[str] = None
-    implant_incharge_name: Optional[str] = None
-    receipt_number: Optional[str] = None
+    patient_name: Optional[str] = Field(None, max_length=100)
+    registration_number: Optional[str] = Field(None, max_length=50)
+    supervisor_id: Optional[str] = Field(None, max_length=50)
+    supervisor_name: Optional[str] = Field(None, max_length=100)
+    implant_incharge_id: Optional[str] = Field(None, max_length=50)
+    implant_incharge_name: Optional[str] = Field(None, max_length=100)
+    receipt_number: Optional[str] = Field(None, max_length=50)
     amount_paid: Optional[float] = None
-    procedure_date: Optional[str] = None
-    procedure_time: Optional[str] = None
-    implant_procedure_type: Optional[str] = None
+    procedure_date: Optional[str] = Field(None, max_length=30)
+    procedure_time: Optional[str] = Field(None, max_length=20)
+    implant_procedure_type: Optional[str] = Field(None, max_length=100)
     loading_type: Optional[List[str]] = None
-    prosthetic_plan: Optional[str] = None
-    bone_graft_specifications: Optional[str] = None
+    prosthetic_plan: Optional[str] = Field(None, max_length=500)
+    bone_graft_specifications: Optional[str] = Field(None, max_length=500)
     checklist: Optional[Checklist] = None
-    implant_site: Optional[str] = None
-    implant_region: Optional[str] = None
-    implant_company: Optional[str] = None
-    remark: Optional[str] = None
+    implant_site: Optional[str] = Field(None, max_length=50)
+    implant_region: Optional[str] = Field(None, max_length=50)
+    implant_company: Optional[str] = Field(None, max_length=100)
+    remark: Optional[str] = Field(None, max_length=1000)
+
+    @field_validator('patient_name')
+    @classmethod
+    def validate_patient_name(cls, v):
+        if v is not None:
+            v = sanitize_input(v)
+            if not PATIENT_NAME_REGEX.match(v):
+                raise ValueError("Patient name contains invalid characters")
+        return v
+
+    @field_validator('supervisor_name', 'implant_incharge_name', 'registration_number', 'receipt_number', 'prosthetic_plan', 'bone_graft_specifications', 'remark')
+    @classmethod
+    def sanitize_optional_text(cls, v):
+        if v is not None:
+            return sanitize_input(v)
+        return v
 
 class ApprovalAction(BaseModel):
-    action: str  # approve or reject
-    rejection_reason: Optional[str] = None
-    rejection_type: Optional[str] = None  # "permanent" or "reconsider"
+    action: str = Field(..., max_length=20)  # approve or reject
+    rejection_reason: Optional[str] = Field(None, max_length=1000)
+    rejection_type: Optional[str] = Field(None, max_length=20)  # "permanent" or "reconsider"
+
+    @field_validator('rejection_reason')
+    @classmethod
+    def sanitize_reason(cls, v):
+        if v is not None:
+            return sanitize_input(v)
+        return v
 
 class Phase2Submit(BaseModel):
     checklist_surgical: ChecklistSection
@@ -192,7 +277,12 @@ class ImplantPlanSave(BaseModel):
 
 
 class FinalCommentSubmit(BaseModel):
-    comment: str
+    comment: str = Field(..., max_length=2000)
+
+    @field_validator('comment')
+    @classmethod
+    def sanitize_comment(cls, v: str) -> str:
+        return sanitize_input(v)
 
 class NotificationResponse(BaseModel):
     id: str
@@ -204,7 +294,7 @@ class NotificationResponse(BaseModel):
     procedure_details: Optional[Dict[str, Any]] = None
 
 class PushTokenRegister(BaseModel):
-    push_token: str
+    push_token: str = Field(..., max_length=255)
 
 
 # Helper to notify the case creator about rejection
@@ -313,7 +403,8 @@ async def register(user: UserRegister):
     )
 
 @api_router.post("/auth/login")
-async def login(user: UserLogin):
+@limiter.limit("5/minute")
+async def login(request: Request, user: UserLogin):
     identifier = user.email.strip().replace('\u200b', '').replace('\ufeff', '')
     password = user.password.strip().replace('\u200b', '').replace('\ufeff', '')
     db_user = None
@@ -385,9 +476,22 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         profile_photo=current_user.get("profile_photo")
     )
 
+# --- Logout (JWT Session Invalidation) ---
+@api_router.post("/auth/logout")
+async def logout(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    try:
+        token = credentials.credentials
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        jti = payload.get("jti")
+        if jti:
+            token_blocklist.add(jti)
+        return {"message": "Logged out successfully"}
+    except Exception:
+        return {"message": "Logged out"}
+
 # Profile Photo Update
 class ProfilePhotoUpdate(BaseModel):
-    profile_photo: str  # Base64 encoded image
+    profile_photo: str  # Base64 encoded image — no max_length (images are large)
 
 @api_router.put("/auth/profile-photo")
 async def update_profile_photo(
@@ -429,10 +533,15 @@ async def get_users(role: Optional[str] = None, current_user: dict = Depends(get
 
 # User Management (Admin/Implant Incharge only)
 class UserCreate(BaseModel):
-    name: str
-    email: EmailStr
-    password: str
-    role: str
+    name: str = Field(..., max_length=100)
+    email: EmailStr = Field(..., max_length=255)
+    password: str = Field(..., max_length=128)
+    role: str = Field(..., max_length=30)
+
+    @field_validator('name')
+    @classmethod
+    def sanitize_name(cls, v: str) -> str:
+        return sanitize_input(v)
 
 @api_router.post("/users")
 async def create_user(user: UserCreate, current_user: dict = Depends(get_current_user)):
@@ -480,9 +589,16 @@ async def delete_user(user_id: str, current_user: dict = Depends(get_current_use
     return {"message": "User deleted successfully"}
 
 class UserUpdate(BaseModel):
-    name: Optional[str] = None
-    role: Optional[str] = None
-    password: Optional[str] = None
+    name: Optional[str] = Field(None, max_length=100)
+    role: Optional[str] = Field(None, max_length=30)
+    password: Optional[str] = Field(None, max_length=128)
+
+    @field_validator('name')
+    @classmethod
+    def sanitize_name(cls, v):
+        if v is not None:
+            return sanitize_input(v)
+        return v
 
 @api_router.put("/users/{user_id}")
 async def update_user(user_id: str, user: UserUpdate, current_user: dict = Depends(get_current_user)):
@@ -1932,7 +2048,7 @@ async def generate_album(
     pdf.cell(0, 10, _safe(f"Implant In-Charge: {implant_incharge_name}"), ln=True, align="C")
     pdf.cell(0, 10, "", ln=True)
     pdf.set_font("Helvetica", "", 11)
-    pdf.cell(0, 10, f"Department of Prosthodontics", ln=True, align="C")
+    pdf.cell(0, 10, "Department of Prosthodontics", ln=True, align="C")
     pdf.cell(0, 10, f"Generated: {datetime.now(timezone.utc).strftime('%B %d, %Y')}", ln=True, align="C")
 
     # Page 2 — Patient & Treatment Details
@@ -4040,6 +4156,15 @@ async def shutdown_db_client():
 async def seed_on_startup():
     """Auto-seed users and implant library if collections are empty (for fresh deployments)."""
     import pandas as pd
+
+    # --- HTTPS enforcement check ---
+    cors_origins = os.environ.get("CORS_ORIGINS", "")
+    env_urls = [cors_origins, os.environ.get("REACT_APP_BACKEND_URL", ""), os.environ.get("EXPO_PUBLIC_BACKEND_URL", "")]
+    for url in env_urls:
+        for u in url.split(","):
+            u = u.strip()
+            if u and u.startswith("http://") and u not in ("http://localhost", "http://127.0.0.1", "http://0.0.0.0"):
+                logging.warning(f"HTTPS enforcement: URL '{u}' uses http:// instead of https://. Consider using HTTPS in production.")
 
     # --- Seed users ---
     user_count = await db.users.count_documents({})
