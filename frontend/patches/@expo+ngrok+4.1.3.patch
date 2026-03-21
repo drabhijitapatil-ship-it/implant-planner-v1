@@ -1,0 +1,75 @@
+diff --git a/node_modules/@expo/ngrok/index.js b/node_modules/@expo/ngrok/index.js
+index c9e5f8d..1769708 100644
+--- a/node_modules/@expo/ngrok/index.js
++++ b/node_modules/@expo/ngrok/index.js
+@@ -1,5 +1,6 @@
+ const { NgrokClient, NgrokClientError } = require("./src/client");
+ const uuid = require("uuid");
++const { execSync } = require("child_process");
+ const {
+   getProcess,
+   getActiveProcess,
+@@ -12,6 +13,15 @@ const { defaults, validate, isRetriable } = require("./src/utils");
+ let processUrl = null;
+ let ngrokClient = null;
+ 
++function killAllNgrokProcesses() {
++  try {
++    // Kill all ngrok processes to avoid free-tier tunnel conflicts
++    execSync("pkill -f ngrok 2>/dev/null || true", { stdio: "ignore" });
++  } catch (e) {
++    // ignore
++  }
++}
++
+ async function connect(opts) {
+   opts = defaults(opts);
+   validate(opts);
+@@ -19,6 +29,11 @@ async function connect(opts) {
+     await setAuthtoken(opts);
+   }
+ 
++  // Kill ALL existing ngrok processes first (free tier: 1 tunnel limit)
++  killAllNgrokProcesses();
++  // Small delay to let processes die
++  await new Promise((resolve) => setTimeout(resolve, 1000));
++
+   processUrl = await getProcess(opts);
+   ngrokClient = new NgrokClient(processUrl);
+   return connectRetry(opts);
+@@ -26,8 +41,22 @@ async function connect(opts) {
+ 
+ async function connectRetry(opts, retryCount = 0) {
+   opts.name = String(opts.name || uuid.v4());
++  // Build clean tunnel config for ngrok v3 API compatibility
++  const tunnelOpts = {
++    name: opts.name,
++    proto: opts.proto || "http",
++    addr: String(opts.addr || opts.port || 80),
++  };
++  if (opts.subdomain) tunnelOpts.subdomain = opts.subdomain;
++  if (opts.hostname) tunnelOpts.hostname = opts.hostname;
++  if (opts.host_header) tunnelOpts.host_header = opts.host_header;
++  if (opts.bind_tls !== undefined) tunnelOpts.bind_tls = opts.bind_tls;
++  if (opts.inspect !== undefined) tunnelOpts.inspect = opts.inspect;
++  if (opts.auth) tunnelOpts.auth = opts.auth;
++  if (opts.region) tunnelOpts.region = opts.region;
++
+   try {
+-    const response = await ngrokClient.startTunnel(opts);
++    const response = await ngrokClient.startTunnel(tunnelOpts);
+     return response.public_url;
+   } catch (err) {
+     if (!isRetriable(err) || retryCount >= 100) {
+@@ -57,10 +86,8 @@ async function disconnect(publicUrl) {
+ }
+ 
+ async function kill() {
+-  if (!ngrokClient) return;
+-  await killProcess();
++  killAllNgrokProcesses();
+   ngrokClient = null;
+-  tunnels = {};
+ }
+ 
+ function getUrl() {
