@@ -6,7 +6,6 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { useAuth } from '../../contexts/AuthContext';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';
 import {

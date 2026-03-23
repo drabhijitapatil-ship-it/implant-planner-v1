@@ -18,7 +18,7 @@ import pytest
 import requests
 import os
 
-BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://clinical-album.preview.emergentagent.com')
+BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://implant-case-builder.preview.emergentagent.com')
 
 
 class TestRiskCalculator:

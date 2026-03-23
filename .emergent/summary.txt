@@ -1,128 +1,141 @@
-<analysis>**original_problem_statement**: The user is building a comprehensive prosthodontics mobile application to manage implant cases through a multi-phase approval workflow (Phases 1-4, Completion). Recent requirements involve fine-tuning permissions (who can edit implant plans and when), creating cases without a student by faculty (Supervisors/Implant In-charges), overhauling the case rejection mechanism into a Two-Tier system (Permanent vs. Reconsider), and introducing an ImplantLens - Clinical Case Album to the side menu to view all patient case photos.
-
-PRODUCT REQUIREMENTS:
-- Restrict students from editing the Implant Planning details after Phase 2 approval.
-- Allow Supervisors and Implant In-charges to edit Implant Planning details at any stage.
-- Enable faculty to schedule New Cases directly. Supervisor cases require In-charge approval; In-charge cases are auto-approved fully.
-- Implement Two-Tier Rejection: Reject Permanently stops the case completely. Reject with Consideration allows the student to edit the rejected phase and resubmit.
-- Add an ImplantLens - Clinical Case Album screen accessible via the hamburger menu to view all case photos. 
+<analysis>**original_problem_statement**: The user is building a comprehensive prosthodontics mobile application. Recent requests focused on fixing local Expo Go tunneling issues (ngrok failures), hardening backend security (7 specific features including rate limiting and JWT invalidation), overhauling the New Case form into a 2-step workflow, integrating Medical Assessment factors directly into the Implant Risk Calculator, and resolving a production deployment build failure.
 
 **User's preferred language**: English (INSTRUCT next agent to respond in English only)
 
 **what currently exists?**: 
-A full-stack application (React Native/Expo frontend + FastAPI backend + MongoDB). The core multi-phase workflow is implemented with robust role-based access control. Faculty can create auto-approved cases. Implant plans are strictly locked for students after Phase 2, but unlocked for faculty. The system features dynamic PDF report generation, a functional Suggest Me implant recommendation engine, a Two-Tier case rejection flow, and a newly implemented ImplantLens Case Album module.
+A React Native (Expo) frontend + FastAPI backend + MongoDB application. The backend has been hardened with SlowAPI (rate limiting), JWT blocklisting, global exception handling, input sanitization, and runs via Gunicorn. The Expo environment is locally patched to use ngrok v3 to bypass rate limits. The New Case creation screen operates as a 2-step wizard.
 
 **Last working item**: 
-- **Last item agent was working**: Implementing the ImplantLens - Clinical Case Album feature. The user provided React Native/Firebase code snippets, which the agent adapted to the existing Expo Router + FastAPI + MongoDB stack. It created the  backend endpoint and the frontend screens ( and ), and added the link to the drawer navigation.
-- **Status**: USER VERIFICATION PENDING
-- **Agent Testing Done**: Y (Backend tested successfully in Iteration 41; 16/16 passed).
-- **Which testing method agent to use?**: Frontend testing agent / Screenshot tool (To visually verify the newly created ImplantLens screens if the user requests UI refinements).
-- **User Testing Done**: N
+    - **Last item agent was working**: Fixing a production deployment build failure. The EAS build failed because  was imported in  but not installed in . The agent just performed a  to remove the dependency and replace it with a text-based date input.
+    - **Status**: TESTING PENDING
+    - **Agent Testing Done**: N (Code was edited, but build/deployment has not been re-verified).
+    - **Which testing method agent to use?**: Frontend testing agent to verify  renders properly without the datepicker, and  to verify the build now succeeds.
+    - **User Testing Done**: N
 
 **All Pending/In progress Issue list**: 
-None. All reported bugs and feature requests from the user's latest prompts have been addressed and tested.
+  Issue 1: Production Deployment Build Failure
+     - Attempted fixes: Agent removed the  import from  and replaced it with a standard text input to bypass the missing dependency error.
+     - Next debug checklist: Check if the build now succeeds using  logs. Verify if the fallback text input provides acceptable UX for date entry, or if the package should be properly installed via yarn add v1.22.22
+info Visit https://yarnpkg.com/en/docs/cli/add for documentation about this command..
+     - Why fix this issue and what will be achieved with the fix? The application cannot be deployed to production until this build error is resolved.
+     - Status: TESTING PENDING
+     - Is recurring issue? N
+     - Should Test frontend/backend/both after fix? Frontend (to ensure the form still works) and Deployment.
+     - Blocked on other issue: None.
 
-**In progress Task List**:
+**In progress Task List**: 
 None.
 
-**Upcoming and Future Tasks**:
-Future Tasks:
-- P2: Backend refactoring: Decompose the monolithic  (which is now >4000 lines) into a standard FastAPI project structure (routers, models, services).
-- P2: Frontend refactoring: Modularize complex UI components like , , and .
-- P2: Data cleanup: Create a script to find and remove any duplicate user entries from the database.
+**Upcoming and Future Tasks**
+    Future Tasks:
+    - P2: Backend refactoring: Decompose the monolithic  (>4200 lines) into a standard FastAPI project structure (routers, models, services).
+    - P2: Frontend refactoring: Modularize complex UI components like  and .
+    - P2: Data cleanup: Create a script to find and remove duplicate user entries from the database.
 
-**Completed work in this session**:
-- Phase B Implementation: Photo visibility for faculty, notification badges, removed duplicate Phase 2 notes, torque visibility.
-- Phase C Implementation: Cleaned Phase 4 checklists, final prosthesis visibility, PDF Case Report generation (without photos), standalone Download Photo Album button.
-- Implant Lock: Prevented students from editing implant plans after Phase 2 approval (enforced on both Frontend and Backend).
-- Faculty Permissions: Allowed Supervisors and Implant In-charges to edit implant plans at ANY phase.
-- Faculty Case Creation: Allowed faculty to bypass student requirements when creating a case (auto-approval logic implemented).
-- Fixed Suggest Me Implant System dropdown (mapped to ).
-- Fixed Edit Implant Position modal: Made the modal start at Step 2 (Select System) instead of jumping to the read-only summary (Step 4).
-- Built Two-Tier Rejection System: Implemented Reject Permanently and Reject with Consideration states with distinct UI banners and backend handling.
-- Built ImplantLens Case Album module.
+**Completed work in this session**
+- Fixed Expo Go Tunneling (): Patched  and  to use ngrok v3 and a custom user auth token via .
+- Backend Security Hardening (7 Features): Added SlowAPI rate limiting (5/min for login), JWT session invalidation (blocklist), Global exception handler, Gunicorn config (), HTTPS startup check, Unicode patient name support, and regex Input Sanitization.
+- Overhauled New Case Workflow: Transformed  into a 2-step flow.
+- Integrated Medical Assessments into Risk Calculator: Updated  and backend models to pass medical factors into the existing 18-point risk score logic.
 
-**Earlier issues found/mentioned but not fixed**:
-- None.
+**Earlier issues found/mentioned but not fixed**
+   Issue 1: Invalid Credentials on Deployed App
+   - Debug checklist: User reported login failure on the *deployed* app. Agent verified backend credentials worked via  and added frontend error logs, but it is unclear if the user successfully logged into the production app after the backend hardening changes. Monitor if user reports this again after successful deployment.
+   - Why to solve this issue and what will be achieved with this? Ensures production app is usable.
+   - Should Test frontend/backend/both after fix: Frontend
+   - Is recurring issue? Y
 
-**Known issue recurrence from previous fork**:
-- Recurrence count: 0
-- Status: RESOLVED (The previously known Login issues remained stable throughout this session).
+**Known issue recurrence from previous fork**
+  - Issue recurrence in previous fork: None from the previous handoff, but local ngrok tunnel crashing was a heavy recurring issue in *this* session until patched to v3.
+  - Recurrence count: 0
+  - Status: RESOLVED
 
-**Code Architecture**:
+**Code Architecture**
 
 
-**Key Technical Concepts**:
-- **Frontend**: React Native, Expo Router, Modal-based multi-step wizards, Conditional rendering based on role (, , ).
-- **Backend**: FastAPI, MongoDB (Motor). Monolithic structure. Uses a robust  dictionary and state-machine-like status logic for approvals/rejections.
+**Key Technical Concepts**
+- **Frontend**: React Native, Expo Router. Custom shell scripts and  are used to modify internal Expo CLI tunneling behaviors.
+- **Backend**: FastAPI, MongoDB (Motor). Now uses  with  workers. JWT token invalidation is handled via an in-memory blocklist using the  claim. Uses  for endpoint rate limiting.
 
-**key DB schema**:
-- **procedures**: Key additions include  ('permanent' | 'reconsider'),  (string), and optional student linkage ( can be null for faculty-created cases).
-- **users**: Differentiated closely by . 
+**key DB schema**
+  - : Added fields for  (occlusocervical space, smile line) and  (diabetes, smoking, etc.) to support the new case workflow.
 
-**changes in tech stack**:
-- None.
+**changes in tech stack**
+  - Added , , ,  to Python backend.
+  - Replaced Expo's default ngrok v2 binary with ngrok v3 for local tunneling.
 
-**All files of reference**:
--  (Heavily modified for permissions, 2-tier rejection, and ImplantLens endpoints)
--  (Updated with 2-tier rejection modals and banners)
--  (Fixed Edit flow, Suggest Me)
--  (Adapted for faculty case creation)
--  (Added ImplantLens to hamburger menu)
--  &  (Created for the new feature)
--  (Modified Export PDF contents)
+**All files of reference** 
+-  (Major updates for security hardening and risk calculator logic).
+-  (Re-written for 2-step workflow; recently edited to remove missing datetimepicker dependency).
+-  (Updated to accept medical props).
+-  &  (Created for production server management).
+- Installing ngrok v3 for arm64...
+Replaced node_modules/@expo/ngrok-bin-linux-arm64/ngrok with v3
+ngrok v3 installed: ngrok version 3.37.2 (Created to fix local Expo tunneling).
 
-**Areas that need refactoring**:
--  (Urgent: Codebase is scaling massively into a single file).
--  (Very complex component handling selection, recommendations, and edit flows).
--  (Large file handling all phase views and approvals).
+**Areas that need refactoring**: 
+-  is critically large and handles all routes, models, and logic.
+- The date input fallback in  is currently a raw text input. It may need refactoring to a proper native DatePicker once dependencies are sorted out.
 
-**key api endpoints**:
-- : Secured to block students after Phase 2.
-- : Overhauled to accept  ('permanent' vs 'reconsider').
-- : Fixed return key parsing ().
-- : New endpoint fetching case photo statistics.
+**key api endpoints**
+- : Updated to accept new medical and clinical data.
+- : Now rate-limited (5 requests/minute per IP).
+- : New endpoint; adds JWT  to blocklist.
 
-**Critical Info for New Agent**:
-- **Code Adaptation**: The user frequently shares code snippets using React Navigation () or Firebase. *Do not install or use these directly.* The application uses Expo Router () for navigation and a custom FastAPI + MongoDB backend. Always adapt the user's logic to the existing stack.
-- **Role Permissions**: Be extremely careful with conditional blocks based on . Students have strict limits (e.g., cannot edit implants after P2), while faculty (, ) bypass these limits.
+**Critical Info for New Agent** 
+- **Deployment Build:** The last action taken was a hotfix removing a missing dependency to fix a deployment build. You must verify if the build succeeds now.
+- **Package Management:** The frontend relies heavily on a  script that runs  and Installing ngrok v3 for arm64...
+Replaced node_modules/@expo/ngrok-bin-linux-arm64/ngrok with v3
+ngrok v3 installed: ngrok version 3.37.2. If you ever delete , ensure you run yarn install v1.22.22
+[1/4] Resolving packages...
+success Already up-to-date.
+$ npx patch-package && bash scripts/install-ngrok-v3.sh && npx expo install --fix || true
+patch-package 8.0.1
+Applying patches...
+@expo/cli@54.0.23 ✔
+@expo/ngrok@4.1.3 ✔
+Installing ngrok v3 for arm64...
+Replaced node_modules/@expo/ngrok-bin-linux-arm64/ngrok with v3
+ngrok v3 installed: ngrok version 3.37.2
+env: load .env
+env: export EXPO_TUNNEL_SUBDOMAIN EXPO_PACKAGER_HOSTNAME EXPO_PACKAGER_PROXY_URL EXPO_PUBLIC_BACKEND_URL EXPO_USE_FAST_RESOLVER METRO_CACHE_ROOT EXPO_NGROK_AUTH_TOKEN
+Dependencies are up to date
+Done in 2.14s. so patches are applied.
 
-**documents and test reports created in this job**:
-- 
-- 
-- 
-- 
-- 
-- 
-- 
+**documents and test reports created in this job**
+  - 
+  -  (Backend 20/20 pass for new case workflow).
 
-**Last 10 User Messages and any pending HUMAN messages**:
-1. User approved starting Phase C.
-2. User requested workflow changes: Lock implant edits for students after P2, fix Suggest Me, adjust PDF download buttons.
-3. User clarified permissions: Supervisors/In-charges can edit implants anytime, and can create auto-approved New Cases.
-4. User attached a photo pointing out a bug where clicking Edit on an implant card skipped to the read-only summary (Step 4) instead of allowing them to alter the system/specs.
-5. User requested a Two-Tier Rejection System (Reject Permanently vs Reject with Consideration).
-6. User requested adding ImplantLens - Clinical Case Album to the hamburger menu, supplying generic Firebase/React Native code snippets as a reference. *(Agent implemented this in the final steps before context cutoff)*.
+**Last 10 User Messages and any pending HUMAN messages** 
+1. (Latest) User shared deployment build logs showing  failed due to missing . (Status: Agent applied hotfix, verification pending).
+2. User requested changes to New Case workflow via Word doc, integrating medical assessments into risk calc. (Status: COMPLETED).
+3. User requested 7 specific backend security/hardening features. (Status: COMPLETED).
+4. User shared screenshot showing invalid credentials on the deployed app. (Status: Agent verified backend, added frontend logs).
+5. User provided personal ngrok auth token. (Status: COMPLETED).
+6. User reported Expo Go still failing. (Status: COMPLETED).
+7. User reported same ngrok issue persists. (Status: COMPLETED).
+8. User shared screenshot of Expo Go ngrok offline error. (Status: COMPLETED).
+9. User requested to verify and deploy ImplantLens. (Status: COMPLETED).
+10. User confirmed agent's initial plan. (Status: COMPLETED).
 
-**Project Health Check**:
-- Broken: None
-- Mocked: None
+**Project Health Check:**
+- Broken: Deployment is currently failing (Agent applied a hotfix just before context cutoff, needs verification).
+- Mocked: None.
 
-**3rd Party Integrations**:
-- fpdf2 (Backend PDF generation)
-- expo-image-picker / expo-print / expo-sharing (Frontend media/files)
-- expo-notifications (Backend/Frontend push notifications)
+**3rd Party Integrations** 
+- Expo EAS (Deployment)
+- Ngrok v3 (Local Tunneling)
+- Stripe (Payments) - requires User API Key
 
-**Testing status**:
-- Testing agent used after significant changes: YES (Extensively used across 6 iterations)
-- Troubleshoot agent used after agent stuck in loop: NO
-- Test files created: None strictly, relied on  backend sweeps.
-- Known regressions: None.
+**Testing status**
+  - Testing agent used after significant changes: YES (Tested backend workflow).
+  - Troubleshoot agent used after agent stuck in loop: NO.
+  - Test files created: None.
+  - Known regressions: None known, but watch the frontend login flow on the production URL.
 
-**Credentials to test flow**:
-- Admin/In-Charge:  (or email) / 
-- Supervisor:  (or email) / 
-- Student:  (or email) / 
+**Credentials to test flow:**
+- Admin/In-Charge:  / 
+- Student:  / 
 
-**What agent forgot to execute**:
-- The agent accomplished all user requests flawlessly. It accurately translated the user's raw Firebase/React Native snippets into the Expo/FastAPI stack without breaking the architecture. No tasks were overlooked.</analysis>
+**What agent forgot to execute**
+The agent removed the missing  import from the frontend to fix the build crash, but did not actually trigger a new build/deployment or check if the text-input fallback provides acceptable UX for the user.</analysis>
