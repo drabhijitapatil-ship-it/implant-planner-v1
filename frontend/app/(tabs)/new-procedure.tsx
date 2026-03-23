@@ -113,7 +113,6 @@ export default function NewProcedureScreen() {
 
   // Checklist state
   const [checklistItems, setChecklistItems] = useState<Record<string, boolean>>({});
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [showSupervisorPicker, setShowSupervisorPicker] = useState(false);
   const [showInchargePicker, setShowInchargePicker] = useState(false);
 
@@ -427,23 +426,18 @@ export default function NewProcedureScreen() {
         <Text style={styles.sectionTitle}>Schedule</Text>
         <View style={styles.fieldContainer}>
           <Text style={styles.label}>Procedure Date <Text style={{ color: '#DC3545' }}>*</Text></Text>
-          <TouchableOpacity style={styles.dropdown} onPress={() => setShowDatePicker(true)}>
-            <Text style={[styles.dropdownText, !formData.procedure_date && { color: '#999' }]}>
-              {formData.procedure_date || 'Select Date'}
-            </Text>
-            <Ionicons name="calendar-outline" size={18} color="#666" />
-          </TouchableOpacity>
-          {showDatePicker && (
-            <DateTimePicker
-              value={formData.procedure_date ? new Date(formData.procedure_date) : new Date()}
-              mode="date"
-              minimumDate={new Date()}
-              onChange={(_, date) => {
-                setShowDatePicker(Platform.OS === 'ios');
-                if (date) updateForm('procedure_date', date.toISOString().split('T')[0]);
-              }}
-            />
-          )}
+          <TextInput
+            style={styles.input}
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor="#999"
+            value={formData.procedure_date || ''}
+            onChangeText={(text) => {
+              const cleaned = text.replace(/[^0-9-]/g, '');
+              updateForm('procedure_date', cleaned);
+            }}
+            keyboardType="default"
+            maxLength={10}
+          />
         </View>
         <View style={styles.fieldContainer}>
           <Text style={styles.label}>Time Slot <Text style={{ color: '#DC3545' }}>*</Text></Text>

@@ -69,7 +69,7 @@ A mobile application for prosthodontics departments to manage implant cases thro
 `draft` -> `pending_phase1` -> `phase1_approved` -> `pending_phase2` -> `phase2_approved` -> `pending_stage2_surgical` -> `stage2_surgical_approved` -> `pending_stage2_prosthetic` -> `completed`
 
 ## Deployment Fixes (Mar 2026)
-- Fixed `.gitignore` blocking `.env` files from deployment
+- Fixed `.gitignore` blocking `.env` files from deployment (removed duplicate *.env entries)
 - CORS origins now read from `CORS_ORIGINS` env variable
 - Aligned `package.json` start script with supervisor config (`--tunnel`)
 - **Fixed ERR_NGROK_3200 / Expo Go tunnel failure:**
@@ -80,6 +80,7 @@ A mobile application for prosthodontics departments to manage implant cases thro
   - Skips custom subdomain on free tier (ngrok v3 free doesn't support subdomains)
   - All patches persisted via `patch-package` in `frontend/patches/`
   - `EXPO_NGROK_AUTH_TOKEN` env variable required in frontend/.env
+- **Fixed DateTimePicker build crash (Mar 2026):** Removed `@react-native-community/datetimepicker` usage from `new-procedure.tsx` and replaced with text-based date input (YYYY-MM-DD) to resolve EAS build failure due to missing dependency.
 
 ## New Case Workflow Overhaul (Mar 2026)
 **Two-Step Flow:** Case Details → "Continue to Implant Selection" → Implant Selection → "Submit for Approval"
@@ -115,3 +116,4 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
 - Backend refactoring (decompose server.py into routers/models/services)
 - Frontend refactoring (modularize new-procedure.tsx, [procedureId].tsx)
 - Data cleanup (duplicate user removal)
+- Consider installing `@react-native-community/datetimepicker` properly for better native date picking UX
