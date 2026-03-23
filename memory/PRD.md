@@ -81,6 +81,23 @@ A mobile application for prosthodontics departments to manage implant cases thro
   - All patches persisted via `patch-package` in `frontend/patches/`
   - `EXPO_NGROK_AUTH_TOKEN` env variable required in frontend/.env
 
+## New Case Workflow Overhaul (Mar 2026)
+**Two-Step Flow:** Case Details → "Continue to Implant Selection" → Implant Selection → "Submit for Approval"
+
+**New Fields in Case Details (Phase 1):**
+- Clinical Examination: Intraoral exam (edentulous site, ridge contour, soft tissue, keratinized mucosa)
+- Occlusal Analysis: Conditional on procedure type (non-full-arch: occlusal scheme, parafunction, vertical dimension, opposing dentition; full-arch: vertical dimension in mm, TMJ)
+- Aesthetic Risk Assessment: Conditional non-full-arch (smile line, gingival biotype)
+- Medical Assessment: Diabetes, Smoking, Anticoagulant, Osteoporosis, Radiation (Yes/No) + auto risk classification
+- Prosthetic Plan: Conditional options based on procedure type + loading type, "Other" with manual entry
+
+**Updated Options:**
+- Procedure Types: "Implant Placement with GBR" → "Implant Placement with Guided Bone Regeneration"
+- Loading Types: Added "Early Loading" (now: Immediate, Early, Delayed)
+- Prosthetic Plans: Expanded with Zirconia Ti Base, Custom Abutment, Malo, PEEK, Full Arch options
+
+**Risk Calculator:** Now accepts `medical_assessment` parameter. When provided, adds Medical Risk factor (score 1-3), max_score becomes 18 (vs 15). Generates specific clinical recommendations per medical factor.
+
 ## Backend Security & Hardening (Mar 2026)
 1. **Rate Limiting** — `slowapi` with `@limiter.limit("5/minute")` on `/auth/login` (SlowAPI + get_remote_address)
 2. **JWT Session Invalidation** — `jti` claim added to tokens; in-memory `token_blocklist` set; `/auth/logout` endpoint adds jti to blocklist; all protected routes check blocklist
