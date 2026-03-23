@@ -118,6 +118,12 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
 4. **Form State Persistence** — AppState listener saves form data to AsyncStorage on app background; restores on mount; clears after successful submission
 5. **Client-side Input Sanitisation** — `sanitizeString()` trims whitespace and strips `< > " ' ;` from all string fields before API submission
 
+### Bug Fix: Case Creation Status (Mar 2026)
+- **Fixed**: Implant In-Charge cases no longer auto-complete on creation. All roles (student, supervisor, incharge) now start as `draft` and must go through the normal `draft → pending_phase1 → ...` approval workflow.
+- **Fixed**: Added `status` field to `ProcedureUpdate` model so "Submit for Approval" (PUT with `{status: "pending_phase1"}`) actually works.
+- **Fixed**: Status transition validation — only `draft → pending_phase1` is allowed via PUT endpoint.
+- **Fixed**: Students can now edit their own `draft` procedures (was previously restricted to `pending_supervisor` only).
+
 ## Backlog
 ### P2 - Refactoring
 - Backend refactoring (decompose server.py into routers/models/services)
