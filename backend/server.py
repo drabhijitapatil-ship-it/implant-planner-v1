@@ -235,6 +235,7 @@ class ProcedureUpdate(BaseModel):
     implant_region: Optional[str] = Field(None, max_length=50)
     implant_company: Optional[str] = Field(None, max_length=100)
     remark: Optional[str] = Field(None, max_length=1000)
+    status: Optional[str] = Field(None, max_length=50)
 
     @field_validator('patient_name')
     @classmethod
@@ -838,23 +839,16 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
             "created_by_name": current_user["name"],
         })
     elif is_incharge:
-        # Implant In-Charge creates: all phases auto-approved, goes to completed
+        # Implant In-Charge creates: starts as draft, goes through normal approval flow
         procedure_dict.update({
             "student_id": None,
             "student_name": procedure.student_name or "",
-            "status": "completed",
-            "current_phase": 4,
-            "supervisor_phase1_approved": True,
-            "supervisor_phase1_approved_at": datetime.utcnow(),
-            "implant_incharge_phase1_approved": True,
-            "implant_incharge_phase1_approved_at": datetime.utcnow(),
-            "supervisor_phase2_approved": True,
-            "supervisor_phase2_approved_at": datetime.utcnow(),
-            "implant_incharge_phase2_approved": True,
-            "implant_incharge_phase2_approved_at": datetime.utcnow(),
-            "phase1_completed_at": datetime.utcnow(),
-            "phase2_completed_at": datetime.utcnow(),
-            "fully_completed_at": datetime.utcnow(),
+            "status": "draft",
+            "current_phase": 1,
+            "supervisor_phase1_approved": False,
+            "implant_incharge_phase1_approved": False,
+            "supervisor_phase2_approved": False,
+            "implant_incharge_phase2_approved": False,
             "created_at": datetime.utcnow(),
             "updated_at": datetime.utcnow(),
             "created_by_role": "implant_incharge",
@@ -981,10 +975,10 @@ async def update_procedure(
     
     # Check permissions
     if current_user["role"] == "student":
-        # Students can only edit their own pending procedures
+        # Students can only edit their own draft/pending procedures
         if procedure["student_id"] != current_user["_id"]:
             raise HTTPException(status_code=403, detail="Access denied")
-        if procedure["status"] != "pending_supervisor":
+        if procedure["status"] not in ("draft", "pending_supervisor", "pending_phase1"):
             raise HTTPException(status_code=403, detail="Cannot edit approved procedures")
     elif current_user["role"] == "supervisor":
         # Instructors can edit if they are the supervisor
@@ -993,6 +987,18 @@ async def update_procedure(
     # implant_incharge can edit all
     
     update_data = {k: v for k, v in procedure_update.model_dump().items() if v is not None}
+    
+    # Validate status transitions
+    if "status" in update_data:
+        valid_transitions = {
+            "draft": {"pending_phase1"},
+        }
+        current_status = procedure["status"]
+        new_status = update_data["status"]
+        allowed = valid_transitions.get(current_status, set())
+        if new_status not in allowed:
+            raise HTTPException(status_code=400, detail=f"Cannot change status from '{current_status}' to '{new_status}'")
+    
     update_data["updated_at"] = datetime.utcnow()
     
     await db.procedures.update_one(
