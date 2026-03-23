@@ -111,6 +111,13 @@ A mobile application for prosthodontics departments to manage implant cases thro
 New dependencies: `slowapi==0.1.9`, `gunicorn==25.1.0`
 New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
 
+## Frontend Security & UX Hardening (Mar 2026)
+1. **JWT Expiry → Auto Redirect** — Axios response interceptor in `api.ts` catches 401, clears AsyncStorage, redirects to login
+2. **HTTPS Enforcement** — Runtime warning in `api.ts` if `EXPO_PUBLIC_BACKEND_URL` doesn't use `https://`
+3. **Patient Name Input** — `autoCorrect={false}`, `autoCapitalize="none"` on patient name field in `new-procedure.tsx`
+4. **Form State Persistence** — AppState listener saves form data to AsyncStorage on app background; restores on mount; clears after successful submission
+5. **Client-side Input Sanitisation** — `sanitizeString()` trims whitespace and strips `< > " ' ;` from all string fields before API submission
+
 ## Backlog
 ### P2 - Refactoring
 - Backend refactoring (decompose server.py into routers/models/services)
