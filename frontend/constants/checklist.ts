@@ -11,6 +11,7 @@ export const CHECKLIST_DATA = {
       { id: 'instruments', label: 'Availability of the Instruments and Equipment' },
       { id: 'medical_assessment', label: 'Medical assessment done' },
       { id: 'realguide', label: 'RealGuide Planning and Report' },
+      { id: 'pre_op_medication', label: 'Pre-operative Medication Prescription' },
       { id: 'payment', label: 'Full payment done' },
     ],
   },
@@ -62,8 +63,6 @@ export const CHECKLIST_DATA = {
 };
 
 // Time slots available for procedures
-// Monday-Friday: 10:00 AM, 2:00 PM
-// Saturday: 9:30 AM only (updated as per spec)
 export const PROCEDURE_TIME_SLOTS = [
   { value: '10:00', label: '10:00 AM', days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] },
   { value: '14:00', label: '2:00 PM', days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'] },
@@ -75,16 +74,102 @@ export const PROCEDURE_TYPES = [
   'Multiple Conventional Implants',
   'Immediate Implant',
   'Partial Extraction Therapy',
-  'Implant Placement with GBR',
+  'Implant Placement with Guided Bone Regeneration',
   'Guided Surgery',
   'All on 4',
   'All on 6',
   'All on X',
 ];
 
+// Procedure type groupings for conditional UI
+export const SINGLE_GROUP = new Set([
+  'Single Conventional Implant',
+  'Immediate Implant',
+  'Partial Extraction Therapy',
+  'Implant Placement with Guided Bone Regeneration',
+  'Guided Surgery',
+]);
+
+export const MULTIPLE_GROUP = new Set([
+  'Multiple Conventional Implants',
+  'Immediate Implant',
+  'Partial Extraction Therapy',
+  'Implant Placement with Guided Bone Regeneration',
+  'Guided Surgery',
+]);
+
+export const FULL_ARCH_GROUP = new Set([
+  'All on 4',
+  'All on 6',
+  'All on X',
+]);
+
+// All non-full-arch procedures (used for conditional sections)
+export const NON_FULL_ARCH_TYPES = new Set([
+  'Single Conventional Implant',
+  'Multiple Conventional Implants',
+  'Immediate Implant',
+  'Partial Extraction Therapy',
+  'Implant Placement with Guided Bone Regeneration',
+  'Guided Surgery',
+]);
+
+// ─── Clinical Examination Dropdowns ───────────────────
+export const EDENTULOUS_SITE_OPTIONS = [
+  'Sufficient Occlusocervical Space',
+  'Sufficient Mesiodistal Space',
+  'Insufficient Occlusocervical Space',
+  'Insufficient Mesiodistal Space',
+];
+
+export const RIDGE_CONTOUR_OPTIONS = [
+  'Well Contoured',
+  'Medium Contoured',
+  'Low Contoured',
+];
+
+export const SOFT_TISSUE_OPTIONS = ['Thick', 'Thin'];
+export const KERATINIZED_MUCOSA_OPTIONS = ['Present', 'Absent'];
+
+// Occlusal Analysis (for non-full-arch types)
+export const OCCLUSAL_SCHEME_OPTIONS = ['Canine Guided', 'Group Function', 'Mutually Protected'];
+export const PARAFUNCTION_HABIT_OPTIONS = ['Present', 'Absent'];
+export const VERTICAL_DIMENSION_OPTIONS = ['Sufficient', 'Compromised'];
+export const OPPOSING_DENTITION_OPTIONS = ['Natural', 'Absent'];
+
+// Occlusal Analysis (for full-arch types)
+export const TMJ_OPTIONS = ['Normal', 'Deviation Present'];
+
+// Aesthetic Risk Assessment (for non-full-arch types)
+export const SMILE_LINE_OPTIONS = ['Low Smile Line', 'Medium Smile Line', 'High Smile Line'];
+export const GINGIVAL_BIOTYPE_OPTIONS = ['Thin', 'Thick'];
+
+// ─── Medical Assessment Risk Factors ──────────────────
+export const MEDICAL_RISK_FACTORS = [
+  { id: 'diabetes', label: 'Diabetes' },
+  { id: 'smoking', label: 'Smoking Status' },
+  { id: 'anticoagulant', label: 'Anticoagulant Therapy' },
+  { id: 'osteoporosis', label: 'Osteoporosis Medication' },
+  { id: 'radiation', label: 'Radiation Therapy' },
+];
+
+export function calculateMedicalRisk(factors: Record<string, string>): { level: string; color: string } {
+  const yesCount = Object.values(factors).filter(v => v === 'Yes').length;
+  // High Risk: >2 factors or uncontrolled diabetes or excessive smoking
+  if (yesCount > 2 || factors.diabetes === 'Yes' || factors.smoking === 'Yes') {
+    // If diabetes OR smoking present with 2+ others = High
+    if (yesCount >= 2) return { level: 'High Risk', color: '#DC3545' };
+    if (yesCount === 1) return { level: 'Moderate Risk', color: '#FF9800' };
+  }
+  if (yesCount >= 3) return { level: 'High Risk', color: '#DC3545' };
+  if (yesCount >= 1) return { level: 'Moderate Risk', color: '#FF9800' };
+  return { level: 'Low Risk', color: '#4CAF50' };
+}
+
 // ─── Loading Type Options ─────────────────────────────
 export const LOADING_TYPES = [
   'Immediate Loading',
+  'Early Loading',
   'Delayed Loading',
 ];
 
@@ -98,6 +183,8 @@ const SINGLE_CROWN_OPTIONS = [
   'Screw Retained Crown - Porcelain Fused to Metal',
   'Screw Retained Crown - Zirconia',
   'Screw Retained Crown - Lithium Disilicate',
+  'Zirconia Abutment Ti Base',
+  'Custom Abutment',
 ];
 
 const BRIDGE_OPTIONS = [
@@ -110,6 +197,9 @@ const BRIDGE_OPTIONS = [
   'Screw Retained Bridge - Zirconia',
   'Screw Retained Bridge - Lithium Disilicate',
   'Overdenture with Attachment',
+  'Malo Prosthesis with MUA',
+  'Zirconia Abutment Ti Base',
+  'Custom Abutments',
 ];
 
 const IMMEDIATE_LOADING_OPTIONS = [
@@ -121,51 +211,39 @@ const IMMEDIATE_LOADING_OPTIONS = [
 ];
 
 const FULL_ARCH_OPTIONS = [
-  'Full Arch Co-Cr Framework Removable Denture',
-  'Full Arch Porcelain Fused to Metal Prosthesis',
-  'Full Arch Co-Cr Framework Zirconia Prosthesis',
-  'Full Arch Titanium Framework Zirconia Prosthesis',
-  'Full Arch Peek Framework Zirconia Ti Base',
+  'Full Arch - Porcelain Fused to Metal Prosthesis',
+  'Full Arch - Co-Cr Framework - Zirconia Prosthesis',
+  'Full Arch - Titanium Framework - Zirconia Prosthesis',
+  'Full Arch - Peek and Zirconia Ti Base',
 ];
-
-const SINGLE_PROCEDURE_TYPES = new Set([
-  'Single Conventional Implant',
-  'Immediate Implant',
-  'Partial Extraction Therapy',
-  'Implant Placement with GBR',
-]);
-
-const BRIDGE_PROCEDURE_TYPES = new Set([
-  'Multiple Conventional Implants',
-  'Immediate Implant',
-  'Partial Extraction Therapy',
-  'Implant Placement with GBR',
-]);
-
-const FULL_ARCH_PROCEDURE_TYPES = new Set([
-  'All on 4',
-  'All on 6',
-  'All on X',
-]);
 
 export function getProstheticOptions(procedureType: string, loadingTypes: string[]): string[] {
   const options: string[] = [];
 
-  if (SINGLE_PROCEDURE_TYPES.has(procedureType)) {
+  if (SINGLE_GROUP.has(procedureType) && !FULL_ARCH_GROUP.has(procedureType)) {
     options.push(...SINGLE_CROWN_OPTIONS);
   }
-  if (BRIDGE_PROCEDURE_TYPES.has(procedureType)) {
-    options.push(...BRIDGE_OPTIONS);
+  if (MULTIPLE_GROUP.has(procedureType) && !FULL_ARCH_GROUP.has(procedureType)) {
+    // For multiple, add bridge options (avoid dupes from single)
+    for (const o of BRIDGE_OPTIONS) {
+      if (!options.includes(o)) options.push(o);
+    }
   }
-  if (FULL_ARCH_PROCEDURE_TYPES.has(procedureType)) {
+  if (FULL_ARCH_GROUP.has(procedureType)) {
     options.push(...FULL_ARCH_OPTIONS);
   }
-  if (loadingTypes.includes('Immediate Loading')) {
-    options.push(...IMMEDIATE_LOADING_OPTIONS);
+  if (loadingTypes.includes('Immediate Loading') || (loadingTypes.includes('Immediate Loading') && loadingTypes.includes('Delayed Loading'))) {
+    for (const o of IMMEDIATE_LOADING_OPTIONS) {
+      if (!options.includes(o)) options.push(o);
+    }
   }
 
-  // Remove duplicates preserving order
-  return [...new Set(options)];
+  // Always add "Other" at the end
+  if (options.length > 0 && !options.includes('Other')) {
+    options.push('Other');
+  }
+
+  return options;
 }
 
 export const STATUS_COLORS: Record<string, string> = {

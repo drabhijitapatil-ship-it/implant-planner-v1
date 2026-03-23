@@ -166,12 +166,32 @@ class ProcedureCreate(BaseModel):
     implant_procedure_type: str = Field(..., max_length=100)
     loading_type: List[str] = []
     prosthetic_plan: str = Field("", max_length=500)
+    prosthetic_plan_other: Optional[str] = Field("", max_length=500)
     bone_graft_specifications: Optional[str] = Field("", max_length=500)
     checklist: Optional[Checklist] = None
     implant_site: Optional[str] = Field("", max_length=50)
     implant_region: Optional[str] = Field("", max_length=50)
     implant_company: Optional[str] = Field("", max_length=100)
     remark: Optional[str] = Field("", max_length=1000)
+    # Clinical Examination — Intraoral
+    edentulous_site: Optional[str] = Field("", max_length=100)
+    ridge_contour: Optional[str] = Field("", max_length=50)
+    soft_tissue_thickness: Optional[str] = Field("", max_length=20)
+    keratinized_mucosa: Optional[str] = Field("", max_length=20)
+    # Occlusal Analysis (non-full-arch)
+    occlusal_scheme: Optional[str] = Field("", max_length=50)
+    parafunction_habit: Optional[str] = Field("", max_length=20)
+    vertical_dimension: Optional[str] = Field("", max_length=50)
+    opposing_dentition: Optional[str] = Field("", max_length=20)
+    # Occlusal Analysis (full-arch)
+    vertical_dimension_mm: Optional[str] = Field("", max_length=20)
+    tmj: Optional[str] = Field("", max_length=30)
+    # Aesthetic Risk Assessment
+    smile_line: Optional[str] = Field("", max_length=30)
+    gingival_biotype: Optional[str] = Field("", max_length=20)
+    # Medical Assessment
+    medical_assessment: Optional[Dict[str, str]] = None
+    medical_risk_level: Optional[str] = Field("", max_length=30)
 
     @field_validator('patient_name')
     @classmethod
@@ -671,14 +691,14 @@ PROCEDURE_TYPES = [
     "Multiple Conventional Implants",
     "Immediate Implant",
     "Partial Extraction Therapy",
-    "Implant Placement with GBR",
+    "Implant Placement with Guided Bone Regeneration",
     "Guided Surgery",
     "All on 4",
     "All on 6",
     "All on X",
 ]
 
-LOADING_TYPES = ["Immediate Loading", "Delayed Loading"]
+LOADING_TYPES = ["Immediate Loading", "Early Loading", "Delayed Loading"]
 
 @api_router.get("/case-form-options")
 async def get_case_form_options():
@@ -769,13 +789,13 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
     valid_procedure_types = [
         "Single Conventional Implant", "Multiple Conventional Implants",
         "Immediate Implant", "Partial Extraction Therapy",
-        "Implant Placement with GBR", "Guided Surgery",
+        "Implant Placement with Guided Bone Regeneration", "Guided Surgery",
         "All on 4", "All on 6", "All on X",
     ]
     if procedure.implant_procedure_type not in valid_procedure_types:
         raise HTTPException(status_code=400, detail=f"Invalid implant procedure type: {procedure.implant_procedure_type}")
 
-    valid_loading = {"Immediate Loading", "Delayed Loading"}
+    valid_loading = {"Immediate Loading", "Early Loading", "Delayed Loading"}
     if procedure.loading_type:
         for lt in procedure.loading_type:
             if lt not in valid_loading:
@@ -3462,7 +3482,8 @@ async def calculate_risk(
     """
     Implant Risk Calculator.
     Body: { bone_width, bone_height, implant_diameter, implant_length,
-            bone_type, procedure, tooth }
+            bone_type, procedure, tooth, medical_assessment? }
+    medical_assessment: { diabetes, smoking, anticoagulant, osteoporosis, radiation }
     """
     bone_width = float(body.get("bone_width", 0))
     bone_height = float(body.get("bone_height", 0))
@@ -3471,6 +3492,7 @@ async def calculate_risk(
     bone_type = body.get("bone_type", "")
     procedure = body.get("procedure", "")
     tooth = body.get("tooth", "")
+    medical = body.get("medical_assessment", {})
 
     if not all([bone_width, bone_height, implant_diameter, implant_length, bone_type, procedure, tooth]):
         raise HTTPException(status_code=400, detail="All fields are required")
@@ -3503,12 +3525,38 @@ async def calculate_risk(
     region = _get_tooth_region(tooth)
     tooth_score = TOOTH_REGION_SCORES.get(region, 2)
 
+    # 6. Medical risk factors
+    medical_yes = sum(1 for v in medical.values() if v == "Yes") if medical else 0
+    if medical_yes >= 3:
+        medical_score = 3
+    elif medical_yes >= 1:
+        medical_score = 2
+    else:
+        medical_score = 1
+
+    factors = [
+        {"factor": "Bone Width", "remaining": round(remaining_width, 1), "risk": _score_label(width_score), "score": width_score},
+        {"factor": "Bone Height", "remaining": round(remaining_height, 1), "risk": _score_label(height_score), "score": height_score},
+        {"factor": "Bone Density", "detail": bone_type, "risk": _score_label(density_score), "score": density_score},
+        {"factor": "Procedure", "detail": procedure, "risk": _score_label(procedure_score), "score": procedure_score},
+        {"factor": "Tooth Position", "detail": f"{tooth} ({region})", "risk": _score_label(tooth_score), "score": tooth_score},
+    ]
+
     total = width_score + height_score + density_score + procedure_score + tooth_score
 
-    if total <= 7:
+    # Add medical factor only if medical assessment was provided
+    if medical:
+        medical_details = ", ".join(k.title() for k, v in medical.items() if v == "Yes") or "None"
+        factors.append({"factor": "Medical Risk", "detail": medical_details, "risk": _score_label(medical_score), "score": medical_score})
+        total += medical_score
+        max_score = 18
+    else:
+        max_score = 15
+
+    if total <= (max_score * 0.47):
         risk_level = "Low"
         color = "green"
-    elif total <= 11:
+    elif total <= (max_score * 0.73):
         risk_level = "Moderate"
         color = "orange"
     else:
@@ -3525,20 +3573,26 @@ async def calculate_risk(
         actions.append("Consider implant with enhanced surface treatment")
     if procedure_score == 3:
         actions.append("Ensure advanced surgical planning")
-    if total >= 8:
+    if medical and medical_score >= 2:
+        if medical.get("diabetes") == "Yes":
+            actions.append("Ensure glycemic control before implant placement")
+        if medical.get("smoking") == "Yes":
+            actions.append("Advise smoking cessation before and after surgery")
+        if medical.get("anticoagulant") == "Yes":
+            actions.append("Coordinate with physician for anticoagulant management")
+        if medical.get("osteoporosis") == "Yes":
+            actions.append("Evaluate bisphosphonate therapy duration and risk")
+        if medical.get("radiation") == "Yes":
+            actions.append("Assess radiation dose and field before implant placement")
+    if total >= (max_score * 0.53):
         actions.append("Evaluate CBCT carefully")
-    if total >= 12:
+    if total >= (max_score * 0.8):
         actions.append("Consider bone graft")
 
     return {
-        "factors": [
-            {"factor": "Bone Width", "remaining": round(remaining_width, 1), "risk": _score_label(width_score), "score": width_score},
-            {"factor": "Bone Height", "remaining": round(remaining_height, 1), "risk": _score_label(height_score), "score": height_score},
-            {"factor": "Bone Density", "detail": bone_type, "risk": _score_label(density_score), "score": density_score},
-            {"factor": "Procedure", "detail": procedure, "risk": _score_label(procedure_score), "score": procedure_score},
-            {"factor": "Tooth Position", "detail": f"{tooth} ({region})", "risk": _score_label(tooth_score), "score": tooth_score},
-        ],
+        "factors": factors,
         "total_score": total,
+        "max_score": max_score,
         "risk_level": risk_level,
         "color": color,
         "suggested_actions": actions,
