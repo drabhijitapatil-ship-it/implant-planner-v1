@@ -22,7 +22,7 @@ import requests
 import os
 from datetime import datetime, timedelta
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://clinical-album.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://implant-case-builder.preview.emergentagent.com').rstrip('/')
 
 # Test credentials
 STUDENT_CREDS = {"email": "Gaurav.pandey", "password": "Student@123"}

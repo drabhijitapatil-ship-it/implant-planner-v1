@@ -21,7 +21,7 @@ import os
 import time
 from datetime import datetime, timedelta
 
-BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://clinical-album.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://implant-case-builder.preview.emergentagent.com').rstrip('/')
 
 # Test credentials
 ADMIN_CREDS = {"email": "Abhijit.patil", "password": "Admin@123"}
