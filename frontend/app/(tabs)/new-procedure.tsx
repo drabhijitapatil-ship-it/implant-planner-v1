@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, Alert, ActivityIndicator, Platform
+  StyleSheet, Alert, ActivityIndicator, Platform, AppState
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
@@ -120,6 +121,45 @@ export default function NewProcedureScreen() {
   const isNonFullArch = NON_FULL_ARCH_TYPES.has(formData.implant_procedure_type);
   const prostheticOptions = getProstheticOptions(formData.implant_procedure_type, formData.loading_type);
 
+  const FORM_STORAGE_KEY = `new_procedure_form_${user?.id || 'anon'}`;
+  const appState = useRef(AppState.currentState);
+
+  // ── Sanitise a string: trim + strip < > ; " ' ──
+  const sanitizeString = (val: string) => val.trim().replace(/[<>"';]/g, '');
+
+  // ── Restore form from AsyncStorage on mount ──
+  useEffect(() => {
+    const restoreForm = async () => {
+      try {
+        const saved = await AsyncStorage.getItem(FORM_STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.formData) setFormData(parsed.formData);
+          if (parsed.checklistItems) setChecklistItems(parsed.checklistItems);
+        }
+      } catch { /* ignore */ }
+    };
+    restoreForm();
+  }, []);
+
+  // ── Save form to AsyncStorage when app goes to background ──
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', async (nextState) => {
+      if (appState.current === 'active' && nextState.match(/inactive|background/)) {
+        try {
+          await AsyncStorage.setItem(FORM_STORAGE_KEY, JSON.stringify({ formData, checklistItems }));
+        } catch { /* ignore */ }
+      }
+      appState.current = nextState;
+    });
+    return () => sub.remove();
+  }, [formData, checklistItems]);
+
+  // ── Clear persisted form after successful submission ──
+  const clearPersistedForm = async () => {
+    try { await AsyncStorage.removeItem(FORM_STORAGE_KEY); } catch { /* ignore */ }
+  };
+
   // ── Load faculty data ──
   useEffect(() => {
     const loadFaculty = async () => {
@@ -163,16 +203,26 @@ export default function NewProcedureScreen() {
 
   // ── Continue to Implant Selection ──
   const handleContinueToImplants = async () => {
+    // Sanitise all string fields before validation
+    const sanitized = { ...formData };
+    for (const key of Object.keys(sanitized) as (keyof typeof sanitized)[]) {
+      const val = sanitized[key];
+      if (typeof val === 'string') {
+        (sanitized as any)[key] = sanitizeString(val);
+      }
+    }
+    setFormData(sanitized);
+
     // Validate required fields
     const required = ['patient_name', 'registration_number', 'supervisor_id', 'implant_incharge_id',
       'receipt_number', 'amount_paid', 'procedure_date', 'procedure_time', 'implant_procedure_type'];
     for (const f of required) {
-      if (!(formData as any)[f]) {
+      if (!(sanitized as any)[f]) {
         Alert.alert('Missing Field', `Please fill in: ${f.replace(/_/g, ' ')}`);
         return;
       }
     }
-    if (formData.loading_type.length === 0) {
+    if (sanitized.loading_type.length === 0) {
       Alert.alert('Missing Field', 'Please select at least one loading type.');
       return;
     }
@@ -180,8 +230,12 @@ export default function NewProcedureScreen() {
     setLoading(true);
     try {
       const payload = {
-        ...formData,
-        amount_paid: parseFloat(formData.amount_paid) || 0,
+        ...sanitized,
+        patient_name: sanitizeString(sanitized.patient_name),
+        registration_number: sanitizeString(sanitized.registration_number),
+        receipt_number: sanitizeString(sanitized.receipt_number),
+        bone_graft_specifications: sanitizeString(sanitized.bone_graft_specifications),
+        amount_paid: parseFloat(sanitized.amount_paid) || 0,
         checklist: {
           pre_surgical: {
             items: CHECKLIST_DATA.pre_surgical.items.map(item => ({
@@ -192,9 +246,9 @@ export default function NewProcedureScreen() {
             additional_fields: {},
           },
         },
-        prosthetic_plan: formData.prosthetic_plan === 'Other'
-          ? `Other: ${formData.prosthetic_plan_other}`
-          : formData.prosthetic_plan,
+        prosthetic_plan: sanitized.prosthetic_plan === 'Other'
+          ? `Other: ${sanitizeString(sanitized.prosthetic_plan_other)}`
+          : sanitized.prosthetic_plan,
       };
 
       const res = await axios.post(`${API}/api/procedures`, payload, {
@@ -204,6 +258,7 @@ export default function NewProcedureScreen() {
       const procId = res.data.id || res.data._id;
       setCreatedProcedureId(procId);
       setStep('implants');
+      await clearPersistedForm();
     } catch (err: any) {
       Alert.alert('Error', err.response?.data?.detail || 'Failed to create case');
     } finally {
@@ -275,7 +330,8 @@ export default function NewProcedureScreen() {
         <View style={styles.fieldContainer}>
           <Text style={styles.label}>Patient Name <Text style={{ color: '#DC3545' }}>*</Text></Text>
           <TextInput style={styles.input} value={formData.patient_name}
-            onChangeText={v => updateForm('patient_name', v)} placeholder="Enter patient name" data-testid="patient-name-input" />
+            onChangeText={v => updateForm('patient_name', v)} placeholder="Enter patient name"
+            autoCorrect={false} autoCapitalize="none" data-testid="patient-name-input" />
         </View>
         <View style={styles.fieldContainer}>
           <Text style={styles.label}>Registration Number <Text style={{ color: '#DC3545' }}>*</Text></Text>
