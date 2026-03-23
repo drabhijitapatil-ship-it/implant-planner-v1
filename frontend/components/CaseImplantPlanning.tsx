@@ -38,10 +38,14 @@ interface ImplantPlanItem {
 }
 interface Props {
   procedureId: string;
-  isOwner: boolean;
+  isOwner?: boolean;
   userRole: string;
   torqueValues?: number[];
   procedureStatus?: string;
+  procedureType?: string;
+  status?: string;
+  readOnly?: boolean;
+  medicalAssessment?: Record<string, string>;
 }
 
 // ── Drilling Protocol Generator ────────────────────────────
@@ -97,7 +101,7 @@ function generateDrillingProtocol(brand: string, system: string, diameter: numbe
   return protocol;
 }
 
-export default function CaseImplantPlanning({ procedureId, isOwner, userRole, torqueValues, procedureStatus }: Props) {
+export default function CaseImplantPlanning({ procedureId, isOwner, userRole, torqueValues, procedureStatus, medicalAssessment }: Props) {
   const [plans, setPlans] = useState<ImplantPlanItem[]>([]);
   const [systems, setSystems] = useState<ImplantSystem[]>([]);
   const [toothRecs, setToothRecs] = useState<Record<string,any>>({});
@@ -222,7 +226,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
             <View style={st.implantDetails}>
               {plan.bone_width && <Text style={st.detailText}>Bone: {plan.bone_width}mm W x {plan.bone_height}mm H</Text>}
               {plan.bone_type && <Text style={st.detailText}>Bone Type: {plan.bone_type}</Text>}
-              {plan.risk_score !== undefined && plan.risk_score !== null && <Text style={st.detailText}>Risk Score: {plan.risk_score}/15</Text>}
+              {plan.risk_score !== undefined && plan.risk_score !== null && <Text style={st.detailText}>Risk Score: {plan.risk_score}/{plan.risk_score > 15 ? 18 : 15}</Text>}
               {torqueValues && torqueValues[idx] !== undefined && (
                 <View style={st.torqueRow} data-testid={`implant-torque-${idx}`}>
                   <Ionicons name="speedometer" size={14} color="#FF6D00" />
@@ -327,16 +331,17 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
         toothRecs={toothRecs}
         usedPositions={editingIdx !== null ? usedPositions.filter((_, i) => i !== editingIdx) : usedPositions}
         editItem={editingIdx !== null ? plans[editingIdx] : undefined}
+        medicalAssessment={medicalAssessment}
       />
     </View>
   );
 }
 
 // ── Add/Edit Implant Modal Component ───────────────────────
-function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPositions, editItem }: {
+function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPositions, editItem, medicalAssessment }: {
   visible: boolean; onClose: () => void; onSave: (item: ImplantPlanItem) => void;
   systems: ImplantSystem[]; toothRecs: Record<string,any>; usedPositions: string[];
-  editItem?: ImplantPlanItem;
+  editItem?: ImplantPlanItem; medicalAssessment?: Record<string, string>;
 }) {
   const [step, setStep] = useState(1);
   const [position, setPosition] = useState('');
@@ -417,6 +422,7 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
         bone_width: parseFloat(boneWidth), bone_height: parseFloat(boneHeight),
         implant_diameter: selectedImplant.diameter, implant_length: selectedImplant.length,
         bone_type: boneType, procedure: sProcedures[0] || 'Conventional Implant Placement', tooth: position,
+        medical_assessment: medicalAssessment || {},
       });
       setRiskResult(res.data);
     } catch { Alert.alert('Error', 'Failed to calculate risk.'); }
