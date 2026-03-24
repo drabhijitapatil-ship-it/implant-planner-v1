@@ -154,6 +154,13 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
 - **Backend**: `Phase4Step2Submit` model, new submission + approval endpoints for Step 2, badge generation + completion on final approval
 - **Frontend**: Rewritten `submit-stage2-prosthetic/[id].tsx` for Step 1, new `submit-phase4-step2/[id].tsx` for Step 2
 
+### Phase 1 Refinements (Mar 2026)
+1. **Top 3 + Show More implants**: Fixed React hooks violation (useState inside render callback). Extracted `showAllResults` state to parent `ImplantPlanModal`. Added missing `matchHeader`, `showMoreBtn`, `showMoreText` styles to modal StyleSheet.
+2. **Clinical Examination data on detail page**: Added new sections to `[id].tsx` — Procedure Details (type, loading, prosthetic plan), Clinical Examination (edentulous sites, arch condition, ridge contour, soft tissue, keratinized mucosa), Occlusal Analysis, Aesthetic Risk Assessment, Medical Assessment (with risk level badge). Each section has colored left border and appropriate icons.
+3. **PDF Export enhanced**: Added Procedure Details, Clinical Examination, Occlusal Analysis, Aesthetic Risk, and Medical Assessment sections to `pdfGenerator.ts`. Medical factors shown with color-coded Yes/No. PDF export now available from `pending_phase1` onwards (previously only from `phase2_approved`).
+4. **Auto-populate Implant Site**: Backend `save_implant_plan` endpoint now auto-sets `implant_site` field from sorted unique tooth positions (e.g., "14, 36"). No manual entry needed.
+5. **Data visibility by role/status**: All Phase 1 clinical data is now visible on the detail page regardless of role. PDF export enabled for all non-draft statuses.
+
 ## Backlog
 ### P2 - Refactoring
 - Backend refactoring (decompose server.py into routers/models/services)
