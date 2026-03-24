@@ -1596,6 +1596,7 @@ async def save_implant_plan(
         {"$set": {
             "implant_plans": implant_docs,
             "number_of_implants": len(implant_docs),
+            "implant_site": ", ".join(sorted(set(imp["position"] for imp in implant_docs))),
         }},
     )
     return {"message": "Implant plan saved", "count": len(implant_docs)}

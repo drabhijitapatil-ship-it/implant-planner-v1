@@ -6,7 +6,7 @@
     "production": {
       "distribution": "store",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://implant-case-builder.preview.emergentagent.com"
+        "EXPO_PUBLIC_BACKEND_URL": "https://surgical-case-portal.preview.emergentagent.com"
       }
     },
     "preview": {
