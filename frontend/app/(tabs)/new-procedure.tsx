@@ -50,18 +50,140 @@ function Dropdown({ label, value, options, onChange, placeholder, required }: {
         <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color="#666" />
       </TouchableOpacity>
       {open && (
-        <View style={styles.dropdownList}>
+        <ScrollView style={styles.dropdownList} nestedScrollEnabled={true}>
           {options.map(opt => (
             <TouchableOpacity key={opt} style={[styles.dropdownItem, value === opt && styles.dropdownItemActive]}
               onPress={() => { onChange(opt); setOpen(false); }}>
               <Text style={[styles.dropdownItemText, value === opt && styles.dropdownItemTextActive]}>{opt}</Text>
             </TouchableOpacity>
           ))}
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
+// ─── Inline Calendar Picker ────────────────────────────
+function CalendarPicker({ value, onChange, label, required }: {
+  value: string; onChange: (date: string) => void; label: string; required?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const today = new Date();
+  const [viewYear, setViewYear] = useState(value ? parseInt(value.split('-')[0]) : today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(value ? parseInt(value.split('-')[1]) - 1 : today.getMonth());
+
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
+  const dayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+
+  const prevMonth = () => {
+    if (viewMonth === 0) { setViewMonth(11); setViewYear(viewYear - 1); }
+    else setViewMonth(viewMonth - 1);
+  };
+  const nextMonth = () => {
+    if (viewMonth === 11) { setViewMonth(0); setViewYear(viewYear + 1); }
+    else setViewMonth(viewMonth + 1);
+  };
+
+  const selectDate = (day: number) => {
+    const m = String(viewMonth + 1).padStart(2, '0');
+    const d = String(day).padStart(2, '0');
+    onChange(`${viewYear}-${m}-${d}`);
+    setOpen(false);
+  };
+
+  const isDisabled = (day: number) => {
+    const date = new Date(viewYear, viewMonth, day);
+    const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    return date < todayMidnight;
+  };
+
+  const isSelected = (day: number) => {
+    const m = String(viewMonth + 1).padStart(2, '0');
+    const d = String(day).padStart(2, '0');
+    return value === `${viewYear}-${m}-${d}`;
+  };
+
+  const isToday = (day: number) => {
+    return day === today.getDate() && viewMonth === today.getMonth() && viewYear === today.getFullYear();
+  };
+
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstDayOfWeek; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  return (
+    <View style={styles.fieldContainer}>
+      <Text style={styles.label}>{label}{required && <Text style={{ color: '#DC3545' }}> *</Text>}</Text>
+      <TouchableOpacity style={styles.dropdown} onPress={() => setOpen(!open)} data-testid="calendar-trigger">
+        <Text style={[styles.dropdownText, !value && { color: '#999' }]}>
+          {value || 'Select Date'}
+        </Text>
+        <Ionicons name="calendar-outline" size={18} color="#666" />
+      </TouchableOpacity>
+      {open && (
+        <View style={calStyles.container}>
+          <View style={calStyles.header}>
+            <TouchableOpacity onPress={prevMonth} style={calStyles.navBtn}>
+              <Ionicons name="chevron-back" size={20} color="#1A73E8" />
+            </TouchableOpacity>
+            <Text style={calStyles.monthYear}>{monthNames[viewMonth]} {viewYear}</Text>
+            <TouchableOpacity onPress={nextMonth} style={calStyles.navBtn}>
+              <Ionicons name="chevron-forward" size={20} color="#1A73E8" />
+            </TouchableOpacity>
+          </View>
+          <View style={calStyles.dayNamesRow}>
+            {dayNames.map(dn => (
+              <Text key={dn} style={calStyles.dayName}>{dn}</Text>
+            ))}
+          </View>
+          <View style={calStyles.grid}>
+            {cells.map((day, idx) => (
+              <TouchableOpacity
+                key={idx}
+                style={[
+                  calStyles.cell,
+                  day && isSelected(day) && calStyles.cellSelected,
+                  day && isToday(day) && !isSelected(day) && calStyles.cellToday,
+                ]}
+                disabled={!day || isDisabled(day)}
+                onPress={() => day && selectDate(day)}
+              >
+                <Text style={[
+                  calStyles.cellText,
+                  day && isDisabled(day) && calStyles.cellDisabled,
+                  day && isSelected(day) && calStyles.cellSelectedText,
+                  day && isToday(day) && !isSelected(day) && calStyles.cellTodayText,
+                ]}>
+                  {day || ''}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
       )}
     </View>
   );
 }
+
+const calStyles = StyleSheet.create({
+  container: { borderWidth: 1, borderColor: '#DDD', borderRadius: 10, marginTop: 4, backgroundColor: '#FFF', padding: 12 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  navBtn: { padding: 6 },
+  monthYear: { fontSize: 15, fontWeight: '700', color: '#1A1A2E' },
+  dayNamesRow: { flexDirection: 'row', marginBottom: 4 },
+  dayName: { flex: 1, textAlign: 'center', fontSize: 12, fontWeight: '600', color: '#999' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap' },
+  cell: { width: '14.28%', aspectRatio: 1, justifyContent: 'center', alignItems: 'center', borderRadius: 20 },
+  cellText: { fontSize: 14, color: '#333' },
+  cellDisabled: { color: '#CCC' },
+  cellSelected: { backgroundColor: '#1A73E8' },
+  cellSelectedText: { color: '#FFF', fontWeight: '700' },
+  cellToday: { borderWidth: 1.5, borderColor: '#1A73E8', borderRadius: 20 },
+  cellTodayText: { color: '#1A73E8', fontWeight: '600' },
+});
 
 // ─── Main Component ────────────────────────────────────
 export default function NewProcedureScreen() {
@@ -480,21 +602,12 @@ export default function NewProcedureScreen() {
       {/* ─── Schedule ─── */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Schedule</Text>
-        <View style={styles.fieldContainer}>
-          <Text style={styles.label}>Procedure Date <Text style={{ color: '#DC3545' }}>*</Text></Text>
-          <TextInput
-            style={styles.input}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor="#999"
-            value={formData.procedure_date || ''}
-            onChangeText={(text) => {
-              const cleaned = text.replace(/[^0-9-]/g, '');
-              updateForm('procedure_date', cleaned);
-            }}
-            keyboardType="default"
-            maxLength={10}
-          />
-        </View>
+        <CalendarPicker
+          label="Procedure Date"
+          value={formData.procedure_date}
+          onChange={(date) => updateForm('procedure_date', date)}
+          required
+        />
         <View style={styles.fieldContainer}>
           <Text style={styles.label}>Time Slot <Text style={{ color: '#DC3545' }}>*</Text></Text>
           <View style={styles.chipRow}>
