@@ -357,6 +357,7 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
   const [riskLoading, setRiskLoading] = useState(false);
   const [showSystemDD, setShowSystemDD] = useState(false);
   const [systemSearch, setSystemSearch] = useState('');
+  const [showAllResults, setShowAllResults] = useState(false);
 
   // Suggest Me states
   const [sProcedures, setSProcedures] = useState<string[]>([]);
@@ -394,7 +395,7 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
   };
 
   const handleSearch = async () => {
-    setSearching(true); setResult(null);
+    setSearching(true); setResult(null); setShowAllResults(false);
     try {
       if (mode === 'choose') {
         const res = await api.get('/implant-library/suggest', {
@@ -466,6 +467,7 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
         riskLoading={riskLoading}
         showSystemDD={showSystemDD} setShowSystemDD={setShowSystemDD}
         systemSearch={systemSearch} setSystemSearch={setSystemSearch}
+        showAllResults={showAllResults} setShowAllResults={setShowAllResults}
         sProcedures={sProcedures} setSProcedures={setSProcedures}
         handleSearch={handleSearch}
         handleCalcRisk={handleCalcRisk}
@@ -484,6 +486,7 @@ function ModalContent(props: any) {
     selectedSystem, setSelectedSystem, boneWidth, setBoneWidth, boneHeight, setBoneHeight,
     boneType, setBoneType, searching, result, selectedImplant, setSelectedImplant,
     riskResult, riskLoading, showSystemDD, setShowSystemDD, systemSearch, setSystemSearch,
+    showAllResults, setShowAllResults,
     sProcedures, setSProcedures, handleSearch, handleCalcRisk, handleConfirm, toothInfo,
     systems, usedPositions, onSave,
   } = props;
@@ -675,21 +678,43 @@ function ModalContent(props: any) {
                   ? (result.recommended?.length ? result.recommended : result.all_options || [])
                   : (result.recommended_systems || []).flatMap((s: any) => (s.implants || []).map((imp: any) => ({ ...imp, brand: s.brand, system: s.system })));
                 if (implants.length === 0) return <Text style={ms.noResults}>No implants found for these measurements.</Text>;
-                return implants.slice(0, 10).map((imp: any, i: number) => {
-                  const isSelected = selectedImplant?.diameter === imp.diameter && selectedImplant?.length === imp.length && selectedImplant?.brand === imp.brand;
-                  return (
-                    <TouchableOpacity key={i} style={[ms.implantOption, isSelected && ms.implantOptionSelected]}
-                      onPress={() => setSelectedImplant({ diameter: imp.diameter, length: imp.length, brand: imp.brand || selectedSystem?.brand || '', system: imp.system || selectedSystem?.system || '' })}
-                      data-testid={`result-implant-${i}`}>
-                      <Ionicons name={isSelected ? 'radio-button-on' : 'radio-button-off'} size={22} color={isSelected ? '#1E88E5' : '#CCC'} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={ms.implantName}>{imp.brand || selectedSystem?.brand} - {imp.system || selectedSystem?.system}</Text>
-                        <Text style={ms.implantSpec}>D: {imp.diameter}mm | L: {imp.length}mm</Text>
-                      </View>
-                      {i === 0 && <View style={ms.bestBadge}><Text style={ms.bestBadgeText}>Best</Text></View>}
-                    </TouchableOpacity>
-                  );
-                });
+                const topMatches = implants.slice(0, 3);
+                const remaining = implants.slice(3);
+                const displayed = showAllResults ? implants : topMatches;
+                return (
+                  <>
+                    <Text style={ms.matchHeader}>Top {Math.min(3, implants.length)} Best Matches</Text>
+                    {displayed.map((imp: any, i: number) => {
+                      const isSelected = selectedImplant?.diameter === imp.diameter && selectedImplant?.length === imp.length && selectedImplant?.brand === imp.brand;
+                      return (
+                        <TouchableOpacity key={i} style={[ms.implantOption, isSelected && ms.implantOptionSelected]}
+                          onPress={() => setSelectedImplant({ diameter: imp.diameter, length: imp.length, brand: imp.brand || selectedSystem?.brand || '', system: imp.system || selectedSystem?.system || '' })}
+                          data-testid={`result-implant-${i}`}>
+                          <Ionicons name={isSelected ? 'radio-button-on' : 'radio-button-off'} size={22} color={isSelected ? '#1E88E5' : '#CCC'} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={ms.implantName}>{imp.brand || selectedSystem?.brand} - {imp.system || selectedSystem?.system}</Text>
+                            <Text style={ms.implantSpec}>D: {imp.diameter}mm | L: {imp.length}mm</Text>
+                          </View>
+                          {i === 0 && <View style={ms.bestBadge}><Text style={ms.bestBadgeText}>Best</Text></View>}
+                          {i === 1 && <View style={[ms.bestBadge, { backgroundColor: '#E3F2FD' }]}><Text style={[ms.bestBadgeText, { color: '#1565C0' }]}>2nd</Text></View>}
+                          {i === 2 && <View style={[ms.bestBadge, { backgroundColor: '#FFF3E0' }]}><Text style={[ms.bestBadgeText, { color: '#E65100' }]}>3rd</Text></View>}
+                        </TouchableOpacity>
+                      );
+                    })}
+                    {remaining.length > 0 && !showAllResults && (
+                      <TouchableOpacity style={ms.showMoreBtn} onPress={() => setShowAllResults(true)} data-testid="show-more-implants">
+                        <Ionicons name="chevron-down-circle-outline" size={20} color="#1A73E8" />
+                        <Text style={ms.showMoreText}>Show {remaining.length} more option{remaining.length > 1 ? 's' : ''}</Text>
+                      </TouchableOpacity>
+                    )}
+                    {showAllResults && remaining.length > 0 && (
+                      <TouchableOpacity style={ms.showMoreBtn} onPress={() => setShowAllResults(false)}>
+                        <Ionicons name="chevron-up-circle-outline" size={20} color="#1A73E8" />
+                        <Text style={ms.showMoreText}>Show less</Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                );
               })()}
 
               <View style={ms.navRow}>
@@ -982,6 +1007,9 @@ const ms = StyleSheet.create({
   implantOptionSelected: { borderColor: '#1E88E5', backgroundColor: '#F0F8FF' },
   implantName: { fontSize: 14, fontWeight: '600', color: '#333' },
   implantSpec: { fontSize: 12, color: '#888', marginTop: 2 },
+  matchHeader: { fontSize: 15, fontWeight: '700', color: '#333', marginBottom: 10, marginTop: 4 },
+  showMoreBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, marginTop: 4, borderRadius: 8, backgroundColor: '#F0F7FF' },
+  showMoreText: { fontSize: 14, fontWeight: '600', color: '#1A73E8' },
   bestBadge: { backgroundColor: '#E8F5E9', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   bestBadgeText: { fontSize: 10, fontWeight: '700', color: '#4CAF50' },
   summaryCard: { backgroundColor: '#FFF', borderRadius: 12, padding: 16, marginBottom: 16 },

@@ -189,8 +189,8 @@ export default function ProcedureDetailScreen() {
   
   const canExportPDF = () => {
     if (!procedure) return false;
-    const pdfStatuses = ['phase2_approved', 'pending_stage2_surgical', 'stage2_surgical_approved', 'pending_stage2_prosthetic', 'completed'];
-    return pdfStatuses.includes(procedure.status);
+    // Allow PDF export from pending_phase1 onwards (all non-draft statuses)
+    return procedure.status !== 'draft';
   };
   
   const handleExportPDF = async () => {
@@ -598,6 +598,129 @@ export default function ProcedureDetailScreen() {
           />
           <InfoRow icon="time" label="Time" value={procedure.procedure_time} />
         </View>
+
+        {/* Procedure Type & Plan */}
+        {procedure.implant_procedure_type && (
+          <View style={styles.section} data-testid="procedure-type-section">
+            <Text style={styles.sectionTitle}>Procedure Details</Text>
+            <InfoRow icon="construct" label="Procedure Type" value={procedure.implant_procedure_type} />
+            {procedure.loading_type?.length > 0 && (
+              <InfoRow icon="flash" label="Loading Type" value={procedure.loading_type.join(', ')} />
+            )}
+            {procedure.prosthetic_plan && (
+              <InfoRow icon="build" label="Prosthetic Plan" value={procedure.prosthetic_plan} />
+            )}
+            {procedure.prosthetic_plan_other && (
+              <InfoRow icon="create" label="Prosthetic Plan (Other)" value={procedure.prosthetic_plan_other} />
+            )}
+          </View>
+        )}
+
+        {/* Clinical Examination */}
+        {(procedure.edentulous_sites?.length > 0 || procedure.edentulous_site || procedure.arch_condition || procedure.ridge_contour || procedure.soft_tissue_thickness || procedure.keratinized_mucosa) && (
+          <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#1E88E5' }]} data-testid="clinical-examination-section">
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <Ionicons name="search" size={20} color="#1E88E5" />
+              <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#1565C0' }]}>Clinical Examination</Text>
+            </View>
+            {procedure.edentulous_sites?.length > 0 && (
+              <InfoRow icon="grid" label="Edentulous Sites" value={procedure.edentulous_sites.join(', ')} />
+            )}
+            {procedure.edentulous_site && !procedure.edentulous_sites?.length && (
+              <InfoRow icon="grid" label="Edentulous Site" value={procedure.edentulous_site} />
+            )}
+            {procedure.arch_condition && (
+              <InfoRow icon="ellipse" label="Arch Condition" value={procedure.arch_condition} />
+            )}
+            {procedure.ridge_contour && (
+              <InfoRow icon="analytics" label="Ridge Contour" value={procedure.ridge_contour} />
+            )}
+            {procedure.soft_tissue_thickness && (
+              <InfoRow icon="layers" label="Soft Tissue Thickness" value={procedure.soft_tissue_thickness} />
+            )}
+            {procedure.keratinized_mucosa && (
+              <InfoRow icon="resize" label="Keratinized Mucosa" value={procedure.keratinized_mucosa} />
+            )}
+          </View>
+        )}
+
+        {/* Occlusal Analysis */}
+        {(procedure.occlusal_scheme || procedure.parafunction_habit || procedure.vertical_dimension || procedure.opposing_dentition || procedure.vertical_dimension_mm || procedure.tmj) && (
+          <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#7B1FA2' }]} data-testid="occlusal-analysis-section">
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <Ionicons name="fitness" size={20} color="#7B1FA2" />
+              <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#6A1B9A' }]}>Occlusal Analysis</Text>
+            </View>
+            {procedure.occlusal_scheme && (
+              <InfoRow icon="swap-horizontal" label="Occlusal Scheme" value={procedure.occlusal_scheme} />
+            )}
+            {procedure.parafunction_habit && (
+              <InfoRow icon="alert-circle" label="Parafunctional Habits" value={procedure.parafunction_habit} />
+            )}
+            {procedure.vertical_dimension && (
+              <InfoRow icon="arrow-up" label="Vertical Dimension" value={procedure.vertical_dimension} />
+            )}
+            {procedure.vertical_dimension_mm && (
+              <InfoRow icon="arrow-up" label="Vertical Dimension (mm)" value={procedure.vertical_dimension_mm} />
+            )}
+            {procedure.opposing_dentition && (
+              <InfoRow icon="git-compare" label="Opposing Dentition" value={procedure.opposing_dentition} />
+            )}
+            {procedure.tmj && (
+              <InfoRow icon="pulse" label="TMJ Assessment" value={procedure.tmj} />
+            )}
+          </View>
+        )}
+
+        {/* Aesthetic Risk Assessment */}
+        {(procedure.smile_line || procedure.gingival_biotype) && (
+          <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#E91E63' }]} data-testid="aesthetic-risk-section">
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <Ionicons name="happy" size={20} color="#E91E63" />
+              <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#C2185B' }]}>Aesthetic Risk Assessment</Text>
+            </View>
+            {procedure.smile_line && (
+              <InfoRow icon="eye" label="Smile Line" value={procedure.smile_line} />
+            )}
+            {procedure.gingival_biotype && (
+              <InfoRow icon="leaf" label="Gingival Biotype" value={procedure.gingival_biotype} />
+            )}
+          </View>
+        )}
+
+        {/* Medical Assessment */}
+        {procedure.medical_assessment && Object.keys(procedure.medical_assessment).length > 0 && (
+          <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#D32F2F' }]} data-testid="medical-assessment-section">
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <Ionicons name="heart" size={20} color="#D32F2F" />
+              <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#B71C1C' }]}>Medical Assessment</Text>
+              {procedure.medical_risk_level && (
+                <View style={{
+                  backgroundColor: procedure.medical_risk_level === 'Low Risk' ? '#E8F5E9' : procedure.medical_risk_level === 'Moderate Risk' ? '#FFF3E0' : '#FFEBEE',
+                  borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4,
+                }}>
+                  <Text style={{
+                    fontSize: 11, fontWeight: '700',
+                    color: procedure.medical_risk_level === 'Low Risk' ? '#4CAF50' : procedure.medical_risk_level === 'Moderate Risk' ? '#FF9800' : '#F44336',
+                  }}>{procedure.medical_risk_level}</Text>
+                </View>
+              )}
+            </View>
+            {Object.entries(procedure.medical_assessment).map(([key, value]) => (
+              <View key={key} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' }}>
+                <Ionicons
+                  name={(value as string) === 'Yes' ? 'alert-circle' : 'checkmark-circle'}
+                  size={20}
+                  color={(value as string) === 'Yes' ? '#F44336' : '#4CAF50'}
+                />
+                <View style={{ marginLeft: 12, flex: 1 }}>
+                  <Text style={{ fontSize: 12, color: '#666', textTransform: 'capitalize' }}>{key.replace(/_/g, ' ')}</Text>
+                  <Text style={{ fontSize: 14, color: '#1A1A1A', fontWeight: '500' }}>{value as string}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Payment</Text>

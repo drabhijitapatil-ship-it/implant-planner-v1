@@ -78,6 +78,66 @@ export const generateProcedurePDF = async (procedure: any) => {
             ${procedure.implant_company ? `<p class="info-value"><strong>Company:</strong> ${procedure.implant_company}</p>` : ''}
           </div>` : ''}
 
+          ${procedure.implant_procedure_type ? `
+          <div class="section">
+            <div class="section-title">Procedure Details</div>
+            <table>
+              <tr><td class="info-label">Procedure Type:</td><td class="info-value">${procedure.implant_procedure_type}</td></tr>
+              ${procedure.loading_type?.length ? `<tr><td class="info-label">Loading Type:</td><td class="info-value">${procedure.loading_type.join(', ')}</td></tr>` : ''}
+              ${procedure.prosthetic_plan ? `<tr><td class="info-label">Prosthetic Plan:</td><td class="info-value">${procedure.prosthetic_plan}</td></tr>` : ''}
+              ${procedure.prosthetic_plan_other ? `<tr><td class="info-label">Prosthetic Plan (Other):</td><td class="info-value">${procedure.prosthetic_plan_other}</td></tr>` : ''}
+            </table>
+          </div>` : ''}
+
+          ${(procedure.edentulous_sites?.length || procedure.edentulous_site || procedure.arch_condition || procedure.ridge_contour || procedure.soft_tissue_thickness || procedure.keratinized_mucosa) ? `
+          <div class="section">
+            <div class="section-title">Clinical Examination — Intraoral</div>
+            <table>
+              ${procedure.edentulous_sites?.length ? `<tr><td class="info-label">Edentulous Sites:</td><td class="info-value">${procedure.edentulous_sites.join(', ')}</td></tr>` : ''}
+              ${procedure.edentulous_site && !procedure.edentulous_sites?.length ? `<tr><td class="info-label">Edentulous Site:</td><td class="info-value">${procedure.edentulous_site}</td></tr>` : ''}
+              ${procedure.arch_condition ? `<tr><td class="info-label">Arch Condition:</td><td class="info-value">${procedure.arch_condition}</td></tr>` : ''}
+              ${procedure.ridge_contour ? `<tr><td class="info-label">Ridge Contour:</td><td class="info-value">${procedure.ridge_contour}</td></tr>` : ''}
+              ${procedure.soft_tissue_thickness ? `<tr><td class="info-label">Soft Tissue:</td><td class="info-value">${procedure.soft_tissue_thickness}</td></tr>` : ''}
+              ${procedure.keratinized_mucosa ? `<tr><td class="info-label">Keratinized Mucosa:</td><td class="info-value">${procedure.keratinized_mucosa}</td></tr>` : ''}
+            </table>
+          </div>` : ''}
+
+          ${(procedure.occlusal_scheme || procedure.parafunction_habit || procedure.vertical_dimension || procedure.opposing_dentition || procedure.vertical_dimension_mm || procedure.tmj) ? `
+          <div class="section">
+            <div class="section-title">Occlusal Analysis</div>
+            <table>
+              ${procedure.occlusal_scheme ? `<tr><td class="info-label">Occlusal Scheme:</td><td class="info-value">${procedure.occlusal_scheme}</td></tr>` : ''}
+              ${procedure.parafunction_habit ? `<tr><td class="info-label">Parafunctional Habits:</td><td class="info-value">${procedure.parafunction_habit}</td></tr>` : ''}
+              ${procedure.vertical_dimension ? `<tr><td class="info-label">Vertical Dimension:</td><td class="info-value">${procedure.vertical_dimension}</td></tr>` : ''}
+              ${procedure.vertical_dimension_mm ? `<tr><td class="info-label">Vertical Dimension (mm):</td><td class="info-value">${procedure.vertical_dimension_mm}</td></tr>` : ''}
+              ${procedure.opposing_dentition ? `<tr><td class="info-label">Opposing Dentition:</td><td class="info-value">${procedure.opposing_dentition}</td></tr>` : ''}
+              ${procedure.tmj ? `<tr><td class="info-label">TMJ Assessment:</td><td class="info-value">${procedure.tmj}</td></tr>` : ''}
+            </table>
+          </div>` : ''}
+
+          ${(procedure.smile_line || procedure.gingival_biotype) ? `
+          <div class="section">
+            <div class="section-title">Aesthetic Risk Assessment</div>
+            <table>
+              ${procedure.smile_line ? `<tr><td class="info-label">Smile Line:</td><td class="info-value">${procedure.smile_line}</td></tr>` : ''}
+              ${procedure.gingival_biotype ? `<tr><td class="info-label">Gingival Biotype:</td><td class="info-value">${procedure.gingival_biotype}</td></tr>` : ''}
+            </table>
+          </div>` : ''}
+
+          ${procedure.medical_assessment && Object.keys(procedure.medical_assessment).length > 0 ? `
+          <div class="section">
+            <div class="section-title">Medical Assessment${procedure.medical_risk_level ? ` — ${procedure.medical_risk_level}` : ''}</div>
+            <table>
+              ${Object.entries(procedure.medical_assessment).map(([key, value]) => `
+              <tr>
+                <td class="info-label" style="text-transform: capitalize;">${key.replace(/_/g, ' ')}:</td>
+                <td class="info-value">
+                  <span style="color: ${value === 'Yes' ? '#F44336' : '#4CAF50'}; font-weight: bold;">${value}</span>
+                </td>
+              </tr>`).join('')}
+            </table>
+          </div>` : ''}
+
           ${procedure.implant_plans?.length ? `
           <div class="section">
             <div class="section-title">Implant Selection Details</div>
