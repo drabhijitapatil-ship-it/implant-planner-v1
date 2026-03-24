@@ -480,7 +480,7 @@ export default function NewProcedureScreen() {
             <Ionicons name={showSupervisorPicker ? 'chevron-up' : 'chevron-down'} size={18} color="#666" />
           </TouchableOpacity>
           {showSupervisorPicker && (
-            <View style={styles.dropdownList}>
+            <ScrollView style={styles.dropdownList} nestedScrollEnabled={true}>
               {supervisors.map(s => (
                 <TouchableOpacity key={s._id || s.id} style={styles.dropdownItem}
                   onPress={() => {
@@ -491,7 +491,7 @@ export default function NewProcedureScreen() {
                   <Text style={styles.dropdownItemText}>{s.name}</Text>
                 </TouchableOpacity>
               ))}
-            </View>
+            </ScrollView>
           )}
         </View>
         <View style={styles.fieldContainer}>
@@ -503,7 +503,7 @@ export default function NewProcedureScreen() {
             <Ionicons name={showInchargePicker ? 'chevron-up' : 'chevron-down'} size={18} color="#666" />
           </TouchableOpacity>
           {showInchargePicker && (
-            <View style={styles.dropdownList}>
+            <ScrollView style={styles.dropdownList} nestedScrollEnabled={true}>
               {incharges.map(s => (
                 <TouchableOpacity key={s._id || s.id} style={styles.dropdownItem}
                   onPress={() => {
@@ -514,7 +514,7 @@ export default function NewProcedureScreen() {
                   <Text style={styles.dropdownItemText}>{s.name}</Text>
                 </TouchableOpacity>
               ))}
-            </View>
+            </ScrollView>
           )}
         </View>
       </View>
