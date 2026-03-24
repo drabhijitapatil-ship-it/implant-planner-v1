@@ -173,6 +173,13 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
    - All data visible to all roles at all times (during and after approval)
 5. **Backend**: `phase2_supervisor_notes` and `phase2_incharge_notes` now saved as top-level fields for easy retrieval.
 
+### Phase 3 & Phase 4 Data Consolidation (Mar 2026)
+1. **Phase 3 — Second Stage Surgical** section on detail page: Shows checklist items (with check/uncheck icons), ISQ Value, Healing Abutment Height, and notes by Student/Supervisor/In-Charge.
+2. **Phase 4 Step 1 — Prosthetic Protocol** section: Shows Final Prosthetic Plan, Prosthetic Material, Custom Abutment, Overdenture Attachment, Impression Type, Payment/Components status, and notes by Student/Supervisor/In-Charge.
+3. **Phase 4 Step 2 — Trial & Delivery** section: Shows Trial Checklist (check/uncheck), Confirmation Statement, and notes by Student/Supervisor/In-Charge.
+4. **Backend**: Phase 3 submit now saves `phase3_supervisor_notes` and `phase3_incharge_notes`. Phase 4 Step 2 submit now saves `phase4_step2_supervisor_notes` and `phase4_step2_incharge_notes`.
+5. All phase data visible to all roles (student, supervisor, in-charge) at all times.
+
 ## Backlog
 ### P2 - Refactoring
 - Backend refactoring (decompose server.py into routers/models/services)
