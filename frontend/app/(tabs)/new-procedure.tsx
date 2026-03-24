@@ -443,7 +443,8 @@ export default function NewProcedureScreen() {
           <CaseImplantPlanning
             procedureId={createdProcedureId}
             procedureType={formData.implant_procedure_type}
-            status="draft"
+            procedureStatus="draft"
+            isOwner={true}
             userRole={user?.role || 'student'}
             readOnly={false}
             medicalAssessment={formData.medical_assessment}
