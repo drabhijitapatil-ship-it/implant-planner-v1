@@ -37,6 +37,7 @@ export default function Phase2SubmissionScreen() {
   const [implantOtherNotes, setImplantOtherNotes] = useState('');
   const [prostheticComponent, setProstheticComponent] = useState('');
   const [prostheticOpen, setProstheticOpen] = useState(false);
+  const [healingAbutmentCuffHeight, setHealingAbutmentCuffHeight] = useState('');
   const [suturesPlaced, setSuturesPlaced] = useState(true);
   const [hemostasisAchieved, setHemostasisAchieved] = useState(true);
 
@@ -100,6 +101,7 @@ export default function Phase2SubmissionScreen() {
         torque_values: torqueValues.map(v => parseFloat(v)),
         implant_other_notes: implantOtherNotes || null,
         prosthetic_component: prostheticComponent,
+        healing_abutment_cuff_height: prostheticComponent === 'Healing Abutment Placed' ? healingAbutmentCuffHeight : null,
         sutures_placed: suturesPlaced,
         hemostasis_achieved: hemostasisAchieved,
         post_op_checklist: postOpChecklist,
@@ -136,7 +138,7 @@ export default function Phase2SubmissionScreen() {
   );
 
   return (
-    <SafeAreaView style={s.container} edges={['bottom']}>
+    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       <BackToDashboard />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} nestedScrollEnabled>
@@ -233,6 +235,22 @@ export default function Phase2SubmissionScreen() {
             {/* Prosthetic Component */}
             {renderDropdown('Prosthetic Component', prostheticComponent, PROSTHETIC_COMPONENT_OPTIONS,
               prostheticOpen, setProstheticOpen, setProstheticComponent)}
+
+            {/* Healing Abutment Cuff Height */}
+            {prostheticComponent === 'Healing Abutment Placed' && (
+              <View style={s.field}>
+                <Text style={s.label}>Healing Abutment Cuff Height (mm) <Text style={{ color: '#DC3545' }}>*</Text></Text>
+                <TextInput
+                  style={s.input}
+                  value={healingAbutmentCuffHeight}
+                  onChangeText={setHealingAbutmentCuffHeight}
+                  placeholder="e.g. 3"
+                  keyboardType="decimal-pad"
+                  maxLength={5}
+                  data-testid="healing-abutment-cuff-height"
+                />
+              </View>
+            )}
 
             {/* Suturing */}
             <View style={s.field}>

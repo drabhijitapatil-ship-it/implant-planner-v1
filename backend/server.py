@@ -282,6 +282,7 @@ class Phase2Submit(BaseModel):
     torque_values: Optional[List[float]] = None
     implant_other_notes: Optional[str] = Field(None, max_length=500)
     prosthetic_component: Optional[str] = Field(None, max_length=100)
+    healing_abutment_cuff_height: Optional[str] = Field(None, max_length=10)
     sutures_placed: Optional[bool] = True
     hemostasis_achieved: Optional[bool] = True
     # Post-operative checklist
@@ -2584,6 +2585,7 @@ async def submit_phase2(
         "torque_values": phase2_data.torque_values or [],
         "implant_other_notes": phase2_data.implant_other_notes,
         "prosthetic_component": phase2_data.prosthetic_component,
+        "healing_abutment_cuff_height": phase2_data.healing_abutment_cuff_height,
         "sutures_placed": phase2_data.sutures_placed,
         "hemostasis_achieved": phase2_data.hemostasis_achieved,
         "post_op_checklist": phase2_data.post_op_checklist or {},
@@ -2607,6 +2609,10 @@ async def submit_phase2(
         update_data["phase2_student_notes"] = phase2_data.student_notes
     if phase2_data.remark:
         update_data["phase2_remark"] = phase2_data.remark
+    if phase2_data.supervisor_notes:
+        update_data["phase2_supervisor_notes"] = phase2_data.supervisor_notes
+    if phase2_data.incharge_notes:
+        update_data["phase2_incharge_notes"] = phase2_data.incharge_notes
     if phase2_data.torque_values:
         update_data["torque_values"] = phase2_data.torque_values
     

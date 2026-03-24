@@ -842,7 +842,114 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
-        {procedure.phase2_remark && (
+        {/* ═══════════ PHASE 2: SURGICAL PROTOCOLS - Full Data Display ═══════════ */}
+        {procedure.phase2_data && Object.keys(procedure.phase2_data).length > 0 && (
+          <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#0D47A1' }]} data-testid="phase2-full-data-section">
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <Ionicons name="medkit" size={22} color="#0D47A1" />
+              <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#0D47A1', fontSize: 17 }]}>Phase 2 — Surgical Protocols</Text>
+            </View>
+
+            {/* Pre-Surgery Checklist */}
+            {procedure.phase2_data.pre_surgery_checklist && Object.keys(procedure.phase2_data.pre_surgery_checklist).length > 0 && (
+              <View style={{ marginBottom: 16 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', marginBottom: 8 }}>Pre-Surgery Checklist</Text>
+                {Object.entries(procedure.phase2_data.pre_surgery_checklist).map(([key, val]) => (
+                  <View key={key} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' }}>
+                    <Ionicons name={val ? 'checkbox' : 'square-outline'} size={20} color={val ? '#4CAF50' : '#999'} />
+                    <Text style={{ marginLeft: 10, fontSize: 13, color: '#333', textTransform: 'capitalize' }}>{key.replace(/_/g, ' ')}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Surgical Procedure Details */}
+            <View style={{ marginBottom: 16 }}>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', marginBottom: 8 }}>Surgical Procedure</Text>
+              {procedure.phase2_data.anesthesia_adequate && (
+                <InfoRow icon="water" label="Anaesthesia Adequate" value={procedure.phase2_data.anesthesia_adequate} />
+              )}
+              {procedure.phase2_data.anesthesia_details && (
+                <InfoRow icon="alert" label="Anaesthesia Notes" value={procedure.phase2_data.anesthesia_details} />
+              )}
+              {procedure.phase2_data.flap_design && (
+                <InfoRow icon="cut" label="Incision / Flap Design" value={procedure.phase2_data.flap_design} />
+              )}
+              {procedure.phase2_data.drilling_type && (
+                <InfoRow icon="hardware-chip" label="Drilling Type" value={procedure.phase2_data.drilling_type} />
+              )}
+              {procedure.phase2_data.implant_seated_correctly !== undefined && (
+                <InfoRow icon="checkmark-done" label="Implant Seated Correctly" value={procedure.phase2_data.implant_seated_correctly ? 'Yes' : 'No'} />
+              )}
+              {procedure.phase2_data.implant_seated_comment && (
+                <InfoRow icon="chatbox" label="Implant Seating Notes" value={procedure.phase2_data.implant_seated_comment} />
+              )}
+              {procedure.phase2_data.torque_values && procedure.phase2_data.torque_values.length > 0 && (
+                <View style={{ marginVertical: 6 }}>
+                  <Text style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>Torque Values</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                    {procedure.phase2_data.torque_values.map((tv: number, idx: number) => (
+                      <View key={idx} style={{ backgroundColor: '#FFF3E0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 }}>
+                        <Text style={{ fontSize: 14, fontWeight: '700', color: '#E65100' }}>Implant {idx + 1}: {tv} Ncm</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+              {procedure.phase2_data.implant_other_notes && (
+                <InfoRow icon="document-text" label="Other Implant Notes" value={procedure.phase2_data.implant_other_notes} />
+              )}
+              {procedure.phase2_data.prosthetic_component && (
+                <InfoRow icon="cube" label="Prosthetic Component" value={procedure.phase2_data.prosthetic_component} />
+              )}
+              {procedure.phase2_data.healing_abutment_cuff_height && (
+                <InfoRow icon="resize" label="Healing Abutment Cuff Height" value={`${procedure.phase2_data.healing_abutment_cuff_height} mm`} />
+              )}
+              {procedure.phase2_data.sutures_placed !== undefined && (
+                <InfoRow icon="bandage" label="Sutures Placed" value={procedure.phase2_data.sutures_placed ? 'Yes' : 'No'} />
+              )}
+              {procedure.phase2_data.hemostasis_achieved !== undefined && (
+                <InfoRow icon="water" label="Hemostasis Achieved" value={procedure.phase2_data.hemostasis_achieved ? 'Yes' : 'No'} />
+              )}
+            </View>
+
+            {/* Post-Operative Checklist */}
+            {procedure.phase2_data.post_op_checklist && Object.keys(procedure.phase2_data.post_op_checklist).length > 0 && (
+              <View style={{ marginBottom: 16 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', marginBottom: 8 }}>Post-Operative Checklist</Text>
+                {Object.entries(procedure.phase2_data.post_op_checklist).map(([key, val]) => (
+                  <View key={key} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' }}>
+                    <Ionicons name={val ? 'checkbox' : 'square-outline'} size={20} color={val ? '#4CAF50' : '#999'} />
+                    <Text style={{ marginLeft: 10, fontSize: 13, color: '#333', textTransform: 'capitalize' }}>{key.replace(/_/g, ' ')}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Notes & Remarks */}
+            {(procedure.phase2_student_notes || procedure.phase2_remark) && (
+              <View style={{ marginBottom: 8, backgroundColor: '#F5F9FF', borderRadius: 8, padding: 12 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', marginBottom: 8 }}>Post-Surgical Notes by Student</Text>
+                <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase2_student_notes || procedure.phase2_remark}</Text>
+              </View>
+            )}
+            {procedure.phase2_supervisor_notes && (
+              <View style={{ marginBottom: 8, backgroundColor: '#F3E5F5', borderRadius: 8, padding: 12 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#6A1B9A', marginBottom: 8 }}>Remarks by Supervising Faculty</Text>
+                <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase2_supervisor_notes}</Text>
+              </View>
+            )}
+            {procedure.phase2_incharge_notes && (
+              <View style={{ marginBottom: 8, backgroundColor: '#E8F5E9', borderRadius: 8, padding: 12 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#2E7D32', marginBottom: 8 }}>Remarks by Implant In-Charge</Text>
+                <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase2_incharge_notes}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Legacy Phase 2 remark (for older procedures without phase2_data) */}
+        {!procedure.phase2_data && procedure.phase2_remark && (
           <View style={styles.section} data-testid="phase2-remark-section">
             <Text style={styles.sectionTitle}>Phase 2 - Post-Surgical Notes by Student</Text>
             <Text style={styles.specText}>{procedure.phase2_remark}</Text>
