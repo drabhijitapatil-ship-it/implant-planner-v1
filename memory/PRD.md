@@ -147,6 +147,13 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
 - **Notes**: Student, Supervisor, In-Charge text areas
 - **Backend**: `Stage2SurgicalSubmit` model with `checklist_items`, `isq_value`, `healing_abutment_height`, `student_notes`. `phase3_data` subdocument stored. Permissions opened for faculty
 
+### Phase 4 Implementation (Mar 2026 — Doc-Aligned, 2-Step)
+- **Step 1: Final Prosthesis & Impressions** — Conditional prosthesis dropdown (FP1/2/3 per type, material, custom abutment, overdenture attachment), payment + components checkboxes, impression type selector
+- **Step 2: Trial & Prosthesis Delivery** — 5-item trial checklist (Jig/Sheffield's/Radiographic, Prosthesis Trial, Occlusion, Final Placement), student notes, confirmation statement
+- **New Statuses**: `stage2_prosthetic_step1_approved`, `pending_final_delivery`
+- **Backend**: `Phase4Step2Submit` model, new submission + approval endpoints for Step 2, badge generation + completion on final approval
+- **Frontend**: Rewritten `submit-stage2-prosthetic/[id].tsx` for Step 1, new `submit-phase4-step2/[id].tsx` for Step 2
+
 ## Backlog
 ### P2 - Refactoring
 - Backend refactoring (decompose server.py into routers/models/services)
