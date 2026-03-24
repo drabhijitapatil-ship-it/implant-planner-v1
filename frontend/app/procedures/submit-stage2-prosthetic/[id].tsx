@@ -1,81 +1,84 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-  ActivityIndicator,
-  Modal,
-  FlatList,
+  View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity,
+  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import api from '../../../utils/api';
-import ChecklistForm from '../../../components/ChecklistForm';
 import BackToDashboard from '../../../components/BackToDashboard';
 import { Ionicons } from '@expo/vector-icons';
-import { getProstheticOptions } from '../../../constants/checklist';
+import {
+  PHASE4_SINGLE_MULTIPLE_OPTIONS,
+  PHASE4_FULL_ARCH_OPTIONS,
+  CUSTOM_ABUTMENT_OPTIONS,
+  FP_MATERIAL_OPTIONS,
+  OVERDENTURE_ATTACHMENT_OPTIONS,
+  FULL_ARCH_GROUP,
+  SINGLE_GROUP,
+  MULTIPLE_GROUP,
+} from '../../../constants/checklist';
 
-export default function Stage2ProstheticSubmissionScreen() {
+export default function Phase4Step1Screen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-
   const [loading, setLoading] = useState(false);
-  const [checklist, setChecklist] = useState<any>({});
-  const [studentRemark, setStudentRemark] = useState('');
-  const [facultyRemark, setFacultyRemark] = useState('');
-  const [inchargeRemark, setInchargeRemark] = useState('');
-  const [finalProstheticPlan, setFinalProstheticPlan] = useState('');
-  const [procedureType, setProcedureType] = useState('');
-  const [loadingTypes, setLoadingTypes] = useState<string[]>([]);
-  const [showPlanDropdown, setShowPlanDropdown] = useState(false);
+  const [procedure, setProcedure] = useState<any>(null);
 
-  useEffect(() => {
-    loadProcedure();
-  }, []);
+  // Form state
+  const [finalProsthesis, setFinalProsthesis] = useState('');
+  const [prosthesisOpen, setProsthesisOpen] = useState(false);
+  const [prostheticMaterial, setProstheticMaterial] = useState('');
+  const [materialOpen, setMaterialOpen] = useState(false);
+  const [customAbutment, setCustomAbutment] = useState('');
+  const [abutmentOpen, setAbutmentOpen] = useState(false);
+  const [overdentureAttachment, setOverdentureAttachment] = useState('');
+  const [attachmentOpen, setAttachmentOpen] = useState(false);
+  const [paymentComplete, setPaymentComplete] = useState(false);
+  const [componentsAvailable, setComponentsAvailable] = useState(false);
+  const [impressionType, setImpressionType] = useState('');
+  const [studentNotes, setStudentNotes] = useState('');
+
+  useEffect(() => { loadProcedure(); }, []);
 
   const loadProcedure = async () => {
     try {
       const res = await api.get(`/procedures/${id}`);
-      const proc = res.data;
-      setProcedureType(proc.implant_procedure_type || '');
-      setLoadingTypes(proc.loading_type || []);
-      setFinalProstheticPlan(proc.prosthetic_plan || '');
-    } catch {
-      console.error('Failed to load procedure data');
-    }
+      setProcedure(res.data);
+    } catch {}
   };
 
-  const prostheticOptions = useMemo(() => {
-    return getProstheticOptions(procedureType, loadingTypes);
-  }, [procedureType, loadingTypes]);
+  const getOptions = () => {
+    if (!procedure) return [];
+    const procType = procedure.implant_procedure_type || '';
+    if (SINGLE_GROUP.has(procType) || MULTIPLE_GROUP.has(procType)) return PHASE4_SINGLE_MULTIPLE_OPTIONS;
+    if (FULL_ARCH_GROUP.has(procType)) return PHASE4_FULL_ARCH_OPTIONS;
+    return [...PHASE4_SINGLE_MULTIPLE_OPTIONS, ...PHASE4_FULL_ARCH_OPTIONS];
+  };
+
+  const showMaterial = finalProsthesis && (finalProsthesis.includes('FP1') || finalProsthesis.includes('FP2') || finalProsthesis.includes('FP3'));
+  const showOverdenture = finalProsthesis && finalProsthesis.includes('Overdenture');
 
   const handleSubmit = async () => {
-    if (!checklist.prosthetic_phase || !checklist.prosthetic_phase.items || checklist.prosthetic_phase.items.length === 0) {
-      Alert.alert('Validation Error', 'Please complete the Prosthetic Phase Protocol checklist');
-      return;
-    }
+    if (!finalProsthesis) { Alert.alert('Missing', 'Please select Final Prosthesis'); return; }
+    if (!paymentComplete) { Alert.alert('Missing', 'Please confirm payment is complete'); return; }
+    if (!componentsAvailable) { Alert.alert('Missing', 'Please confirm all components are available'); return; }
+    if (!impressionType) { Alert.alert('Missing', 'Please select impression type'); return; }
 
     setLoading(true);
     try {
       await api.post(`/procedures/${id}/stage2/prosthetic`, {
-        checklist: checklist.prosthetic_phase,
-        remark: studentRemark || null,
-        faculty_remark: facultyRemark || null,
-        incharge_remark: inchargeRemark || null,
-        final_prosthetic_plan: finalProstheticPlan || null,
+        final_prosthetic_plan: finalProsthesis + (prostheticMaterial ? ` - ${prostheticMaterial}` : ''),
+        prosthetic_material: prostheticMaterial || null,
+        custom_abutment: customAbutment || null,
+        overdenture_attachment: overdentureAttachment || null,
+        payment_complete: paymentComplete,
+        components_available: componentsAvailable,
+        impression_type: impressionType,
+        student_notes: studentNotes || null,
       });
-
-      Alert.alert(
-        'Success',
-        'Phase 4 - Prosthetic Protocol submitted successfully! Awaiting approval.',
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
+      Alert.alert('Success', 'Phase 4 Step 1 submitted! Awaiting approval.',
+        [{ text: 'OK', onPress: () => router.back() }]);
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.detail || 'Failed to submit');
     } finally {
@@ -83,184 +86,146 @@ export default function Stage2ProstheticSubmissionScreen() {
     }
   };
 
+  const renderDropdown = (label: string, value: string, options: string[],
+    open: boolean, setOpen: (v: boolean) => void, onSelect: (v: string) => void, required = true) => (
+    <View style={s.field}>
+      <Text style={s.label}>{label} {required && <Text style={{ color: '#DC3545' }}>*</Text>}</Text>
+      <TouchableOpacity style={s.dropdown} onPress={() => setOpen(!open)}>
+        <Text style={[s.dropdownText, !value && { color: '#999' }]}>{value || `Select...`}</Text>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color="#666" />
+      </TouchableOpacity>
+      {open && (
+        <ScrollView style={s.ddList} nestedScrollEnabled>
+          {options.map(opt => (
+            <TouchableOpacity key={opt} style={[s.ddItem, value === opt && s.ddItemActive]}
+              onPress={() => { onSelect(opt); setOpen(false); }}>
+              <Text style={[s.ddItemText, value === opt && { color: '#1A73E8', fontWeight: '700' }]}>{opt}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+    </View>
+  );
+
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={s.container} edges={['bottom']}>
       <BackToDashboard />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
-      >
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <View style={styles.titleContainer}>
-            <Text style={styles.pageTitle} data-testid="stage2-prosthetic-title">
-              Phase 4 - Prosthetic Protocol
-            </Text>
-          </View>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={s.scroll} nestedScrollEnabled>
+          <Text style={s.pageTitle}>Phase 4 Step 1 - Final Prosthesis & Impressions</Text>
 
-          <View style={styles.infoBox}>
-            <Ionicons name="information-circle" size={24} color="#007AFF" />
-            <Text style={styles.infoText}>
-              Phase 3 has been approved. Complete the Prosthetic Protocol checklist to finalize the treatment.
-            </Text>
-          </View>
-
-          {/* Final Prosthetic Treatment Plan */}
-          {prostheticOptions.length > 0 && (
-            <View style={styles.planSection}>
-              <Text style={styles.planLabel}>Final Prosthetic Treatment Plan</Text>
-              <TouchableOpacity
-                style={styles.planDropdown}
-                onPress={() => setShowPlanDropdown(true)}
-                data-testid="final-prosthetic-plan-dropdown"
-              >
-                <Text style={finalProstheticPlan ? styles.planText : styles.planPlaceholder}>
-                  {finalProstheticPlan || 'Select Final Prosthetic Plan'}
-                </Text>
-                <Ionicons name="chevron-down" size={20} color="#666" />
-              </TouchableOpacity>
+          {/* ── Final Prosthesis Selection ── */}
+          <View style={s.section}>
+            <View style={s.sectionHeader}>
+              <Ionicons name="construct-outline" size={20} color="#6A1B9A" />
+              <Text style={s.sectionTitle}>Final Prosthesis Selection</Text>
             </View>
-          )}
+            {procedure && <Text style={s.helperText}>Procedure Type: {procedure.implant_procedure_type}</Text>}
+            {renderDropdown('Final Prosthesis Type', finalProsthesis, getOptions(),
+              prosthesisOpen, setProsthesisOpen, (v) => { setFinalProsthesis(v); setProstheticMaterial(''); setOverdentureAttachment(''); })}
 
-          <ChecklistForm
-            checklist={checklist}
-            onChecklistChange={setChecklist}
-            stage2Section="prosthetic_phase"
-            procedureId={id as string}
-          />
+            {showMaterial && renderDropdown('Prosthetic Material', prostheticMaterial, FP_MATERIAL_OPTIONS,
+              materialOpen, setMaterialOpen, setProstheticMaterial)}
 
-          <View style={styles.form}>
-            <Text style={styles.label}>Student Remark</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={studentRemark}
-              onChangeText={setStudentRemark}
-              placeholder="Student observations, treatment notes..."
-              multiline
-              numberOfLines={3}
-              data-testid="phase4-student-remark"
-            />
+            {showOverdenture && renderDropdown('Overdenture Attachment', overdentureAttachment, OVERDENTURE_ATTACHMENT_OPTIONS,
+              attachmentOpen, setAttachmentOpen, setOverdentureAttachment)}
 
-            <Text style={styles.label}>Faculty Remark</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={facultyRemark}
-              onChangeText={setFacultyRemark}
-              placeholder="Faculty observations and approval notes..."
-              multiline
-              numberOfLines={3}
-              data-testid="phase4-faculty-remark"
-            />
-
-            <Text style={styles.label}>Implant Incharge Remark</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={inchargeRemark}
-              onChangeText={setInchargeRemark}
-              placeholder="Implant incharge final assessment..."
-              multiline
-              numberOfLines={3}
-              data-testid="phase4-incharge-remark"
-            />
+            {renderDropdown('Custom Abutment (optional)', customAbutment, CUSTOM_ABUTMENT_OPTIONS,
+              abutmentOpen, setAbutmentOpen, setCustomAbutment, false)}
           </View>
 
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity
-              style={[styles.submitButton, loading && styles.submitButtonDisabled]}
-              onPress={handleSubmit}
-              disabled={loading}
-              data-testid="stage2-prosthetic-submit-btn"
-            >
-              {loading ? (
-                <ActivityIndicator color="#FFF" />
-              ) : (
-                <>
-                  <Ionicons name="checkmark-circle" size={20} color="#FFF" />
-                  <Text style={styles.submitButtonText}>Submit Phase 4 - Prosthetic Protocol</Text>
-                </>
+          {/* ── Payment & Components ── */}
+          <View style={s.section}>
+            <View style={s.sectionHeader}>
+              <Ionicons name="card-outline" size={20} color="#1565C0" />
+              <Text style={s.sectionTitle}>Payment & Components</Text>
+            </View>
+            <TouchableOpacity style={s.checkRow} onPress={() => setPaymentComplete(!paymentComplete)}>
+              <Ionicons name={paymentComplete ? 'checkbox' : 'square-outline'} size={22} color={paymentComplete ? '#4CAF50' : '#999'} />
+              <Text style={s.checkLabel}>Complete Payment Done</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.checkRow} onPress={() => setComponentsAvailable(!componentsAvailable)}>
+              <Ionicons name={componentsAvailable ? 'checkbox' : 'square-outline'} size={22} color={componentsAvailable ? '#4CAF50' : '#999'} />
+              <Text style={s.checkLabel}>All Prosthetic Components Available</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* ── Impressions ── */}
+          <View style={s.section}>
+            <View style={s.sectionHeader}>
+              <Ionicons name="scan-outline" size={20} color="#E65100" />
+              <Text style={s.sectionTitle}>Impressions</Text>
+            </View>
+            <Text style={s.label}>Select Impression Type <Text style={{ color: '#DC3545' }}>*</Text></Text>
+            <View style={{ gap: 10 }}>
+              {[
+                { id: 'intraoral_scans', label: 'Intra-Oral Scans Made', icon: 'phone-portrait-outline' },
+                { id: 'conventional', label: 'Conventional Impressions Made', icon: 'hand-left-outline' },
+              ].map(opt => (
+                <TouchableOpacity key={opt.id} style={[s.impressionCard, impressionType === opt.id && s.impressionCardActive]}
+                  onPress={() => setImpressionType(opt.id)}>
+                  <Ionicons name={opt.icon as any} size={24} color={impressionType === opt.id ? '#1A73E8' : '#999'} />
+                  <Text style={[s.impressionLabel, impressionType === opt.id && { color: '#1A73E8', fontWeight: '700' }]}>{opt.label}</Text>
+                  {impressionType === opt.id && <Ionicons name="checkmark-circle" size={22} color="#1A73E8" />}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* ── Notes ── */}
+          <View style={s.section}>
+            <View style={s.sectionHeader}>
+              <Ionicons name="document-text-outline" size={20} color="#00695C" />
+              <Text style={s.sectionTitle}>Notes</Text>
+            </View>
+            <View style={s.field}>
+              <Text style={s.label}>Student Notes</Text>
+              <TextInput style={[s.input, s.textArea]} value={studentNotes} onChangeText={setStudentNotes}
+                placeholder="Treatment planning notes, special considerations..." multiline numberOfLines={3}
+                data-testid="phase4-step1-notes" />
+            </View>
+            <Text style={s.helperText}>Supervisor and In-Charge remarks added during approval.</Text>
+          </View>
+
+          {/* ── Submit ── */}
+          <View style={{ padding: 16, paddingBottom: 32 }}>
+            <TouchableOpacity style={[s.submitBtn, loading && { opacity: 0.6 }]} onPress={handleSubmit} disabled={loading}
+              data-testid="phase4-step1-submit">
+              {loading ? <ActivityIndicator color="#FFF" /> : (
+                <><Ionicons name="checkmark-circle" size={22} color="#FFF" />
+                <Text style={s.submitText}>Submit Step 1 for Approval</Text></>
               )}
             </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-
-      {/* Prosthetic Plan Dropdown Modal */}
-      <Modal visible={showPlanDropdown} animationType="slide" transparent onRequestClose={() => setShowPlanDropdown(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.dropdownModal}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Final Prosthetic Plan</Text>
-              <TouchableOpacity onPress={() => setShowPlanDropdown(false)}>
-                <Ionicons name="close" size={24} color="#333" />
-              </TouchableOpacity>
-            </View>
-            <FlatList
-              data={prostheticOptions}
-              keyExtractor={(item) => item}
-              renderItem={({ item }) => {
-                const isSelected = finalProstheticPlan === item;
-                return (
-                  <TouchableOpacity
-                    style={[styles.ddItem, isSelected && styles.ddItemSelected]}
-                    onPress={() => { setFinalProstheticPlan(item); setShowPlanDropdown(false); }}
-                  >
-                    <Text style={[styles.ddItemText, isSelected && styles.ddItemTextSelected]}>{item}</Text>
-                    {isSelected && <Ionicons name="checkmark-circle" size={22} color="#FF9800" />}
-                  </TouchableOpacity>
-                );
-              }}
-            />
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
-  keyboardView: { flex: 1 },
-  scrollContent: { paddingBottom: 32 },
-  titleContainer: { padding: 16, paddingBottom: 0 },
-  pageTitle: { fontSize: 22, fontWeight: '700', color: '#1A1A1A', textAlign: 'center' },
-  infoBox: {
-    flexDirection: 'row', backgroundColor: '#FFF3E0', margin: 16, padding: 16,
-    borderRadius: 12, gap: 12,
-  },
-  infoText: { flex: 1, fontSize: 14, color: '#E65100', lineHeight: 20 },
-  planSection: { paddingHorizontal: 16, marginBottom: 8 },
-  planLabel: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 6 },
-  planDropdown: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    borderWidth: 1.5, borderColor: '#FF9800', borderRadius: 10, padding: 14, backgroundColor: '#FFF',
-  },
-  planText: { fontSize: 15, color: '#333', flex: 1 },
-  planPlaceholder: { fontSize: 15, color: '#999', flex: 1 },
-  form: { padding: 16 },
-  label: { fontSize: 14, fontWeight: '600', color: '#1A1A1A', marginBottom: 8, marginTop: 12 },
-  input: {
-    borderWidth: 1, borderColor: '#DDD', borderRadius: 8, padding: 12,
-    fontSize: 14, backgroundColor: '#FFF',
-  },
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#F5F7FA' },
+  scroll: { paddingBottom: 32 },
+  pageTitle: { fontSize: 18, fontWeight: '700', color: '#1A1A2E', textAlign: 'center', paddingVertical: 16 },
+  section: { backgroundColor: '#FFF', marginHorizontal: 16, marginBottom: 16, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#E8EDF2' },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1A1A2E' },
+  field: { marginBottom: 14 },
+  label: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 6 },
+  input: { borderWidth: 1, borderColor: '#DDD', borderRadius: 8, padding: 12, fontSize: 14, backgroundColor: '#FAFAFA', minHeight: 44 },
   textArea: { minHeight: 80, textAlignVertical: 'top' },
-  buttonContainer: { padding: 16 },
-  submitButton: {
-    flexDirection: 'row', backgroundColor: '#FF9800', borderRadius: 12, padding: 16,
-    alignItems: 'center', justifyContent: 'center', gap: 8,
-  },
-  submitButtonDisabled: { opacity: 0.6 },
-  submitButtonText: { color: '#FFF', fontSize: 16, fontWeight: '600' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
-  dropdownModal: { backgroundColor: '#FFF', borderRadius: 16, maxHeight: '70%', overflow: 'hidden' },
-  modalHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    padding: 16, borderBottomWidth: 1, borderBottomColor: '#E0E0E0',
-  },
-  modalTitle: { fontSize: 18, fontWeight: '600', color: '#333' },
-  ddItem: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    padding: 16, borderBottomWidth: 1, borderBottomColor: '#F0F0F0',
-  },
-  ddItemSelected: { backgroundColor: '#FFF8E1' },
-  ddItemText: { fontSize: 15, color: '#333', flex: 1 },
-  ddItemTextSelected: { color: '#FF9800', fontWeight: '600' },
+  helperText: { fontSize: 12, color: '#999', fontStyle: 'italic', marginTop: 4 },
+  dropdown: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: '#DDD', borderRadius: 8, padding: 12, backgroundColor: '#FAFAFA' },
+  dropdownText: { fontSize: 14, color: '#333', flex: 1 },
+  ddList: { maxHeight: 250, borderWidth: 1, borderColor: '#DDD', borderRadius: 8, marginTop: 4, backgroundColor: '#FFF' },
+  ddItem: { padding: 12, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  ddItemActive: { backgroundColor: '#E8F0FE' },
+  ddItemText: { fontSize: 14, color: '#333' },
+  checkRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  checkLabel: { flex: 1, fontSize: 14, color: '#333' },
+  impressionCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderWidth: 1.5, borderColor: '#DDD', borderRadius: 10, backgroundColor: '#FAFAFA' },
+  impressionCardActive: { borderColor: '#1A73E8', backgroundColor: '#E8F0FE' },
+  impressionLabel: { flex: 1, fontSize: 14, color: '#555' },
+  submitBtn: { flexDirection: 'row', backgroundColor: '#6A1B9A', borderRadius: 12, padding: 16, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  submitText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
 });

@@ -134,6 +134,11 @@ export default function ProcedureDetailScreen() {
       if (isSupervisor && !procedure.supervisor_stage2_prosthetic_approved) return true;
       if (isImplantIncharge && !procedure.implant_incharge_stage2_prosthetic_approved) return true;
     }
+
+    if (procedure.status === 'pending_final_delivery') {
+      if (isSupervisor && !procedure.supervisor_final_delivery_approved) return true;
+      if (isImplantIncharge && !procedure.implant_incharge_final_delivery_approved) return true;
+    }
     
     return false;
   };
@@ -154,14 +159,20 @@ export default function ProcedureDetailScreen() {
 
   const canSubmitStage2Prosthetic = () => {
     if (!procedure) return false;
-    return user?.role === 'student' && 
-           user?.id === procedure.student_id && 
-           procedure.status === 'stage2_surgical_approved';
+    const isOwner = user?.id === procedure.student_id || user?.id === procedure.created_by_id;
+    return isOwner && procedure.status === 'stage2_surgical_approved';
+  };
+
+  const canSubmitPhase4Step2 = () => {
+    if (!procedure) return false;
+    const isOwner = user?.id === procedure.student_id || user?.id === procedure.created_by_id;
+    return isOwner && procedure.status === 'stage2_prosthetic_step1_approved';
   };
 
   const getApproveEndpoint = () => {
     if (procedure?.status === 'pending_stage2_surgical') return `/procedures/${id}/stage2/surgical/approve`;
     if (procedure?.status === 'pending_stage2_prosthetic') return `/procedures/${id}/stage2/prosthetic/approve`;
+    if (procedure?.status === 'pending_final_delivery') return `/procedures/${id}/stage2/prosthetic/step2/approve`;
     return `/procedures/${id}/approve`;
   };
 
@@ -523,14 +534,32 @@ export default function ProcedureDetailScreen() {
         {canSubmitStage2Prosthetic() && (
           <View style={styles.phase2ButtonContainer}>
             <TouchableOpacity
-              style={[styles.phase2Button, { backgroundColor: '#FF9800' }]}
+              style={[styles.phase2Button, { backgroundColor: '#6A1B9A' }]}
               onPress={() => router.push(`/procedures/submit-stage2-prosthetic/${id}`)}
               data-testid="stage2-prosthetic-btn"
             >
               <Ionicons name="construct" size={24} color="#FFF" />
               <View style={styles.phase2ButtonTextContainer}>
                 <Text style={styles.phase2ButtonTitle}>PHASE 3 APPROVED</Text>
-                <Text style={styles.phase2ButtonSubtitle}>Tap to start Phase 4 - Prosthetic Protocol</Text>
+                <Text style={styles.phase2ButtonSubtitle}>Tap to start Phase 4 Step 1 - Final Prosthesis & Impressions</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={24} color="#FFF" />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Phase 4 Step 2 Button */}
+        {canSubmitPhase4Step2() && (
+          <View style={styles.phase2ButtonContainer}>
+            <TouchableOpacity
+              style={[styles.phase2Button, { backgroundColor: '#1B5E20' }]}
+              onPress={() => router.push(`/procedures/submit-phase4-step2/${id}`)}
+              data-testid="phase4-step2-btn"
+            >
+              <Ionicons name="trophy" size={24} color="#FFF" />
+              <View style={styles.phase2ButtonTextContainer}>
+                <Text style={styles.phase2ButtonTitle}>PHASE 4 STEP 1 APPROVED</Text>
+                <Text style={styles.phase2ButtonSubtitle}>Tap to complete Step 2 - Trial & Prosthesis Delivery</Text>
               </View>
               <Ionicons name="chevron-forward" size={24} color="#FFF" />
             </TouchableOpacity>
