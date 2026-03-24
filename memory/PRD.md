@@ -161,6 +161,18 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
 4. **Auto-populate Implant Site**: Backend `save_implant_plan` endpoint now auto-sets `implant_site` field from sorted unique tooth positions (e.g., "14, 36"). No manual entry needed.
 5. **Data visibility by role/status**: All Phase 1 clinical data is now visible on the detail page regardless of role. PDF export enabled for all non-draft statuses.
 
+### Phase 2 Refinements (Mar 2026)
+1. **Header collision fix**: Added `'top'` to SafeAreaView edges in `submit-phase2/[id].tsx` so the "Phase 2 — Surgical Protocols" header sits below the mobile status bar.
+2. **Drilling Type options updated**: Changed from 4 options to 3: Guided Surgery, Free Hand Sequential Drilling, Combination of Guided and Free Hand Sequential Drilling.
+3. **Healing Abutment cuff height**: When "Healing Abutment Placed" is selected as Prosthetic Component, a text input for cuff height (mm) appears. Value stored in `phase2_data.healing_abutment_cuff_height`.
+4. **Full Phase 2 data visibility on detail page**: Added comprehensive Phase 2 section to `[id].tsx` showing:
+   - Pre-Surgery Checklist (with check/uncheck status)
+   - Surgical Procedure details (Anaesthesia, Incision/Flap, Drilling, Implant Seating, Torque, Prosthetic Component, Cuff Height, Sutures, Hemostasis)
+   - Post-Operative Checklist
+   - Post-surgical Notes by Student, Remarks by Supervisor, Remarks by In-Charge
+   - All data visible to all roles at all times (during and after approval)
+5. **Backend**: `phase2_supervisor_notes` and `phase2_incharge_notes` now saved as top-level fields for easy retrieval.
+
 ## Backlog
 ### P2 - Refactoring
 - Backend refactoring (decompose server.py into routers/models/services)
