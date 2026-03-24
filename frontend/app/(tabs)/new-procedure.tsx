@@ -398,14 +398,16 @@ export default function NewProcedureScreen() {
           </TouchableOpacity>
           <Text style={styles.stepTitle}>Step 2: Implant Selection</Text>
         </View>
-        <CaseImplantPlanning
-          procedureId={createdProcedureId}
-          procedureType={formData.implant_procedure_type}
-          status="draft"
-          userRole={user?.role || 'student'}
-          readOnly={false}
-          medicalAssessment={formData.medical_assessment}
-        />
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 16 }} nestedScrollEnabled={true}>
+          <CaseImplantPlanning
+            procedureId={createdProcedureId}
+            procedureType={formData.implant_procedure_type}
+            status="draft"
+            userRole={user?.role || 'student'}
+            readOnly={false}
+            medicalAssessment={formData.medical_assessment}
+          />
+        </ScrollView>
         <View style={styles.submitContainer}>
           <TouchableOpacity style={styles.submitBtn} data-testid="submit-for-approval"
             onPress={() => {
