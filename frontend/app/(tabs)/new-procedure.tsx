@@ -16,7 +16,9 @@ import {
   PROCEDURE_TIME_SLOTS,
   NON_FULL_ARCH_TYPES,
   FULL_ARCH_GROUP,
+  CLINICAL_EXAM_GROUP,
   EDENTULOUS_SITE_OPTIONS,
+  ARCH_CONDITION_OPTIONS,
   RIDGE_CONTOUR_OPTIONS,
   SOFT_TISSUE_OPTIONS,
   KERATINIZED_MUCOSA_OPTIONS,
@@ -33,6 +35,43 @@ import {
 } from '../../constants/checklist';
 
 const API = process.env.EXPO_PUBLIC_BACKEND_URL;
+
+// ─── Multi-Select Dropdown ─────────────────────────────
+function MultiSelectDropdown({ label, values, options, onChange, placeholder, required }: {
+  label: string; values: string[]; options: string[]; onChange: (v: string[]) => void;
+  placeholder?: string; required?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const toggleOption = (opt: string) => {
+    if (values.includes(opt)) onChange(values.filter(v => v !== opt));
+    else onChange([...values, opt]);
+  };
+  return (
+    <View style={styles.fieldContainer}>
+      <Text style={styles.label}>{label}{required && <Text style={{ color: '#DC3545' }}> *</Text>}</Text>
+      <TouchableOpacity style={styles.dropdown} onPress={() => setOpen(!open)}>
+        <Text style={[styles.dropdownText, values.length === 0 && { color: '#999' }]} numberOfLines={2}>
+          {values.length > 0 ? values.join(', ') : placeholder || `Select ${label}`}
+        </Text>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color="#666" />
+      </TouchableOpacity>
+      {open && (
+        <ScrollView style={styles.dropdownList} nestedScrollEnabled={true}>
+          {options.map(opt => (
+            <TouchableOpacity key={opt} style={[styles.dropdownItem, values.includes(opt) && styles.dropdownItemActive]}
+              onPress={() => toggleOption(opt)}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name={values.includes(opt) ? 'checkbox' : 'square-outline'}
+                  size={20} color={values.includes(opt) ? '#1A73E8' : '#999'} />
+                <Text style={[styles.dropdownItemText, values.includes(opt) && styles.dropdownItemTextActive]}>{opt}</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+    </View>
+  );
+}
 
 // ─── Reusable Dropdown ─────────────────────────────────
 function Dropdown({ label, value, options, onChange, placeholder, required }: {
@@ -214,7 +253,8 @@ export default function NewProcedureScreen() {
     prosthetic_plan_other: '',
     bone_graft_specifications: '',
     // Clinical Examination
-    edentulous_site: '',
+    edentulous_sites: [] as string[],
+    arch_condition: '',
     ridge_contour: '',
     soft_tissue_thickness: '',
     keratinized_mucosa: '',
@@ -241,6 +281,7 @@ export default function NewProcedureScreen() {
 
   const isFullArch = FULL_ARCH_GROUP.has(formData.implant_procedure_type);
   const isNonFullArch = NON_FULL_ARCH_TYPES.has(formData.implant_procedure_type);
+  const isClinicalExamGroup = CLINICAL_EXAM_GROUP.has(formData.implant_procedure_type);
   const prostheticOptions = getProstheticOptions(formData.implant_procedure_type, formData.loading_type);
 
   const FORM_STORAGE_KEY = `new_procedure_form_${user?.id || 'anon'}`;
@@ -548,16 +589,35 @@ export default function NewProcedureScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Clinical Examination</Text>
 
-          {/* Intraoral Examination */}
-          <Text style={styles.subSectionTitle}>Intraoral Examination</Text>
-          <Dropdown label="Edentulous Site" value={formData.edentulous_site}
-            options={EDENTULOUS_SITE_OPTIONS} onChange={v => updateForm('edentulous_site', v)} />
-          <Dropdown label="Ridge Contour" value={formData.ridge_contour}
-            options={RIDGE_CONTOUR_OPTIONS} onChange={v => updateForm('ridge_contour', v)} />
-          <Dropdown label="Soft Tissue Thickness" value={formData.soft_tissue_thickness}
-            options={SOFT_TISSUE_OPTIONS} onChange={v => updateForm('soft_tissue_thickness', v)} />
-          <Dropdown label="Keratinized Mucosa" value={formData.keratinized_mucosa}
-            options={KERATINIZED_MUCOSA_OPTIONS} onChange={v => updateForm('keratinized_mucosa', v)} />
+          {/* Intraoral Examination – Non-Full-Arch (Single, Multiple, GBR, Guided Surgery) */}
+          {isClinicalExamGroup && (
+            <>
+              <Text style={styles.subSectionTitle}>Intraoral Examination</Text>
+              <MultiSelectDropdown label="Edentulous Site" values={formData.edentulous_sites}
+                options={EDENTULOUS_SITE_OPTIONS} onChange={v => updateForm('edentulous_sites', v)} />
+              <Dropdown label="Ridge Contour" value={formData.ridge_contour}
+                options={RIDGE_CONTOUR_OPTIONS} onChange={v => updateForm('ridge_contour', v)} />
+              <Dropdown label="Soft Tissue Thickness" value={formData.soft_tissue_thickness}
+                options={SOFT_TISSUE_OPTIONS} onChange={v => updateForm('soft_tissue_thickness', v)} />
+              <Dropdown label="Keratinized Mucosa" value={formData.keratinized_mucosa}
+                options={KERATINIZED_MUCOSA_OPTIONS} onChange={v => updateForm('keratinized_mucosa', v)} />
+            </>
+          )}
+
+          {/* Intraoral Examination – Full-Arch (All on 4/6/X) */}
+          {isFullArch && (
+            <>
+              <Text style={styles.subSectionTitle}>Intraoral Examination</Text>
+              <Dropdown label="Mandibular/Maxillary Arch Condition" value={formData.arch_condition}
+                options={ARCH_CONDITION_OPTIONS} onChange={v => updateForm('arch_condition', v)} />
+              <Dropdown label="Ridge Contour" value={formData.ridge_contour}
+                options={RIDGE_CONTOUR_OPTIONS} onChange={v => updateForm('ridge_contour', v)} />
+              <Dropdown label="Soft Tissue Thickness" value={formData.soft_tissue_thickness}
+                options={SOFT_TISSUE_OPTIONS} onChange={v => updateForm('soft_tissue_thickness', v)} />
+              <Dropdown label="Keratinized Mucosa" value={formData.keratinized_mucosa}
+                options={KERATINIZED_MUCOSA_OPTIONS} onChange={v => updateForm('keratinized_mucosa', v)} />
+            </>
+          )}
 
           {/* Occlusal Analysis – Non-Full-Arch */}
           {isNonFullArch && (
@@ -607,23 +667,44 @@ export default function NewProcedureScreen() {
         <CalendarPicker
           label="Procedure Date"
           value={formData.procedure_date}
-          onChange={(date) => updateForm('procedure_date', date)}
+          onChange={(date) => {
+            updateForm('procedure_date', date);
+            updateForm('procedure_time', ''); // reset time when date changes
+          }}
           required
         />
-        <View style={styles.fieldContainer}>
-          <Text style={styles.label}>Time Slot <Text style={{ color: '#DC3545' }}>*</Text></Text>
-          <View style={styles.chipRow}>
-            {PROCEDURE_TIME_SLOTS.map(slot => (
-              <TouchableOpacity key={slot.value}
-                style={[styles.chip, formData.procedure_time === slot.value && styles.chipActive]}
-                onPress={() => updateForm('procedure_time', slot.value)}>
-                <Text style={[styles.chipText, formData.procedure_time === slot.value && styles.chipTextActive]}>
-                  {slot.label}
+        {formData.procedure_date && (() => {
+          const d = new Date(formData.procedure_date + 'T00:00:00');
+          const dayOfWeek = d.getDay(); // 0=Sun
+          if (dayOfWeek === 0) {
+            return (
+              <View style={[styles.riskBadge, { backgroundColor: '#FFF3E0' }]}>
+                <Text style={{ color: '#E65100', fontWeight: '600', fontSize: 13 }}>
+                  No procedure slots available on Sundays
                 </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
+              </View>
+            );
+          }
+          const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+          const dayName = dayNames[dayOfWeek];
+          const availableSlots = PROCEDURE_TIME_SLOTS.filter(s => s.days.includes(dayName));
+          return (
+            <View style={styles.fieldContainer}>
+              <Text style={styles.label}>Time Slot <Text style={{ color: '#DC3545' }}>*</Text></Text>
+              <View style={styles.chipRow}>
+                {availableSlots.map(slot => (
+                  <TouchableOpacity key={slot.value}
+                    style={[styles.chip, formData.procedure_time === slot.value && styles.chipActive]}
+                    onPress={() => updateForm('procedure_time', slot.value)}>
+                    <Text style={[styles.chipText, formData.procedure_time === slot.value && styles.chipTextActive]}>
+                      {slot.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          );
+        })()}
       </View>
 
       {/* ─── Loading Type ─── */}

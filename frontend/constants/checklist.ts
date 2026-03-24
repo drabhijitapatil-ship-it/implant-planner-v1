@@ -3,62 +3,64 @@ export const CHECKLIST_DATA = {
     title: 'Phase 1: Pre-Surgical Protocol',
     items: [
       { id: 'case_selection', label: 'Case Selection Approved' },
-      { id: 'academic_readiness', label: 'Academic Readiness (with presentation)', hasUpload: true, uploadTypes: 'PPT, PDF' },
+      { id: 'academic_readiness', label: 'Approved Academic Readiness with Presentation', hasUpload: true, uploadTypes: 'PPT, PDF' },
       { id: 'hematological', label: 'Hematological Investigations Completed' },
       { id: 'radiographic', label: 'Radiographic Investigations and Evaluation Done' },
       { id: 'treatment_plan', label: 'Approved Surgical Treatment Plan' },
       { id: 'oral_prophylaxis', label: 'Oral Prophylaxis Done' },
       { id: 'instruments', label: 'Availability of the Instruments and Equipment' },
-      { id: 'medical_assessment', label: 'Medical assessment done' },
-      { id: 'realguide', label: 'RealGuide Planning and Report' },
-      { id: 'pre_op_medication', label: 'Pre-operative Medication Prescription' },
-      { id: 'payment', label: 'Full payment done' },
+      { id: 'medical_assessment', label: 'Medical Assessment Done' },
+      { id: 'realguide', label: 'RealGuide Planning and Report Generated' },
+      { id: 'pre_op_medication', label: 'Pre-operative Medication Prescription Completed' },
+      { id: 'payment', label: 'Full Payment Done' },
     ],
   },
   surgical: {
     title: 'Phase 2: Surgical Protocol',
     items: [
       { id: 'consent_form', label: 'Signed Patient consent form (LA and Surgical)' },
-      { id: 'drilling_protocol', label: 'Drilling Protocol Displayed' },
+      { id: 'vitals_checked', label: 'Patient vitals checked' },
+      { id: 'drilling_protocol', label: 'Drilling Protocol Available' },
+      { id: 'implant_kit', label: 'Implant Kit and Physiodispenser with irrigation Ready' },
       { id: 'drapes_gowns', label: 'Clean Autoclaved Drapes and Gowns' },
       { id: 'instruments_equipment', label: 'Clean Autoclaved Instruments and Equipment' },
-      { id: 'asepsis', label: 'Asepsis and Fumigation, Cleanliness of the Operatory' },
-      { id: 'register_entry', label: 'Entry into the Implant Register with a Sticker' },
-      { id: 'post_op_instructions', label: 'Post-operative Instructions and Medication Prescription' },
-      { id: 'post_cleaning', label: 'Post-operative cleaning of implant room, instruments, and equipment' },
-    ],
-    additionalFields: [
-      { id: 'faculty_remark', label: 'Remarks by Faculty' },
+      { id: 'asepsis', label: 'Asepsis, Fumigation, and Cleanliness of the Operatory' },
     ],
   },
   second_stage: {
     title: 'Phase 3: Second Stage Surgical Protocol',
     items: [
-      { id: 'faculty_approval', label: 'Approval by the Supervising Faculty' },
-      { id: 'components_available', label: 'All Components Available (second stage and prosthetic)' },
-      { id: 'healing_cap', label: 'Healing Cap Placed' },
-      { id: 'scan_impressions', label: 'Scan/Impressions Made' },
-      { id: 'temporary_prosthesis', label: 'Temporary Prosthesis Delivered' },
-      { id: 'patient_consent', label: 'Patient consent' },
-    ],
-    additionalFields: [
-      { id: 'student_clinical_assessment', label: 'Student Clinical Assessment' },
-      { id: 'faculty_remark', label: 'Faculty Remark' },
+      { id: 'components_available', label: 'All Components Available (Second stage and Prosthetic)' },
+      { id: 'implant_site_exam', label: 'Implant site examination done' },
+      { id: 'radiograph_made', label: 'Radiograph Made' },
+      { id: 'isq_checked', label: 'Implant ISQ value checked', hasTextInput: true, textLabel: 'ISQ Value (optional)' },
+      { id: 'healing_abutment', label: 'Healing Abutment Placed', hasTextInput: true, textLabel: 'Cuff height (mm)' },
+      { id: 'prosthetic_plan_eval', label: 'Prosthetic Plan Evaluated and Finalized' },
     ],
   },
   prosthetic_phase: {
     title: 'Phase 4: Prosthetic Protocol',
-    items: [
-      { id: 'payment_complete', label: 'Complete Payment Done' },
-      { id: 'prosthetic_components', label: 'All Prosthetic Components are Available' },
-      { id: 'prosthetic_plan_approved', label: 'Final Prosthetic Plan Evaluated and Approved' },
-      { id: 'sterile_instruments', label: 'Cleaned and Autoclaved Instruments' },
-      { id: 'intraoral_scans', label: 'Intra-Oral Scans Made and Approved' },
-      { id: 'impressions', label: 'Impressions Made and Approved' },
-      { id: 'jig_trial', label: "Jig Trial Done - Sheffield's Test and Radiographic Assessment" },
-      { id: 'occlusion_evaluated', label: 'Occlusion Evaluation Done' },
-      { id: 'final_cementation', label: 'Final Cementation/Screwing of the Prosthesis' },
-    ],
+    step1: {
+      title: 'Step 1: Final Prosthesis and Impressions',
+      items: [
+        { id: 'payment_complete', label: 'Complete Payment Done' },
+        { id: 'prosthetic_components', label: 'All Prosthetic Components are Available' },
+      ],
+      impressionOptions: [
+        { id: 'intraoral_scans', label: 'Intra-Oral Scans Made' },
+        { id: 'conventional_impressions', label: 'Conventional Impressions Made' },
+      ],
+    },
+    step2: {
+      title: 'Step 2: Trial and Prosthesis Delivery',
+      items: [
+        { id: 'jig_trial_sheffield', label: "Jig Trial Done - Sheffield's Test" },
+        { id: 'jig_trial_radiographic', label: 'Jig Trial Done - Radiographic Assessment' },
+        { id: 'prosthesis_trial', label: 'Prosthesis Trial Done' },
+        { id: 'occlusion_eval', label: 'Occlusion Evaluation Done' },
+        { id: 'final_placement', label: 'Final Placement of Prosthesis Done' },
+      ],
+    },
   },
 };
 
@@ -81,13 +83,17 @@ export const PROCEDURE_TYPES = [
   'All on X',
 ];
 
+// Group A: Shows Edentulous Site in clinical exam
+export const CLINICAL_EXAM_GROUP = new Set([
+  'Single Conventional Implant',
+  'Multiple Conventional Implants',
+  'Implant Placement with Guided Bone Regeneration',
+  'Guided Surgery',
+]);
+
 // Procedure type groupings for conditional UI
 export const SINGLE_GROUP = new Set([
   'Single Conventional Implant',
-  'Immediate Implant',
-  'Partial Extraction Therapy',
-  'Implant Placement with Guided Bone Regeneration',
-  'Guided Surgery',
 ]);
 
 export const MULTIPLE_GROUP = new Set([
@@ -95,7 +101,6 @@ export const MULTIPLE_GROUP = new Set([
   'Immediate Implant',
   'Partial Extraction Therapy',
   'Implant Placement with Guided Bone Regeneration',
-  'Guided Surgery',
 ]);
 
 export const FULL_ARCH_GROUP = new Set([
@@ -104,7 +109,7 @@ export const FULL_ARCH_GROUP = new Set([
   'All on X',
 ]);
 
-// All non-full-arch procedures (used for conditional sections)
+// All non-full-arch procedures (for Occlusal Analysis + Aesthetic Risk)
 export const NON_FULL_ARCH_TYPES = new Set([
   'Single Conventional Implant',
   'Multiple Conventional Implants',
@@ -120,6 +125,13 @@ export const EDENTULOUS_SITE_OPTIONS = [
   'Sufficient Mesiodistal Space',
   'Insufficient Occlusocervical Space',
   'Insufficient Mesiodistal Space',
+];
+
+export const ARCH_CONDITION_OPTIONS = [
+  'High Well Formed',
+  'Medium Well Formed',
+  'Low Well Formed',
+  'Resorbed',
 ];
 
 export const RIDGE_CONTOUR_OPTIONS = [
@@ -141,7 +153,7 @@ export const OPPOSING_DENTITION_OPTIONS = ['Natural', 'Absent'];
 export const TMJ_OPTIONS = ['Normal', 'Deviation Present'];
 
 // Aesthetic Risk Assessment (for non-full-arch types)
-export const SMILE_LINE_OPTIONS = ['Low Smile Line', 'Medium Smile Line', 'High Smile Line'];
+export const SMILE_LINE_OPTIONS = ['Low', 'Medium', 'High'];
 export const GINGIVAL_BIOTYPE_OPTIONS = ['Thin', 'Thick'];
 
 // ─── Medical Assessment Risk Factors ──────────────────
@@ -155,13 +167,7 @@ export const MEDICAL_RISK_FACTORS = [
 
 export function calculateMedicalRisk(factors: Record<string, string>): { level: string; color: string } {
   const yesCount = Object.values(factors).filter(v => v === 'Yes').length;
-  // High Risk: >2 factors or uncontrolled diabetes or excessive smoking
-  if (yesCount > 2 || factors.diabetes === 'Yes' || factors.smoking === 'Yes') {
-    // If diabetes OR smoking present with 2+ others = High
-    if (yesCount >= 2) return { level: 'High Risk', color: '#DC3545' };
-    if (yesCount === 1) return { level: 'Moderate Risk', color: '#FF9800' };
-  }
-  if (yesCount >= 3) return { level: 'High Risk', color: '#DC3545' };
+  if (yesCount > 2) return { level: 'High Risk', color: '#DC3545' };
   if (yesCount >= 1) return { level: 'Moderate Risk', color: '#FF9800' };
   return { level: 'Low Risk', color: '#4CAF50' };
 }
@@ -205,13 +211,13 @@ const BRIDGE_OPTIONS = [
 const IMMEDIATE_LOADING_OPTIONS = [
   'PMMA Crown with Temporary Abutment',
   'PMMA Crown with Ti-Base',
-  'Full Arch Temporary Prosthesis with Multiunit and Temporary Cylinders',
-  'Temporary PMMA CAD Prosthesis with Multiunit and Temporary Cylinders',
+  'Full Arch Temporary Prosthesis with Multiunit Abutments and Temporary Cylinders',
+  'Temporary PMMA CAD Prosthesis with Multiunit Abutments and Temporary Cylinders',
   'Temporary PMMA CAD Prosthesis on Ti-Base',
 ];
 
 const FULL_ARCH_OPTIONS = [
-  'Full Arch - Porcelain Fused to Metal Prosthesis',
+  'Full Arch - Co-Cr Framework - Porcelain Fused to Metal Prosthesis',
   'Full Arch - Co-Cr Framework - Zirconia Prosthesis',
   'Full Arch - Titanium Framework - Zirconia Prosthesis',
   'Full Arch - Peek and Zirconia Ti Base',
@@ -220,19 +226,25 @@ const FULL_ARCH_OPTIONS = [
 export function getProstheticOptions(procedureType: string, loadingTypes: string[]): string[] {
   const options: string[] = [];
 
-  if (SINGLE_GROUP.has(procedureType) && !FULL_ARCH_GROUP.has(procedureType)) {
+  // Single Conventional Implant → Crown options
+  if (procedureType === 'Single Conventional Implant') {
     options.push(...SINGLE_CROWN_OPTIONS);
   }
-  if (MULTIPLE_GROUP.has(procedureType) && !FULL_ARCH_GROUP.has(procedureType)) {
-    // For multiple, add bridge options (avoid dupes from single)
+
+  // Multiple, Immediate, PET, GBR → Bridge options
+  if (MULTIPLE_GROUP.has(procedureType)) {
     for (const o of BRIDGE_OPTIONS) {
       if (!options.includes(o)) options.push(o);
     }
   }
+
+  // Full-Arch → Full arch options
   if (FULL_ARCH_GROUP.has(procedureType)) {
     options.push(...FULL_ARCH_OPTIONS);
   }
-  if (loadingTypes.includes('Immediate Loading') || (loadingTypes.includes('Immediate Loading') && loadingTypes.includes('Delayed Loading'))) {
+
+  // Immediate or Delayed loading selected → PMMA/temp options
+  if (loadingTypes.includes('Immediate Loading')) {
     for (const o of IMMEDIATE_LOADING_OPTIONS) {
       if (!options.includes(o)) options.push(o);
     }
@@ -246,6 +258,73 @@ export function getProstheticOptions(procedureType: string, loadingTypes: string
   return options;
 }
 
+// ─── Phase 2: Surgical Procedure Options ──────────────
+export const FLAP_DESIGN_OPTIONS = [
+  'Mid-crestal Incision',
+  'Guided Surgery (Tissue Punch)',
+  'Papilla Sparing Flap',
+  'Two-Sided Flap',
+  'Three-Sided (Trapezoidal) Flap',
+];
+
+export const DRILLING_TYPE_OPTIONS = [
+  'Guided Surgery',
+  'Free Hand',
+  'Sequential Drilling',
+  'Combination of Guided and Free Hand Sequential Drilling',
+];
+
+export const PROSTHETIC_COMPONENT_OPTIONS = [
+  'Cover Screw Placed',
+  'Healing Abutment Placed',
+  'Immediate Loading Done',
+];
+
+// ─── Phase 4: Final Prosthesis Options ────────────────
+export const PHASE4_SINGLE_MULTIPLE_OPTIONS = [
+  'Cement Retained Crown FP1',
+  'Cement Retained Crown FP2',
+  'Cement Retained Crown FP3',
+  'Screw Retained Crown FP1',
+  'Screw Retained Crown FP2',
+  'Screw Retained Crown FP3',
+  'Cement Retained Bridge FP1',
+  'Cement Retained Bridge FP2',
+  'Cement Retained Bridge FP3',
+  'Screw Retained Bridge FP1',
+  'Screw Retained Bridge FP2',
+  'Screw Retained Bridge FP3',
+  'Overdenture with Attachment RP',
+];
+
+export const FP_MATERIAL_OPTIONS = ['Metal', 'Porcelain Fused to Metal', 'Zirconia', 'Lithium Disilicate'];
+
+export const OVERDENTURE_ATTACHMENT_OPTIONS = [
+  'Rheine 83 Equator Attachment',
+  'Locator Attachment',
+  'Sonator Attachment',
+  'Other',
+];
+
+export const PHASE4_FULL_ARCH_OPTIONS = [
+  'Full Arch FP3 - Co-Cr Framework - Removable Complete Denture',
+  'Full Arch FP3 - Porcelain Fused to Metal Prosthesis',
+  'Full Arch FP3 - Co-Cr Framework - Zirconia Prosthesis',
+  'Full Arch FP3 - Titanium Framework - Zirconia Prosthesis',
+  'Full Arch FP3 - Peek Framework and Zirconia Ti Base',
+  'Malo Prosthesis with MUA',
+  'Zirconia Abutment Ti Base - Zirconia Prosthesis',
+];
+
+export const CUSTOM_ABUTMENT_OPTIONS = [
+  'Custom Abutment - Metal',
+  'Custom Abutment - Porcelain Fused to Metal',
+  'Custom Abutment - Zirconia Prosthesis',
+  'Custom Abutment - Lithium Disilicate Prosthesis',
+  'Other',
+];
+
+// ─── Status Styling ───────────────────────────────────
 export const STATUS_COLORS: Record<string, string> = {
   draft: '#78909C',
   pending_phase1: '#FFA500',
@@ -260,6 +339,7 @@ export const STATUS_COLORS: Record<string, string> = {
   completed: '#4CAF50',
   approved: '#4CAF50',
   rejected: '#F44336',
+  permanently_rejected: '#B71C1C',
 };
 
 export const STATUS_LABELS: Record<string, string> = {
@@ -268,14 +348,15 @@ export const STATUS_LABELS: Record<string, string> = {
   phase1_approved: 'Phase 1: Approved - Ready for Phase 2',
   pending_phase2: 'Phase 2: Pending Approval',
   phase2_approved: 'Phase 2 Approved - Ready for Phase 3',
-  pending_stage2_surgical: 'Phase 3: Second Stage Surgical Protocol Pending Approval',
+  pending_stage2_surgical: 'Phase 3: Pending Approval',
   stage2_surgical_approved: 'Phase 3: Approved - Ready for Phase 4',
-  stage2_surgical_rejected: 'Phase 3: Second Stage Surgical Protocol Rejected',
-  pending_stage2_prosthetic: 'Phase 4: Prosthetic Protocol Pending Approval',
-  stage2_prosthetic_rejected: 'Phase 4: Prosthetic Protocol Rejected',
+  stage2_surgical_rejected: 'Phase 3: Rejected',
+  pending_stage2_prosthetic: 'Phase 4: Pending Approval',
+  stage2_prosthetic_rejected: 'Phase 4: Rejected',
   completed: 'Treatment Complete',
   approved: 'Approved',
   rejected: 'Rejected',
+  permanently_rejected: 'Permanently Rejected',
 };
 
 export const USER_ROLES = {

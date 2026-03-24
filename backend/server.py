@@ -174,7 +174,9 @@ class ProcedureCreate(BaseModel):
     implant_company: Optional[str] = Field("", max_length=100)
     remark: Optional[str] = Field("", max_length=1000)
     # Clinical Examination — Intraoral
-    edentulous_site: Optional[str] = Field("", max_length=100)
+    edentulous_site: Optional[str] = Field("", max_length=200)
+    edentulous_sites: Optional[List[str]] = None
+    arch_condition: Optional[str] = Field("", max_length=50)
     ridge_contour: Optional[str] = Field("", max_length=50)
     soft_tissue_thickness: Optional[str] = Field("", max_length=20)
     keratinized_mucosa: Optional[str] = Field("", max_length=20)
@@ -236,6 +238,8 @@ class ProcedureUpdate(BaseModel):
     implant_company: Optional[str] = Field(None, max_length=100)
     remark: Optional[str] = Field(None, max_length=1000)
     status: Optional[str] = Field(None, max_length=50)
+    edentulous_sites: Optional[List[str]] = None
+    arch_condition: Optional[str] = Field(None, max_length=50)
 
     @field_validator('patient_name')
     @classmethod

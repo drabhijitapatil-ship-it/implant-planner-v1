@@ -124,6 +124,16 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
 - **Fixed**: Status transition validation — only `draft → pending_phase1` is allowed via PUT endpoint.
 - **Fixed**: Students can now edit their own `draft` procedures (was previously restricted to `pending_supervisor` only).
 
+### Phase 1 Overhaul (Mar 2026 — Doc-Aligned)
+- **Clinical Exam Group A** (Single, Multiple, GBR, Guided Surgery) — Multi-select "Edentulous Site", Ridge Contour, Soft Tissue, Keratinized Mucosa
+- **Clinical Exam Group B** (All on 4/6/X) — "Mandibular/Maxillary Arch Condition" + Ridge/Tissue/Keratinized
+- **Edentulous Site → Multi-Select** — New MultiSelectDropdown with checkboxes
+- **Occlusal/Aesthetic for all non-full-arch** — All 6 types (incl. Immediate/PET) now trigger Occlusal Analysis + Aesthetic Risk
+- **Schedule** — Mon-Fri: 10am/2pm, Saturday: 10am only, Sunday: No slots. Time resets on date change
+- **Prosthetic Plan** — 4 conditional option lists (Single crowns, Bridge/Multiple, Immediate Loading PMMA, Full-Arch)
+- **Checklist** — Matches document: Academic Readiness + upload, RealGuide, Pre-op Medication, Full Payment
+- **Backend** — Added `edentulous_sites` (List[str]), `arch_condition` (str) to ProcedureCreate/Update
+
 ## Backlog
 ### P2 - Refactoring
 - Backend refactoring (decompose server.py into routers/models/services)
