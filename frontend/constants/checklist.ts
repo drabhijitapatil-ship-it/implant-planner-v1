@@ -269,8 +269,7 @@ export const FLAP_DESIGN_OPTIONS = [
 
 export const DRILLING_TYPE_OPTIONS = [
   'Guided Surgery',
-  'Free Hand',
-  'Sequential Drilling',
+  'Free Hand Sequential Drilling',
   'Combination of Guided and Free Hand Sequential Drilling',
 ];
 
