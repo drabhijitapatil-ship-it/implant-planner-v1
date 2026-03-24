@@ -2700,6 +2700,10 @@ async def submit_stage2_surgical(
     }
     if data.student_notes:
         update_data["phase3_student_notes"] = data.student_notes
+    if data.supervisor_notes:
+        update_data["phase3_supervisor_notes"] = data.supervisor_notes
+    if data.incharge_notes:
+        update_data["phase3_incharge_notes"] = data.incharge_notes
     if data.remark:
         update_data["stage2_surgical_remark"] = data.remark
 
@@ -3078,6 +3082,10 @@ async def submit_phase4_step2(
     }
     if data.student_notes:
         update_data["phase4_step2_student_notes"] = data.student_notes
+    if data.supervisor_notes:
+        update_data["phase4_step2_supervisor_notes"] = data.supervisor_notes
+    if data.incharge_notes:
+        update_data["phase4_step2_incharge_notes"] = data.incharge_notes
 
     await db.procedures.update_one({"_id": ObjectId(procedure_id)}, {"$set": update_data})
 
