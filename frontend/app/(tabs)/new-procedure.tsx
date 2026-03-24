@@ -288,7 +288,7 @@ export default function NewProcedureScreen() {
       try {
         const res = await axios.get(`${API}/api/users`, { headers: { Authorization: `Bearer ${token}` } });
         const users = res.data || [];
-        setSupervisors(users.filter((u: any) => u.role === 'supervisor'));
+        setSupervisors(users.filter((u: any) => u.role === 'supervisor' || u.role === 'implant_incharge'));
         setIncharges(users.filter((u: any) => u.role === 'implant_incharge'));
       } catch (e) { /* ignore */ }
     };
