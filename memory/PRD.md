@@ -134,6 +134,14 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
 - **Checklist** — Matches document: Academic Readiness + upload, RealGuide, Pre-op Medication, Full Payment
 - **Backend** — Added `edentulous_sites` (List[str]), `arch_condition` (str) to ProcedureCreate/Update
 
+### Phase 2 Implementation (Mar 2026 — Doc-Aligned)
+- **Pre-Surgery Checklist**: 7 items (consent, vitals, drilling protocol, implant kit, drapes, instruments, asepsis)
+- **Surgical Procedure**: Anesthesia (Yes/No), Flap Design (5 options), Drilling Type (4 options), Implant Seated + Torque per implant, Prosthetic Component (3 options), Suturing (sutures + hemostasis)
+- **Post-Operative Checklist**: 3 items (radiograph, instructions, medications)
+- **Notes**: Student, Supervisor, In-Charge text areas
+- **Backend**: `Phase2Submit` model with all fields, `phase2_data` subdocument stored, permissions opened for faculty-created cases
+- **Frontend**: Full rewrite of `submit-phase2/[id].tsx` with scrollable dropdowns, toggles, torque inputs
+
 ## Backlog
 ### P2 - Refactoring
 - Backend refactoring (decompose server.py into routers/models/services)

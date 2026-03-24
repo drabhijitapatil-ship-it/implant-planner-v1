@@ -270,9 +270,29 @@ class ApprovalAction(BaseModel):
         return v
 
 class Phase2Submit(BaseModel):
-    checklist_surgical: ChecklistSection
-    remark: Optional[str] = None
+    # Pre-surgery checklist (7 items)
+    pre_surgery_checklist: Optional[Dict[str, bool]] = None
+    # Surgical procedure data
+    anesthesia_adequate: Optional[str] = Field("Yes", max_length=10)  # Yes/No
+    anesthesia_details: Optional[str] = Field(None, max_length=500)  # If No
+    flap_design: Optional[str] = Field(None, max_length=100)
+    drilling_type: Optional[str] = Field(None, max_length=100)
+    implant_seated_correctly: Optional[bool] = True
+    implant_seated_comment: Optional[str] = Field(None, max_length=500)
     torque_values: Optional[List[float]] = None
+    implant_other_notes: Optional[str] = Field(None, max_length=500)
+    prosthetic_component: Optional[str] = Field(None, max_length=100)
+    sutures_placed: Optional[bool] = True
+    hemostasis_achieved: Optional[bool] = True
+    # Post-operative checklist
+    post_op_checklist: Optional[Dict[str, bool]] = None
+    # Notes
+    student_notes: Optional[str] = Field(None, max_length=2000)
+    supervisor_notes: Optional[str] = Field(None, max_length=2000)
+    incharge_notes: Optional[str] = Field(None, max_length=2000)
+    # Legacy fields
+    checklist_surgical: Optional[ChecklistSection] = None
+    remark: Optional[str] = None
 
 class Stage2SurgicalSubmit(BaseModel):
     checklist: ChecklistSection
@@ -2507,34 +2527,57 @@ async def submit_phase2(
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
     
-    # Check if user is the student who created this procedure
-    if current_user["role"] != "student" or procedure["student_id"] != current_user["_id"]:
-        raise HTTPException(status_code=403, detail="Only the student who created this procedure can submit Phase 2")
+    # Check if user has permission to submit Phase 2
+    is_student = current_user["role"] == "student" and procedure.get("student_id") == current_user["_id"]
+    is_supervisor = current_user["role"] == "supervisor" and procedure.get("supervisor_id") == current_user["_id"]
+    is_incharge = current_user["role"] == "implant_incharge"
+    is_creator = procedure.get("created_by_id") == current_user["_id"]
+    
+    if not (is_student or is_supervisor or is_incharge or is_creator):
+        raise HTTPException(status_code=403, detail="You don't have permission to submit Phase 2 for this procedure")
     
     # Check if Phase 1 is approved
     if procedure["status"] != "phase1_approved":
         raise HTTPException(status_code=400, detail="Phase 1 must be approved before submitting Phase 2")
     
-    # Build the update data - handle null checklist properly
+    # Build the update data
     existing_checklist = procedure.get("checklist") or {}
     
-    # Create the complete checklist with surgical data
-    new_checklist = {
-        **existing_checklist,
-        "surgical": phase2_data.checklist_surgical.model_dump()
+    # Store full Phase 2 surgical data
+    phase2_surgical_data = {
+        "pre_surgery_checklist": phase2_data.pre_surgery_checklist or {},
+        "anesthesia_adequate": phase2_data.anesthesia_adequate,
+        "anesthesia_details": phase2_data.anesthesia_details,
+        "flap_design": phase2_data.flap_design,
+        "drilling_type": phase2_data.drilling_type,
+        "implant_seated_correctly": phase2_data.implant_seated_correctly,
+        "implant_seated_comment": phase2_data.implant_seated_comment,
+        "torque_values": phase2_data.torque_values or [],
+        "implant_other_notes": phase2_data.implant_other_notes,
+        "prosthetic_component": phase2_data.prosthetic_component,
+        "sutures_placed": phase2_data.sutures_placed,
+        "hemostasis_achieved": phase2_data.hemostasis_achieved,
+        "post_op_checklist": phase2_data.post_op_checklist or {},
     }
+    
+    # Merge surgical checklist if provided (legacy support)
+    new_checklist = {**existing_checklist}
+    if phase2_data.checklist_surgical:
+        new_checklist["surgical"] = phase2_data.checklist_surgical.model_dump()
     
     update_data = {
         "checklist": new_checklist,
+        "phase2_data": phase2_surgical_data,
         "status": "pending_phase2",
         "current_phase": 2,
         "phase2_submitted_at": datetime.utcnow(),
         "updated_at": datetime.utcnow()
     }
     
+    if phase2_data.student_notes:
+        update_data["phase2_student_notes"] = phase2_data.student_notes
     if phase2_data.remark:
         update_data["phase2_remark"] = phase2_data.remark
-
     if phase2_data.torque_values:
         update_data["torque_values"] = phase2_data.torque_values
     
