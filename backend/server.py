@@ -295,7 +295,17 @@ class Phase2Submit(BaseModel):
     remark: Optional[str] = None
 
 class Stage2SurgicalSubmit(BaseModel):
-    checklist: ChecklistSection
+    # Second Stage checklist items
+    checklist_items: Optional[Dict[str, bool]] = None
+    # Additional data fields
+    isq_value: Optional[str] = Field(None, max_length=20)
+    healing_abutment_height: Optional[str] = Field(None, max_length=20)
+    # Notes
+    student_notes: Optional[str] = Field(None, max_length=2000)
+    supervisor_notes: Optional[str] = Field(None, max_length=2000)
+    incharge_notes: Optional[str] = Field(None, max_length=2000)
+    # Legacy
+    checklist: Optional[ChecklistSection] = None
     remark: Optional[str] = None
 
 class Stage2ProstheticSubmit(BaseModel):
@@ -2629,22 +2639,42 @@ async def submit_stage2_surgical(
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
-    if current_user["role"] != "student" or procedure["student_id"] != current_user["_id"]:
+    if current_user["role"] == "student" and procedure.get("student_id") != current_user["_id"]:
         raise HTTPException(status_code=403, detail="Only the student who created this procedure can submit")
+    is_student = current_user["role"] == "student" and procedure.get("student_id") == current_user["_id"]
+    is_supervisor = current_user["role"] == "supervisor"
+    is_incharge = current_user["role"] == "implant_incharge"
+    is_creator = procedure.get("created_by_id") == current_user["_id"]
+    if not (is_student or is_supervisor or is_incharge or is_creator):
+        raise HTTPException(status_code=403, detail="You don't have permission to submit Phase 3")
     if procedure["status"] != "phase2_approved":
         raise HTTPException(status_code=400, detail="Phase 2 must be approved before starting Phase 3")
 
     existing_checklist = procedure.get("checklist") or {}
-    new_checklist = {**existing_checklist, "second_stage": data.checklist.model_dump()}
+    
+    # Store Phase 3 data
+    phase3_data = {
+        "checklist_items": data.checklist_items or {},
+        "isq_value": data.isq_value,
+        "healing_abutment_height": data.healing_abutment_height,
+    }
+    
+    # Merge legacy checklist if provided
+    new_checklist = {**existing_checklist}
+    if data.checklist:
+        new_checklist["second_stage"] = data.checklist.model_dump()
 
     update_data = {
         "checklist": new_checklist,
+        "phase3_data": phase3_data,
         "status": "pending_stage2_surgical",
         "stage2_surgical_submitted_at": datetime.utcnow(),
         "supervisor_stage2_surgical_approved": False,
         "implant_incharge_stage2_surgical_approved": False,
         "updated_at": datetime.utcnow()
     }
+    if data.student_notes:
+        update_data["phase3_student_notes"] = data.student_notes
     if data.remark:
         update_data["stage2_surgical_remark"] = data.remark
 

@@ -142,6 +142,11 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
 - **Backend**: `Phase2Submit` model with all fields, `phase2_data` subdocument stored, permissions opened for faculty-created cases
 - **Frontend**: Full rewrite of `submit-phase2/[id].tsx` with scrollable dropdowns, toggles, torque inputs
 
+### Phase 3 Implementation (Mar 2026 — Doc-Aligned)
+- **Checklist**: 6 items (Components Available, Implant Site Exam, Radiograph, ISQ Value with text input, Healing Abutment with cuff height mm input, Prosthetic Plan Evaluated)
+- **Notes**: Student, Supervisor, In-Charge text areas
+- **Backend**: `Stage2SurgicalSubmit` model with `checklist_items`, `isq_value`, `healing_abutment_height`, `student_notes`. `phase3_data` subdocument stored. Permissions opened for faculty
+
 ## Backlog
 ### P2 - Refactoring
 - Backend refactoring (decompose server.py into routers/models/services)
