@@ -148,30 +148,16 @@ export const generateProcedurePDF = async (procedure: any) => {
                 <th style="border:1px solid #ddd;padding:6px;text-align:left;font-size:11px;">System</th>
                 <th style="border:1px solid #ddd;padding:6px;text-align:left;font-size:11px;">Diameter</th>
                 <th style="border:1px solid #ddd;padding:6px;text-align:left;font-size:11px;">Length</th>
-                ${procedure.torque_values?.length ? '<th style="border:1px solid #ddd;padding:6px;text-align:left;font-size:11px;">Torque</th>' : ''}
               </tr>
-              ${procedure.implant_plans.map((imp: any, idx: number) => `
+              ${procedure.implant_plans.map((imp: any) => `
               <tr>
                 <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${imp.position}</td>
                 <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${imp.brand}</td>
                 <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${imp.system}</td>
                 <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${imp.diameter}mm</td>
                 <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${imp.length}mm</td>
-                ${procedure.torque_values?.length ? `<td style="border:1px solid #ddd;padding:6px;font-size:11px;font-weight:bold;color:#E65100;">${procedure.torque_values[idx] !== undefined ? procedure.torque_values[idx] + ' Ncm' : '-'}</td>` : ''}
               </tr>`).join('')}
             </table>
-          </div>` : ''}
-
-          ${procedure.torque_values?.length && !procedure.implant_plans?.length ? `
-          <div class="section">
-            <div class="section-title">Torque Values Achieved</div>
-            ${procedure.torque_values.map((tv: number, idx: number) => `<p class="info-value"><strong>Implant ${idx + 1}:</strong> ${tv} Ncm</p>`).join('')}
-          </div>` : ''}
-
-          ${procedure.final_prosthetic_plan ? `
-          <div class="section">
-            <div class="section-title">Final Prosthetic Plan</div>
-            <p class="info-value" style="font-size:14px;font-weight:bold;">${procedure.final_prosthetic_plan}</p>
           </div>` : ''}
 
           ${procedure.bone_graft_specifications ? `
@@ -180,10 +166,10 @@ export const generateProcedurePDF = async (procedure: any) => {
             <p class="info-value">${procedure.bone_graft_specifications}</p>
           </div>` : ''}
 
-          <div class="stage-divider">STAGE 1 - IMPLANT PLACEMENT</div>
+          <div class="stage-divider">PHASE 1 — PRE-SURGICAL PROTOCOL</div>
 
           <div class="section">
-            <div class="section-title">Phase 1: Pre-Surgical Protocol</div>
+            <div class="section-title">Pre-Surgical Checklist</div>
             <div class="checklist">
               ${procedure.checklist?.pre_surgical?.items?.map((item: any) => `
                 <div class="checklist-item">
@@ -195,36 +181,112 @@ export const generateProcedurePDF = async (procedure: any) => {
             ${renderAdditionalFields(procedure.checklist?.pre_surgical?.additional_fields)}
           </div>
 
+          ${procedure.remark ? `
           <div class="section">
-            <div class="section-title">Phase 2: Surgical Protocol</div>
+            <div class="section-title">Phase 1 — Remarks</div>
+            <p class="info-value">${procedure.remark}</p>
+          </div>` : ''}
+
+          ${procedure.phase2_data || procedure.checklist?.surgical ? `
+          <div class="stage-divider">PHASE 2 — SURGICAL PROTOCOLS</div>
+
+          ${procedure.phase2_data ? `
+          ${procedure.phase2_data.pre_surgery_checklist && Object.keys(procedure.phase2_data.pre_surgery_checklist).length > 0 ? `
+          <div class="section">
+            <div class="section-title">Pre-Surgery Checklist</div>
             <div class="checklist">
-              ${procedure.checklist?.surgical?.items?.map((item: any) => `
+              ${Object.entries(procedure.phase2_data.pre_surgery_checklist).map(([key, val]) => `
+                <div class="checklist-item">
+                  <span class="${val ? 'check-yes' : 'check-no'}">${val ? '&#10003;' : '&#10007;'}</span>
+                  <span style="text-transform:capitalize;">${key.replace(/_/g, ' ')}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>` : ''}
+
+          <div class="section">
+            <div class="section-title">Surgical Procedure</div>
+            <table>
+              ${procedure.phase2_data.anesthesia_adequate ? `<tr><td class="info-label">Anaesthesia Adequate:</td><td class="info-value">${procedure.phase2_data.anesthesia_adequate}</td></tr>` : ''}
+              ${procedure.phase2_data.anesthesia_details ? `<tr><td class="info-label">Anaesthesia Notes:</td><td class="info-value">${procedure.phase2_data.anesthesia_details}</td></tr>` : ''}
+              ${procedure.phase2_data.flap_design ? `<tr><td class="info-label">Incision / Flap Design:</td><td class="info-value">${procedure.phase2_data.flap_design}</td></tr>` : ''}
+              ${procedure.phase2_data.drilling_type ? `<tr><td class="info-label">Drilling Type:</td><td class="info-value">${procedure.phase2_data.drilling_type}</td></tr>` : ''}
+              ${procedure.phase2_data.implant_seated_correctly !== undefined ? `<tr><td class="info-label">Implant Seated Correctly:</td><td class="info-value">${procedure.phase2_data.implant_seated_correctly ? 'Yes' : 'No'}</td></tr>` : ''}
+              ${procedure.phase2_data.implant_seated_comment ? `<tr><td class="info-label">Seating Notes:</td><td class="info-value">${procedure.phase2_data.implant_seated_comment}</td></tr>` : ''}
+              ${procedure.phase2_data.torque_values?.length ? `<tr><td class="info-label">Torque Values:</td><td class="info-value" style="font-weight:bold;color:#E65100;">${procedure.phase2_data.torque_values.map((tv: number, i: number) => 'Implant ' + (i + 1) + ': ' + tv + ' Ncm').join(', ')}</td></tr>` : ''}
+              ${procedure.phase2_data.implant_other_notes ? `<tr><td class="info-label">Other Implant Notes:</td><td class="info-value">${procedure.phase2_data.implant_other_notes}</td></tr>` : ''}
+              ${procedure.phase2_data.prosthetic_component ? `<tr><td class="info-label">Prosthetic Component:</td><td class="info-value">${procedure.phase2_data.prosthetic_component}</td></tr>` : ''}
+              ${procedure.phase2_data.healing_abutment_cuff_height ? `<tr><td class="info-label">Cuff Height:</td><td class="info-value">${procedure.phase2_data.healing_abutment_cuff_height} mm</td></tr>` : ''}
+              ${procedure.phase2_data.sutures_placed !== undefined ? `<tr><td class="info-label">Sutures Placed:</td><td class="info-value">${procedure.phase2_data.sutures_placed ? 'Yes' : 'No'}</td></tr>` : ''}
+              ${procedure.phase2_data.hemostasis_achieved !== undefined ? `<tr><td class="info-label">Hemostasis Achieved:</td><td class="info-value">${procedure.phase2_data.hemostasis_achieved ? 'Yes' : 'No'}</td></tr>` : ''}
+            </table>
+          </div>
+
+          ${procedure.phase2_data.post_op_checklist && Object.keys(procedure.phase2_data.post_op_checklist).length > 0 ? `
+          <div class="section">
+            <div class="section-title">Post-Operative Checklist</div>
+            <div class="checklist">
+              ${Object.entries(procedure.phase2_data.post_op_checklist).map(([key, val]) => `
+                <div class="checklist-item">
+                  <span class="${val ? 'check-yes' : 'check-no'}">${val ? '&#10003;' : '&#10007;'}</span>
+                  <span style="text-transform:capitalize;">${key.replace(/_/g, ' ')}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>` : ''}
+          ` : `
+          ${procedure.checklist?.surgical ? `
+          <div class="section">
+            <div class="section-title">Surgical Checklist (Legacy)</div>
+            <div class="checklist">
+              ${procedure.checklist.surgical.items?.map((item: any) => `
                 <div class="checklist-item">
                   <span class="${item.value ? 'check-yes' : 'check-no'}">${item.value ? '&#10003;' : '&#10007;'}</span>
                   ${getChecklistLabel('surgical', item.id)}
                 </div>
               `).join('') || '<p>No checklist data available</p>'}
             </div>
-          </div>
+          </div>` : ''}
+          `}
 
-          ${procedure.remark ? `
+          ${(procedure.phase2_student_notes || procedure.phase2_remark || procedure.phase2_supervisor_notes || procedure.phase2_incharge_notes) ? `
           <div class="section">
-            <div class="section-title">Stage 1 Remarks</div>
-            <p class="info-value">${procedure.remark}</p>
+            <div class="section-title">Phase 2 — Notes & Remarks</div>
+            ${(procedure.phase2_student_notes || procedure.phase2_remark) ? `<p class="info-value"><strong>Post-Surgical Notes by Student:</strong><br/>${procedure.phase2_student_notes || procedure.phase2_remark}</p>` : ''}
+            ${procedure.phase2_supervisor_notes ? `<p class="info-value"><strong>Remarks by Supervising Faculty:</strong><br/>${procedure.phase2_supervisor_notes}</p>` : ''}
+            ${procedure.phase2_incharge_notes ? `<p class="info-value"><strong>Remarks by Implant In-Charge:</strong><br/>${procedure.phase2_incharge_notes}</p>` : ''}
+          </div>` : ''}
+          ` : ''}
+
+          ${procedure.phase3_data || procedure.checklist?.second_stage || procedure.phase3_student_notes || procedure.stage2_surgical_remark ? `
+          <div class="stage-divider">PHASE 3 — SECOND STAGE SURGICAL</div>
+
+          ${procedure.phase3_data ? `
+          ${procedure.phase3_data.checklist_items && Object.keys(procedure.phase3_data.checklist_items).length > 0 ? `
+          <div class="section">
+            <div class="section-title">Phase 3 Checklist</div>
+            <div class="checklist">
+              ${Object.entries(procedure.phase3_data.checklist_items).map(([key, val]) => `
+                <div class="checklist-item">
+                  <span class="${val ? 'check-yes' : 'check-no'}">${val ? '&#10003;' : '&#10007;'}</span>
+                  <span style="text-transform:capitalize;">${key.replace(/_/g, ' ')}</span>
+                </div>
+              `).join('')}
+            </div>
           </div>` : ''}
 
-          ${procedure.phase2_remark ? `
+          ${(procedure.phase3_data.isq_value || procedure.phase3_data.healing_abutment_height) ? `
           <div class="section">
-            <div class="section-title">Phase 2 - Post-Surgical Notes by Student</div>
-            <p class="info-value">${procedure.phase2_remark}</p>
+            <div class="section-title">Measurements</div>
+            <table>
+              ${procedure.phase3_data.isq_value ? `<tr><td class="info-label">ISQ Value:</td><td class="info-value" style="font-weight:bold;color:#2E7D32;">${procedure.phase3_data.isq_value}</td></tr>` : ''}
+              ${procedure.phase3_data.healing_abutment_height ? `<tr><td class="info-label">Healing Abutment Height:</td><td class="info-value">${procedure.phase3_data.healing_abutment_height} mm</td></tr>` : ''}
+            </table>
           </div>` : ''}
-
-          ${procedure.checklist?.second_stage || procedure.checklist?.prosthetic_phase ? `
-          <div class="stage-divider">PHASE 3 &amp; 4 - HEALING &amp; PROSTHETIC PHASE</div>
-
+          ` : `
           ${procedure.checklist?.second_stage ? `
           <div class="section">
-            <div class="section-title">III. Phase 3 - Second Stage Surgical Protocol</div>
+            <div class="section-title">Second Stage Surgical Checklist (Legacy)</div>
             <div class="checklist">
               ${procedure.checklist.second_stage.items?.map((item: any) => `
                 <div class="checklist-item">
@@ -234,16 +296,45 @@ export const generateProcedurePDF = async (procedure: any) => {
               `).join('') || '<p>No checklist data</p>'}
             </div>
           </div>` : ''}
+          `}
 
-          ${procedure.stage2_surgical_remark ? `
+          ${(procedure.phase3_student_notes || procedure.stage2_surgical_remark || procedure.phase3_supervisor_notes || procedure.phase3_incharge_notes) ? `
           <div class="section">
-            <div class="section-title">Phase 3 - Second Stage Surgical Remarks</div>
-            <p class="info-value">${procedure.stage2_surgical_remark}</p>
+            <div class="section-title">Phase 3 — Notes & Remarks</div>
+            ${(procedure.phase3_student_notes || procedure.stage2_surgical_remark) ? `<p class="info-value"><strong>Notes by Student:</strong><br/>${procedure.phase3_student_notes || procedure.stage2_surgical_remark}</p>` : ''}
+            ${procedure.phase3_supervisor_notes ? `<p class="info-value"><strong>Remarks by Supervising Faculty:</strong><br/>${procedure.phase3_supervisor_notes}</p>` : ''}
+            ${procedure.phase3_incharge_notes ? `<p class="info-value"><strong>Remarks by Implant In-Charge:</strong><br/>${procedure.phase3_incharge_notes}</p>` : ''}
           </div>` : ''}
+          ` : ''}
 
+          ${procedure.phase4_step1_data || procedure.phase4_step2_data || procedure.checklist?.prosthetic_phase || procedure.stage2_prosthetic_remark ? `
+          <div class="stage-divider">PHASE 4 — PROSTHETIC PROTOCOL</div>
+
+          ${procedure.phase4_step1_data ? `
+          <div class="section">
+            <div class="section-title">Step 1 — Prosthetic Plan & Impressions</div>
+            <table>
+              ${procedure.phase4_step1_data.final_prosthetic_plan ? `<tr><td class="info-label">Final Prosthetic Plan:</td><td class="info-value" style="font-weight:bold;">${procedure.phase4_step1_data.final_prosthetic_plan}</td></tr>` : ''}
+              ${procedure.phase4_step1_data.prosthetic_material ? `<tr><td class="info-label">Prosthetic Material:</td><td class="info-value">${procedure.phase4_step1_data.prosthetic_material}</td></tr>` : ''}
+              ${procedure.phase4_step1_data.custom_abutment ? `<tr><td class="info-label">Custom Abutment:</td><td class="info-value">${procedure.phase4_step1_data.custom_abutment}</td></tr>` : ''}
+              ${procedure.phase4_step1_data.overdenture_attachment ? `<tr><td class="info-label">Overdenture Attachment:</td><td class="info-value">${procedure.phase4_step1_data.overdenture_attachment}</td></tr>` : ''}
+              ${procedure.phase4_step1_data.impression_type ? `<tr><td class="info-label">Impression Type:</td><td class="info-value">${procedure.phase4_step1_data.impression_type === 'intraoral_scans' ? 'Intraoral Scans' : 'Conventional Impressions'}</td></tr>` : ''}
+              ${procedure.phase4_step1_data.payment_complete !== undefined ? `<tr><td class="info-label">Payment Complete:</td><td class="info-value">${procedure.phase4_step1_data.payment_complete ? 'Yes' : 'No'}</td></tr>` : ''}
+              ${procedure.phase4_step1_data.components_available !== undefined ? `<tr><td class="info-label">Components Available:</td><td class="info-value">${procedure.phase4_step1_data.components_available ? 'Yes' : 'No'}</td></tr>` : ''}
+            </table>
+          </div>
+
+          ${(procedure.phase4_step1_student_notes || procedure.stage2_prosthetic_remark || procedure.stage2_prosthetic_faculty_remark || procedure.stage2_prosthetic_incharge_remark) ? `
+          <div class="section">
+            <div class="section-title">Step 1 — Notes & Remarks</div>
+            ${(procedure.phase4_step1_student_notes || procedure.stage2_prosthetic_remark) ? `<p class="info-value"><strong>Notes by Student:</strong><br/>${procedure.phase4_step1_student_notes || procedure.stage2_prosthetic_remark}</p>` : ''}
+            ${procedure.stage2_prosthetic_faculty_remark ? `<p class="info-value"><strong>Remarks by Supervising Faculty:</strong><br/>${procedure.stage2_prosthetic_faculty_remark}</p>` : ''}
+            ${procedure.stage2_prosthetic_incharge_remark ? `<p class="info-value"><strong>Remarks by Implant In-Charge:</strong><br/>${procedure.stage2_prosthetic_incharge_remark}</p>` : ''}
+          </div>` : ''}
+          ` : `
           ${procedure.checklist?.prosthetic_phase ? `
           <div class="section">
-            <div class="section-title">IV. Prosthetic Phase Protocol</div>
+            <div class="section-title">Prosthetic Phase Checklist (Legacy)</div>
             <div class="checklist">
               ${procedure.checklist.prosthetic_phase.items?.map((item: any) => `
                 <div class="checklist-item">
@@ -253,12 +344,37 @@ export const generateProcedurePDF = async (procedure: any) => {
               `).join('') || '<p>No checklist data</p>'}
             </div>
           </div>` : ''}
+          `}
 
-          ${procedure.stage2_prosthetic_remark ? `
+          ${procedure.phase4_step2_data ? `
           <div class="section">
-            <div class="section-title">Phase 4 - Prosthetic Remarks</div>
-            <p class="info-value">${procedure.stage2_prosthetic_remark}</p>
+            <div class="section-title">Step 2 — Trial & Delivery</div>
+            ${procedure.phase4_step2_data.trial_checklist && Object.keys(procedure.phase4_step2_data.trial_checklist).length > 0 ? `
+            <div class="checklist" style="margin-bottom:10px;">
+              ${Object.entries(procedure.phase4_step2_data.trial_checklist).map(([key, val]) => `
+                <div class="checklist-item">
+                  <span class="${val ? 'check-yes' : 'check-no'}">${val ? '&#10003;' : '&#10007;'}</span>
+                  <span style="text-transform:capitalize;">${key.replace(/_/g, ' ')}</span>
+                </div>
+              `).join('')}
+            </div>` : ''}
+            ${procedure.phase4_step2_data.confirmation_statement !== undefined ? `
+            <p class="info-value" style="padding:8px;border-radius:4px;background:${procedure.phase4_step2_data.confirmation_statement ? '#E8F5E9' : '#FFEBEE'};">
+              <strong>Confirmation:</strong>
+              <span style="color:${procedure.phase4_step2_data.confirmation_statement ? '#2E7D32' : '#C62828'};font-weight:bold;">
+                ${procedure.phase4_step2_data.confirmation_statement ? 'Treatment Confirmed Complete' : 'Not Confirmed'}
+              </span>
+            </p>` : ''}
+          </div>
+
+          ${(procedure.phase4_step2_student_notes || procedure.phase4_step2_supervisor_notes || procedure.phase4_step2_incharge_notes) ? `
+          <div class="section">
+            <div class="section-title">Step 2 — Notes & Remarks</div>
+            ${procedure.phase4_step2_student_notes ? `<p class="info-value"><strong>Notes by Student:</strong><br/>${procedure.phase4_step2_student_notes}</p>` : ''}
+            ${procedure.phase4_step2_supervisor_notes ? `<p class="info-value"><strong>Remarks by Supervising Faculty:</strong><br/>${procedure.phase4_step2_supervisor_notes}</p>` : ''}
+            ${procedure.phase4_step2_incharge_notes ? `<p class="info-value"><strong>Remarks by Implant In-Charge:</strong><br/>${procedure.phase4_step2_incharge_notes}</p>` : ''}
           </div>` : ''}
+          ` : ''}
           ` : ''}
 
           <div class="section">
