@@ -956,14 +956,185 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
-        {procedure.stage2_surgical_remark && (
+        {/* ═══════════ PHASE 3: SECOND STAGE SURGICAL - Full Data Display ═══════════ */}
+        {(procedure.phase3_data || procedure.stage2_surgical_remark || procedure.phase3_student_notes) && (
+          <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#2E7D32' }]} data-testid="phase3-full-data-section">
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <Ionicons name="git-branch" size={22} color="#2E7D32" />
+              <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#2E7D32', fontSize: 17 }]}>Phase 3 — Second Stage Surgical</Text>
+            </View>
+
+            {/* Phase 3 Checklist Items */}
+            {procedure.phase3_data?.checklist_items && Object.keys(procedure.phase3_data.checklist_items).length > 0 && (
+              <View style={{ marginBottom: 16 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#388E3C', marginBottom: 8 }}>Checklist</Text>
+                {Object.entries(procedure.phase3_data.checklist_items).map(([key, val]) => (
+                  <View key={key} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' }}>
+                    <Ionicons name={val ? 'checkbox' : 'square-outline'} size={20} color={val ? '#4CAF50' : '#999'} />
+                    <Text style={{ marginLeft: 10, fontSize: 13, color: '#333', textTransform: 'capitalize' }}>{key.replace(/_/g, ' ')}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* ISQ & Healing Abutment */}
+            {(procedure.phase3_data?.isq_value || procedure.phase3_data?.healing_abutment_height) && (
+              <View style={{ marginBottom: 16 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#388E3C', marginBottom: 8 }}>Measurements</Text>
+                {procedure.phase3_data.isq_value && (
+                  <InfoRow icon="speedometer" label="ISQ Value" value={procedure.phase3_data.isq_value} />
+                )}
+                {procedure.phase3_data.healing_abutment_height && (
+                  <InfoRow icon="resize" label="Healing Abutment Height" value={`${procedure.phase3_data.healing_abutment_height} mm`} />
+                )}
+              </View>
+            )}
+
+            {/* Notes & Remarks */}
+            {(procedure.phase3_student_notes || procedure.stage2_surgical_remark) && (
+              <View style={{ marginBottom: 8, backgroundColor: '#F1F8E9', borderRadius: 8, padding: 12 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#33691E', marginBottom: 8 }}>Notes by Student</Text>
+                <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase3_student_notes || procedure.stage2_surgical_remark}</Text>
+              </View>
+            )}
+            {procedure.phase3_supervisor_notes && (
+              <View style={{ marginBottom: 8, backgroundColor: '#F3E5F5', borderRadius: 8, padding: 12 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#6A1B9A', marginBottom: 8 }}>Remarks by Supervising Faculty</Text>
+                <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase3_supervisor_notes}</Text>
+              </View>
+            )}
+            {procedure.phase3_incharge_notes && (
+              <View style={{ marginBottom: 8, backgroundColor: '#E8F5E9', borderRadius: 8, padding: 12 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#2E7D32', marginBottom: 8 }}>Remarks by Implant In-Charge</Text>
+                <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase3_incharge_notes}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ═══════════ PHASE 4 STEP 1: PROSTHETIC PROTOCOL - Full Data Display ═══════════ */}
+        {(procedure.phase4_step1_data || procedure.stage2_prosthetic_remark || procedure.phase4_step1_student_notes) && (
+          <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#FF6F00' }]} data-testid="phase4-step1-full-data-section">
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <Ionicons name="construct" size={22} color="#FF6F00" />
+              <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#E65100', fontSize: 17 }]}>Phase 4 — Prosthetic Protocol (Step 1)</Text>
+            </View>
+
+            {/* Prosthetic Plan Details */}
+            {procedure.phase4_step1_data && (
+              <View style={{ marginBottom: 16 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#EF6C00', marginBottom: 8 }}>Prosthetic Plan</Text>
+                {procedure.phase4_step1_data.final_prosthetic_plan && (
+                  <InfoRow icon="build" label="Final Prosthetic Plan" value={procedure.phase4_step1_data.final_prosthetic_plan} />
+                )}
+                {procedure.phase4_step1_data.prosthetic_material && (
+                  <InfoRow icon="diamond" label="Prosthetic Material" value={procedure.phase4_step1_data.prosthetic_material} />
+                )}
+                {procedure.phase4_step1_data.custom_abutment && (
+                  <InfoRow icon="settings" label="Custom Abutment" value={procedure.phase4_step1_data.custom_abutment} />
+                )}
+                {procedure.phase4_step1_data.overdenture_attachment && (
+                  <InfoRow icon="link" label="Overdenture Attachment" value={procedure.phase4_step1_data.overdenture_attachment} />
+                )}
+                {procedure.phase4_step1_data.impression_type && (
+                  <InfoRow icon="scan" label="Impression Type" value={procedure.phase4_step1_data.impression_type === 'intraoral_scans' ? 'Intraoral Scans' : 'Conventional Impressions'} />
+                )}
+                {procedure.phase4_step1_data.payment_complete !== undefined && (
+                  <InfoRow icon="card" label="Payment Complete" value={procedure.phase4_step1_data.payment_complete ? 'Yes' : 'No'} />
+                )}
+                {procedure.phase4_step1_data.components_available !== undefined && (
+                  <InfoRow icon="cube" label="Components Available" value={procedure.phase4_step1_data.components_available ? 'Yes' : 'No'} />
+                )}
+              </View>
+            )}
+
+            {/* Notes & Remarks */}
+            {(procedure.phase4_step1_student_notes || procedure.stage2_prosthetic_remark) && (
+              <View style={{ marginBottom: 8, backgroundColor: '#FFF8E1', borderRadius: 8, padding: 12 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#E65100', marginBottom: 8 }}>Notes by Student</Text>
+                <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase4_step1_student_notes || procedure.stage2_prosthetic_remark}</Text>
+              </View>
+            )}
+            {procedure.stage2_prosthetic_faculty_remark && (
+              <View style={{ marginBottom: 8, backgroundColor: '#F3E5F5', borderRadius: 8, padding: 12 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#6A1B9A', marginBottom: 8 }}>Remarks by Supervising Faculty</Text>
+                <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.stage2_prosthetic_faculty_remark}</Text>
+              </View>
+            )}
+            {procedure.stage2_prosthetic_incharge_remark && (
+              <View style={{ marginBottom: 8, backgroundColor: '#E8F5E9', borderRadius: 8, padding: 12 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#2E7D32', marginBottom: 8 }}>Remarks by Implant In-Charge</Text>
+                <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.stage2_prosthetic_incharge_remark}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ═══════════ PHASE 4 STEP 2: TRIAL & DELIVERY - Full Data Display ═══════════ */}
+        {(procedure.phase4_step2_data || procedure.phase4_step2_student_notes) && (
+          <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#AD1457' }]} data-testid="phase4-step2-full-data-section">
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <Ionicons name="ribbon" size={22} color="#AD1457" />
+              <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#AD1457', fontSize: 17 }]}>Phase 4 — Trial & Delivery (Step 2)</Text>
+            </View>
+
+            {/* Trial Checklist */}
+            {procedure.phase4_step2_data?.trial_checklist && Object.keys(procedure.phase4_step2_data.trial_checklist).length > 0 && (
+              <View style={{ marginBottom: 16 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#C2185B', marginBottom: 8 }}>Trial Checklist</Text>
+                {Object.entries(procedure.phase4_step2_data.trial_checklist).map(([key, val]) => (
+                  <View key={key} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' }}>
+                    <Ionicons name={val ? 'checkbox' : 'square-outline'} size={20} color={val ? '#4CAF50' : '#999'} />
+                    <Text style={{ marginLeft: 10, fontSize: 13, color: '#333', textTransform: 'capitalize' }}>{key.replace(/_/g, ' ')}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Confirmation Statement */}
+            {procedure.phase4_step2_data?.confirmation_statement !== undefined && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, padding: 10, backgroundColor: procedure.phase4_step2_data.confirmation_statement ? '#E8F5E9' : '#FFEBEE', borderRadius: 8 }}>
+                <Ionicons
+                  name={procedure.phase4_step2_data.confirmation_statement ? 'checkmark-circle' : 'close-circle'}
+                  size={22}
+                  color={procedure.phase4_step2_data.confirmation_statement ? '#4CAF50' : '#F44336'}
+                />
+                <Text style={{ marginLeft: 10, fontSize: 14, fontWeight: '600', color: '#333' }}>
+                  Confirmation: {procedure.phase4_step2_data.confirmation_statement ? 'Treatment Confirmed Complete' : 'Not Confirmed'}
+                </Text>
+              </View>
+            )}
+
+            {/* Notes & Remarks */}
+            {procedure.phase4_step2_student_notes && (
+              <View style={{ marginBottom: 8, backgroundColor: '#FCE4EC', borderRadius: 8, padding: 12 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#880E4F', marginBottom: 8 }}>Notes by Student</Text>
+                <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase4_step2_student_notes}</Text>
+              </View>
+            )}
+            {procedure.phase4_step2_supervisor_notes && (
+              <View style={{ marginBottom: 8, backgroundColor: '#F3E5F5', borderRadius: 8, padding: 12 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#6A1B9A', marginBottom: 8 }}>Remarks by Supervising Faculty</Text>
+                <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase4_step2_supervisor_notes}</Text>
+              </View>
+            )}
+            {procedure.phase4_step2_incharge_notes && (
+              <View style={{ marginBottom: 8, backgroundColor: '#E8F5E9', borderRadius: 8, padding: 12 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#2E7D32', marginBottom: 8 }}>Remarks by Implant In-Charge</Text>
+                <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase4_step2_incharge_notes}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {procedure.stage2_surgical_remark && !procedure.phase3_data && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Phase 3 Surgical Remarks</Text>
             <Text style={styles.specText}>{procedure.stage2_surgical_remark}</Text>
           </View>
         )}
 
-        {procedure.stage2_prosthetic_remark && (
+        {procedure.stage2_prosthetic_remark && !procedure.phase4_step1_data && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Phase 4 Prosthetic Remarks</Text>
             <Text style={styles.specText}>{procedure.stage2_prosthetic_remark}</Text>
