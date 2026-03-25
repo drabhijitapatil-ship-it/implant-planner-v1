@@ -933,7 +933,7 @@ export default function ProcedureDetailScreen() {
             {/* Notes & Remarks */}
             {(procedure.phase2_student_notes || procedure.phase2_remark) && (
               <View style={{ marginBottom: 8, backgroundColor: '#F5F9FF', borderRadius: 8, padding: 12 }}>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', marginBottom: 8 }}>Post-Surgical Notes by Student</Text>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', marginBottom: 8 }}>Post-Surgical Notes</Text>
                 <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase2_student_notes || procedure.phase2_remark}</Text>
               </View>
             )}
@@ -955,7 +955,7 @@ export default function ProcedureDetailScreen() {
         {/* Legacy Phase 2 remark (for older procedures without phase2_data) */}
         {!procedure.phase2_data && procedure.phase2_remark && (
           <View style={styles.section} data-testid="phase2-remark-section">
-            <Text style={styles.sectionTitle}>Phase 2 - Post-Surgical Notes by Student</Text>
+            <Text style={styles.sectionTitle}>Phase 2 - Post-Surgical Notes</Text>
             <Text style={styles.specText}>{procedure.phase2_remark}</Text>
           </View>
         )}
@@ -997,7 +997,7 @@ export default function ProcedureDetailScreen() {
             {/* Notes & Remarks */}
             {(procedure.phase3_student_notes || procedure.stage2_surgical_remark) && (
               <View style={{ marginBottom: 8, backgroundColor: '#F1F8E9', borderRadius: 8, padding: 12 }}>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: '#33691E', marginBottom: 8 }}>Notes by Student</Text>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#33691E', marginBottom: 8 }}>Notes</Text>
                 <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase3_student_notes || procedure.stage2_surgical_remark}</Text>
               </View>
             )}
@@ -1055,7 +1055,7 @@ export default function ProcedureDetailScreen() {
             {/* Notes & Remarks */}
             {(procedure.phase4_step1_student_notes || procedure.stage2_prosthetic_remark) && (
               <View style={{ marginBottom: 8, backgroundColor: '#FFF8E1', borderRadius: 8, padding: 12 }}>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: '#E65100', marginBottom: 8 }}>Notes by Student</Text>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#E65100', marginBottom: 8 }}>Notes</Text>
                 <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase4_step1_student_notes || procedure.stage2_prosthetic_remark}</Text>
               </View>
             )}
@@ -1112,7 +1112,7 @@ export default function ProcedureDetailScreen() {
             {/* Notes & Remarks */}
             {procedure.phase4_step2_student_notes && (
               <View style={{ marginBottom: 8, backgroundColor: '#FCE4EC', borderRadius: 8, padding: 12 }}>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: '#880E4F', marginBottom: 8 }}>Notes by Student</Text>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#880E4F', marginBottom: 8 }}>Notes</Text>
                 <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase4_step2_student_notes}</Text>
               </View>
             )}
