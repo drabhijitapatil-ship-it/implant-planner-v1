@@ -338,19 +338,23 @@ export default function NewProcedureScreen() {
     }, [createdProcedureId, user?.name])
   );
 
-  // ── Restore form from AsyncStorage on mount ──
+  // ── Restore form ONLY when app returns from background, NOT on mount/focus ──
   useEffect(() => {
-    const restoreForm = async () => {
-      try {
-        const saved = await AsyncStorage.getItem(FORM_STORAGE_KEY);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed.formData) setFormData(parsed.formData);
-          if (parsed.checklistItems) setChecklistItems(parsed.checklistItems);
-        }
-      } catch { /* ignore */ }
-    };
-    restoreForm();
+    const sub = AppState.addEventListener('change', async (nextState) => {
+      if (appState.current.match(/inactive|background/) && nextState === 'active') {
+        // App came back from background — restore saved form data
+        try {
+          const saved = await AsyncStorage.getItem(FORM_STORAGE_KEY);
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (parsed.formData) setFormData(parsed.formData);
+            if (parsed.checklistItems) setChecklistItems(parsed.checklistItems);
+          }
+        } catch { /* ignore */ }
+      }
+      appState.current = nextState;
+    });
+    return () => sub.remove();
   }, []);
 
   // ── Save form to AsyncStorage when app goes to background ──
@@ -365,7 +369,6 @@ export default function NewProcedureScreen() {
     });
     return () => sub.remove();
   }, [formData, checklistItems]);
-
   // ── Clear persisted form after successful submission ──
   const clearPersistedForm = async () => {
     try { await AsyncStorage.removeItem(FORM_STORAGE_KEY); } catch { /* ignore */ }

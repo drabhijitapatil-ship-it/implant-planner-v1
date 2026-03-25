@@ -114,28 +114,34 @@ export default function ProcedureDetailScreen() {
     // Assignment-based check: anyone assigned as supervisor or incharge can approve
     const isSupervisor = user?.id === procedure.supervisor_id;
     const isImplantIncharge = user?.id === procedure.implant_incharge_id;
+    const isInchargeSelfCreated = procedure.created_by_role === 'implant_incharge' && user?.id === procedure.created_by_id;
     
     if (procedure.status === 'pending_phase1') {
+      if (isInchargeSelfCreated) return true;
       if (isSupervisor && !procedure.supervisor_phase1_approved) return true;
       if (isImplantIncharge && !procedure.implant_incharge_phase1_approved) return true;
     }
     
     if (procedure.status === 'pending_phase2') {
+      if (isInchargeSelfCreated) return true;
       if (isSupervisor && !procedure.supervisor_phase2_approved) return true;
       if (isImplantIncharge && !procedure.implant_incharge_phase2_approved) return true;
     }
 
     if (procedure.status === 'pending_stage2_surgical') {
+      if (isInchargeSelfCreated) return true;
       if (isSupervisor && !procedure.supervisor_stage2_surgical_approved) return true;
       if (isImplantIncharge && !procedure.implant_incharge_stage2_surgical_approved) return true;
     }
 
     if (procedure.status === 'pending_stage2_prosthetic') {
+      if (isInchargeSelfCreated) return true;
       if (isSupervisor && !procedure.supervisor_stage2_prosthetic_approved) return true;
       if (isImplantIncharge && !procedure.implant_incharge_stage2_prosthetic_approved) return true;
     }
 
     if (procedure.status === 'pending_final_delivery') {
+      if (isInchargeSelfCreated) return true;
       if (isSupervisor && !procedure.supervisor_final_delivery_approved) return true;
       if (isImplantIncharge && !procedure.implant_incharge_final_delivery_approved) return true;
     }
@@ -145,16 +151,14 @@ export default function ProcedureDetailScreen() {
   
   const canSubmitPhase2 = () => {
     if (!procedure) return false;
-    return user?.role === 'student' && 
-           user?.id === procedure.student_id && 
-           procedure.status === 'phase1_approved';
+    const isOwner = user?.id === procedure.student_id || user?.id === procedure.created_by_id;
+    return isOwner && procedure.status === 'phase1_approved';
   };
 
   const canSubmitStage2Surgical = () => {
     if (!procedure) return false;
-    return user?.role === 'student' && 
-           user?.id === procedure.student_id && 
-           procedure.status === 'phase2_approved';
+    const isOwner = user?.id === procedure.student_id || user?.id === procedure.created_by_id;
+    return isOwner && procedure.status === 'phase2_approved';
   };
 
   const canSubmitStage2Prosthetic = () => {
@@ -1197,7 +1201,7 @@ export default function ProcedureDetailScreen() {
             </View>
             <CaseImplantPlanning
               procedureId={id as string}
-              isOwner={user?.id === procedure.student_id}
+              isOwner={user?.id === procedure.student_id || user?.id === procedure.created_by_id}
               userRole={user?.role || ''}
               torqueValues={procedure.torque_values}
               procedureStatus={procedure.status}
