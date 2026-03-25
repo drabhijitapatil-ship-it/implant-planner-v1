@@ -40,7 +40,6 @@ function DrawerMenu({
     ...(isAdmin
       ? [{ key: 'users', icon: 'people-outline' as const, label: 'Users', route: '/user-management' }]
       : []),
-    { key: 'implantlens', icon: 'camera-outline' as const, label: 'ImplantLens – Case Album', route: '/implantlens' },
     { key: 'profile', icon: 'person-circle-outline' as const, label: 'My Profile', route: '/profile' },
   ];
 

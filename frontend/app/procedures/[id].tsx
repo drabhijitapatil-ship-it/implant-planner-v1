@@ -18,7 +18,6 @@ import { STATUS_COLORS, STATUS_LABELS, CHECKLIST_DATA } from '../../constants/ch
 import { format } from 'date-fns';
 import { generateProcedurePDF } from '../../utils/pdfGenerator';
 import BackToDashboard from '../../components/BackToDashboard';
-import CasePhotoAlbum from '../../components/CasePhotoAlbum';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';
 import CaseCompletionBadge from '../../components/CaseCompletionBadge';
 import * as Linking from 'expo-linking';
@@ -1219,14 +1218,6 @@ export default function ProcedureDetailScreen() {
             procedureStatus={procedure.status}
           />
         )}
-
-        {/* Clinical Photo Album */}
-        <CasePhotoAlbum
-          procedureId={id as string}
-          isOwner={user?.id === procedure.student_id}
-          userRole={user?.role || ''}
-          procedureStatus={procedure.status}
-        />
 
         {canApprove() && !showRejectDialog && (
           <View style={styles.actionButtons}>
