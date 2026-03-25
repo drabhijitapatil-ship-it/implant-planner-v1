@@ -960,9 +960,12 @@ async def get_procedures(
     if current_user["role"] == "student":
         query["student_id"] = current_user["_id"]
     elif current_user["role"] == "supervisor":
-        query["$or"] = [
-            {"supervisor_id": current_user["_id"]},
-            {"created_by_id": current_user["_id"]},
+        query["$and"] = [
+            {"$or": [
+                {"supervisor_id": current_user["_id"]},
+                {"created_by_id": current_user["_id"]},
+            ]},
+            {"created_by_role": {"$ne": "implant_incharge"}},
         ]
     elif current_user["role"] == "nurse":
         # Nurses can only see fully approved/completed procedures
@@ -2247,18 +2250,40 @@ async def approve_procedure(
     # Check if the same person is BOTH supervisor AND implant incharge
     same_person_both_roles = procedure["supervisor_id"] == procedure["implant_incharge_id"]
     
+    # Check if this case was created by the in-charge (self-approval workflow)
+    is_incharge_self_created = procedure.get("created_by_role") == "implant_incharge" and procedure.get("created_by_id") == current_user["_id"]
+    
     # Determine which phase we're in
     if procedure["status"] == "pending_phase1":
         # Phase 1: Pre-surgical approval
-        if not (is_supervisor or is_implant_incharge):
+        if not (is_supervisor or is_implant_incharge or is_incharge_self_created):
             raise HTTPException(status_code=403, detail="Only assigned supervisor or implant incharge can approve")
         
         if action.action == "approve":
             # Mark this approver as having approved
             update_fields = {"updated_at": datetime.utcnow()}
             
+            # In-Charge self-created case: auto-approve both roles at once
+            if is_incharge_self_created:
+                update_fields["supervisor_phase1_approved"] = True
+                update_fields["supervisor_phase1_approved_at"] = datetime.utcnow()
+                update_fields["implant_incharge_phase1_approved"] = True
+                update_fields["implant_incharge_phase1_approved_at"] = datetime.utcnow()
+                update_fields["status"] = "phase1_approved"
+                update_fields["phase1_completed_at"] = datetime.utcnow()
+                
+                await db.procedures.update_one(
+                    {"_id": ObjectId(procedure_id)},
+                    {"$set": update_fields}
+                )
+                
+                updated_procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+                updated_procedure["_id"] = str(updated_procedure["_id"])
+                updated_procedure["id"] = updated_procedure["_id"]
+                return updated_procedure
+            
             # If same person is both supervisor and implant incharge, approve both roles at once
-            if same_person_both_roles and (is_supervisor or is_implant_incharge):
+            elif same_person_both_roles and (is_supervisor or is_implant_incharge):
                 update_fields["supervisor_phase1_approved"] = True
                 update_fields["supervisor_phase1_approved_at"] = datetime.utcnow()
                 update_fields["implant_incharge_phase1_approved"] = True
@@ -2355,15 +2380,34 @@ async def approve_procedure(
     
     elif procedure["status"] == "pending_phase2":
         # Phase 2: Surgical protocol approval
-        if not (is_supervisor or is_implant_incharge):
+        if not (is_supervisor or is_implant_incharge or is_incharge_self_created):
             raise HTTPException(status_code=403, detail="Only assigned supervisor or implant incharge can approve")
         
         if action.action == "approve":
             # Mark this approver as having approved Phase 2
             update_fields = {"updated_at": datetime.utcnow()}
             
+            # In-Charge self-created case: auto-approve both roles at once
+            if is_incharge_self_created:
+                update_fields["supervisor_phase2_approved"] = True
+                update_fields["supervisor_phase2_approved_at"] = datetime.utcnow()
+                update_fields["implant_incharge_phase2_approved"] = True
+                update_fields["implant_incharge_phase2_approved_at"] = datetime.utcnow()
+                update_fields["status"] = "phase2_approved"
+                update_fields["phase2_completed_at"] = datetime.utcnow()
+                
+                await db.procedures.update_one(
+                    {"_id": ObjectId(procedure_id)},
+                    {"$set": update_fields}
+                )
+                
+                updated_procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+                updated_procedure["_id"] = str(updated_procedure["_id"])
+                updated_procedure["id"] = updated_procedure["_id"]
+                return updated_procedure
+            
             # If same person is both supervisor and implant incharge, approve both roles at once
-            if same_person_both_roles and (is_supervisor or is_implant_incharge):
+            elif same_person_both_roles and (is_supervisor or is_implant_incharge):
                 update_fields["supervisor_phase2_approved"] = True
                 update_fields["supervisor_phase2_approved_at"] = datetime.utcnow()
                 update_fields["implant_incharge_phase2_approved"] = True
@@ -2490,54 +2534,60 @@ async def request_phase1_approval(
     procedure_id: str,
     current_user: dict = Depends(get_current_user),
 ):
-    """Student sends the case for Phase 1 approval after completing implant planning."""
+    """Student or Implant In-Charge sends the case for Phase 1 approval after completing implant planning."""
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
 
-    if current_user["role"] != "student" or procedure["student_id"] != current_user["_id"]:
-        raise HTTPException(status_code=403, detail="Only the student who created this case can request approval")
+    is_student = current_user["role"] == "student" and procedure.get("student_id") == current_user["_id"]
+    is_incharge_creator = current_user["role"] in ("implant_incharge", "administrator") and procedure.get("created_by_id") == current_user["_id"]
+
+    if not (is_student or is_incharge_creator):
+        raise HTTPException(status_code=403, detail="Only the case creator can request approval")
 
     if procedure["status"] != "draft":
         raise HTTPException(status_code=400, detail="Case is not in draft status")
 
+    update_fields = {
+        "status": "pending_phase1",
+        "phase1_requested_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow(),
+    }
+
     await db.procedures.update_one(
         {"_id": ObjectId(procedure_id)},
-        {"$set": {
-            "status": "pending_phase1",
-            "phase1_requested_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow(),
-        }},
+        {"$set": update_fields},
     )
 
-    student_name = procedure.get("student_name", "A student")
-    patient_name = procedure.get("patient_name", "")
-    msg = f"Phase 1 approval requested by {student_name} for patient {patient_name}"
+    if is_student:
+        student_name = procedure.get("student_name", "A student")
+        patient_name = procedure.get("patient_name", "")
+        msg = f"Phase 1 approval requested by {student_name} for patient {patient_name}"
 
-    await db.notifications.insert_one({
-        "user_id": procedure["supervisor_id"],
-        "procedure_id": procedure_id,
-        "message": msg,
-        "type": "approval_request",
-        "read": False,
-        "created_at": datetime.utcnow(),
-    })
-    await db.notifications.insert_one({
-        "user_id": procedure["implant_incharge_id"],
-        "procedure_id": procedure_id,
-        "message": msg,
-        "type": "approval_request",
-        "read": False,
-        "created_at": datetime.utcnow(),
-    })
+        await db.notifications.insert_one({
+            "user_id": procedure["supervisor_id"],
+            "procedure_id": procedure_id,
+            "message": msg,
+            "type": "approval_request",
+            "read": False,
+            "created_at": datetime.utcnow(),
+        })
+        await db.notifications.insert_one({
+            "user_id": procedure["implant_incharge_id"],
+            "procedure_id": procedure_id,
+            "message": msg,
+            "type": "approval_request",
+            "read": False,
+            "created_at": datetime.utcnow(),
+        })
 
-    push_recipients = list(set([procedure["supervisor_id"], procedure["implant_incharge_id"]]))
-    await send_expo_push_notifications(
-        push_recipients,
-        "Phase 1 Approval Requested",
-        msg,
-        {"procedure_id": procedure_id, "type": "approval_request"},
-    )
+        push_recipients = list(set([procedure["supervisor_id"], procedure["implant_incharge_id"]]))
+        await send_expo_push_notifications(
+            push_recipients,
+            "Phase 1 Approval Requested",
+            msg,
+            {"procedure_id": procedure_id, "type": "approval_request"},
+        )
 
     updated = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     updated["_id"] = str(updated["_id"])
@@ -2835,7 +2885,8 @@ async def approve_stage2_surgical(
 
     is_supervisor = current_user["_id"] == procedure.get("supervisor_id")
     is_implant_incharge = current_user["_id"] == procedure.get("implant_incharge_id")
-    if not (is_supervisor or is_implant_incharge):
+    is_incharge_self_created = procedure.get("created_by_role") == "implant_incharge" and procedure.get("created_by_id") == current_user["_id"]
+    if not (is_supervisor or is_implant_incharge or is_incharge_self_created):
         raise HTTPException(status_code=403, detail="Only assigned supervisor or implant incharge can approve")
 
     same_person = procedure["supervisor_id"] == procedure["implant_incharge_id"]
@@ -2843,7 +2894,7 @@ async def approve_stage2_surgical(
     if action.action == "approve":
         update_fields = {"updated_at": datetime.utcnow()}
 
-        if same_person:
+        if is_incharge_self_created or same_person:
             update_fields["supervisor_stage2_surgical_approved"] = True
             update_fields["supervisor_stage2_surgical_approved_at"] = datetime.utcnow()
             update_fields["implant_incharge_stage2_surgical_approved"] = True
@@ -2856,8 +2907,8 @@ async def approve_stage2_surgical(
                 update_fields["implant_incharge_stage2_surgical_approved"] = True
                 update_fields["implant_incharge_stage2_surgical_approved_at"] = datetime.utcnow()
 
-        sup_ok = procedure.get("supervisor_stage2_surgical_approved", False) or is_supervisor or (same_person and is_implant_incharge)
-        inc_ok = procedure.get("implant_incharge_stage2_surgical_approved", False) or is_implant_incharge or (same_person and is_supervisor)
+        sup_ok = procedure.get("supervisor_stage2_surgical_approved", False) or is_supervisor or (same_person and is_implant_incharge) or is_incharge_self_created
+        inc_ok = procedure.get("implant_incharge_stage2_surgical_approved", False) or is_implant_incharge or (same_person and is_supervisor) or is_incharge_self_created
 
         if sup_ok and inc_ok:
             update_fields["status"] = "stage2_surgical_approved"
@@ -2946,7 +2997,8 @@ async def approve_stage2_prosthetic(
 
     is_supervisor = current_user["_id"] == procedure.get("supervisor_id")
     is_implant_incharge = current_user["_id"] == procedure.get("implant_incharge_id")
-    if not (is_supervisor or is_implant_incharge):
+    is_incharge_self_created = procedure.get("created_by_role") == "implant_incharge" and procedure.get("created_by_id") == current_user["_id"]
+    if not (is_supervisor or is_implant_incharge or is_incharge_self_created):
         raise HTTPException(status_code=403, detail="Only assigned supervisor or implant incharge can approve")
 
     same_person = procedure["supervisor_id"] == procedure["implant_incharge_id"]
@@ -2954,7 +3006,7 @@ async def approve_stage2_prosthetic(
     if action.action == "approve":
         update_fields = {"updated_at": datetime.utcnow()}
 
-        if same_person:
+        if is_incharge_self_created or same_person:
             update_fields["supervisor_stage2_prosthetic_approved"] = True
             update_fields["supervisor_stage2_prosthetic_approved_at"] = datetime.utcnow()
             update_fields["implant_incharge_stage2_prosthetic_approved"] = True
@@ -2967,8 +3019,8 @@ async def approve_stage2_prosthetic(
                 update_fields["implant_incharge_stage2_prosthetic_approved"] = True
                 update_fields["implant_incharge_stage2_prosthetic_approved_at"] = datetime.utcnow()
 
-        sup_ok = procedure.get("supervisor_stage2_prosthetic_approved", False) or is_supervisor or (same_person and is_implant_incharge)
-        inc_ok = procedure.get("implant_incharge_stage2_prosthetic_approved", False) or is_implant_incharge or (same_person and is_supervisor)
+        sup_ok = procedure.get("supervisor_stage2_prosthetic_approved", False) or is_supervisor or (same_person and is_implant_incharge) or is_incharge_self_created
+        inc_ok = procedure.get("implant_incharge_stage2_prosthetic_approved", False) or is_implant_incharge or (same_person and is_supervisor) or is_incharge_self_created
 
         if sup_ok and inc_ok:
             update_fields["status"] = "stage2_prosthetic_step1_approved"
@@ -3124,14 +3176,15 @@ async def approve_phase4_step2(
 
     is_supervisor = current_user["_id"] == procedure.get("supervisor_id")
     is_implant_incharge = current_user["_id"] == procedure.get("implant_incharge_id")
-    if not (is_supervisor or is_implant_incharge):
+    is_incharge_self_created = procedure.get("created_by_role") == "implant_incharge" and procedure.get("created_by_id") == current_user["_id"]
+    if not (is_supervisor or is_implant_incharge or is_incharge_self_created):
         raise HTTPException(status_code=403, detail="Only assigned supervisor or implant incharge can approve")
 
     same_person = procedure.get("supervisor_id") == procedure.get("implant_incharge_id")
 
     if action.action == "approve":
         update_fields = {"updated_at": datetime.utcnow()}
-        if same_person:
+        if is_incharge_self_created or same_person:
             update_fields["supervisor_final_delivery_approved"] = True
             update_fields["supervisor_final_delivery_approved_at"] = datetime.utcnow()
             update_fields["implant_incharge_final_delivery_approved"] = True
@@ -3144,8 +3197,8 @@ async def approve_phase4_step2(
                 update_fields["implant_incharge_final_delivery_approved"] = True
                 update_fields["implant_incharge_final_delivery_approved_at"] = datetime.utcnow()
 
-        sup_ok = procedure.get("supervisor_final_delivery_approved", False) or is_supervisor or (same_person and is_implant_incharge)
-        inc_ok = procedure.get("implant_incharge_final_delivery_approved", False) or is_implant_incharge or (same_person and is_supervisor)
+        sup_ok = procedure.get("supervisor_final_delivery_approved", False) or is_supervisor or (same_person and is_implant_incharge) or is_incharge_self_created
+        inc_ok = procedure.get("implant_incharge_final_delivery_approved", False) or is_implant_incharge or (same_person and is_supervisor) or is_incharge_self_created
 
         if sup_ok and inc_ok:
             update_fields["status"] = "completed"
