@@ -4,8 +4,7 @@ import {
   StyleSheet, Alert, ActivityIndicator, Platform, AppState
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
@@ -292,48 +291,24 @@ export default function NewProcedureScreen() {
   const sanitizeString = (val: string) => val.trim().replace(/[<>"';]/g, '');
 
   // ── Reset form when tab gains focus (prevents stale data) ──
-  const defaultFormData = {
-    patient_name: '',
-    registration_number: '',
-    student_name: user?.name || '',
-    supervisor_id: '',
-    supervisor_name: '',
-    implant_incharge_id: '',
-    implant_incharge_name: '',
-    receipt_number: '',
-    amount_paid: '',
-    procedure_date: '',
-    procedure_time: '',
-    implant_procedure_type: '',
-    loading_type: [] as string[],
-    prosthetic_plan: '',
-    prosthetic_plan_other: '',
-    bone_graft_specifications: '',
-    edentulous_sites: [] as string[],
-    arch_condition: '',
-    ridge_contour: '',
-    soft_tissue_thickness: '',
-    keratinized_mucosa: '',
-    occlusal_scheme: '',
-    parafunction_habit: '',
-    vertical_dimension: '',
-    opposing_dentition: '',
-    vertical_dimension_mm: '',
-    tmj: '',
-    smile_line: '',
-    gingival_biotype: '',
-    medical_assessment: {} as Record<string, string>,
-    medical_risk_level: '',
-  };
-
   useFocusEffect(
     useCallback(() => {
-      // Only reset if not in the middle of implant selection
       if (!createdProcedureId) {
-        setFormData({ ...defaultFormData, student_name: user?.name || '' });
+        setFormData({
+          patient_name: '', registration_number: '', student_name: user?.name || '',
+          supervisor_id: '', supervisor_name: '', implant_incharge_id: '', implant_incharge_name: '',
+          receipt_number: '', amount_paid: '', procedure_date: '', procedure_time: '',
+          implant_procedure_type: '', loading_type: [] as string[],
+          prosthetic_plan: '', prosthetic_plan_other: '', bone_graft_specifications: '',
+          edentulous_sites: [] as string[], arch_condition: '', ridge_contour: '',
+          soft_tissue_thickness: '', keratinized_mucosa: '', occlusal_scheme: '',
+          parafunction_habit: '', vertical_dimension: '', opposing_dentition: '',
+          vertical_dimension_mm: '', tmj: '', smile_line: '', gingival_biotype: '',
+          medical_assessment: {} as Record<string, string>, medical_risk_level: '',
+        });
         setChecklistItems({});
         setStep('details');
-        clearPersistedForm();
+        AsyncStorage.removeItem(FORM_STORAGE_KEY).catch(() => {});
       }
     }, [createdProcedureId, user?.name])
   );
