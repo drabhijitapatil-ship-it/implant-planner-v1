@@ -180,6 +180,16 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
 4. **Backend**: Phase 3 submit now saves `phase3_supervisor_notes` and `phase3_incharge_notes`. Phase 4 Step 2 submit now saves `phase4_step2_supervisor_notes` and `phase4_step2_incharge_notes`.
 5. All phase data visible to all roles (student, supervisor, in-charge) at all times.
 
+### In-Charge Self-Approval Workflow & Form Reset (Mar 2026)
+1. **Form reset on "New Case" tab**: Added `useFocusEffect` to clear all form fields when tab gains focus (prevents stale data like "Hemant Patil" prefilling).
+2. **In-Charge self-approval workflow**: When Implant In-Charge creates a case:
+   - Goes through Phase 1 → 2 → 3 → 4 sequentially (same as students)
+   - On each phase approve, both supervisor AND in-charge approvals are auto-set
+   - No supervisor approval needed
+   - Cases invisible to supervisors (filtered from listing)
+3. **Backend updates**: All 5 approval endpoints (Phase 1, Phase 2, Phase 3, Phase 4 Step 1, Phase 4 Step 2) check `is_incharge_self_created` flag. Supervisor listing uses `$and` query to exclude `created_by_role: "implant_incharge"`.
+4. **PDF Export enhanced**: Added comprehensive Phase 2, 3, 4 data sections. Removed duplicate "Torque Values" from implant table.
+
 ## Backlog
 ### P2 - Refactoring
 - Backend refactoring (decompose server.py into routers/models/services)
