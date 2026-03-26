@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,11 +7,8 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
-  TextInput,
   Image,
   Alert,
-  Keyboard,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar } from 'react-native-calendars';
@@ -28,9 +25,6 @@ export default function DashboardScreen() {
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const searchInputRef = useRef<TextInput>(null);
   const [approvingDraftId, setApprovingDraftId] = useState<string | null>(null);
   const { user } = useAuth();
   const router = useRouter();
@@ -59,15 +53,6 @@ export default function DashboardScreen() {
     setRefreshing(true);
     loadData();
   };
-
-  const searchResults = useMemo(() => {
-    if (!searchQuery.trim()) return [];
-    const q = searchQuery.toLowerCase();
-    return procedures.filter((proc: any) =>
-      proc.patient_name?.toLowerCase().includes(q) ||
-      proc.registration_number?.toLowerCase().includes(q)
-    );
-  }, [searchQuery, procedures]);
 
   const draftCases = useMemo(() => {
     if (user?.role !== 'student') return [];
@@ -142,113 +127,37 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      {/* Header with Profile Photo - outside ScrollView */}
-      <View style={styles.headerRow} data-testid="dashboard-header">
-        <View style={styles.headerTextContainer}>
-          <Text style={styles.greeting}>Welcome back,</Text>
-          <Text style={styles.userName} data-testid="dashboard-user-name">{user?.name}</Text>
-        </View>
-        <TouchableOpacity
-          style={styles.avatarTouchable}
-          onPress={() => router.push('/profile')}
-          data-testid="dashboard-profile-avatar"
-        >
-          {user?.profile_photo ? (
-            <Image
-              source={{ uri: user.profile_photo }}
-              style={styles.avatarImage}
-            />
-          ) : (
-            <View style={[styles.avatarFallback, { backgroundColor: getRoleColor(user?.role || '') }]}>
-              <Text style={styles.avatarInitials}>{getInitials(user?.name || 'U')}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      {/* Search Bar - outside ScrollView for reliable keyboard focus */}
-      <View style={styles.searchContainer} data-testid="patient-search-container">
-        <View style={[styles.searchBar, isSearchFocused && styles.searchBarFocused]}>
-          <Ionicons name="search" size={20} color={isSearchFocused ? '#007AFF' : '#999'} />
-          <TextInput
-            ref={searchInputRef}
-            style={styles.searchInput}
-            placeholder="Search patients by name or reg. number..."
-            placeholderTextColor="#999"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onFocus={() => setIsSearchFocused(true)}
-            onBlur={() => {
-              if (!searchQuery.trim()) setIsSearchFocused(false);
-            }}
-            returnKeyType="search"
-            autoCapitalize="none"
-            autoCorrect={false}
-            testID="patient-search-input"
-            data-testid="patient-search-input"
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity
-              onPress={() => { setSearchQuery(''); setIsSearchFocused(false); Keyboard.dismiss(); }}
-              data-testid="search-clear-btn"
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Ionicons name="close-circle" size={20} color="#999" />
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-
       <ScrollView
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
       >
-
-        {/* Search Results */}
-        {searchQuery.trim().length > 0 && (
-          <View style={styles.searchResultsContainer} data-testid="search-results">
-            <Text style={styles.searchResultsTitle}>
-              {searchResults.length} result{searchResults.length !== 1 ? 's' : ''} for "{searchQuery}"
-            </Text>
-            {searchResults.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Ionicons name="search-outline" size={32} color="#CCC" />
-                <Text style={styles.emptyText}>No patients found</Text>
-              </View>
-            ) : (
-              searchResults.map((proc: any) => (
-                <TouchableOpacity
-                  key={proc.id}
-                  style={styles.procedureCard}
-                  onPress={() => router.push(`/procedures/${proc.id}`)}
-                  data-testid={`search-result-${proc.id}`}
-                >
-                  <View style={styles.procedureHeader}>
-                    <Text style={styles.patientName}>{proc.patient_name}</Text>
-                    <View
-                      style={[
-                        styles.statusBadge,
-                        { backgroundColor: STATUS_COLORS[proc.status as keyof typeof STATUS_COLORS] || '#999' },
-                      ]}
-                    >
-                      <Text style={styles.statusText}>
-                        {STATUS_LABELS[proc.status as keyof typeof STATUS_LABELS] || proc.status}
-                      </Text>
-                    </View>
-                  </View>
-                  <Text style={styles.procedureDetail}>Reg: {proc.registration_number}</Text>
-                  <Text style={styles.procedureDetail}>Student: {proc.student_name}</Text>
-                  <Text style={styles.procedureDetail}>Site: {proc.implant_site}</Text>
-                </TouchableOpacity>
-              ))
-            )}
+        {/* Header with Profile Photo */}
+        <View style={styles.headerRow} data-testid="dashboard-header">
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.greeting}>Welcome back,</Text>
+            <Text style={styles.userName} data-testid="dashboard-user-name">{user?.name}</Text>
           </View>
-        )}
+          <TouchableOpacity
+            style={styles.avatarTouchable}
+            onPress={() => router.push('/profile')}
+            data-testid="dashboard-profile-avatar"
+          >
+            {user?.profile_photo ? (
+              <Image
+                source={{ uri: user.profile_photo }}
+                style={styles.avatarImage}
+              />
+            ) : (
+              <View style={[styles.avatarFallback, { backgroundColor: getRoleColor(user?.role || '') }]}>
+                <Text style={styles.avatarInitials}>{getInitials(user?.name || 'U')}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
 
         {/* Stats Cards */}
-        {!searchQuery.trim() && (
-          <>
+
+        {/* Stats Cards */}
             <View style={styles.statsContainer}>
               <TouchableOpacity
                 style={[styles.statCard, { backgroundColor: '#007AFF' }]}
@@ -385,8 +294,6 @@ export default function DashboardScreen() {
                 ))
               )}
             </View>
-          </>
-        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -445,48 +352,6 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 18,
     fontWeight: '700',
-  },
-  searchContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderWidth: 1.5,
-    borderColor: '#E8E8E8',
-    gap: 10,
-  },
-  searchBarFocused: {
-    borderColor: '#007AFF',
-    shadowColor: '#007AFF',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    color: '#1A1A1A',
-    paddingVertical: 8,
-    paddingHorizontal: 0,
-    minHeight: 36,
-  },
-  searchResultsContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-  },
-  searchResultsTitle: {
-    fontSize: 14,
-    color: '#888',
-    marginBottom: 10,
-    fontWeight: '500',
   },
   statsContainer: {
     flexDirection: 'row',

@@ -207,7 +207,7 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
 - **Bone type filtering in Suggest Me**: Systems only indicated for certain bone types are filtered out when incompatible
 - **System dropdown enhanced**: Shows indication text, "Indicated" badge for procedure-matched systems, "Tooth N" badge for tooth-indicated systems
 - **Result cards in Step 3**: Show indication text and "Indicated" badge from Suggest Me results
-- **Dashboard search bar fix**: Added `minHeight: 36`, `paddingVertical: 8`, `returnKeyType`, `autoCapitalize` to improve TextInput touch target
+- **Dashboard search bar removed**: Search bar removed from home screen per user request — search functionality remains available in the "My Cases" tab (procedures.tsx)
 - **FlatList keyboard fix**: Added `keyboardShouldPersistTaps="handled"` to procedures.tsx FlatList
 
 ## Backlog
