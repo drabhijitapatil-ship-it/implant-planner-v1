@@ -3430,14 +3430,14 @@ IMPLANT_INDICATIONS = {
     "Neodent|Titamax GM Acqua": {
         "indication": "Indicated for Bone D1 and D2 and Bone Graft areas.",
     },
-    "Noble Biocare|NobelActive NP": {
+    "Nobel Biocare|NobelActive NP": {
         "indication": "Only indicated for the replacement of teeth 41, 42, 31, 32, 12, and 22.",
         "restricted_teeth": ["41", "42", "31", "32", "12", "22"],
     },
-    "Noble Biocare|NobelActive RP": {
+    "Nobel Biocare|NobelActive RP": {
         "indication": "Primary indications for D4 or an extraction socket.",
     },
-    "Noble Biocare|NobelParallel RP": {
+    "Nobel Biocare|NobelParallel RP": {
         "indication": "Universal use.",
     },
     "NeoBiotech|IS-III active": {
@@ -3475,8 +3475,12 @@ IMPLANT_INDICATIONS = {
         "indication": "Indicated for Bone height of 8, 9, 10 mm.",
     },
     "Conelog|Progressive Line": {
-        "indication": "Indicated for all bone types (D1–D4). Conical connection with platform switching.",
+        "indication": "Indicated for all bone types (D1-D4). Conical connection with platform switching.",
     },
+}
+
+BRAND_NAME_CORRECTIONS = {
+    "Noble Biocare": "Nobel Biocare",
 }
 
 @api_router.get("/implant-library/systems")
@@ -4599,7 +4603,7 @@ async def seed_on_startup():
     if xlsx_path.exists():
         df = pd.read_excel(xlsx_path, skiprows=0)
         df.columns = [c.strip() for c in df.columns]
-        brand_col = [c for c in df.columns if "company" in c.lower()][0]
+        brand_col = [c for c in df.columns if "company" in c.lower() or "brand" in c.lower()][0]
         system_col = [c for c in df.columns if "system" in c.lower() or "name" in c.lower()][0]
         diam_col = [c for c in df.columns if "diameter" in c.lower()][0]
         len_col = [c for c in df.columns if "length" in c.lower()][0]
@@ -4612,6 +4616,9 @@ async def seed_on_startup():
                 system = str(row[system_col]).strip()
                 diameter = round(float(row[diam_col]), 2)
                 length = round(float(row[len_col]), 2)
+                if not brand or not system or brand == "nan" or system == "nan":
+                    continue
+                brand = BRAND_NAME_CORRECTIONS.get(brand, brand)
                 key = (brand, system, diameter, length)
                 if key not in seen:
                     seen.add(key)
