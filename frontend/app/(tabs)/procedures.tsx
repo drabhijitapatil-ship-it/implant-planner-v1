@@ -189,6 +189,7 @@ export default function ProceduresScreen() {
           keyExtractor={(item: any) => item.id}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           contentContainerStyle={styles.listContainer}
+          keyboardShouldPersistTaps="handled"
         />
       )}
     </SafeAreaView>

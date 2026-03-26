@@ -181,6 +181,10 @@ export default function DashboardScreen() {
               onBlur={() => {
                 if (!searchQuery.trim()) setIsSearchFocused(false);
               }}
+              returnKeyType="search"
+              autoCapitalize="none"
+              autoCorrect={false}
+              testID="patient-search-input"
               data-testid="patient-search-input"
             />
             {searchQuery.length > 0 && (
@@ -463,7 +467,9 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     color: '#1A1A1A',
-    padding: 0,
+    paddingVertical: 8,
+    paddingHorizontal: 0,
+    minHeight: 36,
   },
   searchResultsContainer: {
     paddingHorizontal: 16,
