@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +22,7 @@ export default function ProceduresScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const router = useRouter();
   const params = useLocalSearchParams<{ filter?: string }>();
 
@@ -117,6 +119,18 @@ export default function ProceduresScreen() {
     { key: 'rejected', label: 'Rejected' },
   ];
 
+  const filteredProcedures = searchQuery.trim()
+    ? procedures.filter((p: any) => {
+        const q = searchQuery.toLowerCase();
+        return (
+          p.patient_name?.toLowerCase().includes(q) ||
+          p.registration_number?.toLowerCase().includes(q) ||
+          p.student_name?.toLowerCase().includes(q) ||
+          p.supervisor_name?.toLowerCase().includes(q)
+        );
+      })
+    : procedures;
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -145,14 +159,32 @@ export default function ProceduresScreen() {
         ))}
       </View>
 
-      {procedures.length === 0 ? (
+      <View style={styles.searchContainer} data-testid="search-bar-container">
+        <Ionicons name="search" size={18} color="#999" style={{ marginLeft: 12 }} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search by patient, registration, student..."
+          placeholderTextColor="#999"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          autoCorrect={false}
+          data-testid="search-input"
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')} style={{ padding: 8 }} data-testid="search-clear">
+            <Ionicons name="close-circle" size={20} color="#999" />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {filteredProcedures.length === 0 ? (
         <View style={styles.emptyState}>
-          <Ionicons name="document-text-outline" size={64} color="#CCC" />
-          <Text style={styles.emptyText}>No procedures found</Text>
+          <Ionicons name={searchQuery ? 'search-outline' : 'document-text-outline'} size={64} color="#CCC" />
+          <Text style={styles.emptyText}>{searchQuery ? 'No matching cases found' : 'No procedures found'}</Text>
         </View>
       ) : (
         <FlatList
-          data={procedures}
+          data={filteredProcedures}
           renderItem={renderProcedure}
           keyExtractor={(item: any) => item.id}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -213,6 +245,24 @@ const styles = StyleSheet.create({
   },
   filterTextActive: {
     color: '#FFF',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    fontSize: 14,
+    color: '#1A1A1A',
   },
   emptyState: {
     flex: 1,
