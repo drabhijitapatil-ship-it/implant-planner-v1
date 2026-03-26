@@ -190,6 +190,15 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
 3. **Backend updates**: All 5 approval endpoints (Phase 1, Phase 2, Phase 3, Phase 4 Step 1, Phase 4 Step 2) check `is_incharge_self_created` flag. Supervisor listing uses `$and` query to exclude `created_by_role: "implant_incharge"`.
 4. **PDF Export enhanced**: Added comprehensive Phase 2, 3, 4 data sections. Removed duplicate "Torque Values" from implant table.
 
+### Implant Library Update (Mar 2026)
+- **Updated master implant library** from user-provided Excel (`implant_library_updated.xlsx`): 49 systems, 649 variants, 17 companies
+- **Brand name correction**: "Noble Biocare" → "Nobel Biocare" (applied via `BRAND_NAME_CORRECTIONS` dict in seeder)
+- **New systems added**: Bredent (Mini 2 Sky, Narrow Sky, Blue Sky, Sky Classic, Copa Sky), Zimmer (TSX, Tapered Screw-Vent TSV), B&B Dental (Dura-Vit Slim), NeoBiotech (IT-III active RP, IT-III active Wide)
+- **Removed old systems**: Alpha Bio BSPI, Bredent Copa/Sky (renamed), Zimmer Biomet Tapered Screw-Vent (brand+system renamed)
+- **Systems sorted alphabetically** by company name in `/api/implant-library/systems` endpoint
+- **IMPLANT_INDICATIONS** updated to match new brand names (Nobel Biocare)
+- Seeder logic enhanced: handles both "Implant Company" and "Brand" column headers, applies brand corrections, skips empty/nan rows
+
 ## Backlog
 ### P2 - Refactoring
 - Backend refactoring (decompose server.py into routers/models/services)
