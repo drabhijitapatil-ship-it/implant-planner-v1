@@ -568,6 +568,12 @@ function ModalContent(props: any) {
                   {selectedSystem && (
                     <View style={ms.systemOptionsBox} data-testid="system-options-list">
                       <Text style={ms.systemOptionsTitle}>Available Options: {selectedSystem.brand} - {selectedSystem.system}</Text>
+                      {selectedSystem.indication ? (
+                        <View style={ms.indicationBanner} data-testid="selected-system-indication">
+                          <Ionicons name="information-circle" size={16} color="#1565C0" />
+                          <Text style={ms.indicationBannerText}>{selectedSystem.indication}</Text>
+                        </View>
+                      ) : null}
                       <View style={ms.systemOptionsGrid}>
                         <View style={ms.systemOptionsCol}>
                           <Text style={ms.systemOptionsLabel}>Diameters (mm)</Text>
@@ -1061,6 +1067,8 @@ const ms = StyleSheet.create({
   matchBadgeText: { fontSize: 10, fontWeight: '700', color: '#2E7D32' },
   toothBadge: { backgroundColor: '#FFF3E0', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: '#FFB74D' },
   toothBadgeText: { fontSize: 10, fontWeight: '700', color: '#E65100' },
+  indicationBanner: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#E3F2FD', borderRadius: 8, padding: 10, marginTop: 8, marginBottom: 4, gap: 8 },
+  indicationBannerText: { flex: 1, fontSize: 13, color: '#1565C0', fontWeight: '500', lineHeight: 18 },
   // Drilling Protocol styles
   protocolBox: { backgroundColor: '#F5F9FE', borderRadius: 12, borderWidth: 1, borderColor: '#BBDEFB', padding: 14, marginBottom: 12, marginTop: 4 },
   protocolHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
