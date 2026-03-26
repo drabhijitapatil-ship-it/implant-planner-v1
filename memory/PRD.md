@@ -210,6 +210,14 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
 - **Dashboard search bar removed**: Search bar removed from home screen per user request — search functionality remains available in the "My Cases" tab (procedures.tsx)
 - **FlatList keyboard fix**: Added `keyboardShouldPersistTaps="handled"` to procedures.tsx FlatList
 
+### Ankylos C/X Drilling Protocol (Mar 2026)
+- **Added complete drilling protocol** for Dentsply Sirona Ankylos C/X with series-based color-coded system
+- **4 Series**: A (3.5mm/Red), B (4.5mm/Yellow), C (5.5mm/Blue), D (7.0mm/Green)
+- **Protocol sequence**: Round Drill 1.8mm → Lindemann → Pilot 2.0mm → Twist Drill (series-specific) → Conical Reamer (e.g., B11) → Tap (D1/D2 only) → Implant Placement
+- **Bone density handling**: Dense bone (D1/D2) = 7 steps with Tap; Soft bone (D3/D4) = 6 steps without Tap
+- **Insertion torque**: 25-35 Ncm (Ankylos-specific)
+- **PDF export** and **available endpoint** both support Ankylos with series data
+
 ## Backlog
 ### P2 - Refactoring
 - Backend refactoring (decompose server.py into routers/models/services)
