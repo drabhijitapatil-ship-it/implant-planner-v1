@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   TextInput,
   Image,
   Alert,
+  Keyboard,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar } from 'react-native-calendars';
@@ -28,6 +30,7 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const searchInputRef = useRef<TextInput>(null);
   const [approvingDraftId, setApprovingDraftId] = useState<string | null>(null);
   const { user } = useAuth();
   const router = useRouter();
@@ -169,9 +172,14 @@ export default function DashboardScreen() {
 
         {/* Search Bar */}
         <View style={styles.searchContainer} data-testid="patient-search-container">
-          <View style={[styles.searchBar, isSearchFocused && styles.searchBarFocused]}>
+          <TouchableOpacity
+            activeOpacity={1}
+            style={[styles.searchBar, isSearchFocused && styles.searchBarFocused]}
+            onPress={() => searchInputRef.current?.focus()}
+          >
             <Ionicons name="search" size={20} color={isSearchFocused ? '#007AFF' : '#999'} />
             <TextInput
+              ref={searchInputRef}
               style={styles.searchInput}
               placeholder="Search patients by name or reg. number..."
               placeholderTextColor="#999"
@@ -189,13 +197,14 @@ export default function DashboardScreen() {
             />
             {searchQuery.length > 0 && (
               <TouchableOpacity
-                onPress={() => { setSearchQuery(''); setIsSearchFocused(false); }}
+                onPress={() => { setSearchQuery(''); setIsSearchFocused(false); Keyboard.dismiss(); }}
                 data-testid="search-clear-btn"
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <Ionicons name="close-circle" size={20} color="#999" />
               </TouchableOpacity>
             )}
-          </View>
+          </TouchableOpacity>
         </View>
 
         {/* Search Results */}
