@@ -142,70 +142,68 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
+      {/* Header with Profile Photo - outside ScrollView */}
+      <View style={styles.headerRow} data-testid="dashboard-header">
+        <View style={styles.headerTextContainer}>
+          <Text style={styles.greeting}>Welcome back,</Text>
+          <Text style={styles.userName} data-testid="dashboard-user-name">{user?.name}</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.avatarTouchable}
+          onPress={() => router.push('/profile')}
+          data-testid="dashboard-profile-avatar"
+        >
+          {user?.profile_photo ? (
+            <Image
+              source={{ uri: user.profile_photo }}
+              style={styles.avatarImage}
+            />
+          ) : (
+            <View style={[styles.avatarFallback, { backgroundColor: getRoleColor(user?.role || '') }]}>
+              <Text style={styles.avatarInitials}>{getInitials(user?.name || 'U')}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {/* Search Bar - outside ScrollView for reliable keyboard focus */}
+      <View style={styles.searchContainer} data-testid="patient-search-container">
+        <View style={[styles.searchBar, isSearchFocused && styles.searchBarFocused]}>
+          <Ionicons name="search" size={20} color={isSearchFocused ? '#007AFF' : '#999'} />
+          <TextInput
+            ref={searchInputRef}
+            style={styles.searchInput}
+            placeholder="Search patients by name or reg. number..."
+            placeholderTextColor="#999"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onFocus={() => setIsSearchFocused(true)}
+            onBlur={() => {
+              if (!searchQuery.trim()) setIsSearchFocused(false);
+            }}
+            returnKeyType="search"
+            autoCapitalize="none"
+            autoCorrect={false}
+            testID="patient-search-input"
+            data-testid="patient-search-input"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity
+              onPress={() => { setSearchQuery(''); setIsSearchFocused(false); Keyboard.dismiss(); }}
+              data-testid="search-clear-btn"
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="close-circle" size={20} color="#999" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
       <ScrollView
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
-        {/* Header with Profile Photo */}
-        <View style={styles.headerRow} data-testid="dashboard-header">
-          <View style={styles.headerTextContainer}>
-            <Text style={styles.greeting}>Welcome back,</Text>
-            <Text style={styles.userName} data-testid="dashboard-user-name">{user?.name}</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.avatarTouchable}
-            onPress={() => router.push('/profile')}
-            data-testid="dashboard-profile-avatar"
-          >
-            {user?.profile_photo ? (
-              <Image
-                source={{ uri: user.profile_photo }}
-                style={styles.avatarImage}
-              />
-            ) : (
-              <View style={[styles.avatarFallback, { backgroundColor: getRoleColor(user?.role || '') }]}>
-                <Text style={styles.avatarInitials}>{getInitials(user?.name || 'U')}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* Search Bar */}
-        <View style={styles.searchContainer} data-testid="patient-search-container">
-          <TouchableOpacity
-            activeOpacity={1}
-            style={[styles.searchBar, isSearchFocused && styles.searchBarFocused]}
-            onPress={() => searchInputRef.current?.focus()}
-          >
-            <Ionicons name="search" size={20} color={isSearchFocused ? '#007AFF' : '#999'} />
-            <TextInput
-              ref={searchInputRef}
-              style={styles.searchInput}
-              placeholder="Search patients by name or reg. number..."
-              placeholderTextColor="#999"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              onFocus={() => setIsSearchFocused(true)}
-              onBlur={() => {
-                if (!searchQuery.trim()) setIsSearchFocused(false);
-              }}
-              returnKeyType="search"
-              autoCapitalize="none"
-              autoCorrect={false}
-              testID="patient-search-input"
-              data-testid="patient-search-input"
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity
-                onPress={() => { setSearchQuery(''); setIsSearchFocused(false); Keyboard.dismiss(); }}
-                data-testid="search-clear-btn"
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Ionicons name="close-circle" size={20} color="#999" />
-              </TouchableOpacity>
-            )}
-          </TouchableOpacity>
-        </View>
 
         {/* Search Results */}
         {searchQuery.trim().length > 0 && (
