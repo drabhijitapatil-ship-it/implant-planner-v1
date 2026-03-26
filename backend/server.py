@@ -4163,6 +4163,89 @@ DRILLING_PROTOCOLS = {
     },
 }
 
+# ── Dentsply Sirona Ankylos C/X Drilling Protocol ──────────────────────────
+DRILLING_PROTOCOLS["Dentsply Sirona|Ankylos C/X"] = {
+    "system_name": "Dentsply Sirona Ankylos C/X",
+    "protocol_family": "ankylos",
+    "implant_series": [
+        {"series": "A", "color": "Red", "diameter": 3.5},
+        {"series": "B", "color": "Yellow", "diameter": 4.5},
+        {"series": "C", "color": "Blue", "diameter": 5.5},
+        {"series": "D", "color": "Green", "diameter": 7.0},
+    ],
+    "size_database": {
+        3.5: [6.6, 8, 9.5, 11, 14, 17],
+        4.5: [6.6, 8, 9.5, 11, 14, 17],
+        5.5: [6.6, 8, 9.5, 11, 14, 17],
+        7.0: [8, 9.5, 11, 14],
+    },
+    "drill_mapping": {
+        3.5: {"series": "A", "color": "Red", "twist_drill": 2.9},
+        4.5: {"series": "B", "color": "Yellow", "twist_drill": 3.8},
+        5.5: {"series": "C", "color": "Blue", "twist_drill": 4.7},
+        7.0: {"series": "D", "color": "Green", "twist_drill": 5.7},
+    },
+}
+
+def _generate_ankylos_protocol(proto, implant_diameter, implant_length, bone):
+    """Generate drilling protocol for Dentsply Sirona Ankylos C/X system."""
+    steps = []
+    step_num = 1
+    depth = str(implant_length)
+    is_dense = bone in ("D1", "D2")
+
+    dm = proto["drill_mapping"].get(implant_diameter)
+    if not dm:
+        return steps
+    series = dm["series"]
+    color = dm["color"]
+    twist_drill = dm["twist_drill"]
+
+    # Step 1: Round Drill 1.8 mm
+    steps.append({"step": step_num, "drill_type": "Round Drill", "code": "—",
+                   "diameter": 1.8, "depth": "Mark site", "rpm": "1500-2000", "irrigation": True,
+                   "series": series, "color": color})
+    step_num += 1
+
+    # Step 2: Lindemann Drill
+    steps.append({"step": step_num, "drill_type": "Lindemann Drill", "code": "—",
+                   "diameter": 2.0, "depth": depth, "rpm": "800-1200", "irrigation": True,
+                   "series": series, "color": color})
+    step_num += 1
+
+    # Step 3: Pilot Drill 2.0 mm
+    steps.append({"step": step_num, "drill_type": "Pilot Drill", "code": "—",
+                   "diameter": 2.0, "depth": depth, "rpm": "800-1000", "irrigation": True,
+                   "series": series, "color": color})
+    step_num += 1
+
+    # Step 4: Twist Drill (series-specific)
+    steps.append({"step": step_num, "drill_type": f"Twist Drill {twist_drill} mm", "code": "—",
+                   "diameter": twist_drill, "depth": depth, "rpm": "800-1000", "irrigation": True,
+                   "series": series, "color": color})
+    step_num += 1
+
+    # Step 5: Conical Reamer (series + length)
+    steps.append({"step": step_num, "drill_type": f"Conical Reamer {series}{int(implant_length) if implant_length == int(implant_length) else implant_length}", "code": "—",
+                   "diameter": implant_diameter, "depth": depth, "rpm": "500-800", "irrigation": True,
+                   "series": series, "color": color})
+    step_num += 1
+
+    # Step 6: Tap (dense bone only — D1/D2)
+    if is_dense:
+        steps.append({"step": step_num, "drill_type": f"Tap {series}", "code": "—",
+                       "diameter": implant_diameter, "depth": depth, "rpm": "15-20", "irrigation": True,
+                       "series": series, "color": color, "note": "Dense bone only (D1/D2)"})
+        step_num += 1
+
+    # Final: Implant Placement
+    steps.append({"step": step_num, "drill_type": "Implant Placement", "code": "—",
+                   "diameter": implant_diameter, "depth": depth, "rpm": "25-30", "irrigation": False,
+                   "series": series, "color": color,
+                   "note": f"Ankylos C/X {series} Series ({color}) — {implant_diameter}mm x {implant_length}mm"})
+
+    return steps
+
 # Alias the "Conical RBT" full names to the same protocols
 DRILLING_PROTOCOLS["BioHorizons|Tapered Pro Conical RBT"] = DRILLING_PROTOCOLS["BioHorizons|Tapered Pro"]
 DRILLING_PROTOCOLS["BioHorizons|Tapered Short Conical RBT"] = DRILLING_PROTOCOLS["BioHorizons|Tapered Short"]
@@ -4495,6 +4578,8 @@ async def generate_drilling_protocol(
         steps = _generate_conelog_protocol(proto, diameter, length, bone)
     elif proto.get("protocol_family") in ("helix", "drive", "titamax"):
         steps = _generate_neodent_protocol(proto, diameter, length, bone)
+    elif proto.get("protocol_family") == "ankylos":
+        steps = _generate_ankylos_protocol(proto, diameter, length, bone)
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
@@ -4503,10 +4588,25 @@ async def generate_drilling_protocol(
         protocol_type = "Dense Bone Protocol" if bone in ("D1", "D2") else ("Soft Bone Protocol" if bone == "D4" else "Standard Protocol")
     elif "Progressive" in system or brand == "Conelog":
         protocol_type = "Soft Bone Protocol" if bone in ("D3", "D4") else "Standard Protocol"
+    elif family == "ankylos":
+        dm = proto["drill_mapping"].get(diameter, {})
+        series_info = f" ({dm.get('series', '')} Series / {dm.get('color', '')})" if dm else ""
+        protocol_type = f"Dense Bone Protocol{series_info}" if bone in ("D1", "D2") else f"Standard Protocol{series_info}"
     else:
         protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
 
-    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else "35-45 Ncm"
+    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else "35-45 Ncm")
+
+    # Add Ankylos series info to response
+    ankylos_info = {}
+    if family == "ankylos":
+        dm = proto["drill_mapping"].get(diameter, {})
+        ankylos_info = {
+            "series": dm.get("series", ""),
+            "color": dm.get("color", ""),
+            "twist_drill": dm.get("twist_drill", 0),
+            "implant_series": proto.get("implant_series", []),
+        }
 
     return {
         "system_name": proto["system_name"],
@@ -4521,6 +4621,7 @@ async def generate_drilling_protocol(
             "Maintain copious irrigation during drilling" if bone != "D4" else "Reduced drilling for soft bone",
             f"Target insertion torque: {insertion_torque}",
         ],
+        **({"ankylos_info": ankylos_info} if ankylos_info else {}),
     }
 
 @api_router.get("/drilling-protocols/available")
@@ -4529,12 +4630,17 @@ async def get_available_protocols(current_user: dict = Depends(get_current_user)
     result = []
     for key, proto in DRILLING_PROTOCOLS.items():
         brand, system = key.split("|")
-        result.append({
+        entry = {
             "brand": brand,
             "system": system,
             "system_name": proto["system_name"],
-            "lengths": proto["lengths"],
-        })
+            "lengths": proto.get("lengths", []),
+        }
+        if proto.get("protocol_family") == "ankylos":
+            entry["implant_series"] = proto.get("implant_series", [])
+            entry["size_database"] = {str(k): v for k, v in proto.get("size_database", {}).items()}
+            entry["drill_mapping"] = {str(k): v for k, v in proto.get("drill_mapping", {}).items()}
+        result.append(entry)
     return result
 
 @api_router.post("/drilling-protocols/export-pdf")
@@ -4569,6 +4675,8 @@ async def export_drilling_pdf(
         steps = _generate_conelog_protocol(proto, diameter, length, bone)
     elif proto.get("protocol_family") in ("helix", "drive", "titamax"):
         steps = _generate_neodent_protocol(proto, diameter, length, bone)
+    elif proto.get("protocol_family") == "ankylos":
+        steps = _generate_ankylos_protocol(proto, diameter, length, bone)
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
@@ -4577,6 +4685,10 @@ async def export_drilling_pdf(
         protocol_type = "Dense Bone Protocol" if bone in ("D1", "D2") else ("Soft Bone Protocol" if bone == "D4" else "Standard Protocol")
     elif "Progressive" in system or brand == "Conelog":
         protocol_type = "Soft Bone Protocol" if bone in ("D3", "D4") else "Standard Protocol"
+    elif family == "ankylos":
+        dm = proto["drill_mapping"].get(diameter, {})
+        series_info = f" ({dm.get('series', '')} Series / {dm.get('color', '')})" if dm else ""
+        protocol_type = f"Dense Bone Protocol{series_info}" if bone in ("D1", "D2") else f"Standard Protocol{series_info}"
     else:
         protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
     buf = io.BytesIO()

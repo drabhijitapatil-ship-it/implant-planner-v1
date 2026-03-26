@@ -56,6 +56,30 @@ function generateDrillingProtocol(brand: string, system: string, diameter: numbe
   const isHardBone = boneType === 'D1' || boneType === 'D2';
   const isSoftBone = boneType === 'D3' || boneType === 'D4';
 
+  // ── Ankylos C/X specific protocol ──
+  if (brand === 'Dentsply Sirona' && system === 'Ankylos C/X') {
+    const ANKYLOS_DRILL_MAP: Record<number, { series: string; color: string; twist: number }> = {
+      3.5: { series: 'A', color: 'Red', twist: 2.9 },
+      4.5: { series: 'B', color: 'Yellow', twist: 3.8 },
+      5.5: { series: 'C', color: 'Blue', twist: 4.7 },
+      7.0: { series: 'D', color: 'Green', twist: 5.7 },
+    };
+    const dm = ANKYLOS_DRILL_MAP[d];
+    if (!dm) return [];
+    const proto: { step: number; drill: string; speed: string; depth: string; note: string }[] = [];
+    let s = 1;
+    proto.push({ step: s++, drill: 'Round Drill 1.8 mm', speed: '1500-2000 RPM', depth: 'Mark site', note: `${dm.series} Series (${dm.color}). Mark osteotomy.` });
+    proto.push({ step: s++, drill: 'Lindemann Drill', speed: '800-1200 RPM', depth: 'Working length', note: 'Open cortical bone. Copious irrigation.' });
+    proto.push({ step: s++, drill: 'Pilot Drill 2.0 mm', speed: '800-1000 RPM', depth: 'Working length', note: 'Verify direction with paralleling pin.' });
+    proto.push({ step: s++, drill: `Twist Drill ${dm.twist} mm`, speed: '800-1000 RPM', depth: 'Working length', note: `${dm.series} Series (${dm.color}). Check depth gauge.` });
+    proto.push({ step: s++, drill: `Conical Reamer ${dm.series}`, speed: '500-800 RPM', depth: 'Working length', note: `Series ${dm.series} reamer for ${d}mm implant.` });
+    if (isHardBone) {
+      proto.push({ step: s++, drill: `Tap ${dm.series}`, speed: '15-20 RPM', depth: 'Full depth', note: 'Dense bone only (D1/D2). Pre-tap for easier insertion.' });
+    }
+    proto.push({ step: s++, drill: `Ankylos C/X Implant (${d}mm)`, speed: '25-30 RPM', depth: 'Final position', note: `${dm.series} Series (${dm.color}). Insert at 25-35 Ncm.` });
+    return proto;
+  }
+
   // Base protocol varies by diameter and bone density
   const protocol: { step: number; drill: string; speed: string; depth: string; note: string }[] = [];
   let stepNum = 1;
