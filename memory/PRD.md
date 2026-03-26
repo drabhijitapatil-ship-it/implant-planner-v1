@@ -199,6 +199,17 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
 - **IMPLANT_INDICATIONS** updated to match new brand names (Nobel Biocare)
 - Seeder logic enhanced: handles both "Implant Company" and "Brand" column headers, applies brand corrections, skips empty/nan rows
 
+### Implant-Specific Indications & Search Fix (Mar 2026)
+- **Added 38 implant-specific indications** from user's Word document to `IMPLANT_INDICATIONS` dict
+- Each indication includes: `indication` (text), `indicated_procedures` (matching New Case procedure types), `indicated_bone_types` (D1-D4)
+- Special fields: `restricted_teeth` (Nobel Active NP, Osstem MS), `indicated_teeth` (BioHorizons, Conelog, B&B Dental, etc.)
+- **Procedure matching in Suggest Me**: `SUGGEST_ME_TO_CASE_PROCEDURES` maps Suggest Me types → New Case types; `suggest-auto` sorts matched systems first
+- **Bone type filtering in Suggest Me**: Systems only indicated for certain bone types are filtered out when incompatible
+- **System dropdown enhanced**: Shows indication text, "Indicated" badge for procedure-matched systems, "Tooth N" badge for tooth-indicated systems
+- **Result cards in Step 3**: Show indication text and "Indicated" badge from Suggest Me results
+- **Dashboard search bar fix**: Added `minHeight: 36`, `paddingVertical: 8`, `returnKeyType`, `autoCapitalize` to improve TextInput touch target
+- **FlatList keyboard fix**: Added `keyboardShouldPersistTaps="handled"` to procedures.tsx FlatList
+
 ## Backlog
 ### P2 - Refactoring
 - Backend refactoring (decompose server.py into routers/models/services)
