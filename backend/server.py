@@ -3414,69 +3414,216 @@ TOOTH_RECOMMENDATIONS = {
 IMPLANT_INDICATIONS = {
     "Neodent|Drive GM Acqua": {
         "indication": "Indicated for Bone D3 and D4 and Immediate Placement.",
+        "indicated_procedures": ["Immediate Implant"],
+        "indicated_bone_types": ["D3", "D4"],
     },
     "Neodent|Drive GM NeoPorous": {
-        "indication": "Indicated for Bone D3 and D4 and Immediate Placement.",
+        "indication": "Indicated for Bone D3 and D4 and for Immediate Placement.",
+        "indicated_procedures": ["Immediate Implant"],
+        "indicated_bone_types": ["D3", "D4"],
     },
     "Neodent|Helix GM Acqua": {
-        "indication": "Indicated in D1, D2, D3, and D4 Bone Types and Immediate Placement.",
+        "indication": "Indicated in D1, D2, D3, and D4 Bone Types and for Immediate Placement.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
     "Neodent|Helix GM Neoporous": {
-        "indication": "Indicated in D1, D2, D3, and D4 Bone Types and Immediate Placement.",
+        "indication": "Indicated in D1, D2, D3, and D4 Bone Types and for Immediate Placement.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
     "Neodent|Titamax GM NeoPorous": {
-        "indication": "Indicated for Bone D1 and D2 and Bone Graft areas.",
+        "indication": "Indicated for Bone type D1 and D2 and Guided Bone Regeneration areas.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Implant Placement with Guided Bone Regeneration"],
+        "indicated_bone_types": ["D1", "D2"],
     },
     "Neodent|Titamax GM Acqua": {
-        "indication": "Indicated for Bone D1 and D2 and Bone Graft areas.",
+        "indication": "Indicated for Bone type D1 and D2 and Guided Bone Regeneration areas.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Implant Placement with Guided Bone Regeneration"],
+        "indicated_bone_types": ["D1", "D2"],
     },
     "Nobel Biocare|NobelActive NP": {
-        "indication": "Only indicated for the replacement of teeth 41, 42, 31, 32, 12, and 22.",
-        "restricted_teeth": ["41", "42", "31", "32", "12", "22"],
+        "indication": "Indicated only for the replacement of 11, 12, 21, 22, 31, 32, 41, 42.",
+        "restricted_teeth": ["11", "12", "21", "22", "31", "32", "41", "42"],
+        "indicated_procedures": ["Single Conventional Implant"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
     "Nobel Biocare|NobelActive RP": {
-        "indication": "Primary indications for D4 or an extraction socket.",
+        "indication": "Indicated for D4 and for Immediate Placement.",
+        "indicated_procedures": ["Immediate Implant", "Partial Extraction Therapy"],
+        "indicated_bone_types": ["D4"],
     },
     "Nobel Biocare|NobelParallel RP": {
-        "indication": "Universal use.",
+        "indication": "Indicated for all bone types D1, D2, D3, D4, for Immediate Placement, for Conventional Placement.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
     "NeoBiotech|IS-III active": {
-        "indication": "Indicated for Immediate placement and Soft Bone.",
+        "indication": "Indicated for Immediate placement and D3, D4 Bone Types.",
+        "indicated_procedures": ["Immediate Implant", "Partial Extraction Therapy"],
+        "indicated_bone_types": ["D3", "D4"],
     },
     "Osstem|TS III": {
         "indication": "Indicated for D1, D2, D3, and D4 Bone Types.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
     "Osstem|TS IV": {
         "indication": "Indicated for D3 and D4 Bone Type. Indicated for Sinus Lift.",
+        "indicated_procedures": ["Immediate Implant"],
+        "indicated_bone_types": ["D3", "D4"],
     },
     "Osstem|SS III": {
-        "indication": "Indicated for D3 and D4 Bone Type (Preferably Cancellous).",
+        "indication": "Indicated for D3 and D4 Bone Type.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants"],
+        "indicated_bone_types": ["D3", "D4"],
     },
     "Osstem|MS": {
-        "indication": "Indicated for teeth 31, 32, 33, 41, 42, 43.",
+        "indication": "Indicated for 31, 32, 33, 41, 42, 43.",
         "restricted_teeth": ["31", "32", "33", "41", "42", "43"],
+        "indicated_procedures": ["Single Conventional Implant"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
     "Osstem|ETIII NH": {
         "indication": "Hydroxyapatite Coated. Indicated for Enhanced Osseointegration and Fast Healing.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
     "BioHorizons|Tapered Pro": {
-        "indication": "Indicated for Immediate Placement and the esthetic zone. Laser Lock Collar surface for connective tissue attachment.",
+        "indication": "Indicated for Immediate Placement and for 11, 12, 13, 21, 22, 23. Laser Lock Collar surface for good connective tissue attachment.",
+        "indicated_teeth": ["11", "12", "13", "21", "22", "23"],
+        "indicated_procedures": ["Immediate Implant", "Partial Extraction Therapy"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "BioHorizons|Tapered Pro Conical RBT": {
+        "indication": "Indicated for Immediate Placement and All on 4, All on 6, and All on X. Camelog connection with Biohorizons Tapered Pro features.",
+        "indicated_procedures": ["Immediate Implant", "All on 4", "All on 6", "All on X"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "BioHorizons|Tapered Short Conical RBT": {
+        "indication": "Indicated when available bone height is 9, 9.5, or 10 mm.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants"],
+        "indicated_bone_types": ["D3", "D4"],
     },
     "BioHorizons|Tapered IM": {
-        "indication": "Indicated for Immediate Placement in the molar region.",
+        "indication": "Indicated for Immediate Placement in the 16, 17, 26, 27, 36, 37, 46, 47.",
+        "indicated_teeth": ["16", "17", "26", "27", "36", "37", "46", "47"],
+        "indicated_procedures": ["Immediate Implant"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
     "BioHorizons|Tapered Short": {
         "indication": "Indicated for Bone height of 8, 9, 10 mm.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants"],
+        "indicated_bone_types": ["D3", "D4"],
     },
-    "BioHorizons|Tapered Pro Conical RBT": {
-        "indication": "Indicated for Immediate Placement and the esthetic zone. Laser Lock Collar surface for connective tissue attachment.",
-    },
-    "BioHorizons|Tapered Short Conical RBT": {
-        "indication": "Indicated for Bone height of 8, 9, 10 mm.",
+    "BioHorizons|Narrow Diameter": {
+        "indication": "Indicated for 11, 12, 13, 21, 22, 23, 31, 32, 33, 41, 42, 43 with narrow spaces.",
+        "indicated_teeth": ["11", "12", "13", "21", "22", "23", "31", "32", "33", "41", "42", "43"],
+        "indicated_procedures": ["Single Conventional Implant"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
     "Conelog|Progressive Line": {
-        "indication": "Indicated for all bone types (D1-D4). Conical connection with platform switching.",
+        "indication": "Indicated for 11, 12, 13, 21, 22, 23 and Immediate Extraction. Parallel Body provides excellent primary stability.",
+        "indicated_teeth": ["11", "12", "13", "21", "22", "23"],
+        "indicated_procedures": ["Immediate Implant", "Partial Extraction Therapy"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
+    "Zimmer|Tapered Screw-Vent (TSV)": {
+        "indication": "Indicated for D1, D2, D3, and D4 Bone Type, for Immediate Loading - high primary stability due to Apical Vent design.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Zimmer|TSX": {
+        "indication": "Indicated for Immediate placement.",
+        "indicated_procedures": ["Immediate Implant", "Partial Extraction Therapy"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Bredent|Mini 2 Sky": {
+        "indication": "Indicated for bone width 4mm, 4.5mm, 5mm - Narrow Ridges.",
+        "indicated_procedures": ["Single Conventional Implant"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Bredent|Copa Sky": {
+        "indication": "Indicated for 34, 35, 36, 37, 44, 45, 46, 47 regions with Bone Height 6mm, 7mm, or 8mm.",
+        "indicated_teeth": ["34", "35", "36", "37", "44", "45", "46", "47"],
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants"],
+        "indicated_bone_types": ["D3", "D4"],
+    },
+    "Bredent|Narrow Sky": {
+        "indication": "Indicated for bone width 4mm, 4.5mm, 5mm - Narrow Ridges.",
+        "indicated_procedures": ["Single Conventional Implant"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Bredent|Blue Sky": {
+        "indication": "Indicated for D1, D2, D3, D4 bone type with Immediate Loading. High Primary Stability.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "B&B Dental|EV Line": {
+        "indication": "Indicated for Soft Bone with High Stability, for 14, 15, 16, 17, 24, 25, 26, 27 and D3 and D4 Bone, for Immediate Implants.",
+        "indicated_teeth": ["14", "15", "16", "17", "24", "25", "26", "27"],
+        "indicated_procedures": ["Immediate Implant"],
+        "indicated_bone_types": ["D3", "D4"],
+    },
+    "B&B Dental|3P": {
+        "indication": "Indicated primarily for D1 and D2 Bone Types.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants"],
+        "indicated_bone_types": ["D1", "D2"],
+    },
+    "B&B Dental|3P Long": {
+        "indication": "Indicated for Pterygoid Implant.",
+        "indicated_procedures": ["All on 4", "All on 6", "All on X"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "B&B Dental|Wide Line": {
+        "indication": "Indicated for Immediate extraction for 16, 17, 26, 27, 36, 37, 46, 47 for Bone Width 8mm, 9mm, 10mm.",
+        "indicated_teeth": ["16", "17", "26", "27", "36", "37", "46", "47"],
+        "indicated_procedures": ["Immediate Implant", "Partial Extraction Therapy"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "B&B Dental|Dura-Vit Slim": {
+        "indication": "Indicated for Narrow Ridge with Bone Width 4.5mm, 5mm, 6mm, for 12, 13, 22, 23, 31, 32, 33, 41, 42, 43.",
+        "indicated_teeth": ["12", "13", "22", "23", "31", "32", "33", "41", "42", "43"],
+        "indicated_procedures": ["Single Conventional Implant"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Cowellmedi|INNO Submerged": {
+        "indication": "Indicated for Universal use for D1, D2, D3, D4 bone, for the Delayed Protocol. SLA surface treatment.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Cowellmedi|INNO Submerged Narrow": {
+        "indication": "Indicated for Narrow Ridge with Bone Width 4.5mm, 5mm, 6mm, for 11, 12, 13, 21, 22, 23, 31, 32, 33, 41, 42, 43.",
+        "indicated_teeth": ["11", "12", "13", "21", "22", "23", "31", "32", "33", "41", "42", "43"],
+        "indicated_procedures": ["Single Conventional Implant"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Alpha Bio|SPI": {
+        "indication": "Indicated primarily for D3 and D4 bone, for Immediate Implant. Sand-blasted + double acid etched.",
+        "indicated_procedures": ["Immediate Implant"],
+        "indicated_bone_types": ["D3", "D4"],
+    },
+    "Dentsply Sirona|Ankylos C/X": {
+        "indication": "Indicated for all bone type D1, D2, D3, D4, and for 11, 12, 13, 21, 22, 23. Provides excellent soft tissue stability.",
+        "indicated_teeth": ["11", "12", "13", "21", "22", "23"],
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "MIS|Lance +": {
+        "indication": "Indicated for D1, D2, D3, D4 Bone Types, and for Immediate Loading. SLA surface treatment.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+}
+
+# Map Suggest Me procedure types → New Case procedure types for indication matching
+SUGGEST_ME_TO_CASE_PROCEDURES = {
+    "Conventional Implant Placement": ["Single Conventional Implant", "Multiple Conventional Implants"],
+    "Conventional Implant Placement with Bone Graft": ["Implant Placement with Guided Bone Regeneration"],
+    "Immediate Implant Placement": ["Immediate Implant", "Partial Extraction Therapy"],
+    "Immediate Implant Placement with Bone Graft": ["Immediate Implant", "Implant Placement with Guided Bone Regeneration"],
+    "Sinus Lift": [],
+    "Restricted Bone Height": [],
 }
 
 BRAND_NAME_CORRECTIONS = {
@@ -3511,9 +3658,13 @@ async def get_implant_systems(response: Response, current_user: dict = Depends(g
             "lengths": sorted(r["lengths"]),
             "count": r["count"],
             "indication": ind_data.get("indication", ""),
+            "indicated_procedures": ind_data.get("indicated_procedures", []),
+            "indicated_bone_types": ind_data.get("indicated_bone_types", []),
         }
         if "restricted_teeth" in ind_data:
             entry["restricted_teeth"] = ind_data["restricted_teeth"]
+        if "indicated_teeth" in ind_data:
+            entry["indicated_teeth"] = ind_data["indicated_teeth"]
         systems.append(entry)
     return systems
 
@@ -3724,6 +3875,11 @@ async def suggest_auto(
     ).to_list(500)
 
     # Check tooth restrictions and filter to indication-only systems
+    # Also match against selected procedures using SUGGEST_ME_TO_CASE_PROCEDURES mapping
+    mapped_case_procedures = set()
+    for proc in procedures:
+        mapped_case_procedures.update(SUGGEST_ME_TO_CASE_PROCEDURES.get(proc, []))
+
     filtered = []
     for imp in all_matching:
         key = f"{imp['brand']}|{imp['system']}"
@@ -3735,6 +3891,11 @@ async def suggest_auto(
         restricted = ind.get("restricted_teeth")
         if restricted and tooth and tooth not in restricted:
             continue
+        # Check indicated_teeth (soft recommendation, not a hard filter)
+        # Check bone type match
+        indicated_bone = ind.get("indicated_bone_types", [])
+        if indicated_bone and bone_type and bone_type not in indicated_bone:
+            continue
         filtered.append(imp)
     all_matching = filtered
 
@@ -3744,10 +3905,14 @@ async def suggest_auto(
         key = f"{imp['brand']}|{imp['system']}"
         if key not in systems_map:
             ind = IMPLANT_INDICATIONS.get(key, {})
+            sys_indicated_procs = ind.get("indicated_procedures", [])
+            proc_match = bool(mapped_case_procedures & set(sys_indicated_procs)) if mapped_case_procedures else False
             systems_map[key] = {
                 "brand": imp["brand"],
                 "system": imp["system"],
                 "indication": ind.get("indication", ""),
+                "indicated_procedures": sys_indicated_procs,
+                "procedure_match": proc_match,
                 "implants": [],
             }
         systems_map[key]["implants"].append({
@@ -3755,7 +3920,11 @@ async def suggest_auto(
             "length": imp["length"],
         })
 
-    recommended_systems = list(systems_map.values())
+    # Sort: procedure-matched systems first, then alphabetically
+    recommended_systems = sorted(
+        systems_map.values(),
+        key=lambda s: (0 if s["procedure_match"] else 1, s["brand"], s["system"])
+    )
 
     # Build tooth recommendation
     tooth_data = TOOTH_RECOMMENDATIONS.get(tooth) if tooth else None

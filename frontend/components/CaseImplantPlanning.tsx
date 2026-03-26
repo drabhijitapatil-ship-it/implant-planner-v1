@@ -29,7 +29,8 @@ const TOOTH_TYPE: Record<string,string> = {};
 
 interface ImplantSystem {
   brand: string; system: string; diameters: number[]; lengths: number[]; count: number;
-  indication?: string; restricted_teeth?: string[];
+  indication?: string; restricted_teeth?: string[]; indicated_teeth?: string[];
+  indicated_procedures?: string[]; indicated_bone_types?: string[];
 }
 interface ImplantPlanItem {
   position: string; brand: string; system: string; diameter: number; length: number;
@@ -676,7 +677,10 @@ function ModalContent(props: any) {
               {(() => {
                 const implants = mode === 'choose'
                   ? (result.recommended?.length ? result.recommended : result.all_options || [])
-                  : (result.recommended_systems || []).flatMap((s: any) => (s.implants || []).map((imp: any) => ({ ...imp, brand: s.brand, system: s.system })));
+                  : (result.recommended_systems || []).flatMap((s: any) => (s.implants || []).map((imp: any) => ({
+                      ...imp, brand: s.brand, system: s.system,
+                      indication: s.indication, procedure_match: s.procedure_match,
+                    })));
                 if (implants.length === 0) return <Text style={ms.noResults}>No implants found for these measurements.</Text>;
                 const topMatches = implants.slice(0, 3);
                 const remaining = implants.slice(3);
@@ -692,8 +696,12 @@ function ModalContent(props: any) {
                           data-testid={`result-implant-${i}`}>
                           <Ionicons name={isSelected ? 'radio-button-on' : 'radio-button-off'} size={22} color={isSelected ? '#1E88E5' : '#CCC'} />
                           <View style={{ flex: 1 }}>
-                            <Text style={ms.implantName}>{imp.brand || selectedSystem?.brand} - {imp.system || selectedSystem?.system}</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                              <Text style={ms.implantName}>{imp.brand || selectedSystem?.brand} - {imp.system || selectedSystem?.system}</Text>
+                              {imp.procedure_match && <View style={ms.matchBadge}><Text style={ms.matchBadgeText}>Indicated</Text></View>}
+                            </View>
                             <Text style={ms.implantSpec}>D: {imp.diameter}mm | L: {imp.length}mm</Text>
+                            {imp.indication ? <Text style={ms.ddItemIndication}>{imp.indication}</Text> : null}
                           </View>
                           {i === 0 && <View style={ms.bestBadge}><Text style={ms.bestBadgeText}>Best</Text></View>}
                           {i === 1 && <View style={[ms.bestBadge, { backgroundColor: '#E3F2FD' }]}><Text style={[ms.bestBadgeText, { color: '#1565C0' }]}>2nd</Text></View>}
@@ -829,11 +837,19 @@ function ModalContent(props: any) {
                   if (!systemSearch.trim()) return true;
                   const q = systemSearch.toLowerCase();
                   return s.brand.toLowerCase().includes(q) || s.system.toLowerCase().includes(q);
+                }).sort((a, b) => {
+                  // Sort: procedure-matched first, then alphabetically
+                  const aMatch = procedureType && a.indicated_procedures?.includes(procedureType) ? 0 : 1;
+                  const bMatch = procedureType && b.indicated_procedures?.includes(procedureType) ? 0 : 1;
+                  if (aMatch !== bMatch) return aMatch - bMatch;
+                  return `${a.brand} ${a.system}`.localeCompare(`${b.brand} ${b.system}`);
                 })}
                 keyExtractor={(item, i) => `${item.brand}-${item.system}-${i}`}
                 renderItem={({ item }) => {
                   const isSel = selectedSystem?.brand === item.brand && selectedSystem?.system === item.system;
                   const isRestricted = item.restricted_teeth && position && !item.restricted_teeth.includes(position);
+                  const isToothIndicated = item.indicated_teeth && position && item.indicated_teeth.includes(position);
+                  const isProcMatch = procedureType && item.indicated_procedures?.includes(procedureType);
                   return (
                     <TouchableOpacity style={[ms.ddItem, isSel && ms.ddItemSelected, isRestricted && ms.ddItemRestricted]}
                       onPress={() => {
@@ -841,8 +857,15 @@ function ModalContent(props: any) {
                         setSelectedSystem(item); setShowSystemDD(false);
                       }}>
                       <View style={{ flex: 1 }}>
-                        <Text style={[ms.ddItemTitle, isRestricted && { color: '#999' }]}>{item.brand} - {item.system}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                          <Text style={[ms.ddItemTitle, isRestricted && { color: '#999' }]}>{item.brand} - {item.system}</Text>
+                          {isProcMatch && <View style={ms.matchBadge}><Text style={ms.matchBadgeText}>Indicated</Text></View>}
+                          {isToothIndicated && <View style={ms.toothBadge}><Text style={ms.toothBadgeText}>Tooth {position}</Text></View>}
+                        </View>
                         <Text style={ms.ddItemSub}>{item.count} sizes | D: {item.diameters[0]}-{item.diameters[item.diameters.length-1]}mm</Text>
+                        {item.indication ? (
+                          <Text style={ms.ddItemIndication}>{item.indication}</Text>
+                        ) : null}
                       </View>
                       {isSel && <Ionicons name="checkmark-circle" size={22} color="#1E88E5" />}
                     </TouchableOpacity>
@@ -1033,6 +1056,11 @@ const ms = StyleSheet.create({
   ddItemRestricted: { opacity: 0.4 },
   ddItemTitle: { fontSize: 14, fontWeight: '600', color: '#333' },
   ddItemSub: { fontSize: 11, color: '#888', marginTop: 2 },
+  ddItemIndication: { fontSize: 11, color: '#1565C0', marginTop: 4, fontStyle: 'italic', lineHeight: 15 },
+  matchBadge: { backgroundColor: '#E8F5E9', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: '#66BB6A' },
+  matchBadgeText: { fontSize: 10, fontWeight: '700', color: '#2E7D32' },
+  toothBadge: { backgroundColor: '#FFF3E0', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: '#FFB74D' },
+  toothBadgeText: { fontSize: 10, fontWeight: '700', color: '#E65100' },
   // Drilling Protocol styles
   protocolBox: { backgroundColor: '#F5F9FE', borderRadius: 12, borderWidth: 1, borderColor: '#BBDEFB', padding: 14, marginBottom: 12, marginTop: 4 },
   protocolHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
