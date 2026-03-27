@@ -4250,6 +4250,137 @@ def _generate_ankylos_protocol(proto, implant_diameter, implant_length, bone):
 DRILLING_PROTOCOLS["BioHorizons|Tapered Pro Conical RBT"] = DRILLING_PROTOCOLS["BioHorizons|Tapered Pro"]
 DRILLING_PROTOCOLS["BioHorizons|Tapered Short Conical RBT"] = DRILLING_PROTOCOLS["BioHorizons|Tapered Short"]
 
+# ── B&B Dental Drilling Protocols ──────────────────────────────────────────
+# Universal Rule: Drill Depth = Implant Length + 0.5 mm
+# Standard drill set: 2.1, 3.0, 3.5, 4.0, 4.5, 5.0 (sequential)
+# Countersink mapping by implant diameter
+BB_COUNTERSINK_MAP = {3.5: "NECK-334", 3.75: "NECK-334", 4.0: "NECK-354", 4.5: "NECK-455", 5.0: "NECK-455"}
+
+DRILLING_PROTOCOLS["B&B Dental|EV Line"] = {
+    "system_name": "B&B Dental EV Line",
+    "protocol_family": "bb_dental",
+    "bb_system": "ev_line",
+    "lengths": [6.5, 8, 10, 12, 14, 16],
+}
+DRILLING_PROTOCOLS["B&B Dental|3P"] = {
+    "system_name": "B&B Dental 3P",
+    "protocol_family": "bb_dental",
+    "bb_system": "3p",
+    "lengths": [6.5, 8, 10, 12, 14],
+}
+DRILLING_PROTOCOLS["B&B Dental|3P Long"] = {
+    "system_name": "B&B Dental 3P Long",
+    "protocol_family": "bb_dental",
+    "bb_system": "3p_long",
+    "lengths": [18, 20, 22, 24],
+}
+DRILLING_PROTOCOLS["B&B Dental|Wide Line"] = {
+    "system_name": "B&B Dental Wide Line",
+    "protocol_family": "bb_dental",
+    "bb_system": "wide_line",
+    "lengths": [6.5, 8, 10, 12, 14],
+}
+DRILLING_PROTOCOLS["B&B Dental|Dura-Vit Slim"] = {
+    "system_name": "B&B Dental Dura-Vit Slim",
+    "protocol_family": "bb_dental",
+    "bb_system": "dura_vit_slim",
+    "lengths": [8, 10, 12, 14],
+}
+
+def _generate_bb_dental_protocol(proto, implant_diameter, implant_length, bone):
+    """Generate drilling protocol for all B&B Dental systems."""
+    steps = []
+    step_num = 1
+    depth = implant_length + 0.5
+    depth_str = f"{depth:.1f}" if depth != int(depth) else str(int(depth))
+    is_dense = bone in ("D1", "D2")
+    bb_sys = proto.get("bb_system", "")
+    d = implant_diameter
+
+    # ── Dura-Vit Slim: simplified narrow implant sequence ──
+    if bb_sys == "dura_vit_slim":
+        steps.append({"step": step_num, "drill_type": "Pilot Drill", "code": "—",
+                       "diameter": 2.1, "depth": depth_str, "rpm": "800-1000", "irrigation": True})
+        step_num += 1
+        steps.append({"step": step_num, "drill_type": "Drill", "code": "—",
+                       "diameter": 3.0, "depth": depth_str, "rpm": "800-1000", "irrigation": True})
+        step_num += 1
+        if is_dense and d > 3.0:
+            steps.append({"step": step_num, "drill_type": "Final Drill", "code": "—",
+                           "diameter": d, "depth": depth_str, "rpm": "800-1000", "irrigation": True})
+            step_num += 1
+        elif not is_dense and d > 3.0:
+            steps.append({"step": step_num, "drill_type": "Drill (Optional)", "code": "—",
+                           "diameter": 3.2, "depth": depth_str, "rpm": "800-1000", "irrigation": True,
+                           "note": "Optional in soft bone"})
+            step_num += 1
+        steps.append({"step": step_num, "drill_type": "Implant Placement", "code": "—",
+                       "diameter": d, "depth": str(implant_length), "rpm": "25-35", "irrigation": False,
+                       "note": f"B&B Dental Dura-Vit Slim {d}mm x {implant_length}mm"})
+        return steps
+
+    # ── Wide Line: standard sequential drilling to full diameter ──
+    if bb_sys == "wide_line":
+        standard_drills = [2.1, 3.0, 3.5, 4.0, 4.5, 5.0]
+        # Add wider drills for Wide Line system
+        if d > 5.0:
+            wide_drills = [x for x in [5.5, 6.0] if x <= d]
+            all_drills = standard_drills + wide_drills
+        else:
+            all_drills = [x for x in standard_drills if x <= d]
+        for drill_d in all_drills:
+            label = "Pilot Drill" if drill_d == 2.1 else ("Final Drill" if drill_d == d else "Drill")
+            steps.append({"step": step_num, "drill_type": label, "code": "—",
+                           "diameter": drill_d, "depth": depth_str, "rpm": "800-1000", "irrigation": True})
+            step_num += 1
+        steps.append({"step": step_num, "drill_type": "Implant Placement", "code": "—",
+                       "diameter": d, "depth": str(implant_length), "rpm": "25-35", "irrigation": False,
+                       "note": f"B&B Dental Wide Line {d}mm x {implant_length}mm"})
+        return steps
+
+    # ── EV Line, 3P, 3P Long: bone-dependent protocol ──
+    standard_drills = [3.0, 3.5, 4.0, 4.5, 5.0]
+    drills_below = [x for x in standard_drills if x < d]
+
+    # Step 1: Pilot Drill
+    steps.append({"step": step_num, "drill_type": "Pilot Drill", "code": "—",
+                   "diameter": 2.1, "depth": depth_str, "rpm": "800-1000", "irrigation": True})
+    step_num += 1
+
+    # Sequential drills below implant diameter
+    for drill_d in drills_below:
+        steps.append({"step": step_num, "drill_type": "Drill", "code": "—",
+                       "diameter": drill_d, "depth": depth_str, "rpm": "800-1000", "irrigation": True})
+        step_num += 1
+
+    if is_dense:
+        # D1/D2: Final drill at implant diameter + Countersink
+        steps.append({"step": step_num, "drill_type": "Final Drill", "code": "—",
+                       "diameter": d, "depth": depth_str, "rpm": "800-1000", "irrigation": True})
+        step_num += 1
+        cs = BB_COUNTERSINK_MAP.get(d, f"NECK-{d}")
+        steps.append({"step": step_num, "drill_type": f"Countersink {cs}", "code": "—",
+                       "diameter": d, "depth": "Collar depth", "rpm": "500-800", "irrigation": True,
+                       "note": "Dense bone only (D1/D2)"})
+        step_num += 1
+    else:
+        # D3/D4: Last sequential drill is final (undersized) + optional compactor for 3P/3P Long
+        if drills_below:
+            steps[-1]["drill_type"] = "Final Drill"
+        if bb_sys in ("3p", "3p_long"):
+            steps.append({"step": step_num, "drill_type": f"Compactor", "code": "—",
+                           "diameter": d, "depth": depth_str, "rpm": "50-100", "irrigation": False,
+                           "note": "Condense soft bone (D3/D4)"})
+            step_num += 1
+
+    # Implant Placement
+    system_label = proto["system_name"]
+    steps.append({"step": step_num, "drill_type": "Implant Placement", "code": "—",
+                   "diameter": d, "depth": str(implant_length), "rpm": "25-35", "irrigation": False,
+                   "note": f"{system_label} {d}mm x {implant_length}mm"})
+
+    return steps
+
 # Conelog Progressive Line protocol
 DRILLING_PROTOCOLS["Conelog|Progressive Line"] = {
     "system_name": "CONELOG Progressive Line",
@@ -4580,6 +4711,8 @@ async def generate_drilling_protocol(
         steps = _generate_neodent_protocol(proto, diameter, length, bone)
     elif proto.get("protocol_family") == "ankylos":
         steps = _generate_ankylos_protocol(proto, diameter, length, bone)
+    elif proto.get("protocol_family") == "bb_dental":
+        steps = _generate_bb_dental_protocol(proto, diameter, length, bone)
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
@@ -4592,6 +4725,10 @@ async def generate_drilling_protocol(
         dm = proto["drill_mapping"].get(diameter, {})
         series_info = f" ({dm.get('series', '')} Series / {dm.get('color', '')})" if dm else ""
         protocol_type = f"Dense Bone Protocol{series_info}" if bone in ("D1", "D2") else f"Standard Protocol{series_info}"
+    elif family == "bb_dental":
+        bb_sys = proto.get("bb_system", "")
+        sys_label = {"ev_line": "EV Line", "3p": "3P", "3p_long": "3P Long", "wide_line": "Wide Line", "dura_vit_slim": "Dura-Vit Slim"}.get(bb_sys, system)
+        protocol_type = f"Dense Bone Protocol ({sys_label})" if bone in ("D1", "D2") else f"Soft Bone Protocol ({sys_label})"
     else:
         protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
 
@@ -4677,6 +4814,8 @@ async def export_drilling_pdf(
         steps = _generate_neodent_protocol(proto, diameter, length, bone)
     elif proto.get("protocol_family") == "ankylos":
         steps = _generate_ankylos_protocol(proto, diameter, length, bone)
+    elif proto.get("protocol_family") == "bb_dental":
+        steps = _generate_bb_dental_protocol(proto, diameter, length, bone)
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
@@ -4689,6 +4828,10 @@ async def export_drilling_pdf(
         dm = proto["drill_mapping"].get(diameter, {})
         series_info = f" ({dm.get('series', '')} Series / {dm.get('color', '')})" if dm else ""
         protocol_type = f"Dense Bone Protocol{series_info}" if bone in ("D1", "D2") else f"Standard Protocol{series_info}"
+    elif family == "bb_dental":
+        bb_sys = proto.get("bb_system", "")
+        sys_label = {"ev_line": "EV Line", "3p": "3P", "3p_long": "3P Long", "wide_line": "Wide Line", "dura_vit_slim": "Dura-Vit Slim"}.get(bb_sys, system)
+        protocol_type = f"Dense Bone Protocol ({sys_label})" if bone in ("D1", "D2") else f"Soft Bone Protocol ({sys_label})"
     else:
         protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
     buf = io.BytesIO()
