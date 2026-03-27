@@ -227,9 +227,29 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
 - **Countersink codes**: 3.5→NECK-334, 3.75→NECK-334, 4.0→NECK-354, 4.5→NECK-455, 5.0→NECK-455
 - Both backend generator + frontend `generateDrillingProtocol` + PDF export updated
 
+### MIS Lance+ Drilling Protocol (Mar 2026)
+- **Added complete drilling protocol** for MIS Lance+ system with triple-thread, self-tapping, conical design
+- **Depth Rule**: Osteotomy depth = Implant Length (no offset, unlike B&B Dental)
+- **Drill library**: 1.9mm (marking), 2.4mm (pilot), 3.1mm, 3.65mm, 4.1mm, 4.9mm
+- **Final drill mapping**: 3.3→3.1, 3.75→3.65, 4.2→4.1, 5.0→4.9
+- **D1 (Dense cortical)**: Full sequential drilling + Countersink
+- **D2 (Standard)**: Full sequential drilling, no Countersink
+- **D3/D4 (Under-preparation)**: Skip final drill for primary stability (3.3→stop at 2.4, 3.75→stop at 3.1, 4.2→stop at 3.65, 5.0→stop at 4.1)
+- **Insertion torque**: 35-50 Ncm
+- Backend generator (`_generate_mis_lance_protocol`), frontend local protocol, and PDF export all implemented
+
+### Frontend Drilling Protocol Bug Fix (Mar 2026)
+- **Fixed**: `generateDrillingProtocol()` in `CaseImplantPlanning.tsx` was missing `length` parameter
+- B&B Dental protocols used `length` variable which was undefined, causing `NaN` depth values
+- Added `length?: number` optional parameter, updated all callers to pass `plan.length` and `selectedSystem.lengths?.[0]`
+- All B&B Dental implant placement steps now correctly show implant dimensions
+
 ## Backlog
+### P1 - Upcoming
+- Implement drilling protocols for remaining systems (Nobel Biocare, Osstem, Straumann, Bredent, etc.) as user provides developer-ready codes
+
 ### P2 - Refactoring
 - Backend refactoring (decompose server.py into routers/models/services)
-- Frontend refactoring (modularize new-procedure.tsx, [procedureId].tsx)
+- Frontend refactoring (modularize new-procedure.tsx, [procedureId].tsx, CaseImplantPlanning.tsx)
 - Data cleanup (duplicate user removal)
 - Consider installing `@react-native-community/datetimepicker` properly for better native date picking UX
