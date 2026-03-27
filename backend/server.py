@@ -4799,6 +4799,8 @@ async def generate_drilling_protocol(
         steps = _generate_ankylos_protocol(proto, diameter, length, bone)
     elif proto.get("protocol_family") == "bb_dental":
         steps = _generate_bb_dental_protocol(proto, diameter, length, bone)
+    elif proto.get("protocol_family") == "mis_lance":
+        steps = _generate_mis_lance_protocol(proto, diameter, length, bone)
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
@@ -4815,10 +4817,12 @@ async def generate_drilling_protocol(
         bb_sys = proto.get("bb_system", "")
         sys_label = {"ev_line": "EV Line", "3p": "3P", "3p_long": "3P Long", "wide_line": "Wide Line", "dura_vit_slim": "Dura-Vit Slim"}.get(bb_sys, system)
         protocol_type = f"Dense Bone Protocol ({sys_label})" if bone in ("D1", "D2") else f"Soft Bone Protocol ({sys_label})"
+    elif family == "mis_lance":
+        protocol_type = f"Dense Bone Protocol (MIS LANCE+)" if bone in ("D1", "D2") else (f"Under-Preparation Protocol (MIS LANCE+)" if bone in ("D3", "D4") else "Standard Protocol (MIS LANCE+)")
     else:
         protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
 
-    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else "35-45 Ncm")
+    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else ("35-50 Ncm" if family == "mis_lance" else "35-45 Ncm"))
 
     # Add Ankylos series info to response
     ankylos_info = {}
@@ -4902,6 +4906,8 @@ async def export_drilling_pdf(
         steps = _generate_ankylos_protocol(proto, diameter, length, bone)
     elif proto.get("protocol_family") == "bb_dental":
         steps = _generate_bb_dental_protocol(proto, diameter, length, bone)
+    elif proto.get("protocol_family") == "mis_lance":
+        steps = _generate_mis_lance_protocol(proto, diameter, length, bone)
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
@@ -4918,6 +4924,8 @@ async def export_drilling_pdf(
         bb_sys = proto.get("bb_system", "")
         sys_label = {"ev_line": "EV Line", "3p": "3P", "3p_long": "3P Long", "wide_line": "Wide Line", "dura_vit_slim": "Dura-Vit Slim"}.get(bb_sys, system)
         protocol_type = f"Dense Bone Protocol ({sys_label})" if bone in ("D1", "D2") else f"Soft Bone Protocol ({sys_label})"
+    elif family == "mis_lance":
+        protocol_type = f"Dense Bone Protocol (MIS LANCE+)" if bone in ("D1", "D2") else (f"Under-Preparation Protocol (MIS LANCE+)" if bone in ("D3", "D4") else "Standard Protocol (MIS LANCE+)")
     else:
         protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
     buf = io.BytesIO()

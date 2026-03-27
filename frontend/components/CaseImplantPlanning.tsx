@@ -50,11 +50,43 @@ interface Props {
 }
 
 // ── Drilling Protocol Generator ────────────────────────────
-// Generates a system-specific drilling sequence based on brand, implant diameter, and bone type
-function generateDrillingProtocol(brand: string, system: string, diameter: number, boneType: string): { step: number; drill: string; speed: string; depth: string; note: string }[] {
+// Generates a system-specific drilling sequence based on brand, implant diameter, bone type, and length
+function generateDrillingProtocol(brand: string, system: string, diameter: number, boneType: string, length?: number): { step: number; drill: string; speed: string; depth: string; note: string }[] {
   const d = diameter;
   const isHardBone = boneType === 'D1' || boneType === 'D2';
   const isSoftBone = boneType === 'D3' || boneType === 'D4';
+
+  // ── MIS Lance+ specific protocol ──
+  if (brand === 'MIS' && system === 'Lance +') {
+    const MIS_DRILLS = [1.9, 2.4, 3.1, 3.65, 4.1, 4.9];
+    const FINAL_DRILL: Record<number, number> = { 3.3: 3.1, 3.75: 3.65, 4.2: 4.1, 5.0: 4.9 };
+    const UNDERPREP: Record<number, number> = { 3.3: 2.4, 3.75: 3.1, 4.2: 3.65, 5.0: 4.1 };
+    const finalDrill = FINAL_DRILL[d] || d;
+    const underprepStop = UNDERPREP[d] || finalDrill;
+    const depthStr = length ? `${length}` : 'Working length';
+    const proto: { step: number; drill: string; speed: string; depth: string; note: string }[] = [];
+    let s = 1;
+    proto.push({ step: s++, drill: 'Marking Drill 1.9mm', speed: '1200-1500 RPM', depth: 'Mark site', note: 'Mark osteotomy site.' });
+    proto.push({ step: s++, drill: 'Pilot Drill 2.4mm', speed: '1200-1500 RPM', depth: depthStr, note: 'Establish osteotomy direction. Copious irrigation.' });
+    if (isHardBone) {
+      const intermediates = MIS_DRILLS.filter(x => x > 2.4 && x <= finalDrill);
+      for (const dd of intermediates) {
+        const label = dd === finalDrill ? `Final Drill ${dd}mm` : `Drill ${dd}mm`;
+        const rpm = dd === finalDrill ? '200-600 RPM' : '500-700 RPM';
+        proto.push({ step: s++, drill: label, speed: rpm, depth: depthStr, note: dd === finalDrill ? 'Final diameter reached.' : 'Sequential widening.' });
+      }
+      if (boneType === 'D1') {
+        proto.push({ step: s++, drill: `Countersink ${d}mm`, speed: '200-400 RPM', depth: 'Cortical', note: 'Dense cortical bone (D1) only.' });
+      }
+    } else {
+      const intermediates = MIS_DRILLS.filter(x => x > 2.4 && x <= underprepStop);
+      for (const dd of intermediates) {
+        proto.push({ step: s++, drill: `Drill ${dd}mm`, speed: '500-700 RPM', depth: depthStr, note: 'Under-preparation for primary stability.' });
+      }
+    }
+    proto.push({ step: s++, drill: `MIS LANCE+ Implant (${d}mm)`, speed: '15-25 RPM', depth: depthStr, note: `${d}mm${length ? ` x ${length}mm` : ''} — Triple Thread, High Primary Stability. 35-50 Ncm.` });
+    return proto;
+  }
 
   // ── Ankylos C/X specific protocol ──
   if (brand === 'Dentsply Sirona' && system === 'Ankylos C/X') {
@@ -82,7 +114,7 @@ function generateDrillingProtocol(brand: string, system: string, diameter: numbe
 
   // ── B&B Dental systems ──
   if (brand === 'B&B Dental') {
-    const depthVal = length + 0.5;
+    const depthVal = (length || 0) + 0.5;
     const depthStr = `${depthVal}`;
     const standardDrills = [3.0, 3.5, 4.0, 4.5, 5.0];
     const proto: { step: number; drill: string; speed: string; depth: string; note: string }[] = [];
@@ -97,7 +129,7 @@ function generateDrillingProtocol(brand: string, system: string, diameter: numbe
       } else if (!isHardBone && d > 3.0) {
         proto.push({ step: s++, drill: 'Drill 3.2mm (Optional)', speed: '800-1000 RPM', depth: depthStr, note: 'Optional in soft bone.' });
       }
-      proto.push({ step: s++, drill: `Implant ${d}mm x ${length}mm`, speed: '25-35 RPM', depth: `${length}`, note: 'Dura-Vit Slim placement.' });
+      proto.push({ step: s++, drill: `Implant ${d}mm${length ? ` x ${length}mm` : ''}`, speed: '25-35 RPM', depth: length ? `${length}` : depthStr, note: 'Dura-Vit Slim placement.' });
       return proto;
     }
     if (system === 'Wide Line') {
@@ -107,7 +139,7 @@ function generateDrillingProtocol(brand: string, system: string, diameter: numbe
         proto.push({ step: s++, drill: `Drill ${dd}mm`, speed: '800-1000 RPM', depth: depthStr, note: dd === d ? 'Final drill.' : 'Sequential widening.' });
       }
       if (!allDrills.includes(d)) proto.push({ step: s++, drill: `Final Drill ${d}mm`, speed: '800-1000 RPM', depth: depthStr, note: 'Final drill.' });
-      proto.push({ step: s++, drill: `Implant ${d}mm x ${length}mm`, speed: '25-35 RPM', depth: `${length}`, note: 'Wide Line placement.' });
+      proto.push({ step: s++, drill: `Implant ${d}mm${length ? ` x ${length}mm` : ''}`, speed: '25-35 RPM', depth: length ? `${length}` : depthStr, note: 'Wide Line placement.' });
       return proto;
     }
     // EV Line, 3P, 3P Long
@@ -126,7 +158,7 @@ function generateDrillingProtocol(brand: string, system: string, diameter: numbe
         proto.push({ step: s++, drill: `Compactor ${d}mm`, speed: '50-100 RPM', depth: depthStr, note: 'Condense soft bone (D3/D4).' });
       }
     }
-    proto.push({ step: s++, drill: `Implant ${d}mm x ${length}mm`, speed: '25-35 RPM', depth: `${length}`, note: `${system} placement.` });
+    proto.push({ step: s++, drill: `Implant ${d}mm${length ? ` x ${length}mm` : ''}`, speed: '25-35 RPM', depth: length ? `${length}` : depthStr, note: `${system} placement.` });
     return proto;
   }
 
@@ -347,7 +379,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
                   <Ionicons name="construct" size={16} color="#1565C0" />
                   <Text style={st.inlineProtocolTitle}>Drilling Sequence: {plan.brand} {plan.diameter}mm ({plan.bone_type})</Text>
                 </View>
-                {generateDrillingProtocol(plan.brand, plan.system, plan.diameter, plan.bone_type).map((p) => (
+                {generateDrillingProtocol(plan.brand, plan.system, plan.diameter, plan.bone_type, plan.length).map((p) => (
                   <View key={p.step} style={st.protocolStepRow}>
                     <View style={st.protocolStepBadge}>
                       <Text style={st.protocolStepBadgeText}>{p.step}</Text>
@@ -677,7 +709,7 @@ function ModalContent(props: any) {
                           <Text style={ms.protocolDiameterLabel}>
                             Sequence for {selectedSystem.diameters[0]}mm (Bone: {boneType || 'D2'})
                           </Text>
-                          {generateDrillingProtocol(selectedSystem.brand, selectedSystem.system, selectedSystem.diameters[0], boneType || 'D2').map((p) => (
+                          {generateDrillingProtocol(selectedSystem.brand, selectedSystem.system, selectedSystem.diameters[0], boneType || 'D2', selectedSystem.lengths?.[0]).map((p) => (
                             <View key={p.step} style={ms.protocolStep}>
                               <View style={ms.protocolStepNum}>
                                 <Text style={ms.protocolStepNumText}>{p.step}</Text>
