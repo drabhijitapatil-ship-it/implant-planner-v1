@@ -80,6 +80,56 @@ function generateDrillingProtocol(brand: string, system: string, diameter: numbe
     return proto;
   }
 
+  // ── B&B Dental systems ──
+  if (brand === 'B&B Dental') {
+    const depthVal = length + 0.5;
+    const depthStr = `${depthVal}`;
+    const standardDrills = [3.0, 3.5, 4.0, 4.5, 5.0];
+    const proto: { step: number; drill: string; speed: string; depth: string; note: string }[] = [];
+    let s = 1;
+    const COUNTERSINK: Record<number, string> = { 3.5: 'NECK-334', 3.75: 'NECK-334', 4.0: 'NECK-354', 4.5: 'NECK-455', 5.0: 'NECK-455' };
+
+    if (system === 'Dura-Vit Slim') {
+      proto.push({ step: s++, drill: 'Pilot Drill 2.1mm', speed: '800-1000 RPM', depth: depthStr, note: 'Initial osteotomy.' });
+      proto.push({ step: s++, drill: 'Drill 3.0mm', speed: '800-1000 RPM', depth: depthStr, note: 'Sequential widening.' });
+      if (isHardBone && d > 3.0) {
+        proto.push({ step: s++, drill: `Final Drill ${d}mm`, speed: '800-1000 RPM', depth: depthStr, note: 'Dense bone — drill to full diameter.' });
+      } else if (!isHardBone && d > 3.0) {
+        proto.push({ step: s++, drill: 'Drill 3.2mm (Optional)', speed: '800-1000 RPM', depth: depthStr, note: 'Optional in soft bone.' });
+      }
+      proto.push({ step: s++, drill: `Implant ${d}mm x ${length}mm`, speed: '25-35 RPM', depth: `${length}`, note: 'Dura-Vit Slim placement.' });
+      return proto;
+    }
+    if (system === 'Wide Line') {
+      const allDrills = [...standardDrills.filter(x => x < d), ...[5.5, 6.0].filter(x => x <= d && x > 5.0)];
+      proto.push({ step: s++, drill: 'Pilot Drill 2.1mm', speed: '800-1000 RPM', depth: depthStr, note: 'Initial osteotomy.' });
+      for (const dd of allDrills) {
+        proto.push({ step: s++, drill: `Drill ${dd}mm`, speed: '800-1000 RPM', depth: depthStr, note: dd === d ? 'Final drill.' : 'Sequential widening.' });
+      }
+      if (!allDrills.includes(d)) proto.push({ step: s++, drill: `Final Drill ${d}mm`, speed: '800-1000 RPM', depth: depthStr, note: 'Final drill.' });
+      proto.push({ step: s++, drill: `Implant ${d}mm x ${length}mm`, speed: '25-35 RPM', depth: `${length}`, note: 'Wide Line placement.' });
+      return proto;
+    }
+    // EV Line, 3P, 3P Long
+    const drillsBelow = standardDrills.filter(x => x < d);
+    proto.push({ step: s++, drill: 'Pilot Drill 2.1mm', speed: '800-1000 RPM', depth: depthStr, note: 'Initial osteotomy.' });
+    for (const dd of drillsBelow) {
+      proto.push({ step: s++, drill: `Drill ${dd}mm`, speed: '800-1000 RPM', depth: depthStr, note: 'Sequential widening.' });
+    }
+    if (isHardBone) {
+      proto.push({ step: s++, drill: `Final Drill ${d}mm`, speed: '800-1000 RPM', depth: depthStr, note: 'Dense bone — full diameter.' });
+      const cs = COUNTERSINK[d] || `NECK-${d}`;
+      proto.push({ step: s++, drill: `Countersink ${cs}`, speed: '500-800 RPM', depth: 'Collar depth', note: 'Dense bone only (D1/D2).' });
+    } else {
+      if (drillsBelow.length > 0) proto[proto.length - 1].note = 'Final drill (undersized for soft bone).';
+      if (system === '3P' || system === '3P Long') {
+        proto.push({ step: s++, drill: `Compactor ${d}mm`, speed: '50-100 RPM', depth: depthStr, note: 'Condense soft bone (D3/D4).' });
+      }
+    }
+    proto.push({ step: s++, drill: `Implant ${d}mm x ${length}mm`, speed: '25-35 RPM', depth: `${length}`, note: `${system} placement.` });
+    return proto;
+  }
+
   // Base protocol varies by diameter and bone density
   const protocol: { step: number; drill: string; speed: string; depth: string; note: string }[] = [];
   let stepNum = 1;
