@@ -4467,6 +4467,151 @@ def _generate_mis_lance_protocol(proto, implant_diameter, implant_length, bone):
 
     return steps
 
+# ── COWELLMEDI INNO Drilling Protocols ──────────────────────────────────
+# Depth Rule: Osteotomy depth = Implant length (no offset)
+# Drill library (Submerged): Round, 2.0 (pilot), 2.8, 3.2, 3.6, 4.2, 4.8
+# Drill library (Narrow): Round, 2.0 (pilot), 2.8
+# D1: Full drilling + countersink + optional bone tap
+# D2: Standard full sequence
+# D3/D4: Under-preparation (skip final drill for primary stability)
+# Torque: 25-45 Ncm
+# RPM: Initial 800-1200, Final ≤300, Placement 20-30
+
+COWELLMEDI_SUBMERGED_DRILLS = [2.0, 2.8, 3.2, 3.6, 4.2, 4.8]
+
+COWELLMEDI_SUBMERGED_FINAL = {
+    3.5: 3.2,
+    4.0: 3.6,
+    4.5: 4.2,
+    5.0: 4.8,
+    6.0: 4.8,
+}
+
+COWELLMEDI_SUBMERGED_UNDERPREP = {
+    3.5: 2.8,
+    4.0: 3.2,
+    4.5: 3.6,
+    5.0: 4.2,
+    6.0: 4.2,
+}
+
+DRILLING_PROTOCOLS["Cowellmedi|INNO Submerged"] = {
+    "system_name": "Cowellmedi INNO Submerged",
+    "protocol_family": "cowellmedi",
+    "cowellmedi_system": "submerged",
+    "lengths": [7, 8, 10, 12, 14, 16, 18],
+}
+
+COWELLMEDI_NARROW_FINAL = {
+    3.0: 2.8,
+    3.1: 2.8,
+    3.2: 2.8,
+    3.3: 2.8,
+}
+
+COWELLMEDI_NARROW_UNDERPREP = {
+    3.0: 2.0,
+    3.1: 2.0,
+    3.2: 2.0,
+    3.3: 2.0,
+}
+
+DRILLING_PROTOCOLS["Cowellmedi|INNO Submerged Narrow"] = {
+    "system_name": "Cowellmedi INNO Submerged Narrow",
+    "protocol_family": "cowellmedi",
+    "cowellmedi_system": "narrow",
+    "lengths": [8, 10, 12, 14],
+}
+
+
+def _generate_cowellmedi_protocol(proto, implant_diameter, implant_length, bone):
+    """Generate drilling protocol for Cowellmedi INNO systems."""
+    steps = []
+    step_num = 1
+    depth = str(implant_length)
+    d = implant_diameter
+    is_d1 = bone == "D1"
+    is_dense = bone in ("D1", "D2")
+    is_soft = bone in ("D3", "D4")
+    sys_type = proto.get("cowellmedi_system", "submerged")
+
+    # Step 1: Round Drill (mark site)
+    steps.append({"step": step_num, "drill_type": "Round Drill", "code": "—",
+                   "diameter": 1.8, "depth": "Mark site", "rpm": "1200-1500", "irrigation": True})
+    step_num += 1
+
+    if sys_type == "submerged":
+        # Step 2: Pilot Drill 2.0mm
+        steps.append({"step": step_num, "drill_type": "Pilot Drill", "code": "—",
+                       "diameter": 2.0, "depth": depth, "rpm": "800-1200", "irrigation": True})
+        step_num += 1
+
+        final_drill = COWELLMEDI_SUBMERGED_FINAL.get(d, 4.2)
+        underprep_stop = COWELLMEDI_SUBMERGED_UNDERPREP.get(d, 3.6)
+
+        if is_dense:
+            # D1/D2: Full sequential drilling up to final drill
+            intermediates = [x for x in COWELLMEDI_SUBMERGED_DRILLS if x > 2.0 and x <= final_drill]
+            for drill_d in intermediates:
+                label = "Final Drill" if drill_d == final_drill else "Drill"
+                rpm = "≤300" if drill_d == final_drill else "800-1200"
+                steps.append({"step": step_num, "drill_type": label, "code": "—",
+                               "diameter": drill_d, "depth": depth, "rpm": rpm, "irrigation": True})
+                step_num += 1
+
+            # Countersink for D1 (mandatory) or D2 (if cortical thick)
+            cs_note = "Mandatory for dense cortical bone (D1)." if is_d1 else "If cortical bone is thick."
+            steps.append({"step": step_num, "drill_type": "Countersink", "code": "—",
+                           "diameter": d, "depth": "Cortical", "rpm": "≤300", "irrigation": True,
+                           "note": cs_note})
+            step_num += 1
+
+            # D1 only: Optional bone tap
+            if is_d1:
+                steps.append({"step": step_num, "drill_type": "Bone Tap", "code": "—",
+                               "diameter": d, "depth": depth, "rpm": "15-20", "irrigation": False,
+                               "note": "Optional — dense cortical bone (D1) only"})
+                step_num += 1
+        else:
+            # D3/D4: Under-preparation — stop one drill short
+            intermediates = [x for x in COWELLMEDI_SUBMERGED_DRILLS if x > 2.0 and x <= underprep_stop]
+            for drill_d in intermediates:
+                steps.append({"step": step_num, "drill_type": "Drill", "code": "—",
+                               "diameter": drill_d, "depth": depth, "rpm": "800-1200", "irrigation": True})
+                step_num += 1
+
+    else:
+        # Narrow system
+        # Step 2: Pilot Drill 2.0mm
+        steps.append({"step": step_num, "drill_type": "Pilot Drill", "code": "—",
+                       "diameter": 2.0, "depth": depth, "rpm": "800-1200", "irrigation": True})
+        step_num += 1
+
+        if is_dense:
+            # D1/D2: Drill 2.8 + Final drill to diameter
+            steps.append({"step": step_num, "drill_type": "Drill", "code": "—",
+                           "diameter": 2.8, "depth": depth, "rpm": "800-1200", "irrigation": True})
+            step_num += 1
+            if d > 2.8:
+                steps.append({"step": step_num, "drill_type": "Final Drill", "code": "—",
+                               "diameter": d, "depth": depth, "rpm": "≤300", "irrigation": True})
+                step_num += 1
+        else:
+            # D3/D4: Stop at 2.8, skip final drill
+            steps.append({"step": step_num, "drill_type": "Drill", "code": "—",
+                           "diameter": 2.8, "depth": depth, "rpm": "800-1200", "irrigation": True,
+                           "note": "Under-preparation — skip final drill for stability"})
+            step_num += 1
+
+    # Implant Placement
+    sys_label = "INNO Submerged" if sys_type == "submerged" else "INNO Submerged Narrow"
+    steps.append({"step": step_num, "drill_type": "Implant Placement", "code": "—",
+                   "diameter": d, "depth": depth, "rpm": "20-30", "irrigation": False,
+                   "note": f"Cowellmedi {sys_label} {d}mm x {implant_length}mm — Grade 4 Ti, SLA Surface, Internal Hex"})
+
+    return steps
+
+
 # Conelog Progressive Line protocol
 DRILLING_PROTOCOLS["Conelog|Progressive Line"] = {
     "system_name": "CONELOG Progressive Line",
@@ -4801,6 +4946,8 @@ async def generate_drilling_protocol(
         steps = _generate_bb_dental_protocol(proto, diameter, length, bone)
     elif proto.get("protocol_family") == "mis_lance":
         steps = _generate_mis_lance_protocol(proto, diameter, length, bone)
+    elif proto.get("protocol_family") == "cowellmedi":
+        steps = _generate_cowellmedi_protocol(proto, diameter, length, bone)
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
@@ -4819,10 +4966,14 @@ async def generate_drilling_protocol(
         protocol_type = f"Dense Bone Protocol ({sys_label})" if bone in ("D1", "D2") else f"Soft Bone Protocol ({sys_label})"
     elif family == "mis_lance":
         protocol_type = f"Dense Bone Protocol (MIS LANCE+)" if bone in ("D1", "D2") else (f"Under-Preparation Protocol (MIS LANCE+)" if bone in ("D3", "D4") else "Standard Protocol (MIS LANCE+)")
+    elif family == "cowellmedi":
+        cw_sys = proto.get("cowellmedi_system", "submerged")
+        cw_label = "INNO Submerged" if cw_sys == "submerged" else "INNO Narrow"
+        protocol_type = f"Dense Bone Protocol ({cw_label})" if bone in ("D1", "D2") else (f"Under-Preparation Protocol ({cw_label})" if bone in ("D3", "D4") else f"Standard Protocol ({cw_label})")
     else:
         protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
 
-    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else ("35-50 Ncm" if family == "mis_lance" else "35-45 Ncm"))
+    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else ("35-50 Ncm" if family == "mis_lance" else ("25-45 Ncm" if family == "cowellmedi" else "35-45 Ncm")))
 
     # Add Ankylos series info to response
     ankylos_info = {}
@@ -4908,6 +5059,8 @@ async def export_drilling_pdf(
         steps = _generate_bb_dental_protocol(proto, diameter, length, bone)
     elif proto.get("protocol_family") == "mis_lance":
         steps = _generate_mis_lance_protocol(proto, diameter, length, bone)
+    elif proto.get("protocol_family") == "cowellmedi":
+        steps = _generate_cowellmedi_protocol(proto, diameter, length, bone)
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
@@ -4926,6 +5079,10 @@ async def export_drilling_pdf(
         protocol_type = f"Dense Bone Protocol ({sys_label})" if bone in ("D1", "D2") else f"Soft Bone Protocol ({sys_label})"
     elif family == "mis_lance":
         protocol_type = f"Dense Bone Protocol (MIS LANCE+)" if bone in ("D1", "D2") else (f"Under-Preparation Protocol (MIS LANCE+)" if bone in ("D3", "D4") else "Standard Protocol (MIS LANCE+)")
+    elif family == "cowellmedi":
+        cw_sys = proto.get("cowellmedi_system", "submerged")
+        cw_label = "INNO Submerged" if cw_sys == "submerged" else "INNO Narrow"
+        protocol_type = f"Dense Bone Protocol ({cw_label})" if bone in ("D1", "D2") else (f"Under-Preparation Protocol ({cw_label})" if bone in ("D3", "D4") else f"Standard Protocol ({cw_label})")
     else:
         protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
     buf = io.BytesIO()
