@@ -4381,6 +4381,92 @@ def _generate_bb_dental_protocol(proto, implant_diameter, implant_length, bone):
 
     return steps
 
+# ── MIS LANCE+ Drilling Protocol ──────────────────────────────────────────
+# Depth Rule: Osteotomy depth = Implant length (no offset)
+# Drill library: 1.9 (marking), 2.4 (pilot), 3.1, 3.65, 4.1, 4.9
+# D1: Full drilling + countersink (for Ø5.0)
+# D2: Standard full sequence
+# D3/D4: Under-preparation (skip final drill for primary stability)
+# Triple thread, self-tapping, conical — high primary stability system
+
+MIS_LANCE_DRILLS = [1.9, 2.4, 3.1, 3.65, 4.1, 4.9]
+
+# Map implant diameter → final drill diameter for D1/D2
+MIS_LANCE_FINAL_DRILL = {
+    3.3: 3.1,     # Narrow: final = 3.1
+    3.75: 3.65,   # Standard: final = 3.65
+    4.2: 4.1,     # Standard: final = 4.1
+    5.0: 4.9,     # Wide: final = 4.9
+}
+
+# Map implant diameter → D3/D4 last drill (one step before final)
+MIS_LANCE_UNDERPREP = {
+    3.3: 2.4,     # Stop at pilot 2.4, skip 3.1
+    3.75: 3.1,    # Stop at 3.1, skip 3.65
+    4.2: 3.65,    # Stop at 3.65, skip 4.1
+    5.0: 4.1,     # Stop at 4.1, skip 4.9
+}
+
+DRILLING_PROTOCOLS["MIS|Lance +"] = {
+    "system_name": "MIS LANCE+",
+    "protocol_family": "mis_lance",
+    "lengths": [8, 10, 11.5, 13, 16],
+}
+
+def _generate_mis_lance_protocol(proto, implant_diameter, implant_length, bone):
+    """Generate drilling protocol for MIS LANCE+ system."""
+    steps = []
+    step_num = 1
+    depth = str(implant_length)
+    d = implant_diameter
+    is_d1 = bone == "D1"
+    is_dense = bone in ("D1", "D2")
+    is_soft = bone in ("D3", "D4")
+
+    final_drill = MIS_LANCE_FINAL_DRILL.get(d, d)
+    underprep_stop = MIS_LANCE_UNDERPREP.get(d, final_drill)
+
+    # Step 1: Marking Drill 1.9mm
+    steps.append({"step": step_num, "drill_type": "Marking Drill", "code": "—",
+                   "diameter": 1.9, "depth": "Mark site", "rpm": "1200-1500", "irrigation": True})
+    step_num += 1
+
+    # Step 2: Pilot Drill 2.4mm
+    steps.append({"step": step_num, "drill_type": "Pilot Drill", "code": "—",
+                   "diameter": 2.4, "depth": depth, "rpm": "1200-1500", "irrigation": True})
+    step_num += 1
+
+    if is_dense:
+        # D1/D2: Full sequential drilling up to final drill
+        intermediate_drills = [x for x in MIS_LANCE_DRILLS if x > 2.4 and x <= final_drill]
+        for drill_d in intermediate_drills:
+            label = "Final Drill" if drill_d == final_drill else "Drill"
+            rpm = "200-600" if drill_d == final_drill else "500-700"
+            steps.append({"step": step_num, "drill_type": label, "code": "—",
+                           "diameter": drill_d, "depth": depth, "rpm": rpm, "irrigation": True})
+            step_num += 1
+
+        # D1 only: Countersink for dense cortical bone
+        if is_d1:
+            steps.append({"step": step_num, "drill_type": "Countersink", "code": "—",
+                           "diameter": d, "depth": "Cortical", "rpm": "200-400", "irrigation": True,
+                           "note": "Dense cortical bone (D1) only"})
+            step_num += 1
+    else:
+        # D3/D4: Under-preparation — stop one drill short for primary stability
+        intermediate_drills = [x for x in MIS_LANCE_DRILLS if x > 2.4 and x <= underprep_stop]
+        for drill_d in intermediate_drills:
+            steps.append({"step": step_num, "drill_type": "Drill", "code": "—",
+                           "diameter": drill_d, "depth": depth, "rpm": "500-700", "irrigation": True})
+            step_num += 1
+
+    # Implant Placement
+    steps.append({"step": step_num, "drill_type": "Implant Placement", "code": "—",
+                   "diameter": d, "depth": depth, "rpm": "15-25", "irrigation": False,
+                   "note": f"MIS LANCE+ {d}mm x {implant_length}mm — Triple Thread, High Primary Stability"})
+
+    return steps
+
 # Conelog Progressive Line protocol
 DRILLING_PROTOCOLS["Conelog|Progressive Line"] = {
     "system_name": "CONELOG Progressive Line",
