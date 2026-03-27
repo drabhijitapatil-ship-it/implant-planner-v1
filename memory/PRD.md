@@ -218,6 +218,15 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
 - **Insertion torque**: 25-35 Ncm (Ankylos-specific)
 - **PDF export** and **available endpoint** both support Ankylos with series data
 
+### B&B Dental Drilling Protocols (Mar 2026)
+- **Added drilling protocols for all 5 B&B Dental systems**: EV Line, 3P, 3P Long, Wide Line, Dura-Vit Slim
+- **Universal depth rule**: Drill Depth = Implant Length + 0.5mm
+- **Bone-dependent finishing**: Dense (D1/D2) → Final Drill + Countersink; Soft (D3/D4) → Undersized Final Drill + Compactor (3P/3P Long only)
+- **Wide Line**: Standard sequential drilling to full diameter (no countersink/compactor)
+- **Dura-Vit Slim**: Simplified narrow sequence (Pilot 2.1 → 3.0 → Optional 3.2/Final → Place)
+- **Countersink codes**: 3.5→NECK-334, 3.75→NECK-334, 4.0→NECK-354, 4.5→NECK-455, 5.0→NECK-455
+- Both backend generator + frontend `generateDrillingProtocol` + PDF export updated
+
 ## Backlog
 ### P2 - Refactoring
 - Backend refactoring (decompose server.py into routers/models/services)
