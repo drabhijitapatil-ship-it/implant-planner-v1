@@ -112,6 +112,56 @@ function generateDrillingProtocol(brand: string, system: string, diameter: numbe
     return proto;
   }
 
+  // ── Cowellmedi INNO systems ──
+  if (brand === 'Cowellmedi') {
+    const depthStr = length ? `${length}` : 'Working length';
+    const proto: { step: number; drill: string; speed: string; depth: string; note: string }[] = [];
+    let s = 1;
+    proto.push({ step: s++, drill: 'Round Drill 1.8mm', speed: '1200-1500 RPM', depth: 'Mark site', note: 'Mark osteotomy site.' });
+
+    if (system === 'INNO Submerged') {
+      const SUBMERGED_DRILLS = [2.0, 2.8, 3.2, 3.6, 4.2, 4.8];
+      const FINAL: Record<number, number> = { 3.5: 3.2, 4.0: 3.6, 4.5: 4.2, 5.0: 4.8, 6.0: 4.8 };
+      const UNDERPREP: Record<number, number> = { 3.5: 2.8, 4.0: 3.2, 4.5: 3.6, 5.0: 4.2, 6.0: 4.2 };
+      const finalDrill = FINAL[d] || 4.2;
+      const underprepStop = UNDERPREP[d] || 3.6;
+
+      proto.push({ step: s++, drill: 'Pilot Drill 2.0mm', speed: '800-1200 RPM', depth: depthStr, note: 'Establish osteotomy. Copious irrigation.' });
+
+      if (isHardBone) {
+        const intermediates = SUBMERGED_DRILLS.filter(x => x > 2.0 && x <= finalDrill);
+        for (const dd of intermediates) {
+          const label = dd === finalDrill ? `Final Drill ${dd}mm` : `Drill ${dd}mm`;
+          const rpm = dd === finalDrill ? '≤300 RPM' : '800-1200 RPM';
+          proto.push({ step: s++, drill: label, speed: rpm, depth: depthStr, note: dd === finalDrill ? 'Final diameter reached.' : 'Sequential widening.' });
+        }
+        proto.push({ step: s++, drill: `Countersink ${d}mm`, speed: '≤300 RPM', depth: 'Cortical', note: boneType === 'D1' ? 'Mandatory — dense cortical bone (D1).' : 'If cortical bone is thick.' });
+        if (boneType === 'D1') {
+          proto.push({ step: s++, drill: `Bone Tap ${d}mm`, speed: '15-20 RPM', depth: depthStr, note: 'Optional — dense cortical bone (D1) only.' });
+        }
+      } else {
+        const intermediates = SUBMERGED_DRILLS.filter(x => x > 2.0 && x <= underprepStop);
+        for (const dd of intermediates) {
+          proto.push({ step: s++, drill: `Drill ${dd}mm`, speed: '800-1200 RPM', depth: depthStr, note: 'Under-preparation for primary stability.' });
+        }
+      }
+      proto.push({ step: s++, drill: `INNO Submerged Implant (${d}mm)`, speed: '20-30 RPM', depth: depthStr, note: `${d}mm${length ? ` x ${length}mm` : ''} — Grade 4 Ti, SLA Surface. 25-45 Ncm.` });
+    } else {
+      // INNO Submerged Narrow
+      proto.push({ step: s++, drill: 'Pilot Drill 2.0mm', speed: '800-1200 RPM', depth: depthStr, note: 'Establish osteotomy. Copious irrigation.' });
+      if (isHardBone) {
+        proto.push({ step: s++, drill: 'Drill 2.8mm', speed: '800-1200 RPM', depth: depthStr, note: 'Sequential widening.' });
+        if (d > 2.8) {
+          proto.push({ step: s++, drill: `Final Drill ${d}mm`, speed: '≤300 RPM', depth: depthStr, note: 'Final diameter reached.' });
+        }
+      } else {
+        proto.push({ step: s++, drill: 'Drill 2.8mm', speed: '800-1200 RPM', depth: depthStr, note: 'Under-preparation — skip final drill for stability.' });
+      }
+      proto.push({ step: s++, drill: `INNO Narrow Implant (${d}mm)`, speed: '20-30 RPM', depth: depthStr, note: `${d}mm${length ? ` x ${length}mm` : ''} — Narrow Body. 25-45 Ncm. Avoid high occlusal load.` });
+    }
+    return proto;
+  }
+
   // ── B&B Dental systems ──
   if (brand === 'B&B Dental') {
     const depthVal = (length || 0) + 0.5;
