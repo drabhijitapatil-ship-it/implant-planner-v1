@@ -112,6 +112,50 @@ function generateDrillingProtocol(brand: string, system: string, diameter: numbe
     return proto;
   }
 
+  // ── Bredent SKY systems ──
+  if (brand === 'Bredent') {
+    const depthVal = (length || 0) + 0.7;
+    const depthStr = length ? `${depthVal}` : 'Working length + 0.7';
+    const implantDepth = length ? `${length}` : 'Working length';
+    const isD1 = boneType === 'D1';
+    const isD4 = boneType === 'D4';
+    const proto: { step: number; drill: string; speed: string; depth: string; note: string }[] = [];
+    let s = 1;
+
+    if (system === 'Copa Sky') {
+      // copaSKY: Ultra-short — Pilot → Final → Implant
+      proto.push({ step: s++, drill: 'Pilot Drill 2.0mm', speed: '800-1000 RPM', depth: depthStr, note: 'copaSKY ultra-short. Precise axial alignment critical.' });
+      proto.push({ step: s++, drill: `Final Drill ${d}mm`, speed: '300 RPM', depth: depthStr, note: `Final drill to implant diameter ${d}mm.` });
+      proto.push({ step: s++, drill: `copaSKY Implant (${d}mm)`, speed: '15-25 RPM', depth: implantDepth, note: `${d}mm${length ? ` x ${length}mm` : ''} — Ultra-short. Maintain strict axial alignment.` });
+      return proto;
+    }
+
+    if (system === 'Mini 2 Sky') {
+      // miniSKY: Pilot → Twist → Final → Implant (no crestal)
+      proto.push({ step: s++, drill: 'Pilot Drill 2.0mm', speed: '800-1000 RPM', depth: depthStr, note: 'Establish osteotomy direction.' });
+      proto.push({ step: s++, drill: 'Twist Drill 2.25mm', speed: '800-1000 RPM', depth: depthStr, note: 'Verify direction with paralleling pin.' });
+      const fRpm = isD4 ? '50 RPM (anticlockwise)' : '300 RPM';
+      const fNote = isD4 ? 'Anticlockwise for bone condensation (D4).' : `Final drill to ${d}mm.`;
+      proto.push({ step: s++, drill: `Final Drill ${d}mm`, speed: fRpm, depth: depthStr, note: fNote });
+      proto.push({ step: s++, drill: `miniSKY Implant (${d}mm)`, speed: '15-25 RPM', depth: implantDepth, note: `${d}mm${length ? ` x ${length}mm` : ''} — Self-cutting, no tap required. 25-45 Ncm.` });
+      return proto;
+    }
+
+    // narrowSKY, blueSKY, classicSKY — common pattern
+    const sysLabel = system === 'Narrow Sky' ? 'narrowSKY' : (system === 'Blue Sky' ? 'blueSKY' : 'classicSKY');
+    proto.push({ step: s++, drill: 'Pilot Drill 2.0mm', speed: '800-1000 RPM', depth: depthStr, note: 'Establish osteotomy direction. Copious irrigation.' });
+    proto.push({ step: s++, drill: 'Twist Drill 2.8mm', speed: '800-1000 RPM', depth: depthStr, note: 'Verify with paralleling pin.' });
+    const fRpm = isD4 ? '50 RPM (anticlockwise)' : '300 RPM';
+    const fNote = isD4 ? 'Anticlockwise for bone condensation (D4).' : (isD1 ? `Full depth — ${d}mm.` : `Final drill ${d}mm.`);
+    proto.push({ step: s++, drill: `Final Drill ${d}mm`, speed: fRpm, depth: depthStr, note: fNote });
+    // Crestal Drill: D2-D4 only (NOT for D1)
+    if (!isD1) {
+      proto.push({ step: s++, drill: `Crestal Drill ${d}mm`, speed: '300 RPM', depth: 'Full insertion', note: `FULL insertion crestal preparation for ${d}mm implant.` });
+    }
+    proto.push({ step: s++, drill: `${sysLabel} Implant (${d}mm)`, speed: '15-25 RPM', depth: implantDepth, note: `${d}mm${length ? ` x ${length}mm` : ''} — Self-cutting, no tap required. 25-45 Ncm.` });
+    return proto;
+  }
+
   // ── Cowellmedi INNO systems ──
   if (brand === 'Cowellmedi') {
     const depthStr = length ? `${length}` : 'Working length';
