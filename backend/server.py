@@ -4612,6 +4612,142 @@ def _generate_cowellmedi_protocol(proto, implant_diameter, implant_length, bone)
     return steps
 
 
+# ── BREDENT SKY Drilling Protocols ──────────────────────────────────────
+# Global Rules:
+#   Depth = Implant Length + 0.7mm
+#   No tapping required (self-cutting implants)
+#   Pilot/Twist: 800-1000 RPM | Final/Crestal: 300 RPM | Placement: 15-25 RPM
+#   D1 (Hard): Full drilling sequence, NO crestal drill
+#   D2-D4: Reduced drilling + crestal drill (FULL insertion)
+#   D4 (Very soft): Final drill anticlockwise at 50 RPM for condensation
+#   Torque: 25-45 Ncm. >45 Ncm → unscrew 1-2 turns, wait, reinsert
+
+DRILLING_PROTOCOLS["Bredent|Mini 2 Sky"] = {
+    "system_name": "Bredent miniSKY",
+    "protocol_family": "bredent_sky",
+    "bredent_system": "mini",
+    "lengths": [8, 10, 12, 14],
+}
+
+DRILLING_PROTOCOLS["Bredent|Copa Sky"] = {
+    "system_name": "Bredent copaSKY",
+    "protocol_family": "bredent_sky",
+    "bredent_system": "copa",
+    "lengths": [5.2],
+}
+
+DRILLING_PROTOCOLS["Bredent|Narrow Sky"] = {
+    "system_name": "Bredent narrowSKY",
+    "protocol_family": "bredent_sky",
+    "bredent_system": "narrow",
+    "lengths": [8, 10, 12, 14],
+}
+
+DRILLING_PROTOCOLS["Bredent|Blue Sky"] = {
+    "system_name": "Bredent blueSKY",
+    "protocol_family": "bredent_sky",
+    "bredent_system": "blue",
+    "lengths": [8, 10, 12, 14, 16],
+}
+
+DRILLING_PROTOCOLS["Bredent|Sky Classic"] = {
+    "system_name": "Bredent classicSKY",
+    "protocol_family": "bredent_sky",
+    "bredent_system": "classic",
+    "lengths": [8, 10, 12, 14, 16],
+}
+
+
+def _generate_bredent_protocol(proto, implant_diameter, implant_length, bone):
+    """Generate drilling protocol for Bredent SKY systems."""
+    steps = []
+    step_num = 1
+    d = implant_diameter
+    depth = round(implant_length + 0.7, 1)
+    depth_str = str(depth)
+    is_d1 = bone == "D1"
+    is_soft = bone in ("D3", "D4")
+    is_very_soft = bone == "D4"
+    sys_type = proto.get("bredent_system", "blue")
+
+    SYSTEM_LABELS = {
+        "mini": "miniSKY", "copa": "copaSKY", "narrow": "narrowSKY",
+        "blue": "blueSKY", "classic": "classicSKY",
+    }
+    sys_label = SYSTEM_LABELS.get(sys_type, sys_type)
+
+    if sys_type == "copa":
+        # copaSKY: Ultra-short (5.2mm) — simplified: Pilot → Final → Implant
+        steps.append({"step": step_num, "drill_type": "Pilot Drill", "code": "—",
+                       "diameter": 2.0, "depth": depth_str, "rpm": "800-1000", "irrigation": True,
+                       "note": "copaSKY ultra-short. Precise axial alignment critical."})
+        step_num += 1
+        steps.append({"step": step_num, "drill_type": "Final Drill", "code": "—",
+                       "diameter": d, "depth": depth_str, "rpm": "300", "irrigation": True,
+                       "note": f"Final drill to implant diameter {d}mm."})
+        step_num += 1
+        steps.append({"step": step_num, "drill_type": "Implant Placement", "code": "—",
+                       "diameter": d, "depth": str(implant_length), "rpm": "15-25", "irrigation": False,
+                       "note": f"Bredent copaSKY {d}mm x {implant_length}mm — Ultra-short. Maintain strict axial alignment."})
+        return steps
+
+    if sys_type == "mini":
+        # miniSKY: Pilot → Twist → Final → Implant (no crestal for any bone)
+        steps.append({"step": step_num, "drill_type": "Pilot Drill", "code": "—",
+                       "diameter": 2.0, "depth": depth_str, "rpm": "800-1000", "irrigation": True})
+        step_num += 1
+        steps.append({"step": step_num, "drill_type": "Twist Drill", "code": "—",
+                       "diameter": 2.25, "depth": depth_str, "rpm": "800-1000", "irrigation": True,
+                       "note": "Verify direction with paralleling pin."})
+        step_num += 1
+        final_rpm = "50 (anticlockwise)" if is_very_soft else "300"
+        final_note = "Anticlockwise for bone condensation (D4)." if is_very_soft else f"Final drill to {d}mm."
+        steps.append({"step": step_num, "drill_type": "Final Drill", "code": "—",
+                       "diameter": d, "depth": depth_str, "rpm": final_rpm, "irrigation": True,
+                       "note": final_note})
+        step_num += 1
+        steps.append({"step": step_num, "drill_type": "Implant Placement", "code": "—",
+                       "diameter": d, "depth": str(implant_length), "rpm": "15-25", "irrigation": False,
+                       "note": f"Bredent miniSKY {d}mm x {implant_length}mm — Self-cutting, no tap required."})
+        return steps
+
+    # narrowSKY, blueSKY, classicSKY — share common pattern
+    # Step 1: Pilot Drill
+    steps.append({"step": step_num, "drill_type": "Pilot Drill", "code": "—",
+                   "diameter": 2.0, "depth": depth_str, "rpm": "800-1000", "irrigation": True,
+                   "note": "Establish osteotomy direction. Copious irrigation."})
+    step_num += 1
+
+    # Step 2: Twist Drill
+    steps.append({"step": step_num, "drill_type": "Twist Drill", "code": "—",
+                   "diameter": 2.8, "depth": depth_str, "rpm": "800-1000", "irrigation": True,
+                   "note": "Verify with paralleling pin."})
+    step_num += 1
+
+    # Step 3: Final Drill
+    final_rpm = "50 (anticlockwise)" if is_very_soft else "300"
+    final_note = "Anticlockwise for bone condensation (D4)." if is_very_soft else (
+        f"Full depth — {d}mm." if is_d1 else f"Final drill {d}mm.")
+    steps.append({"step": step_num, "drill_type": "Final Drill", "code": "—",
+                   "diameter": d, "depth": depth_str, "rpm": final_rpm, "irrigation": True,
+                   "note": final_note})
+    step_num += 1
+
+    # Step 4: Crestal Drill — D2-D4 only (NOT for D1 hard bone)
+    if not is_d1:
+        steps.append({"step": step_num, "drill_type": "Crestal Drill", "code": "—",
+                       "diameter": d, "depth": "Full insertion", "rpm": "300", "irrigation": True,
+                       "note": f"FULL insertion crestal preparation for {d}mm implant."})
+        step_num += 1
+
+    # Implant Placement
+    steps.append({"step": step_num, "drill_type": "Implant Placement", "code": "—",
+                   "diameter": d, "depth": str(implant_length), "rpm": "15-25", "irrigation": False,
+                   "note": f"Bredent {sys_label} {d}mm x {implant_length}mm — Self-cutting, no tap required. 25-45 Ncm."})
+
+    return steps
+
+
 # Conelog Progressive Line protocol
 DRILLING_PROTOCOLS["Conelog|Progressive Line"] = {
     "system_name": "CONELOG Progressive Line",
@@ -4948,6 +5084,8 @@ async def generate_drilling_protocol(
         steps = _generate_mis_lance_protocol(proto, diameter, length, bone)
     elif proto.get("protocol_family") == "cowellmedi":
         steps = _generate_cowellmedi_protocol(proto, diameter, length, bone)
+    elif proto.get("protocol_family") == "bredent_sky":
+        steps = _generate_bredent_protocol(proto, diameter, length, bone)
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
@@ -4970,10 +5108,15 @@ async def generate_drilling_protocol(
         cw_sys = proto.get("cowellmedi_system", "submerged")
         cw_label = "INNO Submerged" if cw_sys == "submerged" else "INNO Narrow"
         protocol_type = f"Dense Bone Protocol ({cw_label})" if bone in ("D1", "D2") else (f"Under-Preparation Protocol ({cw_label})" if bone in ("D3", "D4") else f"Standard Protocol ({cw_label})")
+    elif family == "bredent_sky":
+        br_sys = proto.get("bredent_system", "blue")
+        br_labels = {"mini": "miniSKY", "copa": "copaSKY", "narrow": "narrowSKY", "blue": "blueSKY", "classic": "classicSKY"}
+        br_label = br_labels.get(br_sys, system)
+        protocol_type = f"Hard Bone Protocol ({br_label})" if bone == "D1" else (f"Condensation Protocol ({br_label})" if bone == "D4" else f"Standard Protocol ({br_label})")
     else:
         protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
 
-    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else ("35-50 Ncm" if family == "mis_lance" else ("25-45 Ncm" if family == "cowellmedi" else "35-45 Ncm")))
+    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else ("35-50 Ncm" if family == "mis_lance" else ("25-45 Ncm" if family in ("cowellmedi", "bredent_sky") else "35-45 Ncm")))
 
     # Add Ankylos series info to response
     ankylos_info = {}
@@ -5061,6 +5204,8 @@ async def export_drilling_pdf(
         steps = _generate_mis_lance_protocol(proto, diameter, length, bone)
     elif proto.get("protocol_family") == "cowellmedi":
         steps = _generate_cowellmedi_protocol(proto, diameter, length, bone)
+    elif proto.get("protocol_family") == "bredent_sky":
+        steps = _generate_bredent_protocol(proto, diameter, length, bone)
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
@@ -5083,6 +5228,11 @@ async def export_drilling_pdf(
         cw_sys = proto.get("cowellmedi_system", "submerged")
         cw_label = "INNO Submerged" if cw_sys == "submerged" else "INNO Narrow"
         protocol_type = f"Dense Bone Protocol ({cw_label})" if bone in ("D1", "D2") else (f"Under-Preparation Protocol ({cw_label})" if bone in ("D3", "D4") else f"Standard Protocol ({cw_label})")
+    elif family == "bredent_sky":
+        br_sys = proto.get("bredent_system", "blue")
+        br_labels = {"mini": "miniSKY", "copa": "copaSKY", "narrow": "narrowSKY", "blue": "blueSKY", "classic": "classicSKY"}
+        br_label = br_labels.get(br_sys, system)
+        protocol_type = f"Hard Bone Protocol ({br_label})" if bone == "D1" else (f"Condensation Protocol ({br_label})" if bone == "D4" else f"Standard Protocol ({br_label})")
     else:
         protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
     buf = io.BytesIO()
