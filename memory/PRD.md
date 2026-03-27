@@ -244,6 +244,23 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
 - Added `length?: number` optional parameter, updated all callers to pass `plan.length` and `selectedSystem.lengths?.[0]`
 - All B&B Dental implant placement steps now correctly show implant dimensions
 
+### Cowellmedi INNO Drilling Protocols (Mar 2026)
+- **Added complete drilling protocols** for both Cowellmedi INNO systems
+- **INNO Submerged** (standard): Diameters 3.5/4.0/4.5/5.0/6.0mm, Lengths 7-18mm
+  - Drill library: Round, 2.0 (pilot), 2.8, 3.2, 3.6, 4.2, 4.8
+  - Final drill mapping: 3.5→3.2, 4.0→3.6, 4.5→4.2, 5.0→4.8
+  - D1: Full drilling + mandatory Countersink + optional Bone Tap
+  - D2: Full drilling + Countersink (if cortical thick)
+  - D3/D4: Under-preparation (3.5→stop 2.8, 4.0→stop 3.2, 4.5→stop 3.6, 5.0→stop 4.2)
+- **INNO Submerged Narrow**: Diameters 3.1/3.3mm, Lengths 8-14mm
+  - Drill library: Round, 2.0 (pilot), 2.8
+  - D1/D2: Pilot → 2.8 → Final Drill → Implant
+  - D3/D4: Pilot → 2.8 (skip final drill) → Implant
+- **Depth Rule**: Osteotomy depth = Implant Length (no offset)
+- **Insertion torque**: 25-45 Ncm
+- **Material**: Grade 4 Titanium, SLA Surface, Internal Hex connection
+- Backend generator + frontend local protocol + PDF export all implemented
+
 ## Backlog
 ### P1 - Upcoming
 - Implement drilling protocols for remaining systems (Nobel Biocare, Osstem, Straumann, Bredent, etc.) as user provides developer-ready codes
