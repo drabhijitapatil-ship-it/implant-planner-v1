@@ -261,6 +261,17 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
 - **Material**: Grade 4 Titanium, SLA Surface, Internal Hex connection
 - Backend generator + frontend local protocol + PDF export all implemented
 
+### Bredent SKY Drilling Protocols (Mar 2026)
+- **Added complete drilling protocols** for all 5 Bredent SKY systems
+- **miniSKY** (2.8/3.2mm): Pilot→Twist 2.25→Final→Implant (no crestal for any bone)
+- **copaSKY** (4.0/5.0/6.0mm, 5.2mm only): Ultra-short simplified: Pilot→Final→Implant
+- **narrowSKY** (3.5mm): D1=no crestal, D2-D4=with crestal (FULL insertion)
+- **blueSKY** (4.0/4.5/5.5mm): Same bone-adaptive crestal pattern as narrowSKY
+- **classicSKY** (4.0/4.5mm): Same bone-adaptive crestal pattern
+- **Global rules**: Depth=Length+0.7mm, self-cutting (no tap), D4=anticlockwise 50 RPM condensation
+- **Insertion torque**: 25-45 Ncm
+- Backend generator + frontend local protocol + PDF export all implemented
+
 ## Backlog
 ### P1 - Upcoming
 - Implement drilling protocols for remaining systems (Nobel Biocare, Osstem, Straumann, Bredent, etc.) as user provides developer-ready codes

@@ -4708,7 +4708,7 @@ def _generate_bredent_protocol(proto, implant_diameter, implant_length, bone):
         step_num += 1
         steps.append({"step": step_num, "drill_type": "Implant Placement", "code": "—",
                        "diameter": d, "depth": str(implant_length), "rpm": "15-25", "irrigation": False,
-                       "note": f"Bredent miniSKY {d}mm x {implant_length}mm — Self-cutting, no tap required."})
+                       "note": f"Bredent miniSKY {d}mm x {implant_length}mm — Self-cutting, no tap required. 25-45 Ncm."})
         return steps
 
     # narrowSKY, blueSKY, classicSKY — share common pattern
@@ -4788,18 +4788,21 @@ NEODENT_GM_COMBO_CODES = {
     "4.3/5.0": "103.418",
 }
 
-# Helix GM protocol
+# Helix GM protocol — Updated with precise diameter-wise drilling sequences
+# D1/D2: Drill up to implant diameter + Plus (+) drill (coronal only)
+# D3/D4: Stop one drill before final diameter, no Plus drill
+# Depth = implant length
 DRILLING_PROTOCOLS["Neodent|Helix GM Acqua"] = {
     "system_name": "Neodent Helix GM",
     "protocol_family": "helix",
     "lengths": [8, 10, 11.5, 13, 16, 18],
-    "sequences": {
-        3.5:  [3.5],
-        3.75: [3.5, 3.75],
-        4.0:  [3.5, 3.75, 4.0],
-        4.3:  [3.5, 3.75, 4.0, 4.3],
-        5.0:  [3.5, 3.75, 4.0, 4.3, 5.0],
-        6.0:  [3.5, 3.75, 4.0, 4.3, 5.0],
+    "helix_protocols": {
+        3.5:  {"D1_D2": [2.8, 3.5],             "D3_D4": [2.8],                              "plus": 3.5},
+        3.75: {"D1_D2": [2.8, 3.5, 3.75],       "D3_D4": [2.8, 3.5],                         "plus": 3.75},
+        4.0:  {"D1_D2": [2.8, 3.5, 3.75, 4.0],  "D3_D4": [2.8, 3.5, 3.75],                   "plus": 4.0},
+        4.3:  {"D1_D2": [2.8, 3.5, 3.75, 4.0, 4.3],  "D3_D4": [2.8, 3.5, 3.75, 4.0],         "plus": 4.3},
+        5.0:  {"D1_D2": [2.8, 3.5, 3.75, 4.0, 4.3, 5.0],  "D3_D4": [2.8, 3.5, 3.75, 4.0, 4.3], "plus": 5.0},
+        6.0:  {"D1_D2": [2.8, 3.5, 3.75, 4.0, 4.3, 5.0, 6.0],  "D3_D4": [2.8, 3.5, 3.75, 4.0, 4.3, 5.0], "plus": 6.0},
     },
 }
 DRILLING_PROTOCOLS["Neodent|Helix GM Neoporous"] = DRILLING_PROTOCOLS["Neodent|Helix GM Acqua"]
@@ -4864,17 +4867,28 @@ def _generate_neodent_protocol(proto, implant_diameter, implant_length, bone):
     _add_step("Initial Drill", 2.0, NEODENT_GM_CODES.get(2.0, "—"))
 
     if family == "helix":
-        seq_map = proto["sequences"]
-        seq = list(seq_map.get(implant_diameter, []))
-        # D4: skip final drill for under-preparation
-        if bone == "D4" and len(seq) > 1:
-            seq = seq[:-1]
-        for d in seq:
+        helix_protos = proto.get("helix_protocols", {})
+        dia_proto = helix_protos.get(implant_diameter)
+        if not dia_proto:
+            # Fallback: find closest diameter
+            available = sorted(helix_protos.keys())
+            closest = min(available, key=lambda x: abs(x - implant_diameter)) if available else None
+            dia_proto = helix_protos.get(closest, {"D1_D2": [2.0, 2.8], "D3_D4": [2.0], "plus": implant_diameter})
+
+        bone_key = "D1_D2" if is_dense else "D3_D4"
+        seq = dia_proto[bone_key]
+        plus_dia = dia_proto.get("plus", implant_diameter)
+
+        for i, d in enumerate(seq):
             code = NEODENT_GM_CODES.get(d, "—")
-            _add_step(f"Drill {d} mm", d, code)
-        # D1/D2: add contour drill
+            label = f"Final Drill {d} mm" if (i == len(seq) - 1 and is_dense) else f"Drill {d} mm"
+            _add_step(label, d, code)
+
+        # D1/D2: Add Plus (+) drill — crestal/coronal only
         if is_dense:
-            _add_step("Contour Drill", implant_diameter, "—")
+            _add_step(f"Plus Drill {plus_dia}+", plus_dia, "—", rpm="300",)
+            steps[-1]["depth"] = "Coronal ONLY"
+            steps[-1]["note"] = "Crestal cortical expansion only — NOT full osteotomy depth"
 
     elif family == "drive":
         seq_map = proto["sequences"]
