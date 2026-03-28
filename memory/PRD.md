@@ -261,6 +261,18 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
 - **Material**: Grade 4 Titanium, SLA Surface, Internal Hex connection
 - Backend generator + frontend local protocol + PDF export all implemented
 
+### Osstem Drilling Protocols (Mar 2026)
+- **Added complete drilling protocols** for all 5 Osstem systems
+- **Standard protocol** (ET III NH, MS, SS III, TS III): Shared bone-adaptive logic
+  - D1: Full drilling + **Cortical Drill** (coronal widening only, NOT full depth)
+  - D2: Standard full sequence, placement 1mm subcrestal
+  - D3/D4: Under-preparation (skip final drill), placement at bone level
+- **TS IV** (ultra-soft bone): Fixed simplified protocol regardless of bone type
+  - 4.0: 2.2→3.5→Implant | 4.5: 2.2→2.7→3.5→4.0→Implant | 5.0: 2.2→2.7→3.5→4.5→Implant
+- **122 concept**: 2-4 drill simplified protocol based on bone density
+- **Insertion torque**: ~40 Ncm | In-built stopper: ~1mm safety margin
+- Backend generator + frontend local protocol + PDF export all implemented
+
 ### Neodent Helix GM Updated Drilling Protocols (Mar 2026)
 - **Replaced generic Helix GM protocol** with precise per-diameter drilling sequences
 - **D1/D2**: Drill up to implant diameter + **Plus (+) drill** (crestal cortical expansion, coronal ONLY)
