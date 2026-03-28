@@ -112,6 +112,58 @@ function generateDrillingProtocol(brand: string, system: string, diameter: numbe
     return proto;
   }
 
+  // ── Osstem systems (ET III NH, MS, SS III, TS III, TS IV) ──
+  if (brand === 'Osstem') {
+    const depthStr = length ? `${length}` : 'Working length';
+    const proto: { step: number; drill: string; speed: string; depth: string; note: string }[] = [];
+    let s = 1;
+
+    if (system === 'TS IV') {
+      // TS IV: Ultra-soft bone — simplified fixed protocols
+      const TS_IV: Record<number, number[]> = { 4.0: [2.2, 3.5], 4.5: [2.2, 2.7, 3.5, 4.0], 5.0: [2.2, 2.7, 3.5, 4.5] };
+      const seq = TS_IV[d] || TS_IV[4.0] || [2.2, 3.5];
+      for (const dd of seq) {
+        const label = dd === 2.2 ? 'Pilot Drill 2.2mm' : `Drill ${dd}mm`;
+        const note = dd === 2.2 ? 'Initial pilot drill.' : 'Under-sized for maximum primary stability in soft bone.';
+        proto.push({ step: s++, drill: label, speed: dd <= 2.2 ? '800 RPM' : '600 RPM', depth: depthStr, note });
+      }
+      proto.push({ step: s++, drill: `TS IV Implant (${d}mm)`, speed: '20-30 RPM', depth: depthStr, note: `${d}mm${length ? ` x ${length}mm` : ''} — Ultra-soft bone design. Place at bone level. ~40 Ncm.` });
+      return proto;
+    }
+
+    // Standard Osstem protocol (shared by ET III NH, MS, SS III, TS III)
+    const OSSTEM: Record<number, { D1: (number|string)[]; D2: number[]; D3: number[]; D4: number[] }> = {
+      3.5: { D1: [2.2, 3.0, 3.5, '3.5_cortical'], D2: [2.2, 3.0, 3.5], D3: [2.2, 3.0], D4: [2.2, 3.0] },
+      4.0: { D1: [2.2, 3.5, 4.0, '4.0_cortical'], D2: [2.2, 3.5, 4.0], D3: [2.2, 3.5], D4: [2.2, 3.5] },
+      4.5: { D1: [2.2, 3.5, 4.0, 4.5, '4.5_cortical'], D2: [2.2, 3.5, 4.0, 4.5], D3: [2.2, 3.5, 4.0], D4: [2.2, 3.5, 4.0] },
+      5.0: { D1: [2.2, 3.5, 4.5, 5.0, '5.0_cortical'], D2: [2.2, 3.5, 4.5, 5.0], D3: [2.2, 3.5, 4.5], D4: [2.2, 3.5, 4.5] },
+      5.5: { D1: [2.2, 3.5, 5.0, 5.5, '5.5_cortical'], D2: [2.2, 3.5, 5.0, 5.5], D3: [2.2, 3.5, 5.0], D4: [2.2, 3.5, 5.0] },
+    };
+    const diaProto = OSSTEM[d] || OSSTEM[4.0];
+    const bKey = boneType as 'D1' | 'D2' | 'D3' | 'D4';
+    const seq = diaProto[bKey] || diaProto.D2;
+
+    for (const entry of seq) {
+      const isCortical = typeof entry === 'string' && entry.includes('_cortical');
+      const drillD = isCortical ? parseFloat((entry as string).replace('_cortical', '')) : (entry as number);
+      if (isCortical) {
+        proto.push({ step: s++, drill: `Cortical Drill ${drillD}mm`, speed: '300 RPM', depth: 'Coronal ONLY', note: 'Cortical widening in hard bone (D1) only — NOT full osteotomy depth.' });
+      } else {
+        const label = drillD === 2.2 ? 'Pilot Drill 2.2mm' : `Drill ${drillD}mm`;
+        let note = drillD === 2.2 ? 'Initial pilot drill.' : 'Sequential widening.';
+        if (isSoftBone && entry === seq[seq.length - 1]) note = 'Under-sized preparation — skip final drill for primary stability.';
+        proto.push({ step: s++, drill: label, speed: drillD <= 2.2 ? '800 RPM' : '600 RPM', depth: depthStr, note });
+      }
+    }
+
+    let placementNote = `${d}mm${length ? ` x ${length}mm` : ''} — `;
+    if (boneType === 'D2') placementNote += 'Place 1mm subcrestal. ~40 Ncm.';
+    else if (boneType === 'D3' || boneType === 'D4') placementNote += 'Place at bone level. ~40 Ncm.';
+    else placementNote += '~40 Ncm.';
+    proto.push({ step: s++, drill: `${system} Implant (${d}mm)`, speed: '20-30 RPM', depth: depthStr, note: placementNote });
+    return proto;
+  }
+
   // ── Bredent SKY systems ──
   if (brand === 'Bredent') {
     const depthVal = (length || 0) + 0.7;
