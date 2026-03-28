@@ -4748,6 +4748,123 @@ def _generate_bredent_protocol(proto, implant_diameter, implant_length, bone):
     return steps
 
 
+# ── OSSTEM Drilling Protocols ──────────────────────────────────────────
+# Systems: ET III NH, MS, SS III, TS III (shared general protocol), TS IV (ultra-soft bone)
+# Depth = Implant Length
+# D1: Full drilling + cortical drill (coronal widening only)
+# D2: Standard full drilling
+# D3/D4: Under-preparation (skip last drill for primary stability)
+# TS IV: Simplified protocol designed for ultra-soft bone (D4)
+# Torque: ~40 Ncm
+# 122 concept: 2–4 drill simplified protocol based on bone density
+# In-built stopper maintains ~1mm safety margin
+
+OSSTEM_PROTOCOLS = {
+    3.5: {"D1": [2.2, 3.0, 3.5, "3.5_cortical"], "D2": [2.2, 3.0, 3.5], "D3": [2.2, 3.0], "D4": [2.2, 3.0]},
+    4.0: {"D1": [2.2, 3.5, 4.0, "4.0_cortical"], "D2": [2.2, 3.5, 4.0], "D3": [2.2, 3.5], "D4": [2.2, 3.5]},
+    4.5: {"D1": [2.2, 3.5, 4.0, 4.5, "4.5_cortical"], "D2": [2.2, 3.5, 4.0, 4.5], "D3": [2.2, 3.5, 4.0], "D4": [2.2, 3.5, 4.0]},
+    5.0: {"D1": [2.2, 3.5, 4.5, 5.0, "5.0_cortical"], "D2": [2.2, 3.5, 4.5, 5.0], "D3": [2.2, 3.5, 4.5], "D4": [2.2, 3.5, 4.5]},
+    5.5: {"D1": [2.2, 3.5, 5.0, 5.5, "5.5_cortical"], "D2": [2.2, 3.5, 5.0, 5.5], "D3": [2.2, 3.5, 5.0], "D4": [2.2, 3.5, 5.0]},
+}
+
+OSSTEM_TS_IV_PROTOCOLS = {
+    4.0: [2.2, 3.5],
+    4.5: [2.2, 2.7, 3.5, 4.0],
+    5.0: [2.2, 2.7, 3.5, 4.5],
+}
+
+# Register all 5 Osstem systems
+for _sys_key, _sys_name in [
+    ("Osstem|ETIII NH", "Osstem ET III NH"),
+    ("Osstem|MS", "Osstem ET III MS"),
+    ("Osstem|SS III", "Osstem SS III"),
+    ("Osstem|TS III", "Osstem TS III"),
+]:
+    DRILLING_PROTOCOLS[_sys_key] = {
+        "system_name": _sys_name,
+        "protocol_family": "osstem",
+        "osstem_type": "standard",
+    }
+
+DRILLING_PROTOCOLS["Osstem|TS IV"] = {
+    "system_name": "Osstem TS IV",
+    "protocol_family": "osstem",
+    "osstem_type": "ts_iv",
+}
+
+
+def _generate_osstem_protocol(proto, implant_diameter, implant_length, bone):
+    """Generate drilling protocol for Osstem implant systems."""
+    steps = []
+    step_num = 1
+    d = implant_diameter
+    depth = str(implant_length)
+    sys_name = proto.get("system_name", "Osstem")
+    osstem_type = proto.get("osstem_type", "standard")
+
+    if osstem_type == "ts_iv":
+        # TS IV: ultra-soft bone protocol — fixed simplified sequences
+        ts_seq = OSSTEM_TS_IV_PROTOCOLS.get(d)
+        if not ts_seq:
+            # Fallback to closest available TS IV diameter
+            available = sorted(OSSTEM_TS_IV_PROTOCOLS.keys())
+            closest = min(available, key=lambda x: abs(x - d)) if available else None
+            ts_seq = OSSTEM_TS_IV_PROTOCOLS.get(closest, [2.2, 3.5])
+        for drill_d in ts_seq:
+            label = "Pilot Drill" if drill_d == 2.2 else f"Drill {drill_d}mm"
+            rpm = "800" if drill_d <= 2.2 else "600"
+            note = "Initial pilot drill." if drill_d == 2.2 else "Under-sized for maximum primary stability in soft bone."
+            steps.append({"step": step_num, "drill_type": label, "code": "—",
+                           "diameter": drill_d, "depth": depth, "rpm": rpm, "irrigation": True,
+                           "note": note})
+            step_num += 1
+        steps.append({"step": step_num, "drill_type": "Implant Placement", "code": "—",
+                       "diameter": d, "depth": depth, "rpm": "20-30", "irrigation": False,
+                       "note": f"Osstem TS IV {d}mm x {implant_length}mm — Ultra-soft bone design. Place at bone level. ~40 Ncm."})
+        return steps
+
+    # Standard Osstem protocol (ET III NH, MS, SS III, TS III)
+    dia_proto = OSSTEM_PROTOCOLS.get(d)
+    if not dia_proto:
+        available = sorted(OSSTEM_PROTOCOLS.keys())
+        closest = min(available, key=lambda x: abs(x - d)) if available else 4.0
+        dia_proto = OSSTEM_PROTOCOLS.get(closest, OSSTEM_PROTOCOLS[4.0])
+
+    seq = dia_proto.get(bone, dia_proto.get("D2", [2.2, 3.5]))
+
+    for drill_entry in seq:
+        is_cortical = isinstance(drill_entry, str) and "_cortical" in drill_entry
+        drill_d = float(drill_entry.replace("_cortical", "")) if isinstance(drill_entry, str) else drill_entry
+        if is_cortical:
+            steps.append({"step": step_num, "drill_type": f"Cortical Drill {drill_d}mm", "code": "—",
+                           "diameter": drill_d, "depth": "Coronal ONLY", "rpm": "300", "irrigation": True,
+                           "note": "Cortical widening in hard bone (D1) only — NOT full osteotomy depth."})
+        else:
+            label = "Pilot Drill" if drill_d == 2.2 else (f"Final Drill {drill_d}mm" if drill_entry == seq[-1] and bone in ("D1", "D2") else f"Drill {drill_d}mm")
+            rpm = "800" if drill_d <= 2.2 else "600"
+            note = "Initial pilot drill." if drill_d == 2.2 else ("Final diameter reached." if label.startswith("Final") else "Sequential widening.")
+            if bone in ("D3", "D4") and drill_entry == seq[-1]:
+                note = "Under-sized preparation — skip final drill for primary stability."
+            steps.append({"step": step_num, "drill_type": label, "code": "—",
+                           "diameter": drill_d, "depth": depth, "rpm": rpm, "irrigation": True,
+                           "note": note})
+        step_num += 1
+
+    placement_note = f"{sys_name} {d}mm x {implant_length}mm"
+    if bone == "D2":
+        placement_note += " — Place 1mm subcrestal. ~40 Ncm."
+    elif bone in ("D3", "D4"):
+        placement_note += " — Place at bone level. ~40 Ncm."
+    else:
+        placement_note += " — ~40 Ncm."
+
+    steps.append({"step": step_num, "drill_type": "Implant Placement", "code": "—",
+                   "diameter": d, "depth": depth, "rpm": "20-30", "irrigation": False,
+                   "note": placement_note})
+
+    return steps
+
+
 # Conelog Progressive Line protocol
 DRILLING_PROTOCOLS["Conelog|Progressive Line"] = {
     "system_name": "CONELOG Progressive Line",
@@ -5100,6 +5217,8 @@ async def generate_drilling_protocol(
         steps = _generate_cowellmedi_protocol(proto, diameter, length, bone)
     elif proto.get("protocol_family") == "bredent_sky":
         steps = _generate_bredent_protocol(proto, diameter, length, bone)
+    elif proto.get("protocol_family") == "osstem":
+        steps = _generate_osstem_protocol(proto, diameter, length, bone)
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
@@ -5127,10 +5246,17 @@ async def generate_drilling_protocol(
         br_labels = {"mini": "miniSKY", "copa": "copaSKY", "narrow": "narrowSKY", "blue": "blueSKY", "classic": "classicSKY"}
         br_label = br_labels.get(br_sys, system)
         protocol_type = f"Hard Bone Protocol ({br_label})" if bone == "D1" else (f"Condensation Protocol ({br_label})" if bone == "D4" else f"Standard Protocol ({br_label})")
+    elif family == "osstem":
+        os_type = proto.get("osstem_type", "standard")
+        os_label = proto.get("system_name", system)
+        if os_type == "ts_iv":
+            protocol_type = f"Ultra-Soft Bone Protocol ({os_label})"
+        else:
+            protocol_type = f"Hard Bone + Cortical Protocol ({os_label})" if bone == "D1" else (f"Under-Preparation Protocol ({os_label})" if bone in ("D3", "D4") else f"Standard Protocol ({os_label})")
     else:
         protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
 
-    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else ("35-50 Ncm" if family == "mis_lance" else ("25-45 Ncm" if family in ("cowellmedi", "bredent_sky") else "35-45 Ncm")))
+    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else ("35-50 Ncm" if family == "mis_lance" else ("25-45 Ncm" if family in ("cowellmedi", "bredent_sky") else ("~40 Ncm" if family == "osstem" else "35-45 Ncm"))))
 
     # Add Ankylos series info to response
     ankylos_info = {}
@@ -5220,6 +5346,8 @@ async def export_drilling_pdf(
         steps = _generate_cowellmedi_protocol(proto, diameter, length, bone)
     elif proto.get("protocol_family") == "bredent_sky":
         steps = _generate_bredent_protocol(proto, diameter, length, bone)
+    elif proto.get("protocol_family") == "osstem":
+        steps = _generate_osstem_protocol(proto, diameter, length, bone)
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
@@ -5247,6 +5375,13 @@ async def export_drilling_pdf(
         br_labels = {"mini": "miniSKY", "copa": "copaSKY", "narrow": "narrowSKY", "blue": "blueSKY", "classic": "classicSKY"}
         br_label = br_labels.get(br_sys, system)
         protocol_type = f"Hard Bone Protocol ({br_label})" if bone == "D1" else (f"Condensation Protocol ({br_label})" if bone == "D4" else f"Standard Protocol ({br_label})")
+    elif family == "osstem":
+        os_type = proto.get("osstem_type", "standard")
+        os_label = proto.get("system_name", system)
+        if os_type == "ts_iv":
+            protocol_type = f"Ultra-Soft Bone Protocol ({os_label})"
+        else:
+            protocol_type = f"Hard Bone + Cortical Protocol ({os_label})" if bone == "D1" else (f"Under-Preparation Protocol ({os_label})" if bone in ("D3", "D4") else f"Standard Protocol ({os_label})")
     else:
         protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
     buf = io.BytesIO()
