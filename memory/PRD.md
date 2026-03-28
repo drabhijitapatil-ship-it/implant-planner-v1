@@ -261,6 +261,15 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
 - **Material**: Grade 4 Titanium, SLA Surface, Internal Hex connection
 - Backend generator + frontend local protocol + PDF export all implemented
 
+### Neodent Helix GM Updated Drilling Protocols (Mar 2026)
+- **Replaced generic Helix GM protocol** with precise per-diameter drilling sequences
+- **D1/D2**: Drill up to implant diameter + **Plus (+) drill** (crestal cortical expansion, coronal ONLY)
+- **D3/D4**: Stop one drill before final diameter — no Plus drill (under-preparation)
+- **Drill sequence base**: 2.0 → 2.8 → 3.5 → 3.75 → 4.0 → 4.3 → 5.0 → 6.0
+- **Plus Drill highlight**: `+ Drill = Crestal Cortical Expansion ONLY, NOT full osteotomy depth`
+- Both Acqua and NeoPorous surfaces use the same protocol
+- Depth = implant length (no offset)
+
 ### Bredent SKY Drilling Protocols (Mar 2026)
 - **Added complete drilling protocols** for all 5 Bredent SKY systems
 - **miniSKY** (2.8/3.2mm): Pilot→Twist 2.25→Final→Implant (no crestal for any bone)
