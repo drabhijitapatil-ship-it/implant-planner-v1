@@ -3937,9 +3937,22 @@ async def suggest_auto(
                 "recommended_diameter": f"{tooth_data['diameter'][0]}–{tooth_data['diameter'][1]} mm",
                 "recommended_length": f"{tooth_data['length'][0]}–{tooth_data['length'][1]} mm",
             }
+        # D3/D4 caution warning with tooth-specific augmentation advice
+        restricted_height_warning = None
+        if bone_type in ("D3", "D4"):
+            msg = "Short implants are ideal and preferred for D1 and D2-type bone only. Make a decision cautiously."
+            maxillary_posterior = {"14", "15", "16", "17", "24", "25", "26", "27"}
+            mandibular_posterior = {"34", "35", "36", "37", "44", "45", "46", "47"}
+            if tooth and tooth in maxillary_posterior:
+                msg += " Advised to increase bone length by Indirect or Direct Sinus Lift."
+            elif tooth and tooth in mandibular_posterior:
+                msg += " Advised to increase bone length by Vertical Bone Augmentation."
+            restricted_height_warning = msg
+
         return {
             "recommended_systems": recommended_systems,
             "restricted_bone_height": True,
+            "restricted_height_warning": restricted_height_warning,
             "clinical_guidance": {
                 "bone_width": bone_width, "bone_height": bone_height,
                 "bone_type": bone_type, "procedures": procedures,

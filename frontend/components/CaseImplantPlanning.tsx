@@ -958,7 +958,13 @@ function ModalContent(props: any) {
                     {isRestrictedResult && (
                       <View style={ms.restrictedBanner} data-testid="restricted-height-banner">
                         <Ionicons name="alert-circle" size={18} color="#E65100" />
-                        <Text style={ms.restrictedBannerText}>Restricted Bone Height ({result.clinical_guidance?.bone_height}mm): Showing priority-based recommendations. Bone type filtering bypassed.</Text>
+                        <Text style={ms.restrictedBannerText}>Restricted Bone Height ({result.clinical_guidance?.bone_height}mm): Showing priority-based recommendations.</Text>
+                      </View>
+                    )}
+                    {result.restricted_height_warning && (
+                      <View style={ms.cautionBanner} data-testid="restricted-d3d4-warning">
+                        <Ionicons name="warning" size={18} color="#B71C1C" />
+                        <Text style={ms.cautionBannerText}>{result.restricted_height_warning}</Text>
                       </View>
                     )}
                     <Text style={ms.matchHeader}>
@@ -1351,6 +1357,8 @@ const ms = StyleSheet.create({
   indicationBannerText: { flex: 1, fontSize: 13, color: '#1565C0', fontWeight: '500', lineHeight: 18 },
   restrictedBanner: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#FFF3E0', borderRadius: 10, padding: 12, marginBottom: 12, gap: 8, borderWidth: 1, borderColor: '#FFB74D' },
   restrictedBannerText: { flex: 1, fontSize: 12, color: '#E65100', fontWeight: '500', lineHeight: 17 },
+  cautionBanner: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#FFEBEE', borderRadius: 10, padding: 12, marginBottom: 12, gap: 8, borderWidth: 1, borderColor: '#EF9A9A' },
+  cautionBannerText: { flex: 1, fontSize: 12, color: '#B71C1C', fontWeight: '500', lineHeight: 17 },
   restrictedP1Badge: { backgroundColor: '#FFF3E0', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: '#FFB74D' },
   restrictedP1BadgeText: { fontSize: 10, fontWeight: '700', color: '#E65100' },
   // Drilling Protocol styles
