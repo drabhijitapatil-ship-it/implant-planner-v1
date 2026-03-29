@@ -308,6 +308,56 @@ function generateDrillingProtocol(brand: string, system: string, diameter: numbe
     return proto;
   }
 
+  // ── ZimVie TSX specific protocol (Dual Kit: Driva Gold + Original) ──
+  if (brand === 'Zimmer' && system === 'TSX') {
+    const depthStr = length ? `${length}` : 'Working length';
+    const isDense = boneType === 'D1' || boneType === 'D2';
+    const boneClass = isDense ? 'dense' : 'soft';
+    const TSX_DRILLS: Record<string, { soft: string[] | null; dense: string[] }> = {
+      '3.1': { soft: ['pilot', '2.3'], dense: ['pilot', '2.3', '2.4/2.8 step'] },
+      '3.7': { soft: ['2.3', '2.8'], dense: ['2.3', '2.8', '3.4/2.8 step'] },
+      '4.1': { soft: ['2.3', '2.8', '3.4/2.8'], dense: ['2.3', '2.8', '3.4/2.8', '3.8/3.4 step'] },
+      '4.7': { soft: ['2.3', '2.8', '3.4/2.8', '3.8'], dense: ['2.3', '2.8', '3.4/2.8', '3.8', '4.4/3.8 step'] },
+      '5.4': { soft: null, dense: ['2.3', '2.8', '3.4/2.8', '3.8', '4.4/3.8', '5.1/4.4 step'] },
+      '6.0': { soft: ['2.3', '2.8', '3.4/2.8', '3.8', '4.4/3.8', '5.1'], dense: ['2.3', '2.8', '3.4/2.8', '3.8', '4.4/3.8', '5.1', '5.7/5.1 step'] },
+    };
+    const GOLD: Record<string, string> = {
+      'pilot': '0201G', '2.3': 'TSV23G', '2.8': 'TSV28G', '3.4/2.8': 'TSV34D28G', '3.4/2.8 step': 'TSV34D28G',
+      '3.8': 'TSV38G', '3.8/3.4 step': 'TSV38D34G', '4.4/3.8': 'TSV44D38G', '4.4/3.8 step': 'TSV44D38G',
+      '5.1': 'TSV51G', '5.1/4.4 step': 'TSV51D44G', '5.7/5.1 step': 'TSV57D51G', '2.4/2.8 step': 'EZT28D24G',
+    };
+    const ORIG: Record<string, string> = {
+      'pilot': '0201DSN', '2.3': 'SV2.3DN', '2.8': 'SV2.8DN', '3.4/2.8': 'TSV3DN', '3.4/2.8 step': 'TSV3DN',
+      '3.8': 'SV3.8DN', '3.8/3.4 step': 'TSV3.8DN', '4.4/3.8': 'TSV4DN', '4.4/3.8 step': 'TSV4DN',
+      '5.1': 'SV5.1DN', '5.1/4.4 step': 'TSV5.1DN', '5.7/5.1 step': 'TSV6DN', '2.4/2.8 step': 'ZOP28DN',
+    };
+    const diaKey = `${d}`;
+    const diaData = TSX_DRILLS[diaKey];
+    if (!diaData) return [];
+    const sequence = boneClass === 'soft' ? diaData.soft : diaData.dense;
+    if (sequence === null) {
+      return [{ step: 1, drill: 'No soft bone protocol available', speed: '—', depth: '—', note: `No D3/D4 protocol for ${diaKey}mm TSX. Use clinician judgment.` }];
+    }
+    const buildKit = (codes: Record<string, string>, kitName: string) => {
+      const steps: { step: number; drill: string; speed: string; depth: string; note: string }[] = [];
+      steps.push({ step: 0, drill: kitName, speed: '', depth: '', note: '' });
+      let s = 1;
+      for (const desc of sequence) {
+        const code = codes[desc] || desc;
+        const isPilot = desc.includes('pilot');
+        const isStep = desc.includes('step');
+        const drillDia = isPilot ? '2.1/1.6mm' : desc.replace(' step', '') + 'mm';
+        const rpm = isPilot ? '800-1500 RPM' : '600-800 RPM';
+        const label = isPilot ? `Pilot ${code} (${drillDia})` : (isStep ? `Step Drill ${code} (${drillDia})` : `Drill ${code} (${drillDia})`);
+        const note = isPilot ? 'Tapered pilot drill.' : (isStep ? 'Final step drill (dense bone).' : 'Sequential osteotomy.');
+        steps.push({ step: s++, drill: label, speed: rpm, depth: depthStr, note });
+      }
+      steps.push({ step: s++, drill: `TSX Implant (${d}mm)`, speed: '≤30 RPM', depth: depthStr, note: `${d}mm${length ? ` x ${length}mm` : ''} — ≤90 Ncm.` });
+      return steps;
+    };
+    return [...buildKit(GOLD, 'Driva Gold Series Drills'), ...buildKit(ORIG, 'Driva Drills (Original)')];
+  }
+
   // Base protocol varies by diameter and bone density
   const protocol: { step: number; drill: string; speed: string; depth: string; note: string }[] = [];
   let stepNum = 1;
@@ -525,8 +575,13 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
                   <Ionicons name="construct" size={16} color="#1565C0" />
                   <Text style={st.inlineProtocolTitle}>Drilling Sequence: {plan.brand} {plan.diameter}mm ({plan.bone_type})</Text>
                 </View>
-                {generateDrillingProtocol(plan.brand, plan.system, plan.diameter, plan.bone_type, plan.length).map((p) => (
-                  <View key={p.step} style={st.protocolStepRow}>
+                {generateDrillingProtocol(plan.brand, plan.system, plan.diameter, plan.bone_type, plan.length).map((p, idx) => (
+                  p.step === 0 ? (
+                    <View key={`kit-${idx}`} style={st.kitSeparator}>
+                      <Text style={st.kitSeparatorText}>{p.drill}</Text>
+                    </View>
+                  ) : (
+                  <View key={`step-${idx}`} style={st.protocolStepRow}>
                     <View style={st.protocolStepBadge}>
                       <Text style={st.protocolStepBadgeText}>{p.step}</Text>
                     </View>
@@ -535,6 +590,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
                       <Text style={st.protocolMetaText}>{p.speed} | {p.depth}</Text>
                     </View>
                   </View>
+                  )
                 ))}
               </View>
             )}
@@ -857,8 +913,13 @@ function ModalContent(props: any) {
                           <Text style={ms.protocolDiameterLabel}>
                             Sequence for {selectedSystem.diameters[0]}mm (Bone: {boneType || 'D2'})
                           </Text>
-                          {generateDrillingProtocol(selectedSystem.brand, selectedSystem.system, selectedSystem.diameters[0], boneType || 'D2', selectedSystem.lengths?.[0]).map((p) => (
-                            <View key={p.step} style={ms.protocolStep}>
+                          {generateDrillingProtocol(selectedSystem.brand, selectedSystem.system, selectedSystem.diameters[0], boneType || 'D2', selectedSystem.lengths?.[0]).map((p, idx) => (
+                            p.step === 0 ? (
+                              <View key={`kit-${idx}`} style={ms.kitSeparator}>
+                                <Text style={ms.kitSeparatorText}>{p.drill}</Text>
+                              </View>
+                            ) : (
+                            <View key={`step-${idx}`} style={ms.protocolStep}>
                               <View style={ms.protocolStepNum}>
                                 <Text style={ms.protocolStepNumText}>{p.step}</Text>
                               </View>
@@ -868,6 +929,7 @@ function ModalContent(props: any) {
                                 <Text style={ms.protocolNote}>{p.note}</Text>
                               </View>
                             </View>
+                            )
                           ))}
                         </>
                       )}
@@ -1265,6 +1327,8 @@ const st = StyleSheet.create({
   protocolStepBadge: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#1565C0', alignItems: 'center', justifyContent: 'center' },
   protocolStepBadgeText: { fontSize: 11, color: '#FFF', fontWeight: '700' },
   protocolDrillText: { fontSize: 13, fontWeight: '600', color: '#333' },
+  kitSeparator: { backgroundColor: '#E3F2FD', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, marginTop: 10, marginBottom: 6, borderLeftWidth: 3, borderLeftColor: '#1565C0' },
+  kitSeparatorText: { fontSize: 13, fontWeight: '700', color: '#1565C0' },
   protocolMetaText: { fontSize: 11, color: '#888' },
   emptyState: { backgroundColor: '#FFF', padding: 30, alignItems: 'center', gap: 8 },
   emptyText: { fontSize: 15, fontWeight: '600', color: '#999' },
@@ -1373,4 +1437,6 @@ const ms = StyleSheet.create({
   protocolDrill: { fontSize: 13, fontWeight: '600', color: '#333' },
   protocolDetail: { fontSize: 11, color: '#666', marginTop: 1 },
   protocolNote: { fontSize: 11, color: '#888', fontStyle: 'italic', marginTop: 2 },
+  kitSeparator: { backgroundColor: '#E3F2FD', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, marginTop: 10, marginBottom: 6, borderLeftWidth: 3, borderLeftColor: '#1565C0' },
+  kitSeparatorText: { fontSize: 13, fontWeight: '700', color: '#1565C0' },
 });
