@@ -316,6 +316,13 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
 - **Backend**: `DRILLING_PROTOCOLS["Zimmer|TSX"]` + `_generate_tsx_protocol()` + `alt_protocol` in response
 - **Frontend**: Dual-kit rendering with kit separator headers (step=0 entries)
 - **Insertion Torque**: ≤90 Ncm
+
+### Inline Drilling Protocol Preview in Step 3 (Mar 2026)
+- **Feature**: When an implant is selected in Step 3 (Select Implant), a collapsible "Drilling Protocol" card appears below the results list
+- **Shows**: Brand, system, diameter x length, bone type, and full drill sequence with step numbers
+- **Dual-kit support**: TSX systems show both Driva Gold + Original kits with separator headers
+- **Resets**: Protocol card collapses when a different implant is selected
+- **Works in both**: "Suggest Me" and "Let Me Choose" workflows
 - **Testing**: 29/29 backend tests passed (iteration_57.json) + 4 regression tests
 
 ## Backlog
