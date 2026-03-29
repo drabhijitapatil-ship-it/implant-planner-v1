@@ -5064,6 +5064,56 @@ DRILLING_PROTOCOLS["Neodent|Titamax GM Acqua"] = {
 }
 DRILLING_PROTOCOLS["Neodent|Titamax GM NeoPorous"] = DRILLING_PROTOCOLS["Neodent|Titamax GM Acqua"]
 
+# ── ZimVie TSX Drilling Protocols ──────────────────────────────────
+DRILLING_PROTOCOLS["Zimmer|TSX"] = {
+    "system_name": "ZimVie TSX",
+    "protocol_family": "tsx",
+    "lengths": [8.0, 10.0, 11.5, 13.0, 16.0],
+    "diameters": {
+        "3.1": {
+            "soft": ["pilot", "2.3"],
+            "dense": ["pilot", "2.3", "2.4/2.8 step"],
+        },
+        "3.7": {
+            "soft": ["2.3", "2.8"],
+            "dense": ["2.3", "2.8", "3.4/2.8 step"],
+        },
+        "4.1": {
+            "soft": ["2.3", "2.8", "3.4/2.8"],
+            "dense": ["2.3", "2.8", "3.4/2.8", "3.8/3.4 step"],
+        },
+        "4.7": {
+            "soft": ["2.3", "2.8", "3.4/2.8", "3.8"],
+            "dense": ["2.3", "2.8", "3.4/2.8", "3.8", "4.4/3.8 step"],
+        },
+        "5.4": {
+            "soft": None,
+            "dense": ["2.3", "2.8", "3.4/2.8", "3.8", "4.4/3.8", "5.1/4.4 step"],
+        },
+        "6.0": {
+            "soft": ["2.3", "2.8", "3.4/2.8", "3.8", "4.4/3.8", "5.1"],
+            "dense": ["2.3", "2.8", "3.4/2.8", "3.8", "4.4/3.8", "5.1", "5.7/5.1 step"],
+        },
+    },
+    "gold_codes": {
+        "pilot": "0201G", "2.3": "TSV23G", "2.8": "TSV28G",
+        "3.4/2.8": "TSV34D28G", "3.4/2.8 step": "TSV34D28G",
+        "3.8": "TSV38G", "3.8/3.4 step": "TSV38D34G",
+        "4.4/3.8": "TSV44D38G", "4.4/3.8 step": "TSV44D38G",
+        "5.1": "TSV51G", "5.1/4.4 step": "TSV51D44G",
+        "5.7/5.1 step": "TSV57D51G", "2.4/2.8 step": "EZT28D24G",
+    },
+    "original_codes": {
+        "pilot": "0201DSN", "2.3": "SV2.3DN", "2.8": "SV2.8DN",
+        "3.4/2.8": "TSV3DN", "3.4/2.8 step": "TSV3DN",
+        "3.8": "SV3.8DN", "3.8/3.4 step": "TSV3.8DN",
+        "4.4/3.8": "TSV4DN", "4.4/3.8 step": "TSV4DN",
+        "5.1": "SV5.1DN", "5.1/4.4 step": "TSV5.1DN",
+        "5.7/5.1 step": "TSV6DN", "2.4/2.8 step": "ZOP28DN",
+    },
+}
+
+
 def _find_drill(drills, diameter):
     for d in drills:
         if d["diameter"] == diameter:
@@ -5152,6 +5202,60 @@ def _generate_neodent_protocol(proto, implant_diameter, implant_length, bone):
     # Final: Implant Placement
     _add_step("Implant Placement", implant_diameter, "—", irrigation=False, rpm="30")
     return steps
+
+
+def _generate_tsx_protocol(proto, implant_diameter, implant_length, bone, kit="gold"):
+    """Generate drilling protocol for ZimVie TSX system (Driva Gold or Original kit)."""
+    steps = []
+    step_num = 1
+    depth = str(implant_length)
+    is_dense = bone in ("D1", "D2")
+    bone_cat = "dense" if is_dense else "soft"
+
+    dia_key = str(implant_diameter)
+    dia_data = proto["diameters"].get(dia_key)
+    if not dia_data:
+        closest = min(proto["diameters"].keys(), key=lambda k: abs(float(k) - implant_diameter), default=None)
+        dia_data = proto["diameters"].get(closest, {})
+
+    sequence = dia_data.get(bone_cat) if dia_data else None
+    if sequence is None:
+        return [{"step": 1, "drill_type": "Warning", "code": "—",
+                 "diameter": implant_diameter, "depth": depth, "rpm": "—", "irrigation": False,
+                 "note": f"No {bone_cat} bone protocol for {dia_key}mm TSX. Use clinician judgment."}]
+
+    codes = proto["gold_codes"] if kit == "gold" else proto["original_codes"]
+    kit_label = "Driva Gold Series" if kit == "gold" else "Driva Drills (Original)"
+
+    for drill_desc in sequence:
+        code = codes.get(drill_desc, drill_desc)
+        is_pilot = "pilot" in drill_desc
+        is_step = "step" in drill_desc
+        if is_pilot:
+            drill_type = "Tapered Pilot Drill"
+            drill_dia = "2.1/1.6"
+            rpm = "800-1500"
+        elif is_step:
+            drill_type = "Step Drill"
+            drill_dia = drill_desc.replace(" step", "")
+            rpm = "600-800"
+        else:
+            drill_type = "Drill"
+            drill_dia = drill_desc
+            rpm = "600-800"
+
+        steps.append({
+            "step": step_num, "drill_type": f"{drill_type} ({kit_label})", "code": code,
+            "diameter": drill_dia, "depth": depth, "rpm": rpm, "irrigation": True,
+        })
+        step_num += 1
+
+    steps.append({
+        "step": step_num, "drill_type": "Implant Placement", "code": "—",
+        "diameter": implant_diameter, "depth": depth, "rpm": "≤30", "irrigation": False,
+    })
+    return steps
+
 
 def _generate_pro_protocol(proto, implant_diameter, implant_length, bone):
     steps = []
@@ -5332,6 +5436,8 @@ async def generate_drilling_protocol(
         steps = _generate_bredent_protocol(proto, diameter, length, bone)
     elif proto.get("protocol_family") == "osstem":
         steps = _generate_osstem_protocol(proto, diameter, length, bone)
+    elif proto.get("protocol_family") == "tsx":
+        steps = _generate_tsx_protocol(proto, diameter, length, bone, kit="gold")
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
@@ -5366,10 +5472,12 @@ async def generate_drilling_protocol(
             protocol_type = f"Ultra-Soft Bone Protocol ({os_label})"
         else:
             protocol_type = f"Hard Bone + Cortical Protocol ({os_label})" if bone == "D1" else (f"Under-Preparation Protocol ({os_label})" if bone in ("D3", "D4") else f"Standard Protocol ({os_label})")
+    elif family == "tsx":
+        protocol_type = f"Dense Bone Protocol (ZimVie TSX)" if bone in ("D1", "D2") else f"Soft Bone Protocol (ZimVie TSX)"
     else:
         protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
 
-    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else ("35-50 Ncm" if family == "mis_lance" else ("25-45 Ncm" if family in ("cowellmedi", "bredent_sky") else ("~40 Ncm" if family == "osstem" else "35-45 Ncm"))))
+    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else ("35-50 Ncm" if family == "mis_lance" else ("25-45 Ncm" if family in ("cowellmedi", "bredent_sky") else ("~40 Ncm" if family == "osstem" else ("≤90 Ncm" if family == "tsx" else "35-45 Ncm")))))
 
     # Add Ankylos series info to response
     ankylos_info = {}
@@ -5382,7 +5490,7 @@ async def generate_drilling_protocol(
             "implant_series": proto.get("implant_series", []),
         }
 
-    return {
+    response = {
         "system_name": proto["system_name"],
         "implant": {"brand": brand, "system": system, "diameter": diameter, "length": length},
         "bone_density": bone,
@@ -5397,6 +5505,13 @@ async def generate_drilling_protocol(
         ],
         **({"ankylos_info": ankylos_info} if ankylos_info else {}),
     }
+
+    # Add alternate kit for TSX (Driva Original)
+    if family == "tsx":
+        alt_steps = _generate_tsx_protocol(proto, diameter, length, bone, kit="original")
+        response["alt_protocol"] = {"name": "Driva Drills (Original)", "steps": alt_steps, "total_steps": len(alt_steps)}
+
+    return response
 
 @api_router.get("/drilling-protocols/available")
 async def get_available_protocols(current_user: dict = Depends(get_current_user)):
@@ -5461,6 +5576,8 @@ async def export_drilling_pdf(
         steps = _generate_bredent_protocol(proto, diameter, length, bone)
     elif proto.get("protocol_family") == "osstem":
         steps = _generate_osstem_protocol(proto, diameter, length, bone)
+    elif proto.get("protocol_family") == "tsx":
+        steps = _generate_tsx_protocol(proto, diameter, length, bone, kit="gold")
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
@@ -5495,6 +5612,8 @@ async def export_drilling_pdf(
             protocol_type = f"Ultra-Soft Bone Protocol ({os_label})"
         else:
             protocol_type = f"Hard Bone + Cortical Protocol ({os_label})" if bone == "D1" else (f"Under-Preparation Protocol ({os_label})" if bone in ("D3", "D4") else f"Standard Protocol ({os_label})")
+    elif family == "tsx":
+        protocol_type = f"Dense Bone Protocol (ZimVie TSX)" if bone in ("D1", "D2") else f"Soft Bone Protocol (ZimVie TSX)"
     else:
         protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
     buf = io.BytesIO()
