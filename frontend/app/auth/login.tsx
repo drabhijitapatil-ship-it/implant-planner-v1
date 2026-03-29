@@ -86,13 +86,15 @@ export default function LoginScreen() {
             {/* Glow Layer */}
             <View style={styles.glow} />
 
-            {/* Logo */}
-            <Animated.Image
-              source={require('../../assets/images/app-logo.png')}
-              style={[styles.logo, { transform: [{ scale: logoScale }], opacity: logoOpacity }]}
-              resizeMode="contain"
-              data-testid="hero-image"
-            />
+            {/* Logo Badge */}
+            <View style={styles.logoBadge}>
+              <Animated.Image
+                source={require('../../assets/images/app-logo.jpg')}
+                style={[styles.logo, { transform: [{ scale: logoScale }], opacity: logoOpacity }]}
+                resizeMode="contain"
+                data-testid="hero-image"
+              />
+            </View>
 
             {/* Branding */}
             <Text style={styles.appName} data-testid="app-title">Implanr</Text>
@@ -210,10 +212,24 @@ const styles = StyleSheet.create({
     opacity: 0.2,
     top: 60,
   },
+  logoBadge: {
+    width: 150,
+    height: 150,
+    borderRadius: 36,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
+  },
   logo: {
-    width: 200,
-    height: 160,
-    marginBottom: 14,
+    width: 110,
+    height: 110,
   },
   appName: {
     fontSize: 42,
