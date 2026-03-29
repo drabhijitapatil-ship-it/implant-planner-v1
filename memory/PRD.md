@@ -308,6 +308,16 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
   - D1/D2: No warning shown (ideal for short implants)
 - **Testing**: 22/22 backend tests passed (iteration_56.json)
 
+### ZimVie TSX Drilling Protocol (Mar 2026)
+- **Dual Kit Support**: Driva Gold Series (codes ending in G) + Driva Drills Original (codes ending in DN)
+- **Diameters**: 3.1, 3.7, 4.1, 4.7, 5.4, 6.0mm | **Lengths**: 8, 10, 11.5, 13, 16mm
+- **Dense (D1/D2)**: Full sequences with step drills as final step
+- **Soft (D3/D4)**: Reduced sequences without step drills; 5.4mm has NO soft protocol (warning shown)
+- **Backend**: `DRILLING_PROTOCOLS["Zimmer|TSX"]` + `_generate_tsx_protocol()` + `alt_protocol` in response
+- **Frontend**: Dual-kit rendering with kit separator headers (step=0 entries)
+- **Insertion Torque**: ≤90 Ncm
+- **Testing**: 29/29 backend tests passed (iteration_57.json) + 4 regression tests
+
 ## Backlog
 ### P1 - Upcoming
 - Implement drilling protocols for remaining systems (Nobel Biocare, Straumann, etc.) as user provides developer-ready codes
