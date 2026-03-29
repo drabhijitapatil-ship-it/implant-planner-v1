@@ -325,6 +325,12 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
 - **Works in both**: "Suggest Me" and "Let Me Choose" workflows
 - **Testing**: 29/29 backend tests passed (iteration_57.json) + 4 regression tests
 
+### Login Page Logo & Footer Update (Mar 29 2026)
+- Removed white background from logo (converted JPG to transparent PNG via Pillow)
+- Enlarged logo to 200x160 for better screen ratio
+- Removed "Powered by Bharati Vidyapeeth Dental College" footer
+- Fixed ngrok tunnel crash loop with retry-with-backoff in AsyncNgrok.js
+
 ### Login Page Logo Update (Mar 2026)
 - Replaced generic implant icon with uploaded "App Logo.jpg" (dental implant + calendar branding)
 - Logo is now the main brand element (120x120, animated with subtle scale breathing)

@@ -88,7 +88,7 @@ export default function LoginScreen() {
 
             {/* Logo */}
             <Animated.Image
-              source={require('../../assets/images/app-logo.jpg')}
+              source={require('../../assets/images/app-logo.png')}
               style={[styles.logo, { transform: [{ scale: logoScale }], opacity: logoOpacity }]}
               resizeMode="contain"
               data-testid="hero-image"
@@ -182,12 +182,8 @@ export default function LoginScreen() {
               </TouchableOpacity>
             </BlurView>
 
-            {/* Footer */}
-            <View style={styles.footer}>
-              <Text style={styles.footerPowered}>Powered by</Text>
-              <Text style={styles.footerCollege}>Bharati Vidyapeeth Dental College</Text>
-              <Text style={styles.footerDept}>Department of Prosthodontics</Text>
-            </View>
+
+
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -215,9 +211,9 @@ const styles = StyleSheet.create({
     top: 60,
   },
   logo: {
-    width: 120,
-    height: 120,
-    marginBottom: 10,
+    width: 200,
+    height: 160,
+    marginBottom: 14,
   },
   appName: {
     fontSize: 42,
@@ -321,23 +317,5 @@ const styles = StyleSheet.create({
   signupLink: {
     color: '#0A84FF',
     fontWeight: '700',
-  },
-  footer: {
-    marginTop: 28,
-    alignItems: 'center',
-  },
-  footerPowered: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.6)',
-    marginBottom: 2,
-  },
-  footerCollege: {
-    fontSize: 12,
-    color: '#fff',
-    fontWeight: '500',
-  },
-  footerDept: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.8)',
   },
 });
