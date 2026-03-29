@@ -5,66 +5,52 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   KeyboardAvoidingView,
   Platform,
   Alert,
   ActivityIndicator,
   Image,
-  Dimensions,
   Animated,
+  Pressable,
+  ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const IMAGE_SIZE = Math.min(SCREEN_WIDTH * 0.55, 220);
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [emailFocus, setEmailFocus] = useState(false);
+  const [passwordFocus, setPasswordFocus] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
 
   // Animations
-  const glowAnim = useRef(new Animated.Value(0.3)).current;
-  const scaleAnim = useRef(new Animated.Value(0.95)).current;
-  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const logoAnim = useRef(new Animated.Value(0)).current;
+  const buttonScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    // Soft glow pulse
     Animated.loop(
       Animated.sequence([
-        Animated.timing(glowAnim, { toValue: 0.7, duration: 2000, useNativeDriver: false }),
-        Animated.timing(glowAnim, { toValue: 0.3, duration: 2000, useNativeDriver: false }),
-      ])
-    ).start();
-
-    // Gentle scale breathing
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(scaleAnim, { toValue: 1.02, duration: 3000, useNativeDriver: true }),
-        Animated.timing(scaleAnim, { toValue: 0.98, duration: 3000, useNativeDriver: true }),
-      ])
-    ).start();
-
-    // Slow subtle rotation
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(rotateAnim, { toValue: 1, duration: 6000, useNativeDriver: true }),
-        Animated.timing(rotateAnim, { toValue: 0, duration: 6000, useNativeDriver: true }),
+        Animated.timing(logoAnim, { toValue: 1, duration: 1800, useNativeDriver: true }),
+        Animated.timing(logoAnim, { toValue: 0, duration: 1800, useNativeDriver: true }),
       ])
     ).start();
   }, []);
 
-  const rotateInterpolate = rotateAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['-2deg', '2deg'],
-  });
+  const logoScale = logoAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] });
+  const logoOpacity = logoAnim.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] });
+
+  const handlePressIn = () => {
+    Animated.spring(buttonScale, { toValue: 0.96, useNativeDriver: true }).start();
+  };
+  const handlePressOut = () => {
+    Animated.spring(buttonScale, { toValue: 1, friction: 3, useNativeDriver: true }).start();
+  };
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -86,126 +72,121 @@ export default function LoginScreen() {
   };
 
   return (
-    <LinearGradient colors={['#E3F2FD', '#F5FAFF', '#FFFFFF']} style={styles.gradient}>
-      <SafeAreaView style={styles.container}>
+    <LinearGradient colors={['#0A84FF', '#3BA4FF', '#A7D8FF']} style={styles.container}>
+      <SafeAreaView style={{ flex: 1 }}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.keyboardView}
+          style={{ flex: 1 }}
         >
           <ScrollView
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            <View style={styles.content}>
-              {/* Hero Image with Animations */}
-              <View style={styles.imageContainer} data-testid="hero-image">
-                <Animated.View style={[styles.glowOuter, { opacity: glowAnim }]} />
-                <Animated.View
-                  style={[
-                    styles.imageWrapper,
-                    { transform: [{ scale: scaleAnim }, { rotate: rotateInterpolate }] },
-                  ]}
-                >
-                  <Image
-                    source={require('../../assets/images/implant-hero.png')}
-                    style={styles.heroImage}
-                    resizeMode="contain"
-                  />
-                </Animated.View>
-              </View>
+            {/* Glow Layer */}
+            <View style={styles.glow} />
 
-              {/* App Title */}
-              <Text style={styles.title} data-testid="app-title">My Implant Planner</Text>
-              <Text style={styles.subtitle}>Digital Implant Planning Assistant</Text>
+            {/* Logo */}
+            <Animated.Image
+              source={require('../../assets/images/implant-icon.png')}
+              style={[styles.logo, { transform: [{ scale: logoScale }], opacity: logoOpacity }]}
+              resizeMode="contain"
+              data-testid="hero-image"
+            />
 
-              {/* Tagline */}
-              <Text style={styles.tagline}>Plan  &bull;  Visualize  &bull;  Restore</Text>
+            {/* Branding */}
+            <Text style={styles.appName} data-testid="app-title">Implanr</Text>
+            <Text style={styles.tagline}>Implant Planning Assistant</Text>
 
-              {/* Login Form */}
-              <View style={styles.form}>
-                <View style={styles.inputContainer}>
-                  <View style={styles.inputIconBox}>
-                    <Ionicons name="mail-outline" size={20} color="#1E88E5" />
-                  </View>
-                  <TextInput
-                    style={styles.input}
-                    value={email}
-                    onChangeText={setEmail}
-                    placeholder="Email / Username"
-                    placeholderTextColor="#90A4AE"
-                    keyboardType="default"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    data-testid="login-email-input"
-                  />
-                </View>
+            <View style={styles.features}>
+              <Text style={styles.feature}>Plan</Text>
+              <Text style={styles.featureDot}>&bull;</Text>
+              <Text style={styles.feature}>Visualize</Text>
+              <Text style={styles.featureDot}>&bull;</Text>
+              <Text style={styles.feature}>Restore</Text>
+            </View>
 
-                <View style={styles.inputContainer}>
-                  <View style={styles.inputIconBox}>
-                    <Ionicons name="lock-closed-outline" size={20} color="#1E88E5" />
-                  </View>
-                  <TextInput
-                    style={styles.input}
-                    value={password}
-                    onChangeText={setPassword}
-                    placeholder="Password"
-                    placeholderTextColor="#90A4AE"
-                    secureTextEntry
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    autoComplete="off"
-                    textContentType="password"
-                    data-testid="login-password-input"
-                  />
-                </View>
+            {/* Glass Card */}
+            <BlurView intensity={60} tint="light" style={styles.card}>
+              {/* Email */}
+              <TextInput
+                placeholder="Email / Username"
+                placeholderTextColor="#888"
+                value={email}
+                onChangeText={setEmail}
+                style={[styles.input, emailFocus && styles.inputActive]}
+                onFocus={() => setEmailFocus(true)}
+                onBlur={() => setEmailFocus(false)}
+                keyboardType="default"
+                autoCapitalize="none"
+                autoCorrect={false}
+                data-testid="login-email-input"
+              />
 
-                <TouchableOpacity
-                  style={styles.forgotBtn}
-                  data-testid="forgot-password-link"
-                >
-                  <Text style={styles.forgotText}>Forgot Password?</Text>
-                </TouchableOpacity>
+              {/* Password */}
+              <TextInput
+                placeholder="Password"
+                secureTextEntry
+                placeholderTextColor="#888"
+                value={password}
+                onChangeText={setPassword}
+                style={[styles.input, passwordFocus && styles.inputActive]}
+                onFocus={() => setPasswordFocus(true)}
+                onBlur={() => setPasswordFocus(false)}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="off"
+                textContentType="password"
+                data-testid="login-password-input"
+              />
 
-                <TouchableOpacity
-                  style={[styles.loginBtnWrap, loading && styles.buttonDisabled]}
+              {/* Forgot Password */}
+              <TouchableOpacity style={styles.forgotBtn} data-testid="forgot-password-link">
+                <Text style={styles.forgotText}>Forgot Password?</Text>
+              </TouchableOpacity>
+
+              {/* Login Button */}
+              <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
+                <Pressable
+                  onPressIn={handlePressIn}
+                  onPressOut={handlePressOut}
                   onPress={handleLogin}
                   disabled={loading}
-                  activeOpacity={0.85}
+                  style={[styles.loginButton, loading && styles.buttonDisabled]}
                   data-testid="login-submit-btn"
                 >
-                  <LinearGradient
-                    colors={['#1E88E5', '#42A5F5']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={styles.loginBtn}
-                  >
-                    {loading ? (
-                      <ActivityIndicator color="#FFF" />
-                    ) : (
-                      <Text style={styles.loginBtnText}>LOGIN</Text>
-                    )}
-                  </LinearGradient>
-                </TouchableOpacity>
+                  {loading ? (
+                    <ActivityIndicator color="#FFF" />
+                  ) : (
+                    <Text style={styles.loginText}>Login</Text>
+                  )}
+                </Pressable>
+              </Animated.View>
 
-                <TouchableOpacity
-                  style={styles.createAccountBtn}
-                  onPress={() => router.push('/auth/register')}
-                  disabled={loading}
-                  data-testid="register-link"
-                >
-                  <Text style={styles.createAccountText}>
-                    Don't have an account? <Text style={styles.createAccountLink}>Create Account</Text>
-                  </Text>
-                </TouchableOpacity>
+              {/* Divider */}
+              <View style={styles.dividerRow}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>OR</Text>
+                <View style={styles.dividerLine} />
               </View>
 
-              {/* Footer */}
-              <View style={styles.footer}>
-                <Text style={styles.footerPowered}>Powered by</Text>
-                <Text style={styles.footerCollege}>Bharati Vidyapeeth Dental College</Text>
-                <Text style={styles.footerDept}>Department of Prosthodontics</Text>
-              </View>
+              {/* Sign Up */}
+              <TouchableOpacity
+                onPress={() => router.push('/auth/register')}
+                disabled={loading}
+                data-testid="register-link"
+              >
+                <Text style={styles.signup}>
+                  Don't have an account? <Text style={styles.signupLink}>Sign Up</Text>
+                </Text>
+              </TouchableOpacity>
+            </BlurView>
+
+            {/* Footer */}
+            <View style={styles.footer}>
+              <Text style={styles.footerPowered}>Powered by</Text>
+              <Text style={styles.footerCollege}>Bharati Vidyapeeth Dental College</Text>
+              <Text style={styles.footerDept}>Department of Prosthodontics</Text>
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -215,174 +196,149 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  gradient: {
-    flex: 1,
-  },
   container: {
-    flex: 1,
-  },
-  keyboardView: {
     flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
-  },
-  content: {
-    paddingHorizontal: 28,
-    paddingVertical: 16,
-  },
-  // --- Image ---
-  imageContainer: {
     alignItems: 'center',
-    marginBottom: 16,
-    position: 'relative',
+    justifyContent: 'center',
+    padding: 24,
   },
-  glowOuter: {
+  glow: {
     position: 'absolute',
-    width: IMAGE_SIZE * 1.1,
-    height: IMAGE_SIZE * 1.1,
-    borderRadius: IMAGE_SIZE * 0.55,
-    backgroundColor: '#42A5F5',
-    top: -(IMAGE_SIZE * 0.05),
+    width: 300,
+    height: 300,
+    backgroundColor: '#5AC8FA',
+    borderRadius: 150,
+    opacity: 0.2,
+    top: 60,
   },
-  imageWrapper: {
-    width: IMAGE_SIZE,
-    height: IMAGE_SIZE,
-    backgroundColor: '#FFFFFF',
-    borderRadius: IMAGE_SIZE / 2,
-    padding: 10,
-    shadowColor: '#1E88E5',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
+  logo: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    marginBottom: 12,
   },
-  heroImage: {
-    width: '95%',
-    height: '95%',
-  },
-  // --- Title / Subtitle ---
-  title: {
-    fontSize: 30,
-    fontWeight: '700',
-    color: '#1E88E5',
+  appName: {
+    fontSize: 42,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: 1,
     textAlign: 'center',
-    marginBottom: 4,
-    letterSpacing: 0.5,
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#42A5F5',
-    textAlign: 'center',
-    marginBottom: 8,
-    fontWeight: '400',
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
   },
   tagline: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#546E7A',
+    fontSize: 16,
+    color: '#EAF6FF',
+    marginBottom: 8,
     textAlign: 'center',
-    marginBottom: 24,
-    letterSpacing: 1,
   },
-  // --- Form ---
-  form: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 22,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  inputContainer: {
+  features: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#D0D7DE',
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    marginBottom: 14,
+    gap: 8,
+    marginBottom: 24,
+  },
+  feature: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  featureDot: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 14,
+  },
+  card: {
+    width: '100%',
+    borderRadius: 25,
+    padding: 22,
     overflow: 'hidden',
   },
-  inputIconBox: {
-    width: 46,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   input: {
-    flex: 1,
-    paddingVertical: 14,
-    paddingRight: 14,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    paddingHorizontal: 16,
+    marginBottom: 14,
     fontSize: 15,
     color: '#263238',
   },
+  inputActive: {
+    borderWidth: 1.5,
+    borderColor: '#0A84FF',
+    backgroundColor: '#fff',
+  },
   forgotBtn: {
     alignSelf: 'flex-end',
-    marginBottom: 18,
+    marginBottom: 16,
   },
   forgotText: {
     fontSize: 13,
-    color: '#1E88E5',
+    color: '#0A84FF',
     fontWeight: '500',
   },
-  // --- Login Button ---
-  loginBtnWrap: {
+  loginButton: {
+    height: 52,
     borderRadius: 14,
-    overflow: 'hidden',
-  },
-  loginBtn: {
-    height: 50,
-    borderRadius: 14,
+    backgroundColor: '#0A84FF',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#0A84FF',
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
   },
   buttonDisabled: {
     opacity: 0.6,
   },
-  loginBtnText: {
-    color: '#FFFFFF',
+  loginText: {
+    color: '#fff',
     fontSize: 17,
     fontWeight: '700',
-    letterSpacing: 1.5,
+    letterSpacing: 0.5,
   },
-  // --- Create Account ---
-  createAccountBtn: {
-    marginTop: 16,
+  dividerRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    marginVertical: 18,
+    gap: 10,
   },
-  createAccountText: {
-    fontSize: 13,
-    color: '#546E7A',
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(0,0,0,0.12)',
   },
-  createAccountLink: {
-    color: '#1E88E5',
+  dividerText: {
+    color: '#777',
+    fontSize: 12,
     fontWeight: '600',
   },
-  // --- Footer ---
+  signup: {
+    textAlign: 'center',
+    color: '#555',
+    fontSize: 14,
+  },
+  signupLink: {
+    color: '#0A84FF',
+    fontWeight: '700',
+  },
   footer: {
     marginTop: 28,
     alignItems: 'center',
   },
   footerPowered: {
     fontSize: 11,
-    color: '#90A4AE',
+    color: 'rgba(255,255,255,0.6)',
     marginBottom: 2,
   },
   footerCollege: {
     fontSize: 12,
-    color: '#546E7A',
+    color: '#fff',
     fontWeight: '500',
   },
   footerDept: {
     fontSize: 11,
-    color: '#78909C',
+    color: 'rgba(255,255,255,0.8)',
   },
 });
