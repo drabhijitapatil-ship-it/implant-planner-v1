@@ -293,9 +293,20 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
 - **Insertion torque**: 25-45 Ncm
 - Backend generator + frontend local protocol + PDF export all implemented
 
+### Restricted Bone Height Logic (Mar 2026)
+- **Trigger**: bone_height ≤ 10mm OR "Restricted Bone Height" procedure selected
+- **Rule 1**: Bone type (D1-D4) filtering is BYPASSED
+- **Rule 2**: Bone width (diameter) filtering still applies
+- **Priority 1 Group**: BioHorizons Tapered Short, BioHorizons Tapered Short Conical RBT, Bredent Copa Sky, Dentsply Sirona Ankylos C/X — filtered by diameter only (no length/bone-type constraint)
+- **Priority 2 Group**: All other systems with length ≤ 8mm — filtered by diameter, sorted by shortest available length then alphabetically. Excludes P1 systems.
+- **Backend**: `suggest_auto` endpoint returns `restricted_bone_height: true`, systems tagged with `priority: 1|2` and `priority_label`
+- **Frontend "Suggest Me"**: Shows restricted height banner, priority-based header, P1/P2 badges on results
+- **Frontend "Let Me Choose"**: Shows restricted height warning when boneHeight ≤ 10, sorts P1 systems to top of dropdown with "Short Implant" badge
+- **Testing**: 22/22 backend tests passed (iteration_56.json)
+
 ## Backlog
 ### P1 - Upcoming
-- Implement drilling protocols for remaining systems (Nobel Biocare, Osstem, Straumann, Bredent, etc.) as user provides developer-ready codes
+- Implement drilling protocols for remaining systems (Nobel Biocare, Straumann, etc.) as user provides developer-ready codes
 
 ### P2 - Refactoring
 - Backend refactoring (decompose server.py into routers/models/services)
