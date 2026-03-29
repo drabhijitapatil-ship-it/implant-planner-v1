@@ -3795,7 +3795,7 @@ PROCEDURE_BONE_COMPATIBILITY = {
         "allowedBone": ["D3", "D4"],
     },
     "Restricted Bone Height": {
-        "allowedBone": ["D3", "D4"],
+        "allowedBone": ["D1", "D2", "D3", "D4"],
     },
 }
 
@@ -3851,11 +3851,112 @@ async def suggest_auto(
     else:
         diam_min, diam_max = 4.5, 6.0
 
-    # Bone Height → Length range
+    # ─── Restricted Bone Height Logic (≤ 10mm) ──────────────────
+    is_restricted_height = bone_height <= 10 or "Restricted Bone Height" in procedures
+    if is_restricted_height:
+        PRIORITY1_KEYS = {
+            "BioHorizons|Tapered Short",
+            "BioHorizons|Tapered Short Conical RBT",
+            "Bredent|Copa Sky",
+            "Dentsply Sirona|Ankylos C/X",
+        }
+        # Priority 1: Query P1 systems filtered by diameter only (no length/bone_type filter)
+        p1_conditions = [{"brand": k.split("|")[0], "system": k.split("|")[1]} for k in PRIORITY1_KEYS]
+        p1_query = {"$or": p1_conditions, "diameter": {"$gte": diam_min, "$lte": diam_max}}
+        p1_implants = await db.implant_library.find(p1_query, {"_id": 0}).sort(
+            [("brand", 1), ("system", 1), ("diameter", 1), ("length", 1)]
+        ).to_list(500)
+        # Apply tooth restrictions to P1
+        p1_filtered = []
+        for imp in p1_implants:
+            key = f"{imp['brand']}|{imp['system']}"
+            ind = IMPLANT_INDICATIONS.get(key, {})
+            restricted = ind.get("restricted_teeth")
+            if restricted and tooth and tooth not in restricted:
+                continue
+            p1_filtered.append(imp)
+        # Group P1 by system
+        p1_systems = {}
+        for imp in p1_filtered:
+            key = f"{imp['brand']}|{imp['system']}"
+            if key not in p1_systems:
+                ind = IMPLANT_INDICATIONS.get(key, {})
+                p1_systems[key] = {
+                    "brand": imp["brand"], "system": imp["system"],
+                    "indication": ind.get("indication", ""),
+                    "priority": 1, "priority_label": "Recommended for Restricted Bone Height",
+                    "procedure_match": True, "implants": [],
+                }
+            p1_systems[key]["implants"].append({"diameter": imp["diameter"], "length": imp["length"]})
+        # Priority 2: All other systems with length ≤ 8mm, filtered by diameter
+        p2_query = {"diameter": {"$gte": diam_min, "$lte": diam_max}, "length": {"$lte": 8.0}}
+        p2_all = await db.implant_library.find(p2_query, {"_id": 0}).sort(
+            [("length", 1), ("brand", 1), ("system", 1), ("diameter", 1)]
+        ).to_list(500)
+        # Exclude P1, apply tooth restrictions, require indications
+        p2_filtered = []
+        for imp in p2_all:
+            key = f"{imp['brand']}|{imp['system']}"
+            if key in PRIORITY1_KEYS:
+                continue
+            ind = IMPLANT_INDICATIONS.get(key, {})
+            if not ind.get("indication"):
+                continue
+            restricted = ind.get("restricted_teeth")
+            if restricted and tooth and tooth not in restricted:
+                continue
+            p2_filtered.append(imp)
+        # Group P2 by system with min_length tracking
+        p2_systems = {}
+        for imp in p2_filtered:
+            key = f"{imp['brand']}|{imp['system']}"
+            if key not in p2_systems:
+                ind = IMPLANT_INDICATIONS.get(key, {})
+                p2_systems[key] = {
+                    "brand": imp["brand"], "system": imp["system"],
+                    "indication": ind.get("indication", ""),
+                    "priority": 2, "priority_label": "Short Implant Option",
+                    "procedure_match": False, "implants": [],
+                    "_min_length": imp["length"],
+                }
+            p2_systems[key]["implants"].append({"diameter": imp["diameter"], "length": imp["length"]})
+            if imp["length"] < p2_systems[key]["_min_length"]:
+                p2_systems[key]["_min_length"] = imp["length"]
+        # Sort: P1 alphabetically, P2 by shortest length then alphabetically
+        p1_sorted = sorted(p1_systems.values(), key=lambda s: (s["brand"], s["system"]))
+        p2_sorted = sorted(p2_systems.values(), key=lambda s: (s["_min_length"], s["brand"], s["system"]))
+        for s in p2_sorted:
+            del s["_min_length"]
+        recommended_systems = p1_sorted + p2_sorted
+        # Build tooth recommendation
+        tooth_data = TOOTH_RECOMMENDATIONS.get(tooth) if tooth else None
+        tooth_rec = None
+        if tooth_data:
+            tooth_rec = {
+                "tooth": tooth, "region": tooth_data["region"],
+                "recommended_diameter": f"{tooth_data['diameter'][0]}–{tooth_data['diameter'][1]} mm",
+                "recommended_length": f"{tooth_data['length'][0]}–{tooth_data['length'][1]} mm",
+            }
+        return {
+            "recommended_systems": recommended_systems,
+            "restricted_bone_height": True,
+            "clinical_guidance": {
+                "bone_width": bone_width, "bone_height": bone_height,
+                "bone_type": bone_type, "procedures": procedures,
+                "recommended_diameter_range": f"{diam_min}–{diam_max} mm",
+                "recommended_length_range": "Short implants for restricted height",
+                "length_category": "Restricted bone height",
+            },
+            "tooth_recommendation": tooth_rec,
+            "validation_warnings": warnings,
+            "valid_procedures": valid_procedures,
+        }
+
+    # ─── Normal Bone Height → Length range ──────────────────────
     if bone_height >= 13:
         len_min, len_max = 11.5, 15.0
         length_label = "Long implant"
-    elif bone_height >= 10:
+    elif bone_height > 10:
         len_min, len_max = 10.0, 13.0
         length_label = "Standard implant"
     elif bone_height >= 8:
@@ -3891,7 +3992,6 @@ async def suggest_auto(
         restricted = ind.get("restricted_teeth")
         if restricted and tooth and tooth not in restricted:
             continue
-        # Check indicated_teeth (soft recommendation, not a hard filter)
         # Check bone type match
         indicated_bone = ind.get("indicated_bone_types", [])
         if indicated_bone and bone_type and bone_type not in indicated_bone:

@@ -746,6 +746,8 @@ function ModalContent(props: any) {
 
   const BONE_TYPES = ['D1','D2','D3','D4'];
   const PROCEDURES = ['Conventional Implant Placement','Conventional Implant Placement with Bone Graft','Immediate Implant Placement','Immediate Implant Placement with Bone Graft','Sinus Lift','Restricted Bone Height'];
+  const RESTRICTED_HEIGHT_P1 = ['BioHorizons|Tapered Short', 'BioHorizons|Tapered Short Conical RBT', 'Bredent|Copa Sky', 'Dentsply Sirona|Ankylos C/X'];
+  const isRestrictedHeight = !isNaN(parseFloat(boneHeight)) && parseFloat(boneHeight) > 0 && parseFloat(boneHeight) <= 10;
 
   return (
     <View style={[ms.container, { paddingTop: Math.max(insets.top, 20) }]}>
@@ -876,6 +878,12 @@ function ModalContent(props: any) {
                   <TextInput style={ms.input} value={boneWidth} onChangeText={setBoneWidth} keyboardType="decimal-pad" placeholder="e.g. 7" data-testid="modal-bone-width" />
                   <Text style={ms.inputLabel}>Bone Height (mm)</Text>
                   <TextInput style={ms.input} value={boneHeight} onChangeText={setBoneHeight} keyboardType="decimal-pad" placeholder="e.g. 12" data-testid="modal-bone-height" />
+                  {isRestrictedHeight && (
+                    <View style={ms.restrictedBanner} data-testid="choose-restricted-warning">
+                      <Ionicons name="alert-circle" size={16} color="#E65100" />
+                      <Text style={ms.restrictedBannerText}>Restricted bone height detected. Recommended systems: BioHorizons Tapered Short, Tapered Short Conical RBT, Bredent Copa Sky, Ankylos C/X.</Text>
+                    </View>
+                  )}
                 </>
               ) : (
                 <>
@@ -938,14 +946,24 @@ function ModalContent(props: any) {
                   : (result.recommended_systems || []).flatMap((s: any) => (s.implants || []).map((imp: any) => ({
                       ...imp, brand: s.brand, system: s.system,
                       indication: s.indication, procedure_match: s.procedure_match,
+                      priority: s.priority, priority_label: s.priority_label,
                     })));
                 if (implants.length === 0) return <Text style={ms.noResults}>No implants found for these measurements.</Text>;
+                const isRestrictedResult = result.restricted_bone_height === true;
                 const topMatches = implants.slice(0, 3);
                 const remaining = implants.slice(3);
                 const displayed = showAllResults ? implants : topMatches;
                 return (
                   <>
-                    <Text style={ms.matchHeader}>Top {Math.min(3, implants.length)} Best Matches</Text>
+                    {isRestrictedResult && (
+                      <View style={ms.restrictedBanner} data-testid="restricted-height-banner">
+                        <Ionicons name="alert-circle" size={18} color="#E65100" />
+                        <Text style={ms.restrictedBannerText}>Restricted Bone Height ({result.clinical_guidance?.bone_height}mm): Showing priority-based recommendations. Bone type filtering bypassed.</Text>
+                      </View>
+                    )}
+                    <Text style={ms.matchHeader}>
+                      {isRestrictedResult ? `Priority-Based Recommendations (${implants.length})` : `Top ${Math.min(3, implants.length)} Best Matches`}
+                    </Text>
                     {displayed.map((imp: any, i: number) => {
                       const isSelected = selectedImplant?.diameter === imp.diameter && selectedImplant?.length === imp.length && selectedImplant?.brand === imp.brand;
                       return (
@@ -961,9 +979,11 @@ function ModalContent(props: any) {
                             <Text style={ms.implantSpec}>D: {imp.diameter}mm | L: {imp.length}mm</Text>
                             {imp.indication ? <Text style={ms.ddItemIndication}>{imp.indication}</Text> : null}
                           </View>
-                          {i === 0 && <View style={ms.bestBadge}><Text style={ms.bestBadgeText}>Best</Text></View>}
-                          {i === 1 && <View style={[ms.bestBadge, { backgroundColor: '#E3F2FD' }]}><Text style={[ms.bestBadgeText, { color: '#1565C0' }]}>2nd</Text></View>}
-                          {i === 2 && <View style={[ms.bestBadge, { backgroundColor: '#FFF3E0' }]}><Text style={[ms.bestBadgeText, { color: '#E65100' }]}>3rd</Text></View>}
+                          {imp.priority === 1 && <View style={[ms.bestBadge, { backgroundColor: '#E8F5E9' }]}><Text style={[ms.bestBadgeText, { color: '#2E7D32' }]}>P1</Text></View>}
+                          {imp.priority === 2 && <View style={[ms.bestBadge, { backgroundColor: '#FFF3E0' }]}><Text style={[ms.bestBadgeText, { color: '#E65100' }]}>P2</Text></View>}
+                          {!imp.priority && i === 0 && <View style={ms.bestBadge}><Text style={ms.bestBadgeText}>Best</Text></View>}
+                          {!imp.priority && i === 1 && <View style={[ms.bestBadge, { backgroundColor: '#E3F2FD' }]}><Text style={[ms.bestBadgeText, { color: '#1565C0' }]}>2nd</Text></View>}
+                          {!imp.priority && i === 2 && <View style={[ms.bestBadge, { backgroundColor: '#FFF3E0' }]}><Text style={[ms.bestBadgeText, { color: '#E65100' }]}>3rd</Text></View>}
                         </TouchableOpacity>
                       );
                     })}
@@ -1096,7 +1116,12 @@ function ModalContent(props: any) {
                   const q = systemSearch.toLowerCase();
                   return s.brand.toLowerCase().includes(q) || s.system.toLowerCase().includes(q);
                 }).sort((a, b) => {
-                  // Sort: procedure-matched first, then alphabetically
+                  // When restricted height, sort P1 systems to top
+                  if (isRestrictedHeight) {
+                    const aP1 = RESTRICTED_HEIGHT_P1.includes(`${a.brand}|${a.system}`) ? 0 : 1;
+                    const bP1 = RESTRICTED_HEIGHT_P1.includes(`${b.brand}|${b.system}`) ? 0 : 1;
+                    if (aP1 !== bP1) return aP1 - bP1;
+                  }
                   const aMatch = procedureType && a.indicated_procedures?.includes(procedureType) ? 0 : 1;
                   const bMatch = procedureType && b.indicated_procedures?.includes(procedureType) ? 0 : 1;
                   if (aMatch !== bMatch) return aMatch - bMatch;
@@ -1119,6 +1144,9 @@ function ModalContent(props: any) {
                           <Text style={[ms.ddItemTitle, isRestricted && { color: '#999' }]}>{item.brand} - {item.system}</Text>
                           {isProcMatch && <View style={ms.matchBadge}><Text style={ms.matchBadgeText}>Indicated</Text></View>}
                           {isToothIndicated && <View style={ms.toothBadge}><Text style={ms.toothBadgeText}>Tooth {position}</Text></View>}
+                          {isRestrictedHeight && RESTRICTED_HEIGHT_P1.includes(`${item.brand}|${item.system}`) && (
+                            <View style={ms.restrictedP1Badge}><Text style={ms.restrictedP1BadgeText}>Short Implant</Text></View>
+                          )}
                         </View>
                         <Text style={ms.ddItemSub}>{item.count} sizes | D: {item.diameters[0]}-{item.diameters[item.diameters.length-1]}mm</Text>
                         {item.indication ? (
@@ -1321,6 +1349,10 @@ const ms = StyleSheet.create({
   toothBadgeText: { fontSize: 10, fontWeight: '700', color: '#E65100' },
   indicationBanner: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#E3F2FD', borderRadius: 8, padding: 10, marginTop: 8, marginBottom: 4, gap: 8 },
   indicationBannerText: { flex: 1, fontSize: 13, color: '#1565C0', fontWeight: '500', lineHeight: 18 },
+  restrictedBanner: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#FFF3E0', borderRadius: 10, padding: 12, marginBottom: 12, gap: 8, borderWidth: 1, borderColor: '#FFB74D' },
+  restrictedBannerText: { flex: 1, fontSize: 12, color: '#E65100', fontWeight: '500', lineHeight: 17 },
+  restrictedP1Badge: { backgroundColor: '#FFF3E0', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: '#FFB74D' },
+  restrictedP1BadgeText: { fontSize: 10, fontWeight: '700', color: '#E65100' },
   // Drilling Protocol styles
   protocolBox: { backgroundColor: '#F5F9FE', borderRadius: 12, borderWidth: 1, borderColor: '#BBDEFB', padding: 14, marginBottom: 12, marginTop: 4 },
   protocolHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
