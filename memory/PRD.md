@@ -302,6 +302,10 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
 - **Backend**: `suggest_auto` endpoint returns `restricted_bone_height: true`, systems tagged with `priority: 1|2` and `priority_label`
 - **Frontend "Suggest Me"**: Shows restricted height banner, priority-based header, P1/P2 badges on results
 - **Frontend "Let Me Choose"**: Shows restricted height warning when boneHeight ≤ 10, sorts P1 systems to top of dropdown with "Short Implant" badge
+- **D3/D4 Caution Warning**: When bone_type is D3 or D4 in restricted height mode, a red warning is shown: "Short implants are ideal and preferred for D1 and D2-type bone only. Make a decision cautiously." Plus tooth-specific augmentation advice:
+  - Maxillary posterior (14-17, 24-27): "Advised to increase bone length by Indirect or Direct Sinus Lift."
+  - Mandibular posterior (34-37, 44-47): "Advised to increase bone length by Vertical Bone Augmentation."
+  - D1/D2: No warning shown (ideal for short implants)
 - **Testing**: 22/22 backend tests passed (iteration_56.json)
 
 ## Backlog
