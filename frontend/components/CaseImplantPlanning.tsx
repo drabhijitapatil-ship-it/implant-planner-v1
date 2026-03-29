@@ -804,6 +804,7 @@ function ModalContent(props: any) {
   const PROCEDURES = ['Conventional Implant Placement','Conventional Implant Placement with Bone Graft','Immediate Implant Placement','Immediate Implant Placement with Bone Graft','Sinus Lift','Restricted Bone Height'];
   const RESTRICTED_HEIGHT_P1 = ['BioHorizons|Tapered Short', 'BioHorizons|Tapered Short Conical RBT', 'Bredent|Copa Sky', 'Dentsply Sirona|Ankylos C/X'];
   const isRestrictedHeight = !isNaN(parseFloat(boneHeight)) && parseFloat(boneHeight) > 0 && parseFloat(boneHeight) <= 10;
+  const [showProtocol, setShowProtocol] = React.useState(false);
 
   return (
     <View style={[ms.container, { paddingTop: Math.max(insets.top, 20) }]}>
@@ -1036,7 +1037,7 @@ function ModalContent(props: any) {
                       const isSelected = selectedImplant?.diameter === imp.diameter && selectedImplant?.length === imp.length && selectedImplant?.brand === imp.brand;
                       return (
                         <TouchableOpacity key={i} style={[ms.implantOption, isSelected && ms.implantOptionSelected]}
-                          onPress={() => setSelectedImplant({ diameter: imp.diameter, length: imp.length, brand: imp.brand || selectedSystem?.brand || '', system: imp.system || selectedSystem?.system || '' })}
+                          onPress={() => { setSelectedImplant({ diameter: imp.diameter, length: imp.length, brand: imp.brand || selectedSystem?.brand || '', system: imp.system || selectedSystem?.system || '' }); setShowProtocol(false); }}
                           data-testid={`result-implant-${i}`}>
                           <Ionicons name={isSelected ? 'radio-button-on' : 'radio-button-off'} size={22} color={isSelected ? '#1E88E5' : '#CCC'} />
                           <View style={{ flex: 1 }}>
@@ -1070,6 +1071,49 @@ function ModalContent(props: any) {
                   </>
                 );
               })()}
+
+              {/* Drilling Protocol Preview (when implant selected) */}
+              {selectedImplant && (
+                <View style={ms.protocolPreviewCard} data-testid="drilling-protocol-preview">
+                  <TouchableOpacity
+                    style={ms.protocolPreviewHeader}
+                    onPress={() => setShowProtocol(!showProtocol)}
+                    data-testid="toggle-drilling-protocol"
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Ionicons name="construct" size={20} color="#1565C0" />
+                      <Text style={ms.protocolPreviewTitle}>Drilling Protocol</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Text style={ms.protocolPreviewSub}>{selectedImplant.brand} {selectedImplant.system} — {selectedImplant.diameter}x{selectedImplant.length}mm</Text>
+                      <Ionicons name={showProtocol ? 'chevron-up' : 'chevron-down'} size={20} color="#1565C0" />
+                    </View>
+                  </TouchableOpacity>
+                  {showProtocol && (
+                    <View style={ms.protocolPreviewBody}>
+                      <Text style={ms.protocolPreviewBone}>Bone Type: {boneType || 'D2'} ({(boneType === 'D1' || boneType === 'D2') ? 'Dense' : 'Soft'} bone)</Text>
+                      {generateDrillingProtocol(selectedImplant.brand, selectedImplant.system, selectedImplant.diameter, boneType || 'D2', selectedImplant.length).map((p, idx) => (
+                        p.step === 0 ? (
+                          <View key={`kit-${idx}`} style={ms.kitSeparator}>
+                            <Text style={ms.kitSeparatorText}>{p.drill}</Text>
+                          </View>
+                        ) : (
+                          <View key={`step-${idx}`} style={ms.protocolStep}>
+                            <View style={ms.protocolStepNum}>
+                              <Text style={ms.protocolStepNumText}>{p.step}</Text>
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={ms.protocolDrill}>{p.drill}</Text>
+                              <Text style={ms.protocolDetail}>{p.speed} | Depth: {p.depth}mm</Text>
+                              {p.note ? <Text style={ms.protocolNote}>{p.note}</Text> : null}
+                            </View>
+                          </View>
+                        )
+                      ))}
+                    </View>
+                  )}
+                </View>
+              )}
 
               <View style={ms.navRow}>
                 <TouchableOpacity style={ms.backBtn} onPress={() => setStep(2)}>
@@ -1439,4 +1483,10 @@ const ms = StyleSheet.create({
   protocolNote: { fontSize: 11, color: '#888', fontStyle: 'italic', marginTop: 2 },
   kitSeparator: { backgroundColor: '#E3F2FD', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, marginTop: 10, marginBottom: 6, borderLeftWidth: 3, borderLeftColor: '#1565C0' },
   kitSeparatorText: { fontSize: 13, fontWeight: '700', color: '#1565C0' },
+  protocolPreviewCard: { backgroundColor: '#F5F9FF', borderRadius: 12, borderWidth: 1, borderColor: '#BBDEFB', marginTop: 16, marginBottom: 8, overflow: 'hidden' },
+  protocolPreviewHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, flexWrap: 'wrap', gap: 4 },
+  protocolPreviewTitle: { fontSize: 15, fontWeight: '700', color: '#1565C0' },
+  protocolPreviewSub: { fontSize: 11, color: '#666', fontWeight: '500' },
+  protocolPreviewBody: { paddingHorizontal: 14, paddingBottom: 14, borderTopWidth: 1, borderTopColor: '#E3F2FD', paddingTop: 10 },
+  protocolPreviewBone: { fontSize: 12, fontWeight: '600', color: '#555', marginBottom: 10, backgroundColor: '#E8EAF6', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, alignSelf: 'flex-start' },
 });
