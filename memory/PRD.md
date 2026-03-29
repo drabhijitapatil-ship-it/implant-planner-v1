@@ -325,6 +325,20 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
 - **Works in both**: "Suggest Me" and "Let Me Choose" workflows
 - **Testing**: 29/29 backend tests passed (iteration_57.json) + 4 regression tests
 
+### Login Page Logo Update (Mar 2026)
+- Replaced generic implant icon with uploaded "App Logo.jpg" (dental implant + calendar branding)
+- Logo is now the main brand element (120x120, animated with subtle scale breathing)
+- Clean text "Implanr" below logo (no embedded icon)
+- Tagline: "Implant Planning Assistant"
+- Features: Plan • Visualize • Restore
+- All existing login functionality preserved (JWT auth, error handling, keyboard avoiding, safe area)
+
+### Ngrok Tunnel Resilience Fix (Mar 2026)
+- Fixed expo crash loop caused by ngrok "tunnel already exists" errors
+- Updated `AsyncNgrok.js` with retry-with-backoff logic (up to 10 attempts, 5-30s delays)
+- Updated `@expo/ngrok/index.js` to disconnect stale tunnels before creating new ones
+- Expo now gracefully starts without tunnel if all retries exhausted
+
 ## Backlog
 ### P1 - Upcoming
 - Implement drilling protocols for remaining systems (Nobel Biocare, Straumann, etc.) as user provides developer-ready codes

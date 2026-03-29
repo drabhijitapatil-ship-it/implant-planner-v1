@@ -88,7 +88,7 @@ export default function LoginScreen() {
 
             {/* Logo */}
             <Animated.Image
-              source={require('../../assets/images/implant-icon.png')}
+              source={require('../../assets/images/app-logo.jpg')}
               style={[styles.logo, { transform: [{ scale: logoScale }], opacity: logoOpacity }]}
               resizeMode="contain"
               data-testid="hero-image"
@@ -215,10 +215,9 @@ const styles = StyleSheet.create({
     top: 60,
   },
   logo: {
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-    marginBottom: 12,
+    width: 120,
+    height: 120,
+    marginBottom: 10,
   },
   appName: {
     fontSize: 42,
