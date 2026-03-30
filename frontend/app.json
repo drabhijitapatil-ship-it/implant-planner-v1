@@ -12,7 +12,7 @@
     },
     "updates": {
       "enabled": true,
-      "url": "https://u.expo.dev/be59d9a1-1a99-47e5-be02-81385517957d"
+      "url": "https://u.expo.dev/364fac6d-f5b1-447e-88e5-f27bb0a027e6"
     },
     "ios": {
       "supportsTablet": true,
@@ -56,8 +56,10 @@
     },
     "extra": {
       "eas": {
-        "projectId": "be59d9a1-1a99-47e5-be02-81385517957d"
-      }
-    }
+        "projectId": "364fac6d-f5b1-447e-88e5-f27bb0a027e6"
+      },
+      "router": {}
+    },
+    "owner": "abhijitapatil"
   }
 }
