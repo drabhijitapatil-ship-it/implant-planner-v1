@@ -12,7 +12,7 @@ import sys
 import time
 
 # Configuration
-BASE_URL = "https://surgical-case-portal.preview.emergentagent.com/api"
+BASE_URL = "https://implant-workflow-hub.preview.emergentagent.com/api"
 HEADERS = {"Content-Type": "application/json"}
 
 # Test credentials from the review request

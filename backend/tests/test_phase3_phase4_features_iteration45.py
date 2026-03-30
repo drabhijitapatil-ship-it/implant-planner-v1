@@ -16,7 +16,7 @@ import os
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 if not BASE_URL:
-    BASE_URL = "https://surgical-case-portal.preview.emergentagent.com"
+    BASE_URL = "https://implant-workflow-hub.preview.emergentagent.com"
 
 # Test procedure with all phase data populated
 COMPLETED_PROCEDURE_ID = "69c2361dfeb06fbdfc09512e"
