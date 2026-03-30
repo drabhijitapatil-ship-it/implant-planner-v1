@@ -1768,7 +1768,67 @@ async def generate_case_report(
     add_field("Loading Type", ", ".join(procedure.get("loading_type", [])))
     add_field("Prosthetic Plan", prosthetic)
     add_field("Bone Graft Specifications", procedure.get("bone_graft_specifications"))
+    add_field("Implant Site", procedure.get("implant_site"))
     pdf.ln(4)
+
+    # ── Clinical Examination ─────────────────────────────────
+    has_clinical = any(procedure.get(k) for k in [
+        "edentulous_sites", "edentulous_site", "arch_condition",
+        "ridge_contour", "soft_tissue_thickness", "keratinized_mucosa",
+    ])
+    if has_clinical:
+        add_section_title("Clinical Examination — Intraoral", 30, 136, 229)
+        sites = procedure.get("edentulous_sites", [])
+        if sites:
+            add_field("Edentulous Sites", ", ".join(str(s) for s in sites))
+        elif procedure.get("edentulous_site"):
+            add_field("Edentulous Site", procedure.get("edentulous_site"))
+        add_field("Arch Condition", procedure.get("arch_condition"))
+        add_field("Ridge Contour", procedure.get("ridge_contour"))
+        add_field("Soft Tissue Thickness", procedure.get("soft_tissue_thickness"))
+        add_field("Keratinized Mucosa", procedure.get("keratinized_mucosa"))
+        pdf.ln(3)
+
+    # ── Occlusal Analysis ────────────────────────────────────
+    has_occlusal = any(procedure.get(k) for k in [
+        "occlusal_scheme", "parafunction_habit", "vertical_dimension",
+        "vertical_dimension_mm", "opposing_dentition", "tmj",
+    ])
+    if has_occlusal:
+        add_section_title("Occlusal Analysis", 123, 31, 162)
+        add_field("Occlusal Scheme", procedure.get("occlusal_scheme"))
+        add_field("Parafunctional Habits", procedure.get("parafunction_habit"))
+        add_field("Vertical Dimension", procedure.get("vertical_dimension"))
+        if procedure.get("vertical_dimension_mm"):
+            add_field("Vertical Dimension (mm)", procedure.get("vertical_dimension_mm"))
+        add_field("Opposing Dentition", procedure.get("opposing_dentition"))
+        add_field("TMJ Assessment", procedure.get("tmj"))
+        pdf.ln(3)
+
+    # ── Aesthetic Risk Assessment ────────────────────────────
+    has_aesthetic = any(procedure.get(k) for k in ["smile_line", "gingival_biotype"])
+    if has_aesthetic:
+        add_section_title("Aesthetic Risk Assessment", 233, 30, 99)
+        add_field("Smile Line", procedure.get("smile_line"))
+        add_field("Gingival Biotype", procedure.get("gingival_biotype"))
+        pdf.ln(3)
+
+    # ── Medical Assessment ───────────────────────────────────
+    med = procedure.get("medical_assessment")
+    if isinstance(med, dict) and med:
+        risk = procedure.get("medical_risk_level", "")
+        title = f"Medical Assessment — {risk}" if risk else "Medical Assessment"
+        add_section_title(title, 211, 47, 47)
+        for key, value in med.items():
+            label = key.replace("_", " ").title()
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.cell(60, 7, safe(label + ":"), ln=False)
+            color = (244, 67, 54) if value == "Yes" else (76, 175, 80)
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.set_text_color(*color)
+            pdf.cell(0, 7, safe(str(value) if value else "N/A"), ln=True)
+            pdf.set_text_color(0, 0, 0)
+        pdf.ln(3)
 
     # ── Implant Planning Section ─────────────────────────────
     implant_plans = procedure.get("implant_plans", [])
@@ -1801,22 +1861,80 @@ async def generate_case_report(
 
     # ── Phase 2: Surgical ────────────────────────────────────
     add_section_title("Phase 2 - Surgical Protocol", 255, 107, 53)
-    checklist_s = procedure.get("checklist_surgical")
-    if checklist_s:
-        add_checklist_section("Surgical Checklist", checklist_s)
-    torque = procedure.get("torque_values", [])
-    if torque:
-        pdf.set_font("Helvetica", "B", 10)
-        pdf.cell(0, 7, safe("Torque Values (Ncm):"), ln=True)
-        pdf.set_font("Helvetica", "", 9)
-        for i, tv in enumerate(torque):
-            pos_label = ""
-            if i < len(implant_plans):
-                pos_label = f" (Tooth {implant_plans[i].get('position', '')})"
-            pdf.cell(0, 6, safe(f"  Implant {i+1}{pos_label}: {tv} Ncm"), ln=True)
-        pdf.ln(2)
-    if procedure.get("phase2_remark"):
-        add_field("Post-Surgical Notes", procedure.get("phase2_remark"))
+    p2 = procedure.get("phase2_data", {})
+    if isinstance(p2, dict) and p2:
+        pre_surg = p2.get("pre_surgery_checklist", {})
+        if pre_surg:
+            pdf.set_font("Helvetica", "BI", 11)
+            pdf.cell(0, 8, safe("Pre-Surgery Checklist"), ln=True)
+            for k, v in pre_surg.items():
+                marker = "[X]" if v else "[ ]"
+                pdf.set_font("Helvetica", "", 9)
+                pdf.cell(0, 6, safe(f"  {marker} {k.replace('_', ' ').title()}"), ln=True)
+            pdf.ln(3)
+        if p2.get("anesthesia_adequate"):
+            add_field("Anaesthesia Adequate", p2["anesthesia_adequate"])
+        if p2.get("anesthesia_details"):
+            add_field("Anaesthesia Notes", p2["anesthesia_details"])
+        if p2.get("flap_design"):
+            add_field("Incision / Flap Design", p2["flap_design"])
+        if p2.get("drilling_type"):
+            add_field("Drilling Type", p2["drilling_type"])
+        if p2.get("implant_seated_correctly") is not None:
+            add_field("Implant Seated Correctly", "Yes" if p2["implant_seated_correctly"] else "No")
+        if p2.get("implant_seated_comment"):
+            add_field("Seating Notes", p2["implant_seated_comment"])
+        tv = p2.get("torque_values", [])
+        if tv:
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.cell(0, 7, safe("Torque Values (Ncm):"), ln=True)
+            pdf.set_font("Helvetica", "", 9)
+            for i, t in enumerate(tv):
+                pos_label = ""
+                if i < len(implant_plans):
+                    pos_label = f" (Tooth {implant_plans[i].get('position', '')})"
+                pdf.cell(0, 6, safe(f"  Implant {i+1}{pos_label}: {t} Ncm"), ln=True)
+            pdf.ln(2)
+        if p2.get("implant_other_notes"):
+            add_field("Other Implant Notes", p2["implant_other_notes"])
+        if p2.get("prosthetic_component"):
+            add_field("Prosthetic Component", p2["prosthetic_component"])
+        if p2.get("healing_abutment_cuff_height"):
+            add_field("Healing Abutment Cuff Height", f"{p2['healing_abutment_cuff_height']} mm")
+        if p2.get("sutures_placed") is not None:
+            add_field("Sutures Placed", "Yes" if p2["sutures_placed"] else "No")
+        if p2.get("hemostasis_achieved") is not None:
+            add_field("Hemostasis Achieved", "Yes" if p2["hemostasis_achieved"] else "No")
+        post_op = p2.get("post_op_checklist", {})
+        if post_op:
+            pdf.set_font("Helvetica", "BI", 11)
+            pdf.cell(0, 8, safe("Post-Operative Checklist"), ln=True)
+            for k, v in post_op.items():
+                marker = "[X]" if v else "[ ]"
+                pdf.set_font("Helvetica", "", 9)
+                pdf.cell(0, 6, safe(f"  {marker} {k.replace('_', ' ').title()}"), ln=True)
+            pdf.ln(3)
+    else:
+        checklist_s = procedure.get("checklist", {}).get("surgical")
+        if checklist_s:
+            add_checklist_section("Surgical Checklist", checklist_s)
+        torque = procedure.get("torque_values", [])
+        if torque:
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.cell(0, 7, safe("Torque Values (Ncm):"), ln=True)
+            pdf.set_font("Helvetica", "", 9)
+            for i, tv in enumerate(torque):
+                pos_label = ""
+                if i < len(implant_plans):
+                    pos_label = f" (Tooth {implant_plans[i].get('position', '')})"
+                pdf.cell(0, 6, safe(f"  Implant {i+1}{pos_label}: {tv} Ncm"), ln=True)
+            pdf.ln(2)
+    if procedure.get("phase2_remark") or procedure.get("phase2_student_notes"):
+        add_field("Post-Surgical Notes", procedure.get("phase2_student_notes") or procedure.get("phase2_remark"))
+    if procedure.get("phase2_supervisor_notes"):
+        add_field("Supervisor Remarks", procedure.get("phase2_supervisor_notes"))
+    if procedure.get("phase2_incharge_notes"):
+        add_field("Incharge Remarks", procedure.get("phase2_incharge_notes"))
     phase2_date = procedure.get("phase2_completed_at")
     if phase2_date:
         add_field("Phase 2 Completed", phase2_date.isoformat() if isinstance(phase2_date, datetime) else str(phase2_date))
@@ -1824,28 +1942,91 @@ async def generate_case_report(
     # ── Phase 3: Second Stage ────────────────────────────────
     pdf.add_page()
     add_section_title("Phase 3 - Second Stage Surgery", 33, 150, 243)
-    checklist_ss = procedure.get("checklist_stage2_surgical")
-    if checklist_ss:
-        add_checklist_section("Second Stage Checklist", checklist_ss)
-    if procedure.get("stage2_surgical_remark"):
-        add_field("Student Clinical Assessment", procedure.get("stage2_surgical_remark"))
+    p3 = procedure.get("phase3_data", {})
+    if isinstance(p3, dict) and p3:
+        chk = p3.get("checklist_items", {})
+        if chk:
+            pdf.set_font("Helvetica", "BI", 11)
+            pdf.cell(0, 8, safe("Phase 3 Checklist"), ln=True)
+            for k, v in chk.items():
+                marker = "[X]" if v else "[ ]"
+                pdf.set_font("Helvetica", "", 9)
+                pdf.cell(0, 6, safe(f"  {marker} {k.replace('_', ' ').title()}"), ln=True)
+            pdf.ln(3)
+        if p3.get("isq_value"):
+            add_field("ISQ Value", p3["isq_value"])
+        if p3.get("healing_abutment_height"):
+            add_field("Healing Abutment Height", f"{p3['healing_abutment_height']} mm")
+    else:
+        checklist_ss = procedure.get("checklist", {}).get("second_stage")
+        if checklist_ss:
+            add_checklist_section("Second Stage Checklist", checklist_ss)
+    if procedure.get("stage2_surgical_remark") or procedure.get("phase3_student_notes"):
+        add_field("Student Notes", procedure.get("phase3_student_notes") or procedure.get("stage2_surgical_remark"))
+    if procedure.get("phase3_supervisor_notes"):
+        add_field("Supervisor Remarks", procedure.get("phase3_supervisor_notes"))
+    if procedure.get("phase3_incharge_notes"):
+        add_field("Incharge Remarks", procedure.get("phase3_incharge_notes"))
     phase3_date = procedure.get("stage2_surgical_completed_at")
     if phase3_date:
         add_field("Phase 3 Completed", phase3_date.isoformat() if isinstance(phase3_date, datetime) else str(phase3_date))
 
     # ── Phase 4: Prosthetic ──────────────────────────────────
     add_section_title("Phase 4 - Prosthetic Protocol", 156, 39, 176)
-    checklist_sp = procedure.get("checklist_stage2_prosthetic")
-    if checklist_sp:
-        add_checklist_section("Prosthetic Checklist", checklist_sp)
+    p4s1 = procedure.get("phase4_step1_data", {})
+    if isinstance(p4s1, dict) and p4s1:
+        pdf.set_font("Helvetica", "BI", 11)
+        pdf.cell(0, 8, safe("Step 1 — Prosthetic Plan & Impressions"), ln=True)
+        if p4s1.get("final_prosthetic_plan"):
+            add_field("Final Prosthetic Plan", p4s1["final_prosthetic_plan"])
+        if p4s1.get("prosthetic_material"):
+            add_field("Prosthetic Material", p4s1["prosthetic_material"])
+        if p4s1.get("custom_abutment"):
+            add_field("Custom Abutment", p4s1["custom_abutment"])
+        if p4s1.get("overdenture_attachment"):
+            add_field("Overdenture Attachment", p4s1["overdenture_attachment"])
+        if p4s1.get("impression_type"):
+            imp_type = "Intraoral Scans" if p4s1["impression_type"] == "intraoral_scans" else "Conventional Impressions"
+            add_field("Impression Type", imp_type)
+        if p4s1.get("payment_complete") is not None:
+            add_field("Payment Complete", "Yes" if p4s1["payment_complete"] else "No")
+        if p4s1.get("components_available") is not None:
+            add_field("Components Available", "Yes" if p4s1["components_available"] else "No")
+        pdf.ln(3)
+    else:
+        checklist_sp = procedure.get("checklist", {}).get("prosthetic_phase")
+        if checklist_sp:
+            add_checklist_section("Prosthetic Checklist", checklist_sp)
     if procedure.get("final_prosthetic_plan"):
         add_field("Final Prosthetic Plan", procedure.get("final_prosthetic_plan"))
-    if procedure.get("stage2_prosthetic_remark"):
-        add_field("Student Remark", procedure.get("stage2_prosthetic_remark"))
+    if procedure.get("stage2_prosthetic_remark") or procedure.get("phase4_step1_student_notes"):
+        add_field("Student Remark (Step 1)", procedure.get("phase4_step1_student_notes") or procedure.get("stage2_prosthetic_remark"))
     if procedure.get("stage2_prosthetic_faculty_remark"):
-        add_field("Faculty Remark", procedure.get("stage2_prosthetic_faculty_remark"))
+        add_field("Faculty Remark (Step 1)", procedure.get("stage2_prosthetic_faculty_remark"))
     if procedure.get("stage2_prosthetic_incharge_remark"):
-        add_field("Incharge Remark", procedure.get("stage2_prosthetic_incharge_remark"))
+        add_field("Incharge Remark (Step 1)", procedure.get("stage2_prosthetic_incharge_remark"))
+
+    p4s2 = procedure.get("phase4_step2_data", {})
+    if isinstance(p4s2, dict) and p4s2:
+        pdf.set_font("Helvetica", "BI", 11)
+        pdf.cell(0, 8, safe("Step 2 — Trial & Delivery"), ln=True)
+        trial_chk = p4s2.get("trial_checklist", {})
+        if trial_chk:
+            for k, v in trial_chk.items():
+                marker = "[X]" if v else "[ ]"
+                pdf.set_font("Helvetica", "", 9)
+                pdf.cell(0, 6, safe(f"  {marker} {k.replace('_', ' ').title()}"), ln=True)
+            pdf.ln(2)
+        if p4s2.get("confirmation_statement") is not None:
+            status_txt = "Treatment Confirmed Complete" if p4s2["confirmation_statement"] else "Not Confirmed"
+            add_field("Confirmation", status_txt)
+    if procedure.get("phase4_step2_student_notes"):
+        add_field("Student Notes (Step 2)", procedure.get("phase4_step2_student_notes"))
+    if procedure.get("phase4_step2_supervisor_notes"):
+        add_field("Supervisor Remarks (Step 2)", procedure.get("phase4_step2_supervisor_notes"))
+    if procedure.get("phase4_step2_incharge_notes"):
+        add_field("Incharge Remarks (Step 2)", procedure.get("phase4_step2_incharge_notes"))
+
     phase4_date = procedure.get("treatment_completed_at")
     if phase4_date:
         add_field("Treatment Completed", phase4_date.isoformat() if isinstance(phase4_date, datetime) else str(phase4_date))
@@ -4305,11 +4486,15 @@ DRILLING_PROTOCOLS["Dentsply Sirona|Ankylos C/X"] = {
 }
 
 def _generate_ankylos_protocol(proto, implant_diameter, implant_length, bone):
-    """Generate drilling protocol for Dentsply Sirona Ankylos C/X system."""
+    """Generate drilling protocol for Dentsply Sirona Ankylos C/X system.
+    Per document: D1 = Full drilling + Tap, D2 = Standard, D3/D4 = Skip full reaming (under-preparation).
+    Drill depth slightly deeper than implant length."""
     steps = []
     step_num = 1
-    depth = str(implant_length)
-    is_dense = bone in ("D1", "D2")
+    drill_depth = round(implant_length + 0.5, 1)
+    depth = str(drill_depth)
+    is_d1 = bone == "D1"
+    is_soft = bone in ("D3", "D4")
 
     dm = proto["drill_mapping"].get(implant_diameter)
     if not dm:
@@ -4318,48 +4503,45 @@ def _generate_ankylos_protocol(proto, implant_diameter, implant_length, bone):
     color = dm["color"]
     twist_drill = dm["twist_drill"]
 
-    # Step 1: Round Drill 1.8 mm
+    # Step 1: Round Drill
     steps.append({"step": step_num, "drill_type": "Round Drill", "code": "—",
                    "diameter": 1.8, "depth": "Mark site", "rpm": "1500-2000", "irrigation": True,
                    "series": series, "color": color})
     step_num += 1
 
-    # Step 2: Lindemann Drill
-    steps.append({"step": step_num, "drill_type": "Lindemann Drill", "code": "—",
-                   "diameter": 2.0, "depth": depth, "rpm": "800-1200", "irrigation": True,
-                   "series": series, "color": color})
-    step_num += 1
-
-    # Step 3: Pilot Drill 2.0 mm
+    # Step 2: Pilot Drill 2.0 mm
     steps.append({"step": step_num, "drill_type": "Pilot Drill", "code": "—",
                    "diameter": 2.0, "depth": depth, "rpm": "800-1000", "irrigation": True,
                    "series": series, "color": color})
     step_num += 1
 
-    # Step 4: Twist Drill (series-specific)
-    steps.append({"step": step_num, "drill_type": f"Twist Drill {twist_drill} mm", "code": "—",
+    # Step 3: Twist Drill (series-specific)
+    steps.append({"step": step_num, "drill_type": f"Twist Drill {series} ({twist_drill} mm)", "code": "—",
                    "diameter": twist_drill, "depth": depth, "rpm": "800-1000", "irrigation": True,
                    "series": series, "color": color})
     step_num += 1
 
-    # Step 5: Conical Reamer (series + length)
-    steps.append({"step": step_num, "drill_type": f"Conical Reamer {series}{int(implant_length) if implant_length == int(implant_length) else implant_length}", "code": "—",
-                   "diameter": implant_diameter, "depth": depth, "rpm": "500-800", "irrigation": True,
-                   "series": series, "color": color})
-    step_num += 1
-
-    # Step 6: Tap (dense bone only — D1/D2)
-    if is_dense:
-        steps.append({"step": step_num, "drill_type": f"Tap {series}", "code": "—",
-                       "diameter": implant_diameter, "depth": depth, "rpm": "15-20", "irrigation": True,
-                       "series": series, "color": color, "note": "Dense bone only (D1/D2)"})
+    # Step 4: Conical Reamer — Skip for D3/D4 (under-preparation)
+    if not is_soft:
+        reamer_label = f"Conical Reamer {series}{int(implant_length) if implant_length == int(implant_length) else implant_length}"
+        steps.append({"step": step_num, "drill_type": reamer_label, "code": "—",
+                       "diameter": implant_diameter, "depth": depth, "rpm": "500-800", "irrigation": True,
+                       "series": series, "color": color,
+                       "note": "Mandatory for shaping conical osteotomy."})
         step_num += 1
 
-    # Final: Implant Placement
+    # Step 5: Tap — D1 (hard bone) only
+    if is_d1:
+        steps.append({"step": step_num, "drill_type": f"Tap {series}", "code": "—",
+                       "diameter": implant_diameter, "depth": depth, "rpm": "15-20", "irrigation": True,
+                       "series": series, "color": color, "note": "Dense bone (D1) only — thread preparation."})
+        step_num += 1
+
+    # Final: Implant Placement (subcrestal)
     steps.append({"step": step_num, "drill_type": "Implant Placement", "code": "—",
-                   "diameter": implant_diameter, "depth": depth, "rpm": "25-30", "irrigation": False,
+                   "diameter": implant_diameter, "depth": str(implant_length), "rpm": "25-30", "irrigation": False,
                    "series": series, "color": color,
-                   "note": f"Ankylos C/X {series} Series ({color}) — {implant_diameter}mm x {implant_length}mm"})
+                   "note": f"Ankylos C/X {series} Series ({color}) — {implant_diameter}mm x {implant_length}mm. Subcrestal placement."})
 
     return steps
 
@@ -4456,7 +4638,7 @@ ALPHA_BIO_SOFT = {
     3.75: [2.0, 2.8, 3.2],
     4.2:  [2.0, 2.8, 3.2],
     5.0:  [2.0, 2.8, 3.2, 3.65],
-    6.0:  [2.0, 2.8, 3.2, 3.65],
+    6.0:  [2.0, 2.8, 3.2, 3.65, 4.1],
 }
 
 DRILLING_PROTOCOLS["Alpha Bio|SPI"] = {
@@ -5172,12 +5354,12 @@ DRILLING_PROTOCOLS["Neodent|Helix GM Acqua"] = {
     "protocol_family": "helix",
     "lengths": [8, 10, 11.5, 13, 16, 18],
     "helix_protocols": {
-        3.5:  {"D1_D2": [2.8, 3.5],             "D3_D4": [2.8],                              "plus": 3.5},
-        3.75: {"D1_D2": [2.8, 3.5, 3.75],       "D3_D4": [2.8, 3.5],                         "plus": 3.75},
-        4.0:  {"D1_D2": [2.8, 3.5, 3.75, 4.0],  "D3_D4": [2.8, 3.5, 3.75],                   "plus": 4.0},
-        4.3:  {"D1_D2": [2.8, 3.5, 3.75, 4.0, 4.3],  "D3_D4": [2.8, 3.5, 3.75, 4.0],         "plus": 4.3},
-        5.0:  {"D1_D2": [2.8, 3.5, 3.75, 4.0, 4.3, 5.0],  "D3_D4": [2.8, 3.5, 3.75, 4.0, 4.3], "plus": 5.0},
-        6.0:  {"D1_D2": [2.8, 3.5, 3.75, 4.0, 4.3, 5.0, 6.0],  "D3_D4": [2.8, 3.5, 3.75, 4.0, 4.3, 5.0], "plus": 6.0},
+        3.5:  {"D1_D2": [3.5],                                    "D3_D4": [],                                     "plus": 3.5},
+        3.75: {"D1_D2": [3.5, 3.75],                              "D3_D4": [3.5],                                  "plus": 3.75},
+        4.0:  {"D1_D2": [3.5, 3.75, 4.0],                         "D3_D4": [3.5, 3.75],                            "plus": 4.0},
+        4.3:  {"D1_D2": [3.5, 3.75, 4.0, 4.3],                    "D3_D4": [3.5, 3.75, 4.0],                       "plus": 4.3},
+        5.0:  {"D1_D2": [3.5, 3.75, 4.0, 4.3, 5.0],               "D3_D4": [3.5, 3.75, 4.0, 4.3],                  "plus": 5.0},
+        6.0:  {"D1_D2": [3.5, 3.75, 4.0, 4.3, 5.0, 6.0],          "D3_D4": [3.5, 3.75, 4.0, 4.3, 5.0],             "plus": 6.0},
     },
 }
 DRILLING_PROTOCOLS["Neodent|Helix GM Neoporous"] = DRILLING_PROTOCOLS["Neodent|Helix GM Acqua"]
