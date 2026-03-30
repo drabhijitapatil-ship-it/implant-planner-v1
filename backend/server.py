@@ -79,6 +79,15 @@ def sanitize_input(value: str) -> str:
 async def health_check():
     return {"status": "ok"}
 
+@app.get("/api/expo-qr")
+async def expo_qr():
+    import os
+    qr_path = os.path.join(os.path.dirname(__file__), "expo-qr.png")
+    if os.path.exists(qr_path):
+        return FileResponse(qr_path, media_type="image/png")
+    raise HTTPException(status_code=404, detail="QR code not found")
+
+
 # Helper functions
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
