@@ -3446,11 +3446,6 @@ IMPLANT_INDICATIONS = {
         "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Implant Placement with Guided Bone Regeneration"],
         "indicated_bone_types": ["D1", "D2"],
     },
-    "Neodent|Titamax GM Acqua": {
-        "indication": "Indicated for Bone type D1 and D2 and Guided Bone Regeneration areas.",
-        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Implant Placement with Guided Bone Regeneration"],
-        "indicated_bone_types": ["D1", "D2"],
-    },
     "Nobel Biocare|NobelActive NP": {
         "indication": "Indicated only for the replacement of 11, 12, 21, 22, 31, 32, 41, 42.",
         "restricted_teeth": ["11", "12", "21", "22", "31", "32", "41", "42"],
@@ -3499,13 +3494,13 @@ IMPLANT_INDICATIONS = {
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
     "BioHorizons|Tapered Pro": {
-        "indication": "Indicated for Immediate Placement and for 11, 12, 13, 21, 22, 23. Laser Lock Collar surface for good connective tissue attachment.",
+        "indication": "Hydroxyapatite Coated. Indicated for Immediate Placement and for 11, 12, 13, 21, 22, 23. Laser Lock Collar surface for good connective tissue attachment.",
         "indicated_teeth": ["11", "12", "13", "21", "22", "23"],
         "indicated_procedures": ["Immediate Implant", "Partial Extraction Therapy"],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
     "BioHorizons|Tapered Pro Conical RBT": {
-        "indication": "Indicated for Immediate Placement and All on 4, All on 6, and All on X. Camelog connection with Biohorizons Tapered Pro features.",
+        "indication": "Indicated for Immediate Placement and All on 4, All on 6, and All on X. Feature Camelog connection with Biohorizons Tapered Pro features.",
         "indicated_procedures": ["Immediate Implant", "All on 4", "All on 6", "All on X"],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
