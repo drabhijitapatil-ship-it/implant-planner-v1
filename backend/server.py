@@ -6146,7 +6146,7 @@ async def seed_on_startup():
     else:
         logging.info(f"Users collection has {user_count} documents — skipping seed.")
 
-    # --- Seed implant library (safe upsert — never drops existing data) ---
+    # --- Seed implant library (authoritative sync from Excel) ---
     implant_count = await db.implant_library.count_documents({})
     xlsx_path = ROOT_DIR / "implant_library_latest.xlsx"
     if xlsx_path.exists():
@@ -6159,6 +6159,7 @@ async def seed_on_startup():
 
         records = []
         seen = set()
+        excel_systems = set()
         for _, row in df.iterrows():
             try:
                 brand = str(row[brand_col]).strip()
@@ -6168,6 +6169,7 @@ async def seed_on_startup():
                 if not brand or not system or brand == "nan" or system == "nan":
                     continue
                 brand = BRAND_NAME_CORRECTIONS.get(brand, brand)
+                excel_systems.add(f"{brand}|{system}")
                 key = (brand, system, diameter, length)
                 if key not in seen:
                     seen.add(key)
@@ -6175,25 +6177,27 @@ async def seed_on_startup():
             except (ValueError, TypeError):
                 continue
 
-        if implant_count == 0:
-            # Fresh database — bulk insert
-            if records:
-                await db.implant_library.insert_many(records)
-                logging.info(f"Seeded {len(records)} implant records into empty collection.")
+        # Count unique systems in DB
+        db_system_pairs = await db.implant_library.aggregate([
+            {"$group": {"_id": {"brand": "$brand", "system": "$system"}}},
+        ]).to_list(500)
+        db_system_count = len(db_system_pairs)
+        excel_system_count = len(excel_systems)
+
+        needs_reseed = (
+            implant_count == 0
+            or db_system_count != excel_system_count
+            or implant_count != len(records)
+        )
+
+        if needs_reseed and records:
+            await db.implant_library.drop()
+            await db.implant_library.insert_many(records)
+            logging.info(
+                f"Implant library RESEEDED: {len(records)} records, {excel_system_count} systems "
+                f"(was {implant_count} records, {db_system_count} systems)."
+            )
         else:
-            # Existing data — safe upsert (add missing records, never drop)
-            inserted = 0
-            for rec in records:
-                result = await db.implant_library.update_one(
-                    {"brand": rec["brand"], "system": rec["system"], "diameter": rec["diameter"], "length": rec["length"]},
-                    {"$setOnInsert": rec},
-                    upsert=True,
-                )
-                if result.upserted_id:
-                    inserted += 1
-            if inserted > 0:
-                logging.info(f"Implant library: added {inserted} new records (total was {implant_count}).")
-            else:
-                logging.info(f"Implant library has {implant_count} documents — up to date.")
+            logging.info(f"Implant library has {implant_count} documents, {db_system_count} systems — up to date.")
     else:
         logging.warning(f"XLSX file not found at {xlsx_path} — skipping implant seed.")
