@@ -5,6 +5,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import api from '../utils/api';
 
 type DrillStep = {
@@ -74,14 +76,15 @@ export default function DrillingProtocolScreen({
   };
 
   const handleExportPDF = async () => {
+    if (!protocol) return;
     setExporting(true);
     try {
-      const res = await api.post('/drilling-protocols/export-pdf', {
-        brand: implant.brand, system: implant.system,
-        diameter: implant.diameter, length: implant.length,
-        bone_density: boneType, tooth,
-      }, { responseType: 'blob' });
       if (Platform.OS === 'web') {
+        const res = await api.post('/drilling-protocols/export-pdf', {
+          brand: implant.brand, system: implant.system,
+          diameter: implant.diameter, length: implant.length,
+          bone_density: boneType, tooth,
+        }, { responseType: 'blob' });
         const blob = new Blob([res.data], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -90,7 +93,85 @@ export default function DrillingProtocolScreen({
         a.click();
         URL.revokeObjectURL(url);
       } else {
-        Alert.alert('PDF Export', 'PDF download is available on web. On mobile, use the Share feature.');
+        // Mobile: generate PDF locally using expo-print + expo-sharing
+        const stepsHtml = protocol.steps.map((s, i) => `
+          <tr style="background:${i % 2 === 0 ? '#F8FBFF' : '#FFF'}">
+            <td style="padding:8px;text-align:center;font-weight:700;color:#1565C0">${s.step}</td>
+            <td style="padding:8px;font-weight:600">${s.drill_type}</td>
+            <td style="padding:8px;text-align:center">${s.diameter} mm</td>
+            <td style="padding:8px;text-align:center">${s.depth} mm</td>
+            <td style="padding:8px;text-align:center">${s.code || '—'}</td>
+            <td style="padding:8px;text-align:center">${s.rpm}</td>
+            <td style="padding:8px;text-align:center">${s.irrigation ? 'Yes' : 'No'}</td>
+          </tr>
+        `).join('');
+
+        const notesHtml = protocol.notes?.length
+          ? protocol.notes.map(n => `<li style="padding:4px 0;color:#555">${n}</li>`).join('')
+          : '<li style="color:#999">No additional notes</li>';
+
+        const html = `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <style>
+              body { font-family: 'Helvetica','Arial',sans-serif; padding:24px; font-size:12px; color:#263238; }
+              .header { text-align:center; border-bottom:3px solid #1565C0; padding-bottom:16px; margin-bottom:20px; }
+              .header h1 { margin:0; color:#1565C0; font-size:22px; }
+              .header p { margin:4px 0; color:#666; font-size:11px; }
+              .info-box { background:#E3F2FD; border-radius:8px; padding:14px; margin-bottom:18px; }
+              .info-row { display:flex; justify-content:space-between; margin:4px 0; }
+              .info-label { font-weight:700; color:#333; }
+              .info-value { color:#1565C0; }
+              table { width:100%; border-collapse:collapse; margin-bottom:18px; }
+              th { background:#1565C0; color:#FFF; padding:10px 8px; text-align:center; font-size:11px; }
+              td { border-bottom:1px solid #E0E0E0; font-size:11px; }
+              .notes { background:#FFF8E1; border-radius:8px; padding:14px; }
+              .notes h3 { margin:0 0 8px; color:#F57F17; font-size:14px; }
+              .footer { text-align:center; margin-top:24px; padding-top:12px; border-top:1px solid #E0E0E0; color:#999; font-size:10px; }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <h1>Drilling Protocol</h1>
+              <p>${implant.brand} — ${implant.system}</p>
+            </div>
+            <div class="info-box">
+              <div class="info-row"><span class="info-label">Implant:</span><span class="info-value">${implant.diameter} x ${implant.length} mm</span></div>
+              <div class="info-row"><span class="info-label">Bone Density:</span><span class="info-value">${boneType.toUpperCase()}</span></div>
+              <div class="info-row"><span class="info-label">Tooth Position:</span><span class="info-value">${tooth || 'N/A'}</span></div>
+              <div class="info-row"><span class="info-label">Total Steps:</span><span class="info-value">${protocol.total_steps}</span></div>
+            </div>
+            <table>
+              <thead>
+                <tr><th>#</th><th>Drill Type</th><th>Diameter</th><th>Depth</th><th>Code</th><th>Speed</th><th>Irrigation</th></tr>
+              </thead>
+              <tbody>${stepsHtml}</tbody>
+            </table>
+            <div class="notes">
+              <h3>Clinical Notes</h3>
+              <ul>${notesHtml}</ul>
+            </div>
+            <div class="footer">
+              <p>Generated on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+              <p>Implanr — Implant Planning Assistant</p>
+            </div>
+          </body>
+          </html>
+        `;
+
+        const { uri } = await Print.printToFileAsync({ html });
+        const isAvailable = await Sharing.isAvailableAsync();
+        if (isAvailable) {
+          await Sharing.shareAsync(uri, {
+            mimeType: 'application/pdf',
+            dialogTitle: `DrillingProtocol_${implant.brand}_${implant.diameter}x${implant.length}.pdf`,
+            UTI: 'com.adobe.pdf',
+          });
+        } else {
+          Alert.alert('Success', 'PDF generated but sharing is not available on this device.');
+        }
       }
     } catch { Alert.alert('Error', 'Failed to export PDF.'); }
     finally { setExporting(false); }

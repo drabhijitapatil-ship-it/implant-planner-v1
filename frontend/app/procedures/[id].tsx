@@ -845,6 +845,13 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
+        {/* Phase 1 Pre-Surgical Checklist — shown right after Phase 1 data */}
+        {procedure.checklist?.pre_surgical && (
+          <>
+            {renderChecklistSection('pre_surgical', 'Phase 1: Pre-Surgical Protocol')}
+          </>
+        )}
+
         {/* ═══════════ PHASE 2: SURGICAL PROTOCOLS - Full Data Display ═══════════ */}
         {procedure.phase2_data && Object.keys(procedure.phase2_data).length > 0 && (
           <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#0D47A1' }]} data-testid="phase2-full-data-section">
@@ -1177,7 +1184,6 @@ export default function ProcedureDetailScreen() {
 
         {procedure.checklist && (
           <>
-            {renderChecklistSection('pre_surgical', 'Phase 1: Pre-Surgical Protocol')}
             {renderChecklistSection('surgical', 'Phase 2: Surgical Protocol')}
             {renderChecklistSection('second_stage', 'Phase 3: Second Stage Surgical Protocol')}
             {renderChecklistSection('prosthetic_phase', 'Phase 4: Prosthetic Protocol')}

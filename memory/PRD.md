@@ -325,6 +325,10 @@ New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
 - **Works in both**: "Suggest Me" and "Let Me Choose" workflows
 - **Testing**: 29/29 backend tests passed (iteration_57.json) + 4 regression tests
 
+### Drilling Protocol PDF + Phase 1 Checklist Order Fix (Mar 30 2026)
+- Fixed mobile Export PDF: replaced alert with expo-print + expo-sharing for native PDF generation/sharing
+- Fixed Phase 1 pre-surgical checklist appearing after Phases 2/3/4 in UI — now renders in correct sequence
+
 ### Login Page Logo & Footer Update (Mar 29 2026)
 - Removed white background from logo (converted JPG to transparent PNG via Pillow)
 - Enlarged logo to 200x160 for better screen ratio
