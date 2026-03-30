@@ -1,0 +1,6 @@
+dist/
+.metro-cache/
+.ruff_cache/
+public/
+expo-qr.png
+*.@@*
