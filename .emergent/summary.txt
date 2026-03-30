@@ -1,126 +1,101 @@
-<analysis>**original_problem_statement**: The user is building a comprehensive prosthodontics mobile application. Recent requests focused on fixing local Expo Go tunneling issues (ngrok failures), hardening backend security (7 specific features including rate limiting and JWT invalidation), overhauling the New Case form into a 2-step workflow, integrating Medical Assessment factors directly into the Implant Risk Calculator, and resolving a production deployment build failure.
+<analysis>**original_problem_statement**: A comprehensive prosthodontics mobile application for managing implant surgical case workflows across 4 phases. The user recently uploaded master documents for drilling protocols and implant indications. The current priority is ensuring the deployed Expo Go application correctly reflects these backend updates, as the user reported seeing stale data (only 45 systems instead of 49, missing protocols, and role-based access issues). Additionally, the user requested Phase 1 UI refinements and PDF export functionality.
 
 **User's preferred language**: English (INSTRUCT next agent to respond in English only)
 
 **what currently exists?**: 
-A React Native (Expo) frontend + FastAPI backend + MongoDB application. The backend has been hardened with SlowAPI (rate limiting), JWT blocklisting, global exception handling, input sanitization, and runs via Gunicorn. The Expo environment is locally patched to use ngrok v3 to bypass rate limits. The New Case creation screen operates as a 2-step wizard.
+A React Native (Expo) frontend + FastAPI backend + MongoDB application. The application features a dynamic 4-phase approval workflow. The backend dynamically maps user inputs against hardcoded dictionaries in a massive  file to generate surgical protocols. The backend case report PDF generator has been updated to include all recent clinical and medical data. The deployment pipeline uses Expo Go.
 
 **Last working item**: 
-    - **Last item agent was working**: Fixing a production deployment build failure. The EAS build failed because  was imported in  but not installed in . The agent just performed a  to remove the dependency and replace it with a text-based date input.
-    - **Status**: TESTING PENDING
-    - **Agent Testing Done**: N (Code was edited, but build/deployment has not been re-verified).
-    - **Which testing method agent to use?**: Frontend testing agent to verify  renders properly without the datepicker, and  to verify the build now succeeds.
-    - **User Testing Done**: N
+    - Last item agent was working: Fixing the Stale Data in Expo Go deployment issue. The agent discovered the deployed managed MongoDB was stuck on old seed data (45 systems) because the backend  function was using a safe upsert that didn't overwrite old data. The agent updated the seed logic to force a full collection replace if the document count does not match the latest authoritative Excel file, and added  to the frontend .
+    - Status: USER VERIFICATION PENDING
+    - Agent Testing Done: Y
+    - Which testing method agent to use?: NA (Agent successfully tested backend startup logs showing 49 systems/649 documents seeded. User needs to verify via their physical iOS device).
+    - User Testing Done: N
 
 **All Pending/In progress Issue list**: 
-  Issue 1: Production Deployment Build Failure
-     - Attempted fixes: Agent removed the  import from  and replaced it with a standard text input to bypass the missing dependency error.
-     - Next debug checklist: Check if the build now succeeds using  logs. Verify if the fallback text input provides acceptable UX for date entry, or if the package should be properly installed via yarn add v1.22.22
-info Visit https://yarnpkg.com/en/docs/cli/add for documentation about this command..
-     - Why fix this issue and what will be achieved with the fix? The application cannot be deployed to production until this build error is resolved.
-     - Status: TESTING PENDING
-     - Is recurring issue? N
-     - Should Test frontend/backend/both after fix? Frontend (to ensure the form still works) and Deployment.
-     - Blocked on other issue: None.
+  Issue 1: Expo Go App Showing Stale Data (P0)
+     - Attempted fixes: Agent updated the backend  logic in  to forcefully sync the database with  if the counts don't match. Added the required  to  as per the deployment agent's advice, and cleaned up redundant Excel files.
+     - Next debug checklist: Instruct the user to trigger a fresh redeployment and scan the new QR code. Ask the user to verify if they now see 49 implant systems, available drilling protocols, and if Supervisors can successfully navigate to New Case.
+     - Why fix this issue and what will be achieved with the fix? The user cannot verify or use the newly integrated medical data if the production/deployed database is stuck on a legacy cache.
+     - Status: USER VERIFICATION PENDING
+     - Is recurring issue? Y
+     - Should Test frontend/backend/both after fix? Frontend (User Testing via Expo Go)
+     - Blocked on other issue: None
 
 **In progress Task List**: 
-None.
+   *(None currently in progress - awaiting user verification on the deployment fix)*
 
 **Upcoming and Future Tasks**
+    Upcoming Tasks:
+    - P1: Data visibility refinement for approval workflow: Ensure all entered data is visible to Supervisor and In-Charge *before* approval, and to the student *after* approval (in ).
+    - P2: Add indications and protocols for the remaining 17 implant systems once the user provides the files for them.
+    
     Future Tasks:
-    - P2: Backend refactoring: Decompose the monolithic  (>4200 lines) into a standard FastAPI project structure (routers, models, services).
-    - P2: Frontend refactoring: Modularize complex UI components like  and .
+    - P2: Backend refactoring: Decompose the massive  (>6200 lines) into modular routers and services.
+    - P2: Frontend refactoring: Modularize complex UI components like .
     - P2: Data cleanup: Create a script to find and remove duplicate user entries from the database.
 
 **Completed work in this session**
-- Fixed Expo Go Tunneling (): Patched  and  to use ngrok v3 and a custom user auth token via .
-- Backend Security Hardening (7 Features): Added SlowAPI rate limiting (5/min for login), JWT session invalidation (blocklist), Global exception handler, Gunicorn config (), HTTPS startup check, Unicode patient name support, and regex Input Sanitization.
-- Overhauled New Case Workflow: Transformed  into a 2-step flow.
-- Integrated Medical Assessments into Risk Calculator: Updated  and backend models to pass medical factors into the existing 18-point risk score logic.
+- Audited and fixed missing/extra steps in 3 critical drilling protocols (Alpha-Bio SPI, Neodent Helix GM, Ankylos C/X) to perfectly match the user's uploaded Word document. (DONE)
+- Updated the backend PDF case report generator () to include Clinical Examination, Medical Assessments, and new Phase 2/3/4 data structures. (DONE)
+- Verified frontend Phase 1 UI requirements:  correctly shows the Top 3 + Show More implant matching logic. (DONE)
+- Diagnosed and fixed the root cause of the stale deployment issue by updating  in  to forcefully drop and reseed the MongoDB  collection if data is outdated. (DONE)
+- Added  to frontend  to stabilize Expo Go tunneling. (DONE)
+- Removed redundant/legacy Excel files, leaving only the authoritative . (DONE)
 
 **Earlier issues found/mentioned but not fixed**
-   Issue 1: Invalid Credentials on Deployed App
-   - Debug checklist: User reported login failure on the *deployed* app. Agent verified backend credentials worked via  and added frontend error logs, but it is unclear if the user successfully logged into the production app after the backend hardening changes. Monitor if user reports this again after successful deployment.
-   - Why to solve this issue and what will be achieved with this? Ensures production app is usable.
-   - Should Test frontend/backend/both after fix: Frontend
-   - Is recurring issue? Y
+  *(None - all previously mentioned Phase 1 UI/PDF tasks and drilling protocol audits were completed)*
 
 **Known issue recurrence from previous fork**
-  - Issue recurrence in previous fork: None from the previous handoff, but local ngrok tunnel crashing was a heavy recurring issue in *this* session until patched to v3.
-  - Recurrence count: 0
-  - Status: RESOLVED
+  - Issue recurrence in previous fork: App showing old data / Updates are not happening in Expo Go.
+  - Recurrence count: 4
+  - Status: USER VERIFICATION PENDING (Agent implemented a backend seed replacement fix).
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
-- **Frontend**: React Native, Expo Router. Custom shell scripts and  are used to modify internal Expo CLI tunneling behaviors.
-- **Backend**: FastAPI, MongoDB (Motor). Now uses  with  workers. JWT token invalidation is handled via an in-memory blocklist using the  claim. Uses  for endpoint rate limiting.
+- **Frontend**: React Native, Expo Router. Complex conditional rendering based on user role (, , ).
+- **Backend**: FastAPI, MongoDB (Motor). Generates dynamic surgical protocols based on hardcoded dictionaries mapped against user inputs (bone density, dimensions). FPDF2 is used for case report PDF generation.
 
 **key DB schema**
-  - : Added fields for  (occlusocervical space, smile line) and  (diabetes, smoking, etc.) to support the new case workflow.
+  - : Contains exactly 649 documents representing variant combinations, grouped under exactly 49 brand/system keys.
+  - : Complex case document containing  and nested arrays/objects for each clinical phase (, , etc.).
 
 **changes in tech stack**
-  - Added , , ,  to Python backend.
-  - Replaced Expo's default ngrok v2 binary with ngrok v3 for local tunneling.
+  - None
 
 **All files of reference** 
--  (Major updates for security hardening and risk calculator logic).
--  (Re-written for 2-step workflow; recently edited to remove missing datetimepicker dependency).
--  (Updated to accept medical props).
--  &  (Created for production server management).
-- Installing ngrok v3 for arm64...
-Replaced node_modules/@expo/ngrok-bin-linux-arm64/ngrok with v3
-ngrok v3 installed: ngrok version 3.37.2 (Created to fix local Expo tunneling).
+-  (Modified seed logic, PDF generator, and drilling protocols)
+-  (Verified as the single source of truth)
+-  (Modified to include Expo tunnel subdomain)
+-  (Updated)
 
 **Areas that need refactoring**: 
--  is critically large and handles all routes, models, and logic.
-- The date input fallback in  is currently a raw text input. It may need refactoring to a proper native DatePicker once dependencies are sorted out.
+-  is critically large (>6200 lines) and contains routing, schemas, DB logic, and massive hardcoded medical dictionaries. It urgently needs to be broken down.
 
 **key api endpoints**
-- : Updated to accept new medical and clinical data.
-- : Now rate-limited (5 requests/minute per IP).
-- : New endpoint; adds JWT  to blocklist.
+-  (Generates comprehensive PDF)
+- 
+- 
 
 **Critical Info for New Agent** 
-- **Deployment Build:** The last action taken was a hotfix removing a missing dependency to fix a deployment build. You must verify if the build succeeds now.
-- **Package Management:** The frontend relies heavily on a  script that runs  and Installing ngrok v3 for arm64...
-Replaced node_modules/@expo/ngrok-bin-linux-arm64/ngrok with v3
-ngrok v3 installed: ngrok version 3.37.2. If you ever delete , ensure you run yarn install v1.22.22
-[1/4] Resolving packages...
-success Already up-to-date.
-$ npx patch-package && bash scripts/install-ngrok-v3.sh && npx expo install --fix || true
-patch-package 8.0.1
-Applying patches...
-@expo/cli@54.0.23 ✔
-@expo/ngrok@4.1.3 ✔
-Installing ngrok v3 for arm64...
-Replaced node_modules/@expo/ngrok-bin-linux-arm64/ngrok with v3
-ngrok v3 installed: ngrok version 3.37.2
-env: load .env
-env: export EXPO_TUNNEL_SUBDOMAIN EXPO_PACKAGER_HOSTNAME EXPO_PACKAGER_PROXY_URL EXPO_PUBLIC_BACKEND_URL EXPO_USE_FAST_RESOLVER METRO_CACHE_ROOT EXPO_NGROK_AUTH_TOKEN
-Dependencies are up to date
-Done in 2.14s. so patches are applied.
+- **Deployment State Awareness**: The user's deployed app was connecting to an Emergent-managed MongoDB that had stale seed data (45 systems instead of 49). The agent fixed the  function to forcefully overwrite the database if counts don't match the Excel file. 
+- **Immediate Action**: You MUST start by asking the user to trigger a redeployment in their platform UI, scan the new Expo QR code, and verify if the data (49 systems, visible protocols, ability for supervisors to create cases) is now correctly reflecting in their iOS Expo Go app. 
+- Do not attempt to build Android APKs; the user relies exclusively on Expo Go for iOS.
 
 **documents and test reports created in this job**
   - 
-  -  (Backend 20/20 pass for new case workflow).
+  -  (17/17 backend tests passed for PDF generation and protocol fixes)
 
 **Last 10 User Messages and any pending HUMAN messages** 
-1. (Latest) User shared deployment build logs showing  failed due to missing . (Status: Agent applied hotfix, verification pending).
-2. User requested changes to New Case workflow via Word doc, integrating medical assessments into risk calc. (Status: COMPLETED).
-3. User requested 7 specific backend security/hardening features. (Status: COMPLETED).
-4. User shared screenshot showing invalid credentials on the deployed app. (Status: Agent verified backend, added frontend logs).
-5. User provided personal ngrok auth token. (Status: COMPLETED).
-6. User reported Expo Go still failing. (Status: COMPLETED).
-7. User reported same ngrok issue persists. (Status: COMPLETED).
-8. User shared screenshot of Expo Go ngrok offline error. (Status: COMPLETED).
-9. User requested to verify and deploy ImplantLens. (Status: COMPLETED).
-10. User confirmed agent's initial plan. (Status: COMPLETED).
+1. (Latest) User states: 1. Scanning the QR code from the redeployment in emergent. 3. I see data with 45 implant systems. No drilling protocols, Supervisors and Implant In Charge cannot create a new case. 4. Yes (Status: USER VERIFICATION PENDING - Agent applied backend seed fixes to address this).
+2. User states: Still, the changes are not seen in the Expo Go app after Redeployment. The Expo Go is showing some backdated version of the app. (Status: COMPLETED - led to investigation above).
+3. User says Yes to starting the drilling protocol audit and Phase 1 UI/PDF export tasks. (Status: COMPLETED).
 
 **Project Health Check:**
-- Broken: Deployment is currently failing (Agent applied a hotfix just before context cutoff, needs verification).
-- Mocked: None.
+- Broken: None
+- Mocked: None
 
 **3rd Party Integrations** 
 - Expo EAS (Deployment)
@@ -128,14 +103,15 @@ Done in 2.14s. so patches are applied.
 - Stripe (Payments) - requires User API Key
 
 **Testing status**
-  - Testing agent used after significant changes: YES (Tested backend workflow).
-  - Troubleshoot agent used after agent stuck in loop: NO.
-  - Test files created: None.
-  - Known regressions: None known, but watch the frontend login flow on the production URL.
+  - Testing agent used after significant changes: YES ( was used to verify backend PDF generation and protocol logic).
+  - Troubleshoot agent used after agent stuck in loop: NO (but Deployment Agent was consulted).
+  - Test files created: 
+  - Known regressions: None currently known.
 
 **Credentials to test flow:**
 - Admin/In-Charge:  / 
 - Student:  / 
+- Supervisor:  / 
 
 **What agent forgot to execute**
-The agent removed the missing  import from the frontend to fix the build crash, but did not actually trigger a new build/deployment or check if the text-input fallback provides acceptable UX for the user.</analysis>
+The agent completed the planned tasks, but the conversation ended immediately after applying the fix for the user's stale deployment issue. The next agent must immediately guide the user to test the fix by redeploying the app and verifying the Expo Go environment.</analysis>

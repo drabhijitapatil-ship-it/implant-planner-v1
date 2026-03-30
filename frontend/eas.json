@@ -8,13 +8,13 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://surgical-case-portal.preview.emergentagent.com"
+        "EXPO_PUBLIC_BACKEND_URL": "https://implant-workflow-hub.preview.emergentagent.com"
       }
     },
     "production": {
       "distribution": "store",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://surgical-case-portal.preview.emergentagent.com"
+        "EXPO_PUBLIC_BACKEND_URL": "https://implant-workflow-hub.preview.emergentagent.com"
       }
     },
     "preview": {
