@@ -82,7 +82,3 @@ android-sdk/
 # Metro cache
 frontend/.metro-cache/
 # Environment files are NOT ignored - required for deployment
--e 
-# Environment files
-*.env
-*.env.*
