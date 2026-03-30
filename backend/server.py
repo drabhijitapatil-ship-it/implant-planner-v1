@@ -79,6 +79,21 @@ def sanitize_input(value: str) -> str:
 async def health_check():
     return {"status": "ok"}
 
+@app.get("/api/health/db-status")
+async def db_status():
+    """Public diagnostic endpoint — shows implant library and user counts to verify deployment state."""
+    implant_count = await db.implant_library.count_documents({})
+    system_pairs = await db.implant_library.aggregate([
+        {"$group": {"_id": {"brand": "$brand", "system": "$system"}}},
+    ]).to_list(500)
+    user_count = await db.users.count_documents({})
+    return {
+        "status": "ok",
+        "implant_library": {"total_records": implant_count, "unique_systems": len(system_pairs)},
+        "users": {"total": user_count},
+        "seed_strategy": "force_reseed_on_every_startup",
+    }
+
 @app.get("/api/expo-qr")
 async def expo_qr():
     import os
@@ -6146,58 +6161,49 @@ async def seed_on_startup():
     else:
         logging.info(f"Users collection has {user_count} documents — skipping seed.")
 
-    # --- Seed implant library (authoritative sync from Excel) ---
-    implant_count = await db.implant_library.count_documents({})
+    # --- Seed implant library (ALWAYS reseed from authoritative Excel on every startup) ---
     xlsx_path = ROOT_DIR / "implant_library_latest.xlsx"
+    logging.info(f"Implant library seed: looking for XLSX at {xlsx_path} (exists={xlsx_path.exists()})")
     if xlsx_path.exists():
-        df = pd.read_excel(xlsx_path, skiprows=0)
-        df.columns = [c.strip() for c in df.columns]
-        brand_col = [c for c in df.columns if "company" in c.lower() or "brand" in c.lower()][0]
-        system_col = [c for c in df.columns if "system" in c.lower() or "name" in c.lower()][0]
-        diam_col = [c for c in df.columns if "diameter" in c.lower()][0]
-        len_col = [c for c in df.columns if "length" in c.lower()][0]
+        try:
+            df = pd.read_excel(xlsx_path, skiprows=0)
+            df.columns = [c.strip() for c in df.columns]
+            brand_col = [c for c in df.columns if "company" in c.lower() or "brand" in c.lower()][0]
+            system_col = [c for c in df.columns if "system" in c.lower() or "name" in c.lower()][0]
+            diam_col = [c for c in df.columns if "diameter" in c.lower()][0]
+            len_col = [c for c in df.columns if "length" in c.lower()][0]
 
-        records = []
-        seen = set()
-        excel_systems = set()
-        for _, row in df.iterrows():
-            try:
-                brand = str(row[brand_col]).strip()
-                system = str(row[system_col]).strip()
-                diameter = round(float(row[diam_col]), 2)
-                length = round(float(row[len_col]), 2)
-                if not brand or not system or brand == "nan" or system == "nan":
+            records = []
+            seen = set()
+            excel_systems = set()
+            for _, row in df.iterrows():
+                try:
+                    brand = str(row[brand_col]).strip()
+                    system = str(row[system_col]).strip()
+                    diameter = round(float(row[diam_col]), 2)
+                    length = round(float(row[len_col]), 2)
+                    if not brand or not system or brand == "nan" or system == "nan":
+                        continue
+                    brand = BRAND_NAME_CORRECTIONS.get(brand, brand)
+                    excel_systems.add(f"{brand}|{system}")
+                    key = (brand, system, diameter, length)
+                    if key not in seen:
+                        seen.add(key)
+                        records.append({"brand": brand, "system": system, "diameter": diameter, "length": length})
+                except (ValueError, TypeError):
                     continue
-                brand = BRAND_NAME_CORRECTIONS.get(brand, brand)
-                excel_systems.add(f"{brand}|{system}")
-                key = (brand, system, diameter, length)
-                if key not in seen:
-                    seen.add(key)
-                    records.append({"brand": brand, "system": system, "diameter": diameter, "length": length})
-            except (ValueError, TypeError):
-                continue
 
-        # Count unique systems in DB
-        db_system_pairs = await db.implant_library.aggregate([
-            {"$group": {"_id": {"brand": "$brand", "system": "$system"}}},
-        ]).to_list(500)
-        db_system_count = len(db_system_pairs)
-        excel_system_count = len(excel_systems)
-
-        needs_reseed = (
-            implant_count == 0
-            or db_system_count != excel_system_count
-            or implant_count != len(records)
-        )
-
-        if needs_reseed and records:
-            await db.implant_library.drop()
-            await db.implant_library.insert_many(records)
-            logging.info(
-                f"Implant library RESEEDED: {len(records)} records, {excel_system_count} systems "
-                f"(was {implant_count} records, {db_system_count} systems)."
-            )
-        else:
-            logging.info(f"Implant library has {implant_count} documents, {db_system_count} systems — up to date.")
+            old_count = await db.implant_library.count_documents({})
+            if records:
+                await db.implant_library.drop()
+                await db.implant_library.insert_many(records)
+                logging.info(
+                    f"Implant library FORCE-RESEEDED: {len(records)} records, {len(excel_systems)} unique systems "
+                    f"(replaced {old_count} old records)."
+                )
+            else:
+                logging.error("Implant library seed: XLSX parsed but produced 0 records!")
+        except Exception as e:
+            logging.error(f"Implant library seed FAILED: {e}")
     else:
         logging.warning(f"XLSX file not found at {xlsx_path} — skipping implant seed.")
