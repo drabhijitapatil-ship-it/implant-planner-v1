@@ -1,360 +1,84 @@
-# Prosthodontics Case Management App — PRD
+# Prosthodontics Case Management App
 
 ## Original Problem Statement
-A mobile application for prosthodontics departments to manage implant cases through a multi-phase approval workflow.
+A comprehensive prosthodontics mobile application for managing surgical case workflows across 4 phases (Pre-Surgical, Surgical, Second Stage Surgical, Prosthetic). Features include implant library management (49 systems), drilling protocol generation, role-based workflows (Student, Supervisor, In-Charge), and medical record documentation.
 
-## Architecture
-- **Frontend:** React Native (Expo) with Expo Router
-- **Backend:** FastAPI (monolithic `server.py`)
-- **Database:** MongoDB (Motor async driver)
-- **Auth:** JWT-based
+## Tech Stack
+- **Frontend**: React Native (Expo), Expo Router
+- **Backend**: FastAPI, MongoDB (Motor), Python
+- **Deployment**: Expo EAS, Docker
+
+## Core Architecture
+```
+/app
+├── backend/
+│   └── server.py                           # Monolithic FastAPI app (~6000 lines)
+│   └── implant_library_updated.xlsx        # 49 systems, 649 variants
+├── frontend/
+│   ├── app/
+│   │   ├── (tabs)/new-procedure.tsx        # Phase 1 creation wizard
+│   │   └── procedures/
+│   │       ├── [id].tsx                    # Main detail/approval view
+│   │       ├── submit-phase2/[id].tsx      # Phase 2 form
+│   │       ├── submit-stage2-surgical/[id].tsx     # Phase 3 form
+│   │       ├── submit-stage2-prosthetic/[id].tsx   # Phase 4 Step 1 form
+│   │       └── submit-phase4-step2/[id].tsx        # Phase 4 Step 2 form
+│   ├── components/
+│   │   ├── CaseImplantPlanning.tsx         # Implant selection & risk logic
+│   │   └── DrillingProtocol.tsx            # Protocol display
+│   └── constants/checklist.ts             # Dropdown options
+└── memory/PRD.md
+```
+
+## Implant Library Status (49 Systems)
+- **With Indications**: 38 systems (Neodent 6, Nobel Biocare 3, Osstem 5, BioHorizons 6, Conelog 1, Zimmer 2, Bredent 4, B&B Dental 5, Cowellmedi 2, Alpha-Bio 1, Dentsply Sirona 1, MIS 1, NeoBiotech 1)
+- **Without Indications** (user will upload later): Blue Sky Bio Bio Max, Bredent Sky Classic, Dentium SuperLine, Megagen AnyRidge, NeoBiotech IT-III (NP/RP/Wide), Nobel Biocare (NobelActive WP, NobelParallel NP/WP), Straumann BLT
+
+## Drilling Protocols Status (32 Systems)
+- BioHorizons: Tapered Pro, Tapered Pro Conical RBT (separate protocol), Tapered Short, Tapered Short Conical RBT
+- Conelog: Progressive Line (with JSON codes)
+- Zimmer: TSX (with Gold/Original kits)
+- Osstem: ETIII NH, MS, SS III, TS III, TS IV
+- Neodent GM: Helix Acqua/Neoporous, Drive Acqua/NeoPorous, Titamax Acqua/NeoPorous
+- MIS: Lance+
+- Dentsply Sirona: Ankylos C/X (with series A-D)
+- Alpha-Bio: SPI (newly added 2026-03-30)
+- Cowellmedi: INNO Submerged, INNO Submerged Narrow
+- B&B Dental: EV Line, 3P, 3P Long, Wide Line, Dura-Vit Slim
+- Bredent: miniSKY, copaSKY, narrowSKY, blueSKY, classicSKY
 
 ## What's Been Implemented
+- Full 4-phase workflow (Pre-Surgical → Surgical → Second Stage Surgical → Prosthetic)
+- Role-based access (Student, Supervisor, In-Charge) with JWT auth
+- Implant library with 49 systems, suggestion engine, risk assessment
+- 32 drilling protocol generators with bone-density-aware sequences
+- PDF export for drilling protocols
+- Calendar picker, scrollable dropdowns, form persistence
+- Safe database seeding (upsert logic, no destructive drops)
 
-### Foundation
-- Full case creation wizard (2-step), Implant selection with FDI chart, drilling protocol
-- 4-phase approval workflow, Clinical photo album (4 phases), PDF reports
-- User management, Push notifications, Username/email login
+## Completed in This Session (2026-03-30)
+- Verified Excel data (49 systems, 649 variants) — already identical, no changes needed
+- Verified IMPLANT_INDICATIONS (38 systems) — already fully aligned with user's Word doc
+- Added Alpha-Bio SPI drilling protocol (dense/soft bone sequences)
+- Separated BioHorizons Tapered Pro Conical RBT into its own protocol (previously aliased to Tapered Pro; document shows different drill sizes: 3.0-5.2 dense vs 2.5-5.4 for Tapered Pro)
+- Updated both generate and export-pdf dispatchers for new protocol families
+- Regression tested: 14/14 protocols pass, 49 systems present, 38 indications match
 
-### Phase A — Checklist & Implant UI Fixes
-- Removed attachment from checklist items #3 & #9
-- Fixed modal header overlap (useSafeAreaInsets)
-- Drilling protocol button on implant cards
-- Phase-wise photo upload (camera + library)
+## Pending / Backlog
+### P1
+- Add drilling protocols for remaining 17 systems once user provides data (Nobel Biocare, Straumann, Dentium, Megagen, NeoBiotech, Blue Sky Bio, Bredent Sky Classic, Zimmer TSV, BioHorizons Narrow/Tapered IM)
+- Add indications for remaining 11 systems once user provides data
 
-### Phase B — Data Visibility & UI Cleanup
-- Photo auto-expand for reviewers, notification badge on Alerts tab
-- Removed duplicate Phase 2 notes, torque visibility in detail & implant cards
+### P2
+- Backend refactoring: Decompose server.py (>6000 lines) into routers/models/services
+- Frontend refactoring: Modularize CaseImplantPlanning.tsx (>1400 lines) and [id].tsx (>1800 lines)
+- Data cleanup: Remove duplicate user entries
 
-### Phase C — Case Summary & Downloads
-- Removed duplicate Phase 4 remark fields, Final Prosthetic Plan display
-- Photo Album download (completed cases only), Export PDF enhanced
+### Known Issues
+- Deployment caching: Docker manifest error causes deployed app to serve old code versions (Emergent platform issue)
+- "Invalid Credentials" on deployed app (intermittent, monitor after next deployment)
 
-### Workflow & PDF Refinements
-- System options display in Step 2, Suggest Me fix (key mismatch)
-- Download Case Report PDF removed, Export PDF from phase2_approved onwards
-- Export PDF includes implant table, torque, final prosthesis, phase2 remarks
-
-### Permissions & Faculty Case Creation (Mar 2026)
-- **Implant plan edit lock:** Students locked after Phase 2 approval. Supervisors/In-Charges can edit at ALL stages. Backend enforces via role + status check.
-- **Edit implant flow fixed:** Edit now opens at Step 2 (System Selection) with pre-filled values, allowing users to change system, diameter, and length. Previously skipped to Step 4 (read-only summary).
-- **Faculty case creation:** Supervisors and Implant In-Charges can create New Cases (without a student).
-  - **Supervisor creates:** status=draft, supervisor_phase1/2_approved pre-set. Only Implant In-Charge needs to approve each phase.
-  - **Implant In-Charge creates:** status=completed, all phases auto-approved instantly.
-  - Notifications handle null student_id gracefully.
-- Frontend adapted: auto-fill supervisor/incharge fields, locked dropdowns, faculty banner, no 24h restriction for faculty.
-
-### Two-Tier Rejection System (Mar 2026)
-- **Reject Permanently:** Case set to `permanently_rejected` (terminal status). No further phases can proceed. Reason stored, creator notified.
-- **Reject with Consideration:** Phase goes back to editable state (Phase 1→draft, Phase 2→phase1_approved, Phase 3→phase2_approved, Phase 4→stage2_surgical_approved). Approval flags reset. Student can edit and resubmit. Reason/feedback stored, creator notified.
-- Works for all 4 phases (Phase 1, 2, 3, 4). Both types require a reason.
-- Frontend: Two-step rejection modal (select type → enter reason). Permanent rejection banner (red) and revision-requested banner (orange) displayed on case detail page.
-- Notifications sent to case creator for both rejection types with reason included.
-
-### ImplantLens – Clinical Case Album (Mar 2026)
-- New standalone feature accessible from hamburger menu
-- **Case Album Listing** (`/implantlens`): Lists all cases with photo completion progress bars, missing photo alerts (count + first 5 missing steps), search by patient/student name, and stats (Total/Complete/In Progress/No Photos)
-- **Case Album Detail** (`/implantlens/[caseId]`): Full-screen CasePhotoAlbum view with case info header and "Full Case" link
-- **Backend** `GET /api/implantlens/cases`: Returns cases with photo stats (photos_uploaded, photos_total, missing_count, missing_steps). Role-filtered: students see own, supervisors see assigned/created, admin/incharge see all.
-
-## Key Endpoints
-- `POST /api/procedures` — Create case (student/supervisor/incharge)
-- `POST /api/procedures/{id}/implant-plan` — Save implant plans (role-based lock)
-- `POST /api/procedures/{id}/approve` — Phase approval
-- `GET /api/notifications/unread-count` — Unread count
-- `POST /api/procedures/{id}/generate-album` — Photo album PDF
-- `POST /api/implant-library/suggest-auto` — Auto-suggest implants
-
-## Status Flow
-`draft` -> `pending_phase1` -> `phase1_approved` -> `pending_phase2` -> `phase2_approved` -> `pending_stage2_surgical` -> `stage2_surgical_approved` -> `pending_stage2_prosthetic` -> `completed`
-
-## Deployment Fixes (Mar 2026)
-- Fixed `.gitignore` blocking `.env` files from deployment (removed duplicate *.env entries)
-- CORS origins now read from `CORS_ORIGINS` env variable
-- Aligned `package.json` start script with supervisor config (`--tunnel`)
-- **Fixed ERR_NGROK_3200 / Expo Go tunnel failure:**
-  - Root cause: Expo SDK 54 bundles ngrok v2 binary (deprecated servers) + shared ngrok account (throttled)
-  - Fix: Installed ngrok v3 binary via `scripts/install-ngrok-v3.sh` (auto-detects architecture)
-  - Patched `@expo/cli` to use user's ngrok auth token via `EXPO_NGROK_AUTH_TOKEN` env var
-  - Patched `@expo/ngrok` for v3 API compatibility (cleaned tunnel config, kill stale processes)
-  - Skips custom subdomain on free tier (ngrok v3 free doesn't support subdomains)
-  - All patches persisted via `patch-package` in `frontend/patches/`
-  - `EXPO_NGROK_AUTH_TOKEN` env variable required in frontend/.env
-- **Fixed DateTimePicker build crash (Mar 2026):** Removed `@react-native-community/datetimepicker` usage from `new-procedure.tsx` and replaced with text-based date input (YYYY-MM-DD) to resolve EAS build failure due to missing dependency.
-
-## New Case Workflow Overhaul (Mar 2026)
-**Two-Step Flow:** Case Details → "Continue to Implant Selection" → Implant Selection → "Submit for Approval"
-
-**New Fields in Case Details (Phase 1):**
-- Clinical Examination: Intraoral exam (edentulous site, ridge contour, soft tissue, keratinized mucosa)
-- Occlusal Analysis: Conditional on procedure type (non-full-arch: occlusal scheme, parafunction, vertical dimension, opposing dentition; full-arch: vertical dimension in mm, TMJ)
-- Aesthetic Risk Assessment: Conditional non-full-arch (smile line, gingival biotype)
-- Medical Assessment: Diabetes, Smoking, Anticoagulant, Osteoporosis, Radiation (Yes/No) + auto risk classification
-- Prosthetic Plan: Conditional options based on procedure type + loading type, "Other" with manual entry
-
-**Updated Options:**
-- Procedure Types: "Implant Placement with GBR" → "Implant Placement with Guided Bone Regeneration"
-- Loading Types: Added "Early Loading" (now: Immediate, Early, Delayed)
-- Prosthetic Plans: Expanded with Zirconia Ti Base, Custom Abutment, Malo, PEEK, Full Arch options
-
-**Risk Calculator:** Now accepts `medical_assessment` parameter. When provided, adds Medical Risk factor (score 1-3), max_score becomes 18 (vs 15). Generates specific clinical recommendations per medical factor.
-
-## Backend Security & Hardening (Mar 2026)
-1. **Rate Limiting** — `slowapi` with `@limiter.limit("5/minute")` on `/auth/login` (SlowAPI + get_remote_address)
-2. **JWT Session Invalidation** — `jti` claim added to tokens; in-memory `token_blocklist` set; `/auth/logout` endpoint adds jti to blocklist; all protected routes check blocklist
-3. **Global Exception Handler** — `@app.exception_handler(Exception)` returns `{"error":"Internal server error","detail":str(exc)}` with 500; HTTPException handler returns clean JSON
-4. **Gunicorn Multi-Worker Config** — `gunicorn.conf.py` (2 workers, UvicornWorker, bind 0.0.0.0:8001) + `start.sh`
-5. **HTTPS Enforcement** — Startup check warns if any configured URL uses `http://` in production
-6. **Unicode Patient Names** — Regex `^[\w\s\-'.À-ÿ]+$` validates patient_name; Pydantic `field_validator` applied
-7. **Input Sanitisation** — `sanitize_input()` strips `<>"';` from all string inputs; `max_length` constraints on all fields (name:100, email:255, etc.); applied via Pydantic `field_validator` on all request models
-
-New dependencies: `slowapi==0.1.9`, `gunicorn==25.1.0`
-New files: `/app/backend/gunicorn.conf.py`, `/app/backend/start.sh`
-
-## Frontend Security & UX Hardening (Mar 2026)
-1. **JWT Expiry → Auto Redirect** — Axios response interceptor in `api.ts` catches 401, clears AsyncStorage, redirects to login
-2. **HTTPS Enforcement** — Runtime warning in `api.ts` if `EXPO_PUBLIC_BACKEND_URL` doesn't use `https://`
-3. **Patient Name Input** — `autoCorrect={false}`, `autoCapitalize="none"` on patient name field in `new-procedure.tsx`
-4. **Form State Persistence** — AppState listener saves form data to AsyncStorage on app background; restores on mount; clears after successful submission
-5. **Client-side Input Sanitisation** — `sanitizeString()` trims whitespace and strips `< > " ' ;` from all string fields before API submission
-
-### Bug Fix: Case Creation Status (Mar 2026)
-- **Fixed**: Implant In-Charge cases no longer auto-complete on creation. All roles (student, supervisor, incharge) now start as `draft` and must go through the normal `draft → pending_phase1 → ...` approval workflow.
-- **Fixed**: Added `status` field to `ProcedureUpdate` model so "Submit for Approval" (PUT with `{status: "pending_phase1"}`) actually works.
-- **Fixed**: Status transition validation — only `draft → pending_phase1` is allowed via PUT endpoint.
-- **Fixed**: Students can now edit their own `draft` procedures (was previously restricted to `pending_supervisor` only).
-
-### Phase 1 Overhaul (Mar 2026 — Doc-Aligned)
-- **Clinical Exam Group A** (Single, Multiple, GBR, Guided Surgery) — Multi-select "Edentulous Site", Ridge Contour, Soft Tissue, Keratinized Mucosa
-- **Clinical Exam Group B** (All on 4/6/X) — "Mandibular/Maxillary Arch Condition" + Ridge/Tissue/Keratinized
-- **Edentulous Site → Multi-Select** — New MultiSelectDropdown with checkboxes
-- **Occlusal/Aesthetic for all non-full-arch** — All 6 types (incl. Immediate/PET) now trigger Occlusal Analysis + Aesthetic Risk
-- **Schedule** — Mon-Fri: 10am/2pm, Saturday: 10am only, Sunday: No slots. Time resets on date change
-- **Prosthetic Plan** — 4 conditional option lists (Single crowns, Bridge/Multiple, Immediate Loading PMMA, Full-Arch)
-- **Checklist** — Matches document: Academic Readiness + upload, RealGuide, Pre-op Medication, Full Payment
-- **Backend** — Added `edentulous_sites` (List[str]), `arch_condition` (str) to ProcedureCreate/Update
-
-### Phase 2 Implementation (Mar 2026 — Doc-Aligned)
-- **Pre-Surgery Checklist**: 7 items (consent, vitals, drilling protocol, implant kit, drapes, instruments, asepsis)
-- **Surgical Procedure**: Anesthesia (Yes/No), Flap Design (5 options), Drilling Type (4 options), Implant Seated + Torque per implant, Prosthetic Component (3 options), Suturing (sutures + hemostasis)
-- **Post-Operative Checklist**: 3 items (radiograph, instructions, medications)
-- **Notes**: Student, Supervisor, In-Charge text areas
-- **Backend**: `Phase2Submit` model with all fields, `phase2_data` subdocument stored, permissions opened for faculty-created cases
-- **Frontend**: Full rewrite of `submit-phase2/[id].tsx` with scrollable dropdowns, toggles, torque inputs
-
-### Phase 3 Implementation (Mar 2026 — Doc-Aligned)
-- **Checklist**: 6 items (Components Available, Implant Site Exam, Radiograph, ISQ Value with text input, Healing Abutment with cuff height mm input, Prosthetic Plan Evaluated)
-- **Notes**: Student, Supervisor, In-Charge text areas
-- **Backend**: `Stage2SurgicalSubmit` model with `checklist_items`, `isq_value`, `healing_abutment_height`, `student_notes`. `phase3_data` subdocument stored. Permissions opened for faculty
-
-### Phase 4 Implementation (Mar 2026 — Doc-Aligned, 2-Step)
-- **Step 1: Final Prosthesis & Impressions** — Conditional prosthesis dropdown (FP1/2/3 per type, material, custom abutment, overdenture attachment), payment + components checkboxes, impression type selector
-- **Step 2: Trial & Prosthesis Delivery** — 5-item trial checklist (Jig/Sheffield's/Radiographic, Prosthesis Trial, Occlusion, Final Placement), student notes, confirmation statement
-- **New Statuses**: `stage2_prosthetic_step1_approved`, `pending_final_delivery`
-- **Backend**: `Phase4Step2Submit` model, new submission + approval endpoints for Step 2, badge generation + completion on final approval
-- **Frontend**: Rewritten `submit-stage2-prosthetic/[id].tsx` for Step 1, new `submit-phase4-step2/[id].tsx` for Step 2
-
-### Phase 1 Refinements (Mar 2026)
-1. **Top 3 + Show More implants**: Fixed React hooks violation (useState inside render callback). Extracted `showAllResults` state to parent `ImplantPlanModal`. Added missing `matchHeader`, `showMoreBtn`, `showMoreText` styles to modal StyleSheet.
-2. **Clinical Examination data on detail page**: Added new sections to `[id].tsx` — Procedure Details (type, loading, prosthetic plan), Clinical Examination (edentulous sites, arch condition, ridge contour, soft tissue, keratinized mucosa), Occlusal Analysis, Aesthetic Risk Assessment, Medical Assessment (with risk level badge). Each section has colored left border and appropriate icons.
-3. **PDF Export enhanced**: Added Procedure Details, Clinical Examination, Occlusal Analysis, Aesthetic Risk, and Medical Assessment sections to `pdfGenerator.ts`. Medical factors shown with color-coded Yes/No. PDF export now available from `pending_phase1` onwards (previously only from `phase2_approved`).
-4. **Auto-populate Implant Site**: Backend `save_implant_plan` endpoint now auto-sets `implant_site` field from sorted unique tooth positions (e.g., "14, 36"). No manual entry needed.
-5. **Data visibility by role/status**: All Phase 1 clinical data is now visible on the detail page regardless of role. PDF export enabled for all non-draft statuses.
-
-### Phase 2 Refinements (Mar 2026)
-1. **Header collision fix**: Added `'top'` to SafeAreaView edges in `submit-phase2/[id].tsx` so the "Phase 2 — Surgical Protocols" header sits below the mobile status bar.
-2. **Drilling Type options updated**: Changed from 4 options to 3: Guided Surgery, Free Hand Sequential Drilling, Combination of Guided and Free Hand Sequential Drilling.
-3. **Healing Abutment cuff height**: When "Healing Abutment Placed" is selected as Prosthetic Component, a text input for cuff height (mm) appears. Value stored in `phase2_data.healing_abutment_cuff_height`.
-4. **Full Phase 2 data visibility on detail page**: Added comprehensive Phase 2 section to `[id].tsx` showing:
-   - Pre-Surgery Checklist (with check/uncheck status)
-   - Surgical Procedure details (Anaesthesia, Incision/Flap, Drilling, Implant Seating, Torque, Prosthetic Component, Cuff Height, Sutures, Hemostasis)
-   - Post-Operative Checklist
-   - Post-surgical Notes by Student, Remarks by Supervisor, Remarks by In-Charge
-   - All data visible to all roles at all times (during and after approval)
-5. **Backend**: `phase2_supervisor_notes` and `phase2_incharge_notes` now saved as top-level fields for easy retrieval.
-
-### Phase 3 & Phase 4 Data Consolidation (Mar 2026)
-1. **Phase 3 — Second Stage Surgical** section on detail page: Shows checklist items (with check/uncheck icons), ISQ Value, Healing Abutment Height, and notes by Student/Supervisor/In-Charge.
-2. **Phase 4 Step 1 — Prosthetic Protocol** section: Shows Final Prosthetic Plan, Prosthetic Material, Custom Abutment, Overdenture Attachment, Impression Type, Payment/Components status, and notes by Student/Supervisor/In-Charge.
-3. **Phase 4 Step 2 — Trial & Delivery** section: Shows Trial Checklist (check/uncheck), Confirmation Statement, and notes by Student/Supervisor/In-Charge.
-4. **Backend**: Phase 3 submit now saves `phase3_supervisor_notes` and `phase3_incharge_notes`. Phase 4 Step 2 submit now saves `phase4_step2_supervisor_notes` and `phase4_step2_incharge_notes`.
-5. All phase data visible to all roles (student, supervisor, in-charge) at all times.
-
-### In-Charge Self-Approval Workflow & Form Reset (Mar 2026)
-1. **Form reset on "New Case" tab**: Added `useFocusEffect` to clear all form fields when tab gains focus (prevents stale data like "Hemant Patil" prefilling).
-2. **In-Charge self-approval workflow**: When Implant In-Charge creates a case:
-   - Goes through Phase 1 → 2 → 3 → 4 sequentially (same as students)
-   - On each phase approve, both supervisor AND in-charge approvals are auto-set
-   - No supervisor approval needed
-   - Cases invisible to supervisors (filtered from listing)
-3. **Backend updates**: All 5 approval endpoints (Phase 1, Phase 2, Phase 3, Phase 4 Step 1, Phase 4 Step 2) check `is_incharge_self_created` flag. Supervisor listing uses `$and` query to exclude `created_by_role: "implant_incharge"`.
-4. **PDF Export enhanced**: Added comprehensive Phase 2, 3, 4 data sections. Removed duplicate "Torque Values" from implant table.
-
-### Implant Library Update (Mar 2026)
-- **Updated master implant library** from user-provided Excel (`implant_library_updated.xlsx`): 49 systems, 649 variants, 17 companies
-- **Brand name correction**: "Noble Biocare" → "Nobel Biocare" (applied via `BRAND_NAME_CORRECTIONS` dict in seeder)
-- **New systems added**: Bredent (Mini 2 Sky, Narrow Sky, Blue Sky, Sky Classic, Copa Sky), Zimmer (TSX, Tapered Screw-Vent TSV), B&B Dental (Dura-Vit Slim), NeoBiotech (IT-III active RP, IT-III active Wide)
-- **Removed old systems**: Alpha Bio BSPI, Bredent Copa/Sky (renamed), Zimmer Biomet Tapered Screw-Vent (brand+system renamed)
-- **Systems sorted alphabetically** by company name in `/api/implant-library/systems` endpoint
-- **IMPLANT_INDICATIONS** updated to match new brand names (Nobel Biocare)
-- Seeder logic enhanced: handles both "Implant Company" and "Brand" column headers, applies brand corrections, skips empty/nan rows
-
-### Implant-Specific Indications & Search Fix (Mar 2026)
-- **Added 38 implant-specific indications** from user's Word document to `IMPLANT_INDICATIONS` dict
-- Each indication includes: `indication` (text), `indicated_procedures` (matching New Case procedure types), `indicated_bone_types` (D1-D4)
-- Special fields: `restricted_teeth` (Nobel Active NP, Osstem MS), `indicated_teeth` (BioHorizons, Conelog, B&B Dental, etc.)
-- **Procedure matching in Suggest Me**: `SUGGEST_ME_TO_CASE_PROCEDURES` maps Suggest Me types → New Case types; `suggest-auto` sorts matched systems first
-- **Bone type filtering in Suggest Me**: Systems only indicated for certain bone types are filtered out when incompatible
-- **System dropdown enhanced**: Shows indication text, "Indicated" badge for procedure-matched systems, "Tooth N" badge for tooth-indicated systems
-- **Result cards in Step 3**: Show indication text and "Indicated" badge from Suggest Me results
-- **Dashboard search bar removed**: Search bar removed from home screen per user request — search functionality remains available in the "My Cases" tab (procedures.tsx)
-- **FlatList keyboard fix**: Added `keyboardShouldPersistTaps="handled"` to procedures.tsx FlatList
-
-### Ankylos C/X Drilling Protocol (Mar 2026)
-- **Added complete drilling protocol** for Dentsply Sirona Ankylos C/X with series-based color-coded system
-- **4 Series**: A (3.5mm/Red), B (4.5mm/Yellow), C (5.5mm/Blue), D (7.0mm/Green)
-- **Protocol sequence**: Round Drill 1.8mm → Lindemann → Pilot 2.0mm → Twist Drill (series-specific) → Conical Reamer (e.g., B11) → Tap (D1/D2 only) → Implant Placement
-- **Bone density handling**: Dense bone (D1/D2) = 7 steps with Tap; Soft bone (D3/D4) = 6 steps without Tap
-- **Insertion torque**: 25-35 Ncm (Ankylos-specific)
-- **PDF export** and **available endpoint** both support Ankylos with series data
-
-### B&B Dental Drilling Protocols (Mar 2026)
-- **Added drilling protocols for all 5 B&B Dental systems**: EV Line, 3P, 3P Long, Wide Line, Dura-Vit Slim
-- **Universal depth rule**: Drill Depth = Implant Length + 0.5mm
-- **Bone-dependent finishing**: Dense (D1/D2) → Final Drill + Countersink; Soft (D3/D4) → Undersized Final Drill + Compactor (3P/3P Long only)
-- **Wide Line**: Standard sequential drilling to full diameter (no countersink/compactor)
-- **Dura-Vit Slim**: Simplified narrow sequence (Pilot 2.1 → 3.0 → Optional 3.2/Final → Place)
-- **Countersink codes**: 3.5→NECK-334, 3.75→NECK-334, 4.0→NECK-354, 4.5→NECK-455, 5.0→NECK-455
-- Both backend generator + frontend `generateDrillingProtocol` + PDF export updated
-
-### MIS Lance+ Drilling Protocol (Mar 2026)
-- **Added complete drilling protocol** for MIS Lance+ system with triple-thread, self-tapping, conical design
-- **Depth Rule**: Osteotomy depth = Implant Length (no offset, unlike B&B Dental)
-- **Drill library**: 1.9mm (marking), 2.4mm (pilot), 3.1mm, 3.65mm, 4.1mm, 4.9mm
-- **Final drill mapping**: 3.3→3.1, 3.75→3.65, 4.2→4.1, 5.0→4.9
-- **D1 (Dense cortical)**: Full sequential drilling + Countersink
-- **D2 (Standard)**: Full sequential drilling, no Countersink
-- **D3/D4 (Under-preparation)**: Skip final drill for primary stability (3.3→stop at 2.4, 3.75→stop at 3.1, 4.2→stop at 3.65, 5.0→stop at 4.1)
-- **Insertion torque**: 35-50 Ncm
-- Backend generator (`_generate_mis_lance_protocol`), frontend local protocol, and PDF export all implemented
-
-### Frontend Drilling Protocol Bug Fix (Mar 2026)
-- **Fixed**: `generateDrillingProtocol()` in `CaseImplantPlanning.tsx` was missing `length` parameter
-- B&B Dental protocols used `length` variable which was undefined, causing `NaN` depth values
-- Added `length?: number` optional parameter, updated all callers to pass `plan.length` and `selectedSystem.lengths?.[0]`
-- All B&B Dental implant placement steps now correctly show implant dimensions
-
-### Cowellmedi INNO Drilling Protocols (Mar 2026)
-- **Added complete drilling protocols** for both Cowellmedi INNO systems
-- **INNO Submerged** (standard): Diameters 3.5/4.0/4.5/5.0/6.0mm, Lengths 7-18mm
-  - Drill library: Round, 2.0 (pilot), 2.8, 3.2, 3.6, 4.2, 4.8
-  - Final drill mapping: 3.5→3.2, 4.0→3.6, 4.5→4.2, 5.0→4.8
-  - D1: Full drilling + mandatory Countersink + optional Bone Tap
-  - D2: Full drilling + Countersink (if cortical thick)
-  - D3/D4: Under-preparation (3.5→stop 2.8, 4.0→stop 3.2, 4.5→stop 3.6, 5.0→stop 4.2)
-- **INNO Submerged Narrow**: Diameters 3.1/3.3mm, Lengths 8-14mm
-  - Drill library: Round, 2.0 (pilot), 2.8
-  - D1/D2: Pilot → 2.8 → Final Drill → Implant
-  - D3/D4: Pilot → 2.8 (skip final drill) → Implant
-- **Depth Rule**: Osteotomy depth = Implant Length (no offset)
-- **Insertion torque**: 25-45 Ncm
-- **Material**: Grade 4 Titanium, SLA Surface, Internal Hex connection
-- Backend generator + frontend local protocol + PDF export all implemented
-
-### Osstem Drilling Protocols (Mar 2026)
-- **Added complete drilling protocols** for all 5 Osstem systems
-- **Standard protocol** (ET III NH, MS, SS III, TS III): Shared bone-adaptive logic
-  - D1: Full drilling + **Cortical Drill** (coronal widening only, NOT full depth)
-  - D2: Standard full sequence, placement 1mm subcrestal
-  - D3/D4: Under-preparation (skip final drill), placement at bone level
-- **TS IV** (ultra-soft bone): Fixed simplified protocol regardless of bone type
-  - 4.0: 2.2→3.5→Implant | 4.5: 2.2→2.7→3.5→4.0→Implant | 5.0: 2.2→2.7→3.5→4.5→Implant
-- **122 concept**: 2-4 drill simplified protocol based on bone density
-- **Insertion torque**: ~40 Ncm | In-built stopper: ~1mm safety margin
-- Backend generator + frontend local protocol + PDF export all implemented
-
-### Neodent Helix GM Updated Drilling Protocols (Mar 2026)
-- **Replaced generic Helix GM protocol** with precise per-diameter drilling sequences
-- **D1/D2**: Drill up to implant diameter + **Plus (+) drill** (crestal cortical expansion, coronal ONLY)
-- **D3/D4**: Stop one drill before final diameter — no Plus drill (under-preparation)
-- **Drill sequence base**: 2.0 → 2.8 → 3.5 → 3.75 → 4.0 → 4.3 → 5.0 → 6.0
-- **Plus Drill highlight**: `+ Drill = Crestal Cortical Expansion ONLY, NOT full osteotomy depth`
-- Both Acqua and NeoPorous surfaces use the same protocol
-- Depth = implant length (no offset)
-
-### Bredent SKY Drilling Protocols (Mar 2026)
-- **Added complete drilling protocols** for all 5 Bredent SKY systems
-- **miniSKY** (2.8/3.2mm): Pilot→Twist 2.25→Final→Implant (no crestal for any bone)
-- **copaSKY** (4.0/5.0/6.0mm, 5.2mm only): Ultra-short simplified: Pilot→Final→Implant
-- **narrowSKY** (3.5mm): D1=no crestal, D2-D4=with crestal (FULL insertion)
-- **blueSKY** (4.0/4.5/5.5mm): Same bone-adaptive crestal pattern as narrowSKY
-- **classicSKY** (4.0/4.5mm): Same bone-adaptive crestal pattern
-- **Global rules**: Depth=Length+0.7mm, self-cutting (no tap), D4=anticlockwise 50 RPM condensation
-- **Insertion torque**: 25-45 Ncm
-- Backend generator + frontend local protocol + PDF export all implemented
-
-### Restricted Bone Height Logic (Mar 2026)
-- **Trigger**: bone_height ≤ 10mm OR "Restricted Bone Height" procedure selected
-- **Rule 1**: Bone type (D1-D4) filtering is BYPASSED
-- **Rule 2**: Bone width (diameter) filtering still applies
-- **Priority 1 Group**: BioHorizons Tapered Short, BioHorizons Tapered Short Conical RBT, Bredent Copa Sky, Dentsply Sirona Ankylos C/X — filtered by diameter only (no length/bone-type constraint)
-- **Priority 2 Group**: All other systems with length ≤ 8mm — filtered by diameter, sorted by shortest available length then alphabetically. Excludes P1 systems.
-- **Backend**: `suggest_auto` endpoint returns `restricted_bone_height: true`, systems tagged with `priority: 1|2` and `priority_label`
-- **Frontend "Suggest Me"**: Shows restricted height banner, priority-based header, P1/P2 badges on results
-- **Frontend "Let Me Choose"**: Shows restricted height warning when boneHeight ≤ 10, sorts P1 systems to top of dropdown with "Short Implant" badge
-- **D3/D4 Caution Warning**: When bone_type is D3 or D4 in restricted height mode, a red warning is shown: "Short implants are ideal and preferred for D1 and D2-type bone only. Make a decision cautiously." Plus tooth-specific augmentation advice:
-  - Maxillary posterior (14-17, 24-27): "Advised to increase bone length by Indirect or Direct Sinus Lift."
-  - Mandibular posterior (34-37, 44-47): "Advised to increase bone length by Vertical Bone Augmentation."
-  - D1/D2: No warning shown (ideal for short implants)
-- **Testing**: 22/22 backend tests passed (iteration_56.json)
-
-### ZimVie TSX Drilling Protocol (Mar 2026)
-- **Dual Kit Support**: Driva Gold Series (codes ending in G) + Driva Drills Original (codes ending in DN)
-- **Diameters**: 3.1, 3.7, 4.1, 4.7, 5.4, 6.0mm | **Lengths**: 8, 10, 11.5, 13, 16mm
-- **Dense (D1/D2)**: Full sequences with step drills as final step
-- **Soft (D3/D4)**: Reduced sequences without step drills; 5.4mm has NO soft protocol (warning shown)
-- **Backend**: `DRILLING_PROTOCOLS["Zimmer|TSX"]` + `_generate_tsx_protocol()` + `alt_protocol` in response
-- **Frontend**: Dual-kit rendering with kit separator headers (step=0 entries)
-- **Insertion Torque**: ≤90 Ncm
-
-### Inline Drilling Protocol Preview in Step 3 (Mar 2026)
-- **Feature**: When an implant is selected in Step 3 (Select Implant), a collapsible "Drilling Protocol" card appears below the results list
-- **Shows**: Brand, system, diameter x length, bone type, and full drill sequence with step numbers
-- **Dual-kit support**: TSX systems show both Driva Gold + Original kits with separator headers
-- **Resets**: Protocol card collapses when a different implant is selected
-- **Works in both**: "Suggest Me" and "Let Me Choose" workflows
-- **Testing**: 29/29 backend tests passed (iteration_57.json) + 4 regression tests
-
-### Drilling Protocol PDF + Phase 1 Checklist Order Fix (Mar 30 2026)
-- Fixed mobile Export PDF: replaced alert with expo-print + expo-sharing for native PDF generation/sharing
-- Fixed Phase 1 pre-surgical checklist appearing after Phases 2/3/4 in UI — now renders in correct sequence
-
-### Login Page Logo & Footer Update (Mar 29 2026)
-- Removed white background from logo (converted JPG to transparent PNG via Pillow)
-- Enlarged logo to 200x160 for better screen ratio
-- Removed "Powered by Bharati Vidyapeeth Dental College" footer
-- Fixed ngrok tunnel crash loop with retry-with-backoff in AsyncNgrok.js
-
-### Login Page Logo Update (Mar 2026)
-- Replaced generic implant icon with uploaded "App Logo.jpg" (dental implant + calendar branding)
-- Logo is now the main brand element (120x120, animated with subtle scale breathing)
-- Clean text "Implanr" below logo (no embedded icon)
-- Tagline: "Implant Planning Assistant"
-- Features: Plan • Visualize • Restore
-- All existing login functionality preserved (JWT auth, error handling, keyboard avoiding, safe area)
-
-### Ngrok Tunnel Resilience Fix (Mar 2026)
-- Fixed expo crash loop caused by ngrok "tunnel already exists" errors
-- Updated `AsyncNgrok.js` with retry-with-backoff logic (up to 10 attempts, 5-30s delays)
-- Updated `@expo/ngrok/index.js` to disconnect stale tunnels before creating new ones
-- Expo now gracefully starts without tunnel if all retries exhausted
-
-## Backlog
-### P1 - Upcoming
-- Implement drilling protocols for remaining systems (Nobel Biocare, Straumann, etc.) as user provides developer-ready codes
-
-### P2 - Refactoring
-- Backend refactoring (decompose server.py into routers/models/services)
-- Frontend refactoring (modularize new-procedure.tsx, [procedureId].tsx, CaseImplantPlanning.tsx)
-- Data cleanup (duplicate user removal)
-- Consider installing `@react-native-community/datetimepicker` properly for better native date picking UX
+## Credentials
+- Admin/In-Charge: `Abhijit.patil` / `Admin@123`
+- Student: `Gaurav.pandey` / `Student@123`
+- Supervisor: `Paresh.gandhi` / `Supervisor@123`

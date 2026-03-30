@@ -4359,9 +4359,150 @@ def _generate_ankylos_protocol(proto, implant_diameter, implant_length, bone):
 
     return steps
 
-# Alias the "Conical RBT" full names to the same protocols
-DRILLING_PROTOCOLS["BioHorizons|Tapered Pro Conical RBT"] = DRILLING_PROTOCOLS["BioHorizons|Tapered Pro"]
+# ── BioHorizons Tapered Pro Conical RBT ─────────────────────────────────────
+# Per the user's document, Conical RBT has DIFFERENT drill sizes from Tapered Pro:
+# Dense bone drills: Pilot + 3.0, 3.3, 3.8, 4.2, 4.6, 5.2 (sequential) + Crestal
+# Soft bone drills:  Pilot + 3.8, 4.2, 4.6, 5.2 (reduced set, starting at 3.8)
+# Diameters: 3.3, 3.8, 4.2, 4.6, 5.2
+DRILLING_PROTOCOLS["BioHorizons|Tapered Pro Conical RBT"] = {
+    "system_name": "BioHorizons Tapered Pro Conical RBT",
+    "protocol_family": "conical_rbt",
+    "lengths": [9, 10.5, 12, 15, 18],
+    "dense_drills": [3.0, 3.3, 3.8, 4.2, 4.6, 5.2],
+    "soft_drills": [3.8, 4.2, 4.6, 5.2],
+}
+
+def _generate_conical_rbt_protocol(proto, implant_diameter, implant_length, bone):
+    """Generate drilling protocol for BioHorizons Tapered Pro Conical RBT."""
+    steps = []
+    step_num = 1
+    depth = str(implant_length)
+    is_dense = bone in ("D1", "D2")
+    is_d4 = bone == "D4"
+
+    # Step 1: Pilot Drill
+    steps.append({"step": step_num, "drill_type": "Pilot Drill", "code": "—",
+                   "diameter": 2.0, "depth": depth, "rpm": "1500-2000", "irrigation": True})
+    step_num += 1
+
+    if is_d4:
+        # D4 (Reduced): Pilot → Soft Bone Drill (implant dia) → Dense Bone Drill (implant dia) → Implant
+        steps.append({"step": step_num, "drill_type": "Soft Bone Drill", "code": "—",
+                       "diameter": implant_diameter, "depth": depth, "rpm": "1000", "irrigation": True})
+        step_num += 1
+        steps.append({"step": step_num, "drill_type": "Dense Bone Drill", "code": "—",
+                       "diameter": implant_diameter, "depth": depth, "rpm": "1000", "irrigation": True})
+        step_num += 1
+    elif is_dense:
+        # D1/D2/D3 (Conventional): Sequential dense drills up to implant diameter + Crestal
+        dense_seq = [d for d in proto["dense_drills"] if d <= implant_diameter]
+        for drill_d in dense_seq:
+            steps.append({"step": step_num, "drill_type": "Dense Bone Drill", "code": "—",
+                           "diameter": drill_d, "depth": depth, "rpm": "1000", "irrigation": True})
+            step_num += 1
+        # Crestal Bone Drill
+        steps.append({"step": step_num, "drill_type": "Crestal Bone Drill", "code": "—",
+                       "diameter": implant_diameter, "depth": "Crestal", "rpm": "1000", "irrigation": True})
+        step_num += 1
+    else:
+        # D3 (Conventional same as D1/D2 per document): Sequential dense drills + Crestal
+        dense_seq = [d for d in proto["dense_drills"] if d <= implant_diameter]
+        for drill_d in dense_seq:
+            steps.append({"step": step_num, "drill_type": "Dense Bone Drill", "code": "—",
+                           "diameter": drill_d, "depth": depth, "rpm": "1000", "irrigation": True})
+            step_num += 1
+        steps.append({"step": step_num, "drill_type": "Crestal Bone Drill", "code": "—",
+                       "diameter": implant_diameter, "depth": "Crestal", "rpm": "1000", "irrigation": True})
+        step_num += 1
+
+    # Implant Placement
+    steps.append({"step": step_num, "drill_type": "Implant Placement", "code": "—",
+                   "diameter": implant_diameter, "depth": depth, "rpm": "30", "irrigation": False,
+                   "note": f"BioHorizons Tapered Pro Conical RBT {implant_diameter}mm x {implant_length}mm"})
+    return steps
+
+
+# Tapered Short Conical RBT uses same protocol as Tapered Short
 DRILLING_PROTOCOLS["BioHorizons|Tapered Short Conical RBT"] = DRILLING_PROTOCOLS["BioHorizons|Tapered Short"]
+
+
+# ── Alpha-Bio SPI Drilling Protocol ────────────────────────────────────────
+# SPI = Spiral Implant (Self-drilling, bone condensing system)
+# Depth Rule: Osteotomy depth = Implant Length
+# Drill library: 2.0 (pilot), 2.8, 3.2, 3.65, 4.1, 4.5, 4.8, 5.2, 5.8
+# D3/D4: Under-preparation (fewer drills for primary stability in soft bone)
+# D1/D2: Full sequential drilling to final drill
+# Bone condensing — minimal osteotomy preparation
+# Can redirect during placement (rotate back 2-3 turns)
+
+ALPHA_BIO_DRILLS = [2.0, 2.8, 3.2, 3.65, 4.1, 4.5, 4.8, 5.2, 5.8]
+
+# Dense bone (D1/D2): full sequence to final drill diameter
+ALPHA_BIO_DENSE = {
+    3.3:  [2.0, 2.8, 3.2],
+    3.75: [2.0, 2.8, 3.2, 3.65],
+    4.2:  [2.0, 2.8, 3.2, 3.65, 4.1],
+    5.0:  [2.0, 2.8, 3.2, 3.65, 4.1, 4.5],
+    6.0:  [2.0, 2.8, 3.2, 3.65, 4.1, 4.5, 4.8, 5.2],
+}
+
+# Soft bone (D3/D4): under-preparation — fewer drills
+ALPHA_BIO_SOFT = {
+    3.3:  [2.0, 2.8],
+    3.75: [2.0, 2.8, 3.2],
+    4.2:  [2.0, 2.8, 3.2],
+    5.0:  [2.0, 2.8, 3.2, 3.65],
+    6.0:  [2.0, 2.8, 3.2, 3.65],
+}
+
+DRILLING_PROTOCOLS["Alpha Bio|SPI"] = {
+    "system_name": "Alpha-Bio SPI",
+    "protocol_family": "alpha_bio_spi",
+    "lengths": [8, 10, 11.5, 13, 16],
+}
+
+def _generate_alpha_bio_spi_protocol(proto, implant_diameter, implant_length, bone):
+    """Generate drilling protocol for Alpha-Bio SPI system."""
+    steps = []
+    step_num = 1
+    depth = str(implant_length)
+    d = implant_diameter
+    is_dense = bone in ("D1", "D2")
+
+    if is_dense:
+        seq = ALPHA_BIO_DENSE.get(d)
+        if not seq:
+            closest = min(ALPHA_BIO_DENSE.keys(), key=lambda x: abs(x - d))
+            seq = ALPHA_BIO_DENSE[closest]
+    else:
+        seq = ALPHA_BIO_SOFT.get(d)
+        if not seq:
+            closest = min(ALPHA_BIO_SOFT.keys(), key=lambda x: abs(x - d))
+            seq = ALPHA_BIO_SOFT[closest]
+
+    for i, drill_d in enumerate(seq):
+        if drill_d == 2.0:
+            label = "Pilot Drill"
+            rpm = "800-1200"
+        elif i == len(seq) - 1 and is_dense:
+            label = "Final Drill"
+            rpm = "500-800"
+        else:
+            label = "Drill"
+            rpm = "800-1000"
+        steps.append({"step": step_num, "drill_type": label, "code": "—",
+                       "diameter": drill_d, "depth": depth, "rpm": rpm, "irrigation": True})
+        step_num += 1
+
+    # Implant Placement
+    note = f"Alpha-Bio SPI {d}mm x {implant_length}mm — Self-drilling, bone condensing."
+    if not is_dense:
+        note += " Under-preparation for primary stability in soft bone."
+    steps.append({"step": step_num, "drill_type": "Implant Placement", "code": "—",
+                   "diameter": d, "depth": depth, "rpm": "20-30", "irrigation": False,
+                   "note": note})
+    return steps
+
 
 # ── B&B Dental Drilling Protocols ──────────────────────────────────────────
 # Universal Rule: Drill Depth = Implant Length + 0.5 mm
@@ -5418,7 +5559,11 @@ async def generate_drilling_protocol(
     if not proto:
         raise HTTPException(status_code=404, detail=f"No drilling protocol available for {brand} {system}")
 
-    if "Short" in system and "Conelog" not in system and brand != "Neodent":
+    if proto.get("protocol_family") == "conical_rbt":
+        steps = _generate_conical_rbt_protocol(proto, diameter, length, bone)
+    elif proto.get("protocol_family") == "alpha_bio_spi":
+        steps = _generate_alpha_bio_spi_protocol(proto, diameter, length, bone)
+    elif "Short" in system and "Conelog" not in system and brand != "Neodent":
         steps = _generate_short_protocol(proto, diameter, length, bone)
     elif "Progressive" in system or brand == "Conelog":
         steps = _generate_conelog_protocol(proto, diameter, length, bone)
@@ -5442,7 +5587,11 @@ async def generate_drilling_protocol(
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
     family = proto.get("protocol_family", "")
-    if family in ("helix", "drive", "titamax"):
+    if family == "conical_rbt":
+        protocol_type = "Reduced Protocol (Conical RBT)" if bone == "D4" else ("Conventional Protocol (Conical RBT)" if bone in ("D1", "D2", "D3") else "Standard Protocol (Conical RBT)")
+    elif family == "alpha_bio_spi":
+        protocol_type = f"Dense Bone Protocol (Alpha-Bio SPI)" if bone in ("D1", "D2") else f"Under-Preparation Protocol (Alpha-Bio SPI)"
+    elif family in ("helix", "drive", "titamax"):
         protocol_type = "Dense Bone Protocol" if bone in ("D1", "D2") else ("Soft Bone Protocol" if bone == "D4" else "Standard Protocol")
     elif "Progressive" in system or brand == "Conelog":
         protocol_type = "Soft Bone Protocol" if bone in ("D3", "D4") else "Standard Protocol"
@@ -5477,7 +5626,7 @@ async def generate_drilling_protocol(
     else:
         protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
 
-    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else ("35-50 Ncm" if family == "mis_lance" else ("25-45 Ncm" if family in ("cowellmedi", "bredent_sky") else ("~40 Ncm" if family == "osstem" else ("≤90 Ncm" if family == "tsx" else "35-45 Ncm")))))
+    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else ("35-50 Ncm" if family == "mis_lance" else ("25-45 Ncm" if family in ("cowellmedi", "bredent_sky") else ("~40 Ncm" if family == "osstem" else ("≤90 Ncm" if family == "tsx" else ("35-45 Ncm" if family in ("conical_rbt", "alpha_bio_spi") else "35-45 Ncm"))))))
 
     # Add Ankylos series info to response
     ankylos_info = {}
@@ -5558,7 +5707,11 @@ async def export_drilling_pdf(
     if not proto:
         raise HTTPException(status_code=404, detail="No protocol available")
 
-    if "Short" in system and "Conelog" not in system and brand != "Neodent":
+    if proto.get("protocol_family") == "conical_rbt":
+        steps = _generate_conical_rbt_protocol(proto, diameter, length, bone)
+    elif proto.get("protocol_family") == "alpha_bio_spi":
+        steps = _generate_alpha_bio_spi_protocol(proto, diameter, length, bone)
+    elif "Short" in system and "Conelog" not in system and brand != "Neodent":
         steps = _generate_short_protocol(proto, diameter, length, bone)
     elif "Progressive" in system or brand == "Conelog":
         steps = _generate_conelog_protocol(proto, diameter, length, bone)
@@ -5582,7 +5735,11 @@ async def export_drilling_pdf(
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
     family = proto.get("protocol_family", "")
-    if family in ("helix", "drive", "titamax"):
+    if family == "conical_rbt":
+        protocol_type = "Reduced Protocol (Conical RBT)" if bone == "D4" else ("Conventional Protocol (Conical RBT)" if bone in ("D1", "D2", "D3") else "Standard Protocol (Conical RBT)")
+    elif family == "alpha_bio_spi":
+        protocol_type = f"Dense Bone Protocol (Alpha-Bio SPI)" if bone in ("D1", "D2") else f"Under-Preparation Protocol (Alpha-Bio SPI)"
+    elif family in ("helix", "drive", "titamax"):
         protocol_type = "Dense Bone Protocol" if bone in ("D1", "D2") else ("Soft Bone Protocol" if bone == "D4" else "Standard Protocol")
     elif "Progressive" in system or brand == "Conelog":
         protocol_type = "Soft Bone Protocol" if bone in ("D3", "D4") else "Standard Protocol"
