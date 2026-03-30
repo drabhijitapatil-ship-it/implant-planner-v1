@@ -5803,7 +5803,7 @@ async def seed_on_startup():
     else:
         logging.info(f"Users collection has {user_count} documents — skipping seed.")
 
-    # --- Seed implant library (always re-seed to ensure latest data) ---
+    # --- Seed implant library (safe upsert — never drops existing data) ---
     implant_count = await db.implant_library.count_documents({})
     xlsx_path = ROOT_DIR / "implant_library_latest.xlsx"
     if xlsx_path.exists():
@@ -5832,13 +5832,25 @@ async def seed_on_startup():
             except (ValueError, TypeError):
                 continue
 
-        if len(records) != implant_count:
-            logging.info(f"Implant library mismatch (DB: {implant_count}, XLSX: {len(records)}) — re-seeding...")
-            await db.implant_library.drop()
+        if implant_count == 0:
+            # Fresh database — bulk insert
             if records:
                 await db.implant_library.insert_many(records)
-            logging.info(f"Re-seeded {len(records)} implant records.")
+                logging.info(f"Seeded {len(records)} implant records into empty collection.")
         else:
-            logging.info(f"Implant library has {implant_count} documents — up to date.")
+            # Existing data — safe upsert (add missing records, never drop)
+            inserted = 0
+            for rec in records:
+                result = await db.implant_library.update_one(
+                    {"brand": rec["brand"], "system": rec["system"], "diameter": rec["diameter"], "length": rec["length"]},
+                    {"$setOnInsert": rec},
+                    upsert=True,
+                )
+                if result.upserted_id:
+                    inserted += 1
+            if inserted > 0:
+                logging.info(f"Implant library: added {inserted} new records (total was {implant_count}).")
+            else:
+                logging.info(f"Implant library has {implant_count} documents — up to date.")
     else:
         logging.warning(f"XLSX file not found at {xlsx_path} — skipping implant seed.")
