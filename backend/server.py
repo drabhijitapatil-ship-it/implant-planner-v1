@@ -84,6 +84,10 @@ def sanitize_input(value: str) -> str:
 async def health_check():
     return {"status": "ok"}
 
+@app.get("/api/health")
+async def api_health_check():
+    return {"status": "ok"}
+
 @app.get("/api/health/db-status")
 async def db_status():
     """Public diagnostic endpoint — shows implant library and user counts to verify deployment state."""
@@ -6155,10 +6159,12 @@ async def seed_on_startup():
         {"name": "Nurse 2", "username": "Nurse.2", "email": "Nurse.2@dental.edu", "password": "Nurse@123", "role": "nurse"},
     ]
 
-    # Upsert each authoritative user (update existing, insert missing, preserve profile_photo)
+    # Upsert each authoritative user (update existing, insert missing, preserve profile_photo & password for existing users)
+    new_count = 0
     for u in AUTHORITATIVE_USERS:
         existing = await db.users.find_one({"username": {"$regex": f"^{re.escape(u['username'])}$", "$options": "i"}})
         if existing:
+            # Update name, email, role but keep existing password_hash (avoids slow bcrypt on every startup)
             await db.users.update_one(
                 {"_id": existing["_id"]},
                 {"$set": {
@@ -6166,10 +6172,10 @@ async def seed_on_startup():
                     "email": u["email"],
                     "username": u["username"],
                     "role": u["role"],
-                    "password_hash": pwd_context.hash(u["password"]),
                 }}
             )
         else:
+            # New user — hash password and insert
             await db.users.insert_one({
                 "name": u["name"],
                 "username": u["username"],
@@ -6178,7 +6184,8 @@ async def seed_on_startup():
                 "role": u["role"],
                 "profile_photo": None,
             })
-    logging.info(f"User sync complete: {len(AUTHORITATIVE_USERS)} authoritative users upserted.")
+            new_count += 1
+    logging.info(f"User sync complete: {len(AUTHORITATIVE_USERS)} checked, {new_count} new users added.")
 
     # --- Seed implant library (ALWAYS reseed from authoritative Excel on every startup) ---
     xlsx_path = ROOT_DIR / "implant_library_latest.xlsx"
