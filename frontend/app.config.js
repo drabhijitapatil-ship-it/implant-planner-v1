@@ -43,5 +43,15 @@ Module._resolveFilename = function (request, parent, isMain, options) {
 };
 
 module.exports = ({ config }) => {
-  return config;
+  // In deployed environment, Emergent sets REACT_APP_BACKEND_URL to the production URL.
+  // In preview, only EXPO_PUBLIC_BACKEND_URL is available.
+  const backendUrl = process.env.REACT_APP_BACKEND_URL || process.env.EXPO_PUBLIC_BACKEND_URL || '';
+
+  return {
+    ...config,
+    extra: {
+      ...(config.extra || {}),
+      backendUrl,
+    },
+  };
 };

@@ -1,8 +1,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
-
-const EXPO_PUBLIC_BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+import { BACKEND_URL } from '../utils/config';
 
 interface User {
   id: string;
@@ -41,7 +40,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (storedToken && storedUser) {
         // Validate the stored token is still valid
         try {
-          const resp = await axios.get(`${EXPO_PUBLIC_BACKEND_URL}/api/auth/me`, {
+          const resp = await axios.get(`${BACKEND_URL}/api/auth/me`, {
             headers: { Authorization: `Bearer ${storedToken}` },
           });
           setToken(storedToken);
@@ -61,7 +60,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const login = async (email: string, password: string) => {
-    const url = `${EXPO_PUBLIC_BACKEND_URL}/api/auth/login`;
+    const url = `${BACKEND_URL}/api/auth/login`;
     console.log(`[AUTH] Login attempt to: ${url} with identifier: '${email}'`);
     try {
       const response = await axios.post(url, {
@@ -86,7 +85,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const register = async (name: string, email: string, password: string, role: string) => {
     try {
-      await axios.post(`${EXPO_PUBLIC_BACKEND_URL}/api/auth/register`, {
+      await axios.post(`${BACKEND_URL}/api/auth/register`, {
         name,
         email,
         password,
@@ -114,7 +113,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateProfilePhoto = async (photoBase64: string) => {
     try {
-      await axios.put(`${EXPO_PUBLIC_BACKEND_URL}/api/auth/profile-photo`, {
+      await axios.put(`${BACKEND_URL}/api/auth/profile-photo`, {
         profile_photo: photoBase64,
       });
       
