@@ -56,6 +56,19 @@ A comprehensive mobile application for managing dental implant procedures at the
 
 ## Session History
 
+### March 31, 2026 — Session 4 (Fork)
+- **EAS Deployment Fix**: Simplified `utils/config.ts` to remove `expo-constants` dependency — EAS deletes `app.config.js` during builds, so the previous approach of reading `Constants.expoConfig?.extra?.backendUrl` was unreliable. Now uses `process.env.EXPO_PUBLIC_BACKEND_URL` directly (inlined by Metro from `eas.json`).
+- **Added `backendUrl` to `app.json` extra** as a hardcoded safety net.
+- **Backend verified**: All 3 roles login successfully, 49 systems / 649 records confirmed.
+- **Status**: USER VERIFICATION PENDING — user needs to redeploy and test Expo Go.
+
+### March 30, 2026 — Session 3 (Fork)
+- Fixed EAS build failure: incorrect import path `../utils/config` → `../../utils/config` in `new-procedure.tsx`
+- Created centralized `utils/config.ts` for URL management
+- Cleaned backend requirements.txt (removed 16 unused Google AI packages)
+- Added `/api/health/db-status` diagnostic endpoint
+- Updated `.gitignore` to stop ignoring `*.env` files
+
 ### March 30, 2026 — Session 2 (Fork)
 - **Drilling Protocol Audit & Fixes**:
   - Alpha-Bio SPI 6.0mm soft bone: Added missing 4.1mm drill
