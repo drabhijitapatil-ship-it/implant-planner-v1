@@ -1,16 +1,15 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
-
-const EXPO_PUBLIC_BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+import { BACKEND_URL } from './config';
 
 // HTTPS enforcement check
-if (EXPO_PUBLIC_BACKEND_URL && !EXPO_PUBLIC_BACKEND_URL.startsWith('https://')) {
-  console.warn('[SECURITY] EXPO_PUBLIC_BACKEND_URL does not use HTTPS:', EXPO_PUBLIC_BACKEND_URL);
+if (BACKEND_URL && !BACKEND_URL.startsWith('https://')) {
+  console.warn('[SECURITY] BACKEND_URL does not use HTTPS:', BACKEND_URL);
 }
 
 const api = axios.create({
-  baseURL: `${EXPO_PUBLIC_BACKEND_URL}/api`,
+  baseURL: `${BACKEND_URL}/api`,
 });
 
 // Add token to requests

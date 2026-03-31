@@ -4,7 +4,9 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import axios from 'axios';
 
-const EXPO_PUBLIC_BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+import { BACKEND_URL } from './config';
+
+const EXPO_PUBLIC_BACKEND_URL = BACKEND_URL;
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({

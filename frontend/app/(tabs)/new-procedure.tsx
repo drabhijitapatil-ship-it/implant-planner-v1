@@ -34,7 +34,9 @@ import {
   getProstheticOptions,
 } from '../../constants/checklist';
 
-const API = process.env.EXPO_PUBLIC_BACKEND_URL;
+import { BACKEND_URL } from '../utils/config';
+
+const API = BACKEND_URL;
 
 // ─── Multi-Select Dropdown ─────────────────────────────
 function MultiSelectDropdown({ label, values, options, onChange, placeholder, required }: {
