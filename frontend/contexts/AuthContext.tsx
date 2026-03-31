@@ -1,6 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
+import api, { getToken, setToken, removeToken } from '../utils/api';
 import { BACKEND_URL } from '../utils/config';
 
 interface User {
@@ -13,19 +12,17 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  token: string | null;
-  login: (email: string, password: string) => Promise<void>;
+  loading: boolean;
+  login: (identifier: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string, role: string) => Promise<void>;
   logout: () => Promise<void>;
   updateProfilePhoto: (photoBase64: string) => Promise<void>;
-  loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -34,22 +31,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadStoredAuth = async () => {
     try {
-      const storedToken = await AsyncStorage.getItem('token');
-      const storedUser = await AsyncStorage.getItem('user');
-      
-      if (storedToken && storedUser) {
-        // Validate the stored token is still valid
+      const storedAccessToken = await getToken('access_token');
+      if (storedAccessToken) {
         try {
-          const resp = await axios.get(`${BACKEND_URL}/api/auth/me`, {
-            headers: { Authorization: `Bearer ${storedToken}` },
-          });
-          setToken(storedToken);
+          const resp = await api.get('/auth/me');
           setUser(resp.data);
-          axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
         } catch {
-          // Token invalid or user deleted — clear stale session
-          await AsyncStorage.removeItem('token');
-          await AsyncStorage.removeItem('user');
+          // Token invalid — try refresh silently (interceptor handles it)
+          // If refresh also fails, interceptor clears tokens
+          await removeToken('access_token');
+          await removeToken('refresh_token');
+          await removeToken('user');
         }
       }
     } catch (error) {
@@ -59,77 +51,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const login = async (email: string, password: string) => {
-    const url = `${BACKEND_URL}/api/auth/login`;
-    console.log(`[AUTH] Login attempt to: ${url} with identifier: '${email}'`);
-    try {
-      const response = await axios.post(url, {
-        email,
-        password,
-      });
+  const login = async (identifier: string, password: string) => {
+    const response = await api.post('/auth/login', { identifier, password });
 
-      console.log(`[AUTH] Login success for: ${response.data.user?.name}`);
-      const { token: newToken, user: newUser } = response.data;
-      
-      await AsyncStorage.setItem('token', newToken);
-      await AsyncStorage.setItem('user', JSON.stringify(newUser));
-      
-      setToken(newToken);
-      setUser(newUser);
-      axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
-    } catch (error: any) {
-      console.error(`[AUTH] Login error:`, error.message, error.response?.status, error.response?.data);
-      throw new Error(error.response?.data?.detail || 'Login failed');
-    }
+    const { access_token, refresh_token, user: newUser } = response.data;
+
+    await setToken('access_token', access_token);
+    await setToken('refresh_token', refresh_token);
+    await setToken('user', JSON.stringify(newUser));
+
+    setUser(newUser);
   };
 
   const register = async (name: string, email: string, password: string, role: string) => {
-    try {
-      await axios.post(`${BACKEND_URL}/api/auth/register`, {
-        name,
-        email,
-        password,
-        role,
-      });
-      
-      // Auto login after register
-      await login(email, password);
-    } catch (error: any) {
-      throw new Error(error.response?.data?.detail || 'Registration failed');
-    }
+    await api.post('/auth/register', { name, email, password, role });
+    // Auto login after register
+    await login(email, password);
   };
 
   const logout = async () => {
     try {
-      await AsyncStorage.removeItem('token');
-      await AsyncStorage.removeItem('user');
-      setToken(null);
-      setUser(null);
-      delete axios.defaults.headers.common['Authorization'];
-    } catch (error) {
-      console.error('Failed to logout:', error);
+      const accessToken = await getToken('access_token');
+      if (accessToken) {
+        await api.post('/auth/logout');
+      }
+    } catch {
+      // Ignore logout API errors
     }
+    await removeToken('access_token');
+    await removeToken('refresh_token');
+    await removeToken('user');
+    setUser(null);
   };
 
   const updateProfilePhoto = async (photoBase64: string) => {
-    try {
-      await axios.put(`${BACKEND_URL}/api/auth/profile-photo`, {
-        profile_photo: photoBase64,
-      });
-      
-      // Update local user state
-      if (user) {
-        const updatedUser = { ...user, profile_photo: photoBase64 };
-        setUser(updatedUser);
-        await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
-      }
-    } catch (error: any) {
-      throw new Error(error.response?.data?.detail || 'Failed to update profile photo');
+    await api.put('/auth/profile-photo', { profile_photo: photoBase64 });
+    if (user) {
+      const updatedUser = { ...user, profile_photo: photoBase64 };
+      setUser(updatedUser);
+      await setToken('user', JSON.stringify(updatedUser));
     }
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, register, logout, updateProfilePhoto, loading }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, updateProfilePhoto }}>
       {children}
     </AuthContext.Provider>
   );

@@ -6,7 +6,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import axios from 'axios';
+import api from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';
 import {
@@ -35,8 +35,6 @@ import {
 } from '../../constants/checklist';
 
 import { BACKEND_URL } from '../../utils/config';
-
-const API = BACKEND_URL;
 
 // ─── Multi-Select Dropdown ─────────────────────────────
 function MultiSelectDropdown({ label, values, options, onChange, placeholder, required }: {
@@ -228,7 +226,7 @@ const calStyles = StyleSheet.create({
 
 // ─── Main Component ────────────────────────────────────
 export default function NewProcedureScreen() {
-  const { user, token } = useAuth();
+  const { user } = useAuth();
   const router = useRouter();
   const [step, setStep] = useState<'details' | 'implants'>('details');
   const [loading, setLoading] = useState(false);
@@ -355,14 +353,14 @@ export default function NewProcedureScreen() {
   useEffect(() => {
     const loadFaculty = async () => {
       try {
-        const res = await axios.get(`${API}/api/users`, { headers: { Authorization: `Bearer ${token}` } });
+        const res = await api.get('/users');
         const users = res.data || [];
         setSupervisors(users.filter((u: any) => u.role === 'supervisor' || u.role === 'implant_incharge'));
         setIncharges(users.filter((u: any) => u.role === 'implant_incharge'));
       } catch (e) { /* ignore */ }
     };
     loadFaculty();
-  }, [token]);
+  }, []);
 
   // Update medical risk when factors change
   useEffect(() => {
@@ -442,9 +440,7 @@ export default function NewProcedureScreen() {
           : sanitized.prosthetic_plan,
       };
 
-      const res = await axios.post(`${API}/api/procedures`, payload, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await api.post('/procedures', payload);
 
       const procId = res.data.id || res.data._id;
       setCreatedProcedureId(procId);
@@ -486,9 +482,8 @@ export default function NewProcedureScreen() {
                 {
                   text: 'Submit', onPress: async () => {
                     try {
-                      await axios.put(`${API}/api/procedures/${createdProcedureId}`,
-                        { status: 'pending_phase1' },
-                        { headers: { Authorization: `Bearer ${token}` } }
+                      await api.put(`/procedures/${createdProcedureId}`,
+                        { status: 'pending_phase1' }
                       );
                       Alert.alert('Success', 'Case submitted for approval.');
                       router.replace('/(tabs)/dashboard');
