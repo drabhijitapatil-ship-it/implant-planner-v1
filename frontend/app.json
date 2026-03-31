@@ -58,7 +58,8 @@
       "eas": {
         "projectId": "364fac6d-f5b1-447e-88e5-f27bb0a027e6"
       },
-      "router": {}
+      "router": {},
+      "backendUrl": "https://implant-workflow-hub.preview.emergentagent.com"
     },
     "owner": "abhijitapatil"
   }
