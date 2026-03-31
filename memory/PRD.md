@@ -59,7 +59,10 @@ A comprehensive mobile application for managing dental implant procedures at the
 ### March 31, 2026 — Session 4 (Fork)
 - **EAS Deployment Fix**: Simplified `utils/config.ts` to remove `expo-constants` dependency — EAS deletes `app.config.js` during builds, so the previous approach of reading `Constants.expoConfig?.extra?.backendUrl` was unreliable. Now uses `process.env.EXPO_PUBLIC_BACKEND_URL` directly (inlined by Metro from `eas.json`).
 - **Added `backendUrl` to `app.json` extra** as a hardcoded safety net.
-- **Backend verified**: All 3 roles login successfully, 49 systems / 649 records confirmed.
+- **Implemented authoritative user seed sync**: All 21 users from Login Details.docx now upsert on every startup (emails, passwords, roles synced). Deployed DB will always have correct credentials.
+- **Updated login IDs to document format**: Emails now match document exactly (e.g., `Abhijit.patil@dental.edu`). Login is case-insensitive.
+- **Updated login placeholder** to guide users: "Login ID (e.g. Name.surname@dental.edu)"
+- **All 21 users verified via API**: Every credential from the document works correctly.
 - **Status**: USER VERIFICATION PENDING — user needs to redeploy and test Expo Go.
 
 ### March 30, 2026 — Session 3 (Fork)
