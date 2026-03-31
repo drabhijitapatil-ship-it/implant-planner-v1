@@ -19,6 +19,7 @@ import { BlurView } from 'expo-blur';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { BACKEND_URL } from '../../utils/config';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -65,7 +66,7 @@ export default function LoginScreen() {
       const detail = error.message || 'Unknown error';
       const status = error.response?.status || 'no status';
       const respData = JSON.stringify(error.response?.data || {});
-      Alert.alert('Login Failed', `${detail}\n\nStatus: ${status}\nIdentifier: "${email.trim()}" (len=${email.trim().length})\nResp: ${respData.substring(0, 100)}`);
+      Alert.alert('Login Failed', `${detail}\n\nStatus: ${status}\nAPI: ${BACKEND_URL || '(empty)'}\nIdentifier: "${email.trim()}" (len=${email.trim().length})\nResp: ${respData.substring(0, 100)}`);
     } finally {
       setLoading(false);
     }
