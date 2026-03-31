@@ -1,8 +1,14 @@
 # Test Credentials
 
+## Auth System (Production-Grade Upgrade)
+- **Login field**: `identifier` (accepts email OR username, case-insensitive)
+- **Response format**: `{ access_token, refresh_token, token_type: "bearer", user }`
+- **Access token expiry**: 15 minutes
+- **Refresh token expiry**: 7 days (stored in MongoDB `refresh_tokens` collection)
+
 ## User Accounts (from Login Details.docx)
 
-### Implant In-Charge (also act as Supervisors)
+### Implant In-Charge
 | Name | Login ID | Password |
 |------|----------|----------|
 | Dr. Abhijit Patil | Abhijit.patil@dental.edu | Admin@123 |
@@ -39,8 +45,16 @@
 | Nurse 1 | Nurse.1@dental.edu | Nurse@123 |
 | Nurse 2 | Nurse.2@dental.edu | Nurse@123 |
 
+## Key API Endpoints
+- `POST /api/auth/login` — `{"identifier": "...", "password": "..."}`
+- `GET /api/auth/me` — Returns current user (requires Bearer token)
+- `POST /api/auth/refresh` — `{"refresh_token": "..."}`
+- `POST /api/auth/logout` — Invalidates refresh token (requires Bearer token)
+- `GET /api/health` — Health check
+- `GET /api/health/db-status` — DB diagnostics
+
 ## Notes
 - Login is case-insensitive (both `Abhijit.patil@dental.edu` and `abhijit.patil@dental.edu` work)
 - Username-only login also works (e.g., `Abhijit.patil`)
-- Backend API: `https://implant-workflow-hub.preview.emergentagent.com`
 - Rate limit: 5 login attempts per minute per IP
+- Backend URL: `https://implant-workflow-hub.preview.emergentagent.com`

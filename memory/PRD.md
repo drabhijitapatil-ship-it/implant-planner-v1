@@ -62,7 +62,16 @@ A comprehensive mobile application for managing dental implant procedures at the
 - **Implemented authoritative user seed sync**: All 21 users from Login Details.docx now upsert on every startup (emails, passwords, roles synced). Deployed DB will always have correct credentials.
 - **Updated login IDs to document format**: Emails now match document exactly (e.g., `Abhijit.patil@dental.edu`). Login is case-insensitive.
 - **Updated login placeholder** to guide users: "Login ID (e.g. Name.surname@dental.edu)"
-- **All 21 users verified via API**: Every credential from the document works correctly.
+- **Added `/api/health` endpoint**: Emergent deployment health check was hitting this missing route (returning 404), causing the deployment to be torn down.
+- **Optimized startup**: Seed no longer re-hashes bcrypt passwords for existing users (saved ~5s of blocking CPU time).
+- **Production-grade Auth Upgrade** (20/20 tests passed):
+  - Login uses `identifier` field (supports email or username, case-insensitive)
+  - Access token (15min) + Refresh token (7 days, stored in MongoDB)
+  - `/api/auth/refresh` endpoint for silent token renewal
+  - `/api/auth/logout` invalidates refresh token in DB
+  - Frontend: expo-secure-store for token storage, axios interceptors for auto-attach + auto-refresh on 401
+  - Removed `token` from AuthContext, replaced with interceptor-based approach
+  - Migrated `new-procedure.tsx`, `_layout.tsx`, `usePushNotifications.ts` to use centralized `api` module
 - **Status**: USER VERIFICATION PENDING — user needs to redeploy and test Expo Go.
 
 ### March 30, 2026 — Session 3 (Fork)
