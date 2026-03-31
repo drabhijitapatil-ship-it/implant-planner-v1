@@ -34,7 +34,7 @@ import {
   getProstheticOptions,
 } from '../../constants/checklist';
 
-import { BACKEND_URL } from '../utils/config';
+import { BACKEND_URL } from '../../utils/config';
 
 const API = BACKEND_URL;
 
