@@ -47,7 +47,6 @@ if not SECRET_KEY:
     SECRET_KEY = secrets.token_urlsafe(32)
     logging.warning("SECRET_KEY not set in environment, using generated key (not recommended for production)")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -121,8 +120,14 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def create_access_token(data: dict) -> str:
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire, "jti": str(uuid.uuid4())})
+    expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+    to_encode.update({"exp": expire, "type": "access", "jti": str(uuid.uuid4())})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def create_refresh_token(data: dict) -> str:
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + timedelta(days=7)
+    to_encode.update({"exp": expire, "type": "refresh", "jti": str(uuid.uuid4())})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
@@ -133,6 +138,10 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         jti = payload.get("jti")
         if jti and jti in token_blocklist:
             raise HTTPException(status_code=401, detail="Token has been revoked")
+        # Only accept access tokens (not refresh tokens)
+        token_type = payload.get("type")
+        if token_type not in ("access", None):
+            raise HTTPException(status_code=401, detail="Invalid token type")
         user_id = payload.get("user_id")
         if user_id is None:
             raise HTTPException(status_code=401, detail="Invalid token")
@@ -161,7 +170,7 @@ class UserRegister(BaseModel):
         return sanitize_input(v)
 
 class UserLogin(BaseModel):
-    email: str = Field(..., max_length=255)  # accepts email or username
+    identifier: str = Field(..., max_length=255)  # accepts email or username
     password: str = Field(..., max_length=128)
 
 class UserResponse(BaseModel):
@@ -512,11 +521,11 @@ async def register(user: UserRegister):
 @api_router.post("/auth/login")
 @limiter.limit("5/minute")
 async def login(request: Request, user: UserLogin):
-    identifier = user.email.strip().replace('\u200b', '').replace('\ufeff', '')
+    identifier = user.identifier.strip().replace('\u200b', '').replace('\ufeff', '')
     password = user.password.strip().replace('\u200b', '').replace('\ufeff', '')
     db_user = None
 
-    logging.info(f"Login attempt: identifier='{identifier}' (len={len(identifier)}, repr={repr(identifier)}, pw_len={len(password)}, pw_repr={repr(password)})")
+    logging.info(f"Login attempt: identifier='{identifier}'")
 
     # 1) Try exact email match
     db_user = await db.users.find_one({"email": identifier})
@@ -543,7 +552,6 @@ async def login(request: Request, user: UserLogin):
         password_variants.append(password.lower())
     if password != password.capitalize():
         password_variants.append(password.capitalize())
-    # Handle mobile auto-capitalize of first char: e.g., "student@123" → "Student@123"
     if len(password) > 0 and password[0].islower():
         password_variants.append(password[0].upper() + password[1:])
     if len(password) > 0 and password[0].isupper():
@@ -556,21 +564,35 @@ async def login(request: Request, user: UserLogin):
             break
 
     if not matched:
-        logging.warning(f"Login failed: wrong password for user '{db_user['name']}' (identifier='{identifier}', pw_variants_tried={len(password_variants)})")
+        logging.warning(f"Login failed: wrong password for user '{db_user['name']}'")
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
-    # Create token
-    token = create_access_token({"user_id": str(db_user["_id"])})
+    user_id_str = str(db_user["_id"])
+    # Create access + refresh tokens
+    access_token = create_access_token({"user_id": user_id_str})
+    refresh_token = create_refresh_token({"user_id": user_id_str})
+
+    # Store refresh token in DB for invalidation on logout
+    await db.refresh_tokens.insert_one({
+        "user_id": user_id_str,
+        "token": refresh_token,
+        "created_at": datetime.now(timezone.utc),
+        "expires_at": datetime.now(timezone.utc) + timedelta(days=7),
+    })
+
+    user_resp = UserResponse(
+        id=user_id_str,
+        name=db_user["name"],
+        email=db_user["email"],
+        role=db_user["role"],
+        profile_photo=db_user.get("profile_photo")
+    )
     
     return {
-        "token": token,
-        "user": UserResponse(
-            id=str(db_user["_id"]),
-            name=db_user["name"],
-            email=db_user["email"],
-            role=db_user["role"],
-            profile_photo=db_user.get("profile_photo")
-        )
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "user": user_resp,
     }
 
 @api_router.get("/auth/me", response_model=UserResponse)
@@ -592,9 +614,43 @@ async def logout(credentials: HTTPAuthorizationCredentials = Depends(security)):
         jti = payload.get("jti")
         if jti:
             token_blocklist.add(jti)
+        # Remove all refresh tokens for this user
+        user_id = payload.get("user_id")
+        if user_id:
+            await db.refresh_tokens.delete_many({"user_id": user_id})
         return {"message": "Logged out successfully"}
     except Exception:
         return {"message": "Logged out"}
+
+# --- Token Refresh ---
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
+@api_router.post("/auth/refresh")
+async def refresh_access_token(body: RefreshTokenRequest):
+    try:
+        payload = jwt.decode(body.refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=401, detail="Invalid token type")
+        # Check if this refresh token exists in DB (not revoked)
+        stored = await db.refresh_tokens.find_one({"token": body.refresh_token})
+        if not stored:
+            raise HTTPException(status_code=401, detail="Refresh token revoked")
+        user_id = payload.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        # Verify user still exists
+        user = await db.users.find_one({"_id": ObjectId(user_id)}, {"password_hash": 0})
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        new_access_token = create_access_token({"user_id": user_id})
+        return {"access_token": new_access_token, "token_type": "bearer"}
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Refresh token expired")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
 
 # Profile Photo Update
 class ProfilePhotoUpdate(BaseModel):

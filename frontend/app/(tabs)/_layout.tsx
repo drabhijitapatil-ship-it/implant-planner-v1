@@ -164,9 +164,9 @@ const d = StyleSheet.create({
 
 // ── Tab Layout ─────────────────────────────────────────────
 export default function TabsLayout() {
-  const { user, token, logout } = useAuth();
+  const { user, logout } = useAuth();
   const router = useRouter();
-  usePushNotifications(token);
+  usePushNotifications();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 

@@ -2,11 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
-import axios from 'axios';
-
-import { BACKEND_URL } from './config';
-
-const EXPO_PUBLIC_BACKEND_URL = BACKEND_URL;
+import api from './api';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -16,14 +12,12 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export function usePushNotifications(token: string | null) {
+export function usePushNotifications() {
   const notificationListener = useRef<Notifications.Subscription>();
   const responseListener = useRef<Notifications.Subscription>();
 
   useEffect(() => {
-    if (!token) return;
-
-    registerForPushNotifications(token);
+    registerForPushNotifications();
 
     notificationListener.current = Notifications.addNotificationReceivedListener((notification) => {
       console.log('Notification received:', notification.request.content.title);
@@ -42,10 +36,10 @@ export function usePushNotifications(token: string | null) {
         Notifications.removeNotificationSubscription(responseListener.current);
       }
     };
-  }, [token]);
+  }, []);
 }
 
-async function registerForPushNotifications(authToken: string) {
+async function registerForPushNotifications() {
   if (!Device.isDevice) {
     console.log('Push notifications require a physical device');
     return;
@@ -67,12 +61,8 @@ async function registerForPushNotifications(authToken: string) {
 
     const pushToken = (await Notifications.getExpoPushTokenAsync()).data;
 
-    // Send token to backend
-    await axios.post(
-      `${EXPO_PUBLIC_BACKEND_URL}/api/auth/push-token`,
-      { push_token: pushToken },
-      { headers: { Authorization: `Bearer ${authToken}` } }
-    );
+    // Send token to backend (api module auto-attaches auth header)
+    await api.post('/auth/push-token', { push_token: pushToken });
 
     // Android notification channel
     if (Platform.OS === 'android') {
