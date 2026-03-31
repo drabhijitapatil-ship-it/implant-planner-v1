@@ -29,9 +29,14 @@ UPLOADS_DIR.mkdir(exist_ok=True)
 load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+mongo_url = os.environ.get('MONGO_URL', '')
+if not mongo_url:
+    logging.error("MONGO_URL not set! Backend cannot start without a database.")
+    raise RuntimeError("MONGO_URL environment variable is required")
+logging.info(f"Connecting to MongoDB: {mongo_url[:30]}...")
+client = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=10000, connectTimeoutMS=10000)
+db_name = os.environ.get('DB_NAME', 'test_database')
+db = client[db_name]
 
 # Security
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
