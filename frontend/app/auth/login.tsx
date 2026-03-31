@@ -112,7 +112,7 @@ export default function LoginScreen() {
             <BlurView intensity={60} tint="light" style={styles.card}>
               {/* Email */}
               <TextInput
-                placeholder="Email / Username"
+                placeholder="Login ID (e.g. Name.surname@dental.edu)"
                 placeholderTextColor="#888"
                 value={email}
                 onChangeText={setEmail}

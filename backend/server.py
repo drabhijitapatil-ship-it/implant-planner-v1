@@ -6130,41 +6130,55 @@ async def seed_on_startup():
             if u and u.startswith("http://") and u not in ("http://localhost", "http://127.0.0.1", "http://0.0.0.0"):
                 logging.warning(f"HTTPS enforcement: URL '{u}' uses http:// instead of https://. Consider using HTTPS in production.")
 
-    # --- Seed users ---
-    user_count = await db.users.count_documents({})
-    if user_count == 0:
-        logging.info("No users found — seeding default users...")
-        users_data = [
-            {"name": "Dr. Abhijit Patil", "username": "Abhijit.patil", "email": "abhijit.patil@dental.edu", "password": "Admin@123", "role": "implant_incharge"},
-            {"name": "Dr. Ajay Sabane", "username": "Ajay.sabane", "email": "ajay.sabane@dental.edu", "password": "Admin@123", "role": "implant_incharge"},
-            {"name": "Dr. Paresh Gandhi", "username": "Paresh.gandhi", "email": "paresh.gandhi@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
-            {"name": "Dr. Rajshree Jadhav", "username": "Rajshree.jadhav", "email": "rajshree.jadhav@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
-            {"name": "Dr. Vasantha N", "username": "Vasantha.n", "email": "vasantha.n@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
-            {"name": "Dr. Rupali Patil", "username": "Rupali.patil", "email": "rupali.patil@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
-            {"name": "Dr. Pankaj Kadam", "username": "Pankaj.kadam", "email": "pankaj.kadam@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
-            {"name": "Dr. Gaurav Pandey", "username": "Gaurav.pandey", "email": "gaurav.pandey@student.dental.edu", "password": "Student@123", "role": "student"},
-            {"name": "Dr. Atharva Mahadik", "username": "Atharva.mahadik", "email": "atharva.mahadik@student.dental.edu", "password": "Student@123", "role": "student"},
-            {"name": "Dr. Anand Kurum", "username": "Anand.kurum", "email": "anand.kurum@student.dental.edu", "password": "Student@123", "role": "student"},
-            {"name": "Dr. Yashica Jain", "username": "Yashica.jain", "email": "yashica.jain@student.dental.edu", "password": "Student@123", "role": "student"},
-            {"name": "Dr. Vaibhav Deshpande", "username": "Vaibhav.deshpande", "email": "vaibhav.deshpande@student.dental.edu", "password": "Student@123", "role": "student"},
-            {"name": "Dr. Manasi Dhiren", "username": "Manasi.dhiren", "email": "manasi.dhiren@student.dental.edu", "password": "Student@123", "role": "student"},
-            {"name": "Dr. Renuka Bodakhe", "username": "Renuka.bodakhe", "email": "renuka.bodakhe@student.dental.edu", "password": "Student@123", "role": "student"},
-            {"name": "Dr. Shritej Shevakari", "username": "Shritej.shevakari", "email": "shritej.shevakari@student.dental.edu", "password": "Student@123", "role": "student"},
-            {"name": "Dr. Aaditya Patil", "username": "Aaditya.patil", "email": "aaditya.patil@student.dental.edu", "password": "Student@123", "role": "student"},
-            {"name": "Dr. Kunal Parikh", "username": "Kunal.parikh", "email": "kunal.parikh@student.dental.edu", "password": "Student@123", "role": "student"},
-            {"name": "Dr. Krishna Mehta", "username": "Krishna.mehta", "email": "krishna.mehta@student.dental.edu", "password": "Student@123", "role": "student"},
-            {"name": "Dr. Sakshi Lohade", "username": "Sakshi.lohade", "email": "sakshi.lohade@student.dental.edu", "password": "Student@123", "role": "student"},
-            {"name": "Nurse 1", "username": "Nurse.1", "email": "nurse.1@dental.edu", "password": "Nurse@123", "role": "nurse"},
-            {"name": "Nurse 2", "username": "Nurse.2", "email": "nurse.2@dental.edu", "password": "Nurse@123", "role": "nurse"},
-        ]
-        docs = [
-            {"name": u["name"], "username": u["username"], "email": u["email"], "password_hash": pwd_context.hash(u["password"]), "role": u["role"], "profile_photo": None}
-            for u in users_data
-        ]
-        await db.users.insert_many(docs)
-        logging.info(f"Seeded {len(docs)} users.")
-    else:
-        logging.info(f"Users collection has {user_count} documents — skipping seed.")
+    # --- Seed users (force-sync authoritative user list on every startup) ---
+    AUTHORITATIVE_USERS = [
+        {"name": "Dr. Abhijit Patil", "username": "Abhijit.patil", "email": "Abhijit.patil@dental.edu", "password": "Admin@123", "role": "implant_incharge"},
+        {"name": "Dr. Ajay Sabane", "username": "Ajay.sabane", "email": "Ajay.sabane@dental.edu", "password": "Admin@123", "role": "implant_incharge"},
+        {"name": "Dr. Paresh Gandhi", "username": "Paresh.gandhi", "email": "Paresh.gandhi@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
+        {"name": "Dr. Rajshree Jadhav", "username": "Rajshree.jadhav", "email": "Rajshree.jadhav@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
+        {"name": "Dr. Vasantha N", "username": "Vasantha.n", "email": "Vasantha.n@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
+        {"name": "Dr. Rupali Patil", "username": "Rupali.patil", "email": "Rupali.patil@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
+        {"name": "Dr. Pankaj Kadam", "username": "Pankaj.kadam", "email": "Pankaj.kadam@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
+        {"name": "Dr. Gaurav Pandey", "username": "Gaurav.pandey", "email": "Gaurav.pandey@student.dental.edu", "password": "Student@123", "role": "student"},
+        {"name": "Dr. Atharva Mahadik", "username": "Atharva.mahadik", "email": "Atharva.mahadik@student.dental.edu", "password": "Student@123", "role": "student"},
+        {"name": "Dr. Anand Kurum", "username": "Anand.kurum", "email": "Anand.kurum@student.dental.edu", "password": "Student@123", "role": "student"},
+        {"name": "Dr. Yashica Jain", "username": "Yashica.jain", "email": "Yashica.jain@student.dental.edu", "password": "Student@123", "role": "student"},
+        {"name": "Dr. Vaibhav Deshpande", "username": "Vaibhav.deshpande", "email": "Vaibhav.deshpande@student.dental.edu", "password": "Student@123", "role": "student"},
+        {"name": "Dr. Manasi Dhiren", "username": "Manasi.dhiren", "email": "Manasi.dhiren@student.dental.edu", "password": "Student@123", "role": "student"},
+        {"name": "Dr. Renuka Bodakhe", "username": "Renuka.bodakhe", "email": "Renuka.bodakhe@student.dental.edu", "password": "Student@123", "role": "student"},
+        {"name": "Dr. Shritej Shevakari", "username": "Shritej.shevakari", "email": "Shritej.shevakari@student.dental.edu", "password": "Student@123", "role": "student"},
+        {"name": "Dr. Aaditya Patil", "username": "Aaditya.patil", "email": "Aaditya.patil@student.dental.edu", "password": "Student@123", "role": "student"},
+        {"name": "Dr. Kunal Parikh", "username": "Kunal.parikh", "email": "Kunal.parikh@student.dental.edu", "password": "Student@123", "role": "student"},
+        {"name": "Dr. Krishna Mehta", "username": "Krishna.mehta", "email": "Krishna.mehta@student.dental.edu", "password": "Student@123", "role": "student"},
+        {"name": "Dr. Sakshi Lohade", "username": "Sakshi.lohade", "email": "Sakshi.lohade@student.dental.edu", "password": "Student@123", "role": "student"},
+        {"name": "Nurse 1", "username": "Nurse.1", "email": "Nurse.1@dental.edu", "password": "Nurse@123", "role": "nurse"},
+        {"name": "Nurse 2", "username": "Nurse.2", "email": "Nurse.2@dental.edu", "password": "Nurse@123", "role": "nurse"},
+    ]
+
+    # Upsert each authoritative user (update existing, insert missing, preserve profile_photo)
+    for u in AUTHORITATIVE_USERS:
+        existing = await db.users.find_one({"username": {"$regex": f"^{re.escape(u['username'])}$", "$options": "i"}})
+        if existing:
+            await db.users.update_one(
+                {"_id": existing["_id"]},
+                {"$set": {
+                    "name": u["name"],
+                    "email": u["email"],
+                    "username": u["username"],
+                    "role": u["role"],
+                    "password_hash": pwd_context.hash(u["password"]),
+                }}
+            )
+        else:
+            await db.users.insert_one({
+                "name": u["name"],
+                "username": u["username"],
+                "email": u["email"],
+                "password_hash": pwd_context.hash(u["password"]),
+                "role": u["role"],
+                "profile_photo": None,
+            })
+    logging.info(f"User sync complete: {len(AUTHORITATIVE_USERS)} authoritative users upserted.")
 
     # --- Seed implant library (ALWAYS reseed from authoritative Excel on every startup) ---
     xlsx_path = ROOT_DIR / "implant_library_latest.xlsx"
