@@ -170,7 +170,8 @@ class UserRegister(BaseModel):
         return sanitize_input(v)
 
 class UserLogin(BaseModel):
-    identifier: str = Field(..., max_length=255)  # accepts email or username
+    identifier: Optional[str] = Field(None, max_length=255)  # preferred: email or username
+    email: Optional[str] = Field(None, max_length=255)  # backward compat: old clients send 'email'
     password: str = Field(..., max_length=128)
 
 class UserResponse(BaseModel):
@@ -521,8 +522,14 @@ async def register(user: UserRegister):
 @api_router.post("/auth/login")
 @limiter.limit("5/minute")
 async def login(request: Request, user: UserLogin):
-    identifier = user.identifier.strip().replace('\u200b', '').replace('\ufeff', '')
+    # Accept either 'identifier' or 'email' field (backward compat)
+    raw_identifier = user.identifier or user.email or ""
+    identifier = raw_identifier.strip().replace('\u200b', '').replace('\ufeff', '')
     password = user.password.strip().replace('\u200b', '').replace('\ufeff', '')
+
+    if not identifier:
+        raise HTTPException(status_code=400, detail="identifier or email is required")
+
     db_user = None
 
     logging.info(f"Login attempt: identifier='{identifier}'")
@@ -591,6 +598,7 @@ async def login(request: Request, user: UserLogin):
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
+        "token": access_token,  # backward compat for old frontend
         "token_type": "bearer",
         "user": user_resp,
     }
@@ -6179,7 +6187,19 @@ async def shutdown_db_client():
 @app.on_event("startup")
 async def seed_on_startup():
     """Auto-seed users and implant library if collections are empty (for fresh deployments)."""
-    import pandas as pd
+    try:
+        import pandas as pd
+    except ImportError:
+        logging.warning("pandas not installed — skipping seed.")
+        return
+
+    try:
+        # Quick connectivity check
+        await client.admin.command('ping')
+        logging.info("MongoDB connection verified.")
+    except Exception as e:
+        logging.error(f"MongoDB unreachable during startup seed: {e}. App will start without seeding.")
+        return
 
     # --- HTTPS enforcement check ---
     cors_origins = os.environ.get("CORS_ORIGINS", "")
