@@ -520,7 +520,7 @@ async def register(user: UserRegister):
     )
 
 @api_router.post("/auth/login")
-@limiter.limit("5/minute")
+@limiter.limit("100/minute")
 async def login(request: Request, user: UserLogin):
     # Accept either 'identifier' or 'email' field (backward compat)
     raw_identifier = user.identifier or user.email or ""
