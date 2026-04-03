@@ -1236,15 +1236,7 @@ function ModalContent(props: any) {
                   const q = systemSearch.toLowerCase();
                   return s.brand.toLowerCase().includes(q) || s.system.toLowerCase().includes(q);
                 }).sort((a, b) => {
-                  // When restricted height, sort P1 systems to top
-                  if (isRestrictedHeight) {
-                    const aP1 = RESTRICTED_HEIGHT_P1.includes(`${a.brand}|${a.system}`) ? 0 : 1;
-                    const bP1 = RESTRICTED_HEIGHT_P1.includes(`${b.brand}|${b.system}`) ? 0 : 1;
-                    if (aP1 !== bP1) return aP1 - bP1;
-                  }
-                  const aMatch = procedureType && a.indicated_procedures?.includes(procedureType) ? 0 : 1;
-                  const bMatch = procedureType && b.indicated_procedures?.includes(procedureType) ? 0 : 1;
-                  if (aMatch !== bMatch) return aMatch - bMatch;
+                  // Primary: always alphabetical by brand + system
                   return `${a.brand} ${a.system}`.localeCompare(`${b.brand} ${b.system}`);
                 })}
                 keyExtractor={(item, i) => `${item.brand}-${item.system}-${i}`}
