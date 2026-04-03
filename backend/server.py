@@ -1653,7 +1653,11 @@ async def save_implant_plan(
     current_user: dict = Depends(get_current_user),
 ):
     """Save or update implant plans (1-6 implants) for a procedure."""
-    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0, "student_id": 1, "status": 1, "supervisor_id": 1, "implant_incharge_id": 1})
+    try:
+        oid = ObjectId(procedure_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid procedure ID")
+    proc = await db.procedures.find_one({"_id": oid}, {"_id": 1, "student_id": 1, "status": 1, "supervisor_id": 1, "implant_incharge_id": 1})
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
 
@@ -1709,15 +1713,21 @@ async def get_implant_plan(
     current_user: dict = Depends(get_current_user),
 ):
     """Retrieve the implant plan for a procedure."""
+    try:
+        oid = ObjectId(procedure_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid procedure ID")
+    # Check existence first (without projection that can return empty dict)
+    exists = await db.procedures.find_one({"_id": oid}, {"_id": 1})
+    if not exists:
+        raise HTTPException(status_code=404, detail="Procedure not found")
     proc = await db.procedures.find_one(
-        {"_id": ObjectId(procedure_id)},
+        {"_id": oid},
         {"_id": 0, "implant_plans": 1, "number_of_implants": 1},
     )
-    if not proc:
-        raise HTTPException(status_code=404, detail="Procedure not found")
     return {
-        "implant_plans": proc.get("implant_plans", []),
-        "number_of_implants": proc.get("number_of_implants", 0),
+        "implant_plans": (proc or {}).get("implant_plans", []),
+        "number_of_implants": (proc or {}).get("number_of_implants", 0),
     }
 
 

@@ -404,7 +404,7 @@ function generateDrillingProtocol(brand: string, system: string, diameter: numbe
   return protocol;
 }
 
-export default function CaseImplantPlanning({ procedureId, isOwner, userRole, torqueValues, procedureStatus, medicalAssessment }: Props) {
+export default function CaseImplantPlanning({ procedureId, isOwner, userRole, torqueValues, procedureStatus, procedureType, medicalAssessment }: Props) {
   const [plans, setPlans] = useState<ImplantPlanItem[]>([]);
   const [systems, setSystems] = useState<ImplantSystem[]>([]);
   const [toothRecs, setToothRecs] = useState<Record<string,any>>({});
@@ -641,16 +641,18 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
         usedPositions={editingIdx !== null ? usedPositions.filter((_, i) => i !== editingIdx) : usedPositions}
         editItem={editingIdx !== null ? plans[editingIdx] : undefined}
         medicalAssessment={medicalAssessment}
+        procedureType={procedureType}
       />
     </View>
   );
 }
 
 // ── Add/Edit Implant Modal Component ───────────────────────
-function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPositions, editItem, medicalAssessment }: {
+function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPositions, editItem, medicalAssessment, procedureType }: {
   visible: boolean; onClose: () => void; onSave: (item: ImplantPlanItem) => void;
   systems: ImplantSystem[]; toothRecs: Record<string,any>; usedPositions: string[];
   editItem?: ImplantPlanItem; medicalAssessment?: Record<string, string>;
+  procedureType?: string;
 }) {
   const [step, setStep] = useState(1);
   const [position, setPosition] = useState('');
@@ -782,6 +784,7 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
         handleCalcRisk={handleCalcRisk}
         handleConfirm={handleConfirm}
         toothInfo={toothInfo}
+        procedureType={procedureType}
       />
     </Modal>
   );
@@ -797,7 +800,7 @@ function ModalContent(props: any) {
     riskResult, riskLoading, showSystemDD, setShowSystemDD, systemSearch, setSystemSearch,
     showAllResults, setShowAllResults,
     sProcedures, setSProcedures, handleSearch, handleCalcRisk, handleConfirm, toothInfo,
-    systems, usedPositions, onSave,
+    systems, usedPositions, onSave, procedureType,
   } = props;
 
   const BONE_TYPES = ['D1','D2','D3','D4'];
