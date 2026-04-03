@@ -7,6 +7,7 @@ A comprehensive mobile application for managing dental implant procedures at the
 - **Frontend**: React Native (Expo Router) — tested via Expo Go on iOS
 - **Backend**: FastAPI + MongoDB (Motor) — monolithic `server.py`
 - **Database**: MongoDB with `implant_library` (649 variants, 49 systems) and `procedures` collections
+- **Auth**: JWT Access/Refresh tokens, expo-secure-store, Axios interceptors
 
 ## Core Features Implemented
 1. **4-Phase Workflow**: Complete CRUD + approval flow for Phases 1-4
@@ -19,27 +20,30 @@ A comprehensive mobile application for managing dental implant procedures at the
 8. **Top 3 + Show More**: Implant suggestion results show top 3 by default with expandable list
 9. **Auto-populate implant_site**: Derived from selected implant plan positions
 10. **Authoritative Seed Sync**: Implant library auto-reseeds on deployment if DB is stale
+11. **Production-grade Auth**: Access/Refresh JWT tokens with expo-secure-store and Axios interceptors
 
 ## Key Credentials
-- Admin/In-Charge: `Abhijit.patil` / `Admin@123`
-- Student: `Gaurav.pandey` / `Student@123`
-- Supervisor: `Paresh.gandhi` / `Supervisor@123`
+- Admin/In-Charge: `Abhijit.patil@dental.edu` / `Admin@123`
+- Student: `Gaurav.pandey@student.dental.edu` / `Student@123`
+- Supervisor: `Paresh.gandhi@dental.edu` / `Supervisor@123`
 
 ## Key API Endpoints
-- `POST /api/auth/login`
+- `POST /api/auth/login` (accepts `identifier` field)
+- `POST /api/auth/refresh`
+- `GET /api/health`
 - `GET /api/procedures` / `GET /api/procedures/{id}`
 - `POST /api/procedures` (creation)
+- `GET /api/procedures/{id}/implant-plan`
+- `POST /api/procedures/{id}/implant-plan`
 - `POST /api/procedures/{id}/case-report` (PDF generation)
 - `POST /api/drilling-protocols/generate`
-- `GET /api/drilling-protocols/available`
 - `GET /api/implant-library/systems`
-- Phase submission endpoints: `/api/procedures/{id}/submit-phase2`, etc.
 
 ## Architecture
 ```
 /app
   backend/
-    server.py                        # Monolithic (~6200 lines) — ALL endpoints, models, protocol dicts
+    server.py                        # Monolithic (~6300 lines) — ALL endpoints, models, protocol dicts
     implant_library_latest.xlsx      # Authoritative implant data source
   frontend/
     app/
@@ -47,65 +51,40 @@ A comprehensive mobile application for managing dental implant procedures at the
       (tabs)/_layout.tsx             # Tab navigation with role-based visibility
       procedures/[id].tsx, submit-phase2/[id].tsx, etc.
     components/
-      CaseImplantPlanning.tsx, DrillingProtocol.tsx
+      CaseImplantPlanning.tsx        # Implant planning modal with dental chart
+    contexts/
+      AuthContext.tsx                 # Auth state management with onAuthFailure callback
     utils/
-      pdfGenerator.ts               # Frontend HTML-to-PDF via expo-print
+      api.ts                         # Centralized Axios with interceptors
+      pdfGenerator.ts                # Frontend HTML-to-PDF via expo-print
     constants/
       checklist.ts                   # Dropdown options, checklist definitions
 ```
 
 ## Session History
 
+### April 1, 2026 — Session 5 (Fork)
+- **P0 Bug Fix: "Add Implant Position" Blank Screen Crash** (17/17 tests passed):
+  - **Root Cause 1**: Backend `GET /api/procedures/{id}/implant-plan` returned 404 for newly created procedures. MongoDB projection on non-existent fields returns `{}` which is falsy in Python. Fixed by separating existence check from data retrieval.
+  - **Root Cause 2**: Backend lacked ObjectId validation — invalid IDs like 'NONE' caused unhandled 500 errors. Added try/except ObjectId validation to both GET and POST implant-plan endpoints.
+  - **Root Cause 3**: Frontend `procedureType` prop was undefined in `ModalContent`. It was declared in Props interface but never destructured in `CaseImplantPlanning`, never passed to `ImplantPlanModal`, and never forwarded to `ModalContent`. Fixed the full prop chain.
+  - **Root Cause 4**: (Previous session) `api.ts` interceptor used `router.replace('/auth/login')` on 401 errors, which crashes React Native when a Modal is open. Already fixed to use `onAuthFailure` callback registered by `AuthContext.tsx`.
+
 ### March 31, 2026 — Session 4 (Fork)
-- **EAS Deployment Fix**: Simplified `utils/config.ts` to remove `expo-constants` dependency — EAS deletes `app.config.js` during builds, so the previous approach of reading `Constants.expoConfig?.extra?.backendUrl` was unreliable. Now uses `process.env.EXPO_PUBLIC_BACKEND_URL` directly (inlined by Metro from `eas.json`).
-- **Added `backendUrl` to `app.json` extra** as a hardcoded safety net.
-- **Implemented authoritative user seed sync**: All 21 users from Login Details.docx now upsert on every startup (emails, passwords, roles synced). Deployed DB will always have correct credentials.
-- **Updated login IDs to document format**: Emails now match document exactly (e.g., `Abhijit.patil@dental.edu`). Login is case-insensitive.
-- **Updated login placeholder** to guide users: "Login ID (e.g. Name.surname@dental.edu)"
-- **Added `/api/health` endpoint**: Emergent deployment health check was hitting this missing route (returning 404), causing the deployment to be torn down.
-- **Optimized startup**: Seed no longer re-hashes bcrypt passwords for existing users (saved ~5s of blocking CPU time).
-- **Production-grade Auth Upgrade** (20/20 tests passed):
-  - Login uses `identifier` field (supports email or username, case-insensitive)
-  - Access token (15min) + Refresh token (7 days, stored in MongoDB)
-  - `/api/auth/refresh` endpoint for silent token renewal
-  - `/api/auth/logout` invalidates refresh token in DB
-  - Frontend: expo-secure-store for token storage, axios interceptors for auto-attach + auto-refresh on 401
-  - Removed `token` from AuthContext, replaced with interceptor-based approach
-  - Migrated `new-procedure.tsx`, `_layout.tsx`, `usePushNotifications.ts` to use centralized `api` module
-- **Status**: USER VERIFICATION PENDING — user needs to redeploy and test Expo Go.
+- EAS Deployment Fix, Auth Upgrade (20/20 tests), Health endpoint, Seed optimization
+- Production-grade Auth: JWT Access/Refresh tokens, expo-secure-store, Axios interceptors
 
-### March 30, 2026 — Session 3 (Fork)
-- Fixed EAS build failure: incorrect import path `../utils/config` → `../../utils/config` in `new-procedure.tsx`
-- Created centralized `utils/config.ts` for URL management
-- Cleaned backend requirements.txt (removed 16 unused Google AI packages)
-- Added `/api/health/db-status` diagnostic endpoint
-- Updated `.gitignore` to stop ignoring `*.env` files
-
-### March 30, 2026 — Session 2 (Fork)
-- **Drilling Protocol Audit & Fixes**:
-  - Alpha-Bio SPI 6.0mm soft bone: Added missing 4.1mm drill
-  - Neodent Helix GM: Removed extra 2.8mm step to match document
-  - Ankylos C/X: Tap D1-only, D3/D4 skip Conical Reamer
-- **Backend Case-Report PDF Enhanced** with Clinical Examination, Medical Assessment, Phase 2-4 new data
-- **Deployment Fix — Stale Data**: Rewrote seed function to do authoritative sync (drops and re-inserts if system count or record count mismatches)
-- **Added EXPO_TUNNEL_SUBDOMAIN** to frontend/.env
-- **Cleaned up** old duplicate Excel files
-- **Testing**: 17/17 backend tests passed (iteration_58)
-
-### March 30, 2026 — Session 1
-- Verified implant_library_updated.xlsx matches DB (49 systems, 649 variants)
-- Updated IMPLANT_INDICATIONS dictionary (38 systems from Word doc)
-- Extracted drilling protocol Word document
+### March 30, 2026 — Sessions 1-3
+- Drilling Protocol Audit, PDF Enhancement, Stale Data Fix, Implant Indications
 
 ### Earlier Sessions
-- Full 4-phase workflow implementation (Phases 1-4)
-- Security/UX features, calendar picker, scrollable dropdowns
-- EAS build fixes, Expo project linking
+- Full 4-phase workflow, Security/UX features, EAS build fixes
 
 ## Backlog (Prioritized)
 ### P1
 - Ensure all entered data visible to Supervisor/In-Charge before approval, student after approval
 - Add indications/protocols for remaining 17 systems (when user provides data)
+- Production deployment verification (user needs to "Save to Github" + Deploy)
 
 ### P2
 - Backend refactoring: Decompose server.py into modular routers, models, services
