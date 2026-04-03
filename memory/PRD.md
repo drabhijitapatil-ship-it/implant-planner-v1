@@ -90,8 +90,8 @@ A comprehensive mobile application for managing dental implant procedures at the
 ### April 3, 2026 — Session 7 (Fork)
 - **Approval Comment Revert Verified**: Reverted approval comment boxes per user request. Restored simple Approve/Reject protocol across all 5 phases.
 - **Approve/Reject Button UI Fix**: Removed "! Approval Required" banner, centered buttons with clean layout.
-- **"Let Me Choose" Top 3 + Show More**: In choose mode, top 3 best-match implants shown first, "Show More" reveals all remaining diameters/lengths from the full system catalog.
-- **Medical Assessment Checklist Bug Fix**: Auto-marks "Medical Assessment Done" as green when medical assessment form has entries filled.
+- **Bone Graft & Membrane Field**: Added Yes/No toggle + text box in Phase 2 form (between Torque Values and Other Notes). Data stored in phase2_data, displayed in case detail, and included in PDF.
+- **Supervisor/InCharge Approval Comments (Phase 2-4)**: Comment text box above Approve/Reject buttons for Phase 2 through Phase 4. Independent of approval action. Saved as phase{N}_supervisor_notes / phase{N}_incharge_notes. Visible to student. Included in PDF. Phase 1 intentionally has no comment box.
 
 ### Earlier Sessions
 - Session 5: Blank screen crash fix, backend seed sync, auth upgrade
