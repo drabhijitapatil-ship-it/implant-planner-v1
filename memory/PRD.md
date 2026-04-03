@@ -88,7 +88,10 @@ A comprehensive mobile application for managing dental implant procedures at the
 - **Previous P0 Bug Fix**: "Add Implant Position" blank screen crash fixed (backend 404 for new procedures, ObjectId validation, procedureType prop chain, api.ts interceptor).
 
 ### April 3, 2026 — Session 7 (Fork)
-- **Approval Comment Revert Verified**: Reverted approval comment boxes per user request. Restored simple Approve/Reject protocol across all 5 phases. Full end-to-end curl test: Phase 1→2→3→4 Step1→4 Step2 all pass with `{"action":"approve"}`. Rejection and InCharge self-approval also verified.
+- **Approval Comment Revert Verified**: Reverted approval comment boxes per user request. Restored simple Approve/Reject protocol across all 5 phases.
+- **Approve/Reject Button UI Fix**: Removed "! Approval Required" banner, centered buttons with clean layout.
+- **"Let Me Choose" Top 3 + Show More**: In choose mode, top 3 best-match implants shown first, "Show More" reveals all remaining diameters/lengths from the full system catalog.
+- **Medical Assessment Checklist Bug Fix**: Auto-marks "Medical Assessment Done" as green when medical assessment form has entries filled.
 
 ### Earlier Sessions
 - Session 5: Blank screen crash fix, backend seed sync, auth upgrade

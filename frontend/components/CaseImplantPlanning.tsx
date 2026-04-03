@@ -1022,8 +1022,13 @@ function ModalContent(props: any) {
                 if (implants.length === 0) return <Text style={ms.noResults}>No implants found for these measurements.</Text>;
                 const isRestrictedResult = result.restricted_bone_height === true;
                 const topMatches = implants.slice(0, 3);
-                const remaining = implants.slice(3);
-                const displayed = showAllResults ? implants : topMatches;
+                // In "choose" mode, "Show More" reveals all system options beyond top 3
+                const allSystemOptions = mode === 'choose' ? (result.all_options || []) : implants;
+                const remainingAll = allSystemOptions.filter((opt: any) =>
+                  !topMatches.some((t: any) => t.diameter === opt.diameter && t.length === opt.length)
+                );
+                const remaining = mode === 'choose' ? remainingAll : implants.slice(3);
+                const displayed = showAllResults ? [...topMatches, ...remaining] : topMatches;
                 return (
                   <>
                     {isRestrictedResult && (
