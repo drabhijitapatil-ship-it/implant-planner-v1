@@ -1,6 +1,5 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
-import { router } from 'expo-router';
 import { BACKEND_URL } from './config';
 import { Platform } from 'react-native';
 
@@ -9,30 +8,34 @@ const api = axios.create({
 });
 
 // Secure token storage helpers (fallback to in-memory for unsupported platforms)
-let memoryTokens: { access_token?: string; refresh_token?: string } = {};
+let memoryTokens: Record<string, string> = {};
 
 export async function getToken(key: string): Promise<string | null> {
-  if (Platform.OS === 'web') return memoryTokens[key as keyof typeof memoryTokens] || null;
+  if (Platform.OS === 'web') return memoryTokens[key] || null;
   try {
     return await SecureStore.getItemAsync(key);
   } catch {
-    return memoryTokens[key as keyof typeof memoryTokens] || null;
+    return memoryTokens[key] || null;
   }
 }
 
 export async function setToken(key: string, value: string): Promise<void> {
-  memoryTokens[key as keyof typeof memoryTokens] = value;
+  memoryTokens[key] = value;
   if (Platform.OS !== 'web') {
     try { await SecureStore.setItemAsync(key, value); } catch {}
   }
 }
 
 export async function removeToken(key: string): Promise<void> {
-  delete memoryTokens[key as keyof typeof memoryTokens];
+  delete memoryTokens[key];
   if (Platform.OS !== 'web') {
     try { await SecureStore.deleteItemAsync(key); } catch {}
   }
 }
+
+// Auth failure callback — set by AuthContext to handle logout safely
+let _onAuthFailure: (() => void) | null = null;
+export function setOnAuthFailure(cb: () => void) { _onAuthFailure = cb; }
 
 // Flag to prevent infinite refresh loops
 let isRefreshing = false;
@@ -62,7 +65,6 @@ api.interceptors.response.use(
       originalRequest._retry = true;
 
       if (isRefreshing) {
-        // Queue this request until the refresh completes
         return new Promise((resolve) => {
           refreshSubscribers.push((newToken: string) => {
             originalRequest.headers.Authorization = `Bearer ${newToken}`;
@@ -85,11 +87,11 @@ api.interceptors.response.use(
         originalRequest.headers.Authorization = `Bearer ${data.access_token}`;
         return api(originalRequest);
       } catch {
-        // Refresh failed — clear tokens and redirect to login
+        // Refresh failed — clear tokens, notify AuthContext (no direct navigation)
         await removeToken('access_token');
         await removeToken('refresh_token');
         await removeToken('user');
-        router.replace('/auth/login');
+        if (_onAuthFailure) _onAuthFailure();
         return Promise.reject(error);
       } finally {
         isRefreshing = false;
