@@ -22,7 +22,7 @@ A comprehensive mobile application for managing dental implant procedures at the
 10. **Authoritative Seed Sync**: Implant library auto-reseeds on deployment if DB is stale
 11. **Production-grade Auth**: Access/Refresh JWT tokens with expo-secure-store and Axios interceptors
 12. **Per-Implant Healing Abutment**: Healing abutment boxes match implant count in Phase 2 and Phase 3
-13. **Approval Comments**: Supervisor and In-Charge can add comments when approving each phase
+13. **Simple Approval Protocol**: Supervisor and In-Charge approve/reject each phase without comment boxes (reverted per user request)
 14. **Dynamic Notes Labels**: "Operator's Notes" for faculty-created cases, "Student's Notes" for student cases
 15. **Auto-expand Drilling Protocol**: Protocol auto-expands when implant is selected in Suggest Me mode
 
@@ -87,6 +87,9 @@ A comprehensive mobile application for managing dental implant procedures at the
   - Verified all 5 approval phases work for student-created and incharge-created cases
 - **Previous P0 Bug Fix**: "Add Implant Position" blank screen crash fixed (backend 404 for new procedures, ObjectId validation, procedureType prop chain, api.ts interceptor).
 
+### April 3, 2026 — Session 7 (Fork)
+- **Approval Comment Revert Verified**: Reverted approval comment boxes per user request. Restored simple Approve/Reject protocol across all 5 phases. Full end-to-end curl test: Phase 1→2→3→4 Step1→4 Step2 all pass with `{"action":"approve"}`. Rejection and InCharge self-approval also verified.
+
 ### Earlier Sessions
 - Session 5: Blank screen crash fix, backend seed sync, auth upgrade
 - Session 4: EAS Deployment Fix, Auth Upgrade (20/20 tests), Health endpoint
@@ -95,7 +98,6 @@ A comprehensive mobile application for managing dental implant procedures at the
 
 ## Backlog (Prioritized)
 ### P1
-- Data visibility refinement: Ensure all entered data visible to Supervisor/In-Charge before approval, student after approval
 - Add indications/protocols for remaining 17 systems (when user provides data)
 - Production deployment verification (user needs to "Save to Github" + Deploy)
 
