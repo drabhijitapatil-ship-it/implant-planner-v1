@@ -1210,6 +1210,7 @@ export default function ProcedureDetailScreen() {
               userRole={user?.role || ''}
               torqueValues={procedure.torque_values}
               procedureStatus={procedure.status}
+              procedureType={procedure.implant_procedure_type}
             />
           </View>
         )}
@@ -1222,6 +1223,7 @@ export default function ProcedureDetailScreen() {
             userRole={user?.role || ''}
             torqueValues={procedure.torque_values}
             procedureStatus={procedure.status}
+            procedureType={procedure.implant_procedure_type}
           />
         )}
 
