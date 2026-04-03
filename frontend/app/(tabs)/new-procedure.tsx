@@ -362,11 +362,12 @@ export default function NewProcedureScreen() {
     loadFaculty();
   }, []);
 
-  // Update medical risk when factors change
+  // Update medical risk and auto-mark checklist when factors change
   useEffect(() => {
     if (Object.keys(formData.medical_assessment).length > 0) {
       const risk = calculateMedicalRisk(formData.medical_assessment);
       setFormData(prev => ({ ...prev, medical_risk_level: risk.level }));
+      setChecklistItems(prev => ({ ...prev, medical_assessment: true }));
     }
   }, [formData.medical_assessment]);
 
