@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity,
   KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Switch,
@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import api from '../../../utils/api';
+import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
 import { Ionicons } from '@expo/vector-icons';
 import { CHECKLIST_DATA } from '../../../constants/checklist';
@@ -15,15 +16,33 @@ const CHECKLIST_ITEMS = CHECKLIST_DATA.second_stage.items;
 export default function Stage2SurgicalSubmissionScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const { user } = useAuth();
+  const isFaculty = user?.role === 'supervisor' || user?.role === 'implant_incharge';
+  const notesLabel = isFaculty ? "Operator's Notes" : "Student Notes";
   const [loading, setLoading] = useState(false);
 
   // Checklist state
   const [checklistState, setChecklistState] = useState<Record<string, boolean>>({});
   // Text fields embedded in checklist
   const [isqValue, setIsqValue] = useState('');
-  const [healingAbutmentHeight, setHealingAbutmentHeight] = useState('');
+  const [healingAbutmentHeight, setHealingAbutmentHeight] = useState<string[]>(['']);
+  const [implantPositions, setImplantPositions] = useState<string[]>([]);
   // Notes
   const [studentNotes, setStudentNotes] = useState('');
+
+  useEffect(() => { loadImplantPlan(); }, []);
+
+  const loadImplantPlan = async () => {
+    try {
+      const res = await api.get(`/procedures/${id}/implant-plan`);
+      const count = res.data.number_of_implants || 1;
+      const positions = (res.data.implant_plans || []).map((p: any) => p.position);
+      setImplantPositions(positions);
+      setHealingAbutmentHeight(new Array(count).fill(''));
+    } catch {
+      setHealingAbutmentHeight(['']);
+    }
+  };
 
   const toggleChecklist = (itemId: string) => {
     setChecklistState(prev => ({ ...prev, [itemId]: !prev[itemId] }));
@@ -104,19 +123,29 @@ export default function Stage2SurgicalSubmissionScreen() {
                   </View>
                 )}
 
-                {/* Healing Abutment cuff height */}
+                {/* Healing Abutment cuff height - per implant */}
                 {item.id === 'healing_abutment' && checklistState[item.id] && (
-                  <View style={s.inlineInput}>
-                    <Text style={s.inlineLabel}>Cuff Height (mm)</Text>
-                    <TextInput
-                      style={s.smallInput}
-                      value={healingAbutmentHeight}
-                      onChangeText={setHealingAbutmentHeight}
-                      placeholder="e.g. 3.5"
-                      keyboardType="decimal-pad"
-                      maxLength={5}
-                      data-testid="cuff-height-input"
-                    />
+                  <View style={{ paddingLeft: 16, paddingVertical: 8, backgroundColor: '#FFF8E1', borderRadius: 8, marginBottom: 4, padding: 12, borderWidth: 1, borderColor: '#FFE082' }}>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#E65100', marginBottom: 8 }}>Cuff Height (mm)</Text>
+                    {healingAbutmentHeight.map((val, idx) => (
+                      <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                        <View style={{ flex: 1, backgroundColor: '#FFF3E0', padding: 8, borderRadius: 8 }}>
+                          <Text style={{ fontSize: 13, fontWeight: '600', color: '#BF360C' }}>
+                            Implant {idx + 1}{implantPositions[idx] ? ` (#${implantPositions[idx]})` : ''}
+                          </Text>
+                        </View>
+                        <TextInput
+                          style={s.smallInput}
+                          value={val}
+                          onChangeText={v => { const u = [...healingAbutmentHeight]; u[idx] = v; setHealingAbutmentHeight(u); }}
+                          placeholder="mm"
+                          keyboardType="decimal-pad"
+                          maxLength={5}
+                          data-testid={`healing-abutment-height-${idx}`}
+                        />
+                        <Text style={{ fontSize: 13, fontWeight: '600', color: '#888' }}>mm</Text>
+                      </View>
+                    ))}
                   </View>
                 )}
               </View>
@@ -131,7 +160,7 @@ export default function Stage2SurgicalSubmissionScreen() {
             </View>
 
             <View style={s.field}>
-              <Text style={s.label}>Student Notes</Text>
+              <Text style={s.label}>{notesLabel}</Text>
               <TextInput
                 style={[s.input, s.textArea]}
                 value={studentNotes}

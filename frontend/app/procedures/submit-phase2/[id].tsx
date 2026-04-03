@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import api from '../../../utils/api';
+import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -18,6 +19,9 @@ import {
 export default function Phase2SubmissionScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const { user } = useAuth();
+  const isFaculty = user?.role === 'supervisor' || user?.role === 'implant_incharge';
+  const notesLabel = isFaculty ? "Operator's Notes" : "Student Notes";
   const [loading, setLoading] = useState(false);
 
   // Pre-Surgery Checklist
@@ -37,7 +41,7 @@ export default function Phase2SubmissionScreen() {
   const [implantOtherNotes, setImplantOtherNotes] = useState('');
   const [prostheticComponent, setProstheticComponent] = useState('');
   const [prostheticOpen, setProstheticOpen] = useState(false);
-  const [healingAbutmentCuffHeight, setHealingAbutmentCuffHeight] = useState('');
+  const [healingAbutmentCuffHeight, setHealingAbutmentCuffHeight] = useState<string[]>(['']);
   const [suturesPlaced, setSuturesPlaced] = useState(true);
   const [hemostasisAchieved, setHemostasisAchieved] = useState(true);
 
@@ -56,8 +60,10 @@ export default function Phase2SubmissionScreen() {
       const positions = (res.data.implant_plans || []).map((p: any) => p.position);
       setImplantPositions(positions);
       setTorqueValues(new Array(count).fill(''));
+      setHealingAbutmentCuffHeight(new Array(count).fill(''));
     } catch {
       setTorqueValues(['']);
+      setHealingAbutmentCuffHeight(['']);
     }
   };
 
@@ -236,19 +242,24 @@ export default function Phase2SubmissionScreen() {
             {renderDropdown('Prosthetic Component', prostheticComponent, PROSTHETIC_COMPONENT_OPTIONS,
               prostheticOpen, setProstheticOpen, setProstheticComponent)}
 
-            {/* Healing Abutment Cuff Height */}
+            {/* Healing Abutment Cuff Height - per implant */}
             {prostheticComponent === 'Healing Abutment Placed' && (
-              <View style={s.field}>
-                <Text style={s.label}>Healing Abutment Cuff Height (mm) <Text style={{ color: '#DC3545' }}>*</Text></Text>
-                <TextInput
-                  style={s.input}
-                  value={healingAbutmentCuffHeight}
-                  onChangeText={setHealingAbutmentCuffHeight}
-                  placeholder="e.g. 3"
-                  keyboardType="decimal-pad"
-                  maxLength={5}
-                  data-testid="healing-abutment-cuff-height"
-                />
+              <View style={s.torqueSection}>
+                <Text style={s.torqueTitle}>Healing Abutment Cuff Height (mm)</Text>
+                {healingAbutmentCuffHeight.map((val, idx) => (
+                  <View key={idx} style={s.torqueRow}>
+                    <View style={s.torqueLabel}>
+                      <Text style={s.torqueLabelText}>
+                        Implant {idx + 1}{implantPositions[idx] ? ` (#${implantPositions[idx]})` : ''}
+                      </Text>
+                    </View>
+                    <TextInput style={s.torqueInput} value={val}
+                      onChangeText={v => { const u = [...healingAbutmentCuffHeight]; u[idx] = v; setHealingAbutmentCuffHeight(u); }}
+                      keyboardType="decimal-pad" placeholder="mm" maxLength={5}
+                      data-testid={`healing-abutment-cuff-${idx}`} />
+                    <Text style={s.torqueUnit}>mm</Text>
+                  </View>
+                ))}
               </View>
             )}
 
@@ -294,7 +305,7 @@ export default function Phase2SubmissionScreen() {
               <Text style={s.sectionTitle}>Notes</Text>
             </View>
             <View style={s.field}>
-              <Text style={s.label}>Post-surgical Notes by Student</Text>
+              <Text style={s.label}>Post-surgical Notes by {notesLabel}</Text>
               <TextInput style={[s.input, s.textArea]} value={studentNotes} onChangeText={setStudentNotes}
                 placeholder="Observations, complications, post-surgical notes..." multiline numberOfLines={4}
                 data-testid="phase2-student-notes" />

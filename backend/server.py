@@ -304,8 +304,9 @@ class ApprovalAction(BaseModel):
     action: str = Field(..., max_length=20)  # approve or reject
     rejection_reason: Optional[str] = Field(None, max_length=1000)
     rejection_type: Optional[str] = Field(None, max_length=20)  # "permanent" or "reconsider"
+    comment: Optional[str] = Field(None, max_length=2000)  # Supervisor/Incharge approval comment
 
-    @field_validator('rejection_reason')
+    @field_validator('rejection_reason', 'comment')
     @classmethod
     def sanitize_reason(cls, v):
         if v is not None:
@@ -325,7 +326,7 @@ class Phase2Submit(BaseModel):
     torque_values: Optional[List[float]] = None
     implant_other_notes: Optional[str] = Field(None, max_length=500)
     prosthetic_component: Optional[str] = Field(None, max_length=100)
-    healing_abutment_cuff_height: Optional[str] = Field(None, max_length=10)
+    healing_abutment_cuff_height: Optional[Any] = None  # str or list of str (per implant)
     sutures_placed: Optional[bool] = True
     hemostasis_achieved: Optional[bool] = True
     # Post-operative checklist
@@ -343,7 +344,7 @@ class Stage2SurgicalSubmit(BaseModel):
     checklist_items: Optional[Dict[str, bool]] = None
     # Additional data fields
     isq_value: Optional[str] = Field(None, max_length=20)
-    healing_abutment_height: Optional[str] = Field(None, max_length=20)
+    healing_abutment_height: Optional[Any] = None  # str or list of str (per implant)
     # Notes
     student_notes: Optional[str] = Field(None, max_length=2000)
     supervisor_notes: Optional[str] = Field(None, max_length=2000)
@@ -2551,6 +2552,13 @@ async def approve_procedure(
             # Mark this approver as having approved
             update_fields = {"updated_at": datetime.utcnow()}
             
+            # Save approval comment
+            if action.comment:
+                if is_supervisor or (is_incharge_self_created and not is_implant_incharge):
+                    update_fields["phase1_supervisor_notes"] = action.comment
+                if is_implant_incharge or is_incharge_self_created:
+                    update_fields["phase1_incharge_notes"] = action.comment
+            
             # In-Charge self-created case: auto-approve both roles at once
             if is_incharge_self_created:
                 update_fields["supervisor_phase1_approved"] = True
@@ -2674,6 +2682,13 @@ async def approve_procedure(
         if action.action == "approve":
             # Mark this approver as having approved Phase 2
             update_fields = {"updated_at": datetime.utcnow()}
+            
+            # Save approval comment
+            if action.comment:
+                if is_supervisor or (is_incharge_self_created and not is_implant_incharge):
+                    update_fields["phase2_supervisor_notes"] = action.comment
+                if is_implant_incharge or is_incharge_self_created:
+                    update_fields["phase2_incharge_notes"] = action.comment
             
             # In-Charge self-created case: auto-approve both roles at once
             if is_incharge_self_created:
@@ -3182,6 +3197,13 @@ async def approve_stage2_surgical(
     if action.action == "approve":
         update_fields = {"updated_at": datetime.utcnow()}
 
+        # Save approval comment
+        if action.comment:
+            if is_supervisor or (is_incharge_self_created and not is_implant_incharge):
+                update_fields["phase3_supervisor_notes"] = action.comment
+            if is_implant_incharge or is_incharge_self_created:
+                update_fields["phase3_incharge_notes"] = action.comment
+
         if is_incharge_self_created or same_person:
             update_fields["supervisor_stage2_surgical_approved"] = True
             update_fields["supervisor_stage2_surgical_approved_at"] = datetime.utcnow()
@@ -3293,6 +3315,13 @@ async def approve_stage2_prosthetic(
 
     if action.action == "approve":
         update_fields = {"updated_at": datetime.utcnow()}
+
+        # Save approval comment (Phase 4 Step 1)
+        if action.comment:
+            if is_supervisor or (is_incharge_self_created and not is_implant_incharge):
+                update_fields["phase4_step1_supervisor_notes"] = action.comment
+            if is_implant_incharge or is_incharge_self_created:
+                update_fields["phase4_step1_incharge_notes"] = action.comment
 
         if is_incharge_self_created or same_person:
             update_fields["supervisor_stage2_prosthetic_approved"] = True
@@ -3472,6 +3501,14 @@ async def approve_phase4_step2(
 
     if action.action == "approve":
         update_fields = {"updated_at": datetime.utcnow()}
+
+        # Save approval comment (Phase 4 Step 2)
+        if action.comment:
+            if is_supervisor or (is_incharge_self_created and not is_implant_incharge):
+                update_fields["phase4_step2_supervisor_notes"] = action.comment
+            if is_implant_incharge or is_incharge_self_created:
+                update_fields["phase4_step2_incharge_notes"] = action.comment
+
         if is_incharge_self_created or same_person:
             update_fields["supervisor_final_delivery_approved"] = True
             update_fields["supervisor_final_delivery_approved_at"] = datetime.utcnow()
