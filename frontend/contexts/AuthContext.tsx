@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import api, { getToken, setToken, removeToken } from '../utils/api';
+import api, { getToken, setToken, removeToken, setOnAuthFailure } from '../utils/api';
 import { BACKEND_URL } from '../utils/config';
 
 interface User {
@@ -27,6 +27,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     loadStoredAuth();
+    // Register auth failure callback so interceptor can trigger logout safely
+    setOnAuthFailure(() => {
+      setUser(null);
+    });
   }, []);
 
   const loadStoredAuth = async () => {
