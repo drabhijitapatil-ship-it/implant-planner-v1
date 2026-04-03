@@ -92,6 +92,11 @@ A comprehensive mobile application for managing dental implant procedures at the
 - **Approve/Reject Button UI Fix**: Removed "! Approval Required" banner, centered buttons with clean layout.
 - **Bone Graft & Membrane Field**: Added Yes/No toggle + text box in Phase 2 form (between Torque Values and Other Notes). Data stored in phase2_data, displayed in case detail, and included in PDF.
 - **Supervisor/InCharge Approval Comments (Phase 2-4)**: Comment text box above Approve/Reject buttons for Phase 2 through Phase 4. Independent of approval action. Saved as phase{N}_supervisor_notes / phase{N}_incharge_notes. Visible to student. Included in PDF. Phase 1 intentionally has no comment box.
+- **Role-Based Dashboards**: Three distinct dashboard views:
+  - Student: Action Needed cards, Drafts with "Send" buttons, Faculty Remarks feed
+  - Supervisor: Pending Approval Queue with phase badges, My Students with pending counts, Approval Rate stat
+  - In-Charge/Admin: Case Pipeline bar chart (Phase 1-4 + Complete), Pending Review queue, Student Performance leaderboard, Quick Actions grid
+- Bottom tabs unchanged: Home, New Case, Implant, My Cases, Alerts
 
 ### Earlier Sessions
 - Session 5: Blank screen crash fix, backend seed sync, auth upgrade
