@@ -1254,20 +1254,13 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
-        {/* Implant Planning - Standalone Section (always visible) */}
-        {procedure.status !== 'pending_phase1' && (
-          <CaseImplantPlanning
-            procedureId={id as string}
-            isOwner={user?.id === procedure.student_id}
-            userRole={user?.role || ''}
-            torqueValues={procedure.torque_values}
-            procedureStatus={procedure.status}
-            procedureType={procedure.implant_procedure_type}
-          />
-        )}
-
+        {/* ── APPROVAL SECTION ── */}
         {canApprove() && !showRejectDialog && (
-          <View style={styles.actionButtons}>
+          <View style={[styles.actionButtons, { marginTop: 16, borderWidth: 2, borderColor: '#FF9800', borderRadius: 12, padding: 16, backgroundColor: '#FFF8E1' }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <Ionicons name="alert-circle" size={22} color="#E65100" />
+              <Text style={{ fontSize: 16, fontWeight: '700', color: '#E65100' }}>Approval Required</Text>
+            </View>
             {/* Approval Comment Box */}
             <View style={{ marginBottom: 12, width: '100%' }}>
               <Text style={{ fontSize: 14, fontWeight: '600', color: '#444', marginBottom: 6 }}>
@@ -1403,6 +1396,18 @@ export default function ProcedureDetailScreen() {
               </>
             )}
           </View>
+        )}
+
+        {/* Implant Planning - Standalone Section */}
+        {procedure.status !== 'pending_phase1' && (
+          <CaseImplantPlanning
+            procedureId={id as string}
+            isOwner={user?.id === procedure.student_id}
+            userRole={user?.role || ''}
+            torqueValues={procedure.torque_values}
+            procedureStatus={procedure.status}
+            procedureType={procedure.implant_procedure_type}
+          />
         )}
 
         {/* Extra bottom spacing for the fixed buttons */}
