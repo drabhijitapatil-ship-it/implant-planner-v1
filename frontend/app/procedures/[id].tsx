@@ -34,6 +34,7 @@ export default function ProcedureDetailScreen() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [rejectionType, setRejectionType] = useState<'permanent' | 'reconsider' | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [approvalComment, setApprovalComment] = useState('');
 
   useEffect(() => {
     loadProcedure();
@@ -62,8 +63,9 @@ export default function ProcedureDetailScreen() {
           onPress: async () => {
             setActionLoading(true);
             try {
-              await api.post(getApproveEndpoint(), { action: 'approve' });
+              await api.post(getApproveEndpoint(), { action: 'approve', comment: approvalComment.trim() || null });
               Alert.alert('Success', 'Procedure approved successfully');
+              setApprovalComment('');
               loadProcedure();
             } catch (error: any) {
               Alert.alert('Error', error.response?.data?.detail || 'Failed to approve procedure');
@@ -906,6 +908,12 @@ export default function ProcedureDetailScreen() {
                   </View>
                 </View>
               )}
+              {procedure.phase2_data.bone_graft_used !== undefined && (
+                <InfoRow icon="fitness" label="Bone Graft & Membrane" value={procedure.phase2_data.bone_graft_used ? 'Yes' : 'No'} />
+              )}
+              {procedure.phase2_data.bone_graft_used && procedure.phase2_data.bone_graft_details && (
+                <InfoRow icon="document-text" label="Bone Graft Details" value={procedure.phase2_data.bone_graft_details} />
+              )}
               {procedure.phase2_data.implant_other_notes && (
                 <InfoRow icon="document-text" label="Other Implant Notes" value={procedure.phase2_data.implant_other_notes} />
               )}
@@ -1228,6 +1236,26 @@ export default function ProcedureDetailScreen() {
               procedureStatus={procedure.status}
               procedureType={procedure.implant_procedure_type}
             />
+          </View>
+        )}
+
+        {/* ── APPROVAL COMMENT BOX (Phase 2-4 only) ── */}
+        {canApprove() && !showRejectDialog && procedure?.status !== 'pending_phase1' && (
+          <View style={{ marginTop: 16, marginHorizontal: 16, backgroundColor: '#F0F4FF', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#C5CAE9' }}>
+            <Text style={{ fontSize: 13, fontWeight: '600', color: '#283593', marginBottom: 6 }}>
+              Your Remarks (optional)
+            </Text>
+            <TextInput
+              style={{ borderWidth: 1, borderColor: '#C5CAE9', borderRadius: 8, padding: 10, fontSize: 14, backgroundColor: '#FFF', minHeight: 60, textAlignVertical: 'top' }}
+              value={approvalComment}
+              onChangeText={setApprovalComment}
+              placeholder="Write your remarks for the postgraduate student..."
+              multiline
+              data-testid="approval-comment-input"
+            />
+            <Text style={{ fontSize: 11, color: '#7986CB', marginTop: 4, fontStyle: 'italic' }}>
+              This comment will be visible to the student and included in the PDF.
+            </Text>
           </View>
         )}
 

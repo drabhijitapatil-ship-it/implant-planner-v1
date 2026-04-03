@@ -38,6 +38,8 @@ export default function Phase2SubmissionScreen() {
   const [implantSeatedComment, setImplantSeatedComment] = useState('');
   const [torqueValues, setTorqueValues] = useState<string[]>([]);
   const [implantPositions, setImplantPositions] = useState<string[]>([]);
+  const [boneGraftUsed, setBoneGraftUsed] = useState(false);
+  const [boneGraftDetails, setBoneGraftDetails] = useState('');
   const [implantOtherNotes, setImplantOtherNotes] = useState('');
   const [prostheticComponent, setProstheticComponent] = useState('');
   const [prostheticOpen, setProstheticOpen] = useState(false);
@@ -105,6 +107,8 @@ export default function Phase2SubmissionScreen() {
         implant_seated_correctly: implantSeated,
         implant_seated_comment: implantSeatedComment || null,
         torque_values: torqueValues.map(v => parseFloat(v)),
+        bone_graft_used: boneGraftUsed,
+        bone_graft_details: boneGraftUsed ? boneGraftDetails || null : null,
         implant_other_notes: implantOtherNotes || null,
         prosthetic_component: prostheticComponent,
         healing_abutment_cuff_height: prostheticComponent === 'Healing Abutment Placed' ? healingAbutmentCuffHeight : null,
@@ -229,6 +233,37 @@ export default function Phase2SubmissionScreen() {
                   <Text style={s.torqueUnit}>Ncm</Text>
                 </View>
               ))}
+            </View>
+
+            {/* Bone Graft and Membrane */}
+            <View style={s.field}>
+              <Text style={s.label}>Bone Graft and Membrane</Text>
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 4 }}>
+                <TouchableOpacity
+                  style={[s.toggleBtn, boneGraftUsed && s.toggleBtnActive]}
+                  onPress={() => setBoneGraftUsed(true)}
+                  data-testid="bone-graft-yes"
+                >
+                  <Text style={[s.toggleBtnText, boneGraftUsed && s.toggleBtnTextActive]}>Yes</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[s.toggleBtn, !boneGraftUsed && s.toggleBtnActive]}
+                  onPress={() => { setBoneGraftUsed(false); setBoneGraftDetails(''); }}
+                  data-testid="bone-graft-no"
+                >
+                  <Text style={[s.toggleBtnText, !boneGraftUsed && s.toggleBtnTextActive]}>No</Text>
+                </TouchableOpacity>
+              </View>
+              {boneGraftUsed && (
+                <TextInput
+                  style={[s.input, { marginTop: 8 }]}
+                  value={boneGraftDetails}
+                  onChangeText={setBoneGraftDetails}
+                  placeholder="Type of bone graft and membrane used..."
+                  multiline
+                  data-testid="bone-graft-details"
+                />
+              )}
             </View>
 
             {/* Other Notes */}
@@ -368,4 +403,8 @@ const s = StyleSheet.create({
   torqueUnit: { fontSize: 13, fontWeight: '600', color: '#888' },
   submitBtn: { flexDirection: 'row', backgroundColor: '#4CAF50', borderRadius: 12, padding: 16, alignItems: 'center', justifyContent: 'center', gap: 8 },
   submitText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  toggleBtn: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 8, borderWidth: 1.5, borderColor: '#DDD', backgroundColor: '#FAFAFA' },
+  toggleBtnActive: { borderColor: '#1A73E8', backgroundColor: '#E8F0FE' },
+  toggleBtnText: { fontSize: 14, color: '#666', fontWeight: '600' },
+  toggleBtnTextActive: { color: '#1A73E8' },
 });
