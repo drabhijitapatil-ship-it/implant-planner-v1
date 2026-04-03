@@ -34,7 +34,6 @@ export default function ProcedureDetailScreen() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [rejectionType, setRejectionType] = useState<'permanent' | 'reconsider' | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
-  const [approvalComment, setApprovalComment] = useState('');
 
   useEffect(() => {
     loadProcedure();
@@ -63,10 +62,7 @@ export default function ProcedureDetailScreen() {
           onPress: async () => {
             setActionLoading(true);
             try {
-              const payload: any = { action: 'approve' };
-              if (approvalComment.trim()) payload.comment = approvalComment.trim();
-              await api.post(getApproveEndpoint(), payload);
-              setApprovalComment('');
+              await api.post(getApproveEndpoint(), { action: 'approve' });
               Alert.alert('Success', 'Procedure approved successfully');
               loadProcedure();
             } catch (error: any) {
@@ -842,29 +838,10 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
-        {(procedure.remark || procedure.phase1_supervisor_notes || procedure.phase1_incharge_notes) && (
+        {procedure.remark && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Phase 1 Notes</Text>
-            {procedure.remark && (
-              <View style={{ marginBottom: 8 }}>
-                <Text style={{ fontSize: 13, fontWeight: '700', color: '#666', marginBottom: 4 }}>
-                  {procedure.created_by_role === 'student' ? "Student's Notes" : "Operator's Notes"}
-                </Text>
-                <Text style={styles.specText}>{procedure.remark}</Text>
-              </View>
-            )}
-            {procedure.phase1_supervisor_notes && (
-              <View style={{ marginBottom: 8 }}>
-                <Text style={{ fontSize: 13, fontWeight: '700', color: '#1565C0', marginBottom: 4 }}>Supervisor Comment</Text>
-                <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase1_supervisor_notes}</Text>
-              </View>
-            )}
-            {procedure.phase1_incharge_notes && (
-              <View style={{ marginBottom: 8 }}>
-                <Text style={{ fontSize: 13, fontWeight: '700', color: '#E65100', marginBottom: 4 }}>In-Charge Comment</Text>
-                <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase1_incharge_notes}</Text>
-              </View>
-            )}
+            <Text style={styles.sectionTitle}>Phase 1 Remarks</Text>
+            <Text style={styles.specText}>{procedure.remark}</Text>
           </View>
         )}
 
@@ -1260,21 +1237,6 @@ export default function ProcedureDetailScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <Ionicons name="alert-circle" size={22} color="#E65100" />
               <Text style={{ fontSize: 16, fontWeight: '700', color: '#E65100' }}>Approval Required</Text>
-            </View>
-            {/* Approval Comment Box */}
-            <View style={{ marginBottom: 12, width: '100%' }}>
-              <Text style={{ fontSize: 14, fontWeight: '600', color: '#444', marginBottom: 6 }}>
-                {user?.role === 'supervisor' ? 'Supervisor' : 'In-Charge'} Comment (optional)
-              </Text>
-              <TextInput
-                style={{ backgroundColor: '#FFF', borderWidth: 1, borderColor: '#DDD', borderRadius: 8, padding: 12, minHeight: 60, textAlignVertical: 'top', fontSize: 14 }}
-                value={approvalComment}
-                onChangeText={setApprovalComment}
-                placeholder="Add your comments for this phase..."
-                multiline
-                numberOfLines={3}
-                data-testid="approval-comment-input"
-              />
             </View>
             <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
             <TouchableOpacity
