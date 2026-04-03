@@ -3694,26 +3694,77 @@ async def get_unread_count(current_user: dict = Depends(get_current_user)):
 @api_router.get("/dashboard/stats")
 async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     query = {}
+    user_id = current_user["_id"]
+    role = current_user["role"]
     
-    if current_user["role"] == "student":
-        query["student_id"] = current_user["_id"]
-    elif current_user["role"] == "supervisor":
-        query["supervisor_id"] = current_user["_id"]
+    if role == "student":
+        query["student_id"] = user_id
+    elif role == "supervisor":
+        query["supervisor_id"] = user_id
     
     total = await db.procedures.count_documents(query)
-    pending = await db.procedures.count_documents({**query, "status": {"$in": ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic"]}})
+    pending = await db.procedures.count_documents({**query, "status": {"$in": ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic", "pending_final_delivery"]}})
     approved = await db.procedures.count_documents({**query, "status": {"$in": ["phase1_approved", "phase2_approved", "stage2_surgical_approved", "completed"]}})
-    rejected = await db.procedures.count_documents({**query, "status": {"$in": ["rejected", "stage2_surgical_rejected", "stage2_prosthetic_rejected"]}})
-    
+    rejected = await db.procedures.count_documents({**query, "status": {"$in": ["rejected", "stage2_surgical_rejected", "stage2_prosthetic_rejected", "permanently_rejected"]}})
     drafts = await db.procedures.count_documents({**query, "status": "draft"})
+    completed = await db.procedures.count_documents({**query, "status": "completed"})
 
-    return {
+    # Phase pipeline counts
+    pipeline = {
+        "phase1": await db.procedures.count_documents({**query, "status": {"$in": ["draft", "pending_phase1"]}}),
+        "phase2": await db.procedures.count_documents({**query, "status": {"$in": ["phase1_approved", "pending_phase2"]}}),
+        "phase3": await db.procedures.count_documents({**query, "status": {"$in": ["phase2_approved", "pending_stage2_surgical"]}}),
+        "phase4": await db.procedures.count_documents({**query, "status": {"$in": ["stage2_surgical_approved", "pending_stage2_prosthetic", "stage2_prosthetic_step1_approved", "pending_final_delivery"]}}),
+        "completed": completed,
+        "rejected": rejected,
+    }
+
+    result = {
         "total": total,
         "pending": pending,
         "approved": approved,
         "rejected": rejected,
         "drafts": drafts,
+        "completed": completed,
+        "pipeline": pipeline,
     }
+
+    # Role-specific extras
+    if role == "supervisor" or role == "implant_incharge" or role == "administrator":
+        # Pending my approval count
+        pending_statuses = ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic", "pending_final_delivery"]
+        if role == "supervisor":
+            my_pending = await db.procedures.count_documents({"supervisor_id": user_id, "status": {"$in": pending_statuses}})
+        else:
+            my_pending = await db.procedures.count_documents({"status": {"$in": pending_statuses}})
+        result["pending_my_approval"] = my_pending
+
+        # Student stats for incharge
+        if role in ["implant_incharge", "administrator"]:
+            student_pipeline = [
+                {"$match": {"student_id": {"$exists": True}}},
+                {"$group": {
+                    "_id": "$student_id",
+                    "student_name": {"$first": "$student_name"},
+                    "total": {"$sum": 1},
+                    "completed": {"$sum": {"$cond": [{"$eq": ["$status", "completed"]}, 1, 0]}},
+                    "rejected": {"$sum": {"$cond": [{"$in": ["$status", ["rejected", "permanently_rejected", "stage2_surgical_rejected", "stage2_prosthetic_rejected"]]}, 1, 0]}},
+                    "active": {"$sum": {"$cond": [{"$not": {"$in": ["$status", ["completed", "rejected", "permanently_rejected"]]}}, 1, 0]}},
+                }}
+            ]
+            student_stats = []
+            async for doc in db.procedures.aggregate(student_pipeline):
+                student_stats.append({
+                    "student_name": doc.get("student_name", "Unknown"),
+                    "total": doc["total"],
+                    "completed": doc["completed"],
+                    "rejected": doc["rejected"],
+                    "active": doc["active"],
+                })
+            student_stats.sort(key=lambda x: x["completed"], reverse=True)
+            result["student_stats"] = student_stats
+
+    return result
 
 
 # Implant Library endpoints
