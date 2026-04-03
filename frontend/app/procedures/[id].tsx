@@ -1233,12 +1233,7 @@ export default function ProcedureDetailScreen() {
 
         {/* ── APPROVAL SECTION ── */}
         {canApprove() && !showRejectDialog && (
-          <View style={[styles.actionButtons, { marginTop: 16, borderWidth: 2, borderColor: '#FF9800', borderRadius: 12, padding: 16, backgroundColor: '#FFF8E1' }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <Ionicons name="alert-circle" size={22} color="#E65100" />
-              <Text style={{ fontSize: 16, fontWeight: '700', color: '#E65100' }}>Approval Required</Text>
-            </View>
-            <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
+          <View style={{ marginTop: 20, marginHorizontal: 16, flexDirection: 'row', justifyContent: 'center', gap: 16 }}>
             <TouchableOpacity
               style={[styles.approveButton, actionLoading && styles.buttonDisabled]}
               onPress={handleApprove}
@@ -1264,7 +1259,6 @@ export default function ProcedureDetailScreen() {
               <Ionicons name="close-circle" size={20} color="#FFF" />
               <Text style={styles.buttonText}>Reject</Text>
             </TouchableOpacity>
-            </View>
           </View>
         )}
 
