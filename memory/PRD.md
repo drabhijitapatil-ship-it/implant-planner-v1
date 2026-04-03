@@ -81,6 +81,10 @@ A comprehensive mobile application for managing dental implant procedures at the
   - **Mod 2**: Supervisor/Incharge approval comments. Added `comment` field to `ApprovalAction` model. All 5 approval endpoints save comments as `phase{N}_supervisor_notes` or `phase{N}_incharge_notes` based on approver role.
   - **Mod 3**: Dynamic notes labels. "Operator's Notes" for faculty-created cases, "Student's Notes" for student cases. Applied to all phase submission forms and case detail display.
   - **Mod 4**: Auto-expand drilling protocol when implant is selected from suggestions in the modal.
+- **Approve/Reject Visibility Fix** (33/33 backend tests passed):
+  - Moved approval section (comment box + Approve/Reject buttons) ABOVE the CaseImplantPlanning component so it's immediately visible after phase data sections
+  - Added prominent "Approval Required" orange banner with icon
+  - Verified all 5 approval phases work for student-created and incharge-created cases
 - **Previous P0 Bug Fix**: "Add Implant Position" blank screen crash fixed (backend 404 for new procedures, ObjectId validation, procedureType prop chain, api.ts interceptor).
 
 ### Earlier Sessions
