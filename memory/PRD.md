@@ -21,6 +21,10 @@ A comprehensive mobile application for managing dental implant procedures at the
 9. **Auto-populate implant_site**: Derived from selected implant plan positions
 10. **Authoritative Seed Sync**: Implant library auto-reseeds on deployment if DB is stale
 11. **Production-grade Auth**: Access/Refresh JWT tokens with expo-secure-store and Axios interceptors
+12. **Per-Implant Healing Abutment**: Healing abutment boxes match implant count in Phase 2 and Phase 3
+13. **Approval Comments**: Supervisor and In-Charge can add comments when approving each phase
+14. **Dynamic Notes Labels**: "Operator's Notes" for faculty-created cases, "Student's Notes" for student cases
+15. **Auto-expand Drilling Protocol**: Protocol auto-expands when implant is selected in Suggest Me mode
 
 ## Key Credentials
 - Admin/In-Charge: `Abhijit.patil@dental.edu` / `Admin@123`
@@ -35,6 +39,10 @@ A comprehensive mobile application for managing dental implant procedures at the
 - `POST /api/procedures` (creation)
 - `GET /api/procedures/{id}/implant-plan`
 - `POST /api/procedures/{id}/implant-plan`
+- `POST /api/procedures/{id}/approve` (Phase 1 & 2 approval with optional comment)
+- `POST /api/procedures/{id}/stage2/surgical/approve` (Phase 3 with optional comment)
+- `POST /api/procedures/{id}/stage2/prosthetic/approve` (Phase 4 Step 1 with optional comment)
+- `POST /api/procedures/{id}/stage2/prosthetic/step2/approve` (Phase 4 Step 2 with optional comment)
 - `POST /api/procedures/{id}/case-report` (PDF generation)
 - `POST /api/drilling-protocols/generate`
 - `GET /api/implant-library/systems`
@@ -43,15 +51,19 @@ A comprehensive mobile application for managing dental implant procedures at the
 ```
 /app
   backend/
-    server.py                        # Monolithic (~6300 lines) — ALL endpoints, models, protocol dicts
+    server.py                        # Monolithic (~6350 lines) — ALL endpoints, models, protocol dicts
     implant_library_latest.xlsx      # Authoritative implant data source
   frontend/
     app/
       (tabs)/new-procedure.tsx
       (tabs)/_layout.tsx             # Tab navigation with role-based visibility
-      procedures/[id].tsx, submit-phase2/[id].tsx, etc.
+      procedures/[id].tsx            # Case detail with approval comments + dynamic notes labels
+      procedures/submit-phase2/[id].tsx       # Per-implant healing abutment + Operator's Notes
+      procedures/submit-stage2-surgical/[id].tsx  # Per-implant healing abutment + Operator's Notes
+      procedures/submit-stage2-prosthetic/[id].tsx # Operator's Notes
+      procedures/submit-phase4-step2/[id].tsx      # Operator's Notes
     components/
-      CaseImplantPlanning.tsx        # Implant planning modal with dental chart
+      CaseImplantPlanning.tsx        # Implant planning modal with auto-expand drilling protocol
     contexts/
       AuthContext.tsx                 # Auth state management with onAuthFailure callback
     utils/
@@ -63,26 +75,23 @@ A comprehensive mobile application for managing dental implant procedures at the
 
 ## Session History
 
-### April 1, 2026 — Session 5 (Fork)
-- **P0 Bug Fix: "Add Implant Position" Blank Screen Crash** (17/17 tests passed):
-  - **Root Cause 1**: Backend `GET /api/procedures/{id}/implant-plan` returned 404 for newly created procedures. MongoDB projection on non-existent fields returns `{}` which is falsy in Python. Fixed by separating existence check from data retrieval.
-  - **Root Cause 2**: Backend lacked ObjectId validation — invalid IDs like 'NONE' caused unhandled 500 errors. Added try/except ObjectId validation to both GET and POST implant-plan endpoints.
-  - **Root Cause 3**: Frontend `procedureType` prop was undefined in `ModalContent`. It was declared in Props interface but never destructured in `CaseImplantPlanning`, never passed to `ImplantPlanModal`, and never forwarded to `ModalContent`. Fixed the full prop chain.
-  - **Root Cause 4**: (Previous session) `api.ts` interceptor used `router.replace('/auth/login')` on 401 errors, which crashes React Native when a Modal is open. Already fixed to use `onAuthFailure` callback registered by `AuthContext.tsx`.
-
-### March 31, 2026 — Session 4 (Fork)
-- EAS Deployment Fix, Auth Upgrade (20/20 tests), Health endpoint, Seed optimization
-- Production-grade Auth: JWT Access/Refresh tokens, expo-secure-store, Axios interceptors
-
-### March 30, 2026 — Sessions 1-3
-- Drilling Protocol Audit, PDF Enhancement, Stale Data Fix, Implant Indications
+### April 3, 2026 — Session 6 (Fork)
+- **4 Modifications Implemented** (21/21 backend tests passed):
+  - **Mod 1**: Healing abutment per-implant boxes (Phase 2 + Phase 3). Changed from single input to N boxes matching implant count. Backend accepts both array and single string for backward compatibility.
+  - **Mod 2**: Supervisor/Incharge approval comments. Added `comment` field to `ApprovalAction` model. All 5 approval endpoints save comments as `phase{N}_supervisor_notes` or `phase{N}_incharge_notes` based on approver role.
+  - **Mod 3**: Dynamic notes labels. "Operator's Notes" for faculty-created cases, "Student's Notes" for student cases. Applied to all phase submission forms and case detail display.
+  - **Mod 4**: Auto-expand drilling protocol when implant is selected from suggestions in the modal.
+- **Previous P0 Bug Fix**: "Add Implant Position" blank screen crash fixed (backend 404 for new procedures, ObjectId validation, procedureType prop chain, api.ts interceptor).
 
 ### Earlier Sessions
-- Full 4-phase workflow, Security/UX features, EAS build fixes
+- Session 5: Blank screen crash fix, backend seed sync, auth upgrade
+- Session 4: EAS Deployment Fix, Auth Upgrade (20/20 tests), Health endpoint
+- Session 3: Drilling Protocol Audit, PDF Enhancement, Stale Data Fix
+- Sessions 1-2: Full 4-phase workflow, Security/UX features, EAS build fixes
 
 ## Backlog (Prioritized)
 ### P1
-- Ensure all entered data visible to Supervisor/In-Charge before approval, student after approval
+- Data visibility refinement: Ensure all entered data visible to Supervisor/In-Charge before approval, student after approval
 - Add indications/protocols for remaining 17 systems (when user provides data)
 - Production deployment verification (user needs to "Save to Github" + Deploy)
 
