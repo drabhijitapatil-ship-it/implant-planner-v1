@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import api from '../../../utils/api';
+import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -22,6 +23,9 @@ import {
 export default function Phase4Step1Screen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const { user } = useAuth();
+  const isFaculty = user?.role === 'supervisor' || user?.role === 'implant_incharge';
+  const notesLabel = isFaculty ? "Operator's Notes" : "Student Notes";
   const [loading, setLoading] = useState(false);
   const [procedure, setProcedure] = useState<any>(null);
 
@@ -179,7 +183,7 @@ export default function Phase4Step1Screen() {
               <Text style={s.sectionTitle}>Notes</Text>
             </View>
             <View style={s.field}>
-              <Text style={s.label}>Student Notes</Text>
+              <Text style={s.label}>{notesLabel}</Text>
               <TextInput style={[s.input, s.textArea]} value={studentNotes} onChangeText={setStudentNotes}
                 placeholder="Treatment planning notes, special considerations..." multiline numberOfLines={3}
                 data-testid="phase4-step1-notes" />

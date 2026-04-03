@@ -809,6 +809,11 @@ function ModalContent(props: any) {
   const isRestrictedHeight = !isNaN(parseFloat(boneHeight)) && parseFloat(boneHeight) > 0 && parseFloat(boneHeight) <= 10;
   const [showProtocol, setShowProtocol] = React.useState(false);
 
+  // Auto-expand drilling protocol when an implant is selected
+  React.useEffect(() => {
+    if (selectedImplant) setShowProtocol(true);
+  }, [selectedImplant]);
+
   return (
     <View style={[ms.container, { paddingTop: Math.max(insets.top, 20) }]}>
         {/* Header */}

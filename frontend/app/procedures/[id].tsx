@@ -34,6 +34,7 @@ export default function ProcedureDetailScreen() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [rejectionType, setRejectionType] = useState<'permanent' | 'reconsider' | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [approvalComment, setApprovalComment] = useState('');
 
   useEffect(() => {
     loadProcedure();
@@ -62,7 +63,10 @@ export default function ProcedureDetailScreen() {
           onPress: async () => {
             setActionLoading(true);
             try {
-              await api.post(getApproveEndpoint(), { action: 'approve' });
+              const payload: any = { action: 'approve' };
+              if (approvalComment.trim()) payload.comment = approvalComment.trim();
+              await api.post(getApproveEndpoint(), payload);
+              setApprovalComment('');
               Alert.alert('Success', 'Procedure approved successfully');
               loadProcedure();
             } catch (error: any) {
@@ -838,10 +842,29 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
-        {procedure.remark && (
+        {(procedure.remark || procedure.phase1_supervisor_notes || procedure.phase1_incharge_notes) && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Phase 1 Remarks</Text>
-            <Text style={styles.specText}>{procedure.remark}</Text>
+            <Text style={styles.sectionTitle}>Phase 1 Notes</Text>
+            {procedure.remark && (
+              <View style={{ marginBottom: 8 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#666', marginBottom: 4 }}>
+                  {procedure.created_by_role === 'student' ? "Student's Notes" : "Operator's Notes"}
+                </Text>
+                <Text style={styles.specText}>{procedure.remark}</Text>
+              </View>
+            )}
+            {procedure.phase1_supervisor_notes && (
+              <View style={{ marginBottom: 8 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#1565C0', marginBottom: 4 }}>Supervisor Comment</Text>
+                <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase1_supervisor_notes}</Text>
+              </View>
+            )}
+            {procedure.phase1_incharge_notes && (
+              <View style={{ marginBottom: 8 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#E65100', marginBottom: 4 }}>In-Charge Comment</Text>
+                <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase1_incharge_notes}</Text>
+              </View>
+            )}
           </View>
         )}
 
@@ -913,7 +936,11 @@ export default function ProcedureDetailScreen() {
                 <InfoRow icon="cube" label="Prosthetic Component" value={procedure.phase2_data.prosthetic_component} />
               )}
               {procedure.phase2_data.healing_abutment_cuff_height && (
-                <InfoRow icon="resize" label="Healing Abutment Cuff Height" value={`${procedure.phase2_data.healing_abutment_cuff_height} mm`} />
+                Array.isArray(procedure.phase2_data.healing_abutment_cuff_height)
+                  ? procedure.phase2_data.healing_abutment_cuff_height.map((val: string, idx: number) => (
+                    <InfoRow key={idx} icon="resize" label={`Healing Abutment Cuff Height (Implant ${idx + 1})`} value={`${val} mm`} />
+                  ))
+                  : <InfoRow icon="resize" label="Healing Abutment Cuff Height" value={`${procedure.phase2_data.healing_abutment_cuff_height} mm`} />
               )}
               {procedure.phase2_data.sutures_placed !== undefined && (
                 <InfoRow icon="bandage" label="Sutures Placed" value={procedure.phase2_data.sutures_placed ? 'Yes' : 'No'} />
@@ -939,7 +966,9 @@ export default function ProcedureDetailScreen() {
             {/* Notes & Remarks */}
             {(procedure.phase2_student_notes || procedure.phase2_remark) && (
               <View style={{ marginBottom: 8, backgroundColor: '#F5F9FF', borderRadius: 8, padding: 12 }}>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', marginBottom: 8 }}>Post-Surgical Notes</Text>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', marginBottom: 8 }}>
+                  {procedure.created_by_role === 'student' ? "Student's Notes" : "Operator's Notes"}
+                </Text>
                 <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase2_student_notes || procedure.phase2_remark}</Text>
               </View>
             )}
@@ -995,7 +1024,11 @@ export default function ProcedureDetailScreen() {
                   <InfoRow icon="speedometer" label="ISQ Value" value={procedure.phase3_data.isq_value} />
                 )}
                 {procedure.phase3_data.healing_abutment_height && (
-                  <InfoRow icon="resize" label="Healing Abutment Height" value={`${procedure.phase3_data.healing_abutment_height} mm`} />
+                  Array.isArray(procedure.phase3_data.healing_abutment_height)
+                    ? procedure.phase3_data.healing_abutment_height.map((val: string, idx: number) => (
+                      <InfoRow key={idx} icon="resize" label={`Healing Abutment Height (Implant ${idx + 1})`} value={`${val} mm`} />
+                    ))
+                    : <InfoRow icon="resize" label="Healing Abutment Height" value={`${procedure.phase3_data.healing_abutment_height} mm`} />
                 )}
               </View>
             )}
@@ -1003,7 +1036,9 @@ export default function ProcedureDetailScreen() {
             {/* Notes & Remarks */}
             {(procedure.phase3_student_notes || procedure.stage2_surgical_remark) && (
               <View style={{ marginBottom: 8, backgroundColor: '#F1F8E9', borderRadius: 8, padding: 12 }}>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: '#33691E', marginBottom: 8 }}>Notes</Text>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#33691E', marginBottom: 8 }}>
+                  {procedure.created_by_role === 'student' ? "Student's Notes" : "Operator's Notes"}
+                </Text>
                 <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase3_student_notes || procedure.stage2_surgical_remark}</Text>
               </View>
             )}
@@ -1061,17 +1096,19 @@ export default function ProcedureDetailScreen() {
             {/* Notes & Remarks */}
             {(procedure.phase4_step1_student_notes || procedure.stage2_prosthetic_remark) && (
               <View style={{ marginBottom: 8, backgroundColor: '#FFF8E1', borderRadius: 8, padding: 12 }}>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: '#E65100', marginBottom: 8 }}>Notes</Text>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#E65100', marginBottom: 8 }}>
+                  {procedure.created_by_role === 'student' ? "Student's Notes" : "Operator's Notes"}
+                </Text>
                 <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase4_step1_student_notes || procedure.stage2_prosthetic_remark}</Text>
               </View>
             )}
-            {procedure.stage2_prosthetic_faculty_remark && (
+            {(procedure.stage2_prosthetic_faculty_remark || procedure.phase4_step1_supervisor_notes) && (
               <View style={{ marginBottom: 8, backgroundColor: '#F3E5F5', borderRadius: 8, padding: 12 }}>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: '#6A1B9A', marginBottom: 8 }}>Remarks by Supervising Faculty</Text>
-                <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.stage2_prosthetic_faculty_remark}</Text>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#6A1B9A', marginBottom: 8 }}>Supervisor Comment</Text>
+                <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase4_step1_supervisor_notes || procedure.stage2_prosthetic_faculty_remark}</Text>
               </View>
             )}
-            {procedure.stage2_prosthetic_incharge_remark && (
+            {(procedure.stage2_prosthetic_incharge_remark || procedure.phase4_step1_incharge_notes) && (
               <View style={{ marginBottom: 8, backgroundColor: '#E8F5E9', borderRadius: 8, padding: 12 }}>
                 <Text style={{ fontSize: 14, fontWeight: '700', color: '#2E7D32', marginBottom: 8 }}>Remarks by Implant In-Charge</Text>
                 <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.stage2_prosthetic_incharge_remark}</Text>
@@ -1118,19 +1155,21 @@ export default function ProcedureDetailScreen() {
             {/* Notes & Remarks */}
             {procedure.phase4_step2_student_notes && (
               <View style={{ marginBottom: 8, backgroundColor: '#FCE4EC', borderRadius: 8, padding: 12 }}>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: '#880E4F', marginBottom: 8 }}>Notes</Text>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#880E4F', marginBottom: 8 }}>
+                  {procedure.created_by_role === 'student' ? "Student's Notes" : "Operator's Notes"}
+                </Text>
                 <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase4_step2_student_notes}</Text>
               </View>
             )}
             {procedure.phase4_step2_supervisor_notes && (
               <View style={{ marginBottom: 8, backgroundColor: '#F3E5F5', borderRadius: 8, padding: 12 }}>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: '#6A1B9A', marginBottom: 8 }}>Remarks by Supervising Faculty</Text>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#6A1B9A', marginBottom: 8 }}>Supervisor Comment</Text>
                 <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase4_step2_supervisor_notes}</Text>
               </View>
             )}
             {procedure.phase4_step2_incharge_notes && (
               <View style={{ marginBottom: 8, backgroundColor: '#E8F5E9', borderRadius: 8, padding: 12 }}>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: '#2E7D32', marginBottom: 8 }}>Remarks by Implant In-Charge</Text>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#2E7D32', marginBottom: 8 }}>In-Charge Comment</Text>
                 <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase4_step2_incharge_notes}</Text>
               </View>
             )}
@@ -1229,6 +1268,22 @@ export default function ProcedureDetailScreen() {
 
         {canApprove() && !showRejectDialog && (
           <View style={styles.actionButtons}>
+            {/* Approval Comment Box */}
+            <View style={{ marginBottom: 12, width: '100%' }}>
+              <Text style={{ fontSize: 14, fontWeight: '600', color: '#444', marginBottom: 6 }}>
+                {user?.role === 'supervisor' ? 'Supervisor' : 'In-Charge'} Comment (optional)
+              </Text>
+              <TextInput
+                style={{ backgroundColor: '#FFF', borderWidth: 1, borderColor: '#DDD', borderRadius: 8, padding: 12, minHeight: 60, textAlignVertical: 'top', fontSize: 14 }}
+                value={approvalComment}
+                onChangeText={setApprovalComment}
+                placeholder="Add your comments for this phase..."
+                multiline
+                numberOfLines={3}
+                data-testid="approval-comment-input"
+              />
+            </View>
+            <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
             <TouchableOpacity
               style={[styles.approveButton, actionLoading && styles.buttonDisabled]}
               onPress={handleApprove}
@@ -1254,6 +1309,7 @@ export default function ProcedureDetailScreen() {
               <Ionicons name="close-circle" size={20} color="#FFF" />
               <Text style={styles.buttonText}>Reject</Text>
             </TouchableOpacity>
+            </View>
           </View>
         )}
 

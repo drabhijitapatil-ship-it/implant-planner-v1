@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import api from '../../../utils/api';
+import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
 import { Ionicons } from '@expo/vector-icons';
 import { CHECKLIST_DATA } from '../../../constants/checklist';
@@ -15,6 +16,9 @@ const TRIAL_ITEMS = CHECKLIST_DATA.prosthetic_phase.step2.items;
 export default function Phase4Step2Screen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const { user } = useAuth();
+  const isFaculty = user?.role === 'supervisor' || user?.role === 'implant_incharge';
+  const notesLabel = isFaculty ? "Operator's Notes" : "Student Notes";
   const [loading, setLoading] = useState(false);
 
   // Trial checklist
@@ -93,7 +97,7 @@ export default function Phase4Step2Screen() {
               <Text style={s.sectionTitle}>Notes</Text>
             </View>
             <View style={s.field}>
-              <Text style={s.label}>Student Notes</Text>
+              <Text style={s.label}>{notesLabel}</Text>
               <TextInput style={[s.input, s.textArea]} value={studentNotes} onChangeText={setStudentNotes}
                 placeholder="Final observations, occlusion notes, delivery notes..."
                 multiline numberOfLines={4} data-testid="phase4-step2-notes" />
