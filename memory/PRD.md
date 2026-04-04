@@ -107,7 +107,7 @@ A comprehensive mobile application for managing dental implant procedures at the
   - Backwards compatible with old data
 
 ### April 4, 2026 — Session 8 (Fork)
-- **Narrow Ridge Clinical Decision Engine** (25/25 backend tests passed):
+- **Narrow Ridge Clinical Decision Engine** (25/25 + 25/25 backend tests passed):
   - New endpoint: `POST /api/implant-library/evaluate-narrow-ridge`
   - 4-level classification: Adequate (>=6mm), Mildly Narrow (4.5-6mm), Moderately Narrow (3-4.5mm), Severely Narrow (<3mm)
   - Safety rules: bone_envelope warning (remaining <2mm), severe_ridge critical block (<3mm)
@@ -115,10 +115,12 @@ A comprehensive mobile application for managing dental implant procedures at the
   - Bone density drilling protocol mapping (D1: full, D2: slight undersizing, D3: undersized, D4: osteotome)
   - Integrated into `suggest` and `suggest-auto` endpoints (automatic evaluation when bone_width<6mm)
   - Blocked flow: suggest-auto returns `narrow_ridge_blocked=true` with empty results when ridge<3mm
-  - Frontend: Real-time ridge classification indicator in Step 2 (both Choose/Suggest modes)
-  - Frontend: Classification banners, protocol recommendations, and warnings in Step 3
-  - Frontend: Full blocked UI with augmentation required message for severe narrow ridge
-  - "Narrow Ridge" added as selectable procedure type (alongside Restricted Bone Height)
+  - **Suggest Me mode**: "Narrow Ridge" checkbox in Procedure Type list below "Restricted Bone Height"
+  - **Let Me Choose mode**: When bone_width<6mm, returns `narrow_options` (implants <=3.5mm diameter) from selected system + `narrow_ridge_warning` if system has no narrow options
+  - **Treatment Protocol Display**: Prominent card in Step 3 showing classification, recommended implant type, treatment protocols (undersized drilling/ridge expansion/split crest/GBR/block graft), bone density drilling protocol, and clinical warnings
+  - **Blocked UI**: Full blocked state with augmentation message for severe narrow ridge (<3mm) in both modes
+  - Frontend: Real-time ridge classification indicator in Step 2 (both modes)
+  - Frontend: "Narrow Diameter Options" header when showing narrow_options in Let Me Choose
 
 ### Earlier Sessions
 - Session 5: Blank screen crash fix, backend seed sync, auth upgrade
