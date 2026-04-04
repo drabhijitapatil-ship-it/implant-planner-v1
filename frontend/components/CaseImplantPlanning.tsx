@@ -711,7 +711,7 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
       if (mode === 'choose') {
         const res = await api.get('/implant-library/suggest', {
           params: { brand: selectedSystem!.brand, system: selectedSystem!.system,
-            bone_width: parseFloat(boneWidth), bone_height: parseFloat(boneHeight), tooth: position },
+            bone_width: parseFloat(boneWidth), bone_height: parseFloat(boneHeight), tooth: position, bone_type: boneType || undefined },
         });
         setResult(res.data);
       } else {
@@ -1040,64 +1040,108 @@ function ModalContent(props: any) {
             <View>
               <Text style={ms.stepTitle}>Select Implant</Text>
 
-              {/* Narrow Ridge Evaluation Banner */}
+              {/* ── Treatment Protocol Display (shown when narrow ridge detected) ── */}
               {result.narrow_ridge_evaluation && result.narrow_ridge_evaluation.classification !== 'adequate' && (
-                <View style={[ms.narrowRidgeResultCard, {
-                  backgroundColor: result.narrow_ridge_evaluation.severity === 'critical' ? '#FFEBEE' : result.narrow_ridge_evaluation.severity === 'warning' ? '#FFF3E0' : '#E3F2FD',
+                <View style={[ms.treatmentProtocolCard, {
                   borderColor: result.narrow_ridge_evaluation.severity === 'critical' ? '#EF9A9A' : result.narrow_ridge_evaluation.severity === 'warning' ? '#FFB74D' : '#64B5F6',
-                }]} data-testid="narrow-ridge-result-banner">
-                  <View style={ms.narrowRidgeResultHeader}>
+                }]} data-testid="treatment-protocol-display">
+                  <View style={ms.treatmentProtocolHeader}>
+                    <View style={[ms.treatmentProtocolBadge, {
+                      backgroundColor: result.narrow_ridge_evaluation.severity === 'critical' ? '#B71C1C' : result.narrow_ridge_evaluation.severity === 'warning' ? '#E65100' : '#1565C0',
+                    }]}>
+                      <Ionicons name="medical" size={14} color="#FFF" />
+                      <Text style={ms.treatmentProtocolBadgeText}>Narrow Ridge Assessment</Text>
+                    </View>
+                  </View>
+
+                  {/* Classification */}
+                  <View style={[ms.treatmentClassRow, {
+                    backgroundColor: result.narrow_ridge_evaluation.severity === 'critical' ? '#FFEBEE' : result.narrow_ridge_evaluation.severity === 'warning' ? '#FFF3E0' : '#E3F2FD',
+                  }]}>
                     <Ionicons
                       name={result.narrow_ridge_evaluation.severity === 'critical' ? 'close-circle' : result.narrow_ridge_evaluation.severity === 'warning' ? 'alert-circle' : 'information-circle'}
-                      size={22}
+                      size={20}
                       color={result.narrow_ridge_evaluation.severity === 'critical' ? '#B71C1C' : result.narrow_ridge_evaluation.severity === 'warning' ? '#E65100' : '#1565C0'}
                     />
                     <View style={{ flex: 1 }}>
-                      <Text style={[ms.narrowRidgeResultTitle, {
+                      <Text style={[ms.treatmentClassLabel, {
                         color: result.narrow_ridge_evaluation.severity === 'critical' ? '#B71C1C' : result.narrow_ridge_evaluation.severity === 'warning' ? '#E65100' : '#1565C0',
                       }]}>{result.narrow_ridge_evaluation.classification_label}</Text>
-                      <Text style={ms.narrowRidgeResultSubtext}>
-                        Ridge Width: {result.narrow_ridge_evaluation.ridge_width_mm}mm
-                      </Text>
+                      <Text style={ms.treatmentClassSub}>Ridge Width: {result.narrow_ridge_evaluation.ridge_width_mm}mm</Text>
                     </View>
                   </View>
-                  {result.narrow_ridge_evaluation.recommendation?.label && (
-                    <Text style={ms.narrowRidgeRecommendation}>{result.narrow_ridge_evaluation.recommendation.label}</Text>
+
+                  {/* Recommended Implant Type */}
+                  {result.narrow_ridge_evaluation.recommendation?.implant_type && (
+                    <View style={ms.treatmentRow}>
+                      <Ionicons name="fitness" size={16} color="#37474F" />
+                      <Text style={ms.treatmentRowLabel}>Implant Type: </Text>
+                      <Text style={ms.treatmentRowValue}>
+                        {String(result.narrow_ridge_evaluation.recommendation.implant_type).replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                      </Text>
+                    </View>
                   )}
+
+                  {/* Treatment Protocols */}
                   {result.narrow_ridge_evaluation.recommendation?.protocols?.length > 0 && (
-                    <View style={ms.narrowRidgeProtocols}>
-                      <Text style={ms.narrowRidgeProtocolsTitle}>Recommended Protocols:</Text>
+                    <View style={ms.treatmentSection}>
+                      <Text style={ms.treatmentSectionTitle}>Treatment Protocols</Text>
                       {result.narrow_ridge_evaluation.recommendation.protocols.map((p: string, i: number) => (
-                        <Text key={i} style={ms.narrowRidgeProtocolItem}>{'\u2022'} {p.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}</Text>
+                        <View key={i} style={ms.treatmentProtocolItem}>
+                          <View style={ms.treatmentProtocolDot} />
+                          <Text style={ms.treatmentProtocolItemText}>{p.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}</Text>
+                        </View>
                       ))}
                     </View>
                   )}
+
+                  {/* Bone Density Drilling Protocol */}
                   {result.narrow_ridge_evaluation.recommendation?.drilling_protocol_label && (
-                    <Text style={ms.narrowRidgeDrillingLabel}>Drilling: {result.narrow_ridge_evaluation.recommendation.drilling_protocol_label}</Text>
+                    <View style={ms.treatmentRow}>
+                      <Ionicons name="construct" size={16} color="#37474F" />
+                      <Text style={ms.treatmentRowLabel}>Drilling: </Text>
+                      <Text style={ms.treatmentRowValue}>{result.narrow_ridge_evaluation.recommendation.drilling_protocol_label}</Text>
+                    </View>
+                  )}
+
+                  {/* Clinical Recommendation */}
+                  {result.narrow_ridge_evaluation.recommendation?.label && (
+                    <View style={ms.treatmentRecommendBox}>
+                      <Ionicons name="bulb" size={16} color="#1565C0" />
+                      <Text style={ms.treatmentRecommendText}>{result.narrow_ridge_evaluation.recommendation.label}</Text>
+                    </View>
+                  )}
+
+                  {/* Warnings */}
+                  {result.narrow_ridge_evaluation.warnings?.length > 0 && (
+                    <View style={ms.treatmentWarnings}>
+                      {result.narrow_ridge_evaluation.warnings.map((w: any, i: number) => (
+                        <View key={i} style={[ms.treatmentWarningRow, {
+                          borderLeftColor: w.severity === 'critical' ? '#B71C1C' : w.severity === 'high' ? '#E65100' : '#FF9800',
+                        }]}>
+                          <Ionicons
+                            name={w.severity === 'critical' ? 'close-circle' : 'alert-circle'}
+                            size={14}
+                            color={w.severity === 'critical' ? '#B71C1C' : w.severity === 'high' ? '#E65100' : '#FF9800'}
+                          />
+                          <Text style={ms.treatmentWarningText}>{w.message}</Text>
+                        </View>
+                      ))}
+                    </View>
                   )}
                 </View>
               )}
 
-              {/* Narrow Ridge Warnings */}
-              {result.narrow_ridge_evaluation?.warnings?.length > 0 && (
-                <View style={ms.narrowRidgeWarningsBox} data-testid="narrow-ridge-warnings">
-                  {result.narrow_ridge_evaluation.warnings.map((w: any, i: number) => (
-                    <View key={i} style={[ms.narrowRidgeWarningRow, {
-                      borderLeftColor: w.severity === 'critical' ? '#B71C1C' : w.severity === 'high' ? '#E65100' : w.severity === 'warning' ? '#FF9800' : '#1565C0',
-                    }]}>
-                      <Ionicons
-                        name={w.severity === 'critical' ? 'close-circle' : w.severity === 'high' ? 'alert-circle' : 'information-circle'}
-                        size={16}
-                        color={w.severity === 'critical' ? '#B71C1C' : w.severity === 'high' ? '#E65100' : w.severity === 'warning' ? '#FF9800' : '#1565C0'}
-                      />
-                      <Text style={ms.narrowRidgeWarningText}>{w.message}</Text>
-                    </View>
-                  ))}
+              {/* No narrow options warning (Let Me Choose only) */}
+              {mode === 'choose' && result.narrow_ridge_warning && (
+                <View style={ms.narrowNoOptionsWarning} data-testid="no-narrow-options-warning">
+                  <Ionicons name="warning" size={18} color="#E65100" />
+                  <Text style={ms.narrowNoOptionsText}>{result.narrow_ridge_warning}</Text>
                 </View>
               )}
 
-              {/* BLOCKED: Severe narrow ridge */}
-              {result.narrow_ridge_blocked ? (
+              {/* ── BLOCKED: Severe narrow ridge (both modes) ── */}
+              {(result.narrow_ridge_blocked || result.narrow_ridge_evaluation?.blocked) ? (
                 <View>
                   <View style={ms.blockedCard} data-testid="narrow-ridge-blocked">
                     <Ionicons name="ban" size={40} color="#B71C1C" />
@@ -1117,15 +1161,26 @@ function ModalContent(props: any) {
               ) : (
               <>
               {(() => {
-                const implants = mode === 'choose'
-                  ? (result.recommended?.length ? result.recommended : result.all_options || [])
-                  : (result.recommended_systems || []).flatMap((s: any) => (s.implants || []).map((imp: any) => ({
-                      ...imp, brand: s.brand, system: s.system,
-                      indication: s.indication, procedure_match: s.procedure_match,
-                      priority: s.priority, priority_label: s.priority_label,
-                    })));
+                // Determine implant list based on mode and narrow ridge state
+                let implants: any[];
+                const hasNarrowRidge = result.narrow_ridge_evaluation && result.narrow_ridge_evaluation.classification !== 'adequate';
+                if (mode === 'choose') {
+                  // In narrow ridge: prefer narrow_options, fall back to recommended
+                  if (hasNarrowRidge && result.narrow_options?.length > 0) {
+                    implants = result.narrow_options;
+                  } else {
+                    implants = result.recommended?.length ? result.recommended : result.all_options || [];
+                  }
+                } else {
+                  implants = (result.recommended_systems || []).flatMap((s: any) => (s.implants || []).map((imp: any) => ({
+                    ...imp, brand: s.brand, system: s.system,
+                    indication: s.indication, procedure_match: s.procedure_match,
+                    priority: s.priority, priority_label: s.priority_label,
+                  })));
+                }
                 if (implants.length === 0) return <Text style={ms.noResults}>No implants found for these measurements.</Text>;
                 const isRestrictedResult = result.restricted_bone_height === true;
+                const isNarrowResult = hasNarrowRidge && mode === 'choose' && result.narrow_options?.length > 0;
                 const topMatches = implants.slice(0, 3);
                 // In "choose" mode, "Show More" reveals all system options beyond top 3
                 const allSystemOptions = mode === 'choose' ? (result.all_options || []) : implants;
@@ -1149,7 +1204,7 @@ function ModalContent(props: any) {
                       </View>
                     )}
                     <Text style={ms.matchHeader}>
-                      {isRestrictedResult ? `Priority-Based Recommendations (${implants.length})` : `Top ${Math.min(3, implants.length)} Best Matches`}
+                      {isRestrictedResult ? `Priority-Based Recommendations (${implants.length})` : isNarrowResult ? `Narrow Diameter Options (${implants.length})` : `Top ${Math.min(3, implants.length)} Best Matches`}
                     </Text>
                     {displayed.map((imp: any, i: number) => {
                       const isSelected = selectedImplant?.diameter === imp.diameter && selectedImplant?.length === imp.length && selectedImplant?.brand === imp.brand;
@@ -1596,22 +1651,33 @@ const ms = StyleSheet.create({
   cautionBannerText: { flex: 1, fontSize: 12, color: '#B71C1C', fontWeight: '500', lineHeight: 17 },
   restrictedP1Badge: { backgroundColor: '#FFF3E0', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: '#FFB74D' },
   restrictedP1BadgeText: { fontSize: 10, fontWeight: '700', color: '#E65100' },
-  // Narrow Ridge styles
+  // Narrow Ridge & Treatment Protocol styles
   narrowRidgeBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 10, padding: 12, marginTop: 10, borderWidth: 1 },
   narrowRidgeLabel: { fontSize: 13, fontWeight: '700' },
   narrowRidgeSubtext: { fontSize: 11, color: '#666', marginTop: 2 },
-  narrowRidgeResultCard: { borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1.5 },
-  narrowRidgeResultHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  narrowRidgeResultTitle: { fontSize: 15, fontWeight: '700' },
-  narrowRidgeResultSubtext: { fontSize: 12, color: '#555', marginTop: 2 },
-  narrowRidgeRecommendation: { fontSize: 13, color: '#37474F', fontWeight: '600', marginTop: 10, paddingLeft: 32 },
-  narrowRidgeProtocols: { marginTop: 8, paddingLeft: 32 },
-  narrowRidgeProtocolsTitle: { fontSize: 12, fontWeight: '700', color: '#455A64', marginBottom: 4 },
-  narrowRidgeProtocolItem: { fontSize: 12, color: '#546E7A', marginBottom: 2 },
-  narrowRidgeDrillingLabel: { fontSize: 12, color: '#455A64', fontStyle: 'italic', marginTop: 6, paddingLeft: 32 },
-  narrowRidgeWarningsBox: { marginBottom: 12 },
-  narrowRidgeWarningRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: '#FFF', borderRadius: 8, padding: 10, marginBottom: 6, borderLeftWidth: 3 },
-  narrowRidgeWarningText: { flex: 1, fontSize: 12, color: '#37474F', lineHeight: 17 },
+  // Treatment Protocol Display (Step 3)
+  treatmentProtocolCard: { borderRadius: 12, padding: 14, marginBottom: 14, borderWidth: 1.5, backgroundColor: '#FFF' },
+  treatmentProtocolHeader: { marginBottom: 10 },
+  treatmentProtocolBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16, alignSelf: 'flex-start' },
+  treatmentProtocolBadgeText: { fontSize: 12, fontWeight: '700', color: '#FFF' },
+  treatmentClassRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 8, padding: 10, marginBottom: 10 },
+  treatmentClassLabel: { fontSize: 14, fontWeight: '700' },
+  treatmentClassSub: { fontSize: 12, color: '#666', marginTop: 1 },
+  treatmentRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingHorizontal: 4 },
+  treatmentRowLabel: { fontSize: 13, fontWeight: '600', color: '#37474F' },
+  treatmentRowValue: { fontSize: 13, color: '#455A64', flex: 1 },
+  treatmentSection: { marginTop: 6, paddingLeft: 4, marginBottom: 6 },
+  treatmentSectionTitle: { fontSize: 13, fontWeight: '700', color: '#37474F', marginBottom: 6 },
+  treatmentProtocolItem: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 3 },
+  treatmentProtocolDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#1565C0' },
+  treatmentProtocolItemText: { fontSize: 13, color: '#455A64' },
+  treatmentRecommendBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: '#E3F2FD', borderRadius: 8, padding: 10, marginTop: 8 },
+  treatmentRecommendText: { flex: 1, fontSize: 12, color: '#1565C0', fontWeight: '600', lineHeight: 17 },
+  treatmentWarnings: { marginTop: 8 },
+  treatmentWarningRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: '#FFF8E1', borderRadius: 6, padding: 8, marginBottom: 4, borderLeftWidth: 3 },
+  treatmentWarningText: { flex: 1, fontSize: 11, color: '#37474F', lineHeight: 16 },
+  narrowNoOptionsWarning: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFF3E0', borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#FFB74D' },
+  narrowNoOptionsText: { flex: 1, fontSize: 12, color: '#E65100', fontWeight: '600', lineHeight: 17 },
   blockedCard: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFEBEE', borderRadius: 16, padding: 30, marginVertical: 20, borderWidth: 1.5, borderColor: '#EF9A9A', gap: 12 },
   blockedTitle: { fontSize: 18, fontWeight: '700', color: '#B71C1C' },
   blockedText: { fontSize: 14, color: '#5D4037', textAlign: 'center', lineHeight: 20 },

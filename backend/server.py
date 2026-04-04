@@ -4090,6 +4090,7 @@ async def suggest_implant(
     bone_width: float,
     bone_height: float,
     tooth: Optional[str] = None,
+    bone_type: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
 ):
     """
@@ -4183,7 +4184,24 @@ async def suggest_implant(
     # Narrow ridge evaluation (always included when bone_width < 6)
     if bone_width < 6:
         tooth_region = _get_tooth_region(tooth) if tooth else None
-        response["narrow_ridge_evaluation"] = evaluate_narrow_ridge(bone_width, bone_density=None, tooth_region=tooth_region)
+        response["narrow_ridge_evaluation"] = evaluate_narrow_ridge(bone_width, bone_density=bone_type, tooth_region=tooth_region)
+        # Also return narrow diameter options (<=3.5mm) for narrow ridge cases
+        narrow_query = {
+            "brand": brand, "system": system,
+            "diameter": {"$lte": 3.5},
+            "length": {"$gte": len_min, "$lte": len_max},
+        }
+        narrow_options = await db.implant_library.find(narrow_query, {"_id": 0}).sort([("diameter", 1), ("length", 1)]).to_list(50)
+        if not narrow_options:
+            # Fallback: wider length range for narrow diameter
+            narrow_query_wider = {
+                "brand": brand, "system": system,
+                "diameter": {"$lte": 3.5},
+            }
+            narrow_options = await db.implant_library.find(narrow_query_wider, {"_id": 0}).sort([("diameter", 1), ("length", 1)]).to_list(50)
+        response["narrow_options"] = narrow_options
+        if not narrow_options:
+            response["narrow_ridge_warning"] = f"No narrow diameter (\u22643.5mm) implants available for {brand} {system}. Consider a system with narrow implant options."
 
     return response
 
