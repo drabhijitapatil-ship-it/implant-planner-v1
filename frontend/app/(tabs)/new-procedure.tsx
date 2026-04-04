@@ -239,10 +239,10 @@ export default function NewProcedureScreen() {
     patient_name: '',
     registration_number: '',
     student_name: user?.name || '',
-    supervisor_id: '',
-    supervisor_name: '',
-    implant_incharge_id: '',
-    implant_incharge_name: '',
+    supervisor_id: (user?.role === 'supervisor' || user?.role === 'implant_incharge') ? (user?.id || '') : '',
+    supervisor_name: (user?.role === 'supervisor' || user?.role === 'implant_incharge') ? (user?.name || '') : '',
+    implant_incharge_id: user?.role === 'implant_incharge' ? (user?.id || '') : '',
+    implant_incharge_name: user?.role === 'implant_incharge' ? (user?.name || '') : '',
     receipt_number: '',
     amount_paid: '',
     procedure_date: '',
@@ -296,7 +296,10 @@ export default function NewProcedureScreen() {
       if (!createdProcedureId) {
         setFormData({
           patient_name: '', registration_number: '', student_name: user?.name || '',
-          supervisor_id: '', supervisor_name: '', implant_incharge_id: '', implant_incharge_name: '',
+          supervisor_id: (user?.role === 'supervisor' || user?.role === 'implant_incharge') ? (user?.id || '') : '',
+          supervisor_name: (user?.role === 'supervisor' || user?.role === 'implant_incharge') ? (user?.name || '') : '',
+          implant_incharge_id: user?.role === 'implant_incharge' ? (user?.id || '') : '',
+          implant_incharge_name: user?.role === 'implant_incharge' ? (user?.name || '') : '',
           receipt_number: '', amount_paid: '', procedure_date: '', procedure_time: '',
           implant_procedure_type: '', loading_type: [] as string[],
           prosthetic_plan: '', prosthetic_plan_other: '', bone_graft_specifications: '',
@@ -537,8 +540,10 @@ export default function NewProcedureScreen() {
       </View>
 
       {/* ─── Faculty Selection ─── */}
+      {user?.role === 'implant_incharge' ? null : (
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Faculty Assignment</Text>
+        {user?.role === 'student' && (
         <View style={styles.fieldContainer}>
           <Text style={styles.label}>Supervising Faculty <Text style={{ color: '#DC3545' }}>*</Text></Text>
           <TouchableOpacity style={styles.dropdown} onPress={() => setShowSupervisorPicker(!showSupervisorPicker)}>
@@ -562,6 +567,7 @@ export default function NewProcedureScreen() {
             </ScrollView>
           )}
         </View>
+        )}
         <View style={styles.fieldContainer}>
           <Text style={styles.label}>Implant In-Charge <Text style={{ color: '#DC3545' }}>*</Text></Text>
           <TouchableOpacity style={styles.dropdown} onPress={() => setShowInchargePicker(!showInchargePicker)}>
@@ -586,6 +592,7 @@ export default function NewProcedureScreen() {
           )}
         </View>
       </View>
+      )}
 
       {/* ─── Payment Details ─── */}
       <View style={styles.section}>
