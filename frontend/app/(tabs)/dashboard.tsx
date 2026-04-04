@@ -290,9 +290,9 @@ function SupervisorDashboard({ stats, procedures, selectedDate, setSelectedDate,
       {/* Stats */}
       <View style={s.statsRow}>
         <StatCard label="To Review" value={stats.pending_my_approval || pendingApproval.length} color="#E65100" icon="document-attach" onPress={() => router.push('/procedures')} />
-        <StatCard label="Approved" value={stats.approved} color="#4CAF50" icon="checkmark-circle" />
+        <StatCard label="Approved" value={stats.approved} color="#4CAF50" icon="checkmark-circle" onPress={() => router.push('/procedures')} />
         <StatCard label="Total" value={stats.total} color="#1565C0" icon="folder-open" onPress={() => router.push('/procedures')} />
-        <StatCard label="Rate" value={`${approvalRate}%`} color="#5C35A3" icon="analytics" />
+        <StatCard label="Rate" value={`${approvalRate}%`} color="#5C35A3" icon="analytics" onPress={() => router.push('/procedures')} />
       </View>
 
       {/* Pending Approval Queue */}
@@ -369,9 +369,9 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
       {/* Stats */}
       <View style={s.statsRow}>
         <StatCard label="Total" value={stats.total} color="#283593" icon="layers" onPress={() => router.push('/procedures')} />
-        <StatCard label="Active" value={stats.total - (stats.completed || 0) - stats.rejected} color="#1A73E8" icon="pulse" />
-        <StatCard label="Done" value={stats.completed || 0} color="#4CAF50" icon="checkmark-circle" />
-        <StatCard label="To Review" value={stats.pending_my_approval || 0} color="#E65100" icon="document-attach" />
+        <StatCard label="Active" value={stats.total - (stats.completed || 0) - stats.rejected} color="#1A73E8" icon="pulse" onPress={() => router.push('/procedures')} />
+        <StatCard label="Done" value={stats.completed || 0} color="#4CAF50" icon="checkmark-circle" onPress={() => router.push('/procedures')} />
+        <StatCard label="To Review" value={stats.pending_my_approval || 0} color="#E65100" icon="document-attach" onPress={() => router.push('/procedures')} />
       </View>
 
       {/* Phase Pipeline */}
