@@ -158,18 +158,60 @@ export const GINGIVAL_BIOTYPE_OPTIONS = ['Thin', 'Thick'];
 
 // ─── Medical Assessment Risk Factors ──────────────────
 export const MEDICAL_RISK_FACTORS = [
-  { id: 'diabetes', label: 'Diabetes' },
-  { id: 'smoking', label: 'Smoking Status' },
-  { id: 'anticoagulant', label: 'Anticoagulant Therapy' },
-  { id: 'osteoporosis', label: 'Osteoporosis Medication' },
-  { id: 'radiation', label: 'Radiation Therapy' },
+  { id: 'diabetes', label: 'Diabetes', options: ['No', 'Controlled', 'Uncontrolled'] },
+  { id: 'smoking', label: 'Smoking Status', options: ['No', 'Light (<10/day)', 'Heavy (>10/day)'] },
+  { id: 'anticoagulant', label: 'Anticoagulant Therapy', options: ['No', 'Yes'] },
+  { id: 'osteoporosis', label: 'Osteoporosis Medication (Bisphosphonates)', options: ['No', 'Yes'] },
+  { id: 'radiation', label: 'Radiation Therapy (Head & Neck)', options: ['No', 'Yes'] },
 ];
 
-export function calculateMedicalRisk(factors: Record<string, string>): { level: string; color: string } {
-  const yesCount = Object.values(factors).filter(v => v === 'Yes').length;
-  if (yesCount > 2) return { level: 'High Risk', color: '#DC3545' };
-  if (yesCount >= 1) return { level: 'Moderate Risk', color: '#FF9800' };
-  return { level: 'Low Risk', color: '#4CAF50' };
+export function calculateMedicalRisk(factors: Record<string, string>): { level: string; color: string; score: number; warnings: string[] } {
+  if (!factors || Object.keys(factors).length === 0) {
+    return { level: 'Low Risk', color: '#4CAF50', score: 1, warnings: [] };
+  }
+
+  const warnings: string[] = [];
+
+  // Per-factor scoring
+  const scores: Record<string, number> = {};
+  // Diabetes: No=1, Controlled=2, Uncontrolled=3
+  const diabetes = factors.diabetes || 'No';
+  if (diabetes === 'Uncontrolled') { scores.diabetes = 3; warnings.push('Uncontrolled diabetes - delay implant until glycemic control achieved'); }
+  else if (diabetes === 'Controlled') { scores.diabetes = 2; }
+  else { scores.diabetes = 1; }
+
+  // Smoking: No=1, Light=2, Heavy=3
+  const smoking = factors.smoking || 'No';
+  if (smoking.startsWith('Heavy')) { scores.smoking = 3; warnings.push('Heavy smoking - smoking cessation protocol required'); }
+  else if (smoking.startsWith('Light')) { scores.smoking = 2; }
+  else { scores.smoking = 1; }
+
+  // Anticoagulant: No=1, Yes=2
+  scores.anticoagulant = factors.anticoagulant === 'Yes' ? 2 : 1;
+  if (factors.anticoagulant === 'Yes') warnings.push('Coordinate with physician for anticoagulant management');
+
+  // Osteoporosis: No=1, Yes=3 (MRONJ risk)
+  scores.osteoporosis = factors.osteoporosis === 'Yes' ? 3 : 1;
+  if (factors.osteoporosis === 'Yes') warnings.push('MRONJ risk - evaluate bisphosphonate therapy duration');
+
+  // Radiation: No=1, Yes=3 (Osteoradionecrosis risk)
+  scores.radiation = factors.radiation === 'Yes' ? 3 : 1;
+  if (factors.radiation === 'Yes') warnings.push('Osteoradionecrosis risk - assess radiation dose and field');
+
+  // Override: force HIGH if any factor is 3
+  const hasHighRiskFactor = Object.values(scores).some(s => s === 3);
+  if (hasHighRiskFactor) {
+    const totalScore = Object.values(scores).reduce((a, b) => a + b, 0);
+    return { level: 'High Risk', color: '#DC3545', score: totalScore, warnings };
+  }
+
+  // Count elevated factors (score > 1)
+  const elevatedCount = Object.values(scores).filter(s => s > 1).length;
+  const totalScore = Object.values(scores).reduce((a, b) => a + b, 0);
+
+  if (elevatedCount === 0) return { level: 'Low Risk', color: '#4CAF50', score: totalScore, warnings };
+  if (elevatedCount === 1) return { level: 'Moderate Risk', color: '#FF9800', score: totalScore, warnings };
+  return { level: 'High Risk', color: '#DC3545', score: totalScore, warnings };
 }
 
 // ─── Loading Type Options ─────────────────────────────

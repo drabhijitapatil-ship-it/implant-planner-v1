@@ -784,9 +784,9 @@ export default function NewProcedureScreen() {
             <View key={factor.id} style={styles.medicalRow}>
               <Text style={styles.medicalLabel}>{factor.label}</Text>
               <View style={styles.yesNoRow}>
-                {['Yes', 'No'].map(opt => (
+                {factor.options.map(opt => (
                   <TouchableOpacity key={opt}
-                    style={[styles.yesNoBtn, formData.medical_assessment[factor.id] === opt && (opt === 'Yes' ? styles.yesActive : styles.noActive)]}
+                    style={[styles.yesNoBtn, formData.medical_assessment[factor.id] === opt && (opt === 'No' ? styles.noActive : styles.yesActive)]}
                     onPress={() => updateMedical(factor.id, opt)}>
                     <Text style={[styles.yesNoText, formData.medical_assessment[factor.id] === opt && styles.yesNoTextActive]}>{opt}</Text>
                   </TouchableOpacity>
@@ -795,14 +795,28 @@ export default function NewProcedureScreen() {
             </View>
           ))}
 
-          {/* Auto Risk Classification */}
-          {Object.keys(formData.medical_assessment).length > 0 && (
-            <View style={[styles.riskBadge, { backgroundColor: calculateMedicalRisk(formData.medical_assessment).color + '18' }]}>
-              <Text style={[styles.riskBadgeText, { color: calculateMedicalRisk(formData.medical_assessment).color }]}>
-                Medical Risk: {calculateMedicalRisk(formData.medical_assessment).level}
-              </Text>
-            </View>
-          )}
+          {/* Auto Risk Classification with warnings */}
+          {Object.keys(formData.medical_assessment).length > 0 && (() => {
+            const risk = calculateMedicalRisk(formData.medical_assessment);
+            return (
+              <View>
+                <View style={[styles.riskBadge, { backgroundColor: risk.color + '18' }]}>
+                  <Text style={[styles.riskBadgeText, { color: risk.color }]}>
+                    Medical Risk: {risk.level} (Score: {risk.score}/15)
+                  </Text>
+                </View>
+                {risk.warnings.length > 0 && (
+                  <View style={{ marginTop: 8, padding: 10, backgroundColor: '#FFF3E0', borderRadius: 8, borderLeftWidth: 3, borderLeftColor: risk.color }}>
+                    {risk.warnings.map((w, i) => (
+                      <Text key={i} style={{ fontSize: 12, color: '#5D4037', marginBottom: i < risk.warnings.length - 1 ? 4 : 0 }}>
+                        {'\u26A0'} {w}
+                      </Text>
+                    ))}
+                  </View>
+                )}
+              </View>
+            );
+          })()}
         </View>
       </View>
 
