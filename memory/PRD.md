@@ -96,7 +96,12 @@ A comprehensive mobile application for managing dental implant procedures at the
   - Student: Action Needed cards, Drafts with "Send" buttons, Faculty Remarks feed
   - Supervisor: Pending Approval Queue with phase badges, My Students with pending counts, Approval Rate stat
   - In-Charge/Admin: Case Pipeline bar chart (Phase 1-4 + Complete), Pending Review queue, Student Performance leaderboard, Quick Actions grid
-- Bottom tabs unchanged: Home, New Case, Implant, My Cases, Alerts
+- **Medical Risk Assessment Upgrade**: Replaced simple Yes/No with granular scoring:
+  - Diabetes (No/Controlled/Uncontrolled), Smoking (No/Light/Heavy), Anticoagulant, Osteoporosis, Radiation
+  - Per-factor scoring (1=Low, 2=Moderate, 3=High) with override rules (MRONJ, osteoradionecrosis)
+  - Clinical warnings and suggested actions in risk output
+  - Updated total risk formula: 6 factors, score 6-18 (Low=6-9, Moderate=10-14, High=15-18)
+  - Backwards compatible with old data
 
 ### Earlier Sessions
 - Session 5: Blank screen crash fix, backend seed sync, auth upgrade
