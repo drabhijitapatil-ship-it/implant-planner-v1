@@ -1927,14 +1927,32 @@ async def generate_case_report(
         risk = procedure.get("medical_risk_level", "")
         title = f"Medical Assessment — {risk}" if risk else "Medical Assessment"
         add_section_title(title, 211, 47, 47)
+        risk_label_map = {
+            "Uncontrolled": ("High", (244, 67, 54)),
+            "Heavy (>10/day)": ("High", (244, 67, 54)),
+            "Controlled": ("Moderate", (255, 152, 0)),
+            "Light (<10/day)": ("Moderate", (255, 152, 0)),
+        }
         for key, value in med.items():
             label = key.replace("_", " ").title()
             pdf.set_font("Helvetica", "B", 10)
             pdf.cell(60, 7, safe(label + ":"), ln=False)
-            color = (244, 67, 54) if value == "Yes" else (76, 175, 80)
+            val_str = str(value) if value else "N/A"
+            is_no = val_str == "No"
+            # Determine color based on granular value
+            if is_no:
+                color = (76, 175, 80)  # green
+            elif val_str in risk_label_map:
+                _, color = risk_label_map[val_str]
+            elif val_str == "Yes" and key in ("osteoporosis", "radiation"):
+                color = (244, 67, 54)  # red - high risk
+            elif val_str == "Yes":
+                color = (255, 152, 0)  # orange - moderate
+            else:
+                color = (0, 0, 0)
             pdf.set_font("Helvetica", "B", 10)
             pdf.set_text_color(*color)
-            pdf.cell(0, 7, safe(str(value) if value else "N/A"), ln=True)
+            pdf.cell(0, 7, safe(val_str), ln=True)
             pdf.set_text_color(0, 0, 0)
         pdf.ln(3)
 
@@ -1954,7 +1972,7 @@ async def generate_case_report(
             if imp.get("bone_width"):
                 pdf.cell(0, 6, safe(f"    Bone: {imp.get('bone_width')}mm W x {imp.get('bone_height', '')}mm H | Type: {imp.get('bone_type', '')}"), ln=True)
             if imp.get("risk_level"):
-                pdf.cell(0, 6, safe(f"    Risk: {imp.get('risk_level')} (Score: {imp.get('risk_score', '')}/15)"), ln=True)
+                pdf.cell(0, 6, safe(f"    Risk: {imp.get('risk_level')} (Score: {imp.get('risk_score', '')})"), ln=True)
             pdf.ln(2)
 
     # ── Phase 1: Pre-Surgical ────────────────────────────────
@@ -4535,14 +4553,69 @@ async def calculate_risk(
     region = _get_tooth_region(tooth)
     tooth_score = TOOTH_REGION_SCORES.get(region, 2)
 
-    # 6. Medical risk factors
-    medical_yes = sum(1 for v in medical.values() if v == "Yes") if medical else 0
-    if medical_yes >= 3:
-        medical_score = 3
-    elif medical_yes >= 1:
-        medical_score = 2
-    else:
-        medical_score = 1
+    # 6. Medical risk factors (granular scoring)
+    medical_score = 1
+    medical_warnings = []
+    medical_details_parts = []
+
+    if medical:
+        factor_scores = {}
+
+        # Diabetes: No=1, Controlled=2, Uncontrolled=3
+        diabetes_val = medical.get("diabetes", "No")
+        if diabetes_val == "Uncontrolled":
+            factor_scores["diabetes"] = 3
+            medical_warnings.append("Uncontrolled diabetes - delay implant until glycemic control achieved")
+        elif diabetes_val == "Controlled":
+            factor_scores["diabetes"] = 2
+        else:
+            factor_scores["diabetes"] = 1
+
+        # Smoking: No=1, Light=2, Heavy=3
+        smoking_val = medical.get("smoking", "No")
+        if smoking_val.startswith("Heavy"):
+            factor_scores["smoking"] = 3
+            medical_warnings.append("Heavy smoking - smoking cessation protocol required")
+        elif smoking_val.startswith("Light"):
+            factor_scores["smoking"] = 2
+        else:
+            factor_scores["smoking"] = 1
+
+        # Anticoagulant: No=1, Yes=2
+        factor_scores["anticoagulant"] = 2 if medical.get("anticoagulant") == "Yes" else 1
+        if medical.get("anticoagulant") == "Yes":
+            medical_warnings.append("Coordinate with physician for anticoagulant management")
+
+        # Osteoporosis: No=1, Yes=3 (MRONJ risk)
+        factor_scores["osteoporosis"] = 3 if medical.get("osteoporosis") == "Yes" else 1
+        if medical.get("osteoporosis") == "Yes":
+            medical_warnings.append("MRONJ risk - evaluate bisphosphonate therapy duration")
+
+        # Radiation: No=1, Yes=3 (Osteoradionecrosis)
+        factor_scores["radiation"] = 3 if medical.get("radiation") == "Yes" else 1
+        if medical.get("radiation") == "Yes":
+            medical_warnings.append("Osteoradionecrosis risk - assess radiation dose and field")
+
+        # Override: force HIGH if any factor is 3
+        has_high_risk_factor = any(s == 3 for s in factor_scores.values())
+        elevated_count = sum(1 for s in factor_scores.values() if s > 1)
+        medical_score_total = sum(factor_scores.values())
+
+        if has_high_risk_factor or elevated_count >= 2:
+            medical_score = 3
+        elif elevated_count == 1:
+            medical_score = 2
+        else:
+            medical_score = 1
+
+        # Build details string
+        for key, score in factor_scores.items():
+            label_map = {"diabetes": "Diabetes", "smoking": "Smoking", "anticoagulant": "Anticoagulant", "osteoporosis": "Osteoporosis", "radiation": "Radiation"}
+            val = medical.get(key, "No")
+            if score > 1:
+                medical_details_parts.append(f"{label_map.get(key, key)}: {val}")
+    
+    medical_details = ", ".join(medical_details_parts) if medical_details_parts else "None"
 
     factors = [
         {"factor": "Bone Width", "remaining": round(remaining_width, 1), "risk": _score_label(width_score), "score": width_score},
@@ -4556,22 +4629,34 @@ async def calculate_risk(
 
     # Add medical factor only if medical assessment was provided
     if medical:
-        medical_details = ", ".join(k.title() for k, v in medical.items() if v == "Yes") or "None"
         factors.append({"factor": "Medical Risk", "detail": medical_details, "risk": _score_label(medical_score), "score": medical_score})
         total += medical_score
         max_score = 18
     else:
         max_score = 15
 
-    if total <= (max_score * 0.47):
-        risk_level = "Low"
-        color = "green"
-    elif total <= (max_score * 0.73):
-        risk_level = "Moderate"
-        color = "orange"
+    # Updated thresholds: 6-9 Low, 10-14 Moderate, 15-18 High (with medical)
+    # Without medical: 5-7 Low, 8-11 Moderate, 12-15 High
+    if max_score == 18:
+        if total <= 9:
+            risk_level = "Low"
+            color = "green"
+        elif total <= 14:
+            risk_level = "Moderate"
+            color = "orange"
+        else:
+            risk_level = "High"
+            color = "red"
     else:
-        risk_level = "High"
-        color = "red"
+        if total <= 7:
+            risk_level = "Low"
+            color = "green"
+        elif total <= 11:
+            risk_level = "Moderate"
+            color = "orange"
+        else:
+            risk_level = "High"
+            color = "red"
 
     # Suggested actions for moderate/high risk
     actions = []
@@ -4583,21 +4668,13 @@ async def calculate_risk(
         actions.append("Consider implant with enhanced surface treatment")
     if procedure_score == 3:
         actions.append("Ensure advanced surgical planning")
+    # Medical-specific actions based on granular values
     if medical and medical_score >= 2:
-        if medical.get("diabetes") == "Yes":
-            actions.append("Ensure glycemic control before implant placement")
-        if medical.get("smoking") == "Yes":
-            actions.append("Advise smoking cessation before and after surgery")
-        if medical.get("anticoagulant") == "Yes":
-            actions.append("Coordinate with physician for anticoagulant management")
-        if medical.get("osteoporosis") == "Yes":
-            actions.append("Evaluate bisphosphonate therapy duration and risk")
-        if medical.get("radiation") == "Yes":
-            actions.append("Assess radiation dose and field before implant placement")
-    if total >= (max_score * 0.53):
+        actions.extend(medical_warnings)
+    if total >= 10:
         actions.append("Evaluate CBCT carefully")
-    if total >= (max_score * 0.8):
-        actions.append("Consider bone graft")
+    if total >= 15:
+        actions.append("Consider staged implant placement")
 
     return {
         "factors": factors,
@@ -4606,6 +4683,7 @@ async def calculate_risk(
         "risk_level": risk_level,
         "color": color,
         "suggested_actions": actions,
+        "medical_warnings": medical_warnings,
     }
 
 # ── Drilling Protocol Engine ─────────────────────────────────

@@ -1199,8 +1199,23 @@ function ModalContent(props: any) {
                     color={riskResult.risk_level === 'Low' ? '#4CAF50' : riskResult.risk_level === 'Moderate' ? '#FF9800' : '#F44336'} />
                   <View style={{ flex: 1 }}>
                     <Text style={ms.riskLevel}>{riskResult.risk_level} Risk</Text>
-                    <Text style={ms.riskScore}>Score: {riskResult.total_score}/15</Text>
+                    <Text style={ms.riskScore}>Score: {riskResult.total_score}/{riskResult.max_score || 18}</Text>
                   </View>
+                </View>
+              )}
+              {riskResult?.medical_warnings?.length > 0 && (
+                <View style={{ backgroundColor: '#FFF3E0', borderRadius: 10, padding: 10, marginTop: 8, borderLeftWidth: 3, borderLeftColor: '#FF9800' }}>
+                  {riskResult.medical_warnings.map((w: string, i: number) => (
+                    <Text key={i} style={{ fontSize: 12, color: '#5D4037', marginBottom: i < riskResult.medical_warnings.length - 1 ? 4 : 0 }}>{'\u26A0'} {w}</Text>
+                  ))}
+                </View>
+              )}
+              {riskResult?.suggested_actions?.length > 0 && (
+                <View style={{ backgroundColor: '#E3F2FD', borderRadius: 10, padding: 10, marginTop: 8 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#1565C0', marginBottom: 4 }}>Suggested Actions</Text>
+                  {riskResult.suggested_actions.map((a: string, i: number) => (
+                    <Text key={i} style={{ fontSize: 11, color: '#37474F', marginBottom: 2 }}>{'\u2022'} {a}</Text>
+                  ))}
                 </View>
               )}
 

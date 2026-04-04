@@ -711,19 +711,29 @@ export default function ProcedureDetailScreen() {
                 </View>
               )}
             </View>
-            {Object.entries(procedure.medical_assessment).map(([key, value]) => (
-              <View key={key} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' }}>
-                <Ionicons
-                  name={(value as string) === 'Yes' ? 'alert-circle' : 'checkmark-circle'}
-                  size={20}
-                  color={(value as string) === 'Yes' ? '#F44336' : '#4CAF50'}
-                />
-                <View style={{ marginLeft: 12, flex: 1 }}>
-                  <Text style={{ fontSize: 12, color: '#666', textTransform: 'capitalize' }}>{key.replace(/_/g, ' ')}</Text>
-                  <Text style={{ fontSize: 14, color: '#1A1A1A', fontWeight: '500' }}>{value as string}</Text>
+            {Object.entries(procedure.medical_assessment).map(([key, value]) => {
+              const isNoRisk = (value as string) === 'No';
+              const isHighRisk = ['Uncontrolled', 'Heavy (>10/day)'].some(h => (value as string).includes?.(h)) || 
+                (['osteoporosis', 'radiation'].includes(key) && (value as string) === 'Yes');
+              const iconName = isNoRisk ? 'checkmark-circle' : isHighRisk ? 'warning' : 'alert-circle';
+              const iconColor = isNoRisk ? '#4CAF50' : isHighRisk ? '#F44336' : '#FF9800';
+              return (
+                <View key={key} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' }}>
+                  <Ionicons name={iconName} size={20} color={iconColor} />
+                  <View style={{ marginLeft: 12, flex: 1 }}>
+                    <Text style={{ fontSize: 12, color: '#666', textTransform: 'capitalize' }}>{key.replace(/_/g, ' ')}</Text>
+                    <Text style={{ fontSize: 14, color: '#1A1A1A', fontWeight: '500' }}>{value as string}</Text>
+                  </View>
+                  {!isNoRisk && (
+                    <View style={{ backgroundColor: isHighRisk ? '#FFEBEE' : '#FFF3E0', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 }}>
+                      <Text style={{ fontSize: 10, fontWeight: '600', color: isHighRisk ? '#F44336' : '#FF9800' }}>
+                        {isHighRisk ? 'HIGH' : 'MODERATE'}
+                      </Text>
+                    </View>
+                  )}
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
 
