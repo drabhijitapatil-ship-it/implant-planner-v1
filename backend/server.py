@@ -4180,6 +4180,11 @@ async def suggest_implant(
             "recommended_length": f"{tooth_data['length'][0]}–{tooth_data['length'][1]} mm",
         }
 
+    # Narrow ridge evaluation (always included when bone_width < 6)
+    if bone_width < 6:
+        tooth_region = _get_tooth_region(tooth) if tooth else None
+        response["narrow_ridge_evaluation"] = evaluate_narrow_ridge(bone_width, bone_density=None, tooth_region=tooth_region)
+
     return response
 
 # Procedure → Bone Type compatibility (Indication Dictionary)
@@ -4202,9 +4207,148 @@ PROCEDURE_BONE_COMPATIBILITY = {
     "Restricted Bone Height": {
         "allowedBone": ["D1", "D2", "D3", "D4"],
     },
+    "Narrow Ridge": {
+        "allowedBone": ["D1", "D2", "D3", "D4"],
+    },
 }
 
 PROCEDURE_LIST = list(PROCEDURE_BONE_COMPATIBILITY.keys())
+
+# ── Narrow Ridge Clinical Decision Engine ─────────────────────
+NARROW_RIDGE_CONFIG = {
+    "version": "1.0",
+    "classification": [
+        {"min": 6, "label": "adequate", "clinical_action": "standard_implant"},
+        {"min": 4.5, "max": 6, "label": "mild_narrow", "clinical_action": "standard_or_narrow"},
+        {"min": 3, "max": 4.5, "label": "moderate_narrow", "clinical_action": "narrow_or_expansion"},
+        {"max": 3, "label": "severe_narrow", "clinical_action": "augmentation_required"},
+    ],
+    "decision_logic": [
+        {
+            "min": 6,
+            "recommendation": {
+                "implant_type": "standard", "protocols": ["conventional_drilling"],
+                "label": "Standard implant placement indicated",
+            },
+        },
+        {
+            "min": 4.5, "max": 6,
+            "recommendation": {
+                "implant_type": "standard_or_narrow", "protocols": ["conventional_drilling"],
+                "label": "Standard or narrow implant; conventional drilling protocol",
+            },
+        },
+        {
+            "min": 3, "max": 4.5,
+            "recommendation": {
+                "implant_type": "narrow", "protocols": ["undersized_drilling", "ridge_expansion", "split_crest"],
+                "label": "Narrow implant with ridge modification protocol",
+            },
+        },
+        {
+            "max": 3,
+            "recommendation": {
+                "implant_type": None, "protocols": ["GBR", "block_graft"],
+                "action": "block_implant",
+                "label": "Implant placement not possible; bone augmentation required",
+            },
+        },
+    ],
+    "bone_density_protocol": {
+        "D1": {"key": "full_drilling", "label": "Full sequential drilling"},
+        "D2": {"key": "slight_undersizing", "label": "Slight undersizing for better primary stability"},
+        "D3": {"key": "undersized_drilling", "label": "Undersized drilling for enhanced primary stability"},
+        "D4": {"key": "osteotome_or_minimal_drilling", "label": "Osteotome technique or minimal drilling"},
+    },
+}
+
+CLASSIFICATION_LABELS = {
+    "adequate": "Adequate Ridge Width",
+    "mild_narrow": "Mildly Narrow Ridge",
+    "moderate_narrow": "Moderately Narrow Ridge",
+    "severe_narrow": "Severely Narrow Ridge",
+}
+
+CLASSIFICATION_SEVERITY = {
+    "adequate": "safe",
+    "mild_narrow": "info",
+    "moderate_narrow": "warning",
+    "severe_narrow": "critical",
+}
+
+
+def evaluate_narrow_ridge(
+    ridge_width_mm: float,
+    implant_diameter_mm: float = None,
+    bone_density: str = None,
+    tooth_region: str = None,
+) -> dict:
+    """Evaluate narrow ridge clinical decision engine and return classification, recommendations, warnings."""
+    output = {
+        "classification": None,
+        "classification_label": None,
+        "clinical_action": None,
+        "severity": None,
+        "recommendation": {},
+        "warnings": [],
+        "blocked": False,
+        "ridge_width_mm": ridge_width_mm,
+    }
+
+    # 1. Ridge width classification
+    for rule in NARROW_RIDGE_CONFIG["classification"]:
+        min_val = rule.get("min")
+        max_val = rule.get("max")
+        if (min_val is None or ridge_width_mm >= min_val) and (max_val is None or ridge_width_mm < max_val):
+            output["classification"] = rule["label"]
+            output["clinical_action"] = rule["clinical_action"]
+            break
+    output["classification_label"] = CLASSIFICATION_LABELS.get(output["classification"], "Unknown")
+    output["severity"] = CLASSIFICATION_SEVERITY.get(output["classification"], "info")
+
+    # 2. Decision logic — recommendation
+    for rule in NARROW_RIDGE_CONFIG["decision_logic"]:
+        min_val = rule.get("min")
+        max_val = rule.get("max")
+        if (min_val is None or ridge_width_mm >= min_val) and (max_val is None or ridge_width_mm < max_val):
+            output["recommendation"] = dict(rule["recommendation"])
+            if rule["recommendation"].get("action") == "block_implant":
+                output["blocked"] = True
+            break
+
+    # 3. Safety rules
+    if ridge_width_mm < 3:
+        output["warnings"].append({
+            "id": "severe_ridge", "severity": "critical",
+            "message": "Ridge width <3mm: Bone augmentation (GBR or block graft) required before implant placement.",
+        })
+    if implant_diameter_mm and ridge_width_mm - implant_diameter_mm < 2:
+        remaining = round(ridge_width_mm - implant_diameter_mm, 1)
+        output["warnings"].append({
+            "id": "bone_envelope", "severity": "high",
+            "message": f"Insufficient bone envelope: {remaining}mm remaining ({ridge_width_mm}mm ridge - {implant_diameter_mm}mm implant). Minimum 1mm buccal/lingual required.",
+        })
+
+    # 4. Bone density drilling protocol
+    if bone_density and bone_density in NARROW_RIDGE_CONFIG["bone_density_protocol"]:
+        dp = NARROW_RIDGE_CONFIG["bone_density_protocol"][bone_density]
+        output["recommendation"]["drilling_protocol"] = dp["key"]
+        output["recommendation"]["drilling_protocol_label"] = dp["label"]
+
+    # 5. Prosthetic rules
+    if implant_diameter_mm and tooth_region:
+        if implant_diameter_mm <= 3.5 and tooth_region.lower() == "molar":
+            output["warnings"].append({
+                "id": "narrow_in_molar", "severity": "warning",
+                "message": "Avoid narrow implants in molar region — higher occlusal forces may compromise implant longevity.",
+            })
+        if implant_diameter_mm <= 3.3:
+            output["warnings"].append({
+                "id": "splinting_needed", "severity": "info",
+                "message": "Consider splinting adjacent implants for better load distribution with narrow diameter.",
+            })
+
+    return output
 
 @api_router.get("/implant-library/procedure-options")
 async def get_procedure_options(current_user: dict = Depends(get_current_user)):
@@ -4358,6 +4502,7 @@ async def suggest_auto(
             "recommended_systems": recommended_systems,
             "restricted_bone_height": True,
             "restricted_height_warning": restricted_height_warning,
+            "narrow_ridge_evaluation": evaluate_narrow_ridge(bone_width, bone_density=bone_type, tooth_region=_get_tooth_region(tooth) if tooth else None),
             "clinical_guidance": {
                 "bone_width": bone_width, "bone_height": bone_height,
                 "bone_type": bone_type, "procedures": procedures,
@@ -4367,6 +4512,33 @@ async def suggest_auto(
             },
             "tooth_recommendation": tooth_rec,
             "validation_warnings": warnings,
+            "valid_procedures": valid_procedures,
+        }
+
+    # ─── Narrow Ridge Block: bone_width < 3mm → augmentation required ──
+    nr_eval = evaluate_narrow_ridge(bone_width, bone_density=bone_type, tooth_region=_get_tooth_region(tooth) if tooth else None)
+    if nr_eval["blocked"]:
+        tooth_data = TOOTH_RECOMMENDATIONS.get(tooth) if tooth else None
+        tooth_rec = None
+        if tooth_data:
+            tooth_rec = {
+                "tooth": tooth, "region": tooth_data["region"],
+                "recommended_diameter": f"{tooth_data['diameter'][0]}–{tooth_data['diameter'][1]} mm",
+                "recommended_length": f"{tooth_data['length'][0]}–{tooth_data['length'][1]} mm",
+            }
+        return {
+            "recommended_systems": [],
+            "narrow_ridge_evaluation": nr_eval,
+            "narrow_ridge_blocked": True,
+            "clinical_guidance": {
+                "bone_width": bone_width, "bone_height": bone_height,
+                "bone_type": bone_type, "procedures": procedures,
+                "recommended_diameter_range": "N/A — augmentation required",
+                "recommended_length_range": "N/A — augmentation required",
+                "length_category": "Bone augmentation required",
+            },
+            "tooth_recommendation": tooth_rec,
+            "validation_warnings": warnings + [w["message"] for w in nr_eval["warnings"]],
             "valid_procedures": valid_procedures,
         }
 
@@ -4457,6 +4629,7 @@ async def suggest_auto(
 
     return {
         "recommended_systems": recommended_systems,
+        "narrow_ridge_evaluation": nr_eval,
         "clinical_guidance": {
             "bone_width": bone_width,
             "bone_height": bone_height,
@@ -4480,6 +4653,7 @@ PROCEDURE_RISK_SCORES = {
     "Immediate Implant Placement with Bone Graft": 2,
     "Sinus Lift": 3,
     "Restricted Bone Height": 3,
+    "Narrow Ridge": 3,
 }
 
 BONE_DENSITY_SCORES = {"D1": 1, "D2": 1, "D3": 2, "D4": 3}
@@ -4685,6 +4859,25 @@ async def calculate_risk(
         "suggested_actions": actions,
         "medical_warnings": medical_warnings,
     }
+
+# ── Narrow Ridge Evaluation Endpoint ──────────────────────────
+@api_router.post("/implant-library/evaluate-narrow-ridge")
+async def evaluate_narrow_ridge_endpoint(
+    body: dict,
+    current_user: dict = Depends(get_current_user),
+):
+    """Standalone narrow ridge clinical decision evaluation."""
+    ridge_width = float(body.get("ridge_width_mm", 0))
+    if ridge_width <= 0:
+        raise HTTPException(status_code=400, detail="ridge_width_mm is required and must be > 0")
+    implant_diameter = body.get("implant_diameter_mm")
+    if implant_diameter is not None:
+        implant_diameter = float(implant_diameter)
+    bone_density = body.get("bone_density")
+    tooth = body.get("tooth", "")
+    tooth_region = _get_tooth_region(tooth) if tooth else None
+    return evaluate_narrow_ridge(ridge_width, implant_diameter, bone_density, tooth_region)
+
 
 # ── Drilling Protocol Engine ─────────────────────────────────
 
