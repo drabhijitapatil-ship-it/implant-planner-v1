@@ -25,6 +25,7 @@ A comprehensive mobile application for managing dental implant procedures at the
 13. **Simple Approval Protocol**: Supervisor and In-Charge approve/reject each phase without comment boxes (reverted per user request)
 14. **Dynamic Notes Labels**: "Operator's Notes" for faculty-created cases, "Student's Notes" for student cases
 15. **Auto-expand Drilling Protocol**: Protocol auto-expands when implant is selected in Suggest Me mode
+16. **Narrow Ridge Clinical Decision Engine**: 4-level ridge width classification with safety rules, prosthetic warnings, bone density protocols, and automatic blocking for severe narrow ridges (<3mm)
 
 ## Key Credentials
 - Admin/In-Charge: `Abhijit.patil@dental.edu` / `Admin@123`
@@ -46,6 +47,8 @@ A comprehensive mobile application for managing dental implant procedures at the
 - `POST /api/procedures/{id}/case-report` (PDF generation)
 - `POST /api/drilling-protocols/generate`
 - `GET /api/implant-library/systems`
+- `POST /api/implant-library/evaluate-narrow-ridge` (Narrow Ridge Clinical Decision Engine)
+- `GET /api/implant-library/procedure-options` (includes "Narrow Ridge")
 
 ## Architecture
 ```
@@ -103,6 +106,20 @@ A comprehensive mobile application for managing dental implant procedures at the
   - Updated total risk formula: 6 factors, score 6-18 (Low=6-9, Moderate=10-14, High=15-18)
   - Backwards compatible with old data
 
+### April 4, 2026 — Session 8 (Fork)
+- **Narrow Ridge Clinical Decision Engine** (25/25 backend tests passed):
+  - New endpoint: `POST /api/implant-library/evaluate-narrow-ridge`
+  - 4-level classification: Adequate (>=6mm), Mildly Narrow (4.5-6mm), Moderately Narrow (3-4.5mm), Severely Narrow (<3mm)
+  - Safety rules: bone_envelope warning (remaining <2mm), severe_ridge critical block (<3mm)
+  - Prosthetic rules: molar warning for narrow implants (<=3.5mm), splinting recommendation (<=3.3mm)
+  - Bone density drilling protocol mapping (D1: full, D2: slight undersizing, D3: undersized, D4: osteotome)
+  - Integrated into `suggest` and `suggest-auto` endpoints (automatic evaluation when bone_width<6mm)
+  - Blocked flow: suggest-auto returns `narrow_ridge_blocked=true` with empty results when ridge<3mm
+  - Frontend: Real-time ridge classification indicator in Step 2 (both Choose/Suggest modes)
+  - Frontend: Classification banners, protocol recommendations, and warnings in Step 3
+  - Frontend: Full blocked UI with augmentation required message for severe narrow ridge
+  - "Narrow Ridge" added as selectable procedure type (alongside Restricted Bone Height)
+
 ### Earlier Sessions
 - Session 5: Blank screen crash fix, backend seed sync, auth upgrade
 - Session 4: EAS Deployment Fix, Auth Upgrade (20/20 tests), Health endpoint
@@ -115,6 +132,7 @@ A comprehensive mobile application for managing dental implant procedures at the
 - Production deployment verification (user needs to "Save to Github" + Deploy)
 
 ### P2
+- Multi-tenant architecture (Hybrid: Colleges + Clinics mode with institution_id filtering)
 - Backend refactoring: Decompose server.py into modular routers, models, services
 - Frontend refactoring: Modularize CaseImplantPlanning.tsx and [id].tsx
 - Data cleanup: Remove duplicate user entries
