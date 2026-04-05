@@ -1,0 +1,90 @@
+{
+  "summary": "Iteration 70: Scheduling Constraints Feature Tests - 10/10 tests PASSED (100%). Verified all 7 requested features for the new scheduling constraints: (1) GET /api/procedures/slots/{date} returns booked_slots dict with patient_name and scheduled_by, (2) Empty booked_slots for dates with no procedures, (3) POST /api/procedures returns 409 on duplicate slot with descriptive message including patient name and scheduler name, (4) Different time slot on same day succeeds, (5) Same time slot on different day succeeds, (6) created_by_name field present in procedure list response, (7) 409 error message includes patient name and scheduler name.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "note": "Backend-only testing per request."
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_scheduling_constraints_iteration70.py",
+    "/app/test_reports/pytest/pytest_results_iteration70.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "GET /api/procedures/slots/{date} correctly returns booked_slots dict with patient_name and scheduled_by fields",
+    "POST /api/procedures correctly returns 409 when attempting to book an already-booked slot",
+    "409 error message is descriptive: 'The 10:00 AM slot on {date} is already booked for patient {patient_name} (scheduled by {scheduler_name}). Please choose a different time or date.'",
+    "Different time slots on same day (10:00 and 14:00) can be booked successfully",
+    "Same time slot on different days can be booked successfully",
+    "created_by_name field is correctly populated in procedure responses for dashboard display",
+    "Student-created procedures also correctly block slots and show scheduled_by info"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_scheduling_constraints_iteration70.py"
+  ],
+  "success_rate": {
+    "backend": "100% (10/10 tests passed)",
+    "frontend": "N/A (backend-only testing per request)"
+  },
+  "test_credentials": {
+    "student": {"identifier": "Gaurav.pandey@student.dental.edu", "password": "Student@123"},
+    "supervisor": {"identifier": "Paresh.gandhi@dental.edu", "password": "Supervisor@123"},
+    "incharge": {"identifier": "Abhijit.patil@dental.edu", "password": "Admin@123"}
+  },
+  "seed_data_creation": "None - tests create and cleanup their own test procedures",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Scheduling constraints feature fully tested in iteration 70. All 7 requested features verified working. GET /api/procedures/slots/{date} returns booked_slots dict with patient_name and scheduled_by. POST /api/procedures returns 409 with descriptive error message when attempting duplicate slot booking. created_by_name field present in procedure responses. Tests clean up after themselves by deleting test procedures.",
+  "tested_features": {
+    "feature_1_get_slots_with_booked_info": {
+      "test": "test_create_procedure_and_verify_slot_booked",
+      "result": "PASS - GET /api/procedures/slots/{date} returns booked_slots dict with patient_name and scheduled_by"
+    },
+    "feature_2_get_slots_empty_date": {
+      "test": "test_get_booked_slots_empty_date",
+      "result": "PASS - Returns empty booked_slots {} for date with no procedures"
+    },
+    "feature_3_duplicate_slot_rejection_409": {
+      "test": "test_duplicate_slot_rejection_409",
+      "result": "PASS - Returns 409 with descriptive message when attempting to book already-booked slot"
+    },
+    "feature_4_different_time_same_day": {
+      "test": "test_different_time_same_day_succeeds",
+      "result": "PASS - Booking 10:00 then 14:00 on same day succeeds"
+    },
+    "feature_5_same_time_different_day": {
+      "test": "test_same_time_different_day_succeeds",
+      "result": "PASS - Booking 10:00 on different days succeeds"
+    },
+    "feature_6_created_by_name_in_list": {
+      "test": "test_created_by_name_in_procedure_list",
+      "result": "PASS - created_by_name field present in procedure list response"
+    },
+    "feature_7_409_error_includes_names": {
+      "test": "test_409_error_message_includes_names",
+      "result": "PASS - 409 error message includes patient name and scheduler name"
+    }
+  },
+  "tested_endpoints": {
+    "GET /api/procedures/slots/{date}": "200 - Returns booked_slots dict with patient_name and scheduled_by",
+    "POST /api/procedures": "200 for valid new slot, 409 for duplicate slot with descriptive error message",
+    "GET /api/procedures": "200 - Returns procedures with created_by_name field"
+  },
+  "sample_responses": {
+    "GET /api/procedures/slots/2026-06-04": {
+      "date": "2026-06-04",
+      "booked_slots": {
+        "10:00": {
+          "patient_name": "TEST_SlotBooking_Patient",
+          "scheduled_by": "Dr. Paresh Gandhi"
+        }
+      }
+    },
+    "409_error_message": "The 10:00 AM slot on 2026-06-09 is already booked for patient TEST_FirstPatient_Duplicate (scheduled by Dr. Paresh Gandhi). Please choose a different time or date."
+  }
+}

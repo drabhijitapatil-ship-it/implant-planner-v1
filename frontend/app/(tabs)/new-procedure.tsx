@@ -353,6 +353,8 @@ export default function NewProcedureScreen() {
   };
 
   // ── Load faculty data ──
+  const [bookedSlots, setBookedSlots] = useState<Record<string, { patient_name: string; scheduled_by: string }>>({});
+
   useEffect(() => {
     const loadFaculty = async () => {
       try {
@@ -364,6 +366,18 @@ export default function NewProcedureScreen() {
     };
     loadFaculty();
   }, []);
+
+  // Fetch booked slots when procedure_date changes
+  useEffect(() => {
+    if (!formData.procedure_date) { setBookedSlots({}); return; }
+    const fetchSlots = async () => {
+      try {
+        const res = await api.get(`/procedures/slots/${formData.procedure_date}`);
+        setBookedSlots(res.data?.booked_slots || {});
+      } catch { setBookedSlots({}); }
+    };
+    fetchSlots();
+  }, [formData.procedure_date]);
 
   // Update medical risk and auto-mark checklist when factors change
   useEffect(() => {
@@ -724,15 +738,30 @@ export default function NewProcedureScreen() {
             <View style={styles.fieldContainer}>
               <Text style={styles.label}>Time Slot <Text style={{ color: '#DC3545' }}>*</Text></Text>
               <View style={styles.chipRow}>
-                {availableSlots.map(slot => (
-                  <TouchableOpacity key={slot.value}
-                    style={[styles.chip, formData.procedure_time === slot.value && styles.chipActive]}
-                    onPress={() => updateForm('procedure_time', slot.value)}>
-                    <Text style={[styles.chipText, formData.procedure_time === slot.value && styles.chipTextActive]}>
-                      {slot.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                {availableSlots.map(slot => {
+                  const booked = bookedSlots[slot.value];
+                  const isBooked = !!booked;
+                  const isSelected = formData.procedure_time === slot.value;
+                  return (
+                    <View key={slot.value}>
+                      <TouchableOpacity
+                        style={[styles.chip, isSelected && styles.chipActive, isBooked && styles.chipBooked]}
+                        onPress={() => !isBooked && updateForm('procedure_time', slot.value)}
+                        disabled={isBooked}
+                        data-testid={`slot-${slot.value}`}>
+                        <Text style={[styles.chipText, isSelected && styles.chipTextActive, isBooked && styles.chipBookedText]}>
+                          {slot.label}
+                        </Text>
+                        {isBooked && <Ionicons name="lock-closed" size={12} color="#999" style={{ marginLeft: 4 }} />}
+                      </TouchableOpacity>
+                      {isBooked && (
+                        <Text style={styles.bookedInfo} numberOfLines={1}>
+                          {booked.patient_name} ({booked.scheduled_by})
+                        </Text>
+                      )}
+                    </View>
+                  );
+                })}
               </View>
             </View>
           );
@@ -880,6 +909,9 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: '#1A73E8', borderColor: '#1A73E8' },
   chipText: { fontSize: 13, color: '#666' },
   chipTextActive: { color: '#FFF', fontWeight: '600' },
+  chipBooked: { backgroundColor: '#F0F0F0', borderColor: '#DDD', opacity: 0.7 },
+  chipBookedText: { color: '#999', textDecorationLine: 'line-through' },
+  bookedInfo: { fontSize: 10, color: '#999', marginTop: 2, maxWidth: 120, textAlign: 'center' },
   checklistRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
   checklistLabel: { fontSize: 14, color: '#333', marginLeft: 10, flex: 1 },
   medicalSection: { marginTop: 16, padding: 12, backgroundColor: '#F8F9FA', borderRadius: 8 },
