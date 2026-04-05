@@ -1040,6 +1040,45 @@ function ModalContent(props: any) {
             <View>
               <Text style={ms.stepTitle}>Select Implant</Text>
 
+              {/* ── High Constraint Mode (Narrow Ridge + Restricted Height) ── */}
+              {result.high_constraint_evaluation?.active && (
+                <View style={[ms.highConstraintCard, { borderColor: result.high_constraint_evaluation.risk_level === 'HIGH' ? '#EF9A9A' : '#FFB74D' }]} data-testid="high-constraint-display">
+                  <View style={[ms.highConstraintBadge, { backgroundColor: result.high_constraint_evaluation.risk_level === 'HIGH' ? '#B71C1C' : '#E65100' }]}>
+                    <Ionicons name="warning" size={14} color="#FFF" />
+                    <Text style={ms.highConstraintBadgeText}>High Constraint Mode — {result.high_constraint_evaluation.risk_level} Risk</Text>
+                  </View>
+                  <View style={ms.highConstraintRegion}>
+                    <Ionicons name="locate" size={16} color="#37474F" />
+                    <Text style={ms.highConstraintRegionText}>
+                      {result.high_constraint_evaluation.region?.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                      {result.high_constraint_evaluation.anatomical_constraint ? ` (${result.high_constraint_evaluation.anatomical_constraint.replace(/_/g, ' ')})` : ''}
+                    </Text>
+                  </View>
+                  <View style={ms.highConstraintOptions}>
+                    <View style={ms.highConstraintOption}>
+                      <Text style={ms.highConstraintOptionLabel}>Primary:</Text>
+                      <Text style={ms.highConstraintOptionValue}>{result.high_constraint_evaluation.primary_option}</Text>
+                    </View>
+                    <View style={ms.highConstraintOption}>
+                      <Text style={ms.highConstraintOptionLabel}>Alternative:</Text>
+                      <Text style={ms.highConstraintOptionValue}>{result.high_constraint_evaluation.secondary_option}</Text>
+                    </View>
+                  </View>
+                  {result.high_constraint_evaluation.recommendations?.map((r: string, i: number) => (
+                    <View key={i} style={ms.highConstraintRecItem}>
+                      <View style={ms.highConstraintRecDot} />
+                      <Text style={ms.highConstraintRecText}>{r}</Text>
+                    </View>
+                  ))}
+                  {result.high_constraint_evaluation.warnings?.map((w: string, i: number) => (
+                    <View key={i} style={[ms.highConstraintWarnRow, { borderLeftColor: result.high_constraint_evaluation.risk_level === 'HIGH' ? '#B71C1C' : '#E65100' }]}>
+                      <Ionicons name="alert-circle" size={14} color={result.high_constraint_evaluation.risk_level === 'HIGH' ? '#B71C1C' : '#E65100'} />
+                      <Text style={ms.highConstraintWarnText}>{w}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
               {/* ── Treatment Protocol Display (shown when narrow ridge detected) ── */}
               {result.narrow_ridge_evaluation && result.narrow_ridge_evaluation.classification !== 'adequate' && (
                 <View style={[ms.treatmentProtocolCard, {
@@ -1681,6 +1720,21 @@ const ms = StyleSheet.create({
   blockedCard: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFEBEE', borderRadius: 16, padding: 30, marginVertical: 20, borderWidth: 1.5, borderColor: '#EF9A9A', gap: 12 },
   blockedTitle: { fontSize: 18, fontWeight: '700', color: '#B71C1C' },
   blockedText: { fontSize: 14, color: '#5D4037', textAlign: 'center', lineHeight: 20 },
+  // High Constraint Mode styles
+  highConstraintCard: { borderRadius: 12, padding: 14, marginBottom: 14, borderWidth: 2, backgroundColor: '#FFF' },
+  highConstraintBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16, alignSelf: 'flex-start', marginBottom: 10 },
+  highConstraintBadgeText: { fontSize: 12, fontWeight: '700', color: '#FFF' },
+  highConstraintRegion: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10, backgroundColor: '#F5F5F5', borderRadius: 8, padding: 8 },
+  highConstraintRegionText: { fontSize: 13, fontWeight: '600', color: '#37474F' },
+  highConstraintOptions: { marginBottom: 8 },
+  highConstraintOption: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },
+  highConstraintOptionLabel: { fontSize: 12, fontWeight: '700', color: '#455A64', width: 80 },
+  highConstraintOptionValue: { fontSize: 13, color: '#37474F', flex: 1 },
+  highConstraintRecItem: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 3, paddingLeft: 4 },
+  highConstraintRecDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#1565C0' },
+  highConstraintRecText: { fontSize: 13, color: '#455A64' },
+  highConstraintWarnRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: '#FFF8E1', borderRadius: 6, padding: 8, marginTop: 4, borderLeftWidth: 3 },
+  highConstraintWarnText: { flex: 1, fontSize: 11, color: '#37474F', lineHeight: 16 },
   // Drilling Protocol styles
   protocolBox: { backgroundColor: '#F5F9FE', borderRadius: 12, borderWidth: 1, borderColor: '#BBDEFB', padding: 14, marginBottom: 12, marginTop: 4 },
   protocolHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
