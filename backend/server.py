@@ -945,7 +945,21 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
                 )
     except ValueError:
         pass  # If date parsing fails, let it proceed (will be caught by validation)
-    
+
+    # ── Duplicate slot check: only 1 patient per slot per day ──
+    existing = await db.procedures.find_one({
+        "procedure_date": procedure.procedure_date,
+        "procedure_time": procedure.procedure_time,
+    })
+    if existing:
+        booked_by = existing.get("created_by_name") or existing.get("student_name") or "Unknown"
+        patient = existing.get("patient_name", "Unknown")
+        slot_label = "10:00 AM" if procedure.procedure_time == "10:00" else "2:00 PM"
+        raise HTTPException(
+            status_code=409,
+            detail=f"The {slot_label} slot on {procedure.procedure_date} is already booked for patient {patient} (scheduled by {booked_by}). Please choose a different time or date."
+        )
+
     # Validate mandatory fields
     valid_procedure_types = [
         "Single Conventional Implant", "Multiple Conventional Implants",
@@ -1054,6 +1068,24 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
     procedure_dict["_id"] = procedure_id
     procedure_dict["id"] = procedure_id
     return procedure_dict
+
+
+@api_router.get("/procedures/slots/{date}")
+async def get_booked_slots(date: str, current_user: dict = Depends(get_current_user)):
+    """Return booked time slots for a given date with patient/scheduler info."""
+    booked = await db.procedures.find(
+        {"procedure_date": date},
+        {"_id": 0, "procedure_time": 1, "patient_name": 1, "student_name": 1, "created_by_name": 1, "created_by_role": 1},
+    ).to_list(10)
+    slots = {}
+    for b in booked:
+        t = b.get("procedure_time", "")
+        slots[t] = {
+            "patient_name": b.get("patient_name", ""),
+            "scheduled_by": b.get("created_by_name") or b.get("student_name") or "",
+        }
+    return {"date": date, "booked_slots": slots}
+
 
 @api_router.get("/procedures")
 async def get_procedures(

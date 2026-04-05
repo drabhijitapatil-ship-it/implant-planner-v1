@@ -124,6 +124,10 @@ function ProcedureCalendar({ procedures, selectedDate, setSelectedDate, router }
                 <Text style={s.procDetail}><Ionicons name="time-outline" size={12} color="#90A4AE" /> {proc.procedure_time}</Text>
                 <Text style={s.procDetail}><Ionicons name="location-outline" size={12} color="#90A4AE" /> Site: {proc.implant_site}</Text>
               </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                <Ionicons name="person-outline" size={12} color="#90A4AE" />
+                <Text style={s.procDetail}> Scheduled by: {proc.created_by_name || proc.student_name || '—'}</Text>
+              </View>
             </TouchableOpacity>
           ))
         )}
