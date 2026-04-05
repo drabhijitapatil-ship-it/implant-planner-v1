@@ -180,6 +180,7 @@ export default function ImplantSelectionScreen() {
     'Immediate Implant Placement with Bone Graft',
     'Sinus Lift',
     'Restricted Bone Height',
+    'Narrow Ridge',
   ];
   const BONE_TYPES = ['D1', 'D2', 'D3', 'D4'];
 
@@ -327,6 +328,7 @@ export default function ImplantSelectionScreen() {
             <View style={[s.card, !cSystem && s.cardOff]}>
               <Text style={s.cardTitle}>Enter Bone Measurements</Text>
               <BoneInputs width={cWidth} height={cHeight} setWidth={(v) => { setCWidth(v); setCResult(null); }} setHeight={(v) => { setCHeight(v); setCResult(null); }} enabled={!!cSystem} />
+              <RidgeClassIndicator width={cWidth} />
               <TouchableOpacity style={[s.primaryBtn, (!cSystem || !cWidth || !cHeight) && s.btnOff]} onPress={handleChooseSuggest}
                 disabled={!cSystem || !cWidth || !cHeight || cSearching} data-testid="find-best-btn">
                 {cSearching ? <ActivityIndicator color="#FFF" size="small" /> : (
@@ -386,6 +388,7 @@ export default function ImplantSelectionScreen() {
             <View style={[s.card, !sBoneType && s.cardOff]}>
               <Text style={s.cardTitle}>Bone Measurements</Text>
               <BoneInputs width={sWidth} height={sHeight} setWidth={(v) => { setSWidth(v); setSResult(null); }} setHeight={(v) => { setSHeight(v); setSResult(null); }} enabled={!!sBoneType} />
+              <RidgeClassIndicator width={sWidth} />
               <TouchableOpacity style={[s.suggestBtn, (!sBoneType || !sWidth || !sHeight || !sProcedures.length) && s.btnOff]}
                 onPress={handleSuggestMe} disabled={!sBoneType || !sWidth || !sHeight || !sProcedures.length || sSearching}
                 data-testid="suggest-me-btn">
@@ -514,12 +517,18 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
 
   const recommended: Implant[] = result.recommended || [];
   const allOptions: Implant[] = result.all_options || [];
-  const allImplants = recommended.length > 0 ? recommended : allOptions;
-  const isUsingAllOptions = recommended.length === 0 && allOptions.length > 0;
-  const visibleImplants = showAll ? allImplants : allImplants.slice(0, 5);
-  const hasMore = allImplants.length > 5;
-  const selectedImplant = selectedIdx !== null ? allImplants[selectedIdx] : null;
-  const riskImplant = selectedImplant || allImplants[0];
+  const narrowOptions: Implant[] = result.narrow_options || [];
+  const hasNarrowRidge = result.narrow_ridge_evaluation && result.narrow_ridge_evaluation.classification !== 'adequate';
+  const isBlocked = result.narrow_ridge_evaluation?.blocked;
+
+  // Use narrow options when narrow ridge is detected and narrow_options available
+  const baseImplants = (hasNarrowRidge && narrowOptions.length > 0) ? narrowOptions : (recommended.length > 0 ? recommended : allOptions);
+  const isUsingAllOptions = !hasNarrowRidge && recommended.length === 0 && allOptions.length > 0;
+  const isUsingNarrowOptions = hasNarrowRidge && narrowOptions.length > 0;
+  const visibleImplants = showAll ? baseImplants : baseImplants.slice(0, 5);
+  const hasMore = baseImplants.length > 5;
+  const selectedImplant = selectedIdx !== null ? baseImplants[selectedIdx] : null;
+  const riskImplant = selectedImplant || baseImplants[0];
 
   const handleCalcRisk = async () => {
     if (!riskImplant || !riskBoneType || !riskProcedure) return;
@@ -542,7 +551,7 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
   const riskColor = riskResult?.color === 'green' ? '#4CAF50' : riskResult?.color === 'orange' ? '#FF9800' : '#F44336';
 
   const copyRec = async () => {
-    const imp = selectedImplant || allImplants[0];
+    const imp = selectedImplant || baseImplants[0];
     if (!imp) return;
     const lines = ['Implant Recommendation', `Tooth: ${tooth}${toothInfo ? ` (${toothInfo.region})` : ''}`,
       `System: ${imp.brand} – ${imp.system}`, `Diameter: ${imp.diameter} mm`, `Length: ${imp.length} mm`,
@@ -570,7 +579,37 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
         {system.indication ? (
           <View style={s.indResultBox}><Ionicons name="information-circle" size={16} color="#0D47A1" /><Text style={s.indResultText}>{system.indication}</Text></View>
         ) : null}
-        {allImplants.length > 0 ? (
+
+        {/* Narrow Ridge Treatment Protocol Display */}
+        <NarrowRidgeProtocol evaluation={result.narrow_ridge_evaluation} />
+
+        {/* No narrow options warning */}
+        {result.narrow_ridge_warning && (
+          <View style={nrS.noNarrowWarning} data-testid="no-narrow-options-warning">
+            <Ionicons name="warning" size={18} color="#E65100" />
+            <Text style={nrS.noNarrowWarningText}>{result.narrow_ridge_warning}</Text>
+          </View>
+        )}
+
+        {/* Blocked: Severe narrow ridge */}
+        {isBlocked ? (
+          <View style={nrS.blockedCard} data-testid="narrow-ridge-blocked">
+            <Ionicons name="ban" size={40} color="#B71C1C" />
+            <Text style={nrS.blockedTitle}>Implant Placement Blocked</Text>
+            <Text style={nrS.blockedText}>
+              Ridge width ({result.narrow_ridge_evaluation?.ridge_width_mm}mm) is insufficient for any implant.{'\n'}Bone augmentation (GBR or block graft) is required before implant placement.
+            </Text>
+          </View>
+        ) : (
+        <>
+        {isUsingNarrowOptions && (
+          <View style={s.indResultBox}>
+            <Ionicons name="information-circle" size={16} color="#1565C0" />
+            <Text style={s.indResultText}>Showing narrow diameter ({'\u2264'}3.5mm) implants from {system.brand} {system.system} for narrow ridge compatibility.</Text>
+          </View>
+        )}
+
+        {baseImplants.length > 0 ? (
           <View style={{ marginBottom: 12 }}>
             {isUsingAllOptions && (
               <View style={s.allOptionsNote}>
@@ -579,9 +618,11 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
               </View>
             )}
             <Text style={s.recTitle}>
-              {isUsingAllOptions
-                ? (showAll ? `All Available Sizes (${allImplants.length})` : `Available Sizes (${Math.min(5, allImplants.length)})`)
-                : (showAll ? `All Implants (${allImplants.length})` : `Top ${Math.min(5, allImplants.length)} Implants`)}
+              {isUsingNarrowOptions
+                ? (showAll ? `All Narrow Options (${baseImplants.length})` : `Narrow Diameter Options (${Math.min(5, baseImplants.length)})`)
+                : isUsingAllOptions
+                ? (showAll ? `All Available Sizes (${baseImplants.length})` : `Available Sizes (${Math.min(5, baseImplants.length)})`)
+                : (showAll ? `All Implants (${baseImplants.length})` : `Top ${Math.min(5, baseImplants.length)} Implants`)}
             </Text>
             <Text style={s.selectHint}>Tap an implant to select it for drilling protocol</Text>
             {visibleImplants.map((imp: Implant, i: number) => {
@@ -606,7 +647,7 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
             })}
             {hasMore && !showAll && (
               <TouchableOpacity style={s.showMoreBtn} onPress={() => setShowAll(true)} data-testid="show-more-btn">
-                <Text style={s.showMoreText}>Show More ({allImplants.length - 5} more)</Text>
+                <Text style={s.showMoreText}>Show More ({baseImplants.length - 5} more)</Text>
                 <Ionicons name="chevron-down" size={16} color="#1E88E5" />
               </TouchableOpacity>
             )}
@@ -631,6 +672,8 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
             <Ionicons name="construct" size={18} color="#FFF" />
             <Text style={s.drillProtocolBtnText}>Give Drilling Protocol</Text>
           </TouchableOpacity>
+        )}
+        </>
         )}
       </View>
 
@@ -864,6 +907,20 @@ function SuggestResult({ result, tooth, toothInfo, onReset, onOpenProtocol }: {
 
         <GuidanceBox guidance={cg} />
 
+        {/* Narrow Ridge Treatment Protocol Display */}
+        <NarrowRidgeProtocol evaluation={result.narrow_ridge_evaluation} />
+
+        {/* Blocked: Severe narrow ridge */}
+        {(result.narrow_ridge_blocked || result.narrow_ridge_evaluation?.blocked) ? (
+          <View style={nrS.blockedCard} data-testid="narrow-ridge-blocked">
+            <Ionicons name="ban" size={40} color="#B71C1C" />
+            <Text style={nrS.blockedTitle}>Implant Placement Blocked</Text>
+            <Text style={nrS.blockedText}>
+              Ridge width ({result.narrow_ridge_evaluation?.ridge_width_mm}mm) is insufficient for any implant.{'\n'}Bone augmentation (GBR or block graft) is required before implant placement.
+            </Text>
+          </View>
+        ) : (
+        <>
         {systems.length > 0 ? (
           <View style={{ marginBottom: 12 }}>
             <Text style={s.recTitle}>
@@ -922,6 +979,8 @@ function SuggestResult({ result, tooth, toothInfo, onReset, onOpenProtocol }: {
             <Ionicons name="construct" size={18} color="#FFF" />
             <Text style={s.drillProtocolBtnText}>Give Drilling Protocol</Text>
           </TouchableOpacity>
+        )}
+        </>
         )}
       </View>
 
@@ -1063,6 +1122,126 @@ function GuidanceBox({ guidance }: { guidance: any }) {
     </View>
   );
 }
+
+// ── Narrow Ridge Treatment Protocol Display ────────────────
+function NarrowRidgeProtocol({ evaluation }: { evaluation: any }) {
+  if (!evaluation || evaluation.classification === 'adequate') return null;
+  const sevColor = evaluation.severity === 'critical' ? '#B71C1C' : evaluation.severity === 'warning' ? '#E65100' : '#1565C0';
+  const sevBg = evaluation.severity === 'critical' ? '#FFEBEE' : evaluation.severity === 'warning' ? '#FFF3E0' : '#E3F2FD';
+  const sevBorder = evaluation.severity === 'critical' ? '#EF9A9A' : evaluation.severity === 'warning' ? '#FFB74D' : '#64B5F6';
+  const sevIcon = (evaluation.severity === 'critical' ? 'close-circle' : evaluation.severity === 'warning' ? 'alert-circle' : 'information-circle') as any;
+  return (
+    <View style={[nrS.card, { borderColor: sevBorder }]} data-testid="treatment-protocol-display">
+      <View style={nrS.header}>
+        <View style={[nrS.badge, { backgroundColor: sevColor }]}>
+          <Ionicons name="medical" size={14} color="#FFF" />
+          <Text style={nrS.badgeText}>Narrow Ridge Assessment</Text>
+        </View>
+      </View>
+      <View style={[nrS.classRow, { backgroundColor: sevBg }]}>
+        <Ionicons name={sevIcon} size={20} color={sevColor} />
+        <View style={{ flex: 1 }}>
+          <Text style={[nrS.classLabel, { color: sevColor }]}>{evaluation.classification_label}</Text>
+          <Text style={nrS.classSub}>Ridge Width: {evaluation.ridge_width_mm}mm</Text>
+        </View>
+      </View>
+      {evaluation.recommendation?.implant_type && (
+        <View style={nrS.row}>
+          <Ionicons name="fitness" size={16} color="#37474F" />
+          <Text style={nrS.rowLabel}>Implant Type: </Text>
+          <Text style={nrS.rowValue}>{String(evaluation.recommendation.implant_type).replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}</Text>
+        </View>
+      )}
+      {evaluation.recommendation?.protocols?.length > 0 && (
+        <View style={nrS.section}>
+          <Text style={nrS.sectionTitle}>Treatment Protocols</Text>
+          {evaluation.recommendation.protocols.map((p: string, i: number) => (
+            <View key={i} style={nrS.protocolItem}>
+              <View style={nrS.protocolDot} />
+              <Text style={nrS.protocolItemText}>{p.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+      {evaluation.recommendation?.drilling_protocol_label && (
+        <View style={nrS.row}>
+          <Ionicons name="construct" size={16} color="#37474F" />
+          <Text style={nrS.rowLabel}>Drilling: </Text>
+          <Text style={nrS.rowValue}>{evaluation.recommendation.drilling_protocol_label}</Text>
+        </View>
+      )}
+      {evaluation.recommendation?.label && (
+        <View style={nrS.recommendBox}>
+          <Ionicons name="bulb" size={16} color="#1565C0" />
+          <Text style={nrS.recommendText}>{evaluation.recommendation.label}</Text>
+        </View>
+      )}
+      {evaluation.warnings?.length > 0 && (
+        <View style={nrS.warnings}>
+          {evaluation.warnings.map((w: any, i: number) => (
+            <View key={i} style={[nrS.warningRow, { borderLeftColor: w.severity === 'critical' ? '#B71C1C' : w.severity === 'high' ? '#E65100' : '#FF9800' }]}>
+              <Ionicons name={w.severity === 'critical' ? 'close-circle' as any : 'alert-circle' as any} size={14}
+                color={w.severity === 'critical' ? '#B71C1C' : w.severity === 'high' ? '#E65100' : '#FF9800'} />
+              <Text style={nrS.warningText}>{w.message}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function RidgeClassIndicator({ width }: { width: string }) {
+  const w = parseFloat(width);
+  if (!w || w <= 0) return null;
+  const cls = w >= 6
+    ? { label: 'Adequate Ridge Width', icon: 'checkmark-circle' as any, color: '#2E7D32', bgColor: '#E8F5E9', borderColor: '#66BB6A' }
+    : w >= 4.5
+    ? { label: 'Mildly Narrow Ridge', icon: 'information-circle' as any, color: '#1565C0', bgColor: '#E3F2FD', borderColor: '#64B5F6' }
+    : w >= 3
+    ? { label: 'Moderately Narrow Ridge', icon: 'alert-circle' as any, color: '#E65100', bgColor: '#FFF3E0', borderColor: '#FFB74D' }
+    : { label: 'Severely Narrow Ridge — Augmentation Required', icon: 'close-circle' as any, color: '#B71C1C', bgColor: '#FFEBEE', borderColor: '#EF9A9A' };
+  return (
+    <View style={[nrS.ridgeBanner, { backgroundColor: cls.bgColor, borderColor: cls.borderColor }]} data-testid="ridge-classification-indicator">
+      <Ionicons name={cls.icon} size={18} color={cls.color} />
+      <View style={{ flex: 1 }}>
+        <Text style={[nrS.ridgeLabel, { color: cls.color }]}>{cls.label}</Text>
+        <Text style={nrS.ridgeSubtext}>Ridge Width = Bone Width ({width}mm)</Text>
+      </View>
+    </View>
+  );
+}
+
+const nrS = StyleSheet.create({
+  card: { borderRadius: 12, padding: 14, marginBottom: 14, borderWidth: 1.5, backgroundColor: '#FFF' },
+  header: { marginBottom: 10 },
+  badge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16, alignSelf: 'flex-start' },
+  badgeText: { fontSize: 12, fontWeight: '700', color: '#FFF' },
+  classRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 8, padding: 10, marginBottom: 10 },
+  classLabel: { fontSize: 14, fontWeight: '700' },
+  classSub: { fontSize: 12, color: '#666', marginTop: 1 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingHorizontal: 4 },
+  rowLabel: { fontSize: 13, fontWeight: '600', color: '#37474F' },
+  rowValue: { fontSize: 13, color: '#455A64', flex: 1 },
+  section: { marginTop: 6, paddingLeft: 4, marginBottom: 6 },
+  sectionTitle: { fontSize: 13, fontWeight: '700', color: '#37474F', marginBottom: 6 },
+  protocolItem: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 3 },
+  protocolDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#1565C0' },
+  protocolItemText: { fontSize: 13, color: '#455A64' },
+  recommendBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: '#E3F2FD', borderRadius: 8, padding: 10, marginTop: 8 },
+  recommendText: { flex: 1, fontSize: 12, color: '#1565C0', fontWeight: '600', lineHeight: 17 },
+  warnings: { marginTop: 8 },
+  warningRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: '#FFF8E1', borderRadius: 6, padding: 8, marginBottom: 4, borderLeftWidth: 3 },
+  warningText: { flex: 1, fontSize: 11, color: '#37474F', lineHeight: 16 },
+  blockedCard: { alignItems: 'center', justifyContent: 'center' as const, backgroundColor: '#FFEBEE', borderRadius: 16, padding: 30, marginVertical: 20, borderWidth: 1.5, borderColor: '#EF9A9A', gap: 12 },
+  blockedTitle: { fontSize: 18, fontWeight: '700', color: '#B71C1C' },
+  blockedText: { fontSize: 14, color: '#5D4037', textAlign: 'center' as const, lineHeight: 20 },
+  ridgeBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 10, padding: 12, marginTop: 10, borderWidth: 1 },
+  ridgeLabel: { fontSize: 13, fontWeight: '700' },
+  ridgeSubtext: { fontSize: 11, color: '#666', marginTop: 2 },
+  noNarrowWarning: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFF3E0', borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#FFB74D' },
+  noNarrowWarningText: { flex: 1, fontSize: 12, color: '#E65100', fontWeight: '600', lineHeight: 17 },
+});
 
 // ── Styles ─────────────────────────────────────────────────
 const s = StyleSheet.create({
