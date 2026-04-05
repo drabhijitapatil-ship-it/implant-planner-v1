@@ -121,6 +121,13 @@ A comprehensive mobile application for managing dental implant procedures at the
   - **Blocked UI**: Full blocked state with augmentation message for severe narrow ridge (<3mm) in both modes
   - Frontend: Real-time ridge classification indicator in Step 2 (both modes)
   - Frontend: "Narrow Diameter Options" header when showing narrow_options in Let Me Choose
+  - **Implant Selection Tab (Home Screen)**: Replicated entire Narrow Ridge protocol from New Case into standalone `implant-selection.tsx`:
+    - "Narrow Ridge" checkbox in Suggest Me Procedure Type
+    - Real-time RidgeClassIndicator in both Let Me Choose and Suggest Me bone input cards
+    - NarrowRidgeProtocol Treatment Protocol Display card in both ChooseResult and SuggestResult
+    - Blocked state (augmentation required) handled in both modes
+    - Narrow diameter options filtering with "No narrow options" warning in Let Me Choose
+    - Consistent UX between New Case and Implant Selection workflows
 
 ### Earlier Sessions
 - Session 5: Blank screen crash fix, backend seed sync, auth upgrade
