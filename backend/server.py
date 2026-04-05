@@ -4185,6 +4185,9 @@ async def suggest_implant(
     if bone_width < 6:
         tooth_region = _get_tooth_region(tooth) if tooth else None
         response["narrow_ridge_evaluation"] = evaluate_narrow_ridge(bone_width, bone_density=bone_type, tooth_region=tooth_region)
+        # High constraint: narrow ridge + restricted height
+        if bone_height <= 10:
+            response["high_constraint_evaluation"] = evaluate_high_constraint(tooth, bone_width, bone_height, bone_type)
         # Also return narrow diameter options (<=3.5mm) for narrow ridge cases
         narrow_query = {
             "brand": brand, "system": system,
@@ -4368,6 +4371,88 @@ def evaluate_narrow_ridge(
 
     return output
 
+
+# ── High Constraint Mode (Narrow Ridge + Restricted Height) ──
+def _get_arch(tooth: str) -> str:
+    if not tooth:
+        return "unknown"
+    try:
+        num = int(tooth)
+        return "maxilla" if 11 <= num <= 28 else "mandible" if 31 <= num <= 48 else "unknown"
+    except Exception:
+        return "unknown"
+
+
+def _get_position(tooth: str) -> str:
+    if not tooth:
+        return "unknown"
+    try:
+        unit = int(tooth) % 10
+        return "anterior" if unit in (1, 2, 3) else "premolar" if unit in (4, 5) else "molar"
+    except Exception:
+        return "unknown"
+
+
+def evaluate_high_constraint(tooth: str, bone_width: float, bone_height: float, bone_type: str = None) -> dict:
+    """Combined narrow ridge + restricted bone height: region-specific clinical decision."""
+    arch = _get_arch(tooth)
+    position = _get_position(tooth)
+    is_posterior = position in ("premolar", "molar")
+    region = f"{'posterior' if is_posterior else 'anterior'}_{arch}" if arch != "unknown" else "unknown"
+
+    if arch == "maxilla":
+        aug = "Sinus Lift" if is_posterior else "GBR / Block Graft"
+        return {
+            "active": True, "region": region, "arch": arch, "position": position,
+            "anatomical_constraint": "maxillary_sinus" if is_posterior else "nasal_floor",
+            "typical_bone_density": "D3-D4",
+            "primary_option": f"Augmentation Preferred ({aug})",
+            "secondary_option": "Narrow Short Implant",
+            "implant_filter": {"max_diameter": 3.5, "preferred_length": 8, "avoid_length_below": 6},
+            "risk_level": "HIGH",
+            "risk_adjustments": {"short_implant_penalty": 3, "soft_bone_penalty": 3},
+            "recommendations": [
+                f"{aug} + standard implant",
+                "3.3\u20133.5 mm \u00d7 8 mm implant (compromise)",
+            ],
+            "warnings": [
+                "Low primary stability expected",
+                "Splinting mandatory",
+                "Avoid ultra-short implants",
+            ],
+        }
+    elif arch == "mandible":
+        nerve_warn = (
+            "Maintain 2 mm from IAN" if is_posterior
+            else "Maintain 2 mm from mental foramen" if position == "premolar"
+            else "Consider bone augmentation for anterior mandible"
+        )
+        return {
+            "active": True, "region": region, "arch": arch, "position": position,
+            "anatomical_constraint": "inferior_alveolar_nerve" if is_posterior else ("mental_foramen" if position == "premolar" else "mandibular_symphysis"),
+            "typical_bone_density": "D1-D2",
+            "primary_option": "Narrow Short Implant",
+            "secondary_option": "Ultra Short Implant",
+            "implant_filter": {"max_diameter": 3.5, "length_min": 6, "length_max": 8, "allow_ultra_short": True},
+            "risk_level": "MODERATE",
+            "risk_adjustments": {"short_implant_penalty": 1, "nerve_penalty": 4},
+            "recommendations": [
+                "3.3\u20133.5 mm \u00d7 6\u20138 mm implant",
+                "Ultra-short implant (if severe height loss)",
+            ],
+            "warnings": [nerve_warn, "Splinting recommended"],
+        }
+    return {
+        "active": True, "region": region, "arch": arch, "position": position,
+        "primary_option": "Augmentation + Narrow Short Implant",
+        "secondary_option": "Narrow Short Implant",
+        "implant_filter": {"max_diameter": 3.5, "length_min": 6, "length_max": 8},
+        "risk_level": "HIGH",
+        "recommendations": ["Bone augmentation + standard implant", "3.3\u20133.5 mm \u00d7 6\u20138 mm implant (compromise)"],
+        "warnings": ["Both narrow ridge and restricted height detected", "Splinting recommended"],
+    }
+
+
 @api_router.get("/implant-library/procedure-options")
 async def get_procedure_options(current_user: dict = Depends(get_current_user)):
     """Return available procedure types and bone compatibility info."""
@@ -4420,6 +4505,9 @@ async def suggest_auto(
 
     # ─── Restricted Bone Height Logic (≤ 10mm) ──────────────────
     is_restricted_height = bone_height <= 10 or "Restricted Bone Height" in procedures
+    is_high_constraint = is_restricted_height and bone_width < 6  # narrow + restricted
+    if is_high_constraint:
+        diam_max = min(diam_max, 3.5)  # Cap diameter for high constraint
     if is_restricted_height:
         PRIORITY1_KEYS = {
             "BioHorizons|Tapered Short",
@@ -4521,6 +4609,7 @@ async def suggest_auto(
             "restricted_bone_height": True,
             "restricted_height_warning": restricted_height_warning,
             "narrow_ridge_evaluation": evaluate_narrow_ridge(bone_width, bone_density=bone_type, tooth_region=_get_tooth_region(tooth) if tooth else None),
+            "high_constraint_evaluation": evaluate_high_constraint(tooth, bone_width, bone_height, bone_type) if is_high_constraint else None,
             "clinical_guidance": {
                 "bone_width": bone_width, "bone_height": bone_height,
                 "bone_type": bone_type, "procedures": procedures,
@@ -4648,6 +4737,7 @@ async def suggest_auto(
     return {
         "recommended_systems": recommended_systems,
         "narrow_ridge_evaluation": nr_eval,
+        "high_constraint_evaluation": evaluate_high_constraint(tooth, bone_width, bone_height, bone_type) if (bone_width < 6 and bone_height <= 10) else None,
         "clinical_guidance": {
             "bone_width": bone_width,
             "bone_height": bone_height,

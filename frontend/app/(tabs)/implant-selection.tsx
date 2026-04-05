@@ -583,6 +583,9 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
         {/* Narrow Ridge Treatment Protocol Display */}
         <NarrowRidgeProtocol evaluation={result.narrow_ridge_evaluation} />
 
+        {/* High Constraint Mode */}
+        <HighConstraintDisplay hc={result.high_constraint_evaluation} />
+
         {/* No narrow options warning */}
         {result.narrow_ridge_warning && (
           <View style={nrS.noNarrowWarning} data-testid="no-narrow-options-warning">
@@ -910,6 +913,9 @@ function SuggestResult({ result, tooth, toothInfo, onReset, onOpenProtocol }: {
         {/* Narrow Ridge Treatment Protocol Display */}
         <NarrowRidgeProtocol evaluation={result.narrow_ridge_evaluation} />
 
+        {/* High Constraint Mode */}
+        <HighConstraintDisplay hc={result.high_constraint_evaluation} />
+
         {/* Blocked: Severe narrow ridge */}
         {(result.narrow_ridge_blocked || result.narrow_ridge_evaluation?.blocked) ? (
           <View style={nrS.blockedCard} data-testid="narrow-ridge-blocked">
@@ -1122,6 +1128,58 @@ function GuidanceBox({ guidance }: { guidance: any }) {
     </View>
   );
 }
+
+// ── High Constraint Mode Display ────────────────────────────
+function HighConstraintDisplay({ hc }: { hc: any }) {
+  if (!hc?.active) return null;
+  const isHigh = hc.risk_level === 'HIGH';
+  const riskColor = isHigh ? '#B71C1C' : '#E65100';
+  return (
+    <View style={[hcS.card, { borderColor: isHigh ? '#EF9A9A' : '#FFB74D' }]} data-testid="high-constraint-display">
+      <View style={[hcS.badge, { backgroundColor: riskColor }]}>
+        <Ionicons name="warning" size={14} color="#FFF" />
+        <Text style={hcS.badgeText}>High Constraint Mode — {hc.risk_level} Risk</Text>
+      </View>
+      <View style={hcS.region}>
+        <Ionicons name="locate" size={16} color="#37474F" />
+        <Text style={hcS.regionText}>
+          {hc.region?.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+          {hc.anatomical_constraint ? ` (${hc.anatomical_constraint.replace(/_/g, ' ')})` : ''}
+        </Text>
+      </View>
+      <View style={hcS.options}>
+        <View style={hcS.option}><Text style={hcS.optionLabel}>Primary:</Text><Text style={hcS.optionValue}>{hc.primary_option}</Text></View>
+        <View style={hcS.option}><Text style={hcS.optionLabel}>Alternative:</Text><Text style={hcS.optionValue}>{hc.secondary_option}</Text></View>
+      </View>
+      {hc.recommendations?.map((r: string, i: number) => (
+        <View key={i} style={hcS.recItem}><View style={hcS.recDot} /><Text style={hcS.recText}>{r}</Text></View>
+      ))}
+      {hc.warnings?.map((w: string, i: number) => (
+        <View key={i} style={[hcS.warnRow, { borderLeftColor: riskColor }]}>
+          <Ionicons name="alert-circle" size={14} color={riskColor} />
+          <Text style={hcS.warnText}>{w}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+const hcS = StyleSheet.create({
+  card: { borderRadius: 12, padding: 14, marginBottom: 14, borderWidth: 2, backgroundColor: '#FFF' },
+  badge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16, alignSelf: 'flex-start', marginBottom: 10 },
+  badgeText: { fontSize: 12, fontWeight: '700', color: '#FFF' },
+  region: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10, backgroundColor: '#F5F5F5', borderRadius: 8, padding: 8 },
+  regionText: { fontSize: 13, fontWeight: '600', color: '#37474F' },
+  options: { marginBottom: 8 },
+  option: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },
+  optionLabel: { fontSize: 12, fontWeight: '700', color: '#455A64', width: 80 },
+  optionValue: { fontSize: 13, color: '#37474F', flex: 1 },
+  recItem: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 3, paddingLeft: 4 },
+  recDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#1565C0' },
+  recText: { fontSize: 13, color: '#455A64' },
+  warnRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: '#FFF8E1', borderRadius: 6, padding: 8, marginTop: 4, borderLeftWidth: 3 },
+  warnText: { flex: 1, fontSize: 11, color: '#37474F', lineHeight: 16 },
+});
 
 // ── Narrow Ridge Treatment Protocol Display ────────────────
 function NarrowRidgeProtocol({ evaluation }: { evaluation: any }) {
