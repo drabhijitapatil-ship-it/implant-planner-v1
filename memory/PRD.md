@@ -121,6 +121,14 @@ A comprehensive mobile application for managing dental implant procedures at the
   - **Blocked UI**: Full blocked state with augmentation message for severe narrow ridge (<3mm) in both modes
   - Frontend: Real-time ridge classification indicator in Step 2 (both modes)
   - Frontend: "Narrow Diameter Options" header when showing narrow_options in Let Me Choose
+  - **High Constraint Mode** (Narrow Ridge + Restricted Height combined — 39/39 tests passed):
+    - Activates when BOTH bone_width < 6mm AND bone_height <= 10mm
+    - Uses tooth number → arch (maxilla/mandible) → region-specific clinical logic
+    - **Maxilla** (all teeth): HIGH risk, Augmentation Preferred (Sinus Lift for posterior, GBR/Block Graft for anterior), narrow short implant as compromise
+    - **Mandible** (all teeth): MODERATE risk, Narrow Short Implant primary, Ultra-Short secondary, IAN/mental foramen warnings
+    - Diameter capped at 3.5mm in high constraint mode
+    - Implemented in both `suggest` and `suggest-auto` endpoints
+    - Frontend: High Constraint Display card in both CaseImplantPlanning.tsx and implant-selection.tsx
   - **Implant Selection Tab (Home Screen)**: Replicated entire Narrow Ridge protocol from New Case into standalone `implant-selection.tsx`:
     - "Narrow Ridge" checkbox in Suggest Me Procedure Type
     - Real-time RidgeClassIndicator in both Let Me Choose and Suggest Me bone input cards
