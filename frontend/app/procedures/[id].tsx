@@ -827,9 +827,9 @@ export default function ProcedureDetailScreen() {
 
         {procedure.cbct_file && (
           <View style={styles.section} data-testid="cbct-file-section">
-            <Text style={styles.sectionTitle}>CBCT Slides and Report</Text>
+            <Text style={styles.sectionTitle}>CBCT Report</Text>
             <TouchableOpacity
-              style={styles.cbctFileRow}
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#4CAF50', borderRadius: 10, paddingVertical: 14, paddingHorizontal: 20 }}
               onPress={async () => {
                 try {
                   const baseUrl = api.defaults.baseURL || '';
@@ -841,11 +841,11 @@ export default function ProcedureDetailScreen() {
               }}
               data-testid="cbct-file-download"
             >
-              <Ionicons name="document-attach" size={22} color="#007AFF" />
-              <Text style={styles.cbctFileName} numberOfLines={1}>
-                {procedure.cbct_original_name || 'CBCT Report'}
+              <Ionicons name="document-attach" size={20} color="#FFF" />
+              <Text style={{ color: '#FFF', fontSize: 15, fontWeight: '700', flex: 1 }}>
+                View CBCT Report
               </Text>
-              <Ionicons name="download-outline" size={20} color="#007AFF" />
+              <Ionicons name="open-outline" size={18} color="#FFF" />
             </TouchableOpacity>
           </View>
         )}
