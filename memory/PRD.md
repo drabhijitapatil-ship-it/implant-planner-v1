@@ -27,6 +27,7 @@ A comprehensive mobile application for managing dental implant procedures at the
 15. **Auto-expand Drilling Protocol**: Protocol auto-expands when implant is selected in Suggest Me mode
 16. **Narrow Ridge Clinical Decision Engine**: 4-level ridge width classification with safety rules, prosthetic warnings, bone density protocols, and automatic blocking for severe narrow ridges (<3mm)
 17. **Scheduling Constraints**: Only 1 patient per time slot per day (10 AM / 2 PM). Booked slots shown as grayed/disabled with patient name. Dashboard calendar inline cards show "Scheduled by" info. Backend returns 409 with descriptive message on duplicate slot attempt.
+18. **CBCT Report Upload**: Mandatory PDF/image upload in Phase 1 Case Details (between Loading Type and Checklist). Blue upload button → green "View CBCT Report" button. File stored on server, accessible via role-based endpoint. Visible to Supervisors and In-Charges on case detail page.
 
 ## Key Credentials
 - Admin/In-Charge: `Abhijit.patil@dental.edu` / `Admin@123`
@@ -138,14 +139,35 @@ A comprehensive mobile application for managing dental implant procedures at the
     - Narrow diameter options filtering with "No narrow options" warning in Let Me Choose
     - Consistent UX between New Case and Implant Selection workflows
 
+### April 6, 2026 — Session 10 (Fork)
+- **CBCT Report Upload Feature** (17/17 backend tests passed):
+  - Backend: `POST /api/uploads/cbct-temp` endpoint for pre-uploading CBCT files before procedure creation
+  - Backend: `POST /api/procedures/{id}/upload-cbct` for attaching CBCT to existing procedures
+  - Backend: `GET /api/uploads/{filename}` serves uploaded files with role-based access control
+  - Backend: `ProcedureCreate` schema includes `cbct_file`, `cbct_original_name`, `cbct_content_type` fields
+  - File validation: PDF, PNG, JPG, JPEG, HEIF, HEIC allowed; max 25MB
+  - Frontend `new-procedure.tsx`: Mandatory CBCT upload section between Loading Type and Phase 1 Checklist
+  - Blue "Upload CBCT Report (PDF)" button → Green "View CBCT Report" button after upload
+  - CBCT upload is mandatory (form cannot proceed without it)
+  - Frontend `[id].tsx`: Green "View CBCT Report" button visible to all roles when CBCT exists on procedure
+  - Role-based file access: student owner, assigned supervisor, incharge/admin can view
+
 ### Earlier Sessions
+- Session 9: Narrow Ridge, High Constraint engines, scheduling constraints, logo replacement
+- Session 8: Narrow Ridge Clinical Decision Engine, Implant Selection Tab replication
+- Session 7: Approval revert, Bone Graft, Role-Based Dashboards, Medical Risk Assessment
+- Session 6: Per-implant healing abutment, approval comments, dynamic notes
 - Session 5: Blank screen crash fix, backend seed sync, auth upgrade
 - Session 4: EAS Deployment Fix, Auth Upgrade (20/20 tests), Health endpoint
 - Session 3: Drilling Protocol Audit, PDF Enhancement, Stale Data Fix
 - Sessions 1-2: Full 4-phase workflow, Security/UX features, EAS build fixes
 
 ## Backlog (Prioritized)
+### P0
+- Microsoft Login Integration (user explicitly requested for sign up and login)
+
 ### P1
+- Data visibility refinement for approval workflow (ensure all entered data visible before/after approval)
 - Add indications/protocols for remaining 17 systems (when user provides data)
 - Production deployment verification (user needs to "Save to Github" + Deploy)
 
