@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, Alert, ActivityIndicator, Platform, AppState
+  StyleSheet, Alert, ActivityIndicator, Platform, AppState, Linking
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
 import api from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';
@@ -354,6 +355,8 @@ export default function NewProcedureScreen() {
 
   // ── Load faculty data ──
   const [bookedSlots, setBookedSlots] = useState<Record<string, { patient_name: string; scheduled_by: string }>>({});
+  const [cbctFile, setCbctFile] = useState<{ name: string; cbct_file: string; cbct_original_name: string; cbct_content_type: string } | null>(null);
+  const [cbctUploading, setCbctUploading] = useState(false);
 
   useEffect(() => {
     const loadFaculty = async () => {

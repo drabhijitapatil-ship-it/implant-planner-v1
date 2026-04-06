@@ -237,6 +237,10 @@ class ProcedureCreate(BaseModel):
     # Medical Assessment
     medical_assessment: Optional[Dict[str, str]] = None
     medical_risk_level: Optional[str] = Field("", max_length=30)
+    # CBCT Report (uploaded via /uploads/cbct-temp)
+    cbct_file: Optional[str] = Field("", max_length=200)
+    cbct_original_name: Optional[str] = Field("", max_length=300)
+    cbct_content_type: Optional[str] = Field("", max_length=100)
 
     @field_validator('patient_name')
     @classmethod
@@ -1226,20 +1230,39 @@ async def delete_procedure(procedure_id: str, current_user: dict = Depends(get_c
 ALLOWED_EXTENSIONS = {'.pdf', '.png', '.jpg', '.jpeg', '.heif', '.heic'}
 MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB
 
+
+@api_router.post("/uploads/cbct-temp")
+async def upload_cbct_temp(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+):
+    """Upload CBCT file before procedure creation. Returns a temp reference to attach later."""
+    ext = Path(file.filename).suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"File type not allowed. Allowed: {', '.join(ALLOWED_EXTENSIONS)}")
+    contents = await file.read()
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File size exceeds 25MB limit")
+    unique_name = f"{uuid.uuid4().hex}{ext}"
+    file_path = UPLOADS_DIR / unique_name
+    with open(file_path, "wb") as f:
+        f.write(contents)
+    return {
+        "cbct_file": unique_name,
+        "cbct_original_name": file.filename,
+        "cbct_content_type": file.content_type or "application/pdf",
+    }
+
+
 @api_router.post("/procedures/{procedure_id}/upload-cbct")
 async def upload_cbct(
     procedure_id: str,
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user)
 ):
-    if current_user["role"] != "student":
-        raise HTTPException(status_code=403, detail="Only students can upload files")
-    
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
-    if procedure["student_id"] != current_user["_id"]:
-        raise HTTPException(status_code=403, detail="Access denied")
     
     ext = Path(file.filename).suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
