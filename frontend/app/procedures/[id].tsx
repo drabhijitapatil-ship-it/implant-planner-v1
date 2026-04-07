@@ -836,12 +836,12 @@ export default function ProcedureDetailScreen() {
                 const fileUrl = `${baseUrl}/uploads/${f.filename}`;
                 const isImage = f.filename?.match(/\.(png|jpg|jpeg)$/i);
                 return (
-                  <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 10, backgroundColor: '#E8F5E9', padding: 8, borderRadius: 10 }} data-testid={`cbct-thumb-${idx}`}>
+                  <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 10, backgroundColor: '#E3F2FD', padding: 8, borderRadius: 10 }} data-testid={`cbct-thumb-${idx}`}>
                     {isImage ? (
-                      <Image source={{ uri: fileUrl }} style={{ width: 50, height: 50, borderRadius: 8, borderWidth: 1, borderColor: '#E0E0E0' }} resizeMode="cover" />
+                      <Image source={{ uri: fileUrl }} style={{ width: 50, height: 50, borderRadius: 8, borderWidth: 1, borderColor: '#90CAF9' }} resizeMode="cover" />
                     ) : (
-                      <View style={{ width: 50, height: 50, borderRadius: 8, backgroundColor: '#C8E6C9', alignItems: 'center', justifyContent: 'center' }}>
-                        <Ionicons name="document-attach" size={24} color="#4CAF50" />
+                      <View style={{ width: 50, height: 50, borderRadius: 8, backgroundColor: '#BBDEFB', alignItems: 'center', justifyContent: 'center' }}>
+                        <Ionicons name="document-attach" size={24} color="#1565C0" />
                       </View>
                     )}
                     <View style={{ flex: 1 }}>
@@ -978,7 +978,7 @@ export default function ProcedureDetailScreen() {
               {/* Post Surgical Radiographs - IOPA Thumbnails */}
               {procedure.phase2_data.iopa_files && procedure.phase2_data.iopa_files.length > 0 && (
                 <View style={{ marginTop: 12, marginBottom: 8 }} data-testid="iopa-files-section">
-                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#E65100', marginBottom: 10 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', marginBottom: 10 }}>
                     {procedure.phase2_data.iopa_files.length === 1 ? 'Post Surgical Radiograph' : 'Post Surgical Radiographs'} - IOPA
                   </Text>
                   {procedure.phase2_data.iopa_files.map((f: any, idx: number) => {
@@ -986,12 +986,12 @@ export default function ProcedureDetailScreen() {
                     const fileUrl = `${baseUrl}/uploads/${f.filename}`;
                     const isImage = f.filename?.match(/\.(png|jpg|jpeg)$/i);
                     return (
-                      <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 10, backgroundColor: '#FFF8E1', padding: 8, borderRadius: 10 }} data-testid={`iopa-thumb-${idx}`}>
+                      <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 10, backgroundColor: '#E3F2FD', padding: 8, borderRadius: 10 }} data-testid={`iopa-thumb-${idx}`}>
                         {isImage ? (
-                          <Image source={{ uri: fileUrl }} style={{ width: 60, height: 60, borderRadius: 8, borderWidth: 1, borderColor: '#E0E0E0' }} resizeMode="cover" />
+                          <Image source={{ uri: fileUrl }} style={{ width: 60, height: 60, borderRadius: 8, borderWidth: 1, borderColor: '#90CAF9' }} resizeMode="cover" />
                         ) : (
-                          <View style={{ width: 60, height: 60, borderRadius: 8, backgroundColor: '#FFF3E0', alignItems: 'center', justifyContent: 'center' }}>
-                            <Ionicons name="document-attach" size={28} color="#E65100" />
+                          <View style={{ width: 60, height: 60, borderRadius: 8, backgroundColor: '#BBDEFB', alignItems: 'center', justifyContent: 'center' }}>
+                            <Ionicons name="document-attach" size={28} color="#1565C0" />
                           </View>
                         )}
                         <View style={{ flex: 1 }}>
@@ -1015,18 +1015,18 @@ export default function ProcedureDetailScreen() {
               {/* OPG Thumbnail */}
               {procedure.phase2_data.opg_file && procedure.phase2_data.opg_file.filename && (
                 <View style={{ marginTop: 8, marginBottom: 8 }} data-testid="opg-file-section">
-                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#E65100', marginBottom: 10 }}>OPG Radiograph</Text>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', marginBottom: 10 }}>OPG Radiograph</Text>
                   {(() => {
                     const baseUrl = api.defaults.baseURL || '';
                     const fileUrl = `${baseUrl}/uploads/${procedure.phase2_data.opg_file.filename}`;
                     const isImage = procedure.phase2_data.opg_file.filename?.match(/\.(png|jpg|jpeg)$/i);
                     return (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFF8E1', padding: 10, borderRadius: 10 }} data-testid="opg-thumb">
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#E3F2FD', padding: 10, borderRadius: 10 }} data-testid="opg-thumb">
                         {isImage ? (
-                          <Image source={{ uri: fileUrl }} style={{ width: 70, height: 70, borderRadius: 8, borderWidth: 1, borderColor: '#E0E0E0' }} resizeMode="cover" />
+                          <Image source={{ uri: fileUrl }} style={{ width: 70, height: 70, borderRadius: 8, borderWidth: 1, borderColor: '#90CAF9' }} resizeMode="cover" />
                         ) : (
-                          <View style={{ width: 70, height: 70, borderRadius: 8, backgroundColor: '#FFF3E0', alignItems: 'center', justifyContent: 'center' }}>
-                            <Ionicons name="document-attach" size={32} color="#E65100" />
+                          <View style={{ width: 70, height: 70, borderRadius: 8, backgroundColor: '#BBDEFB', alignItems: 'center', justifyContent: 'center' }}>
+                            <Ionicons name="document-attach" size={32} color="#1565C0" />
                           </View>
                         )}
                         <View style={{ flex: 1 }}>
@@ -1119,7 +1119,24 @@ export default function ProcedureDetailScreen() {
               <View style={{ marginBottom: 16 }}>
                 <Text style={{ fontSize: 14, fontWeight: '700', color: '#388E3C', marginBottom: 8 }}>Measurements</Text>
                 {procedure.phase3_data.isq_value && (
-                  <InfoRow icon="speedometer" label="ISQ Value" value={procedure.phase3_data.isq_value} />
+                  Array.isArray(procedure.phase3_data.isq_value)
+                    ? (
+                      <View style={{ backgroundColor: '#E8F5E9', borderRadius: 8, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: '#A5D6A7' }}>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#2E7D32', marginBottom: 6 }}>ISQ Values</Text>
+                        {procedure.phase3_data.isq_value.map((val: string, idx: number) => {
+                          const toothLabel = procedure.implant_plans?.[idx]?.position
+                            ? `Tooth #${procedure.implant_plans[idx].position}`
+                            : `Implant ${idx + 1}`;
+                          return (
+                            <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1B5E20', flex: 1 }}>{toothLabel}</Text>
+                              <Text style={{ fontSize: 16, fontWeight: '700', color: '#2E7D32' }}>{val || '—'}</Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )
+                    : <InfoRow icon="speedometer" label="ISQ Value" value={procedure.phase3_data.isq_value} />
                 )}
                 {procedure.phase3_data.healing_abutment_height && (
                   Array.isArray(procedure.phase3_data.healing_abutment_height)
@@ -1134,18 +1151,18 @@ export default function ProcedureDetailScreen() {
             {/* Phase 3 IOPA Radiograph Thumbnails */}
             {procedure.phase3_data?.iopa_files && procedure.phase3_data.iopa_files.length > 0 && (
               <View style={{ marginBottom: 16 }} data-testid="phase3-iopa-section">
-                <Text style={{ fontSize: 14, fontWeight: '700', color: '#388E3C', marginBottom: 10 }}>IOPA Radiographs</Text>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', marginBottom: 10 }}>IOPA Radiographs</Text>
                 {procedure.phase3_data.iopa_files.map((f: any, idx: number) => {
                   const baseUrl = api.defaults.baseURL || '';
                   const fileUrl = `${baseUrl}/uploads/${f.filename}`;
                   const isImage = f.filename?.match(/\.(png|jpg|jpeg)$/i);
                   return (
-                    <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 10, backgroundColor: '#E8F5E9', padding: 8, borderRadius: 10 }} data-testid={`p3-iopa-thumb-${idx}`}>
+                    <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 10, backgroundColor: '#E3F2FD', padding: 8, borderRadius: 10 }} data-testid={`p3-iopa-thumb-${idx}`}>
                       {isImage ? (
-                        <Image source={{ uri: fileUrl }} style={{ width: 60, height: 60, borderRadius: 8, borderWidth: 1, borderColor: '#C8E6C9' }} resizeMode="cover" />
+                        <Image source={{ uri: fileUrl }} style={{ width: 60, height: 60, borderRadius: 8, borderWidth: 1, borderColor: '#90CAF9' }} resizeMode="cover" />
                       ) : (
-                        <View style={{ width: 60, height: 60, borderRadius: 8, backgroundColor: '#C8E6C9', alignItems: 'center', justifyContent: 'center' }}>
-                          <Ionicons name="document-attach" size={28} color="#2E7D32" />
+                        <View style={{ width: 60, height: 60, borderRadius: 8, backgroundColor: '#BBDEFB', alignItems: 'center', justifyContent: 'center' }}>
+                          <Ionicons name="document-attach" size={28} color="#1565C0" />
                         </View>
                       )}
                       <View style={{ flex: 1 }}>

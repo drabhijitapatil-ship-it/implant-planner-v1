@@ -361,7 +361,7 @@ class Stage2SurgicalSubmit(BaseModel):
     # Second Stage checklist items
     checklist_items: Optional[Dict[str, bool]] = None
     # Additional data fields
-    isq_value: Optional[str] = Field(None, max_length=20)
+    isq_value: Optional[Any] = None  # str or list of str (per implant)
     healing_abutment_height: Optional[Any] = None  # str or list of str (per implant)
     # Post-surgical radiograph uploads
     iopa_files: Optional[List[Dict[str, str]]] = None  # [{filename, original_name, tooth_label}]

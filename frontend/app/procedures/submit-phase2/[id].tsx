@@ -432,15 +432,15 @@ export default function Phase2SubmissionScreen() {
           {/* ── Post Surgical Radiograph(s) ── */}
           <View style={s.section}>
             <View style={s.sectionHeader}>
-              <Ionicons name="images-outline" size={20} color="#E65100" />
+              <Ionicons name="images-outline" size={20} color="#1565C0" />
               <Text style={s.sectionTitle}>
                 {isSingleImplant ? 'Post Surgical Radiograph' : 'Post Surgical Radiographs'}
               </Text>
             </View>
 
             {/* IOPA upload slots */}
-            <View style={s.torqueSection}>
-              <Text style={s.torqueTitle}>Upload IOPA Radiograph</Text>
+            <View style={s.uploadSection}>
+              <Text style={s.uploadTitle}>Upload IOPA Radiograph</Text>
               {Array.from({ length: totalIopaSlots }).map((_, idx) => {
                 const baseCount = iopaFiles.length;
                 const isExtra = idx >= baseCount;
@@ -449,8 +449,8 @@ export default function Phase2SubmissionScreen() {
                 const baseUrl = api.defaults.baseURL || '';
                 return (
                   <View key={idx} style={s.torqueRow} data-testid={`iopa-slot-${idx}`}>
-                    <View style={[s.torqueLabel, { flex: 1.5 }]}>
-                      <Text style={s.torqueLabelText}>{label}</Text>
+                    <View style={[s.uploadLabel, { flex: 1.5 }]}>
+                      <Text style={s.uploadLabelText}>{label}</Text>
                     </View>
                     <View style={{ flex: 2, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                       {file ? (
@@ -513,8 +513,8 @@ export default function Phase2SubmissionScreen() {
 
             {/* OPG upload for Full Arch cases */}
             {isFullArch && (
-              <View style={[s.torqueSection, { marginTop: 12 }]}>
-                <Text style={s.torqueTitle}>Upload OPG</Text>
+              <View style={[s.uploadSection, { marginTop: 12 }]}>
+                <Text style={s.uploadTitle}>Upload OPG</Text>
                 <View style={{ paddingHorizontal: 12, paddingBottom: 12 }}>
                   {opgFile ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -647,6 +647,10 @@ const s = StyleSheet.create({
   torqueLabelText: { fontSize: 13, fontWeight: '600', color: '#BF360C' },
   torqueInput: { width: 80, borderWidth: 2, borderColor: '#FF6D00', borderRadius: 10, padding: 10, fontSize: 18, fontWeight: '700', textAlign: 'center', backgroundColor: '#FFF' },
   torqueUnit: { fontSize: 13, fontWeight: '600', color: '#888' },
+  uploadSection: { backgroundColor: '#E3F2FD', borderRadius: 10, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#90CAF9' },
+  uploadTitle: { fontSize: 15, fontWeight: '700', color: '#1565C0', marginBottom: 10 },
+  uploadLabel: { flex: 1, backgroundColor: '#BBDEFB', padding: 10, borderRadius: 8 },
+  uploadLabelText: { fontSize: 13, fontWeight: '600', color: '#0D47A1' },
   submitBtn: { flexDirection: 'row', backgroundColor: '#4CAF50', borderRadius: 12, padding: 16, alignItems: 'center', justifyContent: 'center', gap: 8 },
   submitText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
   toggleBtn: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 8, borderWidth: 1.5, borderColor: '#DDD', backgroundColor: '#FAFAFA' },

@@ -25,7 +25,7 @@ export default function Stage2SurgicalSubmissionScreen() {
   // Checklist state
   const [checklistState, setChecklistState] = useState<Record<string, boolean>>({});
   // Text fields embedded in checklist
-  const [isqValue, setIsqValue] = useState('');
+  const [isqValues, setIsqValues] = useState<string[]>(['']);
   const [healingAbutmentHeight, setHealingAbutmentHeight] = useState<string[]>(['']);
   const [implantPositions, setImplantPositions] = useState<string[]>([]);
   // IOPA uploads
@@ -43,9 +43,11 @@ export default function Stage2SurgicalSubmissionScreen() {
       const positions = (res.data.implant_plans || []).map((p: any) => p.position);
       setImplantPositions(positions);
       setHealingAbutmentHeight(new Array(count).fill(''));
+      setIsqValues(new Array(count).fill(''));
       setIopaFiles(new Array(count).fill(null));
     } catch {
       setHealingAbutmentHeight(['']);
+      setIsqValues(['']);
       setIopaFiles([null]);
     }
   };
@@ -108,7 +110,7 @@ export default function Stage2SurgicalSubmissionScreen() {
     try {
       await api.post(`/procedures/${id}/stage2/surgical`, {
         checklist_items: checklistState,
-        isq_value: isqValue || null,
+        isq_value: isqValues.length === 1 ? (isqValues[0] || null) : isqValues,
         healing_abutment_height: healingAbutmentHeight || null,
         iopa_files: iopaFiles.filter(f => f !== null).map(f => ({
           filename: f!.filename,
@@ -162,15 +164,15 @@ export default function Stage2SurgicalSubmissionScreen() {
 
                 {/* Upload IOPA Radiographs below Radiograph Made */}
                 {item.id === 'radiograph_made' && checklistState[item.id] && (
-                  <View style={{ paddingLeft: 0, paddingVertical: 8, backgroundColor: '#FFF8E1', borderRadius: 8, marginBottom: 4, padding: 12, borderWidth: 1, borderColor: '#FFE082' }}>
-                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#E65100', marginBottom: 10 }}>Upload IOPA Radiograph</Text>
+                  <View style={{ paddingLeft: 0, paddingVertical: 8, backgroundColor: '#E3F2FD', borderRadius: 8, marginBottom: 4, padding: 12, borderWidth: 1, borderColor: '#90CAF9' }}>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', marginBottom: 10 }}>Upload IOPA Radiograph</Text>
                     {iopaFiles.map((file, idx) => {
                       const label = implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : `Implant ${idx + 1}`;
                       const baseUrl = api.defaults.baseURL || '';
                       return (
                         <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }} data-testid={`p3-iopa-slot-${idx}`}>
-                          <View style={{ flex: 1, backgroundColor: '#FFF3E0', padding: 8, borderRadius: 8 }}>
-                            <Text style={{ fontSize: 13, fontWeight: '600', color: '#BF360C' }}>{label}</Text>
+                          <View style={{ flex: 1, backgroundColor: '#BBDEFB', padding: 8, borderRadius: 8 }}>
+                            <Text style={{ fontSize: 13, fontWeight: '600', color: '#0D47A1' }}>{label}</Text>
                           </View>
                           <View style={{ flex: 1.5, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                             {file ? (
@@ -216,19 +218,33 @@ export default function Stage2SurgicalSubmissionScreen() {
                   </View>
                 )}
 
-                {/* ISQ Value text input */}
+                {/* ISQ Value per implant - green theme */}
                 {item.id === 'isq_checked' && checklistState[item.id] && (
-                  <View style={s.inlineInput}>
-                    <Text style={s.inlineLabel}>ISQ Value (optional)</Text>
-                    <TextInput
-                      style={s.smallInput}
-                      value={isqValue}
-                      onChangeText={setIsqValue}
-                      placeholder="e.g. 72"
-                      keyboardType="decimal-pad"
-                      maxLength={5}
-                      data-testid="isq-value-input"
-                    />
+                  <View style={{ backgroundColor: '#E8F5E9', borderRadius: 8, padding: 12, marginBottom: 4, borderWidth: 1, borderColor: '#A5D6A7' }}>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#2E7D32', marginBottom: 10 }}>ISQ Values</Text>
+                    {isqValues.map((val, idx) => {
+                      const label = implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : `Implant ${idx + 1}`;
+                      return (
+                        <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }} data-testid={`isq-slot-${idx}`}>
+                          <View style={{ flex: 1, backgroundColor: '#C8E6C9', padding: 8, borderRadius: 8 }}>
+                            <Text style={{ fontSize: 13, fontWeight: '600', color: '#1B5E20' }}>{label}</Text>
+                          </View>
+                          <TextInput
+                            style={{ flex: 1, borderWidth: 1.5, borderColor: '#4CAF50', borderRadius: 8, padding: 8, fontSize: 16, fontWeight: '700', textAlign: 'center', backgroundColor: '#FFF' }}
+                            value={val}
+                            onChangeText={(text) => {
+                              const updated = [...isqValues];
+                              updated[idx] = text;
+                              setIsqValues(updated);
+                            }}
+                            placeholder="e.g. 72"
+                            keyboardType="decimal-pad"
+                            maxLength={5}
+                            data-testid={`isq-input-${idx}`}
+                          />
+                        </View>
+                      );
+                    })}
                   </View>
                 )}
 
