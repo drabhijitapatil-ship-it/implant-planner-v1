@@ -6,7 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
-import api from '../../../utils/api';
+import api, { getAuthFileUrl, getToken } from '../../../utils/api';
 import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
 import { Ionicons } from '@expo/vector-icons';
@@ -58,6 +58,9 @@ export default function Phase2SubmissionScreen() {
   const [extraIopaCount, setExtraIopaCount] = useState(0);
   const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
   const [opgUploading, setOpgUploading] = useState(false);
+  const [authToken, setAuthToken] = useState('');
+
+  useEffect(() => { getToken('access_token').then(t => setAuthToken(t || '')); }, []);
 
   const FULL_ARCH_SET = new Set(['All on 4', 'All on 6', 'All on X']);
   const isFullArch = FULL_ARCH_SET.has(procedureType);
@@ -457,7 +460,7 @@ export default function Phase2SubmissionScreen() {
                         <>
                           {file.filename.match(/\.(png|jpg|jpeg)$/i) ? (
                             <Image
-                              source={{ uri: `${baseUrl}/uploads/${file.filename}` }}
+                              source={{ uri: `${baseUrl}/uploads/${file.filename}?token=${authToken}` }}
                               style={{ width: 40, height: 40, borderRadius: 6 }}
                               resizeMode="cover"
                             />
@@ -466,7 +469,7 @@ export default function Phase2SubmissionScreen() {
                           )}
                           <TouchableOpacity
                             style={{ backgroundColor: '#4CAF50', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 }}
-                            onPress={() => Linking.openURL(`${baseUrl}/uploads/${file.filename}`).catch(() => Alert.alert('Error', 'Could not open file'))}
+                            onPress={() => Linking.openURL(`${baseUrl}/uploads/${file.filename}?token=${authToken}`).catch(() => Alert.alert('Error', 'Could not open file'))}
                             data-testid={`view-iopa-${idx}`}
                           >
                             <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }} numberOfLines={1}>View IOPA</Text>
@@ -520,7 +523,7 @@ export default function Phase2SubmissionScreen() {
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                       {opgFile.filename.match(/\.(png|jpg|jpeg)$/i) ? (
                         <Image
-                          source={{ uri: `${(api.defaults.baseURL || '')}/uploads/${opgFile.filename}` }}
+                          source={{ uri: `${(api.defaults.baseURL || '')}/uploads/${opgFile.filename}?token=${authToken}` }}
                           style={{ width: 50, height: 50, borderRadius: 8 }}
                           resizeMode="cover"
                         />
@@ -529,7 +532,7 @@ export default function Phase2SubmissionScreen() {
                       )}
                       <TouchableOpacity
                         style={{ backgroundColor: '#4CAF50', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, justifyContent: 'center' }}
-                        onPress={() => Linking.openURL(`${(api.defaults.baseURL || '')}/uploads/${opgFile.filename}`).catch(() => Alert.alert('Error', 'Could not open file'))}
+                        onPress={() => Linking.openURL(`${(api.defaults.baseURL || '')}/uploads/${opgFile.filename}?token=${authToken}`).catch(() => Alert.alert('Error', 'Could not open file'))}
                         data-testid="view-opg-btn"
                       >
                         <Ionicons name="document-attach" size={18} color="#FFF" />

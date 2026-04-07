@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Response, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Response, Request, Query
 from fastapi import status as http_status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
@@ -156,6 +156,31 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         raise
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid token")
+
+async def get_current_user_optional(request: Request):
+    """Like get_current_user but returns None instead of raising on failure."""
+    auth = request.headers.get("authorization", "")
+    if not auth.startswith("Bearer "):
+        return None
+    try:
+        token_str = auth.split(" ", 1)[1]
+        payload = jwt.decode(token_str, SECRET_KEY, algorithms=[ALGORITHM])
+        jti = payload.get("jti")
+        if jti and jti in token_blocklist:
+            return None
+        token_type = payload.get("type")
+        if token_type not in ("access", None):
+            return None
+        user_id = payload.get("user_id")
+        if not user_id:
+            return None
+        user = await db.users.find_one({"_id": ObjectId(user_id)}, {"password_hash": 0})
+        if user:
+            user["_id"] = str(user["_id"])
+        return user
+    except Exception:
+        return None
+
 
 # Models
 class UserRegister(BaseModel):
@@ -1338,11 +1363,24 @@ async def upload_ios(
     return {"message": "File uploaded successfully", "filename": file.filename}
 
 @api_router.get("/uploads/{filename}")
-async def serve_upload(filename: str, current_user: dict = Depends(get_current_user)):
+async def serve_upload(filename: str, token: Optional[str] = Query(None), current_user: dict = Depends(get_current_user_optional)):
     file_path = UPLOADS_DIR / filename
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
     
+    # Resolve user from header or query param token
+    user = current_user
+    if not user and token:
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+            uid = payload.get("user_id")
+            if uid:
+                user = await db.users.find_one({"_id": ObjectId(uid)})
+        except Exception:
+            pass
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
     # Only supervisor, implant_incharge, administrator, and the procedure's student can view
     procedure = await db.procedures.find_one({"$or": [
         {"cbct_file": filename},
@@ -1354,11 +1392,11 @@ async def serve_upload(filename: str, current_user: dict = Depends(get_current_u
     ]})
     if procedure:
         allowed = False
-        if current_user["role"] in ["administrator", "implant_incharge"]:
+        if user["role"] in ["administrator", "implant_incharge"]:
             allowed = True
-        elif current_user["role"] == "supervisor" and procedure.get("supervisor_id") == current_user["_id"]:
+        elif user["role"] == "supervisor" and procedure.get("supervisor_id") == str(user["_id"]):
             allowed = True
-        elif current_user["role"] == "student" and procedure.get("student_id") == current_user["_id"]:
+        elif user["role"] == "student" and procedure.get("student_id") == str(user["_id"]):
             allowed = True
         if not allowed:
             raise HTTPException(status_code=403, detail="Access denied")
