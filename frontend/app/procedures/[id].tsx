@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   TextInput,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -942,6 +943,78 @@ export default function ProcedureDetailScreen() {
               )}
               {procedure.phase2_data.hemostasis_achieved !== undefined && (
                 <InfoRow icon="water" label="Hemostasis Achieved" value={procedure.phase2_data.hemostasis_achieved ? 'Yes' : 'No'} />
+              )}
+
+              {/* Post Surgical Radiographs - IOPA Thumbnails */}
+              {procedure.phase2_data.iopa_files && procedure.phase2_data.iopa_files.length > 0 && (
+                <View style={{ marginTop: 12, marginBottom: 8 }} data-testid="iopa-files-section">
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#E65100', marginBottom: 10 }}>
+                    {procedure.phase2_data.iopa_files.length === 1 ? 'Post Surgical Radiograph' : 'Post Surgical Radiographs'} - IOPA
+                  </Text>
+                  {procedure.phase2_data.iopa_files.map((f: any, idx: number) => {
+                    const baseUrl = api.defaults.baseURL || '';
+                    const fileUrl = `${baseUrl}/uploads/${f.filename}`;
+                    const isImage = f.filename?.match(/\.(png|jpg|jpeg)$/i);
+                    return (
+                      <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 10, backgroundColor: '#FFF8E1', padding: 8, borderRadius: 10 }} data-testid={`iopa-thumb-${idx}`}>
+                        {isImage ? (
+                          <Image source={{ uri: fileUrl }} style={{ width: 60, height: 60, borderRadius: 8, borderWidth: 1, borderColor: '#E0E0E0' }} resizeMode="cover" />
+                        ) : (
+                          <View style={{ width: 60, height: 60, borderRadius: 8, backgroundColor: '#FFF3E0', alignItems: 'center', justifyContent: 'center' }}>
+                            <Ionicons name="document-attach" size={28} color="#E65100" />
+                          </View>
+                        )}
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#333' }}>{f.tooth_label || `Implant ${idx + 1}`}</Text>
+                          <Text style={{ fontSize: 11, color: '#888' }} numberOfLines={1}>{f.original_name}</Text>
+                        </View>
+                        <TouchableOpacity
+                          style={{ backgroundColor: '#4CAF50', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                          onPress={() => Linking.openURL(fileUrl).catch(() => Alert.alert('Error', 'Could not open file'))}
+                          data-testid={`view-iopa-detail-${idx}`}
+                        >
+                          <Ionicons name="open-outline" size={14} color="#FFF" />
+                          <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }}>View</Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+
+              {/* OPG Thumbnail */}
+              {procedure.phase2_data.opg_file && procedure.phase2_data.opg_file.filename && (
+                <View style={{ marginTop: 8, marginBottom: 8 }} data-testid="opg-file-section">
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#E65100', marginBottom: 10 }}>OPG Radiograph</Text>
+                  {(() => {
+                    const baseUrl = api.defaults.baseURL || '';
+                    const fileUrl = `${baseUrl}/uploads/${procedure.phase2_data.opg_file.filename}`;
+                    const isImage = procedure.phase2_data.opg_file.filename?.match(/\.(png|jpg|jpeg)$/i);
+                    return (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFF8E1', padding: 10, borderRadius: 10 }} data-testid="opg-thumb">
+                        {isImage ? (
+                          <Image source={{ uri: fileUrl }} style={{ width: 70, height: 70, borderRadius: 8, borderWidth: 1, borderColor: '#E0E0E0' }} resizeMode="cover" />
+                        ) : (
+                          <View style={{ width: 70, height: 70, borderRadius: 8, backgroundColor: '#FFF3E0', alignItems: 'center', justifyContent: 'center' }}>
+                            <Ionicons name="document-attach" size={32} color="#E65100" />
+                          </View>
+                        )}
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#333' }}>OPG</Text>
+                          <Text style={{ fontSize: 11, color: '#888' }} numberOfLines={1}>{procedure.phase2_data.opg_file.original_name}</Text>
+                        </View>
+                        <TouchableOpacity
+                          style={{ backgroundColor: '#4CAF50', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                          onPress={() => Linking.openURL(fileUrl).catch(() => Alert.alert('Error', 'Could not open file'))}
+                          data-testid="view-opg-detail"
+                        >
+                          <Ionicons name="open-outline" size={14} color="#FFF" />
+                          <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }}>View</Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })()}
+                </View>
               )}
             </View>
 

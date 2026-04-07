@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity,
-  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Switch,
+  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Switch, Image, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as DocumentPicker from 'expo-document-picker';
 import api from '../../../utils/api';
 import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
@@ -50,6 +51,18 @@ export default function Phase2SubmissionScreen() {
   // Post-Operative Checklist
   const [postOpChecklist, setPostOpChecklist] = useState<Record<string, boolean>>({});
 
+  // Post Surgical Radiograph uploads
+  const [procedureType, setProcedureType] = useState('');
+  const [iopaFiles, setIopaFiles] = useState<(null | { filename: string; original_name: string; tooth_label: string })[]>([]);
+  const [opgFile, setOpgFile] = useState<null | { filename: string; original_name: string }>(null);
+  const [extraIopaCount, setExtraIopaCount] = useState(0);
+  const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
+  const [opgUploading, setOpgUploading] = useState(false);
+
+  const FULL_ARCH_SET = new Set(['All on 4', 'All on 6', 'All on X']);
+  const isFullArch = FULL_ARCH_SET.has(procedureType);
+  const isSingleImplant = procedureType === 'Single Conventional Implant';
+
   // Notes
   const [studentNotes, setStudentNotes] = useState('');
 
@@ -57,15 +70,31 @@ export default function Phase2SubmissionScreen() {
 
   const loadImplantPlan = async () => {
     try {
-      const res = await api.get(`/procedures/${id}/implant-plan`);
-      const count = res.data.number_of_implants || 1;
-      const positions = (res.data.implant_plans || []).map((p: any) => p.position);
+      // Fetch implant plan and procedure data in parallel
+      const [planRes, procRes] = await Promise.all([
+        api.get(`/procedures/${id}/implant-plan`),
+        api.get(`/procedures/${id}`),
+      ]);
+      const count = planRes.data.number_of_implants || 1;
+      const positions = (planRes.data.implant_plans || []).map((p: any) => p.position);
       setImplantPositions(positions);
       setTorqueValues(new Array(count).fill(''));
       setHealingAbutmentCuffHeight(new Array(count).fill(''));
+
+      const pType = procRes.data.implant_procedure_type || '';
+      setProcedureType(pType);
+
+      // Determine IOPA slot count
+      let iopaCount: number;
+      if (pType === 'All on 4') iopaCount = 4;
+      else if (pType === 'All on 6') iopaCount = 6;
+      else if (pType === 'All on X') iopaCount = 5;
+      else iopaCount = count;
+      setIopaFiles(new Array(iopaCount).fill(null));
     } catch {
       setTorqueValues(['']);
       setHealingAbutmentCuffHeight(['']);
+      setIopaFiles([null]);
     }
   };
 
@@ -75,6 +104,79 @@ export default function Phase2SubmissionScreen() {
 
   const togglePostOp = (itemId: string) => {
     setPostOpChecklist(prev => ({ ...prev, [itemId]: !prev[itemId] }));
+  };
+
+  // ── IOPA / OPG Upload helpers ──
+  const getIopaLabel = (idx: number): string => {
+    if (isFullArch) return `Implant ${idx + 1}`;
+    return implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : `Implant ${idx + 1}`;
+  };
+
+  const totalIopaSlots = iopaFiles.length + extraIopaCount;
+
+  const pickIopaFile = async (idx: number) => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['image/png', 'image/jpeg', 'image/heic', 'image/heif', 'application/pdf'],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      setUploadingIdx(idx);
+      const formPayload = new FormData();
+      formPayload.append('file', {
+        uri: asset.uri, name: asset.name || 'iopa.jpg', type: asset.mimeType || 'image/jpeg',
+      } as any);
+      const res = await api.post('/uploads/cbct-temp', formPayload, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const allFiles = [...iopaFiles];
+      // Expand if extra slot
+      while (allFiles.length <= idx) allFiles.push(null);
+      allFiles[idx] = {
+        filename: res.data.cbct_file,
+        original_name: res.data.cbct_original_name,
+        tooth_label: getIopaLabel(idx),
+      };
+      setIopaFiles(allFiles);
+    } catch (err: any) {
+      Alert.alert('Upload Failed', err.response?.data?.detail || 'Could not upload IOPA');
+    } finally {
+      setUploadingIdx(null);
+    }
+  };
+
+  const pickOpgFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['image/png', 'image/jpeg', 'image/heic', 'image/heif', 'application/pdf'],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      setOpgUploading(true);
+      const formPayload = new FormData();
+      formPayload.append('file', {
+        uri: asset.uri, name: asset.name || 'opg.jpg', type: asset.mimeType || 'image/jpeg',
+      } as any);
+      const res = await api.post('/uploads/cbct-temp', formPayload, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setOpgFile({ filename: res.data.cbct_file, original_name: res.data.cbct_original_name });
+    } catch (err: any) {
+      Alert.alert('Upload Failed', err.response?.data?.detail || 'Could not upload OPG');
+    } finally {
+      setOpgUploading(false);
+    }
+  };
+
+  const addExtraIopa = () => setExtraIopaCount(prev => prev + 1);
+  const removeExtraIopa = (idx: number) => {
+    // Remove the file at position idx (which is base + extra offset)
+    const allFiles = [...iopaFiles];
+    if (idx < allFiles.length) allFiles.splice(idx, 1);
+    setIopaFiles(allFiles);
+    setExtraIopaCount(prev => Math.max(0, prev - 1));
   };
 
   const handleSubmit = async () => {
@@ -114,6 +216,10 @@ export default function Phase2SubmissionScreen() {
         healing_abutment_cuff_height: prostheticComponent === 'Healing Abutment Placed' ? healingAbutmentCuffHeight : null,
         sutures_placed: suturesPlaced,
         hemostasis_achieved: hemostasisAchieved,
+        iopa_files: [...iopaFiles, ...new Array(extraIopaCount).fill(null)]
+          .filter(f => f !== null)
+          .map((f, idx) => ({ filename: f.filename, original_name: f.original_name, tooth_label: f.tooth_label || `Extra ${idx + 1}` })),
+        opg_file: opgFile ? { filename: opgFile.filename, original_name: opgFile.original_name } : null,
         post_op_checklist: postOpChecklist,
         student_notes: studentNotes || null,
       });
@@ -312,6 +418,137 @@ export default function Phase2SubmissionScreen() {
                   trackColor={{ false: '#DDD', true: '#81C784' }} thumbColor={hemostasisAchieved ? '#4CAF50' : '#f4f3f4'} />
               </View>
             </View>
+          </View>
+
+          {/* ── Post Surgical Radiograph(s) ── */}
+          <View style={s.section}>
+            <View style={s.sectionHeader}>
+              <Ionicons name="images-outline" size={20} color="#E65100" />
+              <Text style={s.sectionTitle}>
+                {isSingleImplant ? 'Post Surgical Radiograph' : 'Post Surgical Radiographs'}
+              </Text>
+            </View>
+
+            {/* IOPA upload slots */}
+            <View style={s.torqueSection}>
+              <Text style={s.torqueTitle}>Upload IOPA Radiograph</Text>
+              {Array.from({ length: totalIopaSlots }).map((_, idx) => {
+                const baseCount = iopaFiles.length;
+                const isExtra = idx >= baseCount;
+                const file = isExtra ? null : iopaFiles[idx];
+                const label = getIopaLabel(idx);
+                const baseUrl = api.defaults.baseURL || '';
+                return (
+                  <View key={idx} style={s.torqueRow} data-testid={`iopa-slot-${idx}`}>
+                    <View style={[s.torqueLabel, { flex: 1.5 }]}>
+                      <Text style={s.torqueLabelText}>{label}</Text>
+                    </View>
+                    <View style={{ flex: 2, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      {file ? (
+                        <>
+                          {file.filename.match(/\.(png|jpg|jpeg)$/i) ? (
+                            <Image
+                              source={{ uri: `${baseUrl}/uploads/${file.filename}` }}
+                              style={{ width: 40, height: 40, borderRadius: 6 }}
+                              resizeMode="cover"
+                            />
+                          ) : (
+                            <Ionicons name="document-attach" size={24} color="#4CAF50" />
+                          )}
+                          <TouchableOpacity
+                            style={{ backgroundColor: '#4CAF50', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 }}
+                            onPress={() => Linking.openURL(`${baseUrl}/uploads/${file.filename}`).catch(() => Alert.alert('Error', 'Could not open file'))}
+                            data-testid={`view-iopa-${idx}`}
+                          >
+                            <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }} numberOfLines={1}>View IOPA</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={() => { const u = [...iopaFiles]; u[idx] = null; setIopaFiles(u); }} data-testid={`remove-iopa-${idx}`}>
+                            <Ionicons name="close-circle" size={22} color="#E53935" />
+                          </TouchableOpacity>
+                        </>
+                      ) : (
+                        <TouchableOpacity
+                          style={{ backgroundColor: '#1A73E8', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1, justifyContent: 'center' }}
+                          onPress={() => pickIopaFile(idx)} disabled={uploadingIdx === idx}
+                          data-testid={`upload-iopa-${idx}`}
+                        >
+                          {uploadingIdx === idx ? (
+                            <ActivityIndicator color="#FFF" size="small" />
+                          ) : (
+                            <>
+                              <Ionicons name="cloud-upload" size={16} color="#FFF" />
+                              <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '600' }}>Upload IOPA</Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+                      )}
+                      {/* +/- buttons for extra rows (All on X) */}
+                      {isExtra && (
+                        <TouchableOpacity onPress={() => removeExtraIopa(idx)} data-testid={`remove-extra-iopa-${idx}`}>
+                          <Ionicons name="remove-circle" size={26} color="#E53935" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                );
+              })}
+              {/* Add extra IOPA button for All on X */}
+              {procedureType === 'All on X' && (
+                <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10 }}
+                  onPress={addExtraIopa} data-testid="add-extra-iopa-btn">
+                  <Ionicons name="add-circle" size={26} color="#4CAF50" />
+                  <Text style={{ color: '#4CAF50', fontWeight: '700', fontSize: 14 }}>Add IOPA Radiograph</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* OPG upload for Full Arch cases */}
+            {isFullArch && (
+              <View style={[s.torqueSection, { marginTop: 12 }]}>
+                <Text style={s.torqueTitle}>Upload OPG</Text>
+                <View style={{ paddingHorizontal: 12, paddingBottom: 12 }}>
+                  {opgFile ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      {opgFile.filename.match(/\.(png|jpg|jpeg)$/i) ? (
+                        <Image
+                          source={{ uri: `${(api.defaults.baseURL || '')}/uploads/${opgFile.filename}` }}
+                          style={{ width: 50, height: 50, borderRadius: 8 }}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <Ionicons name="document-attach" size={28} color="#4CAF50" />
+                      )}
+                      <TouchableOpacity
+                        style={{ backgroundColor: '#4CAF50', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, justifyContent: 'center' }}
+                        onPress={() => Linking.openURL(`${(api.defaults.baseURL || '')}/uploads/${opgFile.filename}`).catch(() => Alert.alert('Error', 'Could not open file'))}
+                        data-testid="view-opg-btn"
+                      >
+                        <Ionicons name="document-attach" size={18} color="#FFF" />
+                        <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '700' }}>View OPG</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => setOpgFile(null)} data-testid="remove-opg-btn">
+                        <Ionicons name="close-circle" size={24} color="#E53935" />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={{ backgroundColor: '#1A73E8', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                      onPress={pickOpgFile} disabled={opgUploading}
+                      data-testid="upload-opg-btn"
+                    >
+                      {opgUploading ? (
+                        <ActivityIndicator color="#FFF" size="small" />
+                      ) : (
+                        <>
+                          <Ionicons name="cloud-upload" size={18} color="#FFF" />
+                          <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '700' }}>Upload OPG</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            )}
           </View>
 
           {/* ── Post-Operative Checklist ── */}
