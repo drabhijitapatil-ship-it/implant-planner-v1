@@ -30,6 +30,9 @@ A comprehensive mobile application for managing dental implant procedures at the
 18. **CBCT Report Upload**: Mandatory PDF/image upload in Phase 1 Case Details (between Loading Type and Checklist). Blue upload button → green "View CBCT Report" button. File stored on server, accessible via role-based endpoint. Visible to Supervisors and In-Charges on case detail page.
 19. **Post Surgical Radiograph Upload (Phase 2)**: Between Suturing and Post-Op Checklist. Section header: "Post Surgical Radiograph" (single implant) / "Post Surgical Radiographs" (multiple). IOPA upload tabs per implant with tooth numbering. All on 4→4 tabs, All on 6→6, All on X→5+expandable. Green "+"/red "-" for extras. OPG upload for Full Arch cases. Mandatory IOPA — blocks Phase 2 submission. Thumbnail preview in case detail page.
 20. **Phase 3 IOPA Radiograph Upload**: Below "Radiograph Made" checklist item in Phase 3 Second Stage Surgical form. Number of IOPA tabs = number of implants (with tooth numbering). Mandatory — blocks Phase 3 submission. Thumbnails visible in case detail page.
+21. **Phase 3 Per-Implant ISQ Values**: Below "ISQ Value checked" checklist item. Multiple input fields = number of implants, with tooth numbering. Green theme (#E8F5E9). Case detail shows per-implant values with tooth labels. Backward compatible with legacy single-value format.
+22. **Colour Theme Standardization**: IOPA/CBCT/OPG uploads use Blue theme (#E3F2FD/#1565C0) across all phases. Torque values keep Orange/Amber theme (#FFF8E1/#E65100). Applied consistently in Phase 1 (CBCT), Phase 2 (IOPA/OPG), Phase 3 (IOPA) forms and case detail thumbnails.
+23. **Universal Upload Visibility**: All IOPA, OPG, and CBCT thumbnails visible to all roles (Student, Supervisor, In-Charge) at all times on case detail page. No role-based hiding of uploaded radiographs.
 
 ## Key Credentials
 - Admin/In-Charge: `Abhijit.patil@dental.edu` / `Admin@123`
