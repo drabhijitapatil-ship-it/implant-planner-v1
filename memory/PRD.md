@@ -152,16 +152,17 @@ A comprehensive mobile application for managing dental implant procedures at the
   - CBCT upload is mandatory (form cannot proceed without it)
   - Frontend `[id].tsx`: Green "View CBCT Report" button visible to all roles when CBCT exists on procedure
   - Role-based file access: student owner, assigned supervisor, incharge/admin can view
-- **Post Surgical Radiograph Upload - IOPA/OPG (Phase 2)** (18/18 backend tests passed):
-  - Backend: `Phase2Submit` model extended with `iopa_files` (list) and `opg_file` (dict)
-  - Backend: `submit-phase2` stores IOPA/OPG references in `phase2_data`
-  - Backend: `serve_upload` finds files in `phase2_data.iopa_files` and `phase2_data.opg_file` for access control
-  - Frontend `submit-phase2/[id].tsx`: IOPA upload section between Suturing and Post-Op Checklist
-  - Section header: "Post Surgical Radiograph" (single) / "Post Surgical Radiographs" (plural)
+- **Post Surgical Radiograph Upload - IOPA/OPG (Phase 2)** (18/18 + mandatory validation):
+  - IOPA uploads now MANDATORY: blocks Phase 2 submission if any slot is empty
+  - Backend: `Phase2Submit` with `iopa_files` (list) and `opg_file` (dict)
   - IOPA count: All on 4→4, All on 6→6, All on X→5+expandable with +/- buttons
   - OPG upload shown for Full Arch cases only
-  - Frontend `[id].tsx`: IOPA/OPG thumbnail previews with Image component in case detail
   - Added "Implant Prosthesis" as 3rd option in Opposing Dentition
+- **Multi-CBCT Report Upload (Phase 1)** (11/11 self-tests passed):
+  - Backend: `cbct_files: List[Dict]` array field + backward-compat `cbct_file`
+  - Frontend: 2 mandatory CBCT tabs by default, green "+" to add more, red "-" on extras (3rd+)
+  - Validation: blocks form if fewer than 2 CBCTs uploaded
+  - Case detail: CBCT/IOPA/OPG thumbnail previews with Image component
 
 ### Earlier Sessions
 - Session 9: Narrow Ridge, High Constraint engines, scheduling constraints, logo replacement

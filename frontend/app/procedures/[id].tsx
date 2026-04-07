@@ -826,28 +826,58 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
-        {procedure.cbct_file && (
+        {/* CBCT Reports - Thumbnails */}
+        {(procedure.cbct_files?.length > 0 || procedure.cbct_file) && (
           <View style={styles.section} data-testid="cbct-file-section">
-            <Text style={styles.sectionTitle}>CBCT Report</Text>
-            <TouchableOpacity
-              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#4CAF50', borderRadius: 10, paddingVertical: 14, paddingHorizontal: 20 }}
-              onPress={async () => {
-                try {
-                  const baseUrl = api.defaults.baseURL || '';
-                  const fileUrl = `${baseUrl}/uploads/${procedure.cbct_file}`;
-                  await Linking.openURL(fileUrl);
-                } catch (e) {
-                  Alert.alert('Error', 'Could not open file');
-                }
-              }}
-              data-testid="cbct-file-download"
-            >
-              <Ionicons name="document-attach" size={20} color="#FFF" />
-              <Text style={{ color: '#FFF', fontSize: 15, fontWeight: '700', flex: 1 }}>
-                View CBCT Report
-              </Text>
-              <Ionicons name="open-outline" size={18} color="#FFF" />
-            </TouchableOpacity>
+            <Text style={styles.sectionTitle}>CBCT Reports</Text>
+            {procedure.cbct_files?.length > 0 ? (
+              procedure.cbct_files.map((f: any, idx: number) => {
+                const baseUrl = api.defaults.baseURL || '';
+                const fileUrl = `${baseUrl}/uploads/${f.filename}`;
+                const isImage = f.filename?.match(/\.(png|jpg|jpeg)$/i);
+                return (
+                  <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 10, backgroundColor: '#E8F5E9', padding: 8, borderRadius: 10 }} data-testid={`cbct-thumb-${idx}`}>
+                    {isImage ? (
+                      <Image source={{ uri: fileUrl }} style={{ width: 50, height: 50, borderRadius: 8, borderWidth: 1, borderColor: '#E0E0E0' }} resizeMode="cover" />
+                    ) : (
+                      <View style={{ width: 50, height: 50, borderRadius: 8, backgroundColor: '#C8E6C9', alignItems: 'center', justifyContent: 'center' }}>
+                        <Ionicons name="document-attach" size={24} color="#4CAF50" />
+                      </View>
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#333' }}>CBCT Report {idx + 1}</Text>
+                      <Text style={{ fontSize: 11, color: '#888' }} numberOfLines={1}>{f.original_name}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={{ backgroundColor: '#4CAF50', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                      onPress={() => Linking.openURL(fileUrl).catch(() => Alert.alert('Error', 'Could not open file'))}
+                      data-testid={`view-cbct-detail-${idx}`}
+                    >
+                      <Ionicons name="open-outline" size={14} color="#FFF" />
+                      <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }}>View</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })
+            ) : (
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#4CAF50', borderRadius: 10, paddingVertical: 14, paddingHorizontal: 20 }}
+                onPress={async () => {
+                  try {
+                    const baseUrl = api.defaults.baseURL || '';
+                    const fileUrl = `${baseUrl}/uploads/${procedure.cbct_file}`;
+                    await Linking.openURL(fileUrl);
+                  } catch (e) {
+                    Alert.alert('Error', 'Could not open file');
+                  }
+                }}
+                data-testid="cbct-file-download"
+              >
+                <Ionicons name="document-attach" size={20} color="#FFF" />
+                <Text style={{ color: '#FFF', fontSize: 15, fontWeight: '700', flex: 1 }}>View CBCT Report</Text>
+                <Ionicons name="open-outline" size={18} color="#FFF" />
+              </TouchableOpacity>
+            )}
           </View>
         )}
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, Alert, ActivityIndicator, Platform, AppState, Linking
+  StyleSheet, Alert, ActivityIndicator, Platform, AppState, Linking, Image
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -311,7 +311,8 @@ export default function NewProcedureScreen() {
           medical_assessment: {} as Record<string, string>, medical_risk_level: '',
         });
         setChecklistItems({});
-        setCbctFile(null);
+        setCbctFiles([null, null]);
+        setExtraCbctCount(0);
         setStep('details');
         AsyncStorage.removeItem(FORM_STORAGE_KEY).catch(() => {});
       }
@@ -356,8 +357,9 @@ export default function NewProcedureScreen() {
 
   // ── Load faculty data ──
   const [bookedSlots, setBookedSlots] = useState<Record<string, { patient_name: string; scheduled_by: string }>>({});
-  const [cbctFile, setCbctFile] = useState<{ name: string; cbct_file: string; cbct_original_name: string; cbct_content_type: string } | null>(null);
-  const [cbctUploading, setCbctUploading] = useState(false);
+  const [cbctFiles, setCbctFiles] = useState<(null | { filename: string; original_name: string; content_type: string })[]>([null, null]);
+  const [cbctUploadingIdx, setCbctUploadingIdx] = useState<number | null>(null);
+  const [extraCbctCount, setExtraCbctCount] = useState(0);
 
   useEffect(() => {
     const loadFaculty = async () => {
@@ -412,8 +414,10 @@ export default function NewProcedureScreen() {
     }));
   };
 
-  // ── CBCT File Picker & Upload ──
-  const pickCbctFile = async () => {
+  // ── CBCT File Picker & Upload (Multiple) ──
+  const totalCbctSlots = 2 + extraCbctCount;
+
+  const pickCbctFileAtIndex = async (idx: number) => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: ['application/pdf', 'image/png', 'image/jpeg', 'image/heic', 'image/heif'],
@@ -421,7 +425,7 @@ export default function NewProcedureScreen() {
       });
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
-      setCbctUploading(true);
+      setCbctUploadingIdx(idx);
       const formPayload = new FormData();
       formPayload.append('file', {
         uri: asset.uri,
@@ -431,17 +435,30 @@ export default function NewProcedureScreen() {
       const res = await api.post('/uploads/cbct-temp', formPayload, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      setCbctFile({
-        name: asset.name || 'CBCT Report',
-        cbct_file: res.data.cbct_file,
-        cbct_original_name: res.data.cbct_original_name,
-        cbct_content_type: res.data.cbct_content_type,
-      });
+      const updated = [...cbctFiles];
+      while (updated.length <= idx) updated.push(null);
+      updated[idx] = {
+        filename: res.data.cbct_file,
+        original_name: res.data.cbct_original_name,
+        content_type: res.data.cbct_content_type,
+      };
+      setCbctFiles(updated);
     } catch (err: any) {
       Alert.alert('Upload Failed', err.response?.data?.detail || 'Could not upload CBCT file');
     } finally {
-      setCbctUploading(false);
+      setCbctUploadingIdx(null);
     }
+  };
+
+  const addExtraCbct = () => {
+    setExtraCbctCount(prev => prev + 1);
+    setCbctFiles(prev => [...prev, null]);
+  };
+  const removeExtraCbct = (idx: number) => {
+    const updated = [...cbctFiles];
+    updated.splice(idx, 1);
+    setCbctFiles(updated);
+    setExtraCbctCount(prev => Math.max(0, prev - 1));
   };
 
   // ── Continue to Implant Selection ──
@@ -469,8 +486,8 @@ export default function NewProcedureScreen() {
       Alert.alert('Missing Field', 'Please select at least one loading type.');
       return;
     }
-    if (!cbctFile) {
-      Alert.alert('Missing Field', 'Please upload CBCT Report (PDF) before continuing.');
+    if (!cbctFiles[0] || !cbctFiles[1]) {
+      Alert.alert('Missing Field', 'Please upload both mandatory CBCT Reports before continuing.');
       return;
     }
 
@@ -496,10 +513,15 @@ export default function NewProcedureScreen() {
         prosthetic_plan: sanitized.prosthetic_plan === 'Other'
           ? `Other: ${sanitizeString(sanitized.prosthetic_plan_other)}`
           : sanitized.prosthetic_plan,
-        ...(cbctFile ? {
-          cbct_file: cbctFile.cbct_file,
-          cbct_original_name: cbctFile.cbct_original_name,
-          cbct_content_type: cbctFile.cbct_content_type,
+        ...(cbctFiles.filter(f => f !== null).length > 0 ? {
+          cbct_files: cbctFiles.filter(f => f !== null).map(f => ({
+            filename: f!.filename,
+            original_name: f!.original_name,
+            content_type: f!.content_type,
+          })),
+          cbct_file: cbctFiles[0]?.filename || '',
+          cbct_original_name: cbctFiles[0]?.original_name || '',
+          cbct_content_type: cbctFiles[0]?.content_type || '',
         } : {}),
       };
 
@@ -846,48 +868,70 @@ export default function NewProcedureScreen() {
         </View>
       )}
 
-      {/* ─── CBCT Report Upload (Mandatory) ─── */}
+      {/* ─── CBCT Report Upload (Mandatory: 2 minimum) ─── */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>CBCT Report <Text style={{ color: '#DC3545' }}>*</Text></Text>
-        {cbctFile ? (
-          <TouchableOpacity
-            style={styles.cbctViewBtn}
-            onPress={() => {
-              const baseUrl = api.defaults.baseURL || '';
-              const fileUrl = `${baseUrl}/uploads/${cbctFile.cbct_file}`;
-              Linking.openURL(fileUrl).catch(() => Alert.alert('Error', 'Could not open file'));
-            }}
-            data-testid="view-cbct-report-btn"
-          >
-            <Ionicons name="document-attach" size={20} color="#FFF" />
-            <Text style={styles.cbctViewBtnText}>View CBCT Report</Text>
-            <TouchableOpacity
-              onPress={() => setCbctFile(null)}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              data-testid="remove-cbct-btn"
-            >
-              <Ionicons name="close-circle" size={20} color="rgba(255,255,255,0.8)" />
-            </TouchableOpacity>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={styles.cbctUploadBtn}
-            onPress={pickCbctFile}
-            disabled={cbctUploading}
-            data-testid="upload-cbct-btn"
-          >
-            {cbctUploading ? (
-              <ActivityIndicator color="#FFF" size="small" />
-            ) : (
-              <>
-                <Ionicons name="cloud-upload" size={20} color="#FFF" />
-                <Text style={styles.cbctUploadBtnText}>Upload CBCT Report (PDF)</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
-        <Text style={{ fontSize: 11, color: '#999', marginTop: 6 }}>
-          Accepted: PDF, PNG, JPG, HEIC (Max 25MB)
+        {cbctFiles.map((file, idx) => {
+          const isExtra = idx >= 2;
+          const baseUrl = api.defaults.baseURL || '';
+          return (
+            <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }} data-testid={`cbct-slot-${idx}`}>
+              <View style={{ width: 30, alignItems: 'center' }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#555' }}>{idx + 1}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                {file ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    {file.filename.match(/\.(png|jpg|jpeg)$/i) ? (
+                      <Image source={{ uri: `${baseUrl}/uploads/${file.filename}` }}
+                        style={{ width: 36, height: 36, borderRadius: 6 }} resizeMode="cover" />
+                    ) : (
+                      <Ionicons name="document-attach" size={22} color="#4CAF50" />
+                    )}
+                    <TouchableOpacity
+                      style={styles.cbctViewBtn}
+                      onPress={() => Linking.openURL(`${baseUrl}/uploads/${file.filename}`).catch(() => Alert.alert('Error', 'Could not open file'))}
+                      data-testid={`view-cbct-${idx}`}
+                    >
+                      <Text style={styles.cbctViewBtnText} numberOfLines={1}>View CBCT Report</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => { const u = [...cbctFiles]; u[idx] = null; setCbctFiles(u); }}
+                      data-testid={`remove-cbct-${idx}`}>
+                      <Ionicons name="close-circle" size={22} color="#E53935" />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.cbctUploadBtn}
+                    onPress={() => pickCbctFileAtIndex(idx)} disabled={cbctUploadingIdx === idx}
+                    data-testid={`upload-cbct-${idx}`}
+                  >
+                    {cbctUploadingIdx === idx ? (
+                      <ActivityIndicator color="#FFF" size="small" />
+                    ) : (
+                      <>
+                        <Ionicons name="cloud-upload" size={18} color="#FFF" />
+                        <Text style={styles.cbctUploadBtnText}>Upload CBCT Report</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )}
+              </View>
+              {isExtra && (
+                <TouchableOpacity onPress={() => removeExtraCbct(idx)} data-testid={`remove-extra-cbct-${idx}`}>
+                  <Ionicons name="remove-circle" size={26} color="#E53935" />
+                </TouchableOpacity>
+              )}
+            </View>
+          );
+        })}
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10 }}
+          onPress={addExtraCbct} data-testid="add-extra-cbct-btn">
+          <Ionicons name="add-circle" size={26} color="#4CAF50" />
+          <Text style={{ color: '#4CAF50', fontWeight: '700', fontSize: 14 }}>Add CBCT Report</Text>
+        </TouchableOpacity>
+        <Text style={{ fontSize: 11, color: '#999', marginTop: 2 }}>
+          Minimum 2 CBCT Reports required. Accepted: PDF, PNG, JPG, HEIC (Max 25MB each)
         </Text>
       </View>
 
