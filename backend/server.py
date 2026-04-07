@@ -363,6 +363,8 @@ class Stage2SurgicalSubmit(BaseModel):
     # Additional data fields
     isq_value: Optional[str] = Field(None, max_length=20)
     healing_abutment_height: Optional[Any] = None  # str or list of str (per implant)
+    # Post-surgical radiograph uploads
+    iopa_files: Optional[List[Dict[str, str]]] = None  # [{filename, original_name, tooth_label}]
     # Notes
     student_notes: Optional[str] = Field(None, max_length=2000)
     supervisor_notes: Optional[str] = Field(None, max_length=2000)
@@ -1348,6 +1350,7 @@ async def serve_upload(filename: str, current_user: dict = Depends(get_current_u
         {"ios_file": filename},
         {"phase2_data.iopa_files.filename": filename},
         {"phase2_data.opg_file.filename": filename},
+        {"phase3_data.iopa_files.filename": filename},
     ]})
     if procedure:
         allowed = False
@@ -3137,6 +3140,7 @@ async def submit_stage2_surgical(
         "checklist_items": data.checklist_items or {},
         "isq_value": data.isq_value,
         "healing_abutment_height": data.healing_abutment_height,
+        "iopa_files": data.iopa_files or [],
     }
     
     # Merge legacy checklist if provided

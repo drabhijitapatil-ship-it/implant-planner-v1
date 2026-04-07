@@ -1131,6 +1131,41 @@ export default function ProcedureDetailScreen() {
               </View>
             )}
 
+            {/* Phase 3 IOPA Radiograph Thumbnails */}
+            {procedure.phase3_data?.iopa_files && procedure.phase3_data.iopa_files.length > 0 && (
+              <View style={{ marginBottom: 16 }} data-testid="phase3-iopa-section">
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#388E3C', marginBottom: 10 }}>IOPA Radiographs</Text>
+                {procedure.phase3_data.iopa_files.map((f: any, idx: number) => {
+                  const baseUrl = api.defaults.baseURL || '';
+                  const fileUrl = `${baseUrl}/uploads/${f.filename}`;
+                  const isImage = f.filename?.match(/\.(png|jpg|jpeg)$/i);
+                  return (
+                    <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 10, backgroundColor: '#E8F5E9', padding: 8, borderRadius: 10 }} data-testid={`p3-iopa-thumb-${idx}`}>
+                      {isImage ? (
+                        <Image source={{ uri: fileUrl }} style={{ width: 60, height: 60, borderRadius: 8, borderWidth: 1, borderColor: '#C8E6C9' }} resizeMode="cover" />
+                      ) : (
+                        <View style={{ width: 60, height: 60, borderRadius: 8, backgroundColor: '#C8E6C9', alignItems: 'center', justifyContent: 'center' }}>
+                          <Ionicons name="document-attach" size={28} color="#2E7D32" />
+                        </View>
+                      )}
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#333' }}>{f.tooth_label || `Implant ${idx + 1}`}</Text>
+                        <Text style={{ fontSize: 11, color: '#888' }} numberOfLines={1}>{f.original_name}</Text>
+                      </View>
+                      <TouchableOpacity
+                        style={{ backgroundColor: '#4CAF50', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                        onPress={() => Linking.openURL(fileUrl).catch(() => Alert.alert('Error', 'Could not open file'))}
+                        data-testid={`p3-view-iopa-detail-${idx}`}
+                      >
+                        <Ionicons name="open-outline" size={14} color="#FFF" />
+                        <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }}>View</Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
             {/* Notes & Remarks */}
             {(procedure.phase3_student_notes || procedure.stage2_surgical_remark) && (
               <View style={{ marginBottom: 8, backgroundColor: '#F1F8E9', borderRadius: 8, padding: 12 }}>

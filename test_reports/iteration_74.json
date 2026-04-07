@@ -1,0 +1,15 @@
+{
+  "iteration": 74,
+  "test_type": "backend_self_test",
+  "total_tests": 5,
+  "passed": 5,
+  "failed": 0,
+  "pass_rate": "100%",
+  "features_tested": [
+    "Phase 3 Stage2SurgicalSubmit model accepts iopa_files field",
+    "POST /api/procedures/{id}/stage2/surgical stores iopa_files in phase3_data",
+    "GET /api/procedures/{id} returns phase3_data.iopa_files correctly",
+    "GET /api/uploads/{filename} finds files via phase3_data.iopa_files.filename query",
+    "Upload via /api/uploads/cbct-temp works for Phase 3 IOPA files"
+  ]
+}
