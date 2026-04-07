@@ -36,6 +36,9 @@ export default function ProcedureDetailScreen() {
   const [rejectionType, setRejectionType] = useState<'permanent' | 'reconsider' | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [approvalComment, setApprovalComment] = useState('');
+  const [authToken, setAuthToken] = useState('');
+
+  useEffect(() => { getToken('access_token').then(t => setAuthToken(t || '')); }, []);
 
   useEffect(() => {
     loadProcedure();
@@ -809,7 +812,7 @@ export default function ProcedureDetailScreen() {
               onPress={async () => {
                 try {
                   const baseUrl = api.defaults.baseURL || '';
-                  const fileUrl = `${baseUrl}/uploads/${procedure.ios_file}`;
+                  const fileUrl = `${baseUrl}/uploads/${procedure.ios_file}?token=${authToken}`;
                   await Linking.openURL(fileUrl);
                 } catch (e) {
                   Alert.alert('Error', 'Could not open file');
@@ -833,7 +836,7 @@ export default function ProcedureDetailScreen() {
             {procedure.cbct_files?.length > 0 ? (
               procedure.cbct_files.map((f: any, idx: number) => {
                 const baseUrl = api.defaults.baseURL || '';
-                const fileUrl = `${baseUrl}/uploads/${f.filename}`;
+                const fileUrl = `${baseUrl}/uploads/${f.filename}?token=${authToken}`;
                 const isImage = f.filename?.match(/\.(png|jpg|jpeg)$/i);
                 return (
                   <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 10, backgroundColor: '#E3F2FD', padding: 8, borderRadius: 10 }} data-testid={`cbct-thumb-${idx}`}>
@@ -865,7 +868,7 @@ export default function ProcedureDetailScreen() {
                 onPress={async () => {
                   try {
                     const baseUrl = api.defaults.baseURL || '';
-                    const fileUrl = `${baseUrl}/uploads/${procedure.cbct_file}`;
+                    const fileUrl = `${baseUrl}/uploads/${procedure.cbct_file}?token=${authToken}`;
                     await Linking.openURL(fileUrl);
                   } catch (e) {
                     Alert.alert('Error', 'Could not open file');
@@ -983,7 +986,7 @@ export default function ProcedureDetailScreen() {
                   </Text>
                   {procedure.phase2_data.iopa_files.map((f: any, idx: number) => {
                     const baseUrl = api.defaults.baseURL || '';
-                    const fileUrl = `${baseUrl}/uploads/${f.filename}`;
+                    const fileUrl = `${baseUrl}/uploads/${f.filename}?token=${authToken}`;
                     const isImage = f.filename?.match(/\.(png|jpg|jpeg)$/i);
                     return (
                       <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 10, backgroundColor: '#E3F2FD', padding: 8, borderRadius: 10 }} data-testid={`iopa-thumb-${idx}`}>
@@ -1018,7 +1021,7 @@ export default function ProcedureDetailScreen() {
                   <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', marginBottom: 10 }}>OPG Radiograph</Text>
                   {(() => {
                     const baseUrl = api.defaults.baseURL || '';
-                    const fileUrl = `${baseUrl}/uploads/${procedure.phase2_data.opg_file.filename}`;
+                    const fileUrl = `${baseUrl}/uploads/${procedure.phase2_data.opg_file.filename}?token=${authToken}`;
                     const isImage = procedure.phase2_data.opg_file.filename?.match(/\.(png|jpg|jpeg)$/i);
                     return (
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#E3F2FD', padding: 10, borderRadius: 10 }} data-testid="opg-thumb">
@@ -1154,7 +1157,7 @@ export default function ProcedureDetailScreen() {
                 <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', marginBottom: 10 }}>IOPA Radiographs</Text>
                 {procedure.phase3_data.iopa_files.map((f: any, idx: number) => {
                   const baseUrl = api.defaults.baseURL || '';
-                  const fileUrl = `${baseUrl}/uploads/${f.filename}`;
+                  const fileUrl = `${baseUrl}/uploads/${f.filename}?token=${authToken}`;
                   const isImage = f.filename?.match(/\.(png|jpg|jpeg)$/i);
                   return (
                     <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 10, backgroundColor: '#E3F2FD', padding: 8, borderRadius: 10 }} data-testid={`p3-iopa-thumb-${idx}`}>
