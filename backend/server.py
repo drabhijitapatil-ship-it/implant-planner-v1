@@ -342,6 +342,9 @@ class Phase2Submit(BaseModel):
     healing_abutment_cuff_height: Optional[Any] = None  # str or list of str (per implant)
     sutures_placed: Optional[bool] = True
     hemostasis_achieved: Optional[bool] = True
+    # Post-surgical radiograph uploads
+    iopa_files: Optional[List[Dict[str, str]]] = None  # [{filename, original_name, tooth_label}]
+    opg_file: Optional[Dict[str, str]] = None  # {filename, original_name} — full arch only
     # Post-operative checklist
     post_op_checklist: Optional[Dict[str, bool]] = None
     # Notes
@@ -1337,7 +1340,12 @@ async def serve_upload(filename: str, current_user: dict = Depends(get_current_u
         raise HTTPException(status_code=404, detail="File not found")
     
     # Only supervisor, implant_incharge, administrator, and the procedure's student can view
-    procedure = await db.procedures.find_one({"$or": [{"cbct_file": filename}, {"ios_file": filename}]})
+    procedure = await db.procedures.find_one({"$or": [
+        {"cbct_file": filename},
+        {"ios_file": filename},
+        {"phase2_data.iopa_files.filename": filename},
+        {"phase2_data.opg_file.filename": filename},
+    ]})
     if procedure:
         allowed = False
         if current_user["role"] in ["administrator", "implant_incharge"]:
@@ -3030,6 +3038,8 @@ async def submit_phase2(
         "healing_abutment_cuff_height": phase2_data.healing_abutment_cuff_height,
         "sutures_placed": phase2_data.sutures_placed,
         "hemostasis_achieved": phase2_data.hemostasis_achieved,
+        "iopa_files": phase2_data.iopa_files or [],
+        "opg_file": phase2_data.opg_file,
         "post_op_checklist": phase2_data.post_op_checklist or {},
     }
     
