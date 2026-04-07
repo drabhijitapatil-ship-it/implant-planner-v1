@@ -147,7 +147,7 @@ export const KERATINIZED_MUCOSA_OPTIONS = ['Present', 'Absent'];
 export const OCCLUSAL_SCHEME_OPTIONS = ['Canine Guided', 'Group Function', 'Mutually Protected'];
 export const PARAFUNCTION_HABIT_OPTIONS = ['Present', 'Absent'];
 export const VERTICAL_DIMENSION_OPTIONS = ['Sufficient', 'Compromised'];
-export const OPPOSING_DENTITION_OPTIONS = ['Natural', 'Absent'];
+export const OPPOSING_DENTITION_OPTIONS = ['Natural', 'Absent', 'Implant Prosthesis'];
 
 // Occlusal Analysis (for full-arch types)
 export const TMJ_OPTIONS = ['Normal', 'Deviation Present'];
