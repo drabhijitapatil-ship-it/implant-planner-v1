@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity,
-  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Switch,
+  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Switch, Image, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as DocumentPicker from 'expo-document-picker';
 import api from '../../../utils/api';
 import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
@@ -27,6 +28,9 @@ export default function Stage2SurgicalSubmissionScreen() {
   const [isqValue, setIsqValue] = useState('');
   const [healingAbutmentHeight, setHealingAbutmentHeight] = useState<string[]>(['']);
   const [implantPositions, setImplantPositions] = useState<string[]>([]);
+  // IOPA uploads
+  const [iopaFiles, setIopaFiles] = useState<(null | { filename: string; original_name: string; tooth_label: string })[]>([]);
+  const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
   // Notes
   const [studentNotes, setStudentNotes] = useState('');
 
@@ -39,13 +43,50 @@ export default function Stage2SurgicalSubmissionScreen() {
       const positions = (res.data.implant_plans || []).map((p: any) => p.position);
       setImplantPositions(positions);
       setHealingAbutmentHeight(new Array(count).fill(''));
+      setIopaFiles(new Array(count).fill(null));
     } catch {
       setHealingAbutmentHeight(['']);
+      setIopaFiles([null]);
     }
   };
 
   const toggleChecklist = (itemId: string) => {
     setChecklistState(prev => ({ ...prev, [itemId]: !prev[itemId] }));
+  };
+
+  // ── IOPA Upload helpers ──
+  const getIopaLabel = (idx: number): string => {
+    return implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : `Implant ${idx + 1}`;
+  };
+
+  const pickIopaFile = async (idx: number) => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['image/png', 'image/jpeg', 'image/heic', 'image/heif', 'application/pdf'],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      setUploadingIdx(idx);
+      const formPayload = new FormData();
+      formPayload.append('file', {
+        uri: asset.uri, name: asset.name || 'iopa.jpg', type: asset.mimeType || 'image/jpeg',
+      } as any);
+      const res = await api.post('/uploads/cbct-temp', formPayload, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const updated = [...iopaFiles];
+      updated[idx] = {
+        filename: res.data.cbct_file,
+        original_name: res.data.cbct_original_name,
+        tooth_label: getIopaLabel(idx),
+      };
+      setIopaFiles(updated);
+    } catch (err: any) {
+      Alert.alert('Upload Failed', err.response?.data?.detail || 'Could not upload IOPA');
+    } finally {
+      setUploadingIdx(null);
+    }
   };
 
   const handleSubmit = async () => {
@@ -56,12 +97,24 @@ export default function Stage2SurgicalSubmissionScreen() {
       return;
     }
 
+    // Validate mandatory IOPA uploads
+    const missingIopa = iopaFiles.filter(f => f === null);
+    if (missingIopa.length > 0) {
+      Alert.alert('Missing IOPA', `Please upload all ${iopaFiles.length} IOPA Radiographs before submitting.`);
+      return;
+    }
+
     setLoading(true);
     try {
       await api.post(`/procedures/${id}/stage2/surgical`, {
         checklist_items: checklistState,
         isq_value: isqValue || null,
         healing_abutment_height: healingAbutmentHeight || null,
+        iopa_files: iopaFiles.filter(f => f !== null).map(f => ({
+          filename: f!.filename,
+          original_name: f!.original_name,
+          tooth_label: f!.tooth_label,
+        })),
         student_notes: studentNotes || null,
       });
       Alert.alert('Success',
@@ -106,6 +159,62 @@ export default function Stage2SurgicalSubmissionScreen() {
                   />
                   <Text style={s.checkLabel}>{item.label}</Text>
                 </TouchableOpacity>
+
+                {/* Upload IOPA Radiographs below Radiograph Made */}
+                {item.id === 'radiograph_made' && checklistState[item.id] && (
+                  <View style={{ paddingLeft: 0, paddingVertical: 8, backgroundColor: '#FFF8E1', borderRadius: 8, marginBottom: 4, padding: 12, borderWidth: 1, borderColor: '#FFE082' }}>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#E65100', marginBottom: 10 }}>Upload IOPA Radiograph</Text>
+                    {iopaFiles.map((file, idx) => {
+                      const label = implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : `Implant ${idx + 1}`;
+                      const baseUrl = api.defaults.baseURL || '';
+                      return (
+                        <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }} data-testid={`p3-iopa-slot-${idx}`}>
+                          <View style={{ flex: 1, backgroundColor: '#FFF3E0', padding: 8, borderRadius: 8 }}>
+                            <Text style={{ fontSize: 13, fontWeight: '600', color: '#BF360C' }}>{label}</Text>
+                          </View>
+                          <View style={{ flex: 1.5, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            {file ? (
+                              <>
+                                {file.filename.match(/\.(png|jpg|jpeg)$/i) ? (
+                                  <Image source={{ uri: `${baseUrl}/uploads/${file.filename}` }}
+                                    style={{ width: 36, height: 36, borderRadius: 6 }} resizeMode="cover" />
+                                ) : (
+                                  <Ionicons name="document-attach" size={22} color="#4CAF50" />
+                                )}
+                                <TouchableOpacity
+                                  style={{ backgroundColor: '#4CAF50', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 }}
+                                  onPress={() => Linking.openURL(`${baseUrl}/uploads/${file.filename}`).catch(() => Alert.alert('Error', 'Could not open file'))}
+                                  data-testid={`p3-view-iopa-${idx}`}
+                                >
+                                  <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }} numberOfLines={1}>View</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => { const u = [...iopaFiles]; u[idx] = null; setIopaFiles(u); }}
+                                  data-testid={`p3-remove-iopa-${idx}`}>
+                                  <Ionicons name="close-circle" size={22} color="#E53935" />
+                                </TouchableOpacity>
+                              </>
+                            ) : (
+                              <TouchableOpacity
+                                style={{ backgroundColor: '#1A73E8', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1, justifyContent: 'center' }}
+                                onPress={() => pickIopaFile(idx)} disabled={uploadingIdx === idx}
+                                data-testid={`p3-upload-iopa-${idx}`}
+                              >
+                                {uploadingIdx === idx ? (
+                                  <ActivityIndicator color="#FFF" size="small" />
+                                ) : (
+                                  <>
+                                    <Ionicons name="cloud-upload" size={16} color="#FFF" />
+                                    <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '600' }}>Upload IOPA</Text>
+                                  </>
+                                )}
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
 
                 {/* ISQ Value text input */}
                 {item.id === 'isq_checked' && checklistState[item.id] && (
