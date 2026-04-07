@@ -6,7 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
-import api from '../../../utils/api';
+import api, { getAuthFileUrl, getToken } from '../../../utils/api';
 import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,6 +31,9 @@ export default function Stage2SurgicalSubmissionScreen() {
   // IOPA uploads
   const [iopaFiles, setIopaFiles] = useState<(null | { filename: string; original_name: string; tooth_label: string })[]>([]);
   const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
+  const [authToken, setAuthToken] = useState('');
+
+  useEffect(() => { getToken('access_token').then(t => setAuthToken(t || '')); }, []);
   // Notes
   const [studentNotes, setStudentNotes] = useState('');
 
@@ -178,14 +181,14 @@ export default function Stage2SurgicalSubmissionScreen() {
                             {file ? (
                               <>
                                 {file.filename.match(/\.(png|jpg|jpeg)$/i) ? (
-                                  <Image source={{ uri: `${baseUrl}/uploads/${file.filename}` }}
+                                  <Image source={{ uri: `${baseUrl}/uploads/${file.filename}?token=${authToken}` }}
                                     style={{ width: 36, height: 36, borderRadius: 6 }} resizeMode="cover" />
                                 ) : (
                                   <Ionicons name="document-attach" size={22} color="#4CAF50" />
                                 )}
                                 <TouchableOpacity
                                   style={{ backgroundColor: '#4CAF50', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 }}
-                                  onPress={() => Linking.openURL(`${baseUrl}/uploads/${file.filename}`).catch(() => Alert.alert('Error', 'Could not open file'))}
+                                  onPress={() => Linking.openURL(`${baseUrl}/uploads/${file.filename}?token=${authToken}`).catch(() => Alert.alert('Error', 'Could not open file'))}
                                   data-testid={`p3-view-iopa-${idx}`}
                                 >
                                   <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }} numberOfLines={1}>View</Text>

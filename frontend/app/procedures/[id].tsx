@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import api from '../../utils/api';
+import api, { getAuthFileUrl, getToken } from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { STATUS_COLORS, STATUS_LABELS, CHECKLIST_DATA } from '../../constants/checklist';
 import { format } from 'date-fns';

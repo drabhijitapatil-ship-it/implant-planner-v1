@@ -37,6 +37,13 @@ export async function removeToken(key: string): Promise<void> {
 let _onAuthFailure: (() => void) | null = null;
 export function setOnAuthFailure(cb: () => void) { _onAuthFailure = cb; }
 
+// Build authenticated URL for file viewing (appends token as query param)
+export async function getAuthFileUrl(filename: string): Promise<string> {
+  const baseUrl = api.defaults.baseURL || '';
+  const token = await getToken('access_token');
+  return `${baseUrl}/uploads/${filename}${token ? `?token=${token}` : ''}`;
+}
+
 // Flag to prevent infinite refresh loops
 let isRefreshing = false;
 let refreshSubscribers: ((token: string) => void)[] = [];

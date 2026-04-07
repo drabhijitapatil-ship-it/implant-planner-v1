@@ -7,7 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
-import api from '../../utils/api';
+import api, { getAuthFileUrl, getToken } from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';
 import {
@@ -360,6 +360,9 @@ export default function NewProcedureScreen() {
   const [cbctFiles, setCbctFiles] = useState<(null | { filename: string; original_name: string; content_type: string })[]>([null, null]);
   const [cbctUploadingIdx, setCbctUploadingIdx] = useState<number | null>(null);
   const [extraCbctCount, setExtraCbctCount] = useState(0);
+  const [authToken, setAuthToken] = useState('');
+
+  useEffect(() => { getToken('access_token').then(t => setAuthToken(t || '')); }, []);
 
   useEffect(() => {
     const loadFaculty = async () => {
@@ -883,14 +886,14 @@ export default function NewProcedureScreen() {
                 {file ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     {file.filename.match(/\.(png|jpg|jpeg)$/i) ? (
-                      <Image source={{ uri: `${baseUrl}/uploads/${file.filename}` }}
+                      <Image source={{ uri: `${baseUrl}/uploads/${file.filename}?token=${authToken}`, headers: { Authorization: `Bearer ${authToken}` } }}
                         style={{ width: 36, height: 36, borderRadius: 6 }} resizeMode="cover" />
                     ) : (
                       <Ionicons name="document-attach" size={22} color="#4CAF50" />
                     )}
                     <TouchableOpacity
                       style={styles.cbctViewBtn}
-                      onPress={() => Linking.openURL(`${baseUrl}/uploads/${file.filename}`).catch(() => Alert.alert('Error', 'Could not open file'))}
+                      onPress={() => Linking.openURL(`${baseUrl}/uploads/${file.filename}?token=${authToken}`).catch(() => Alert.alert('Error', 'Could not open file'))}
                       data-testid={`view-cbct-${idx}`}
                     >
                       <Text style={styles.cbctViewBtnText} numberOfLines={1}>View CBCT Report</Text>
