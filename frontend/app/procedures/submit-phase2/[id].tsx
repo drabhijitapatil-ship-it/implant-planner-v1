@@ -198,6 +198,15 @@ export default function Phase2SubmissionScreen() {
     }
     if (!prostheticComponent) { Alert.alert('Missing', 'Please select Prosthetic Component'); return; }
 
+    // Validate mandatory IOPA uploads
+    const allIopaSlots = [...iopaFiles, ...new Array(extraIopaCount).fill(null)];
+    const baseIopaCount = iopaFiles.length;
+    const missingIopa = allIopaSlots.slice(0, baseIopaCount).filter(f => f === null);
+    if (missingIopa.length > 0) {
+      Alert.alert('Missing IOPA', `Please upload all ${baseIopaCount} IOPA Radiographs before submitting.`);
+      return;
+    }
+
     setLoading(true);
     try {
       await api.post(`/procedures/${id}/submit-phase2`, {

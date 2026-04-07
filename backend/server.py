@@ -241,6 +241,8 @@ class ProcedureCreate(BaseModel):
     cbct_file: Optional[str] = Field("", max_length=200)
     cbct_original_name: Optional[str] = Field("", max_length=300)
     cbct_content_type: Optional[str] = Field("", max_length=100)
+    # Multiple CBCT files (new format)
+    cbct_files: Optional[List[Dict[str, str]]] = None  # [{filename, original_name, content_type}]
 
     @field_validator('patient_name')
     @classmethod
@@ -1342,6 +1344,7 @@ async def serve_upload(filename: str, current_user: dict = Depends(get_current_u
     # Only supervisor, implant_incharge, administrator, and the procedure's student can view
     procedure = await db.procedures.find_one({"$or": [
         {"cbct_file": filename},
+        {"cbct_files.filename": filename},
         {"ios_file": filename},
         {"phase2_data.iopa_files.filename": filename},
         {"phase2_data.opg_file.filename": filename},

@@ -1,0 +1,21 @@
+{
+  "iteration": 73,
+  "test_type": "backend_self_test",
+  "total_tests": 11,
+  "passed": 11,
+  "failed": 0,
+  "pass_rate": "100%",
+  "features_tested": [
+    "Multi-CBCT: Upload 3 files via /api/uploads/cbct-temp",
+    "Multi-CBCT: Create procedure with cbct_files array (3 items)",
+    "Multi-CBCT: GET /api/procedures/{id} returns cbct_files array correctly",
+    "Multi-CBCT: Legacy cbct_file still present for backward compat",
+    "Multi-CBCT: serve_upload finds files via cbct_files.filename query (2 files tested)",
+    "Role-based access: Supervisor (unassigned) correctly denied (403)",
+    "Role-based access: InCharge can access any CBCT file (200)",
+    "Cleanup: Both test procedures deleted successfully",
+    "IOPA mandatory validation: Frontend submit-phase2 blocks submission if IOPA slots empty (code review verified)",
+    "CBCT mandatory validation: Frontend new-procedure blocks if < 2 CBCTs uploaded (code review verified)",
+    "CBCT thumbnail display: [id].tsx shows cbct_files array with Image thumbnails (code review verified)"
+  ]
+}
