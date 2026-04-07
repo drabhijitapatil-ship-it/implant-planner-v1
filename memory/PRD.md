@@ -33,6 +33,7 @@ A comprehensive mobile application for managing dental implant procedures at the
 21. **Phase 3 Per-Implant ISQ Values**: Below "ISQ Value checked" checklist item. Multiple input fields = number of implants, with tooth numbering. Green theme (#E8F5E9). Case detail shows per-implant values with tooth labels. Backward compatible with legacy single-value format.
 22. **Colour Theme Standardization**: IOPA/CBCT/OPG uploads use Blue theme (#E3F2FD/#1565C0) across all phases. Torque values keep Orange/Amber theme (#FFF8E1/#E65100). Applied consistently in Phase 1 (CBCT), Phase 2 (IOPA/OPG), Phase 3 (IOPA) forms and case detail thumbnails.
 23. **Universal Upload Visibility**: All IOPA, OPG, and CBCT thumbnails visible to all roles (Student, Supervisor, In-Charge) at all times on case detail page. No role-based hiding of uploaded radiographs.
+24. **Authenticated File Serving for React Native**: Backend `serve_upload` accepts JWT via `?token=` query param (React Native's `<Image>` and `Linking.openURL` don't send Axios interceptor headers). All frontend forms and case detail pages append `?token=${authToken}` to every upload URL. Applied across: `[id].tsx` (CBCT, Phase 2 IOPA/OPG, Phase 3 IOPA, IOS files), `new-procedure.tsx`, `submit-phase2/[id].tsx`, `submit-stage2-surgical/[id].tsx`.
 
 ## Key Credentials
 - Admin/In-Charge: `Abhijit.patil@dental.edu` / `Admin@123`
@@ -167,6 +168,14 @@ A comprehensive mobile application for managing dental implant procedures at the
   - Frontend: 2 mandatory CBCT tabs by default, green "+" to add more, red "-" on extras (3rd+)
   - Validation: blocks form if fewer than 2 CBCTs uploaded
   - Case detail: CBCT/IOPA/OPG thumbnail previews with Image component
+
+### June 5, 2026 — Session 11 (Fork)
+- **Image Auth Token Fix (P0 Bug)** (13/13 backend tests passed):
+  - Completed frontend propagation of JWT token to all file URLs in `[id].tsx` (case detail page)
+  - Added `authToken` state + `useEffect` fetch in `[id].tsx`
+  - Appended `?token=${authToken}` to 6 file URL constructions: IOS file, CBCT array, CBCT legacy, Phase 2 IOPA, Phase 2 OPG, Phase 3 IOPA
+  - All 4 frontend files (case detail, new-procedure, submit-phase2, submit-stage2-surgical) now consistently pass JWT tokens for file access
+  - Backend `serve_upload` endpoint verified: 200 with valid token, 401 without
 
 ### Earlier Sessions
 - Session 9: Narrow Ridge, High Constraint engines, scheduling constraints, logo replacement
