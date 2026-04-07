@@ -28,6 +28,7 @@ A comprehensive mobile application for managing dental implant procedures at the
 16. **Narrow Ridge Clinical Decision Engine**: 4-level ridge width classification with safety rules, prosthetic warnings, bone density protocols, and automatic blocking for severe narrow ridges (<3mm)
 17. **Scheduling Constraints**: Only 1 patient per time slot per day (10 AM / 2 PM). Booked slots shown as grayed/disabled with patient name. Dashboard calendar inline cards show "Scheduled by" info. Backend returns 409 with descriptive message on duplicate slot attempt.
 18. **CBCT Report Upload**: Mandatory PDF/image upload in Phase 1 Case Details (between Loading Type and Checklist). Blue upload button → green "View CBCT Report" button. File stored on server, accessible via role-based endpoint. Visible to Supervisors and In-Charges on case detail page.
+19. **Post Surgical Radiograph Upload (Phase 2)**: Between Suturing and Post-Op Checklist. Section header: "Post Surgical Radiograph" (single implant) / "Post Surgical Radiographs" (multiple). IOPA upload tabs per implant with tooth numbering. All on 4→4 tabs, All on 6→6, All on X→5+expandable. Green "+"/red "-" for extras. OPG upload for Full Arch cases. Thumbnail preview in case detail page. Follows Torque/Healing Abutment design pattern.
 
 ## Key Credentials
 - Admin/In-Charge: `Abhijit.patil@dental.edu` / `Admin@123`
@@ -151,6 +152,16 @@ A comprehensive mobile application for managing dental implant procedures at the
   - CBCT upload is mandatory (form cannot proceed without it)
   - Frontend `[id].tsx`: Green "View CBCT Report" button visible to all roles when CBCT exists on procedure
   - Role-based file access: student owner, assigned supervisor, incharge/admin can view
+- **Post Surgical Radiograph Upload - IOPA/OPG (Phase 2)** (18/18 backend tests passed):
+  - Backend: `Phase2Submit` model extended with `iopa_files` (list) and `opg_file` (dict)
+  - Backend: `submit-phase2` stores IOPA/OPG references in `phase2_data`
+  - Backend: `serve_upload` finds files in `phase2_data.iopa_files` and `phase2_data.opg_file` for access control
+  - Frontend `submit-phase2/[id].tsx`: IOPA upload section between Suturing and Post-Op Checklist
+  - Section header: "Post Surgical Radiograph" (single) / "Post Surgical Radiographs" (plural)
+  - IOPA count: All on 4→4, All on 6→6, All on X→5+expandable with +/- buttons
+  - OPG upload shown for Full Arch cases only
+  - Frontend `[id].tsx`: IOPA/OPG thumbnail previews with Image component in case detail
+  - Added "Implant Prosthesis" as 3rd option in Opposing Dentition
 
 ### Earlier Sessions
 - Session 9: Narrow Ridge, High Constraint engines, scheduling constraints, logo replacement
