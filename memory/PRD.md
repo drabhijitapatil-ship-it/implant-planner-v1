@@ -187,6 +187,11 @@ A comprehensive mobile application for managing dental implant procedures at the
   - Special Ø5.5 case: mandatory CSK Ø5.3 for D1/D2
   - RPM differentiation: Lance/Cylindrical 1200-1500, Taper 800-1000, CSK 600-800, Implant 20-30
   - Target torque: 35-45 Ncm
+- **Edentulous Site Fields Replacement** (8/8 tests passed):
+  - Replaced multi-select dropdown (Sufficient/Insufficient Occlusocervical/Mesiodistal) with two numeric text inputs
+  - "Occlusocervical Height (mm)" and "Mesiodistal Space (mm)" under "Edentulous Site" heading
+  - Visible to all roles in case detail page, exported to PDF under Clinical Examination section
+  - Fixed pre-existing PDF crash when checklist is null (NoneType bug)
 
 ### Earlier Sessions
 - Session 9: Narrow Ridge, High Constraint engines, scheduling constraints, logo replacement
