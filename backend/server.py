@@ -244,6 +244,8 @@ class ProcedureCreate(BaseModel):
     # Clinical Examination — Intraoral
     edentulous_site: Optional[str] = Field("", max_length=200)
     edentulous_sites: Optional[List[str]] = None
+    occlusocervical_height: Optional[str] = Field("", max_length=10)
+    mesiodistal_space: Optional[str] = Field("", max_length=10)
     arch_condition: Optional[str] = Field("", max_length=50)
     ridge_contour: Optional[str] = Field("", max_length=50)
     soft_tissue_thickness: Optional[str] = Field("", max_length=20)
@@ -313,6 +315,8 @@ class ProcedureUpdate(BaseModel):
     remark: Optional[str] = Field(None, max_length=1000)
     status: Optional[str] = Field(None, max_length=50)
     edentulous_sites: Optional[List[str]] = None
+    occlusocervical_height: Optional[str] = Field(None, max_length=10)
+    mesiodistal_space: Optional[str] = Field(None, max_length=10)
     arch_condition: Optional[str] = Field(None, max_length=50)
 
     @field_validator('patient_name')
@@ -1988,11 +1992,18 @@ async def generate_case_report(
 
     # ── Clinical Examination ─────────────────────────────────
     has_clinical = any(procedure.get(k) for k in [
+        "occlusocervical_height", "mesiodistal_space",
         "edentulous_sites", "edentulous_site", "arch_condition",
         "ridge_contour", "soft_tissue_thickness", "keratinized_mucosa",
     ])
     if has_clinical:
         add_section_title("Clinical Examination — Intraoral", 30, 136, 229)
+        if procedure.get("occlusocervical_height") or procedure.get("mesiodistal_space"):
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.cell(0, 6, "Edentulous Site", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("Helvetica", "", 10)
+            add_field("Occlusocervical Height", f"{procedure.get('occlusocervical_height', '')} mm" if procedure.get("occlusocervical_height") else None)
+            add_field("Mesiodistal Space", f"{procedure.get('mesiodistal_space', '')} mm" if procedure.get("mesiodistal_space") else None)
         sites = procedure.get("edentulous_sites", [])
         if sites:
             add_field("Edentulous Sites", ", ".join(str(s) for s in sites))
@@ -2148,7 +2159,7 @@ async def generate_case_report(
                 pdf.cell(0, 6, safe(f"  {marker} {k.replace('_', ' ').title()}"), ln=True)
             pdf.ln(3)
     else:
-        checklist_s = procedure.get("checklist", {}).get("surgical")
+        checklist_s = (procedure.get("checklist") or {}).get("surgical")
         if checklist_s:
             add_checklist_section("Surgical Checklist", checklist_s)
         torque = procedure.get("torque_values", [])
@@ -2199,7 +2210,7 @@ async def generate_case_report(
         if p3.get("healing_abutment_height"):
             add_field("Healing Abutment Height", f"{p3['healing_abutment_height']} mm")
     else:
-        checklist_ss = procedure.get("checklist", {}).get("second_stage")
+        checklist_ss = (procedure.get("checklist") or {}).get("second_stage")
         if checklist_ss:
             add_checklist_section("Second Stage Checklist", checklist_ss)
     if procedure.get("stage2_surgical_remark") or procedure.get("phase3_student_notes"):
@@ -2235,7 +2246,7 @@ async def generate_case_report(
             add_field("Components Available", "Yes" if p4s1["components_available"] else "No")
         pdf.ln(3)
     else:
-        checklist_sp = procedure.get("checklist", {}).get("prosthetic_phase")
+        checklist_sp = (procedure.get("checklist") or {}).get("prosthetic_phase")
         if checklist_sp:
             add_checklist_section("Prosthetic Checklist", checklist_sp)
     if procedure.get("final_prosthetic_plan"):
