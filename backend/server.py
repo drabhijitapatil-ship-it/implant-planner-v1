@@ -6132,6 +6132,92 @@ DRILLING_PROTOCOLS["Zimmer|TSX"] = {
 }
 
 
+# ── Refirm R Series Drilling Protocol ──────────────────────────────────────
+DRILLING_PROTOCOLS["Refirm|R Series"] = {
+    "system_name": "Refirm R Series",
+    "protocol_family": "refirm",
+    "lengths": [7.5, 8.5, 10, 11.5, 13, 15],
+    "all_drills": [2.0, 2.5, 2.9, 3.4, 3.9, 4.4, 4.9],
+    "csk_map": {3.2: 3.2, 3.5: 3.2, 4.0: 3.7, 4.5: 4.2, 5.0: 4.7, 5.5: 5.3},
+}
+
+
+def _generate_refirm_protocol(proto, implant_diameter, implant_length, bone):
+    """Generate drilling protocol for Refirm R Series."""
+    steps = []
+    step_num = 1
+    depth_str = str(implant_length)
+    all_drills = proto["all_drills"]
+    csk_map = proto["csk_map"]
+    d = implant_diameter
+    is_55 = abs(d - 5.5) < 0.01
+
+    # Build the full drill sequence for this diameter (all drills < diameter)
+    full_seq = [dr for dr in all_drills if dr < d]
+
+    def add(drill_type, diameter, depth, rpm, irrigation, note=""):
+        nonlocal step_num
+        entry = {"step": step_num, "drill_type": drill_type, "code": "—",
+                 "diameter": diameter, "depth": depth, "rpm": rpm, "irrigation": irrigation}
+        if note:
+            entry["note"] = note
+        steps.append(entry)
+        step_num += 1
+
+    def rpm_for(dr):
+        return "1200-1500" if dr <= 2.5 else "800-1000"
+
+    if is_55:
+        # --- Ø5.5 SPECIAL CASE ---
+        if bone == "D1":
+            for dr in full_seq:
+                tp = "Lance Drill" if dr == 2.0 else ("Cylindrical Drill" if dr == 2.5 else "Taper Drill")
+                add(tp, dr, depth_str, rpm_for(dr), True)
+            add("Countersink (Crestal)", csk_map[5.5], "4-5 mm (Crestal Only)", "600-800", True,
+                "MANDATORY — cortical expansion only")
+        elif bone == "D2":
+            for dr in full_seq:
+                tp = "Lance Drill" if dr == 2.0 else ("Cylindrical Drill" if dr == 2.5 else "Taper Drill")
+                add(tp, dr, depth_str, rpm_for(dr), True)
+            add("Countersink (Crestal)", csk_map[5.5], "4-5 mm (Crestal Only)", "600-800", True,
+                "MANDATORY — cortical expansion only")
+        elif bone == "D3":
+            for dr in full_seq:
+                tp = "Lance Drill" if dr == 2.0 else ("Cylindrical Drill" if dr == 2.5 else "Taper Drill")
+                add(tp, dr, depth_str, rpm_for(dr), True)
+        elif bone == "D4":
+            for dr in full_seq[:-1]:
+                tp = "Lance Drill" if dr == 2.0 else ("Cylindrical Drill" if dr == 2.5 else "Taper Drill")
+                add(tp, dr, depth_str, rpm_for(dr), True)
+    else:
+        # --- Standard diameters (Ø3.2 – Ø5.0) ---
+        if bone == "D1":
+            for dr in full_seq:
+                tp = "Lance Drill" if dr == 2.0 else ("Cylindrical Drill" if dr == 2.5 else "Taper Drill")
+                add(tp, dr, depth_str, rpm_for(dr), True)
+        elif bone == "D2":
+            for dr in full_seq[:-1]:
+                tp = "Lance Drill" if dr == 2.0 else ("Cylindrical Drill" if dr == 2.5 else "Taper Drill")
+                add(tp, dr, depth_str, rpm_for(dr), True)
+            add("Countersink (Crestal)", csk_map.get(d, d - 0.3), "4-5 mm (Crestal Only)", "600-800", True,
+                "Cortical expansion only — replaces final taper drill")
+        elif bone == "D3":
+            for dr in full_seq[:-1]:
+                tp = "Lance Drill" if dr == 2.0 else ("Cylindrical Drill" if dr == 2.5 else "Taper Drill")
+                add(tp, dr, depth_str, rpm_for(dr), True)
+        elif bone == "D4":
+            undersize_seq = full_seq[:-2] if len(full_seq) > 2 else full_seq[:1]
+            for dr in undersize_seq:
+                tp = "Lance Drill" if dr == 2.0 else ("Cylindrical Drill" if dr == 2.5 else "Taper Drill")
+                add(tp, dr, depth_str, rpm_for(dr), True)
+
+    # Always end with Implant Placement
+    add("Implant Placement", d, depth_str, "20-30", False,
+        f"Refirm R Series Ø{d}mm × {implant_length}mm — Target torque: 35-45 Ncm")
+
+    return steps
+
+
 def _find_drill(drills, diameter):
     for d in drills:
         if d["diameter"] == diameter:
@@ -6460,6 +6546,8 @@ async def generate_drilling_protocol(
         steps = _generate_osstem_protocol(proto, diameter, length, bone)
     elif proto.get("protocol_family") == "tsx":
         steps = _generate_tsx_protocol(proto, diameter, length, bone, kit="gold")
+    elif proto.get("protocol_family") == "refirm":
+        steps = _generate_refirm_protocol(proto, diameter, length, bone)
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
@@ -6500,10 +6588,13 @@ async def generate_drilling_protocol(
             protocol_type = f"Hard Bone + Cortical Protocol ({os_label})" if bone == "D1" else (f"Under-Preparation Protocol ({os_label})" if bone in ("D3", "D4") else f"Standard Protocol ({os_label})")
     elif family == "tsx":
         protocol_type = f"Dense Bone Protocol (ZimVie TSX)" if bone in ("D1", "D2") else f"Soft Bone Protocol (ZimVie TSX)"
+    elif family == "refirm":
+        bone_labels = {"D1": "Dense Bone (Full Sequence)", "D2": "Moderately Dense (Countersink)", "D3": "Soft Bone (Under-Preparation)", "D4": "Very Soft Bone (Undersized)"}
+        protocol_type = f"{bone_labels.get(bone, 'Standard')} Protocol (Refirm R Series)"
     else:
         protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
 
-    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else ("35-50 Ncm" if family == "mis_lance" else ("25-45 Ncm" if family in ("cowellmedi", "bredent_sky") else ("~40 Ncm" if family == "osstem" else ("≤90 Ncm" if family == "tsx" else ("35-45 Ncm" if family in ("conical_rbt", "alpha_bio_spi") else "35-45 Ncm"))))))
+    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else ("35-50 Ncm" if family == "mis_lance" else ("25-45 Ncm" if family in ("cowellmedi", "bredent_sky") else ("~40 Ncm" if family == "osstem" else ("≤90 Ncm" if family == "tsx" else ("35-45 Ncm" if family in ("conical_rbt", "alpha_bio_spi", "refirm") else "35-45 Ncm"))))))
 
     # Add Ankylos series info to response
     ankylos_info = {}
@@ -6608,6 +6699,8 @@ async def export_drilling_pdf(
         steps = _generate_osstem_protocol(proto, diameter, length, bone)
     elif proto.get("protocol_family") == "tsx":
         steps = _generate_tsx_protocol(proto, diameter, length, bone, kit="gold")
+    elif proto.get("protocol_family") == "refirm":
+        steps = _generate_refirm_protocol(proto, diameter, length, bone)
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
