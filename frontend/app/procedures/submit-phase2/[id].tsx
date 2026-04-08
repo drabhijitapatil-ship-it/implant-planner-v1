@@ -5,8 +5,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import * as DocumentPicker from 'expo-document-picker';
 import api, { getAuthFileUrl, getToken } from '../../../utils/api';
+import { showUploadPicker } from '../../../utils/uploadPicker';
 import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
 import { Ionicons } from '@expo/vector-icons';
@@ -119,16 +119,12 @@ export default function Phase2SubmissionScreen() {
 
   const pickIopaFile = async (idx: number) => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['image/png', 'image/jpeg', 'image/heic', 'image/heif', 'application/pdf'],
-        copyToCacheDirectory: true,
-      });
-      if (result.canceled || !result.assets?.length) return;
-      const asset = result.assets[0];
+      const picked = await showUploadPicker(['image/png', 'image/jpeg', 'image/heic', 'image/heif', 'application/pdf']);
+      if (!picked) return;
       setUploadingIdx(idx);
       const formPayload = new FormData();
       formPayload.append('file', {
-        uri: asset.uri, name: asset.name || 'iopa.jpg', type: asset.mimeType || 'image/jpeg',
+        uri: picked.uri, name: picked.name || 'iopa.jpg', type: picked.type || 'image/jpeg',
       } as any);
       const res = await api.post('/uploads/cbct-temp', formPayload, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -151,16 +147,12 @@ export default function Phase2SubmissionScreen() {
 
   const pickOpgFile = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['image/png', 'image/jpeg', 'image/heic', 'image/heif', 'application/pdf'],
-        copyToCacheDirectory: true,
-      });
-      if (result.canceled || !result.assets?.length) return;
-      const asset = result.assets[0];
+      const picked = await showUploadPicker(['image/png', 'image/jpeg', 'image/heic', 'image/heif', 'application/pdf']);
+      if (!picked) return;
       setOpgUploading(true);
       const formPayload = new FormData();
       formPayload.append('file', {
-        uri: asset.uri, name: asset.name || 'opg.jpg', type: asset.mimeType || 'image/jpeg',
+        uri: picked.uri, name: picked.name || 'opg.jpg', type: picked.type || 'image/jpeg',
       } as any);
       const res = await api.post('/uploads/cbct-temp', formPayload, {
         headers: { 'Content-Type': 'multipart/form-data' },
