@@ -18,7 +18,6 @@ import {
   NON_FULL_ARCH_TYPES,
   FULL_ARCH_GROUP,
   CLINICAL_EXAM_GROUP,
-  EDENTULOUS_SITE_OPTIONS,
   ARCH_CONDITION_OPTIONS,
   RIDGE_CONTOUR_OPTIONS,
   SOFT_TISSUE_OPTIONS,
@@ -254,7 +253,8 @@ export default function NewProcedureScreen() {
     prosthetic_plan_other: '',
     bone_graft_specifications: '',
     // Clinical Examination
-    edentulous_sites: [] as string[],
+    occlusocervical_height: '',
+    mesiodistal_space: '',
     arch_condition: '',
     ridge_contour: '',
     soft_tissue_thickness: '',
@@ -304,7 +304,8 @@ export default function NewProcedureScreen() {
           receipt_number: '', amount_paid: '', procedure_date: '', procedure_time: '',
           implant_procedure_type: '', loading_type: [] as string[],
           prosthetic_plan: '', prosthetic_plan_other: '', bone_graft_specifications: '',
-          edentulous_sites: [] as string[], arch_condition: '', ridge_contour: '',
+          edentulous_sites: [] as string[], occlusocervical_height: '', mesiodistal_space: '',
+          arch_condition: '', ridge_contour: '',
           soft_tissue_thickness: '', keratinized_mucosa: '', occlusal_scheme: '',
           parafunction_habit: '', vertical_dimension: '', opposing_dentition: '',
           vertical_dimension_mm: '', tmj: '', smile_line: '', gingival_biotype: '',
@@ -705,8 +706,31 @@ export default function NewProcedureScreen() {
           {isClinicalExamGroup && (
             <>
               <Text style={styles.subSectionTitle}>Intraoral Examination</Text>
-              <MultiSelectDropdown label="Edentulous Site" values={formData.edentulous_sites}
-                options={EDENTULOUS_SITE_OPTIONS} onChange={v => updateForm('edentulous_sites', v)} />
+              <Text style={[styles.subSectionTitle, { fontSize: 14, color: '#1565C0', marginTop: 4 }]}>Edentulous Site</Text>
+              <View style={{ marginBottom: 8 }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#333', marginBottom: 4 }}>Occlusocervical Height (mm) *</Text>
+                <TextInput
+                  style={[styles.input, { borderColor: '#1565C0' }]}
+                  placeholder="e.g. 12"
+                  keyboardType="decimal-pad"
+                  maxLength={5}
+                  value={formData.occlusocervical_height}
+                  onChangeText={v => updateForm('occlusocervical_height', v)}
+                  data-testid="occlusocervical-height-input"
+                />
+              </View>
+              <View style={{ marginBottom: 8 }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#333', marginBottom: 4 }}>Mesiodistal Space (mm) *</Text>
+                <TextInput
+                  style={[styles.input, { borderColor: '#1565C0' }]}
+                  placeholder="e.g. 15"
+                  keyboardType="decimal-pad"
+                  maxLength={5}
+                  value={formData.mesiodistal_space}
+                  onChangeText={v => updateForm('mesiodistal_space', v)}
+                  data-testid="mesiodistal-space-input"
+                />
+              </View>
               <Dropdown label="Ridge Contour" value={formData.ridge_contour}
                 options={RIDGE_CONTOUR_OPTIONS} onChange={v => updateForm('ridge_contour', v)} />
               <Dropdown label="Soft Tissue Thickness" value={formData.soft_tissue_thickness}

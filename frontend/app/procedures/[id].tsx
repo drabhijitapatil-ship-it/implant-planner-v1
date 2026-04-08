@@ -626,12 +626,23 @@ export default function ProcedureDetailScreen() {
         )}
 
         {/* Clinical Examination */}
-        {(procedure.edentulous_sites?.length > 0 || procedure.edentulous_site || procedure.arch_condition || procedure.ridge_contour || procedure.soft_tissue_thickness || procedure.keratinized_mucosa) && (
+        {(procedure.occlusocervical_height || procedure.mesiodistal_space || procedure.edentulous_sites?.length > 0 || procedure.edentulous_site || procedure.arch_condition || procedure.ridge_contour || procedure.soft_tissue_thickness || procedure.keratinized_mucosa) && (
           <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#1E88E5' }]} data-testid="clinical-examination-section">
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <Ionicons name="search" size={20} color="#1E88E5" />
               <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#1565C0' }]}>Clinical Examination</Text>
             </View>
+            {(procedure.occlusocervical_height || procedure.mesiodistal_space) && (
+              <View style={{ marginBottom: 6 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', marginBottom: 4 }}>Edentulous Site</Text>
+                {procedure.occlusocervical_height && (
+                  <InfoRow icon="resize" label="Occlusocervical Height" value={`${procedure.occlusocervical_height} mm`} />
+                )}
+                {procedure.mesiodistal_space && (
+                  <InfoRow icon="resize" label="Mesiodistal Space" value={`${procedure.mesiodistal_space} mm`} />
+                )}
+              </View>
+            )}
             {procedure.edentulous_sites?.length > 0 && (
               <InfoRow icon="grid" label="Edentulous Sites" value={procedure.edentulous_sites.join(', ')} />
             )}
