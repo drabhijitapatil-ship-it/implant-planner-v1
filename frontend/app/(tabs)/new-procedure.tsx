@@ -6,8 +6,8 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import * as DocumentPicker from 'expo-document-picker';
 import api, { getAuthFileUrl, getToken } from '../../utils/api';
+import { showUploadPicker } from '../../utils/uploadPicker';
 import { useAuth } from '../../contexts/AuthContext';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';
 import {
@@ -422,18 +422,14 @@ export default function NewProcedureScreen() {
 
   const pickCbctFileAtIndex = async (idx: number) => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'image/png', 'image/jpeg', 'image/heic', 'image/heif'],
-        copyToCacheDirectory: true,
-      });
-      if (result.canceled || !result.assets?.length) return;
-      const asset = result.assets[0];
+      const picked = await showUploadPicker(['application/pdf', 'image/png', 'image/jpeg', 'image/heic', 'image/heif']);
+      if (!picked) return;
       setCbctUploadingIdx(idx);
       const formPayload = new FormData();
       formPayload.append('file', {
-        uri: asset.uri,
-        name: asset.name || 'cbct_report.pdf',
-        type: asset.mimeType || 'application/pdf',
+        uri: picked.uri,
+        name: picked.name || 'cbct_report.pdf',
+        type: picked.type || 'application/pdf',
       } as any);
       const res = await api.post('/uploads/cbct-temp', formPayload, {
         headers: { 'Content-Type': 'multipart/form-data' },

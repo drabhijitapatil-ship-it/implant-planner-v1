@@ -34,6 +34,7 @@ A comprehensive mobile application for managing dental implant procedures at the
 22. **Colour Theme Standardization**: IOPA/CBCT/OPG uploads use Blue theme (#E3F2FD/#1565C0) across all phases. Torque values keep Orange/Amber theme (#FFF8E1/#E65100). Applied consistently in Phase 1 (CBCT), Phase 2 (IOPA/OPG), Phase 3 (IOPA) forms and case detail thumbnails.
 23. **Universal Upload Visibility**: All IOPA, OPG, and CBCT thumbnails visible to all roles (Student, Supervisor, In-Charge) at all times on case detail page. No role-based hiding of uploaded radiographs.
 24. **Authenticated File Serving for React Native**: Backend `serve_upload` accepts JWT via `?token=` query param (React Native's `<Image>` and `Linking.openURL` don't send Axios interceptor headers). All frontend forms and case detail pages append `?token=${authToken}` to every upload URL. Applied across: `[id].tsx` (CBCT, Phase 2 IOPA/OPG, Phase 3 IOPA, IOS files), `new-procedure.tsx`, `submit-phase2/[id].tsx`, `submit-stage2-surgical/[id].tsx`.
+25. **Multi-Source Upload Picker**: All CBCT, IOPA, OPG, and checklist file uploads now present an iOS ActionSheet with 3 options: Photo Library (expo-image-picker), Take Photo (camera), Browse Files (expo-document-picker for local/cloud storage). Shared utility in `utils/uploadPicker.ts`. Applied consistently across `new-procedure.tsx`, `submit-phase2/[id].tsx`, `submit-stage2-surgical/[id].tsx`, and `ChecklistForm.tsx`. Camera and photo library permissions configured in `app.json`.
 
 ## Key Credentials
 - Admin/In-Charge: `Abhijit.patil@dental.edu` / `Admin@123`
@@ -176,6 +177,10 @@ A comprehensive mobile application for managing dental implant procedures at the
   - Appended `?token=${authToken}` to 6 file URL constructions: IOS file, CBCT array, CBCT legacy, Phase 2 IOPA, Phase 2 OPG, Phase 3 IOPA
   - All 4 frontend files (case detail, new-procedure, submit-phase2, submit-stage2-surgical) now consistently pass JWT tokens for file access
   - Backend `serve_upload` endpoint verified: 200 with valid token, 401 without
+- **Multi-Source Upload Picker** (code review verified):
+  - Created shared `utils/uploadPicker.ts` with ActionSheet offering 3 options: Photo Library, Take Photo, Browse Files
+  - Replaced all 5 DocumentPicker.getDocumentAsync calls across 4 files with showUploadPicker
+  - Added expo-image-picker plugin to app.json with camera/photo permission strings
 
 ### Earlier Sessions
 - Session 9: Narrow Ridge, High Constraint engines, scheduling constraints, logo replacement

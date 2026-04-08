@@ -9,7 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as DocumentPicker from 'expo-document-picker';
+import { showUploadPicker } from '../utils/uploadPicker';
 import { CHECKLIST_DATA } from '../constants/checklist';
 import api from '../utils/api';
 
@@ -86,22 +86,18 @@ export default function ChecklistForm({ checklist, onChecklistChange, phase, sta
       return;
     }
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'application/vnd.ms-powerpoint',
+      const picked = await showUploadPicker(['application/pdf', 'application/vnd.ms-powerpoint',
           'application/vnd.openxmlformats-officedocument.presentationml.presentation',
           'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          'image/jpeg', 'image/png', 'image/heic'],
-        copyToCacheDirectory: true,
-      });
-      if (result.canceled || !result.assets?.[0]) return;
+          'image/jpeg', 'image/png', 'image/heic']);
+      if (!picked) return;
 
-      const asset = result.assets[0];
       setUploadingItem(itemId);
       const formData = new FormData();
       formData.append('file', {
-        uri: asset.uri,
-        name: asset.name || `file_${itemId}.pdf`,
-        type: asset.mimeType || 'application/octet-stream',
+        uri: picked.uri,
+        name: picked.name || `file_${itemId}.pdf`,
+        type: picked.type || 'application/octet-stream',
       } as any);
 
       await api.post(`/procedures/${procedureId}/checklist-files/${itemId}`, formData, {
