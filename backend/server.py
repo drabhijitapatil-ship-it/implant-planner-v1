@@ -257,6 +257,8 @@ class ProcedureCreate(BaseModel):
     opposing_dentition: Optional[str] = Field("", max_length=20)
     # Occlusal Analysis (full-arch)
     vertical_dimension_mm: Optional[str] = Field("", max_length=20)
+    available_interarch_space: Optional[str] = Field("", max_length=20)
+    opposing_arch: Optional[str] = Field("", max_length=50)
     tmj: Optional[str] = Field("", max_length=30)
     # Aesthetic Risk Assessment
     smile_line: Optional[str] = Field("", max_length=30)
@@ -317,6 +319,8 @@ class ProcedureUpdate(BaseModel):
     edentulous_sites: Optional[List[str]] = None
     occlusocervical_height: Optional[str] = Field(None, max_length=10)
     mesiodistal_space: Optional[str] = Field(None, max_length=10)
+    available_interarch_space: Optional[str] = Field(None, max_length=20)
+    opposing_arch: Optional[str] = Field(None, max_length=50)
     arch_condition: Optional[str] = Field(None, max_length=50)
 
     @field_validator('patient_name')
@@ -2018,10 +2022,15 @@ async def generate_case_report(
     # ── Occlusal Analysis ────────────────────────────────────
     has_occlusal = any(procedure.get(k) for k in [
         "occlusal_scheme", "parafunction_habit", "vertical_dimension",
-        "vertical_dimension_mm", "opposing_dentition", "tmj",
+        "vertical_dimension_mm", "available_interarch_space", "opposing_arch",
+        "opposing_dentition", "tmj",
     ])
     if has_occlusal:
         add_section_title("Occlusal Analysis", 123, 31, 162)
+        if procedure.get("available_interarch_space"):
+            add_field("Available Interarch Space", f"{procedure.get('available_interarch_space')} mm")
+        if procedure.get("opposing_arch"):
+            add_field("Opposing Arch", procedure.get("opposing_arch"))
         add_field("Occlusal Scheme", procedure.get("occlusal_scheme"))
         add_field("Parafunctional Habits", procedure.get("parafunction_habit"))
         add_field("Vertical Dimension", procedure.get("vertical_dimension"))
