@@ -665,12 +665,18 @@ export default function ProcedureDetailScreen() {
         )}
 
         {/* Occlusal Analysis */}
-        {(procedure.occlusal_scheme || procedure.parafunction_habit || procedure.vertical_dimension || procedure.opposing_dentition || procedure.vertical_dimension_mm || procedure.tmj) && (
+        {(procedure.occlusal_scheme || procedure.parafunction_habit || procedure.vertical_dimension || procedure.opposing_dentition || procedure.vertical_dimension_mm || procedure.available_interarch_space || procedure.opposing_arch || procedure.tmj) && (
           <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#7B1FA2' }]} data-testid="occlusal-analysis-section">
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <Ionicons name="fitness" size={20} color="#7B1FA2" />
               <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#6A1B9A' }]}>Occlusal Analysis</Text>
             </View>
+            {procedure.available_interarch_space && (
+              <InfoRow icon="resize" label="Available Interarch Space" value={`${procedure.available_interarch_space} mm`} />
+            )}
+            {procedure.opposing_arch && (
+              <InfoRow icon="people" label="Opposing Arch" value={procedure.opposing_arch} />
+            )}
             {procedure.occlusal_scheme && (
               <InfoRow icon="swap-horizontal" label="Occlusal Scheme" value={procedure.occlusal_scheme} />
             )}

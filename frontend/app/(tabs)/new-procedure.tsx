@@ -266,6 +266,8 @@ export default function NewProcedureScreen() {
     opposing_dentition: '',
     // Occlusal Analysis (full-arch)
     vertical_dimension_mm: '',
+    available_interarch_space: '',
+    opposing_arch: '',
     tmj: '',
     // Aesthetic Risk Assessment
     smile_line: '',
@@ -308,7 +310,7 @@ export default function NewProcedureScreen() {
           arch_condition: '', ridge_contour: '',
           soft_tissue_thickness: '', keratinized_mucosa: '', occlusal_scheme: '',
           parafunction_habit: '', vertical_dimension: '', opposing_dentition: '',
-          vertical_dimension_mm: '', tmj: '', smile_line: '', gingival_biotype: '',
+          vertical_dimension_mm: '', available_interarch_space: '', opposing_arch: '', tmj: '', smile_line: '', gingival_biotype: '',
           medical_assessment: {} as Record<string, string>, medical_risk_level: '',
         });
         setChecklistItems({});
@@ -775,10 +777,13 @@ export default function NewProcedureScreen() {
             <>
               <Text style={styles.subSectionTitle}>Occlusal Analysis</Text>
               <View style={styles.fieldContainer}>
-                <Text style={styles.label}>Vertical Dimension (mm)</Text>
-                <TextInput style={styles.input} value={formData.vertical_dimension_mm} keyboardType="numeric"
-                  onChangeText={v => updateForm('vertical_dimension_mm', v)} placeholder="Enter in mm" />
+                <Text style={styles.label}>Available Interarch Space (mm)</Text>
+                <TextInput style={styles.input} value={formData.available_interarch_space} keyboardType="decimal-pad"
+                  onChangeText={v => updateForm('available_interarch_space', v)} placeholder="Enter in mm" data-testid="interarch-space-input" />
               </View>
+              <Dropdown label="Opposing Arch" value={formData.opposing_arch}
+                options={['Natural Dentition', 'Fixed Implant Prosthesis', 'Removable Prosthesis', 'Edentulous']}
+                onChange={v => updateForm('opposing_arch', v)} />
               <Dropdown label="Temporomandibular Joint" value={formData.tmj}
                 options={TMJ_OPTIONS} onChange={v => updateForm('tmj', v)} />
             </>
@@ -1049,10 +1054,10 @@ const styles = StyleSheet.create({
   stepHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E0E0E0' },
   stepTitle: { fontSize: 18, fontWeight: '700', color: '#1A1A2E', marginLeft: 12 },
   section: { backgroundColor: '#FFF', borderRadius: 12, marginHorizontal: 16, marginBottom: 12, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1A1A2E', marginBottom: 12 },
-  subSectionTitle: { fontSize: 14, fontWeight: '600', color: '#444', marginTop: 12, marginBottom: 8, paddingBottom: 6, borderBottomWidth: 1, borderBottomColor: '#EEE' },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1565C0', marginBottom: 12 },
+  subSectionTitle: { fontSize: 14, fontWeight: '600', color: '#1565C0', marginTop: 12, marginBottom: 8, paddingBottom: 6, borderBottomWidth: 1, borderBottomColor: '#EEE' },
   fieldContainer: { marginBottom: 12 },
-  label: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 6 },
+  label: { fontSize: 13, fontWeight: '600', color: '#1565C0', marginBottom: 6 },
   input: { borderWidth: 1, borderColor: '#DDD', borderRadius: 8, padding: 12, fontSize: 15, backgroundColor: '#FAFAFA' },
   dropdown: { borderWidth: 1, borderColor: '#DDD', borderRadius: 8, padding: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FAFAFA' },
   dropdownText: { fontSize: 15, color: '#333', flex: 1 },
