@@ -37,6 +37,9 @@ export default function ProcedureDetailScreen() {
   const [pdfLoading, setPdfLoading] = useState(false);
   const [approvalComment, setApprovalComment] = useState('');
   const [authToken, setAuthToken] = useState('');
+  const [smartPlannerReport, setSmartPlannerReport] = useState<any>(null);
+  const [smartPlannerLoading, setSmartPlannerLoading] = useState(false);
+  const [showSmartPlanner, setShowSmartPlanner] = useState(false);
 
   useEffect(() => { getToken('access_token').then(t => setAuthToken(t || '')); }, []);
 
@@ -48,11 +51,29 @@ export default function ProcedureDetailScreen() {
     try {
       const response = await api.get(`/procedures/${id}`);
       setProcedure(response.data);
+      // Auto-load existing Smart Planner report if available
+      if (response.data?.smart_planner_report) {
+        setSmartPlannerReport(response.data.smart_planner_report);
+        setShowSmartPlanner(true);
+      }
     } catch (error) {
       console.error('Failed to load procedure:', error);
       Alert.alert('Error', 'Failed to load procedure details');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const generateSmartPlanner = async () => {
+    try {
+      setSmartPlannerLoading(true);
+      const res = await api.post(`/procedures/${id}/smart-planner`);
+      setSmartPlannerReport(res.data);
+      setShowSmartPlanner(true);
+    } catch (error: any) {
+      Alert.alert('Error', error?.response?.data?.detail || 'Failed to generate Smart Planner report');
+    } finally {
+      setSmartPlannerLoading(false);
     }
   };
 
@@ -1222,6 +1243,222 @@ export default function ProcedureDetailScreen() {
               <View style={{ marginBottom: 8, backgroundColor: '#E8F5E9', borderRadius: 8, padding: 12 }}>
                 <Text style={{ fontSize: 14, fontWeight: '700', color: '#2E7D32', marginBottom: 8 }}>Remarks by Implant In-Charge</Text>
                 <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase3_incharge_notes}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ═══════════ SMART PROSTHETIC PLANNER ═══════════ */}
+        {['stage2_surgical_approved', 'pending_stage2_prosthetic', 'completed'].includes(procedure.status) && (
+          <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#0D47A1' }]} data-testid="smart-planner-section">
+            <TouchableOpacity
+              onPress={() => {
+                if (smartPlannerReport) {
+                  setShowSmartPlanner(!showSmartPlanner);
+                } else {
+                  generateSmartPlanner();
+                }
+              }}
+              disabled={smartPlannerLoading}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}
+              data-testid="smart-planner-toggle"
+            >
+              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#E3F2FD', alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="bulb" size={22} color="#0D47A1" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: '#0D47A1', letterSpacing: 0.3 }}>Smart Prosthetic Planner</Text>
+                <Text style={{ fontSize: 12, color: '#5C6BC0', marginTop: 2 }}>Pre-Prosthetic Insights</Text>
+              </View>
+              {smartPlannerLoading ? (
+                <ActivityIndicator size="small" color="#1565C0" />
+              ) : (
+                <Ionicons name={showSmartPlanner ? 'chevron-up' : 'chevron-down'} size={22} color="#1565C0" />
+              )}
+            </TouchableOpacity>
+
+            {showSmartPlanner && smartPlannerReport && (
+              <View style={{ marginTop: 16 }}>
+                {/* Case Type Badge */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                  <View style={{ backgroundColor: '#E3F2FD', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#1565C0' }}>
+                      {smartPlannerReport.case_type === 'full_arch' ? 'Full Arch' : 'Dentulous'} Case
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 11, color: '#90A4AE' }}>
+                    {new Date(smartPlannerReport.generated_at).toLocaleDateString()}
+                  </Text>
+                </View>
+
+                {/* Modules */}
+                {smartPlannerReport.modules?.map((mod: any, idx: number) => (
+                  <View key={mod.id || idx} style={{ marginBottom: 14, backgroundColor: '#F8FAFC', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#E0E7EE' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                      <Ionicons name={mod.icon || 'information-circle'} size={18} color="#1565C0" />
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: '#0D47A1' }}>{mod.title}</Text>
+                    </View>
+
+                    {/* Space Analysis flags */}
+                    {mod.id === 'space_analysis' && mod.data?.flags?.map((f: any, fi: number) => (
+                      <View key={fi} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 8, paddingLeft: 4 }}>
+                        <Ionicons name={f.status === 'CRITICAL' ? 'alert-circle' : (f.status === 'WARNING' ? 'warning' : 'checkmark-circle')}
+                          size={16} color={f.status === 'CRITICAL' ? '#D32F2F' : (f.status === 'WARNING' ? '#F57C00' : '#388E3C')} style={{ marginTop: 2 }} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 13, fontWeight: '600', color: '#333' }}>{f.param}: {f.value}</Text>
+                          <Text style={{ fontSize: 12, color: '#666', marginTop: 2, lineHeight: 18 }}>{f.note}</Text>
+                        </View>
+                      </View>
+                    ))}
+
+                    {/* Interarch Space */}
+                    {mod.id === 'interarch_space' && (
+                      <View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                          <Text style={{ fontSize: 24, fontWeight: '700', color: mod.severity === 'SEVERE' ? '#D32F2F' : (mod.severity === 'MODERATE' ? '#F57C00' : '#388E3C') }}>
+                            {mod.data.space_mm} mm
+                          </Text>
+                          <View style={{ backgroundColor: mod.severity === 'SEVERE' ? '#FFEBEE' : (mod.severity === 'MODERATE' ? '#FFF3E0' : '#E8F5E9'), paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
+                            <Text style={{ fontSize: 11, fontWeight: '700', color: mod.severity === 'SEVERE' ? '#D32F2F' : (mod.severity === 'MODERATE' ? '#F57C00' : '#388E3C') }}>{mod.severity}</Text>
+                          </View>
+                        </View>
+                        <Text style={{ fontSize: 13, color: '#555', marginBottom: 6 }}>{mod.data.interpretation}</Text>
+                        {mod.data.implications?.map((imp: string, ii: number) => (
+                          <View key={ii} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginBottom: 3 }}>
+                            <Text style={{ fontSize: 12, color: '#1565C0', marginTop: 1 }}>•</Text>
+                            <Text style={{ fontSize: 12, color: '#555', flex: 1, lineHeight: 18 }}>{imp}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    {/* Material Compatibility */}
+                    {mod.id === 'material_compatibility' && (
+                      <View>
+                        {mod.data.suitable?.length > 0 && (
+                          <View style={{ marginBottom: 8 }}>
+                            <Text style={{ fontSize: 12, fontWeight: '700', color: '#388E3C', marginBottom: 4 }}>Suitable</Text>
+                            {mod.data.suitable.map((s: string, si: number) => (
+                              <View key={si} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                                <Ionicons name="checkmark-circle" size={14} color="#388E3C" />
+                                <Text style={{ fontSize: 12, color: '#555' }}>{s}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        )}
+                        {mod.data.limited?.length > 0 && (
+                          <View>
+                            <Text style={{ fontSize: 12, fontWeight: '700', color: '#F57C00', marginBottom: 4 }}>Limited</Text>
+                            {mod.data.limited.map((l: string, li: number) => (
+                              <View key={li} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                                <Ionicons name="warning" size={14} color="#F57C00" />
+                                <Text style={{ fontSize: 12, color: '#555' }}>{l}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        )}
+                      </View>
+                    )}
+
+                    {/* Esthetic Zone */}
+                    {mod.id === 'esthetic_zone' && (
+                      <View>
+                        <Text style={{ fontSize: 12, color: '#1565C0', marginBottom: 6 }}>Teeth: {mod.data.teeth?.join(', ')}</Text>
+                        {mod.data.alerts?.map((a: string, ai: number) => (
+                          <View key={ai} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginBottom: 3 }}>
+                            <Ionicons name="flower" size={13} color="#AD1457" style={{ marginTop: 2 }} />
+                            <Text style={{ fontSize: 12, color: '#555', flex: 1, lineHeight: 18 }}>{a}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    {/* Retention Guidance */}
+                    {mod.id === 'retention_guidance' && (
+                      <View>
+                        <View style={{ backgroundColor: '#E8F5E9', borderRadius: 10, padding: 10, marginBottom: 8 }}>
+                          <Text style={{ fontSize: 12, fontWeight: '700', color: '#2E7D32', marginBottom: 2 }}>Preferred</Text>
+                          <Text style={{ fontSize: 12, color: '#555' }}>{mod.data.preferred}</Text>
+                        </View>
+                        <View style={{ backgroundColor: '#FFF3E0', borderRadius: 10, padding: 10, marginBottom: 8 }}>
+                          <Text style={{ fontSize: 12, fontWeight: '700', color: '#E65100', marginBottom: 2 }}>Alternative</Text>
+                          <Text style={{ fontSize: 12, color: '#555' }}>{mod.data.alternative}</Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: '#FFFDE7', borderRadius: 10, padding: 10 }}>
+                          <Ionicons name="information-circle" size={16} color="#F57F17" style={{ marginTop: 1 }} />
+                          <Text style={{ fontSize: 12, color: '#555', flex: 1, lineHeight: 18 }}>{mod.data.advisory}</Text>
+                        </View>
+                      </View>
+                    )}
+
+                    {/* Generic notes/warnings/recommendations lists */}
+                    {(mod.id === 'occlusion' || mod.id === 'biomechanics' || mod.id === 'hygiene') && (
+                      <View>
+                        {(mod.data.notes || mod.data.warnings || mod.data.recommendations)?.map((n: string, ni: number) => (
+                          <View key={ni} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginBottom: 4 }}>
+                            <Text style={{ fontSize: 12, color: '#1565C0', marginTop: 1 }}>•</Text>
+                            <Text style={{ fontSize: 12, color: '#555', flex: 1, lineHeight: 18 }}>{n}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    {/* Opposing Arch */}
+                    {mod.id === 'opposing_arch' && (
+                      <View>
+                        <View style={{ backgroundColor: '#E3F2FD', borderRadius: 10, padding: 10, marginBottom: 8 }}>
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#1565C0' }}>{mod.data.opposing_type}</Text>
+                        </View>
+                        {mod.data.notes?.map((n: string, ni: number) => (
+                          <View key={ni} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginBottom: 3 }}>
+                            <Text style={{ fontSize: 12, color: '#1565C0', marginTop: 1 }}>•</Text>
+                            <Text style={{ fontSize: 12, color: '#555', flex: 1, lineHeight: 18 }}>{n}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    {/* Stability Alert */}
+                    {mod.id === 'stability_alert' && (
+                      <View>
+                        {mod.data.low_isq_implants?.map((imp: any, ii: number) => (
+                          <View key={ii} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                            <Ionicons name="alert-circle" size={14} color="#D32F2F" />
+                            <Text style={{ fontSize: 12, color: '#D32F2F', fontWeight: '600' }}>Implant {imp.implant}: ISQ {imp.value}</Text>
+                          </View>
+                        ))}
+                        <Text style={{ fontSize: 12, color: '#555', marginTop: 4, lineHeight: 18 }}>{mod.data.recommendation}</Text>
+                      </View>
+                    )}
+                  </View>
+                ))}
+
+                {/* Alerts */}
+                {smartPlannerReport.alerts?.length > 0 && (
+                  <View style={{ backgroundColor: '#FFF3E0', borderRadius: 14, padding: 14, borderWidth: 1.5, borderColor: '#FFE082' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <Ionicons name="warning" size={16} color="#E65100" />
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#E65100' }}>Clinical Alerts</Text>
+                    </View>
+                    {smartPlannerReport.alerts.map((a: string, ai: number) => (
+                      <View key={ai} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginBottom: 3 }}>
+                        <Text style={{ fontSize: 12, color: '#E65100', marginTop: 1 }}>•</Text>
+                        <Text style={{ fontSize: 12, color: '#BF360C', flex: 1, lineHeight: 18 }}>{a}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {/* Regenerate button */}
+                <TouchableOpacity
+                  onPress={generateSmartPlanner}
+                  disabled={smartPlannerLoading}
+                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 14, paddingVertical: 10, backgroundColor: '#E3F2FD', borderRadius: 12 }}
+                  data-testid="smart-planner-regenerate"
+                >
+                  <Ionicons name="refresh" size={16} color="#1565C0" />
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#1565C0' }}>Regenerate Report</Text>
+                </TouchableOpacity>
               </View>
             )}
           </View>

@@ -1877,6 +1877,302 @@ async def get_procedure_badge(
     return {"badge": badge}
 
 
+# ── Smart Prosthetic Planner ───────────────────────────────────────────────
+FULL_ARCH_SET = {"All on 4", "All on 6", "All on X"}
+ANTERIOR_TEETH = {11, 12, 13, 21, 22, 23}
+
+def _generate_smart_planner_report(procedure: dict) -> dict:
+    proc_type = procedure.get("implant_procedure_type", "")
+    is_full_arch = proc_type in FULL_ARCH_SET
+    implant_plans = procedure.get("implant_plans", [])
+    risk_score = procedure.get("medical_risk_score", "")
+    p3 = procedure.get("phase3_data") or {}
+
+    modules = []
+
+    if is_full_arch:
+        # ── FULL ARCH PATH ──
+        interarch_raw = procedure.get("available_interarch_space", "")
+        interarch = 0
+        try:
+            interarch = float(interarch_raw)
+        except (ValueError, TypeError):
+            pass
+
+        # 1. Interarch Space Analysis
+        if interarch > 0:
+            if interarch < 10:
+                severity = "SEVERE"
+                interpretation = "Severely limited prosthetic space"
+                implications = ["Hybrid prosthesis not feasible", "Consider zirconia monolithic", "Higher fracture risk with thin material"]
+            elif interarch <= 12:
+                severity = "MODERATE"
+                interpretation = "Moderate prosthetic space"
+                implications = ["Limited for hybrid prosthesis", "Better suited for zirconia or metal ceramic", "Careful framework design needed"]
+            else:
+                severity = "ADEQUATE"
+                interpretation = "Adequate prosthetic space"
+                implications = ["All prosthetic options available", "Hybrid, zirconia, or metal ceramic feasible", "Optimal material thickness achievable"]
+            modules.append({
+                "id": "interarch_space",
+                "title": "Interarch Space Analysis",
+                "icon": "resize",
+                "severity": severity,
+                "data": {"space_mm": interarch, "interpretation": interpretation, "implications": implications}
+            })
+
+        # 2. Material Compatibility
+        if interarch > 0:
+            suitable = []
+            limited = []
+            if interarch < 10:
+                suitable = ["Zirconia monolithic (thin profile)"]
+                limited = ["Metal ceramic", "Hybrid prosthesis", "Acrylic"]
+            elif interarch <= 12:
+                suitable = ["Zirconia", "Metal ceramic"]
+                limited = ["Hybrid prosthesis (space dependent)"]
+            else:
+                suitable = ["Hybrid prosthesis", "Zirconia", "Metal ceramic", "Acrylic"]
+                limited = []
+            modules.append({
+                "id": "material_compatibility",
+                "title": "Material Compatibility",
+                "icon": "layers",
+                "data": {"suitable": suitable, "limited": limited}
+            })
+
+        # 3. Biomechanical Interpretation
+        bio_warnings = []
+        if interarch > 12:
+            bio_warnings.append("Increased crown height leads to higher leverage")
+            bio_warnings.append("Greater risk of screw loosening")
+            bio_warnings.append("Consider cross-arch splinting for stability")
+        else:
+            bio_warnings.append("Reduced crown height limits leverage risk")
+            bio_warnings.append("Favorable biomechanical profile")
+        modules.append({
+            "id": "biomechanics",
+            "title": "Biomechanical Interpretation",
+            "icon": "fitness",
+            "data": {"warnings": bio_warnings}
+        })
+
+        # 4. Opposing arch consideration
+        opposing = procedure.get("opposing_arch", "")
+        if opposing:
+            opp_notes = []
+            if opposing == "Natural Dentition":
+                opp_notes = ["Higher occlusal forces expected", "Consider metal-occlusal surface for durability", "Mutually protected occlusion recommended"]
+            elif opposing == "Fixed Implant Prosthesis":
+                opp_notes = ["Bilateral implant-supported — careful occlusal equilibration", "Risk of excessive force transmission", "Regular occlusal adjustment recommended"]
+            elif opposing == "Removable Prosthesis":
+                opp_notes = ["Lower occlusal forces expected", "Favorable for material longevity", "Balanced bilateral occlusion advised"]
+            elif opposing == "Edentulous":
+                opp_notes = ["Minimal opposing forces", "Consider patient's future prosthetic plans", "Provisional loading protocol appropriate"]
+            modules.append({
+                "id": "opposing_arch",
+                "title": "Opposing Arch Consideration",
+                "icon": "git-compare",
+                "data": {"opposing_type": opposing, "notes": opp_notes}
+            })
+
+        # 5. Hygiene Module (always for full arch)
+        modules.append({
+            "id": "hygiene",
+            "title": "Hygiene Considerations",
+            "icon": "water",
+            "data": {"recommendations": [
+                "Ensure cleansable intaglio surface design",
+                "Avoid concave tissue surface contours",
+                "Patient education on superfloss / water flosser",
+                "Plan for regular professional maintenance visits",
+            ]}
+        })
+
+    else:
+        # ── DENTULOUS PATH ──
+        oc_height_raw = procedure.get("occlusocervical_height", "")
+        md_space_raw = procedure.get("mesiodistal_space", "")
+        oc_height = 0
+        md_space = 0
+        try:
+            oc_height = float(oc_height_raw)
+        except (ValueError, TypeError):
+            pass
+        try:
+            md_space = float(md_space_raw)
+        except (ValueError, TypeError):
+            pass
+
+        # 1. Space Analysis
+        space_flags = []
+        if oc_height > 0:
+            if oc_height < 6:
+                space_flags.append({"param": "Occlusocervical Height", "value": f"{oc_height} mm", "status": "CRITICAL", "note": "Limited restorative space — reduced material thickness, higher fracture risk, compromised esthetics"})
+            elif oc_height < 8:
+                space_flags.append({"param": "Occlusocervical Height", "value": f"{oc_height} mm", "status": "WARNING", "note": "Marginal restorative space — careful material selection needed"})
+            else:
+                space_flags.append({"param": "Occlusocervical Height", "value": f"{oc_height} mm", "status": "ADEQUATE", "note": "Sufficient restorative space for standard prosthetic options"})
+        if md_space > 0:
+            if md_space < 5.5:
+                space_flags.append({"param": "Mesiodistal Space", "value": f"{md_space} mm", "status": "CRITICAL", "note": "Narrow prosthetic width — consider custom abutment, limited crown contour"})
+            elif md_space < 7:
+                space_flags.append({"param": "Mesiodistal Space", "value": f"{md_space} mm", "status": "WARNING", "note": "Borderline mesiodistal space — verify contact point feasibility"})
+            else:
+                space_flags.append({"param": "Mesiodistal Space", "value": f"{md_space} mm", "status": "ADEQUATE", "note": "Adequate space for standard prosthetic contours"})
+        if space_flags:
+            modules.append({
+                "id": "space_analysis",
+                "title": "Space Analysis",
+                "icon": "resize",
+                "data": {"flags": space_flags}
+            })
+
+        # 2. Esthetic Module (anterior teeth)
+        anterior_implants = []
+        for imp in implant_plans:
+            pos = imp.get("position", "")
+            try:
+                pos_num = int(str(pos).strip())
+            except (ValueError, TypeError):
+                pos_num = 0
+            if pos_num in ANTERIOR_TEETH:
+                anterior_implants.append(pos)
+        if anterior_implants:
+            modules.append({
+                "id": "esthetic_zone",
+                "title": "Esthetic Zone Assessment",
+                "icon": "flower",
+                "data": {
+                    "teeth": anterior_implants,
+                    "alerts": [
+                        "Emergence profile design is critical",
+                        "Tissue symmetry with adjacent teeth required",
+                        "Provisional crown recommended for soft tissue conditioning",
+                        "Risk: black triangle or recession if poorly managed",
+                    ]
+                }
+            })
+
+        # 3. Retention Guidance
+        retention = {
+            "preferred": "Screw-retained (better retrievability, no cement complications)",
+            "alternative": "Cement-retained (when screw access hole compromises esthetics)",
+            "advisory": "Final choice depends on implant angulation — verify clinically"
+        }
+        modules.append({
+            "id": "retention_guidance",
+            "title": "Retention Guidance",
+            "icon": "link",
+            "data": retention
+        })
+
+        # 4. Occlusal Considerations
+        occlusal_notes = ["Light centric contact on implant crown recommended"]
+        has_posterior = any(
+            int(str(imp.get("position", 0)).strip() or 0) > 23
+            for imp in implant_plans
+            if str(imp.get("position", "")).strip().isdigit()
+        )
+        if has_posterior:
+            occlusal_notes.append("Posterior implant — higher occlusal load expected")
+            occlusal_notes.append("Avoid lateral (excursive) contacts on implant crown")
+        if risk_score and "high" in str(risk_score).lower():
+            occlusal_notes.append("High medical risk — minimize occlusal stress")
+        occlusal_notes.append("Night guard recommended for parafunctional habits")
+        modules.append({
+            "id": "occlusion",
+            "title": "Occlusal Considerations",
+            "icon": "pulse",
+            "data": {"notes": occlusal_notes}
+        })
+
+    # ISQ-based stability alert
+    isq_values = p3.get("isq_value", [])
+    if isinstance(isq_values, str):
+        isq_values = [isq_values] if isq_values else []
+    low_isq = []
+    for i, v in enumerate(isq_values):
+        try:
+            val = float(str(v).strip())
+            if val < 60:
+                low_isq.append({"implant": i + 1, "value": val})
+        except (ValueError, TypeError):
+            pass
+    if low_isq:
+        modules.append({
+            "id": "stability_alert",
+            "title": "Stability Alert",
+            "icon": "warning",
+            "data": {
+                "low_isq_implants": low_isq,
+                "recommendation": "Consider delayed loading protocol for implants with ISQ < 60"
+            }
+        })
+
+    # General alerts
+    alerts = []
+    for flag in (modules[0].get("data", {}).get("flags", []) if modules and modules[0].get("id") == "space_analysis" else []):
+        if flag.get("status") == "CRITICAL":
+            alerts.append(f"{flag['param']}: {flag['note']}")
+    if anterior_implants if not is_full_arch else False:
+        alerts.append("Esthetic zone — high patient expectation management needed")
+    if low_isq:
+        alerts.append("Low ISQ values detected — delayed loading may be required")
+
+    return {
+        "case_type": "full_arch" if is_full_arch else "dentulous",
+        "procedure_type": proc_type,
+        "modules": modules,
+        "alerts": alerts,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@api_router.post("/procedures/{procedure_id}/smart-planner")
+async def generate_smart_planner(
+    procedure_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Generate Pre-Prosthetic Insights report after Phase 3 approval."""
+    procedure = await db.procedures.find_one(
+        {"_id": ObjectId(procedure_id)}, {"_id": 0}
+    )
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    valid_statuses = {"stage2_surgical_approved", "pending_stage2_prosthetic", "completed"}
+    if procedure.get("status") not in valid_statuses:
+        raise HTTPException(status_code=400, detail="Smart Planner is available only after Phase 3 approval")
+
+    report = _generate_smart_planner_report(procedure)
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"smart_planner_report": report}}
+    )
+
+    return report
+
+
+@api_router.get("/procedures/{procedure_id}/smart-planner")
+async def get_smart_planner(
+    procedure_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Retrieve existing Smart Planner report."""
+    procedure = await db.procedures.find_one(
+        {"_id": ObjectId(procedure_id)}, {"_id": 0, "smart_planner_report": 1}
+    )
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    report = procedure.get("smart_planner_report")
+    if not report:
+        raise HTTPException(status_code=404, detail="Smart Planner report not yet generated")
+    return report
+
+
+
 @api_router.post("/procedures/{procedure_id}/case-report")
 async def generate_case_report(
     procedure_id: str,
