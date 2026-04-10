@@ -203,6 +203,14 @@ A comprehensive mobile application for managing dental implant procedures at the
   - Pill-shaped buttons with deeper shadows and letter-spacing
   - Consistent blue (#1565C0) label theme across all forms and case detail page
   - Applied across: new-procedure.tsx, submit-phase2/[id].tsx, submit-stage2-surgical/[id].tsx, [id].tsx
+- **Smart Prosthetic Planner** (12/12 tests passed):
+  - Rule-based Pre-Prosthetic Insights engine, appears after Phase 3 approval
+  - Backend: POST/GET /api/procedures/{id}/smart-planner endpoints
+  - Dentulous path: Space Analysis (critical/warning/adequate flags), Esthetic Zone (anterior teeth), Retention Guidance, Occlusal Considerations
+  - Full Arch path: Interarch Space (severe/moderate/adequate), Material Compatibility, Biomechanics, Opposing Arch, Hygiene
+  - ISQ-based stability alerts for low values (<60)
+  - Report stored in `smart_planner_report` field, visible to all roles once generated
+  - Frontend: Collapsible card in case detail with module-specific renderers
 
 ### Earlier Sessions
 - Session 9: Narrow Ridge, High Constraint engines, scheduling constraints, logo replacement
