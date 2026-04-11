@@ -1337,7 +1337,7 @@ export default function ProcedureDetailScreen() {
                       <View>
                         {mod.data.suitable?.length > 0 && (
                           <View style={{ marginBottom: 8 }}>
-                            <Text style={{ fontSize: 12, fontWeight: '700', color: '#388E3C', marginBottom: 4 }}>Suitable</Text>
+                            <Text style={{ fontSize: 12, fontWeight: '700', color: '#388E3C', marginBottom: 4 }}>Feasible</Text>
                             {mod.data.suitable.map((s: string, si: number) => (
                               <View key={si} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
                                 <Ionicons name="checkmark-circle" size={14} color="#388E3C" />
@@ -1347,12 +1347,23 @@ export default function ProcedureDetailScreen() {
                           </View>
                         )}
                         {mod.data.limited?.length > 0 && (
-                          <View>
-                            <Text style={{ fontSize: 12, fontWeight: '700', color: '#F57C00', marginBottom: 4 }}>Limited</Text>
+                          <View style={{ marginBottom: 8 }}>
+                            <Text style={{ fontSize: 12, fontWeight: '700', color: '#F57C00', marginBottom: 4 }}>Marginal</Text>
                             {mod.data.limited.map((l: string, li: number) => (
                               <View key={li} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
                                 <Ionicons name="warning" size={14} color="#F57C00" />
                                 <Text style={{ fontSize: 12, color: '#555' }}>{l}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        )}
+                        {mod.data.not_feasible?.length > 0 && (
+                          <View>
+                            <Text style={{ fontSize: 12, fontWeight: '700', color: '#D32F2F', marginBottom: 4 }}>Not Feasible</Text>
+                            {mod.data.not_feasible.map((n: string, ni: number) => (
+                              <View key={ni} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                                <Ionicons name="close-circle" size={14} color="#D32F2F" />
+                                <Text style={{ fontSize: 12, color: '#555' }}>{n}</Text>
                               </View>
                             ))}
                           </View>

@@ -211,6 +211,7 @@ A comprehensive mobile application for managing dental implant procedures at the
   - ISQ-based stability alerts for low values (<60)
   - Report stored in `smart_planner_report` field, visible to all roles once generated
   - Frontend: Collapsible card in case detail with module-specific renderers
+  - **Full Arch Material Compatibility Update**: Evaluates exactly 5 prosthesis types (Fixed Prosthesis, Overdentures with Individual Attachments, Overdenture with Bar Attachments, Hybrid Prosthesis with Metal Framework and Acrylic, Zirconia Hybrid Prosthesis) against evidence-based interarch space mm thresholds. Three-tier classification: Feasible/Marginal/Not Feasible. No ITI/SAC references. Frontend renders green/orange/red indicators per category.
 
 ### Earlier Sessions
 - Session 9: Narrow Ridge, High Constraint engines, scheduling constraints, logo replacement
