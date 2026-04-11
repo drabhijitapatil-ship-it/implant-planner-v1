@@ -1921,24 +1921,31 @@ def _generate_smart_planner_report(procedure: dict) -> dict:
                 "data": {"space_mm": interarch, "interpretation": interpretation, "implications": implications}
             })
 
-        # 2. Material Compatibility
+        # 2. Material Compatibility — per-prosthesis feasibility based on Available Interarch Space
         if interarch > 0:
+            prosthesis_types = [
+                {"name": "Fixed Prosthesis", "min_feasible": 8, "min_marginal": 6},
+                {"name": "Overdentures with Individual Attachments", "min_feasible": 12, "min_marginal": 10},
+                {"name": "Overdenture with Bar Attachments", "min_feasible": 14, "min_marginal": 12},
+                {"name": "Hybrid Prosthesis with Metal Framework and Acrylic", "min_feasible": 15, "min_marginal": 12},
+                {"name": "Zirconia Hybrid Prosthesis", "min_feasible": 12, "min_marginal": 9},
+            ]
             suitable = []
             limited = []
-            if interarch < 10:
-                suitable = ["Zirconia monolithic (thin profile)"]
-                limited = ["Metal ceramic", "Hybrid prosthesis", "Acrylic"]
-            elif interarch <= 12:
-                suitable = ["Zirconia", "Metal ceramic"]
-                limited = ["Hybrid prosthesis (space dependent)"]
-            else:
-                suitable = ["Hybrid prosthesis", "Zirconia", "Metal ceramic", "Acrylic"]
-                limited = []
+            not_feasible = []
+            for pt in prosthesis_types:
+                label = f"{pt['name']} (requires \u2265{pt['min_feasible']}mm)"
+                if interarch >= pt["min_feasible"]:
+                    suitable.append(label)
+                elif interarch >= pt["min_marginal"]:
+                    limited.append(label)
+                else:
+                    not_feasible.append(label)
             modules.append({
                 "id": "material_compatibility",
                 "title": "Material Compatibility",
                 "icon": "layers",
-                "data": {"suitable": suitable, "limited": limited}
+                "data": {"suitable": suitable, "limited": limited, "not_feasible": not_feasible}
             })
 
         # 3. Biomechanical Interpretation
