@@ -213,6 +213,17 @@ A comprehensive mobile application for managing dental implant procedures at the
   - Frontend: Collapsible card in case detail with module-specific renderers
   - **Full Arch Material Compatibility Update**: Evaluates exactly 5 prosthesis types (Fixed Prosthesis, Overdentures with Individual Attachments, Overdenture with Bar Attachments, Hybrid Prosthesis with Metal Framework and Acrylic, Zirconia Hybrid Prosthesis) against evidence-based interarch space mm thresholds. Three-tier classification: Feasible/Marginal/Not Feasible. No ITI/SAC references. Frontend renders green/orange/red indicators per category.
 
+### June 18, 2026 — Session 12 (Fork)
+- **Arch Selection for Full Arch Cases** (11/11 backend tests passed):
+  - New `arch` field (Maxillary/Mandibular) added to ProcedureCreate model and procedure form
+  - "Arch" dropdown appears in Procedure Information section only for All on 4/6/X
+  - Dynamic Intraoral label: "Maxillary Arch Condition" or "Mandibular Arch Condition" based on arch selection
+  - Dynamic Occlusal label: "Maxillary Restorative Space (mm)" or "Mandibular Restorative Space (mm)" with blue info icon ("Residual alveolar ridge to opposing occlusal table")
+  - Case detail page shows arch value and uses dynamic labels throughout
+  - Smart Planner uses arch context: module titles dynamically reflect "Maxillary/Mandibular Restorative Space Analysis"
+  - PDF export uses dynamic labels for arch condition and restorative space
+  - Backward compatible: non-full-arch and legacy procedures without arch field work unchanged
+
 ### Earlier Sessions
 - Session 9: Narrow Ridge, High Constraint engines, scheduling constraints, logo replacement
 - Session 8: Narrow Ridge Clinical Decision Engine, Implant Selection Tab replication
