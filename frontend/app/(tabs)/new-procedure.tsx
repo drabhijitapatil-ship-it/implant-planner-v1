@@ -248,6 +248,7 @@ export default function NewProcedureScreen() {
     procedure_date: '',
     procedure_time: '',
     implant_procedure_type: '',
+    arch: '',
     loading_type: [] as string[],
     prosthetic_plan: '',
     prosthetic_plan_other: '',
@@ -304,7 +305,7 @@ export default function NewProcedureScreen() {
           implant_incharge_id: user?.role === 'implant_incharge' ? (user?.id || '') : '',
           implant_incharge_name: user?.role === 'implant_incharge' ? (user?.name || '') : '',
           receipt_number: '', amount_paid: '', procedure_date: '', procedure_time: '',
-          implant_procedure_type: '', loading_type: [] as string[],
+          implant_procedure_type: '', arch: '', loading_type: [] as string[],
           prosthetic_plan: '', prosthetic_plan_other: '', bone_graft_specifications: '',
           edentulous_sites: [] as string[], occlusocervical_height: '', mesiodistal_space: '',
           arch_condition: '', ridge_contour: '',
@@ -696,7 +697,11 @@ export default function NewProcedureScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Procedure Information</Text>
         <Dropdown label="Type of Implant Procedure" value={formData.implant_procedure_type}
-          options={PROCEDURE_TYPES} onChange={v => updateForm('implant_procedure_type', v)} required />
+          options={PROCEDURE_TYPES} onChange={v => { updateForm('implant_procedure_type', v); updateForm('arch', ''); }} required />
+        {isFullArch && (
+          <Dropdown label="Arch" value={formData.arch}
+            options={['Maxillary', 'Mandibular']} onChange={v => updateForm('arch', v)} required data-testid="arch-dropdown" />
+        )}
       </View>
 
       {/* ─── Clinical Examination ─── */}
@@ -746,7 +751,8 @@ export default function NewProcedureScreen() {
           {isFullArch && (
             <>
               <Text style={styles.subSectionTitle}>Intraoral Examination</Text>
-              <Dropdown label="Mandibular/Maxillary Arch Condition" value={formData.arch_condition}
+              <Dropdown label={formData.arch === 'Maxillary' ? 'Maxillary Arch Condition' : formData.arch === 'Mandibular' ? 'Mandibular Arch Condition' : 'Arch Condition'}
+                value={formData.arch_condition}
                 options={ARCH_CONDITION_OPTIONS} onChange={v => updateForm('arch_condition', v)} />
               <Dropdown label="Ridge Contour" value={formData.ridge_contour}
                 options={RIDGE_CONTOUR_OPTIONS} onChange={v => updateForm('ridge_contour', v)} />
@@ -777,9 +783,19 @@ export default function NewProcedureScreen() {
             <>
               <Text style={styles.subSectionTitle}>Occlusal Analysis</Text>
               <View style={styles.fieldContainer}>
-                <Text style={styles.label}>Available Interarch Space (mm)</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <Text style={styles.label}>
+                    {formData.arch === 'Maxillary' ? 'Maxillary Restorative Space (mm)' : formData.arch === 'Mandibular' ? 'Mandibular Restorative Space (mm)' : 'Restorative Space (mm)'}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => Alert.alert('Info', 'Residual alveolar ridge to opposing occlusal table')}
+                    data-testid="restorative-space-info-btn"
+                  >
+                    <Ionicons name="information-circle" size={20} color="#1565C0" />
+                  </TouchableOpacity>
+                </View>
                 <TextInput style={styles.input} value={formData.available_interarch_space} keyboardType="decimal-pad"
-                  onChangeText={v => updateForm('available_interarch_space', v)} placeholder="Enter in mm" data-testid="interarch-space-input" />
+                  onChangeText={v => updateForm('available_interarch_space', v)} placeholder="Enter in mm" data-testid="restorative-space-input" />
               </View>
               <Dropdown label="Opposing Arch" value={formData.opposing_arch}
                 options={['Natural Dentition', 'Fixed Implant Prosthesis', 'Removable Prosthesis', 'Edentulous']}

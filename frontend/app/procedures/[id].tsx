@@ -634,6 +634,9 @@ export default function ProcedureDetailScreen() {
           <View style={styles.section} data-testid="procedure-type-section">
             <Text style={styles.sectionTitle}>Procedure Details</Text>
             <InfoRow icon="construct" label="Procedure Type" value={procedure.implant_procedure_type} />
+            {procedure.arch && (
+              <InfoRow icon="tablet-landscape" label="Arch" value={procedure.arch} />
+            )}
             {procedure.loading_type?.length > 0 && (
               <InfoRow icon="flash" label="Loading Type" value={procedure.loading_type.join(', ')} />
             )}
@@ -671,7 +674,7 @@ export default function ProcedureDetailScreen() {
               <InfoRow icon="grid" label="Edentulous Site" value={procedure.edentulous_site} />
             )}
             {procedure.arch_condition && (
-              <InfoRow icon="ellipse" label="Arch Condition" value={procedure.arch_condition} />
+              <InfoRow icon="ellipse" label={procedure.arch === 'Maxillary' ? 'Maxillary Arch Condition' : procedure.arch === 'Mandibular' ? 'Mandibular Arch Condition' : 'Arch Condition'} value={procedure.arch_condition} />
             )}
             {procedure.ridge_contour && (
               <InfoRow icon="analytics" label="Ridge Contour" value={procedure.ridge_contour} />
@@ -693,7 +696,7 @@ export default function ProcedureDetailScreen() {
               <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#6A1B9A' }]}>Occlusal Analysis</Text>
             </View>
             {procedure.available_interarch_space && (
-              <InfoRow icon="resize" label="Available Interarch Space" value={`${procedure.available_interarch_space} mm`} />
+              <InfoRow icon="resize" label={procedure.arch === 'Maxillary' ? 'Maxillary Restorative Space' : procedure.arch === 'Mandibular' ? 'Mandibular Restorative Space' : 'Restorative Space'} value={`${procedure.available_interarch_space} mm`} />
             )}
             {procedure.opposing_arch && (
               <InfoRow icon="people" label="Opposing Arch" value={procedure.opposing_arch} />

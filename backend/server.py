@@ -241,6 +241,8 @@ class ProcedureCreate(BaseModel):
     implant_region: Optional[str] = Field("", max_length=50)
     implant_company: Optional[str] = Field("", max_length=100)
     remark: Optional[str] = Field("", max_length=1000)
+    # Arch selection (Full Arch only)
+    arch: Optional[str] = Field("", max_length=20)
     # Clinical Examination — Intraoral
     edentulous_site: Optional[str] = Field("", max_length=200)
     edentulous_sites: Optional[List[str]] = None
@@ -1892,6 +1894,7 @@ def _generate_smart_planner_report(procedure: dict) -> dict:
 
     if is_full_arch:
         # ── FULL ARCH PATH ──
+        arch = procedure.get("arch", "") or ""
         interarch_raw = procedure.get("available_interarch_space", "")
         interarch = 0
         try:
@@ -1899,7 +1902,10 @@ def _generate_smart_planner_report(procedure: dict) -> dict:
         except (ValueError, TypeError):
             pass
 
-        # 1. Interarch Space Analysis
+        # Dynamic label based on arch selection
+        space_label = "Maxillary Restorative Space" if arch == "Maxillary" else "Mandibular Restorative Space" if arch == "Mandibular" else "Restorative Space"
+
+        # 1. Restorative Space Analysis
         if interarch > 0:
             if interarch < 10:
                 severity = "SEVERE"
@@ -1915,10 +1921,10 @@ def _generate_smart_planner_report(procedure: dict) -> dict:
                 implications = ["All prosthetic options available", "Hybrid, zirconia, or metal ceramic feasible", "Optimal material thickness achievable"]
             modules.append({
                 "id": "interarch_space",
-                "title": "Interarch Space Analysis",
+                "title": f"{space_label} Analysis",
                 "icon": "resize",
                 "severity": severity,
-                "data": {"space_mm": interarch, "interpretation": interpretation, "implications": implications}
+                "data": {"space_mm": interarch, "arch": arch, "interpretation": interpretation, "implications": implications}
             })
 
         # 2. Material Compatibility — per-prosthesis feasibility based on Available Interarch Space
@@ -2316,7 +2322,11 @@ async def generate_case_report(
             add_field("Edentulous Sites", ", ".join(str(s) for s in sites))
         elif procedure.get("edentulous_site"):
             add_field("Edentulous Site", procedure.get("edentulous_site"))
-        add_field("Arch Condition", procedure.get("arch_condition"))
+        arch_val = procedure.get("arch", "")
+        if arch_val:
+            add_field("Arch", arch_val)
+        arch_cond_label = f"{arch_val} Arch Condition" if arch_val in ("Maxillary", "Mandibular") else "Arch Condition"
+        add_field(arch_cond_label, procedure.get("arch_condition"))
         add_field("Ridge Contour", procedure.get("ridge_contour"))
         add_field("Soft Tissue Thickness", procedure.get("soft_tissue_thickness"))
         add_field("Keratinized Mucosa", procedure.get("keratinized_mucosa"))
@@ -2331,7 +2341,9 @@ async def generate_case_report(
     if has_occlusal:
         add_section_title("Occlusal Analysis", 123, 31, 162)
         if procedure.get("available_interarch_space"):
-            add_field("Available Interarch Space", f"{procedure.get('available_interarch_space')} mm")
+            arch_val_oc = procedure.get("arch", "")
+            space_pdf_label = f"{arch_val_oc} Restorative Space" if arch_val_oc in ("Maxillary", "Mandibular") else "Available Interarch Space"
+            add_field(space_pdf_label, f"{procedure.get('available_interarch_space')} mm")
         if procedure.get("opposing_arch"):
             add_field("Opposing Arch", procedure.get("opposing_arch"))
         add_field("Occlusal Scheme", procedure.get("occlusal_scheme"))
