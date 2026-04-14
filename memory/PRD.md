@@ -242,6 +242,12 @@ A comprehensive mobile application for managing dental implant procedures at the
 - **Vertical Dimension Removed**: Removed "Vertical Dimension" dropdown from non-full-arch Occlusal Analysis (Single Conventional, Multiple Conventional, Immediate Implant, Partial Extraction Therapy, GBR, Guided Surgery)
 - **Opposing Dentition/Arch Updated**: Both full-arch and non-full-arch now use unified 5 options: Natural Dentition, Fixed Partial Denture, Fixed Implant Prosthesis, Removable Prosthesis, Edentulous
 - **InCharge Drafts Section**: Added Drafts section to InCharge dashboard (was missing — Student and Supervisor already had it)
+- **Profile Photo in Drawer Menu & User Management** (13/13 tests passed):
+  - Hamburger drawer menu now shows user's profile photo (circular, blue border) when available, falls back to generic person icon
+  - Drawer header shows user name and role next to the photo
+  - InCharge User Management page shows profile photos for all users in the user list cards
+  - Profile photo auto-refreshes after upload via auth context state update
+  - All API endpoints confirmed: GET /auth/me, GET /users, PUT /auth/profile-photo, and login response all include profile_photo
 - **Interactive Case Pipeline for Supervisor & InCharge** (22/22 tests passed):
   - Supervisor dashboard now shows Case Pipeline section (Phase 1-4 + Complete bars)
   - InCharge pipeline bars made interactive
