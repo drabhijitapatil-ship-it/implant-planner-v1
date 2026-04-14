@@ -236,6 +236,12 @@ A comprehensive mobile application for managing dental implant procedures at the
   - "Delete Draft" button in Step 2 header allows removal of draft cases
   - All roles (Student, Supervisor, InCharge) can delete their own draft cases
   - Available on all user dashboards (Student, Supervisor, InCharge)
+
+### June 18, 2026 — Session 12c (Fork)
+- **CBCT Button Overflow Fix**: Reduced padding/font size of green "View CBCT Report" buttons to stay within card boundaries on mobile screens
+- **Vertical Dimension Removed**: Removed "Vertical Dimension" dropdown from non-full-arch Occlusal Analysis (Single Conventional, Multiple Conventional, Immediate Implant, Partial Extraction Therapy, GBR, Guided Surgery)
+- **Opposing Dentition/Arch Updated**: Both full-arch and non-full-arch now use unified 5 options: Natural Dentition, Fixed Partial Denture, Fixed Implant Prosthesis, Removable Prosthesis, Edentulous
+- **InCharge Drafts Section**: Added Drafts section to InCharge dashboard (was missing — Student and Supervisor already had it)
 - **Interactive Case Pipeline for Supervisor & InCharge** (22/22 tests passed):
   - Supervisor dashboard now shows Case Pipeline section (Phase 1-4 + Complete bars)
   - InCharge pipeline bars made interactive

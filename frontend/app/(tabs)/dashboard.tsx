@@ -415,6 +415,8 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
   const pipelineTotal = (pipeline.phase1 || 0) + (pipeline.phase2 || 0) + (pipeline.phase3 || 0) + (pipeline.phase4 || 0) + (pipeline.completed || 0);
   const studentStats = stats.student_stats || [];
 
+  const draftCases = useMemo(() => procedures.filter((p: any) => p.status === 'draft'), [procedures]);
+
   const pendingApproval = useMemo(() =>
     procedures.filter((p: any) => PENDING_STATUSES.includes(p.status)),
     [procedures]
@@ -452,6 +454,32 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
           ))}
         </View>
       </View>
+
+      {/* Draft Cases */}
+      {draftCases.length > 0 && (
+        <View style={s.section} data-testid="ic-draft-cases-section">
+          <View style={s.sectionHeader}>
+            <Ionicons name="document-text-outline" size={18} color="#546E7A" />
+            <Text style={s.sectionTitle}>Drafts ({draftCases.length})</Text>
+          </View>
+          {draftCases.slice(0, 5).map((proc: any) => (
+            <View key={proc.id} style={s.draftCard} data-testid={`ic-draft-card-${proc.id}`}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.draftPatient}>{proc.patient_name}</Text>
+                <Text style={s.draftSub}>{proc.implant_procedure_type} - {proc.procedure_date}</Text>
+              </View>
+              <TouchableOpacity
+                style={s.continueBtn}
+                onPress={() => router.push(`/(tabs)/new-procedure?draftId=${proc.id}`)}
+                data-testid={`ic-draft-continue-btn-${proc.id}`}
+              >
+                <Ionicons name="play-circle" size={14} color="#FFF" />
+                <Text style={s.continueBtnText}>Continue</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+      )}
 
       {/* Pending Review */}
       {pendingApproval.length > 0 && (
