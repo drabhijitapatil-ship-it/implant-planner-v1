@@ -223,6 +223,11 @@ A comprehensive mobile application for managing dental implant procedures at the
   - Smart Planner uses arch context: module titles dynamically reflect "Maxillary/Mandibular Restorative Space Analysis"
   - PDF export uses dynamic labels for arch condition and restorative space
   - Backward compatible: non-full-arch and legacy procedures without arch field work unchanged
+- **Tooth-Specific Bone Measurement Info Icons** (14/14 tests passed):
+  - Blue info icons next to "Bone Width (mm)" and "Bone Height (mm)" labels in all 4 workflows: Let Me Choose + Suggest Me in both CaseImplantPlanning.tsx (New Case Phase 1 Step 2) and implant-selection.tsx (Home Implant Selection tab)
+  - Bone Width guidance varies by tooth: labial/palatal (anteriors upper), buccal/palatal (posteriors upper), labial/lingual (anteriors lower), buccal/lingual (posteriors lower)
+  - Bone Height guidance varies by tooth: crest to maxillary sinus floor (posterior upper), crest to inferior alveolar nerve (posterior lower), no info for anteriors
+  - Info text appears inline below label and disappears when input is focused
 
 ### Earlier Sessions
 - Session 9: Narrow Ridge, High Constraint engines, scheduling constraints, logo replacement
