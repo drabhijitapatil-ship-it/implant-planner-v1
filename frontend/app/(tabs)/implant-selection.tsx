@@ -327,7 +327,7 @@ export default function ImplantSelectionScreen() {
             {/* Step 3: Bone Measurements */}
             <View style={[s.card, !cSystem && s.cardOff]}>
               <Text style={s.cardTitle}>Enter Bone Measurements</Text>
-              <BoneInputs width={cWidth} height={cHeight} setWidth={(v) => { setCWidth(v); setCResult(null); }} setHeight={(v) => { setCHeight(v); setCResult(null); }} enabled={!!cSystem} />
+              <BoneInputs width={cWidth} height={cHeight} setWidth={(v) => { setCWidth(v); setCResult(null); }} setHeight={(v) => { setCHeight(v); setCResult(null); }} enabled={!!cSystem} tooth={cTooth} />
               <RidgeClassIndicator width={cWidth} />
               <TouchableOpacity style={[s.primaryBtn, (!cSystem || !cWidth || !cHeight) && s.btnOff]} onPress={handleChooseSuggest}
                 disabled={!cSystem || !cWidth || !cHeight || cSearching} data-testid="find-best-btn">
@@ -387,7 +387,7 @@ export default function ImplantSelectionScreen() {
             {/* Step 4: Bone Measurements */}
             <View style={[s.card, !sBoneType && s.cardOff]}>
               <Text style={s.cardTitle}>Bone Measurements</Text>
-              <BoneInputs width={sWidth} height={sHeight} setWidth={(v) => { setSWidth(v); setSResult(null); }} setHeight={(v) => { setSHeight(v); setSResult(null); }} enabled={!!sBoneType} />
+              <BoneInputs width={sWidth} height={sHeight} setWidth={(v) => { setSWidth(v); setSResult(null); }} setHeight={(v) => { setSHeight(v); setSResult(null); }} enabled={!!sBoneType} tooth={sTooth} />
               <RidgeClassIndicator width={sWidth} />
               <TouchableOpacity style={[s.suggestBtn, (!sBoneType || !sWidth || !sHeight || !sProcedures.length) && s.btnOff]}
                 onPress={handleSuggestMe} disabled={!sBoneType || !sWidth || !sHeight || !sProcedures.length || sSearching}
@@ -470,23 +470,56 @@ export default function ImplantSelectionScreen() {
 }
 
 // ── Shared: Bone Measurement Inputs ────────────────────────
-function BoneInputs({ width, height, setWidth, setHeight, enabled }: {
-  width: string; height: string; setWidth: (v: string) => void; setHeight: (v: string) => void; enabled: boolean;
+function BoneInputs({ width, height, setWidth, setHeight, enabled, tooth }: {
+  width: string; height: string; setWidth: (v: string) => void; setHeight: (v: string) => void; enabled: boolean; tooth: string | null;
 }) {
+  const [widthFocused, setWidthFocused] = React.useState(false);
+  const [heightFocused, setHeightFocused] = React.useState(false);
+
+  const widthInfo = React.useMemo(() => {
+    if (!tooth) return '';
+    const t = parseInt(tooth);
+    if ([11,12,13,21,22,23].includes(t)) return 'Measure distance between labial and palatal bone plate';
+    if ([14,15,16,17,24,25,26,27].includes(t)) return 'Measure distance between buccal and palatal bone plate';
+    if ([31,32,33,41,42,43].includes(t)) return 'Measure distance between labial and lingual bone plate';
+    if ([34,35,36,37,44,45,46,47].includes(t)) return 'Measure distance between buccal and lingual bone plate';
+    return '';
+  }, [tooth]);
+
+  const heightInfo = React.useMemo(() => {
+    if (!tooth) return '';
+    const t = parseInt(tooth);
+    if ([14,15,16,17,24,25,26,27].includes(t)) return 'Measure from crest of the ridge to the floor of maxillary sinus';
+    if ([34,35,36,37,44,45,46,47].includes(t)) return 'Measure from crest of the ridge to inferior alveolar nerve';
+    return '';
+  }, [tooth]);
+
   return (
     <>
-      <Text style={s.inputLabel}>Bone Width (mm)</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Text style={s.inputLabel}>Bone Width (mm)</Text>
+        {widthInfo ? <Ionicons name="information-circle" size={18} color="#1565C0" /> : null}
+      </View>
+      {widthInfo && !widthFocused ? <Text style={{ fontSize: 11, color: '#1565C0', marginBottom: 4, marginLeft: 2, fontStyle: 'italic' }}>{widthInfo}</Text> : null}
       <View style={s.inputRow}>
         <Ionicons name="resize-outline" size={18} color="#1E88E5" />
         <TextInput style={s.measureInput} value={width} onChangeText={setWidth} placeholder="e.g. 7"
-          placeholderTextColor="#B0BEC5" keyboardType="decimal-pad" editable={enabled} data-testid="bone-width-input" />
+          placeholderTextColor="#B0BEC5" keyboardType="decimal-pad" editable={enabled}
+          onFocus={() => setWidthFocused(true)} onBlur={() => setWidthFocused(false)}
+          data-testid="bone-width-input" />
         <Text style={s.unit}>mm</Text>
       </View>
-      <Text style={s.inputLabel}>Bone Height (mm)</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Text style={s.inputLabel}>Bone Height (mm)</Text>
+        {heightInfo ? <Ionicons name="information-circle" size={18} color="#1565C0" /> : null}
+      </View>
+      {heightInfo && !heightFocused ? <Text style={{ fontSize: 11, color: '#1565C0', marginBottom: 4, marginLeft: 2, fontStyle: 'italic' }}>{heightInfo}</Text> : null}
       <View style={s.inputRow}>
         <Ionicons name="arrow-up-outline" size={18} color="#1E88E5" />
         <TextInput style={s.measureInput} value={height} onChangeText={setHeight} placeholder="e.g. 12"
-          placeholderTextColor="#B0BEC5" keyboardType="decimal-pad" editable={enabled} data-testid="bone-height-input" />
+          placeholderTextColor="#B0BEC5" keyboardType="decimal-pad" editable={enabled}
+          onFocus={() => setHeightFocused(true)} onBlur={() => setHeightFocused(false)}
+          data-testid="bone-height-input" />
         <Text style={s.unit}>mm</Text>
       </View>
     </>
