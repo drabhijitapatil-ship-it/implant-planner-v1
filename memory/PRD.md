@@ -248,6 +248,13 @@ A comprehensive mobile application for managing dental implant procedures at the
   - InCharge User Management page shows profile photos for all users in the user list cards
   - Profile photo auto-refreshes after upload via auth context state update
   - All API endpoints confirmed: GET /auth/me, GET /users, PUT /auth/profile-photo, and login response all include profile_photo
+
+### Bug Fixes — Session 12e
+- **Drawer Username Fix** (11/11 tests): Changed `user?.full_name` to `user?.name` — backend returns `name` field, not `full_name`
+- **Draft Slot Conflict Fix**: Own draft no longer blocks re-creation on same slot. Other users still get 409 on booked slots.
+- **Draft Delete Persistence**: Deleted drafts removed from DB; dashboard uses `useFocusEffect` to auto-refresh on navigate back
+- **Drafts Hidden from My Cases/Alerts**: Procedures page filters out `status === 'draft'`; removed `draft` from `ACTION_NEEDED_MAP`
+- **My Cases Sort Order**: GET /api/procedures now sorts by `created_at` descending (latest first) for all filter types
 - **Interactive Case Pipeline for Supervisor & InCharge** (22/22 tests passed):
   - Supervisor dashboard now shows Case Pipeline section (Phase 1-4 + Complete bars)
   - InCharge pipeline bars made interactive
