@@ -228,6 +228,20 @@ A comprehensive mobile application for managing dental implant procedures at the
   - Bone Width guidance varies by tooth: labial/palatal (anteriors upper), buccal/palatal (posteriors upper), labial/lingual (anteriors lower), buccal/lingual (posteriors lower)
   - Bone Height guidance varies by tooth: crest to maxillary sinus floor (posterior upper), crest to inferior alveolar nerve (posterior lower), no info for anteriors
   - Info text appears inline below label and disappears when input is focused
+- **Draft Case Workflow** (22/22 backend tests passed):
+  - If only Step 1 is filled and user navigates away, form resets completely (no draft)
+  - Once user proceeds to Step 2 (Implant Selection), case is saved as draft in DB
+  - Dashboard shows "Drafts" section with inline cards containing patient name, type, and "Continue" button
+  - "Continue" navigates to new-procedure with `draftId` param, resumes at Step 2
+  - "Delete Draft" button in Step 2 header allows removal of draft cases
+  - All roles (Student, Supervisor, InCharge) can delete their own draft cases
+  - Available on all user dashboards (Student, Supervisor, InCharge)
+- **Interactive Case Pipeline for Supervisor & InCharge** (22/22 tests passed):
+  - Supervisor dashboard now shows Case Pipeline section (Phase 1-4 + Complete bars)
+  - InCharge pipeline bars made interactive
+  - Tapping a pipeline bar navigates to procedures list filtered by that phase
+  - Backend GET /api/procedures accepts `phase` query param (1,2,3,4,completed)
+  - Procedures page supports `phase` URL param for filtered views
 
 ### Earlier Sessions
 - Session 9: Narrow Ridge, High Constraint engines, scheduling constraints, logo replacement

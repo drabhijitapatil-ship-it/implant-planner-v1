@@ -1265,9 +1265,17 @@ async def update_procedure(
 
 @api_router.delete("/procedures/{procedure_id}")
 async def delete_procedure(procedure_id: str, current_user: dict = Depends(get_current_user)):
-    # Only implant_incharge can delete
-    if current_user["role"] != "implant_incharge":
-        raise HTTPException(status_code=403, detail="Only Implant Incharge can delete procedures")
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    # Allow any user to delete their own draft cases
+    is_owner = proc.get("created_by_id") == current_user["_id"] or proc.get("student_id") == current_user["_id"]
+    is_draft = proc.get("status") == "draft"
+    is_incharge = current_user["role"] == "implant_incharge"
+
+    if not (is_incharge or (is_owner and is_draft)):
+        raise HTTPException(status_code=403, detail="Only Implant Incharge or the case creator (for drafts) can delete procedures")
     
     result = await db.procedures.delete_one({"_id": ObjectId(procedure_id)})
     
