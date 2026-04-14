@@ -817,10 +817,9 @@ export default function NewProcedureScreen() {
                 options={OCCLUSAL_SCHEME_OPTIONS} onChange={v => updateForm('occlusal_scheme', v)} />
               <Dropdown label="Parafunction Habit" value={formData.parafunction_habit}
                 options={PARAFUNCTION_HABIT_OPTIONS} onChange={v => updateForm('parafunction_habit', v)} />
-              <Dropdown label="Vertical Dimension" value={formData.vertical_dimension}
-                options={VERTICAL_DIMENSION_OPTIONS} onChange={v => updateForm('vertical_dimension', v)} />
               <Dropdown label="Opposing Dentition" value={formData.opposing_dentition}
-                options={OPPOSING_DENTITION_OPTIONS} onChange={v => updateForm('opposing_dentition', v)} />
+                options={['Natural Dentition', 'Fixed Partial Denture', 'Fixed Implant Prosthesis', 'Removable Prosthesis', 'Edentulous']}
+                onChange={v => updateForm('opposing_dentition', v)} />
             </>
           )}
 
@@ -844,7 +843,7 @@ export default function NewProcedureScreen() {
                   onChangeText={v => updateForm('available_interarch_space', v)} placeholder="Enter in mm" data-testid="restorative-space-input" />
               </View>
               <Dropdown label="Opposing Arch" value={formData.opposing_arch}
-                options={['Natural Dentition', 'Fixed Implant Prosthesis', 'Removable Prosthesis', 'Edentulous']}
+                options={['Natural Dentition', 'Fixed Partial Denture', 'Fixed Implant Prosthesis', 'Removable Prosthesis', 'Edentulous']}
                 onChange={v => updateForm('opposing_arch', v)} />
               <Dropdown label="Temporomandibular Joint" value={formData.tmj}
                 options={TMJ_OPTIONS} onChange={v => updateForm('tmj', v)} />
@@ -1151,8 +1150,8 @@ const styles = StyleSheet.create({
   riskBadgeText: { fontSize: 14, fontWeight: '700' },
   cbctUploadBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1565C0', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 20, borderStyle: 'dashed' as any, shadowColor: '#1565C0', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 2 },
   cbctUploadBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
-  cbctViewBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#43A047', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 20, shadowColor: '#43A047', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 2 },
-  cbctViewBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700', flex: 1 },
+  cbctViewBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: '#43A047', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10, flex: 1 },
+  cbctViewBtnText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
   continueBtn: { flexDirection: 'row', backgroundColor: '#1565C0', borderRadius: 14, padding: 16, marginHorizontal: 16, marginVertical: 20, alignItems: 'center', justifyContent: 'center', gap: 8, shadowColor: '#1565C0', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 5 },
   continueBtnText: { color: '#FFF', fontSize: 16, fontWeight: '700', letterSpacing: 0.5 },
   submitContainer: { padding: 16, backgroundColor: '#FFF', borderTopWidth: 1, borderTopColor: '#E0E7EE' },
