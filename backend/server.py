@@ -1136,6 +1136,7 @@ async def get_booked_slots(date: str, current_user: dict = Depends(get_current_u
 @api_router.get("/procedures")
 async def get_procedures(
     status: Optional[str] = None,
+    phase: Optional[str] = None,
     date: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
@@ -1157,7 +1158,17 @@ async def get_procedures(
         query["status"] = {"$in": ["phase1_approved", "phase2_approved", "approved", "stage2_surgical_approved", "completed"]}
     # administrator and implant_incharge can see all
     
-    if status and current_user["role"] != "nurse":
+    if phase and current_user["role"] != "nurse":
+        phase_status_map = {
+            "1": ["draft", "pending_phase1"],
+            "2": ["phase1_approved", "pending_phase2"],
+            "3": ["phase2_approved", "pending_stage2_surgical"],
+            "4": ["stage2_surgical_approved", "pending_stage2_prosthetic", "stage2_prosthetic_step1_approved", "pending_final_delivery"],
+            "completed": ["completed"],
+        }
+        if phase in phase_status_map:
+            query["status"] = {"$in": phase_status_map[phase]}
+    elif status and current_user["role"] != "nurse":
         if status == "pending":
             query["status"] = {"$in": ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic"]}
         elif status == "completed":

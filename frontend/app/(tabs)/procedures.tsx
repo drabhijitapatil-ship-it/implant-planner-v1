@@ -24,13 +24,15 @@ export default function ProceduresScreen() {
   const [filter, setFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const router = useRouter();
-  const params = useLocalSearchParams<{ filter?: string }>();
+  const params = useLocalSearchParams<{ filter?: string; phase?: string }>();
 
   useEffect(() => {
-    if (params.filter && ['pending', 'completed', 'rejected'].includes(params.filter)) {
+    if (params.phase) {
+      setFilter(`phase_${params.phase}`);
+    } else if (params.filter && ['pending', 'completed', 'rejected'].includes(params.filter)) {
       setFilter(params.filter);
     }
-  }, [params.filter]);
+  }, [params.filter, params.phase]);
 
   useEffect(() => {
     loadProcedures();
@@ -38,11 +40,13 @@ export default function ProceduresScreen() {
 
   const loadProcedures = async () => {
     try {
-      const params: any = {};
-      if (filter !== 'all') {
-        params.status = filter;
+      const reqParams: any = {};
+      if (filter.startsWith('phase_')) {
+        reqParams.phase = filter.replace('phase_', '');
+      } else if (filter !== 'all') {
+        reqParams.status = filter;
       }
-      const response = await api.get('/procedures', { params });
+      const response = await api.get('/procedures', { params: reqParams });
       setProcedures(response.data);
     } catch (error) {
       console.error('Failed to load procedures:', error);

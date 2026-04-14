@@ -4,7 +4,7 @@ import {
   StyleSheet, Alert, ActivityIndicator, Platform, AppState, Linking, Image
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import api, { getAuthFileUrl, getToken } from '../../utils/api';
 import { showUploadPicker } from '../../utils/uploadPicker';
@@ -228,11 +228,13 @@ const calStyles = StyleSheet.create({
 export default function NewProcedureScreen() {
   const { user } = useAuth();
   const router = useRouter();
+  const params = useLocalSearchParams<{ draftId?: string }>();
   const [step, setStep] = useState<'details' | 'implants'>('details');
   const [loading, setLoading] = useState(false);
   const [supervisors, setSupervisors] = useState<any[]>([]);
   const [incharges, setIncharges] = useState<any[]>([]);
   const [createdProcedureId, setCreatedProcedureId] = useState<string | null>(null);
+  const [isDraftResume, setIsDraftResume] = useState(false);
 
   // ── Form State ──
   const [formData, setFormData] = useState({
@@ -295,9 +297,28 @@ export default function NewProcedureScreen() {
   const sanitizeString = (val: string) => val.trim().replace(/[<>"';]/g, '');
 
   // ── Reset form when tab gains focus (prevents stale data) ──
+  // If draftId param is present, load that draft and jump to Step 2
   useFocusEffect(
     useCallback(() => {
-      if (!createdProcedureId) {
+      if (params.draftId) {
+        // Resuming a draft — load and jump to implant selection
+        const loadDraft = async () => {
+          try {
+            const res = await api.get(`/procedures/${params.draftId}`);
+            const proc = res.data;
+            if (proc.status === 'draft') {
+              setCreatedProcedureId(params.draftId!);
+              setIsDraftResume(true);
+              setFormData(prev => ({
+                ...prev,
+                implant_procedure_type: proc.implant_procedure_type || '',
+              }));
+              setStep('implants');
+            }
+          } catch { /* ignore — draft may have been deleted */ }
+        };
+        loadDraft();
+      } else if (!createdProcedureId) {
         setFormData({
           patient_name: '', registration_number: '', student_name: user?.name || '',
           supervisor_id: (user?.role === 'supervisor' || user?.role === 'implant_incharge') ? (user?.id || '') : '',
@@ -546,10 +567,35 @@ export default function NewProcedureScreen() {
     return (
       <View style={{ flex: 1, backgroundColor: '#F5F7FA' }}>
         <View style={styles.stepHeader}>
-          <TouchableOpacity onPress={() => setStep('details')} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => { setStep('details'); setIsDraftResume(false); }} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={22} color="#1A73E8" />
           </TouchableOpacity>
           <Text style={styles.stepTitle}>Step 2: Implant Selection</Text>
+          <TouchableOpacity
+            style={{ marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFEBEE', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, gap: 4 }}
+            onPress={() => {
+              Alert.alert('Delete Draft', 'Are you sure you want to delete this draft case?', [
+                { text: 'Cancel' },
+                {
+                  text: 'Delete', style: 'destructive', onPress: async () => {
+                    try {
+                      await api.delete(`/procedures/${createdProcedureId}`);
+                      setCreatedProcedureId(null);
+                      setIsDraftResume(false);
+                      setStep('details');
+                      router.replace('/(tabs)/dashboard');
+                    } catch (e: any) {
+                      Alert.alert('Error', e.response?.data?.detail || 'Failed to delete');
+                    }
+                  }
+                },
+              ]);
+            }}
+            data-testid="delete-draft-btn"
+          >
+            <Ionicons name="trash-outline" size={16} color="#D32F2F" />
+            <Text style={{ fontSize: 12, fontWeight: '600', color: '#D32F2F' }}>Delete</Text>
+          </TouchableOpacity>
         </View>
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 16 }} nestedScrollEnabled={true}>
           <CaseImplantPlanning
