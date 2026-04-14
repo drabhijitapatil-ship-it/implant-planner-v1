@@ -9,6 +9,7 @@ import {
   Pressable,
   StyleSheet,
   Platform,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
@@ -23,6 +24,7 @@ function DrawerMenu({
   isAdmin,
   userName,
   userRole,
+  profilePhoto,
   onNavigate,
   onLogout,
 }: {
@@ -31,6 +33,7 @@ function DrawerMenu({
   isAdmin: boolean;
   userName: string;
   userRole: string;
+  profilePhoto: string | null;
   onNavigate: (route: string) => void;
   onLogout: () => void;
 }) {
@@ -58,9 +61,13 @@ function DrawerMenu({
         >
           {/* User Info Header */}
           <View style={d.header}>
-            <View style={d.avatar}>
-              <Ionicons name="person" size={28} color="#FFF" />
-            </View>
+            {profilePhoto ? (
+              <Image source={{ uri: profilePhoto }} style={d.avatarImage} />
+            ) : (
+              <View style={d.avatar}>
+                <Ionicons name="person" size={28} color="#FFF" />
+              </View>
+            )}
             <View style={d.headerInfo}>
               <Text style={d.userName}>{userName}</Text>
               <Text style={d.userRole}>{userRole}</Text>
@@ -147,6 +154,13 @@ const d = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  avatarImage: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    borderWidth: 2,
+    borderColor: '#1E88E5',
+  },
   headerInfo: { flex: 1 },
   userName: { fontSize: 16, fontWeight: '700', color: '#263238' },
   userRole: { fontSize: 12, color: '#78909C', marginTop: 2, textTransform: 'capitalize' },
@@ -217,6 +231,7 @@ export default function TabsLayout() {
         isAdmin={isAdmin}
         userName={user?.full_name || user?.username || ''}
         userRole={roleName}
+        profilePhoto={user?.profile_photo || null}
         onNavigate={handleNavigate}
         onLogout={handleLogout}
       />
