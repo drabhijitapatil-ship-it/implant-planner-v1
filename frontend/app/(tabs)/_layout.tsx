@@ -229,7 +229,7 @@ export default function TabsLayout() {
         visible={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         isAdmin={isAdmin}
-        userName={user?.full_name || user?.username || ''}
+        userName={user?.name || user?.username || ''}
         userRole={roleName}
         profilePhoto={user?.profile_photo || null}
         onNavigate={handleNavigate}

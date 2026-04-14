@@ -47,7 +47,11 @@ export default function ProceduresScreen() {
         reqParams.status = filter;
       }
       const response = await api.get('/procedures', { params: reqParams });
-      setProcedures(response.data);
+      // Exclude draft cases from My Cases (drafts are shown on Dashboard)
+      const filtered = filter.startsWith('phase_')
+        ? response.data
+        : response.data.filter((p: any) => p.status !== 'draft');
+      setProcedures(filtered);
     } catch (error) {
       console.error('Failed to load procedures:', error);
     } finally {

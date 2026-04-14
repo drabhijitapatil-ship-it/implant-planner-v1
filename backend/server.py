@@ -992,19 +992,26 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
     except ValueError:
         pass  # If date parsing fails, let it proceed (will be caught by validation)
 
-    # ── Duplicate slot check: only 1 patient per slot per day ──
+    # ── Duplicate slot check: only 1 patient per slot per day (skip for own draft) ──
     existing = await db.procedures.find_one({
         "procedure_date": procedure.procedure_date,
         "procedure_time": procedure.procedure_time,
     })
     if existing:
-        booked_by = existing.get("created_by_name") or existing.get("student_name") or "Unknown"
-        patient = existing.get("patient_name", "Unknown")
-        slot_label = "10:00 AM" if procedure.procedure_time == "10:00" else "2:00 PM"
-        raise HTTPException(
-            status_code=409,
-            detail=f"The {slot_label} slot on {procedure.procedure_date} is already booked for patient {patient} (scheduled by {booked_by}). Please choose a different time or date."
+        existing_id = str(existing["_id"])
+        # Allow if it's the user's own draft being continued
+        is_own_draft = existing.get("status") == "draft" and (
+            existing.get("created_by_id") == current_user["_id"] or
+            existing.get("student_id") == current_user["_id"]
         )
+        if not is_own_draft:
+            booked_by = existing.get("created_by_name") or existing.get("student_name") or "Unknown"
+            patient = existing.get("patient_name", "Unknown")
+            slot_label = "10:00 AM" if procedure.procedure_time == "10:00" else "2:00 PM"
+            raise HTTPException(
+                status_code=409,
+                detail=f"The {slot_label} slot on {procedure.procedure_date} is already booked for patient {patient} (scheduled by {booked_by}). Please choose a different time or date."
+            )
 
     # Validate mandatory fields
     valid_procedure_types = [
@@ -1181,7 +1188,7 @@ async def get_procedures(
     if date:
         query["procedure_date"] = date
     
-    procedures = await db.procedures.find(query).sort("procedure_date", 1).to_list(100)
+    procedures = await db.procedures.find(query).sort("created_at", -1).to_list(100)
     
     for proc in procedures:
         proc["_id"] = str(proc["_id"])
