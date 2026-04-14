@@ -11,6 +11,7 @@ import {
   TextInput,
   Modal,
   ScrollView,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -164,11 +165,15 @@ export default function UserManagementScreen() {
       data-testid={`user-card-${item.id}`}
     >
       <View style={styles.userRow}>
-        <View style={[styles.userAvatar, { backgroundColor: ROLE_COLORS[item.role] || '#757575' }]}>
-          <Text style={styles.avatarText}>
-            {item.name?.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
-          </Text>
-        </View>
+        {item.profile_photo ? (
+          <Image source={{ uri: item.profile_photo }} style={styles.userAvatarImage} />
+        ) : (
+          <View style={[styles.userAvatar, { backgroundColor: ROLE_COLORS[item.role] || '#757575' }]}>
+            <Text style={styles.avatarText}>
+              {item.name?.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
+            </Text>
+          </View>
+        )}
         <View style={styles.userInfo}>
           <Text style={styles.userName}>{item.name}</Text>
           <Text style={styles.userEmail}>{item.email}</Text>
@@ -510,6 +515,13 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  userAvatarImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: '#1E88E5',
   },
   avatarText: {
     color: '#FFF',
