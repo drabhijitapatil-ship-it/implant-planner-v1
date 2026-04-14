@@ -818,6 +818,26 @@ function ModalContent(props: any) {
     return { label: 'Severely Narrow Ridge — Augmentation Required', icon: 'close-circle' as const, color: '#B71C1C', bgColor: '#FFEBEE', borderColor: '#EF9A9A', severity: 'critical' };
   })();
   const [showProtocol, setShowProtocol] = React.useState(false);
+  const [bwFocused, setBwFocused] = React.useState(false);
+  const [bhFocused, setBhFocused] = React.useState(false);
+
+  const boneWidthInfo = React.useMemo(() => {
+    if (!position) return '';
+    const t = parseInt(position);
+    if ([11,12,13,21,22,23].includes(t)) return 'Measure distance between labial and palatal bone plate';
+    if ([14,15,16,17,24,25,26,27].includes(t)) return 'Measure distance between buccal and palatal bone plate';
+    if ([31,32,33,41,42,43].includes(t)) return 'Measure distance between labial and lingual bone plate';
+    if ([34,35,36,37,44,45,46,47].includes(t)) return 'Measure distance between buccal and lingual bone plate';
+    return '';
+  }, [position]);
+
+  const boneHeightInfo = React.useMemo(() => {
+    if (!position) return '';
+    const t = parseInt(position);
+    if ([14,15,16,17,24,25,26,27].includes(t)) return 'Measure from crest of the ridge to the floor of maxillary sinus';
+    if ([34,35,36,37,44,45,46,47].includes(t)) return 'Measure from crest of the ridge to inferior alveolar nerve';
+    return '';
+  }, [position]);
 
   // Auto-expand drilling protocol when an implant is selected
   React.useEffect(() => {
@@ -955,10 +975,18 @@ function ModalContent(props: any) {
                     </View>
                   )}
 
-                  <Text style={ms.inputLabel}>Bone Width (mm)</Text>
-                  <TextInput style={ms.input} value={boneWidth} onChangeText={setBoneWidth} keyboardType="decimal-pad" placeholder="e.g. 7" data-testid="modal-bone-width" />
-                  <Text style={ms.inputLabel}>Bone Height (mm)</Text>
-                  <TextInput style={ms.input} value={boneHeight} onChangeText={setBoneHeight} keyboardType="decimal-pad" placeholder="e.g. 12" data-testid="modal-bone-height" />
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={ms.inputLabel}>Bone Width (mm)</Text>
+                    {boneWidthInfo ? <Ionicons name="information-circle" size={18} color="#1565C0" /> : null}
+                  </View>
+                  {boneWidthInfo && !bwFocused ? <Text style={{ fontSize: 11, color: '#1565C0', marginBottom: 4, marginLeft: 2, fontStyle: 'italic' }}>{boneWidthInfo}</Text> : null}
+                  <TextInput style={ms.input} value={boneWidth} onChangeText={setBoneWidth} keyboardType="decimal-pad" placeholder="e.g. 7" onFocus={() => setBwFocused(true)} onBlur={() => setBwFocused(false)} data-testid="modal-bone-width" />
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={ms.inputLabel}>Bone Height (mm)</Text>
+                    {boneHeightInfo ? <Ionicons name="information-circle" size={18} color="#1565C0" /> : null}
+                  </View>
+                  {boneHeightInfo && !bhFocused ? <Text style={{ fontSize: 11, color: '#1565C0', marginBottom: 4, marginLeft: 2, fontStyle: 'italic' }}>{boneHeightInfo}</Text> : null}
+                  <TextInput style={ms.input} value={boneHeight} onChangeText={setBoneHeight} keyboardType="decimal-pad" placeholder="e.g. 12" onFocus={() => setBhFocused(true)} onBlur={() => setBhFocused(false)} data-testid="modal-bone-height" />
                   {isRestrictedHeight && (
                     <View style={ms.restrictedBanner} data-testid="choose-restricted-warning">
                       <Ionicons name="alert-circle" size={16} color="#E65100" />
@@ -996,10 +1024,18 @@ function ModalContent(props: any) {
                       </TouchableOpacity>
                     ))}
                   </View>
-                  <Text style={ms.inputLabel}>Bone Width (mm)</Text>
-                  <TextInput style={ms.input} value={boneWidth} onChangeText={setBoneWidth} keyboardType="decimal-pad" placeholder="e.g. 7" />
-                  <Text style={ms.inputLabel}>Bone Height (mm)</Text>
-                  <TextInput style={ms.input} value={boneHeight} onChangeText={setBoneHeight} keyboardType="decimal-pad" placeholder="e.g. 12" />
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={ms.inputLabel}>Bone Width (mm)</Text>
+                    {boneWidthInfo ? <Ionicons name="information-circle" size={18} color="#1565C0" /> : null}
+                  </View>
+                  {boneWidthInfo && !bwFocused ? <Text style={{ fontSize: 11, color: '#1565C0', marginBottom: 4, marginLeft: 2, fontStyle: 'italic' }}>{boneWidthInfo}</Text> : null}
+                  <TextInput style={ms.input} value={boneWidth} onChangeText={setBoneWidth} keyboardType="decimal-pad" placeholder="e.g. 7" onFocus={() => setBwFocused(true)} onBlur={() => setBwFocused(false)} />
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={ms.inputLabel}>Bone Height (mm)</Text>
+                    {boneHeightInfo ? <Ionicons name="information-circle" size={18} color="#1565C0" /> : null}
+                  </View>
+                  {boneHeightInfo && !bhFocused ? <Text style={{ fontSize: 11, color: '#1565C0', marginBottom: 4, marginLeft: 2, fontStyle: 'italic' }}>{boneHeightInfo}</Text> : null}
+                  <TextInput style={ms.input} value={boneHeight} onChangeText={setBoneHeight} keyboardType="decimal-pad" placeholder="e.g. 12" onFocus={() => setBhFocused(true)} onBlur={() => setBhFocused(false)} />
                   {narrowRidgeClass && (
                     <View style={[ms.narrowRidgeBanner, { backgroundColor: narrowRidgeClass.bgColor, borderColor: narrowRidgeClass.borderColor }]} data-testid="suggest-narrow-ridge-indicator">
                       <Ionicons name={narrowRidgeClass.icon} size={18} color={narrowRidgeClass.color} />
