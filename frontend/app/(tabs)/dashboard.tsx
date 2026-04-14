@@ -221,23 +221,21 @@ function StudentDashboard({ stats, procedures, selectedDate, setSelectedDate, ro
             <Ionicons name="document-text-outline" size={18} color="#546E7A" />
             <Text style={s.sectionTitle}>Drafts ({draftCases.length})</Text>
           </View>
-          {draftCases.slice(0, 3).map((proc: any) => (
-            <TouchableOpacity key={proc.id} style={s.draftCard} onPress={() => router.push(`/procedures/${proc.id}`)} data-testid={`draft-card-${proc.id}`}>
+          {draftCases.slice(0, 5).map((proc: any) => (
+            <View key={proc.id} style={s.draftCard} data-testid={`draft-card-${proc.id}`}>
               <View style={{ flex: 1 }}>
                 <Text style={s.draftPatient}>{proc.patient_name}</Text>
                 <Text style={s.draftSub}>{proc.implant_procedure_type} - {proc.procedure_date}</Text>
               </View>
               <TouchableOpacity
-                style={[s.sendBtn, approvingDraftId === proc.id && { opacity: 0.5 }]}
-                onPress={(e) => { e.stopPropagation(); handleSendForApproval(proc.id); }}
-                disabled={approvingDraftId === proc.id}
-                data-testid={`draft-approve-btn-${proc.id}`}
+                style={s.continueBtn}
+                onPress={() => router.push(`/(tabs)/new-procedure?draftId=${proc.id}`)}
+                data-testid={`draft-continue-btn-${proc.id}`}
               >
-                {approvingDraftId === proc.id ? <ActivityIndicator size="small" color="#FFF" /> : (
-                  <><Ionicons name="send" size={13} color="#FFF" /><Text style={s.sendBtnText}>Send</Text></>
-                )}
+                <Ionicons name="play-circle" size={14} color="#FFF" />
+                <Text style={s.continueBtnText}>Continue</Text>
               </TouchableOpacity>
-            </TouchableOpacity>
+            </View>
           ))}
         </View>
       )}
@@ -273,6 +271,11 @@ function SupervisorDashboard({ stats, procedures, selectedDate, setSelectedDate,
     [procedures]
   );
 
+  const draftCases = useMemo(() => procedures.filter((p: any) => p.status === 'draft'), [procedures]);
+
+  const pipeline = stats.pipeline || {};
+  const pipelineTotal = (pipeline.phase1 || 0) + (pipeline.phase2 || 0) + (pipeline.phase3 || 0) + (pipeline.phase4 || 0) + (pipeline.completed || 0);
+
   const myStudents = useMemo(() => {
     const map: Record<string, { name: string; cases: number; pending: number }> = {};
     procedures.forEach((p: any) => {
@@ -297,6 +300,29 @@ function SupervisorDashboard({ stats, procedures, selectedDate, setSelectedDate,
         <StatCard label="Approved" value={stats.approved} color="#4CAF50" icon="checkmark-circle" onPress={() => router.push('/procedures')} />
         <StatCard label="Total" value={stats.total} color="#1565C0" icon="folder-open" onPress={() => router.push('/procedures')} />
         <StatCard label="Rate" value={`${approvalRate}%`} color="#5C35A3" icon="analytics" onPress={() => router.push('/procedures')} />
+      </View>
+
+      {/* Case Pipeline */}
+      <View style={s.section}>
+        <View style={s.sectionHeader}>
+          <Ionicons name="git-branch-outline" size={18} color="#1565C0" />
+          <Text style={[s.sectionTitle, { color: '#1565C0' }]}>Case Pipeline</Text>
+        </View>
+        <View style={s.pipelineCard}>
+          {[
+            { label: 'Phase 1', count: pipeline.phase1 || 0, color: '#78909C', phase: '1' },
+            { label: 'Phase 2', count: pipeline.phase2 || 0, color: '#1A73E8', phase: '2' },
+            { label: 'Phase 3', count: pipeline.phase3 || 0, color: '#FF9800', phase: '3' },
+            { label: 'Phase 4', count: pipeline.phase4 || 0, color: '#9C27B0', phase: '4' },
+            { label: 'Complete', count: pipeline.completed || 0, color: '#4CAF50', phase: 'completed' },
+          ].map((item, idx) => (
+            <TouchableOpacity key={idx} style={s.pipelineItem} onPress={() => router.push(`/(tabs)/procedures?phase=${item.phase}`)} data-testid={`sup-pipeline-${item.phase}`}>
+              <View style={[s.pipelineBar, { backgroundColor: item.color, height: Math.max(8, pipelineTotal > 0 ? (item.count / pipelineTotal) * 80 : 8) }]} />
+              <Text style={s.pipelineCount}>{item.count}</Text>
+              <Text style={s.pipelineLabel}>{item.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
 
       {/* Pending Approval Queue */}
@@ -352,6 +378,32 @@ function SupervisorDashboard({ stats, procedures, selectedDate, setSelectedDate,
         </View>
       )}
 
+      {/* Draft Cases */}
+      {draftCases.length > 0 && (
+        <View style={s.section} data-testid="sup-draft-cases-section">
+          <View style={s.sectionHeader}>
+            <Ionicons name="document-text-outline" size={18} color="#546E7A" />
+            <Text style={s.sectionTitle}>Drafts ({draftCases.length})</Text>
+          </View>
+          {draftCases.slice(0, 5).map((proc: any) => (
+            <View key={proc.id} style={s.draftCard} data-testid={`sup-draft-card-${proc.id}`}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.draftPatient}>{proc.patient_name}</Text>
+                <Text style={s.draftSub}>{proc.implant_procedure_type} - {proc.procedure_date}</Text>
+              </View>
+              <TouchableOpacity
+                style={s.continueBtn}
+                onPress={() => router.push(`/(tabs)/new-procedure?draftId=${proc.id}`)}
+                data-testid={`sup-draft-continue-btn-${proc.id}`}
+              >
+                <Ionicons name="play-circle" size={14} color="#FFF" />
+                <Text style={s.continueBtnText}>Continue</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+      )}
+
       <ProcedureCalendar procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
     </>
   );
@@ -386,17 +438,17 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
         </View>
         <View style={s.pipelineCard}>
           {[
-            { label: 'Phase 1', count: pipeline.phase1 || 0, color: '#78909C' },
-            { label: 'Phase 2', count: pipeline.phase2 || 0, color: '#1A73E8' },
-            { label: 'Phase 3', count: pipeline.phase3 || 0, color: '#FF9800' },
-            { label: 'Phase 4', count: pipeline.phase4 || 0, color: '#9C27B0' },
-            { label: 'Complete', count: pipeline.completed || 0, color: '#4CAF50' },
+            { label: 'Phase 1', count: pipeline.phase1 || 0, color: '#78909C', phase: '1' },
+            { label: 'Phase 2', count: pipeline.phase2 || 0, color: '#1A73E8', phase: '2' },
+            { label: 'Phase 3', count: pipeline.phase3 || 0, color: '#FF9800', phase: '3' },
+            { label: 'Phase 4', count: pipeline.phase4 || 0, color: '#9C27B0', phase: '4' },
+            { label: 'Complete', count: pipeline.completed || 0, color: '#4CAF50', phase: 'completed' },
           ].map((item, idx) => (
-            <View key={idx} style={s.pipelineItem}>
+            <TouchableOpacity key={idx} style={s.pipelineItem} onPress={() => router.push(`/(tabs)/procedures?phase=${item.phase}`)} data-testid={`ic-pipeline-${item.phase}`}>
               <View style={[s.pipelineBar, { backgroundColor: item.color, height: Math.max(8, pipelineTotal > 0 ? (item.count / pipelineTotal) * 80 : 8) }]} />
               <Text style={s.pipelineCount}>{item.count}</Text>
               <Text style={s.pipelineLabel}>{item.label}</Text>
-            </View>
+            </TouchableOpacity>
           ))}
         </View>
       </View>
@@ -612,6 +664,8 @@ const s = StyleSheet.create({
   draftSub: { fontSize: 12, color: '#90A4AE', marginTop: 2 },
   sendBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#34A853', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, gap: 5 },
   sendBtnText: { color: '#FFF', fontSize: 12, fontWeight: '600' },
+  continueBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A73E8', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, gap: 5 },
+  continueBtnText: { color: '#FFF', fontSize: 12, fontWeight: '600' },
 
   // Remarks (Student)
   remarkCard: { backgroundColor: '#FFF', borderRadius: 12, padding: 12, marginBottom: 8, borderLeftWidth: 3, borderLeftColor: '#5C35A3', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3, elevation: 1 },
