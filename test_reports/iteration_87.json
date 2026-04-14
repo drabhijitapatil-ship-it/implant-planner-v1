@@ -1,0 +1,84 @@
+{
+  "summary": "Iteration 87: Backend tests for 3 bug fixes - ALL 11 TESTS PASSED. Verified: (1) GET /api/auth/me returns 'name' field (not 'full_name') for drawer display, (2) Draft slot conflict bypass works - user can create procedure on same slot as their own draft, (3) Another user trying same slot gets 409 Conflict, (4) Deleted drafts are removed from DB and don't appear in GET /api/procedures, (5) Procedures sorted by created_at descending (latest first).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_bug_fixes_iteration87.py",
+    "/app/test_reports/pytest/pytest_results_iteration87.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "GET /api/auth/me correctly returns 'name' field (line 662-670 in server.py) - UserResponse model uses 'name' not 'full_name'",
+    "Slot conflict bypass logic (line 1000-1014) correctly checks if existing procedure is user's own draft before blocking",
+    "DELETE /api/procedures/{id} (line 1287) correctly removes procedure from MongoDB",
+    "GET /api/procedures (line 1191) correctly sorts by created_at descending: .sort('created_at', -1)"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_bug_fixes_iteration87.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "N/A (skipped per request)"
+  },
+  "test_credentials": {
+    "student": "Gaurav.pandey@student.dental.edu / Student@123",
+    "supervisor": "Paresh.gandhi@dental.edu / Supervisor@123",
+    "implant_incharge": "Abhijit.patil@dental.edu / Admin@123"
+  },
+  "seed_data_creation": "Test procedures created and cleaned up during tests",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 87 verified 3 bug fixes: (1) Drawer username - GET /api/auth/me returns 'name' field, (2) Draft slot conflict bypass - continuing own draft bypasses slot check, another user gets 409, deleted drafts removed from DB, (3) Procedures sorted newest first. All backend APIs working correctly.",
+  "tests_executed": {
+    "total": 11,
+    "passed": 11,
+    "failed": 0,
+    "test_categories": {
+      "health_check": 1,
+      "drawer_username_name_field": 3,
+      "draft_slot_conflict_bypass": 2,
+      "draft_delete_persistence": 2,
+      "procedures_sort_order": 2,
+      "student_draft_bypass": 1
+    }
+  },
+  "bug_fix_verification": {
+    "bug_1_drawer_username": {
+      "description": "Drawer menu should show username next to profile photo",
+      "fix": "Frontend changed from user?.full_name to user?.name",
+      "backend_verification": "PASS - GET /api/auth/me returns 'name' field for all roles (student, supervisor, incharge)",
+      "tests": ["test_auth_me_returns_name_field_student", "test_auth_me_returns_name_field_supervisor", "test_auth_me_returns_name_field_incharge"]
+    },
+    "bug_2_draft_slot_conflict": {
+      "description": "Continuing a draft shows 'slot already booked' error",
+      "fix": "create_procedure now checks if existing slot is user's own draft and bypasses conflict",
+      "backend_verification": "PASS - InCharge and Student can create on same slot as their own draft",
+      "tests": ["test_create_draft_then_create_same_slot_bypasses_conflict", "test_student_own_draft_bypass"]
+    },
+    "bug_2b_another_user_slot_conflict": {
+      "description": "Another user trying same slot should fail",
+      "fix": "Slot conflict check still blocks other users",
+      "backend_verification": "PASS - Student gets 409 Conflict when trying InCharge's slot",
+      "tests": ["test_another_user_same_slot_fails_with_409"]
+    },
+    "bug_2c_deleted_drafts": {
+      "description": "Deleted drafts still show in drafts list",
+      "fix": "DELETE /api/procedures/{id} removes from MongoDB",
+      "backend_verification": "PASS - Deleted drafts don't appear in GET /api/procedures, GET by ID returns 404",
+      "tests": ["test_delete_draft_removes_from_db", "test_get_deleted_draft_returns_404"]
+    },
+    "bug_3_sort_order": {
+      "description": "My Cases should show latest cases first",
+      "fix": "GET /api/procedures now sorts by created_at descending",
+      "backend_verification": "PASS - Procedures returned newest first, works with status filters",
+      "tests": ["test_procedures_sorted_by_created_at_descending", "test_procedures_with_status_filter_sorted_descending"]
+    }
+  }
+}

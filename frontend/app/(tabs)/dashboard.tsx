@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   RefreshControl, ActivityIndicator, Image, Alert,
@@ -9,12 +9,11 @@ import { format } from 'date-fns';
 import api from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { STATUS_COLORS, STATUS_LABELS } from '../../constants/checklist';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 // ── Status helpers ────────────────────────────────────────
 const ACTION_NEEDED_MAP: Record<string, { label: string; icon: string; color: string }> = {
-  draft: { label: 'Complete and submit for approval', icon: 'create-outline', color: '#78909C' },
   phase1_approved: { label: 'Submit Phase 2 surgical data', icon: 'medkit-outline', color: '#4CAF50' },
   phase2_approved: { label: 'Submit Phase 3 data', icon: 'pulse-outline', color: '#2196F3' },
   stage2_surgical_approved: { label: 'Submit Phase 4 Step 1', icon: 'construct-outline', color: '#8BC34A' },
@@ -585,7 +584,11 @@ export default function DashboardScreen() {
   const { user } = useAuth();
   const router = useRouter();
 
-  useEffect(() => { loadData(); }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [])
+  );
 
   const loadData = async () => {
     try {
