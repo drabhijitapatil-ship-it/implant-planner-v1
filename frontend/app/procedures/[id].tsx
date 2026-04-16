@@ -1867,27 +1867,32 @@ export default function ProcedureDetailScreen() {
         <View style={{ height: canExportPDF() ? 130 : 80 }} />
       </ScrollView>
 
-      {/* Fixed bottom bar — 2-row grid for proper fit */}
+      {/* Fixed bottom bar — 2-row grid, all buttons same size */}
       <View style={styles.bottomBar}>
-        <View style={styles.bottomBarRow}>
-          <View style={{ flex: 1 }}>
-            <BackToDashboard floating={false} />
-          </View>
+        <View style={[styles.bottomBarRow, user?.role === 'implant_incharge' && { alignSelf: 'stretch' }]}>
+          <TouchableOpacity
+            style={[styles.barButton, { backgroundColor: '#007AFF' }, user?.role === 'implant_incharge' && { flex: 1 }]}
+            onPress={() => router.push('/(tabs)/dashboard')}
+            data-testid="back-to-dashboard-btn"
+          >
+            <Ionicons name="home" size={16} color="#FFF" />
+            <Text style={styles.barButtonText}>Dashboard</Text>
+          </TouchableOpacity>
           {user?.role === 'implant_incharge' && (
             <TouchableOpacity
-              style={[styles.deleteButton, { flex: 1 }]}
+              style={[styles.barButton, { backgroundColor: '#F44336', flex: 1 }]}
               onPress={handleDeleteProcedure}
               data-testid="delete-procedure-btn"
             >
               <Ionicons name="trash" size={16} color="#FFF" />
-              <Text style={styles.pdfButtonText}>DELETE</Text>
+              <Text style={styles.barButtonText}>DELETE</Text>
             </TouchableOpacity>
           )}
         </View>
         {canExportPDF() && (
-          <View style={styles.bottomBarRow}>
+          <View style={[styles.bottomBarRow, { alignSelf: 'stretch' }]}>
             <TouchableOpacity
-              style={[styles.pdfButton, { flex: 1 }, pdfLoading && styles.buttonDisabled]}
+              style={[styles.barButton, { backgroundColor: '#43A047', flex: 1 }, pdfLoading && styles.buttonDisabled]}
               onPress={handleExportPDF}
               disabled={pdfLoading}
               data-testid="export-pdf-btn"
@@ -1897,12 +1902,12 @@ export default function ProcedureDetailScreen() {
               ) : (
                 <>
                   <Ionicons name="document-text" size={16} color="#FFF" />
-                  <Text style={styles.pdfButtonText}>EXPORT PDF</Text>
+                  <Text style={styles.barButtonText}>EXPORT PDF</Text>
                 </>
               )}
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.pdfButton, { flex: 1, backgroundColor: '#0D47A1' }, aiSummaryLoading && styles.buttonDisabled]}
+              style={[styles.barButton, { backgroundColor: '#0D47A1', flex: 1 }, aiSummaryLoading && styles.buttonDisabled]}
               onPress={async () => {
                 setAiSummaryLoading(true);
                 try {
@@ -1920,7 +1925,7 @@ export default function ProcedureDetailScreen() {
               ) : (
                 <>
                   <Ionicons name="sparkles" size={16} color="#FFF" />
-                  <Text style={styles.pdfButtonText}>AI SUMMARY</Text>
+                  <Text style={styles.barButtonText}>AI SUMMARY</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -2252,7 +2257,7 @@ const styles = StyleSheet.create({
   },
   bottomBar: {
     flexDirection: 'column',
-    alignItems: 'stretch',
+    alignItems: 'center',
     paddingHorizontal: 10,
     paddingVertical: 8,
     backgroundColor: '#FFF',
@@ -2265,6 +2270,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+  },
+  barButton: {
+    flexDirection: 'row',
+    borderRadius: 22,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 2,
+    minWidth: 140,
+  },
+  barButtonText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   pdfButton: {
     flexDirection: 'row',
