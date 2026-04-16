@@ -10,6 +10,8 @@ import {
   TextInput,
   Image,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -63,9 +65,7 @@ export default function ProcedureDetailScreen() {
         setSmartPlannerReport(response.data.smart_planner_report);
         setShowSmartPlanner(true);
       }
-      if (response.data?.ai_case_summary) {
-        setAiSummary(response.data.ai_case_summary);
-      }
+      // AI case summary is loaded on-demand only (via AI SUMMARY button)
       if (response.data?.ai_chat_history) {
         setAiChatHistory(response.data.ai_chat_history);
       }
@@ -1843,77 +1843,90 @@ export default function ProcedureDetailScreen() {
           />
         )}
 
+        {/* AI Case Summary Card — inside ScrollView for scrollability */}
+        {aiSummary ? (
+          <View style={{ marginHorizontal: 16, marginBottom: 16, backgroundColor: '#E8EAF6', borderRadius: 14, padding: 16, borderLeftWidth: 4, borderLeftColor: '#3F51B5' }} data-testid="ai-summary-card">
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="sparkles" size={16} color="#3F51B5" />
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#3F51B5' }}>AI Clinical Summary</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setAiSummary('')}
+                style={{ padding: 4 }}
+                data-testid="ai-summary-close"
+              >
+                <Ionicons name="close-circle" size={24} color="#7986CB" />
+              </TouchableOpacity>
+            </View>
+            <Text style={{ fontSize: 13, color: '#37474F', lineHeight: 20 }}>{aiSummary}</Text>
+          </View>
+        ) : null}
+
         {/* Extra bottom spacing for the fixed buttons */}
-        <View style={{ height: canExportPDF() ? 100 : 80 }} />
+        <View style={{ height: canExportPDF() ? 130 : 80 }} />
       </ScrollView>
 
-      {/* Fixed bottom bar */}
+      {/* Fixed bottom bar — 2-row grid for proper fit */}
       <View style={styles.bottomBar}>
-        <BackToDashboard floating={false} />
-        {user?.role === 'implant_incharge' && (
-          <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={handleDeleteProcedure}
-            data-testid="delete-procedure-btn"
-          >
-            <Ionicons name="trash" size={16} color="#FFF" />
-            <Text style={styles.pdfButtonText}>DELETE</Text>
-          </TouchableOpacity>
-        )}
+        <View style={styles.bottomBarRow}>
+          <View style={{ flex: 1 }}>
+            <BackToDashboard floating={false} />
+          </View>
+          {user?.role === 'implant_incharge' && (
+            <TouchableOpacity
+              style={[styles.deleteButton, { flex: 1 }]}
+              onPress={handleDeleteProcedure}
+              data-testid="delete-procedure-btn"
+            >
+              <Ionicons name="trash" size={16} color="#FFF" />
+              <Text style={styles.pdfButtonText}>DELETE</Text>
+            </TouchableOpacity>
+          )}
+        </View>
         {canExportPDF() && (
-          <TouchableOpacity
-            style={[styles.pdfButton, pdfLoading && styles.buttonDisabled]}
-            onPress={handleExportPDF}
-            disabled={pdfLoading}
-            data-testid="export-pdf-btn"
-          >
-            {pdfLoading ? (
-              <ActivityIndicator color="#FFF" size="small" />
-            ) : (
-              <>
-                <Ionicons name="document-text" size={16} color="#FFF" />
-                <Text style={styles.pdfButtonText}>EXPORT PDF</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
-        {canExportPDF() && (
-          <TouchableOpacity
-            style={[styles.pdfButton, { backgroundColor: '#0D47A1' }, aiSummaryLoading && styles.buttonDisabled]}
-            onPress={async () => {
-              setAiSummaryLoading(true);
-              try {
-                const res = await api.post('/ai/case-summary', { procedure_id: procedure.id || procedure._id });
-                setAiSummary(res.data.summary);
-              } catch (e: any) {
-                Alert.alert('Error', e.response?.data?.detail || 'Failed to generate summary');
-              } finally { setAiSummaryLoading(false); }
-            }}
-            disabled={aiSummaryLoading}
-            data-testid="ai-summary-btn"
-          >
-            {aiSummaryLoading ? (
-              <ActivityIndicator color="#FFF" size="small" />
-            ) : (
-              <>
-                <Ionicons name="sparkles" size={16} color="#FFF" />
-                <Text style={styles.pdfButtonText}>AI SUMMARY</Text>
-              </>
-            )}
-          </TouchableOpacity>
+          <View style={styles.bottomBarRow}>
+            <TouchableOpacity
+              style={[styles.pdfButton, { flex: 1 }, pdfLoading && styles.buttonDisabled]}
+              onPress={handleExportPDF}
+              disabled={pdfLoading}
+              data-testid="export-pdf-btn"
+            >
+              {pdfLoading ? (
+                <ActivityIndicator color="#FFF" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="document-text" size={16} color="#FFF" />
+                  <Text style={styles.pdfButtonText}>EXPORT PDF</Text>
+                </>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.pdfButton, { flex: 1, backgroundColor: '#0D47A1' }, aiSummaryLoading && styles.buttonDisabled]}
+              onPress={async () => {
+                setAiSummaryLoading(true);
+                try {
+                  const res = await api.post('/ai/case-summary', { procedure_id: procedure.id || procedure._id });
+                  setAiSummary(res.data.summary);
+                } catch (e: any) {
+                  Alert.alert('Error', e.response?.data?.detail || 'Failed to generate summary');
+                } finally { setAiSummaryLoading(false); }
+              }}
+              disabled={aiSummaryLoading}
+              data-testid="ai-summary-btn"
+            >
+              {aiSummaryLoading ? (
+                <ActivityIndicator color="#FFF" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="sparkles" size={16} color="#FFF" />
+                  <Text style={styles.pdfButtonText}>AI SUMMARY</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
         )}
       </View>
-
-      {/* AI Case Summary Card */}
-      {aiSummary ? (
-        <View style={{ marginHorizontal: 16, marginBottom: 12, backgroundColor: '#E8EAF6', borderRadius: 14, padding: 16, borderLeftWidth: 4, borderLeftColor: '#3F51B5' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <Ionicons name="sparkles" size={16} color="#3F51B5" />
-            <Text style={{ fontSize: 14, fontWeight: '700', color: '#3F51B5' }}>AI Clinical Summary</Text>
-          </View>
-          <Text style={{ fontSize: 13, color: '#37474F', lineHeight: 20 }}>{aiSummary}</Text>
-        </View>
-      ) : null}
 
       {/* Floating AI Chat Button */}
       {procedure.status !== 'draft' && (
@@ -1929,7 +1942,10 @@ export default function ProcedureDetailScreen() {
       {/* AI Chat Modal */}
       <Modal visible={aiChatVisible} animationType="slide" transparent>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-          <View style={{ height: '75%', backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' }}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ maxHeight: '80%', minHeight: '50%', backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' }}
+          >
             {/* Chat Header */}
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#0D47A1' }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -1942,7 +1958,7 @@ export default function ProcedureDetailScreen() {
             </View>
 
             {/* Chat Messages */}
-            <ScrollView style={{ flex: 1, paddingHorizontal: 16, paddingTop: 12 }} contentContainerStyle={{ paddingBottom: 12 }}>
+            <ScrollView style={{ flex: 1, paddingHorizontal: 16, paddingTop: 12 }} contentContainerStyle={{ paddingBottom: 12, flexGrow: 1 }}>
               {aiChatHistory.length === 0 && (
                 <View style={{ alignItems: 'center', paddingVertical: 30 }}>
                   <Ionicons name="chatbubble-ellipses-outline" size={40} color="#B0BEC5" />
@@ -1966,7 +1982,7 @@ export default function ProcedureDetailScreen() {
             </ScrollView>
 
             {/* Chat Input */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#E0E0E0', backgroundColor: '#FAFAFA' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, paddingBottom: Platform.OS === 'ios' ? 28 : 10, borderTopWidth: 1, borderTopColor: '#E0E0E0', backgroundColor: '#FAFAFA' }}>
               <TextInput
                 style={{ flex: 1, backgroundColor: '#FFF', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, fontSize: 14, borderWidth: 1, borderColor: '#E0E0E0', maxHeight: 80 }}
                 value={aiChatInput}
@@ -1997,7 +2013,7 @@ export default function ProcedureDetailScreen() {
                 <Ionicons name="send" size={18} color="#FFF" />
               </TouchableOpacity>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 
@@ -2235,14 +2251,19 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   bottomBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: 'column',
+    alignItems: 'stretch',
     paddingHorizontal: 10,
-    paddingVertical: 10,
+    paddingVertical: 8,
     backgroundColor: '#FFF',
     borderTopWidth: 1,
     borderTopColor: '#E0E7EE',
+    gap: 6,
+  },
+  bottomBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
   },
   pdfButton: {
