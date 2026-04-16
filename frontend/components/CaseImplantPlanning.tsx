@@ -785,6 +785,7 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
         handleConfirm={handleConfirm}
         toothInfo={toothInfo}
         procedureType={procedureType}
+        procedureId={procedureId}
       />
     </Modal>
   );
@@ -800,7 +801,7 @@ function ModalContent(props: any) {
     riskResult, riskLoading, showSystemDD, setShowSystemDD, systemSearch, setSystemSearch,
     showAllResults, setShowAllResults,
     sProcedures, setSProcedures, handleSearch, handleCalcRisk, handleConfirm, toothInfo,
-    systems, usedPositions, onSave, procedureType,
+    systems, usedPositions, onSave, procedureType, procedureId,
   } = props;
 
   const BONE_TYPES = ['D1','D2','D3','D4'];
@@ -820,6 +821,8 @@ function ModalContent(props: any) {
   const [showProtocol, setShowProtocol] = React.useState(false);
   const [bwFocused, setBwFocused] = React.useState(false);
   const [bhFocused, setBhFocused] = React.useState(false);
+  const [aiExplanation, setAiExplanation] = React.useState('');
+  const [aiExplaining, setAiExplaining] = React.useState(false);
 
   const boneWidthInfo = React.useMemo(() => {
     if (!position) return '';
@@ -1453,6 +1456,40 @@ function ModalContent(props: any) {
                   {riskResult.suggested_actions.map((a: string, i: number) => (
                     <Text key={i} style={{ fontSize: 11, color: '#37474F', marginBottom: 2 }}>{'\u2022'} {a}</Text>
                   ))}
+                </View>
+              )}
+
+              {/* AI Explain Recommendation */}
+              {selectedImplant && riskResult && (
+                <View style={{ marginTop: 10 }}>
+                  <TouchableOpacity
+                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#0D47A1', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16, opacity: aiExplaining ? 0.7 : 1 }}
+                    onPress={async () => {
+                      if (aiExplaining) return;
+                      setAiExplaining(true);
+                      setAiExplanation('');
+                      try {
+                        const res = await api.post('/ai/explain-recommendation', { procedure_id: procedureId, implant_index: 0 });
+                        setAiExplanation(res.data.explanation);
+                      } catch (e: any) {
+                        Alert.alert('Error', e.response?.data?.detail || 'Failed to generate explanation');
+                      } finally { setAiExplaining(false); }
+                    }}
+                    disabled={aiExplaining}
+                    data-testid="ai-explain-btn"
+                  >
+                    {aiExplaining ? <ActivityIndicator color="#FFF" size="small" /> : <Ionicons name="sparkles" size={18} color="#FFF" />}
+                    <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '700' }}>Explain Recommendation</Text>
+                  </TouchableOpacity>
+                  {aiExplanation ? (
+                    <View style={{ marginTop: 10, backgroundColor: '#E8EAF6', borderRadius: 12, padding: 14, borderLeftWidth: 3, borderLeftColor: '#3F51B5' }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                        <Ionicons name="sparkles" size={14} color="#3F51B5" />
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: '#3F51B5' }}>Implanr AI</Text>
+                      </View>
+                      <Text style={{ fontSize: 12, color: '#37474F', lineHeight: 18 }}>{aiExplanation}</Text>
+                    </View>
+                  ) : null}
                 </View>
               )}
 
