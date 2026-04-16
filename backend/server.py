@@ -1913,6 +1913,7 @@ def _build_case_context(proc: dict) -> str:
     """Build a clinical case context string from procedure data."""
     parts = [f"Patient: {proc.get('patient_name','N/A')}, Age: {proc.get('age','N/A')}, Gender: {proc.get('gender','N/A')}"]
     parts.append(f"Procedure Type: {proc.get('implant_procedure_type','N/A')}")
+    parts.append(f"Status: {proc.get('status','N/A')}")
     if proc.get('arch'):
         parts.append(f"Arch: {proc.get('arch')}")
     if proc.get('arch_condition'):
@@ -1929,16 +1930,106 @@ def _build_case_context(proc: dict) -> str:
         parts.append(f"Occlusocervical Height: {proc.get('occlusocervical_height')} mm")
     if proc.get('mesiodistal_space'):
         parts.append(f"Mesiodistal Space: {proc.get('mesiodistal_space')} mm")
+    if proc.get('prosthetic_plan'):
+        parts.append(f"Prosthetic Plan: {proc.get('prosthetic_plan')}")
+    if proc.get('loading_type'):
+        lt = proc['loading_type']
+        parts.append(f"Loading Type: {', '.join(lt) if isinstance(lt, list) else lt}")
+    if proc.get('ridge_contour'):
+        parts.append(f"Ridge Contour: {proc.get('ridge_contour')}")
+    if proc.get('soft_tissue_thickness'):
+        parts.append(f"Soft Tissue Thickness: {proc.get('soft_tissue_thickness')}")
+    if proc.get('keratinized_mucosa'):
+        parts.append(f"Keratinized Mucosa: {proc.get('keratinized_mucosa')}")
+    if proc.get('smile_line'):
+        parts.append(f"Smile Line: {proc.get('smile_line')}")
+    if proc.get('gingival_biotype'):
+        parts.append(f"Gingival Biotype: {proc.get('gingival_biotype')}")
+
+    # Implant plans
     plans = proc.get('implant_plans') or []
     for i, p in enumerate(plans):
-        parts.append(f"Implant Plan {i+1}: Tooth {p.get('tooth_number','?')}, Brand: {p.get('brand','?')}, System: {p.get('system','?')}, Diameter: {p.get('diameter','?')}mm, Length: {p.get('length','?')}mm, Bone Width: {p.get('bone_width','?')}mm, Bone Height: {p.get('bone_height','?')}mm, Bone Type: {p.get('bone_type','?')}")
+        parts.append(f"Implant Plan {i+1}: Tooth {p.get('position', p.get('tooth_number','?'))}, Brand: {p.get('brand','?')}, System: {p.get('system','?')}, Diameter: {p.get('diameter','?')}mm, Length: {p.get('length','?')}mm, Bone Width: {p.get('bone_width','?')}mm, Bone Height: {p.get('bone_height','?')}mm, Bone Type: {p.get('bone_type','?')}")
+
+    # Medical assessment
     if proc.get('medical_assessment'):
         ma = proc['medical_assessment']
         if ma.get('asa_classification'):
             parts.append(f"ASA Classification: {ma['asa_classification']}")
-        conditions = [k for k, v in ma.items() if v is True]
+        conditions = [k for k, v in ma.items() if v is True or v == 'Yes']
         if conditions:
             parts.append(f"Medical Conditions: {', '.join(conditions)}")
+    if proc.get('medical_risk_level'):
+        parts.append(f"Medical Risk Level: {proc.get('medical_risk_level')}")
+
+    # Phase 2 - Surgical data
+    p2 = proc.get('phase2_data') or {}
+    if p2:
+        parts.append("\n--- Phase 2: Surgical Data ---")
+        torques = p2.get('torque_values') or proc.get('torque_values') or []
+        if torques:
+            parts.append(f"Insertion Torque Values: {', '.join([str(t) + ' Ncm' for t in torques])}")
+        if p2.get('anesthesia_details'):
+            parts.append(f"Anesthesia: {p2.get('anesthesia_details')}")
+        if p2.get('flap_design'):
+            parts.append(f"Flap Design: {p2.get('flap_design')}")
+        if p2.get('drilling_type'):
+            parts.append(f"Drilling Type: {p2.get('drilling_type')}")
+        if p2.get('bone_graft_used'):
+            parts.append(f"Bone Graft Used: Yes — {p2.get('bone_graft_details','')}")
+        if p2.get('prosthetic_component'):
+            parts.append(f"Prosthetic Component: {p2.get('prosthetic_component')}")
+        if p2.get('healing_abutment_cuff_height'):
+            hch = p2['healing_abutment_cuff_height']
+            if isinstance(hch, list):
+                parts.append(f"Healing Abutment Cuff Heights: {', '.join([str(h) for h in hch])}")
+            else:
+                parts.append(f"Healing Abutment Cuff Height: {hch}")
+        if p2.get('implant_other_notes'):
+            parts.append(f"Implant Notes: {p2.get('implant_other_notes')}")
+        if p2.get('sutures_placed'):
+            parts.append(f"Sutures Placed: {p2.get('sutures_placed')}")
+
+    # Phase 3 - Second Stage Surgical
+    p3 = proc.get('phase3_data') or {}
+    if p3:
+        parts.append("\n--- Phase 3: Second Stage Surgical ---")
+        isq = p3.get('isq_value')
+        if isq:
+            if isinstance(isq, list):
+                parts.append(f"ISQ Values: {', '.join([str(v) for v in isq])}")
+            else:
+                parts.append(f"ISQ Value: {isq}")
+        if p3.get('healing_abutment_height'):
+            hah = p3['healing_abutment_height']
+            if isinstance(hah, list):
+                parts.append(f"Healing Abutment Heights: {', '.join([str(h) for h in hah])}")
+            else:
+                parts.append(f"Healing Abutment Height: {hah}")
+
+    # Phase 4 - Prosthetic Protocol
+    p4 = proc.get('phase4_step1_data') or {}
+    if p4:
+        parts.append("\n--- Phase 4: Prosthetic Protocol ---")
+        if p4.get('final_prosthetic_plan'):
+            parts.append(f"Final Prosthetic Plan: {p4.get('final_prosthetic_plan')}")
+        if p4.get('prosthetic_material'):
+            parts.append(f"Prosthetic Material: {p4.get('prosthetic_material')}")
+        if p4.get('impression_type'):
+            parts.append(f"Impression Type: {p4.get('impression_type')}")
+        if p4.get('custom_abutment'):
+            parts.append(f"Custom Abutment: {p4.get('custom_abutment')}")
+        if p4.get('overdenture_attachment'):
+            parts.append(f"Overdenture Attachment: {p4.get('overdenture_attachment')}")
+
+    # Notes from all phases
+    for key in ['phase2_student_notes', 'phase2_supervisor_notes', 'phase2_incharge_notes',
+                'phase3_student_notes', 'phase3_supervisor_notes', 'phase3_incharge_notes',
+                'phase4_step1_student_notes']:
+        if proc.get(key):
+            label = key.replace('_', ' ').title()
+            parts.append(f"{label}: {proc[key]}")
+
     return "\n".join(parts)
 
 
@@ -2045,29 +2136,21 @@ async def ai_case_summary(request: Request, current_user: dict = Depends(get_cur
         raise HTTPException(status_code=404, detail="Procedure not found")
     
     context = _build_case_context(proc)
-    phase2 = proc.get("phase2_data") or {}
-    phase3 = proc.get("phase3_data") or {}
-    
-    extra = ""
-    if phase2:
-        extra += f"\nPhase 2 Surgical Data: Torque: {phase2.get('insertion_torque','N/A')} Ncm, ISQ: {phase2.get('isq_value','N/A')}"
-    if phase3:
-        extra += f"\nPhase 3 Data: ISQ: {phase3.get('isq_value','N/A')}, Soft Tissue: {phase3.get('soft_tissue_status','N/A')}"
+    # Context now includes Phase 2/3/4 data from _build_case_context
     
     prompt = f"""You are a senior implantologist writing a professional case summary for a clinical PDF report. Based on the data below, write a structured clinical summary.
 
 Case Data:
-{context}{extra}
-
-Status: {proc.get('status','N/A')}
+{context}
 
 Structure your summary with these sections:
 1. Clinical Presentation (2-3 sentences)
 2. Treatment Plan & Implant Selection Rationale (2-3 sentences)
 3. Risk Assessment (1-2 sentences)
-4. Clinical Notes (1-2 sentences)
+4. Surgical Findings & Outcomes (2-3 sentences — include torque values, ISQ values, bone graft details, complications if available)
+5. Clinical Notes (1-2 sentences)
 
-Write professionally. No bullet points — use paragraph format for each section with the section heading in bold."""
+If Phase 2/3/4 data is present, incorporate it into sections 4 and 5. Write professionally. No bullet points — use paragraph format for each section with the section heading in bold."""
 
     chat = LlmChat(
         api_key=_get_llm_key(),
@@ -2098,6 +2181,10 @@ async def ai_surgical_notes(request: Request, current_user: dict = Depends(get_c
     context = _build_case_context(proc)
     phase2 = proc.get("phase2_data") or {}
     
+    # Get torque values from correct location
+    torques = phase2.get("torque_values") or proc.get("torque_values") or []
+    torque_str = ', '.join([str(t) + ' Ncm' for t in torques]) if torques else 'N/A'
+    
     drill_info = ""
     if phase2.get("drilling_protocol"):
         dp = phase2["drilling_protocol"]
@@ -2109,13 +2196,17 @@ Case Data:
 {context}
 
 Surgical Data:
-Insertion Torque: {phase2.get('insertion_torque','N/A')} Ncm
-ISQ Value: {phase2.get('isq_value','N/A')}
+Insertion Torque Values: {torque_str}
+Anesthesia: {phase2.get('anesthesia_details','N/A')}
+Flap Design: {phase2.get('flap_design','N/A')}
+Drilling Type: {phase2.get('drilling_type','N/A')}
 {drill_info}
-Irrigation: {phase2.get('irrigation','Copious normal saline')}
-Complications: {phase2.get('complications','None reported')}
+Bone Graft Used: {'Yes — ' + str(phase2.get('bone_graft_details','')) if phase2.get('bone_graft_used') else 'No'}
+Prosthetic Component: {phase2.get('prosthetic_component','N/A')}
+Sutures: {phase2.get('sutures_placed','N/A')}
+Hemostasis Achieved: {'Yes' if phase2.get('hemostasis_achieved') else 'N/A'}
 
-Write a concise operative note (4-6 sentences) in standard surgical documentation format. Include: preparation, osteotomy, implant placement, primary stability, and closure. Professional tone."""
+Write a concise operative note (4-6 sentences) in standard surgical documentation format. Include: preparation, osteotomy, implant placement, primary stability (referencing actual torque values), and closure. Professional tone."""
 
     chat = LlmChat(
         api_key=_get_llm_key(),
