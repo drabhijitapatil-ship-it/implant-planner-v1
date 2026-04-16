@@ -1936,7 +1936,7 @@ export default function ProcedureDetailScreen() {
       {/* Floating AI Chat Button */}
       {procedure.status !== 'draft' && (
         <TouchableOpacity
-          style={{ position: 'absolute', bottom: 90, right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#0D47A1', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 8, zIndex: 999 }}
+          style={{ position: 'absolute', bottom: 130, right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#0D47A1', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 8, zIndex: 999 }}
           onPress={() => setAiChatVisible(true)}
           data-testid="ai-chat-fab"
         >
