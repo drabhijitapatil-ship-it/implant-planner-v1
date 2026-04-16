@@ -9,6 +9,7 @@ import {
   Alert,
   TextInput,
   Image,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -40,6 +41,12 @@ export default function ProcedureDetailScreen() {
   const [smartPlannerReport, setSmartPlannerReport] = useState<any>(null);
   const [smartPlannerLoading, setSmartPlannerLoading] = useState(false);
   const [showSmartPlanner, setShowSmartPlanner] = useState(false);
+  const [aiSummary, setAiSummary] = useState('');
+  const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
+  const [aiChatVisible, setAiChatVisible] = useState(false);
+  const [aiChatHistory, setAiChatHistory] = useState<any[]>([]);
+  const [aiChatInput, setAiChatInput] = useState('');
+  const [aiChatSending, setAiChatSending] = useState(false);
 
   useEffect(() => { getToken('access_token').then(t => setAuthToken(t || '')); }, []);
 
@@ -55,6 +62,12 @@ export default function ProcedureDetailScreen() {
       if (response.data?.smart_planner_report) {
         setSmartPlannerReport(response.data.smart_planner_report);
         setShowSmartPlanner(true);
+      }
+      if (response.data?.ai_case_summary) {
+        setAiSummary(response.data.ai_case_summary);
+      }
+      if (response.data?.ai_chat_history) {
+        setAiChatHistory(response.data.ai_chat_history);
       }
     } catch (error) {
       console.error('Failed to load procedure:', error);
@@ -1864,7 +1877,130 @@ export default function ProcedureDetailScreen() {
             )}
           </TouchableOpacity>
         )}
+        {canExportPDF() && (
+          <TouchableOpacity
+            style={[styles.pdfButton, { backgroundColor: '#0D47A1' }, aiSummaryLoading && styles.buttonDisabled]}
+            onPress={async () => {
+              setAiSummaryLoading(true);
+              try {
+                const res = await api.post('/ai/case-summary', { procedure_id: procedure.id || procedure._id });
+                setAiSummary(res.data.summary);
+              } catch (e: any) {
+                Alert.alert('Error', e.response?.data?.detail || 'Failed to generate summary');
+              } finally { setAiSummaryLoading(false); }
+            }}
+            disabled={aiSummaryLoading}
+            data-testid="ai-summary-btn"
+          >
+            {aiSummaryLoading ? (
+              <ActivityIndicator color="#FFF" size="small" />
+            ) : (
+              <>
+                <Ionicons name="sparkles" size={16} color="#FFF" />
+                <Text style={styles.pdfButtonText}>AI SUMMARY</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
+
+      {/* AI Case Summary Card */}
+      {aiSummary ? (
+        <View style={{ marginHorizontal: 16, marginBottom: 12, backgroundColor: '#E8EAF6', borderRadius: 14, padding: 16, borderLeftWidth: 4, borderLeftColor: '#3F51B5' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <Ionicons name="sparkles" size={16} color="#3F51B5" />
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#3F51B5' }}>AI Clinical Summary</Text>
+          </View>
+          <Text style={{ fontSize: 13, color: '#37474F', lineHeight: 20 }}>{aiSummary}</Text>
+        </View>
+      ) : null}
+
+      {/* Floating AI Chat Button */}
+      {procedure.status !== 'draft' && (
+        <TouchableOpacity
+          style={{ position: 'absolute', bottom: 90, right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#0D47A1', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 8, zIndex: 999 }}
+          onPress={() => setAiChatVisible(true)}
+          data-testid="ai-chat-fab"
+        >
+          <Ionicons name="chatbubble-ellipses" size={26} color="#FFF" />
+        </TouchableOpacity>
+      )}
+
+      {/* AI Chat Modal */}
+      <Modal visible={aiChatVisible} animationType="slide" transparent>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+          <View style={{ height: '75%', backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' }}>
+            {/* Chat Header */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#0D47A1' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Ionicons name="sparkles" size={20} color="#FFF" />
+                <Text style={{ fontSize: 16, fontWeight: '700', color: '#FFF' }}>Ask Implanr AI</Text>
+              </View>
+              <TouchableOpacity onPress={() => setAiChatVisible(false)} data-testid="ai-chat-close">
+                <Ionicons name="close" size={24} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Chat Messages */}
+            <ScrollView style={{ flex: 1, paddingHorizontal: 16, paddingTop: 12 }} contentContainerStyle={{ paddingBottom: 12 }}>
+              {aiChatHistory.length === 0 && (
+                <View style={{ alignItems: 'center', paddingVertical: 30 }}>
+                  <Ionicons name="chatbubble-ellipses-outline" size={40} color="#B0BEC5" />
+                  <Text style={{ fontSize: 14, color: '#78909C', marginTop: 10, textAlign: 'center' }}>Ask me anything about this case.{'\n'}e.g. "Can I immediately load?" or "Is grafting needed?"</Text>
+                </View>
+              )}
+              {aiChatHistory.map((msg: any, idx: number) => (
+                <View key={idx} style={{ alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start', marginBottom: 10 }}>
+                  <View style={{ maxWidth: '85%', backgroundColor: msg.role === 'user' ? '#1565C0' : '#E8EAF6', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10, borderBottomRightRadius: msg.role === 'user' ? 4 : 14, borderBottomLeftRadius: msg.role === 'user' ? 14 : 4 }}>
+                    <Text style={{ fontSize: 13, color: msg.role === 'user' ? '#FFF' : '#37474F', lineHeight: 19 }}>{msg.content}</Text>
+                  </View>
+                </View>
+              ))}
+              {aiChatSending && (
+                <View style={{ alignItems: 'flex-start', marginBottom: 10 }}>
+                  <View style={{ backgroundColor: '#E8EAF6', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10 }}>
+                    <ActivityIndicator color="#3F51B5" size="small" />
+                  </View>
+                </View>
+              )}
+            </ScrollView>
+
+            {/* Chat Input */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#E0E0E0', backgroundColor: '#FAFAFA' }}>
+              <TextInput
+                style={{ flex: 1, backgroundColor: '#FFF', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, fontSize: 14, borderWidth: 1, borderColor: '#E0E0E0', maxHeight: 80 }}
+                value={aiChatInput}
+                onChangeText={setAiChatInput}
+                placeholder="Ask about this case..."
+                placeholderTextColor="#B0BEC5"
+                multiline
+                data-testid="ai-chat-input"
+              />
+              <TouchableOpacity
+                style={{ marginLeft: 8, width: 42, height: 42, borderRadius: 21, backgroundColor: aiChatSending || !aiChatInput.trim() ? '#B0BEC5' : '#0D47A1', justifyContent: 'center', alignItems: 'center' }}
+                disabled={aiChatSending || !aiChatInput.trim()}
+                onPress={async () => {
+                  const msg = aiChatInput.trim();
+                  if (!msg) return;
+                  setAiChatSending(true);
+                  setAiChatInput('');
+                  setAiChatHistory(prev => [...prev, { role: 'user', content: msg }]);
+                  try {
+                    const res = await api.post('/ai/chat', { procedure_id: procedure.id || procedure._id, message: msg });
+                    setAiChatHistory(res.data.history);
+                  } catch (e: any) {
+                    setAiChatHistory(prev => [...prev, { role: 'assistant', content: 'Sorry, I encountered an error. Please try again.' }]);
+                  } finally { setAiChatSending(false); }
+                }}
+                data-testid="ai-chat-send"
+              >
+                <Ionicons name="send" size={18} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }

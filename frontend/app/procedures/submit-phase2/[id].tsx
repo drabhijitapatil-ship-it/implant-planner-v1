@@ -42,6 +42,8 @@ export default function Phase2SubmissionScreen() {
   const [boneGraftUsed, setBoneGraftUsed] = useState(false);
   const [boneGraftDetails, setBoneGraftDetails] = useState('');
   const [implantOtherNotes, setImplantOtherNotes] = useState('');
+  const [aiSurgicalNotes, setAiSurgicalNotes] = useState('');
+  const [aiNotesLoading, setAiNotesLoading] = useState(false);
   const [prostheticComponent, setProstheticComponent] = useState('');
   const [prostheticOpen, setProstheticOpen] = useState(false);
   const [healingAbutmentCuffHeight, setHealingAbutmentCuffHeight] = useState<string[]>(['']);
@@ -589,6 +591,36 @@ export default function Phase2SubmissionScreen() {
             <Text style={s.helperText}>
               Supervisor and In-Charge remarks will be added during approval.
             </Text>
+          </View>
+
+          {/* ── AI Surgical Notes ── */}
+          <View style={{ paddingHorizontal: 16, marginBottom: 12 }}>
+            <TouchableOpacity
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#0D47A1', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 20, opacity: aiNotesLoading ? 0.7 : 1 }}
+              onPress={async () => {
+                setAiNotesLoading(true);
+                try {
+                  const res = await api.post('/ai/surgical-notes', { procedure_id: id });
+                  setAiSurgicalNotes(res.data.notes);
+                } catch (e: any) {
+                  Alert.alert('Error', e.response?.data?.detail || 'Failed to generate notes');
+                } finally { setAiNotesLoading(false); }
+              }}
+              disabled={aiNotesLoading}
+              data-testid="ai-surgical-notes-btn"
+            >
+              {aiNotesLoading ? <ActivityIndicator color="#FFF" size="small" /> : <Ionicons name="sparkles" size={18} color="#FFF" />}
+              <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '700' }}>Generate Surgical Notes</Text>
+            </TouchableOpacity>
+            {aiSurgicalNotes ? (
+              <View style={{ marginTop: 12, backgroundColor: '#E8EAF6', borderRadius: 14, padding: 16, borderLeftWidth: 4, borderLeftColor: '#3F51B5' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <Ionicons name="sparkles" size={14} color="#3F51B5" />
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#3F51B5' }}>AI Surgical Notes</Text>
+                </View>
+                <Text style={{ fontSize: 13, color: '#37474F', lineHeight: 20 }}>{aiSurgicalNotes}</Text>
+              </View>
+            ) : null}
           </View>
 
           {/* ── Submit Button ── */}

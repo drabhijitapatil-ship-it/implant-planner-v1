@@ -1905,6 +1905,250 @@ async def get_procedure_badge(
     return {"badge": badge}
 
 
+# ── AI Integration (Implanr AI) ────────────────────────────────────────────
+from emergentintegrations.llm.chat import LlmChat, UserMessage
+import uuid
+
+def _build_case_context(proc: dict) -> str:
+    """Build a clinical case context string from procedure data."""
+    parts = [f"Patient: {proc.get('patient_name','N/A')}, Age: {proc.get('age','N/A')}, Gender: {proc.get('gender','N/A')}"]
+    parts.append(f"Procedure Type: {proc.get('implant_procedure_type','N/A')}")
+    if proc.get('arch'):
+        parts.append(f"Arch: {proc.get('arch')}")
+    if proc.get('arch_condition'):
+        parts.append(f"Arch Condition: {proc.get('arch_condition')}")
+    if proc.get('available_interarch_space'):
+        parts.append(f"Restorative Space: {proc.get('available_interarch_space')} mm")
+    if proc.get('opposing_arch'):
+        parts.append(f"Opposing Arch: {proc.get('opposing_arch')}")
+    if proc.get('opposing_dentition'):
+        parts.append(f"Opposing Dentition: {proc.get('opposing_dentition')}")
+    if proc.get('occlusal_scheme'):
+        parts.append(f"Occlusal Scheme: {proc.get('occlusal_scheme')}")
+    if proc.get('occlusocervical_height'):
+        parts.append(f"Occlusocervical Height: {proc.get('occlusocervical_height')} mm")
+    if proc.get('mesiodistal_space'):
+        parts.append(f"Mesiodistal Space: {proc.get('mesiodistal_space')} mm")
+    plans = proc.get('implant_plans') or []
+    for i, p in enumerate(plans):
+        parts.append(f"Implant Plan {i+1}: Tooth {p.get('tooth_number','?')}, Brand: {p.get('brand','?')}, System: {p.get('system','?')}, Diameter: {p.get('diameter','?')}mm, Length: {p.get('length','?')}mm, Bone Width: {p.get('bone_width','?')}mm, Bone Height: {p.get('bone_height','?')}mm, Bone Type: {p.get('bone_type','?')}")
+    if proc.get('medical_assessment'):
+        ma = proc['medical_assessment']
+        if ma.get('asa_classification'):
+            parts.append(f"ASA Classification: {ma['asa_classification']}")
+        conditions = [k for k, v in ma.items() if v is True]
+        if conditions:
+            parts.append(f"Medical Conditions: {', '.join(conditions)}")
+    return "\n".join(parts)
+
+
+def _get_llm_key():
+    return os.environ.get("EMERGENT_LLM_KEY", "")
+
+
+@api_router.post("/ai/explain-recommendation")
+async def ai_explain_recommendation(request: Request, current_user: dict = Depends(get_current_user)):
+    """Generate AI explanation for implant recommendation."""
+    body = await request.json()
+    procedure_id = body.get("procedure_id")
+    implant_index = body.get("implant_index", 0)
+    
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    
+    plans = proc.get("implant_plans") or []
+    plan = plans[implant_index] if implant_index < len(plans) else (plans[0] if plans else {})
+    
+    context = _build_case_context(proc)
+    prompt = f"""You are an expert implantologist. Based on the following clinical case data, explain in 3-4 concise sentences why the selected implant is appropriate for this case. Use clinical reasoning — reference bone dimensions, safety margins, bone density, and anatomical considerations.
+
+Case Data:
+{context}
+
+Selected Implant: {plan.get('brand','')} {plan.get('system','')} {plan.get('diameter','')}×{plan.get('length','')}mm at site {plan.get('tooth_number','')}
+Bone Type: {plan.get('bone_type','N/A')}
+
+Provide a clinical explanation. Do not use bullet points. Write as a professional clinical note."""
+
+    chat = LlmChat(
+        api_key=_get_llm_key(),
+        session_id=f"explain-{procedure_id}-{implant_index}-{uuid.uuid4().hex[:8]}",
+        system_message="You are an expert implant dentistry clinical advisor. Provide concise, evidence-based clinical explanations."
+    ).with_model("openai", "gpt-5.2")
+    
+    response = await chat.send_message(UserMessage(text=prompt))
+    
+    # Store in procedure
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {f"ai_explanations.implant_{implant_index}": response}}
+    )
+    
+    return {"explanation": response}
+
+
+@api_router.post("/ai/case-summary")
+async def ai_case_summary(request: Request, current_user: dict = Depends(get_current_user)):
+    """Generate AI clinical case summary for PDF export."""
+    body = await request.json()
+    procedure_id = body.get("procedure_id")
+    
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    
+    context = _build_case_context(proc)
+    phase2 = proc.get("phase2_data") or {}
+    phase3 = proc.get("phase3_data") or {}
+    
+    extra = ""
+    if phase2:
+        extra += f"\nPhase 2 Surgical Data: Torque: {phase2.get('insertion_torque','N/A')} Ncm, ISQ: {phase2.get('isq_value','N/A')}"
+    if phase3:
+        extra += f"\nPhase 3 Data: ISQ: {phase3.get('isq_value','N/A')}, Soft Tissue: {phase3.get('soft_tissue_status','N/A')}"
+    
+    prompt = f"""You are a senior implantologist writing a professional case summary for a clinical PDF report. Based on the data below, write a structured clinical summary.
+
+Case Data:
+{context}{extra}
+
+Status: {proc.get('status','N/A')}
+
+Structure your summary with these sections:
+1. Clinical Presentation (2-3 sentences)
+2. Treatment Plan & Implant Selection Rationale (2-3 sentences)
+3. Risk Assessment (1-2 sentences)
+4. Clinical Notes (1-2 sentences)
+
+Write professionally. No bullet points — use paragraph format for each section with the section heading in bold."""
+
+    chat = LlmChat(
+        api_key=_get_llm_key(),
+        session_id=f"summary-{procedure_id}-{uuid.uuid4().hex[:8]}",
+        system_message="You are an expert implant dentistry clinical advisor writing professional case summaries."
+    ).with_model("openai", "gpt-5.2")
+    
+    response = await chat.send_message(UserMessage(text=prompt))
+    
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"ai_case_summary": response}}
+    )
+    
+    return {"summary": response}
+
+
+@api_router.post("/ai/surgical-notes")
+async def ai_surgical_notes(request: Request, current_user: dict = Depends(get_current_user)):
+    """Generate AI surgical operative notes from drilling protocol data."""
+    body = await request.json()
+    procedure_id = body.get("procedure_id")
+    
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    
+    context = _build_case_context(proc)
+    phase2 = proc.get("phase2_data") or {}
+    
+    drill_info = ""
+    if phase2.get("drilling_protocol"):
+        dp = phase2["drilling_protocol"]
+        drill_info = f"Drilling Protocol: {', '.join([s.get('drill','') + ' at ' + str(s.get('speed','')) + ' RPM' for s in dp.get('steps',[])])}"
+    
+    prompt = f"""You are a senior implant surgeon dictating operative notes. Generate professional surgical operative notes based on the case and protocol data below.
+
+Case Data:
+{context}
+
+Surgical Data:
+Insertion Torque: {phase2.get('insertion_torque','N/A')} Ncm
+ISQ Value: {phase2.get('isq_value','N/A')}
+{drill_info}
+Irrigation: {phase2.get('irrigation','Copious normal saline')}
+Complications: {phase2.get('complications','None reported')}
+
+Write a concise operative note (4-6 sentences) in standard surgical documentation format. Include: preparation, osteotomy, implant placement, primary stability, and closure. Professional tone."""
+
+    chat = LlmChat(
+        api_key=_get_llm_key(),
+        session_id=f"surgical-{procedure_id}-{uuid.uuid4().hex[:8]}",
+        system_message="You are an expert implant surgeon generating operative notes."
+    ).with_model("openai", "gpt-5.2")
+    
+    response = await chat.send_message(UserMessage(text=prompt))
+    
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"ai_surgical_notes": response}}
+    )
+    
+    return {"notes": response}
+
+
+class AIChatMessage(BaseModel):
+    procedure_id: str
+    message: str
+
+
+@api_router.post("/ai/chat")
+async def ai_chat(body: AIChatMessage, current_user: dict = Depends(get_current_user)):
+    """Implanr AI chat — context-aware clinical assistant."""
+    proc = await db.procedures.find_one({"_id": ObjectId(body.procedure_id)}, {"_id": 0})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    
+    context = _build_case_context(proc)
+    
+    # Retrieve chat history
+    chat_history = proc.get("ai_chat_history") or []
+    
+    system = f"""You are Implanr AI, an expert implant dentistry clinical assistant. You have access to the following patient case data:
+
+{context}
+
+Answer questions about this specific case using evidence-based implant dentistry knowledge. Be concise (2-4 sentences per answer). If asked about something outside your clinical expertise, say so clearly. Never fabricate clinical data — only reference what's in the case."""
+
+    # Build history context for the prompt
+    history_context = ""
+    for msg in chat_history[-10:]:
+        role_label = "User" if msg["role"] == "user" else "Implanr AI"
+        history_context += f"\n{role_label}: {msg['content']}"
+
+    prompt = body.message
+    if history_context:
+        prompt = f"Previous conversation:{history_context}\n\nUser: {body.message}\n\nRespond to the latest user message."
+
+    chat = LlmChat(
+        api_key=_get_llm_key(),
+        session_id=f"chat-{body.procedure_id}-{uuid.uuid4().hex[:8]}",
+        system_message=system
+    ).with_model("openai", "gpt-5.2")
+    
+    response = await chat.send_message(UserMessage(text=prompt))
+    
+    # Append to history
+    chat_history.append({"role": "user", "content": body.message})
+    chat_history.append({"role": "assistant", "content": response})
+    
+    await db.procedures.update_one(
+        {"_id": ObjectId(body.procedure_id)},
+        {"$set": {"ai_chat_history": chat_history}}
+    )
+    
+    return {"response": response, "history": chat_history}
+
+
+@api_router.get("/ai/chat/{procedure_id}")
+async def get_ai_chat_history(procedure_id: str, current_user: dict = Depends(get_current_user)):
+    """Get chat history for a procedure."""
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0, "ai_chat_history": 1})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    return {"history": proc.get("ai_chat_history") or []}
+
+
 # ── Smart Prosthetic Planner ───────────────────────────────────────────────
 FULL_ARCH_SET = {"All on 4", "All on 6", "All on X"}
 ANTERIOR_TEETH = {11, 12, 13, 21, 22, 23}
