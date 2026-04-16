@@ -282,6 +282,8 @@ A comprehensive mobile application for managing dental implant procedures at the
   - Procedures page supports `phase` URL param for filtered views
 
 ### Earlier Sessions
+- Session 11 (Apr 16, 2026): Fixed 3 P0 bugs: (1) Black screen when transitioning Step 1→Step 2 in New Case workflow — added data-testid, fixed useFocusEffect dependency array to include params.draftId. (2) Draft data hydration — updated loadDraft to restore ALL form fields (clinical exam, occlusal analysis, aesthetic risk, medical assessment, checklist). (3) Standalone AI Explain Recommendation — created POST /api/ai/explain-standalone endpoint for use without procedure_id, added AI button to both ChooseResult and SuggestResult in implant-selection.tsx. Also fixed procedureId prop missing in CaseImplantPlanning ImplantPlanModal.
+- Session 10: Integrated 4 AI features (Explain Recommendation, PDF Case Summary, Surgical Notes, Floating AI Chat) using emergentintegrations Universal Key with OpenAI GPT-5.2.
 - Session 9: Narrow Ridge, High Constraint engines, scheduling constraints, logo replacement
 - Session 8: Narrow Ridge Clinical Decision Engine, Implant Selection Tab replication
 - Session 7: Approval revert, Bone Graft, Role-Based Dashboards, Medical Risk Assessment
@@ -293,11 +295,12 @@ A comprehensive mobile application for managing dental implant procedures at the
 
 ## Backlog (Prioritized)
 ### P0
-- Microsoft Login Integration (user explicitly requested for sign up and login)
+- (None — all P0 items resolved)
 
 ### P1
-- Data visibility refinement for approval workflow (ensure all entered data visible before/after approval)
+- Microsoft Login Integration (user explicitly requested for sign up and login)
 - Add indications/protocols for remaining 17 systems (when user provides data)
+- Production AI Key Setup: Switch from Emergent Universal Key to user's own OPENAI_API_KEY for App Store deployment
 - Production deployment verification (user needs to "Save to Github" + Deploy)
 
 ### P2
