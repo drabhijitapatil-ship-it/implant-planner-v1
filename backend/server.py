@@ -1988,6 +1988,52 @@ Provide a clinical explanation. Do not use bullet points. Write as a professiona
     return {"explanation": response}
 
 
+@api_router.post("/ai/explain-standalone")
+async def ai_explain_standalone(request: Request, current_user: dict = Depends(get_current_user)):
+    """Generate AI explanation for standalone implant selection (no procedure ID required)."""
+    body = await request.json()
+    tooth = body.get("tooth", "")
+    brand = body.get("brand", "")
+    system = body.get("system", "")
+    diameter = body.get("diameter", "")
+    length = body.get("length", "")
+    bone_width = body.get("bone_width", "")
+    bone_height = body.get("bone_height", "")
+    bone_type = body.get("bone_type", "")
+    risk_level = body.get("risk_level", "")
+    risk_score = body.get("risk_score", "")
+    procedures = body.get("procedures", [])
+    tooth_region = body.get("tooth_region", "")
+
+    context_parts = [f"Tooth: {tooth} ({tooth_region})" if tooth_region else f"Tooth: {tooth}"]
+    context_parts.append(f"Implant: {brand} {system}, Diameter: {diameter}mm, Length: {length}mm")
+    context_parts.append(f"Bone Width: {bone_width}mm, Bone Height: {bone_height}mm")
+    if bone_type:
+        context_parts.append(f"Bone Type: {bone_type}")
+    if risk_level:
+        context_parts.append(f"Risk Level: {risk_level} (Score: {risk_score})")
+    if procedures:
+        context_parts.append(f"Procedures: {', '.join(procedures) if isinstance(procedures, list) else procedures}")
+    context = "\n".join(context_parts)
+
+    prompt = f"""You are an expert implantologist. Based on the following clinical data, explain in 3-4 concise sentences why the selected implant is appropriate for this case. Use clinical reasoning — reference bone dimensions, safety margins, bone density, and anatomical considerations.
+
+Clinical Data:
+{context}
+
+Provide a clinical explanation. Do not use bullet points. Write as a professional clinical note."""
+
+    chat = LlmChat(
+        api_key=_get_llm_key(),
+        session_id=f"explain-standalone-{uuid.uuid4().hex[:8]}",
+        system_message="You are an expert implant dentistry clinical advisor. Provide concise, evidence-based clinical explanations."
+    ).with_model("openai", "gpt-5.2")
+
+    response = await chat.send_message(UserMessage(text=prompt))
+
+    return {"explanation": response}
+
+
 @api_router.post("/ai/case-summary")
 async def ai_case_summary(request: Request, current_user: dict = Depends(get_current_user)):
     """Generate AI clinical case summary for PDF export."""
