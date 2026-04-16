@@ -255,6 +255,25 @@ A comprehensive mobile application for managing dental implant procedures at the
 - **Draft Delete Persistence**: Deleted drafts removed from DB; dashboard uses `useFocusEffect` to auto-refresh on navigate back
 - **Drafts Hidden from My Cases/Alerts**: Procedures page filters out `status === 'draft'`; removed `draft` from `ACTION_NEEDED_MAP`
 - **My Cases Sort Order**: GET /api/procedures now sorts by `created_at` descending (latest first) for all filter types
+
+### June 18, 2026 — Session 12f: Implanr AI Integration (22/22 tests passed)
+- **AI Clinical Explanation Engine** (`POST /api/ai/explain-recommendation`):
+  - "Explain Recommendation" button appears after implant suggestion in Phase 1 Step 2 (CaseImplantPlanning.tsx)
+  - Generates 3-4 sentence clinical reasoning explaining why the selected implant is appropriate
+  - Stored in `procedure.ai_explanations.implant_{index}`
+- **AI Case Summary Generator** (`POST /api/ai/case-summary`):
+  - "AI SUMMARY" button on case detail page alongside PDF export
+  - Generates structured clinical summary (Presentation, Treatment Plan, Risk, Notes)
+  - Displayed in purple-accented card below action buttons; stored in `procedure.ai_case_summary`
+- **Auto Surgical Notes Generator** (`POST /api/ai/surgical-notes`):
+  - "Generate Surgical Notes" button in Phase 2 submission page above Submit button
+  - Generates operative notes from drilling protocol, torque, ISQ, and case data
+  - Stored in `procedure.ai_surgical_notes`
+- **AI Chat Assistant** (`POST /api/ai/chat`, `GET /api/ai/chat/{id}`):
+  - Floating "Ask Implanr AI" button on case detail page (visible after Phase 1)
+  - Full chat modal with conversation history, context-aware responses grounded in case data
+  - History stored per procedure in `procedure.ai_chat_history`
+- **Tech**: GPT-5.2 via Emergent Universal Key (emergentintegrations library). Production-ready: swap to own OpenAI key in .env before App Store launch.
 - **Interactive Case Pipeline for Supervisor & InCharge** (22/22 tests passed):
   - Supervisor dashboard now shows Case Pipeline section (Phase 1-4 + Complete bars)
   - InCharge pipeline bars made interactive
