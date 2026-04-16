@@ -538,6 +538,8 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
   const [riskLoading, setRiskLoading] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+  const [aiExplanation, setAiExplanation] = useState('');
+  const [aiExplaining, setAiExplaining] = useState(false);
 
   const BONE_TYPES_R = ['D1', 'D2', 'D3', 'D4'];
   const PROCEDURES_R = [
@@ -829,6 +831,54 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
         </View>
       )}
 
+      {/* AI Explain Recommendation */}
+      {riskImplant && (
+        <View style={s.card} data-testid="ai-explain-card">
+          <TouchableOpacity
+            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#0D47A1', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16, opacity: aiExplaining ? 0.7 : 1 }}
+            onPress={async () => {
+              if (aiExplaining) return;
+              const imp = selectedImplant || baseImplants[0];
+              if (!imp) return;
+              setAiExplaining(true);
+              setAiExplanation('');
+              try {
+                const res = await api.post('/ai/explain-standalone', {
+                  tooth,
+                  tooth_region: toothInfo?.region || '',
+                  brand: imp.brand,
+                  system: imp.system,
+                  diameter: imp.diameter,
+                  length: imp.length,
+                  bone_width: boneWidth,
+                  bone_height: boneHeight,
+                  bone_type: riskBoneType || '',
+                  risk_level: riskResult?.risk_level || '',
+                  risk_score: riskResult?.total_score || '',
+                });
+                setAiExplanation(res.data.explanation);
+              } catch (e: any) {
+                Alert.alert('Error', e.response?.data?.detail || 'Failed to generate explanation');
+              } finally { setAiExplaining(false); }
+            }}
+            disabled={aiExplaining}
+            data-testid="ai-explain-btn"
+          >
+            {aiExplaining ? <ActivityIndicator color="#FFF" size="small" /> : <Ionicons name="sparkles" size={18} color="#FFF" />}
+            <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '700' }}>Explain Recommendation</Text>
+          </TouchableOpacity>
+          {aiExplanation ? (
+            <View style={{ marginTop: 10, backgroundColor: '#E8EAF6', borderRadius: 12, padding: 14, borderLeftWidth: 3, borderLeftColor: '#3F51B5' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <Ionicons name="sparkles" size={14} color="#3F51B5" />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#3F51B5' }}>AI Clinical Insight</Text>
+              </View>
+              <Text style={{ fontSize: 12, color: '#37474F', lineHeight: 18 }}>{aiExplanation}</Text>
+            </View>
+          ) : null}
+        </View>
+      )}
+
       {/* Actions */}
       <View style={[s.card, { paddingVertical: 12 }]}>
         <View style={s.actions}>
@@ -858,6 +908,10 @@ function SuggestResult({ result, tooth, toothInfo, onReset, onOpenProtocol }: {
   const [riskProcedure, setRiskProcedure] = useState(cg.procedures?.length === 1 ? cg.procedures[0] : '');
   const [riskResult, setRiskResult] = useState<any>(null);
   const [riskLoading, setRiskLoading] = useState(false);
+
+  // AI Explain state
+  const [aiExplanation, setAiExplanation] = useState('');
+  const [aiExplaining, setAiExplaining] = useState(false);
 
   // Implant selection state: track by "sysIdx-impIdx"
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -1122,6 +1176,55 @@ function SuggestResult({ result, tooth, toothInfo, onReset, onOpenProtocol }: {
               )}
             </View>
           )}
+        </View>
+      )}
+
+      {/* AI Explain Recommendation */}
+      {bestImplant && tooth && (
+        <View style={s.card} data-testid="suggest-ai-explain-card">
+          <TouchableOpacity
+            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#0D47A1', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16, opacity: aiExplaining ? 0.7 : 1 }}
+            onPress={async () => {
+              if (aiExplaining) return;
+              const imp = selectedImplant || bestImplant;
+              if (!imp) return;
+              setAiExplaining(true);
+              setAiExplanation('');
+              try {
+                const res = await api.post('/ai/explain-standalone', {
+                  tooth,
+                  tooth_region: toothInfo?.region || '',
+                  brand: imp.brand,
+                  system: imp.system,
+                  diameter: imp.diameter,
+                  length: imp.length,
+                  bone_width: cg.bone_width || '',
+                  bone_height: cg.bone_height || '',
+                  bone_type: cg.bone_type || '',
+                  risk_level: riskResult?.risk_level || '',
+                  risk_score: riskResult?.total_score || '',
+                  procedures: cg.procedures || [],
+                });
+                setAiExplanation(res.data.explanation);
+              } catch (e: any) {
+                Alert.alert('Error', e.response?.data?.detail || 'Failed to generate explanation');
+              } finally { setAiExplaining(false); }
+            }}
+            disabled={aiExplaining}
+            data-testid="suggest-ai-explain-btn"
+          >
+            {aiExplaining ? <ActivityIndicator color="#FFF" size="small" /> : <Ionicons name="sparkles" size={18} color="#FFF" />}
+            <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '700' }}>Explain Recommendation</Text>
+          </TouchableOpacity>
+          {aiExplanation ? (
+            <View style={{ marginTop: 10, backgroundColor: '#E8EAF6', borderRadius: 12, padding: 14, borderLeftWidth: 3, borderLeftColor: '#3F51B5' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <Ionicons name="sparkles" size={14} color="#3F51B5" />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#3F51B5' }}>AI Clinical Insight</Text>
+              </View>
+              <Text style={{ fontSize: 12, color: '#37474F', lineHeight: 18 }}>{aiExplanation}</Text>
+            </View>
+          ) : null}
         </View>
       )}
 

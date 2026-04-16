@@ -301,7 +301,7 @@ export default function NewProcedureScreen() {
   useFocusEffect(
     useCallback(() => {
       if (params.draftId) {
-        // Resuming a draft — load and jump to implant selection
+        // Resuming a draft — load ALL data and jump to implant selection
         const loadDraft = async () => {
           try {
             const res = await api.get(`/procedures/${params.draftId}`);
@@ -311,8 +311,55 @@ export default function NewProcedureScreen() {
               setIsDraftResume(true);
               setFormData(prev => ({
                 ...prev,
+                patient_name: proc.patient_name || '',
+                registration_number: proc.registration_number || '',
+                student_name: proc.student_name || prev.student_name || '',
+                supervisor_id: proc.supervisor_id || '',
+                supervisor_name: proc.supervisor_name || '',
+                implant_incharge_id: proc.implant_incharge_id || '',
+                implant_incharge_name: proc.implant_incharge_name || '',
+                receipt_number: proc.receipt_number || '',
+                amount_paid: proc.amount_paid != null ? String(proc.amount_paid) : '',
+                procedure_date: proc.procedure_date || '',
+                procedure_time: proc.procedure_time || '',
                 implant_procedure_type: proc.implant_procedure_type || '',
+                arch: proc.arch || '',
+                loading_type: Array.isArray(proc.loading_type) ? proc.loading_type : [],
+                prosthetic_plan: proc.prosthetic_plan || '',
+                prosthetic_plan_other: proc.prosthetic_plan_other || '',
+                bone_graft_specifications: proc.bone_graft_specifications || '',
+                // Clinical Examination
+                occlusocervical_height: proc.occlusocervical_height || '',
+                mesiodistal_space: proc.mesiodistal_space || '',
+                arch_condition: proc.arch_condition || '',
+                ridge_contour: proc.ridge_contour || '',
+                soft_tissue_thickness: proc.soft_tissue_thickness || '',
+                keratinized_mucosa: proc.keratinized_mucosa || '',
+                // Occlusal Analysis (non-full-arch)
+                occlusal_scheme: proc.occlusal_scheme || '',
+                parafunction_habit: proc.parafunction_habit || '',
+                vertical_dimension: proc.vertical_dimension || '',
+                opposing_dentition: proc.opposing_dentition || '',
+                // Occlusal Analysis (full-arch)
+                vertical_dimension_mm: proc.vertical_dimension_mm || '',
+                available_interarch_space: proc.available_interarch_space || '',
+                opposing_arch: proc.opposing_arch || '',
+                tmj: proc.tmj || '',
+                // Aesthetic Risk Assessment
+                smile_line: proc.smile_line || '',
+                gingival_biotype: proc.gingival_biotype || '',
+                // Medical Assessment
+                medical_assessment: proc.medical_assessment || prev.medical_assessment,
+                medical_risk_level: proc.medical_risk_level || '',
               }));
+              // Restore checklist items if saved
+              if (proc.checklist?.pre_surgical?.items) {
+                const restored: Record<string, boolean> = {};
+                proc.checklist.pre_surgical.items.forEach((item: any) => {
+                  if (item.id && item.value) restored[item.id] = true;
+                });
+                setChecklistItems(restored);
+              }
               setStep('implants');
             }
           } catch { /* ignore — draft may have been deleted */ }
@@ -341,7 +388,7 @@ export default function NewProcedureScreen() {
         setStep('details');
         AsyncStorage.removeItem(FORM_STORAGE_KEY).catch(() => {});
       }
-    }, [createdProcedureId, user?.name])
+    }, [params.draftId, createdProcedureId, user?.name])
   );
 
   // ── Restore form ONLY when app returns from background, NOT on mount/focus ──
@@ -565,9 +612,9 @@ export default function NewProcedureScreen() {
   // ── Render Step: Implant Selection ──
   if (step === 'implants' && createdProcedureId) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#F5F7FA' }}>
+      <View style={{ flex: 1, backgroundColor: '#F5F7FA' }} data-testid="step2-implant-selection-view">
         <View style={styles.stepHeader}>
-          <TouchableOpacity onPress={() => { setStep('details'); setIsDraftResume(false); }} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => { setStep('details'); setIsDraftResume(false); }} style={styles.backBtn} data-testid="step2-back-btn">
             <Ionicons name="arrow-back" size={22} color="#1A73E8" />
           </TouchableOpacity>
           <Text style={styles.stepTitle}>Step 2: Implant Selection</Text>

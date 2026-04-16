@@ -642,17 +642,18 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
         editItem={editingIdx !== null ? plans[editingIdx] : undefined}
         medicalAssessment={medicalAssessment}
         procedureType={procedureType}
+        procedureId={procedureId}
       />
     </View>
   );
 }
 
 // ── Add/Edit Implant Modal Component ───────────────────────
-function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPositions, editItem, medicalAssessment, procedureType }: {
+function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPositions, editItem, medicalAssessment, procedureType, procedureId }: {
   visible: boolean; onClose: () => void; onSave: (item: ImplantPlanItem) => void;
   systems: ImplantSystem[]; toothRecs: Record<string,any>; usedPositions: string[];
   editItem?: ImplantPlanItem; medicalAssessment?: Record<string, string>;
-  procedureType?: string;
+  procedureType?: string; procedureId: string;
 }) {
   const [step, setStep] = useState(1);
   const [position, setPosition] = useState('');
