@@ -235,6 +235,17 @@ export default function ProcedureDetailScreen() {
     // Allow PDF export from pending_phase1 onwards (all non-draft statuses)
     return procedure.status !== 'draft';
   };
+
+  const canViewAiSummary = () => {
+    if (!procedure || procedure.status === 'draft') return false;
+    // Students: always see AI Summary for their own cases
+    if (user?.role === 'student') return true;
+    // Supervisors: see AI Summary for their own cases AND student cases under them
+    if (user?.role === 'supervisor') return true;
+    // Implant In-Charge: see AI Summary for ALL cases
+    if (user?.role === 'implant_incharge') return true;
+    return false;
+  };
   
   const handleExportPDF = async () => {
     if (!procedure) return;
@@ -1864,7 +1875,7 @@ export default function ProcedureDetailScreen() {
         ) : null}
 
         {/* Extra bottom spacing for the fixed buttons */}
-        <View style={{ height: canExportPDF() ? 130 : 80 }} />
+        <View style={{ height: (canExportPDF() || canViewAiSummary()) ? 130 : 80 }} />
       </ScrollView>
 
       {/* Fixed bottom bar — 2-row grid, all buttons same size */}
@@ -1889,46 +1900,50 @@ export default function ProcedureDetailScreen() {
             </TouchableOpacity>
           )}
         </View>
-        {canExportPDF() && (
+        {(canExportPDF() || canViewAiSummary()) && (
           <View style={[styles.bottomBarRow, { alignSelf: 'stretch' }]}>
-            <TouchableOpacity
-              style={[styles.barButton, { backgroundColor: '#43A047', flex: 1 }, pdfLoading && styles.buttonDisabled]}
-              onPress={handleExportPDF}
-              disabled={pdfLoading}
-              data-testid="export-pdf-btn"
-            >
-              {pdfLoading ? (
-                <ActivityIndicator color="#FFF" size="small" />
-              ) : (
-                <>
-                  <Ionicons name="document-text" size={16} color="#FFF" />
-                  <Text style={styles.barButtonText}>EXPORT PDF</Text>
-                </>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.barButton, { backgroundColor: '#0D47A1', flex: 1 }, aiSummaryLoading && styles.buttonDisabled]}
-              onPress={async () => {
-                setAiSummaryLoading(true);
-                try {
-                  const res = await api.post('/ai/case-summary', { procedure_id: procedure.id || procedure._id });
-                  setAiSummary(res.data.summary);
-                } catch (e: any) {
-                  Alert.alert('Error', e.response?.data?.detail || 'Failed to generate summary');
-                } finally { setAiSummaryLoading(false); }
-              }}
-              disabled={aiSummaryLoading}
-              data-testid="ai-summary-btn"
-            >
-              {aiSummaryLoading ? (
-                <ActivityIndicator color="#FFF" size="small" />
-              ) : (
-                <>
-                  <Ionicons name="sparkles" size={16} color="#FFF" />
-                  <Text style={styles.barButtonText}>AI SUMMARY</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            {canExportPDF() && (
+              <TouchableOpacity
+                style={[styles.barButton, { backgroundColor: '#43A047', flex: 1 }, pdfLoading && styles.buttonDisabled]}
+                onPress={handleExportPDF}
+                disabled={pdfLoading}
+                data-testid="export-pdf-btn"
+              >
+                {pdfLoading ? (
+                  <ActivityIndicator color="#FFF" size="small" />
+                ) : (
+                  <>
+                    <Ionicons name="document-text" size={16} color="#FFF" />
+                    <Text style={styles.barButtonText}>EXPORT PDF</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+            {canViewAiSummary() && (
+              <TouchableOpacity
+                style={[styles.barButton, { backgroundColor: '#0D47A1', flex: 1 }, aiSummaryLoading && styles.buttonDisabled]}
+                onPress={async () => {
+                  setAiSummaryLoading(true);
+                  try {
+                    const res = await api.post('/ai/case-summary', { procedure_id: procedure.id || procedure._id });
+                    setAiSummary(res.data.summary);
+                  } catch (e: any) {
+                    Alert.alert('Error', e.response?.data?.detail || 'Failed to generate summary');
+                  } finally { setAiSummaryLoading(false); }
+                }}
+                disabled={aiSummaryLoading}
+                data-testid="ai-summary-btn"
+              >
+                {aiSummaryLoading ? (
+                  <ActivityIndicator color="#FFF" size="small" />
+                ) : (
+                  <>
+                    <Ionicons name="sparkles" size={16} color="#FFF" />
+                    <Text style={styles.barButtonText}>AI SUMMARY</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
         )}
       </View>
