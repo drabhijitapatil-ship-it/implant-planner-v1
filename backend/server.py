@@ -222,7 +222,13 @@ class Checklist(BaseModel):
 class ProcedureCreate(BaseModel):
     student_name: Optional[str] = Field("", max_length=100)
     patient_name: str = Field(..., max_length=100)
+    age: Optional[str] = Field("", max_length=5)
+    sex: Optional[str] = Field("", max_length=10)
+    profession: Optional[str] = Field("", max_length=100)
+    mobile_number: Optional[str] = Field("", max_length=20)
+    patient_email: Optional[str] = Field("", max_length=255)
     registration_number: str = Field(..., max_length=50)
+    chief_complaint: Optional[str] = Field("", max_length=1000)
     supervisor_id: str = Field(..., max_length=50)
     supervisor_name: str = Field(..., max_length=100)
     implant_incharge_id: str = Field(..., max_length=50)
@@ -299,7 +305,13 @@ class ProcedureCreate(BaseModel):
 
 class ProcedureUpdate(BaseModel):
     patient_name: Optional[str] = Field(None, max_length=100)
+    age: Optional[str] = Field(None, max_length=5)
+    sex: Optional[str] = Field(None, max_length=10)
+    profession: Optional[str] = Field(None, max_length=100)
+    mobile_number: Optional[str] = Field(None, max_length=20)
+    patient_email: Optional[str] = Field(None, max_length=255)
     registration_number: Optional[str] = Field(None, max_length=50)
+    chief_complaint: Optional[str] = Field(None, max_length=1000)
     supervisor_id: Optional[str] = Field(None, max_length=50)
     supervisor_name: Optional[str] = Field(None, max_length=100)
     implant_incharge_id: Optional[str] = Field(None, max_length=50)
@@ -1911,7 +1923,11 @@ import uuid
 
 def _build_case_context(proc: dict) -> str:
     """Build a clinical case context string from procedure data."""
-    parts = [f"Patient: {proc.get('patient_name','N/A')}, Age: {proc.get('age','N/A')}, Gender: {proc.get('gender','N/A')}"]
+    parts = [f"Patient: {proc.get('patient_name','N/A')}, Age: {proc.get('age','N/A')}, Sex: {proc.get('sex','N/A')}"]
+    if proc.get('profession'):
+        parts.append(f"Profession: {proc.get('profession')}")
+    if proc.get('chief_complaint'):
+        parts.append(f"Chief Complaint: {proc.get('chief_complaint')}")
     parts.append(f"Procedure Type: {proc.get('implant_procedure_type','N/A')}")
     parts.append(f"Status: {proc.get('status','N/A')}")
     if proc.get('arch'):
@@ -2802,7 +2818,14 @@ async def generate_case_report(
     pdf.add_page()
     add_section_title("Patient & Treatment Details")
     add_field("Patient Name", procedure.get("patient_name"))
+    add_field("Age", f"{procedure.get('age', '')} years" if procedure.get("age") else None)
+    add_field("Sex", procedure.get("sex"))
+    add_field("Profession", procedure.get("profession"))
+    add_field("Mobile Number", procedure.get("mobile_number"))
+    add_field("Email", procedure.get("patient_email"))
     add_field("Registration Number", procedure.get("registration_number"))
+    if procedure.get("chief_complaint"):
+        add_field("Chief Complaint", procedure.get("chief_complaint"))
     add_field("PG Student", procedure.get("student_name"))
     add_field("Supervising Faculty", procedure.get("supervisor_name"))
     add_field("Implant Incharge", procedure.get("implant_incharge_name"))

@@ -239,7 +239,13 @@ export default function NewProcedureScreen() {
   // ── Form State ──
   const [formData, setFormData] = useState({
     patient_name: '',
+    age: '',
+    sex: '',
+    profession: '',
+    mobile_number: '',
+    patient_email: '',
     registration_number: '',
+    chief_complaint: '',
     student_name: user?.name || '',
     supervisor_id: (user?.role === 'supervisor' || user?.role === 'implant_incharge') ? (user?.id || '') : '',
     supervisor_name: (user?.role === 'supervisor' || user?.role === 'implant_incharge') ? (user?.name || '') : '',
@@ -312,7 +318,13 @@ export default function NewProcedureScreen() {
               setFormData(prev => ({
                 ...prev,
                 patient_name: proc.patient_name || '',
+                age: proc.age || '',
+                sex: proc.sex || '',
+                profession: proc.profession || '',
+                mobile_number: proc.mobile_number || '',
+                patient_email: proc.patient_email || '',
                 registration_number: proc.registration_number || '',
+                chief_complaint: proc.chief_complaint || '',
                 student_name: proc.student_name || prev.student_name || '',
                 supervisor_id: proc.supervisor_id || '',
                 supervisor_name: proc.supervisor_name || '',
@@ -367,7 +379,8 @@ export default function NewProcedureScreen() {
         loadDraft();
       } else if (!createdProcedureId) {
         setFormData({
-          patient_name: '', registration_number: '', student_name: user?.name || '',
+          patient_name: '', age: '', sex: '', profession: '', mobile_number: '', patient_email: '',
+          registration_number: '', chief_complaint: '', student_name: user?.name || '',
           supervisor_id: (user?.role === 'supervisor' || user?.role === 'implant_incharge') ? (user?.id || '') : '',
           supervisor_name: (user?.role === 'supervisor' || user?.role === 'implant_incharge') ? (user?.name || '') : '',
           implant_incharge_id: user?.role === 'implant_incharge' ? (user?.id || '') : '',
@@ -703,6 +716,44 @@ export default function NewProcedureScreen() {
             onChangeText={v => updateForm('patient_name', v)} placeholder="Enter patient name"
             autoCorrect={false} autoCapitalize="none" data-testid="patient-name-input" />
         </View>
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <View style={[styles.fieldContainer, { flex: 1 }]}>
+            <Text style={styles.label}>Age (years)</Text>
+            <TextInput style={styles.input} value={formData.age}
+              onChangeText={v => updateForm('age', v.replace(/[^0-9]/g, ''))} placeholder="e.g. 45"
+              keyboardType="numeric" maxLength={3} data-testid="age-input" />
+          </View>
+          <View style={[styles.fieldContainer, { flex: 1 }]}>
+            <Text style={styles.label}>Sex</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+              {['Male', 'Female'].map(opt => (
+                <TouchableOpacity key={opt}
+                  style={[styles.dropdown, { flex: 1, alignItems: 'center', paddingVertical: 10, backgroundColor: formData.sex === opt ? '#1A73E8' : '#FFF' }]}
+                  onPress={() => updateForm('sex', opt)} data-testid={`sex-${opt.toLowerCase()}-btn`}>
+                  <Text style={{ color: formData.sex === opt ? '#FFF' : '#333', fontWeight: formData.sex === opt ? '700' : '400', fontSize: 13 }}>{opt}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+        <View style={styles.fieldContainer}>
+          <Text style={styles.label}>Profession</Text>
+          <TextInput style={styles.input} value={formData.profession}
+            onChangeText={v => updateForm('profession', v)} placeholder="Enter profession"
+            data-testid="profession-input" />
+        </View>
+        <View style={styles.fieldContainer}>
+          <Text style={styles.label}>Mobile Number</Text>
+          <TextInput style={styles.input} value={formData.mobile_number}
+            onChangeText={v => updateForm('mobile_number', v.replace(/[^0-9+\-\s]/g, ''))} placeholder="Enter mobile number"
+            keyboardType="phone-pad" maxLength={15} data-testid="mobile-number-input" />
+        </View>
+        <View style={styles.fieldContainer}>
+          <Text style={styles.label}>Email</Text>
+          <TextInput style={styles.input} value={formData.patient_email}
+            onChangeText={v => updateForm('patient_email', v)} placeholder="Enter email address"
+            keyboardType="email-address" autoCapitalize="none" data-testid="patient-email-input" />
+        </View>
         <View style={styles.fieldContainer}>
           <Text style={styles.label}>Registration Number <Text style={{ color: '#DC3545' }}>*</Text></Text>
           <TextInput style={styles.input} value={formData.registration_number}
@@ -714,6 +765,28 @@ export default function NewProcedureScreen() {
             <TextInput style={[styles.input, { backgroundColor: '#F0F0F0' }]} value={formData.student_name} editable={false} />
           </View>
         )}
+      </View>
+
+      {/* ─── Chief Complaint ─── */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Chief Complaint</Text>
+        <View style={styles.fieldContainer}>
+          <Text style={styles.label}>Chief Complaint</Text>
+          <TextInput
+            style={[styles.input, { height: 90, textAlignVertical: 'top', paddingTop: 10 }]}
+            value={formData.chief_complaint}
+            onChangeText={v => {
+              const words = v.trim().split(/\s+/).filter(Boolean);
+              if (words.length <= 100) updateForm('chief_complaint', v);
+            }}
+            placeholder="Describe the patient's chief complaint (50-100 words)"
+            multiline numberOfLines={4} maxLength={700}
+            data-testid="chief-complaint-input"
+          />
+          <Text style={{ fontSize: 11, color: '#999', marginTop: 4, textAlign: 'right' }}>
+            {formData.chief_complaint.trim().split(/\s+/).filter(Boolean).length}/100 words
+          </Text>
+        </View>
       </View>
 
       {/* ─── Faculty Selection ─── */}
