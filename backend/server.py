@@ -2052,7 +2052,7 @@ async def ai_explain_recommendation(request: Request, current_user: dict = Depen
     plan = plans[implant_index] if implant_index < len(plans) else (plans[0] if plans else {})
     
     context = _build_case_context(proc)
-    prompt = f"""You are an expert implantologist. Based on the following clinical case data, explain in 3-4 concise sentences why the selected implant is appropriate for this case. Use clinical reasoning grounded in ITI Treatment Guides (especially Vol. 1 for implant selection), Misch bone density classification, and ICOI consensus guidelines. Reference bone-to-implant safety margins (minimum 1mm buccal/lingual per ITI), anatomical considerations, and implant design rationale specific to the bone type and site.
+    prompt = f"""You are an expert implantologist. Based on the following clinical case data, explain in 3-4 concise sentences why the selected implant is appropriate for this case. Use clinical reasoning grounded in established scientific literature — reference bone-to-implant safety margins, anatomical considerations, bone density classification, and implant design rationale specific to the bone type and site. Do NOT cite or name any specific guidelines, organizations, or textbooks.
 
 Case Data:
 {context}
@@ -2060,7 +2060,7 @@ Case Data:
 Selected Implant: {plan.get('brand','')} {plan.get('system','')} {plan.get('diameter','')}×{plan.get('length','')}mm at site {plan.get('tooth_number','')}
 Bone Type: {plan.get('bone_type','N/A')}
 
-Provide a clinical explanation citing relevant ITI/ICOI guidelines. Write as a professional clinical note."""
+Provide a clinical explanation in professional scientific language. Do not mention any guideline names or references. Write as a professional clinical note."""
 
     chat = LlmChat(
         api_key=_get_llm_key(),
@@ -2107,12 +2107,12 @@ async def ai_explain_standalone(request: Request, current_user: dict = Depends(g
         context_parts.append(f"Procedures: {', '.join(procedures) if isinstance(procedures, list) else procedures}")
     context = "\n".join(context_parts)
 
-    prompt = f"""You are an expert implantologist. Based on the following clinical data, explain in 3-4 concise sentences why the selected implant is appropriate for this case. Use clinical reasoning grounded in ITI Treatment Guides, Misch bone density classification, and ICOI consensus guidelines. Reference bone-to-implant safety margins, anatomical considerations, and implant design rationale.
+    prompt = f"""You are an expert implantologist. Based on the following clinical data, explain in 3-4 concise sentences why the selected implant is appropriate for this case. Use clinical reasoning grounded in established scientific literature — reference bone-to-implant safety margins, anatomical considerations, and implant design rationale. Do NOT cite or name any specific guidelines, organizations, or textbooks.
 
 Clinical Data:
 {context}
 
-Provide a clinical explanation citing relevant ITI/ICOI guidelines. Write as a professional clinical note."""
+Provide a clinical explanation in professional scientific language. Do not mention any guideline names or references. Write as a professional clinical note."""
 
     chat = LlmChat(
         api_key=_get_llm_key(),
@@ -2189,27 +2189,27 @@ A. Patient Information & Chief Complaint
 B. Procedure Type & Treatment Rationale (type of implant procedure, arch, loading protocol selected and why)
 C. Clinical Examination Findings (ridge contour, soft tissue thickness, keratinized mucosa, occlusocervical height, mesiodistal space)
 D. Occlusal Analysis (scheme, parafunction, opposing dentition, vertical dimension / restorative space)
-E. Aesthetic Risk Assessment (smile line, gingival biotype — reference the SAC classification from ITI)
+E. Aesthetic Risk Assessment (smile line, gingival biotype, SAC classification)
 F. Medical Assessment & ASA Classification (medical conditions affecting treatment, risk level)
-G. Implant Selection & Planning (for each planned site: tooth number, implant brand/system/dimensions, bone dimensions, bone type — justify selection referencing ITI Treatment Guide Vol. 1 implant-to-bone safety margins and Misch bone density classification)"""
+G. Implant Selection & Planning (for each planned site: tooth number, implant brand/system/dimensions, bone dimensions, bone type, implant-to-bone safety margins, bone density classification)"""
 
     phase2_sections = """
 **Phase 2 — Surgical Protocol & Outcomes**
-H. Surgical Approach (anesthesia, flap design, drilling protocol — reference ITI Treatment Guide surgical protocols)
-I. Implant Placement & Primary Stability (insertion torque values per implant, compare against ITI recommended thresholds for immediate/delayed loading)
-J. Bone Augmentation (if performed: type, material, rationale per ICOI bone classification)
+H. Surgical Approach (anesthesia, flap design, drilling protocol)
+I. Implant Placement & Primary Stability (insertion torque values per implant, thresholds for the selected loading protocol)
+J. Bone Augmentation (if performed: type, material, rationale)
 K. Prosthetic Components & Closure (healing abutments, sutures, post-operative instructions)"""
 
     phase3_sections = """
 **Phase 3 — Second Stage Surgery & Healing**
-L. Osseointegration Assessment (ISQ values — interpret per ICOI stability guidelines; clinical assessment)
-M. Healing Abutment Placement (heights, soft tissue management per ITI SAC protocol)"""
+L. Osseointegration Assessment (ISQ values, clinical assessment of integration)
+M. Healing Abutment Placement (heights, soft tissue management)"""
 
     phase4_sections = """
 **Phase 4 — Prosthetic Rehabilitation**
-N. Final Prosthetic Plan (type, material selection rationale — reference ICOI prosthetic guidelines)
+N. Final Prosthetic Plan (type, material selection rationale)
 O. Impression & Abutment (impression type, custom/stock abutment, prosthetic material)
-P. Treatment Outcome (overall assessment, prognosis per ITI/ICOI success criteria)"""
+P. Treatment Outcome (overall assessment, prognosis)"""
 
     sections_to_include = phase1_sections
     if current_phase >= 2:
@@ -2222,24 +2222,25 @@ P. Treatment Outcome (overall assessment, prognosis per ITI/ICOI success criteri
     # ---------- Case-type adaptive instruction ----------
     case_type_instruction = ""
     if case_type == 'full_arch':
-        case_type_instruction = "This is a full-arch rehabilitation case. Emphasize the biomechanical considerations of implant distribution, cantilever management, and material selection for full-arch prostheses per the ICOI Full-Arch Consensus."
+        case_type_instruction = "This is a full-arch rehabilitation case. Emphasize biomechanical considerations of implant distribution, cantilever management, and material selection for full-arch prostheses."
     elif case_type == 'overdenture':
-        case_type_instruction = "This is an implant-retained overdenture case. Discuss attachment system rationale, residual ridge preservation, and retention mechanism per ITI Treatment Guide Vol. 4."
+        case_type_instruction = "This is an implant-retained overdenture case. Discuss attachment system rationale, residual ridge preservation, and retention mechanism."
     elif case_type == 'bone_graft':
-        case_type_instruction = "This case involves bone augmentation. Detail the grafting rationale, material choice, and expected timeline for graft maturation per ITI Treatment Guide Vol. 7 (Ridge Augmentation Procedures)."
+        case_type_instruction = "This case involves bone augmentation. Detail the grafting rationale, material choice, and expected timeline for graft maturation."
     elif case_type == 'multiple_implant':
-        case_type_instruction = "This involves multiple implant sites. Discuss inter-implant spacing, load distribution, and splinting considerations per ITI consensus recommendations."
+        case_type_instruction = "This involves multiple implant sites. Discuss inter-implant spacing, load distribution, and splinting considerations."
     elif case_type == 'immediate_loading':
-        case_type_instruction = "This case uses an immediate loading protocol. Reference the ITI Consensus Conference criteria for immediate loading (minimum insertion torque, ISQ thresholds, occlusal considerations)."
+        case_type_instruction = "This case uses an immediate loading protocol. Discuss criteria for immediate loading (minimum insertion torque, ISQ thresholds, occlusal considerations)."
     else:
-        case_type_instruction = "This is a single-implant case. Discuss site-specific anatomy, implant-to-adjacent-tooth distance, and platform considerations per ITI Treatment Guide Vol. 1."
+        case_type_instruction = "This is a single-implant case. Discuss site-specific anatomy, implant-to-adjacent-tooth distance, and platform considerations."
 
     prompt = f"""You are a senior implantologist and prosthodontist generating a clinical case summary for a dental implant case currently at Phase {current_phase}.
 
 IMPORTANT GUIDELINES:
-- Reference ONLY evidence-based sources: ITI (International Team for Implantology) Treatment Guides, ICOI (International Congress of Oral Implantologists) Consensus Statements, Misch's Contemporary Implant Dentistry, and established prosthodontic textbooks.
-- Do NOT use generic internet content. Use specific clinical reasoning grounded in the above literature.
+- Base your reasoning on established scientific literature, standard implantology textbooks, and recognized consensus guidelines — but DO NOT cite or name any specific references, organizations, journals, or guideline names in the output.
+- Write in professional scientific clinical language.
 - Generate a DYNAMIC summary tailored to this specific case — do not produce a generic template.
+- Make section headings **bold** and descriptions in regular type.
 {case_type_instruction}
 
 Case Data:
@@ -2252,16 +2253,16 @@ Generate the summary covering ONLY the following sections (as the case is curren
 {sections_to_include}
 
 FORMAT INSTRUCTIONS:
-- Use the section letters and titles as headings (e.g., "**A. Patient Information & Chief Complaint**")
-- Under each heading, write 2-4 sentences with specific clinical details from the case data
-- Reference relevant ITI/ICOI guidelines naturally within the text (e.g., "per ITI Treatment Guide Vol. 1, a minimum 1mm bone-to-implant safety margin is recommended...")
+- Use the section letters and titles as headings in **bold** (e.g., "**A. Patient Information & Chief Complaint**")
+- Under each heading, write 2-4 sentences with specific clinical details from the case data in regular (non-bold) type
+- Do NOT mention or cite any specific guidelines, organizations, textbooks, or journal references in the text
 - Skip any section where no relevant data is available, but note it briefly as "Data pending for this phase"
 - Make the summary clinically meaningful and specific to THIS patient — avoid boilerplate language"""
 
     chat = LlmChat(
         api_key=_get_llm_key(),
         session_id=f"summary-{procedure_id}-{uuid.uuid4().hex[:8]}",
-        system_message="You are an expert implant dentistry clinical advisor and prosthodontist. You write case summaries grounded strictly in ITI Treatment Guides, ICOI Consensus Statements, Misch's Classification, and standard prosthodontic textbook content. Never use generic or unverified internet content."
+        system_message="You are an expert implant dentistry clinical advisor and prosthodontist. You write case summaries using rigorous scientific clinical language grounded in established evidence-based implantology. Never cite, name, or reference any specific guidelines, organizations, textbooks, or journals in your output — present the knowledge as your own professional clinical assessment."
     ).with_model("openai", "gpt-5.2")
 
     response = await chat.send_message(UserMessage(text=prompt))

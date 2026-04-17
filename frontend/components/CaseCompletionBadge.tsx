@@ -134,23 +134,6 @@ export default function CaseCompletionBadge({ procedureId, status }: Props) {
           <Text style={st.noBadgeText}>All phases have been approved.</Text>
         </View>
       )}
-
-      {/* Download Photo Album Button - only for completed cases */}
-      <TouchableOpacity
-        style={st.albumButton}
-        onPress={handleDownloadAlbum}
-        disabled={albumLoading}
-        data-testid="download-photo-album-btn"
-      >
-        {albumLoading ? (
-          <ActivityIndicator color="#FFF" size="small" />
-        ) : (
-          <>
-            <Ionicons name="images" size={20} color="#FFF" />
-            <Text style={st.reportButtonText}>Download Photo Album</Text>
-          </>
-        )}
-      </TouchableOpacity>
     </View>
   );
 }
