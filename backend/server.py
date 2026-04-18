@@ -2042,13 +2042,21 @@ def _build_case_context(proc: dict) -> str:
         if p4.get('overdenture_attachment'):
             parts.append(f"Overdenture Attachment: {p4.get('overdenture_attachment')}")
 
-    # Notes from all phases
-    for key in ['phase2_student_notes', 'phase2_supervisor_notes', 'phase2_incharge_notes',
-                'phase3_student_notes', 'phase3_supervisor_notes', 'phase3_incharge_notes',
-                'phase4_step1_student_notes']:
+    # Notes from all phases — include operator observations
+    note_keys = [
+        'phase2_student_notes', 'phase2_supervisor_notes', 'phase2_incharge_notes',
+        'phase3_student_notes', 'phase3_supervisor_notes', 'phase3_incharge_notes',
+        'phase4_step1_student_notes', 'phase4_step1_supervisor_notes', 'phase4_step1_incharge_notes',
+        'phase4_step2_student_notes', 'phase4_step2_supervisor_notes', 'phase4_step2_incharge_notes',
+    ]
+    collected_notes = []
+    for key in note_keys:
         if proc.get(key):
-            label = key.replace('_', ' ').title()
-            parts.append(f"{label}: {proc[key]}")
+            label = key.replace('_', ' ').replace('phase2', 'Phase 2').replace('phase3', 'Phase 3').replace('phase4 step1', 'Phase 4 Step 1').replace('phase4 step2', 'Phase 4 Step 2').title()
+            collected_notes.append(f"{label}: {proc[key]}")
+    if collected_notes:
+        parts.append("\n--- Clinical Notes & Operator Observations ---")
+        parts.extend(collected_notes)
 
     return "\n".join(parts)
 

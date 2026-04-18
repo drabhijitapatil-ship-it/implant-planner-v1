@@ -1202,7 +1202,7 @@ export default function NewProcedureScreen() {
             <View style={{ flexDirection: 'row', gap: 6 }}>
               {['Yes', 'No'].map(opt => (
                 <TouchableOpacity key={opt}
-                  style={[styles.yesNoBtn, checklistItems[item.id] === true && opt === 'Yes' && styles.yesActive, checklistItems[item.id] === false && opt === 'No' && styles.noActive]}
+                  style={[styles.yesNoBtn, checklistItems[item.id] === true && opt === 'Yes' && { backgroundColor: '#4CAF50', borderColor: '#4CAF50' }, checklistItems[item.id] === false && opt === 'No' && { backgroundColor: '#F44336', borderColor: '#F44336' }]}
                   onPress={() => setChecklistItems(prev => ({ ...prev, [item.id]: opt === 'Yes' }))}>
                   <Text style={[styles.yesNoText, (checklistItems[item.id] === true && opt === 'Yes') || (checklistItems[item.id] === false && opt === 'No') ? styles.yesNoTextActive : {}]}>{opt}</Text>
                 </TouchableOpacity>

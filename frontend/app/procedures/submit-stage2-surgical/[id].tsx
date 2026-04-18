@@ -91,10 +91,10 @@ export default function Stage2SurgicalSubmissionScreen() {
   };
 
   const handleSubmit = async () => {
-    // Validate all checklist items checked
-    const unchecked = CHECKLIST_ITEMS.filter(i => !checklistState[i.id]);
-    if (unchecked.length > 0) {
-      Alert.alert('Checklist Incomplete', `Please complete: ${unchecked[0].label}`);
+    // Validate all checklist items answered (Yes or No)
+    const unanswered = CHECKLIST_ITEMS.filter(i => checklistState[i.id] === undefined);
+    if (unanswered.length > 0) {
+      Alert.alert('Checklist Incomplete', `Please answer: ${unanswered[0].label}`);
       return;
     }
 
