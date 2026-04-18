@@ -617,11 +617,18 @@ export default function Phase2SubmissionScreen() {
               { id: 'post_op_instructions', label: 'Post-operative Instructions Given to Patient' },
               { id: 'medications_prescribed', label: 'Medications Prescribed' },
             ].map(item => (
-              <TouchableOpacity key={item.id} style={s.checkRow} onPress={() => togglePostOp(item.id)}>
-                <Ionicons name={postOpChecklist[item.id] ? 'checkbox' : 'square-outline'}
-                  size={22} color={postOpChecklist[item.id] ? '#4CAF50' : '#999'} />
-                <Text style={s.checkLabel}>{item.label}</Text>
-              </TouchableOpacity>
+              <View key={item.id} style={s.checkRow}>
+                <Text style={[s.checkLabel, { flex: 1 }]}>{item.label} <Text style={{ color: '#DC3545' }}>*</Text></Text>
+                <View style={{ flexDirection: 'row', gap: 6 }}>
+                  {['Yes', 'No'].map(opt => (
+                    <TouchableOpacity key={opt}
+                      style={[s.ynBtn, postOpChecklist[item.id] === true && opt === 'Yes' && s.ynYes, postOpChecklist[item.id] === false && opt === 'No' && s.ynNo]}
+                      onPress={() => togglePostOp(item.id, opt === 'Yes')}>
+                      <Text style={[s.ynText, (postOpChecklist[item.id] === true && opt === 'Yes') || (postOpChecklist[item.id] === false && opt === 'No') ? s.ynTextActive : {}]}>{opt}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
             ))}
           </View>
 
