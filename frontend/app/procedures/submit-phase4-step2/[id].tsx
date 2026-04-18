@@ -82,11 +82,21 @@ export default function Phase4Step2Screen() {
               <Text style={s.sectionTitle}>Trial and Delivery Checklist</Text>
             </View>
             {TRIAL_ITEMS.map(item => (
-              <TouchableOpacity key={item.id} style={s.checkRow} onPress={() => toggleTrial(item.id)}>
-                <Ionicons name={trialChecklist[item.id] ? 'checkbox' : 'square-outline'}
-                  size={22} color={trialChecklist[item.id] ? '#4CAF50' : '#999'} />
-                <Text style={s.checkLabel}>{item.label}</Text>
-              </TouchableOpacity>
+              <View key={item.id} style={s.checkRow}>
+                <Text style={[s.checkLabel, { flex: 1 }]}>{item.label} <Text style={{ color: '#DC3545' }}>*</Text></Text>
+                <View style={{ flexDirection: 'row', gap: 6 }}>
+                  {['Yes', 'No'].map(opt => (
+                    <TouchableOpacity key={opt}
+                      style={[{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, borderWidth: 1.5, borderColor: '#D0DCE8', backgroundColor: '#F8FAFC', minWidth: 50, alignItems: 'center' as const },
+                        trialChecklist[item.id] === true && opt === 'Yes' && { borderColor: '#4CAF50', backgroundColor: '#4CAF50' },
+                        trialChecklist[item.id] === false && opt === 'No' && { borderColor: '#F44336', backgroundColor: '#F44336' }]}
+                      onPress={() => setTrialChecklist(prev => ({ ...prev, [item.id]: opt === 'Yes' }))}>
+                      <Text style={[{ fontSize: 13, color: '#666', fontWeight: '600' as const },
+                        (trialChecklist[item.id] === true && opt === 'Yes') || (trialChecklist[item.id] === false && opt === 'No') ? { color: '#FFF' } : {}]}>{opt}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
             ))}
           </View>
 
@@ -111,13 +121,24 @@ export default function Phase4Step2Screen() {
               <Ionicons name="shield-checkmark-outline" size={20} color="#1B5E20" />
               <Text style={s.sectionTitle}>Confirmation</Text>
             </View>
-            <TouchableOpacity style={s.confirmRow} onPress={() => setConfirmed(!confirmed)}>
-              <Ionicons name={confirmed ? 'checkbox' : 'square-outline'} size={24}
-                color={confirmed ? '#4CAF50' : '#999'} />
-              <Text style={s.confirmText}>
-                I hereby confirm that the prosthesis has been delivered to the patient, all trial procedures have been completed satisfactorily, and the treatment is ready for final sign-off.
-              </Text>
-            </TouchableOpacity>
+            <Text style={[s.confirmText, { marginBottom: 12 }]}>
+              I hereby confirm that the prosthesis has been delivered to the patient, all trial procedures have been completed satisfactorily, and the treatment is ready for final sign-off.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+              <Text style={{ fontSize: 14, fontWeight: '600', color: '#333', flex: 1 }}>Treatment Confirmed Complete <Text style={{ color: '#DC3545' }}>*</Text></Text>
+              <View style={{ flexDirection: 'row', gap: 6 }}>
+                {['Yes', 'No'].map(opt => (
+                  <TouchableOpacity key={opt}
+                    style={[{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, borderWidth: 1.5, borderColor: '#D0DCE8', backgroundColor: '#F8FAFC', minWidth: 50, alignItems: 'center' as const },
+                      confirmed === true && opt === 'Yes' && { borderColor: '#4CAF50', backgroundColor: '#4CAF50' },
+                      confirmed === false && opt === 'No' && { borderColor: '#F44336', backgroundColor: '#F44336' }]}
+                    onPress={() => setConfirmed(opt === 'Yes')}>
+                    <Text style={[{ fontSize: 13, color: '#666', fontWeight: '600' as const },
+                      (confirmed === true && opt === 'Yes') || (confirmed === false && opt === 'No') ? { color: '#FFF' } : {}]}>{opt}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
           </View>
 
           {/* ── Submit ── */}

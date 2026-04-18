@@ -895,7 +895,7 @@ export default function NewProcedureScreen() {
               <Text style={styles.subSectionTitle}>Intraoral Examination</Text>
               <Text style={[styles.subSectionTitle, { fontSize: 14, color: '#1565C0', marginTop: 4 }]}>Edentulous Site</Text>
               <View style={{ marginBottom: 8 }}>
-                <Text style={{ fontSize: 13, fontWeight: '600', color: '#333', marginBottom: 4 }}>Occlusocervical Height (mm) *</Text>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#1565C0', marginBottom: 4 }}>Occlusocervical Height (mm) <Text style={{ color: '#DC3545' }}>*</Text></Text>
                 <TextInput
                   style={[styles.input, { borderColor: '#1565C0' }]}
                   placeholder="e.g. 12"
@@ -954,7 +954,7 @@ export default function NewProcedureScreen() {
           <Text style={[styles.subSectionTitle, { fontSize: 14, color: '#1565C0', marginTop: 8 }]}>Periodontal Status</Text>
           <View style={styles.fieldContainer}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              <Text style={{ fontSize: 13, fontWeight: '600', color: '#333' }}>Periodontal Status <Text style={{ color: '#DC3545' }}>*</Text></Text>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: '#1565C0' }}>Select Status <Text style={{ color: '#DC3545' }}>*</Text></Text>
               <TouchableOpacity
                 onPress={() => Alert.alert(
                   'Periodontal Status Assessment',
@@ -1196,13 +1196,19 @@ export default function NewProcedureScreen() {
       {/* ─── Phase 1 Checklist ─── */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Phase 1 Checklist</Text>
-        {CHECKLIST_DATA.pre_surgical.items.filter(item => item.id !== 'medical_assessment').map(item => (
-          <TouchableOpacity key={item.id} style={styles.checklistRow}
-            onPress={() => setChecklistItems(prev => ({ ...prev, [item.id]: !prev[item.id] }))}>
-            <Ionicons name={checklistItems[item.id] ? 'checkbox' : 'square-outline'}
-              size={22} color={checklistItems[item.id] ? '#1A73E8' : '#999'} />
-            <Text style={styles.checklistLabel}>{item.label}</Text>
-          </TouchableOpacity>
+        {CHECKLIST_DATA.pre_surgical.items.filter(item => item.id !== 'medical_assessment').filter(item => !(isFullArch && item.id === 'oral_prophylaxis')).map(item => (
+          <View key={item.id} style={styles.checklistRow}>
+            <Text style={[styles.checklistLabel, { flex: 1 }]}>{item.label} <Text style={{ color: '#DC3545' }}>*</Text></Text>
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              {['Yes', 'No'].map(opt => (
+                <TouchableOpacity key={opt}
+                  style={[styles.yesNoBtn, checklistItems[item.id] === true && opt === 'Yes' && styles.yesActive, checklistItems[item.id] === false && opt === 'No' && styles.noActive]}
+                  onPress={() => setChecklistItems(prev => ({ ...prev, [item.id]: opt === 'Yes' }))}>
+                  <Text style={[styles.yesNoText, (checklistItems[item.id] === true && opt === 'Yes') || (checklistItems[item.id] === false && opt === 'No') ? styles.yesNoTextActive : {}]}>{opt}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
         ))}
 
         {/* ─── Medical Assessment Sub-section ─── */}
@@ -1305,7 +1311,7 @@ const styles = StyleSheet.create({
   chipBookedText: { color: '#999', textDecorationLine: 'line-through' },
   bookedInfo: { fontSize: 10, color: '#999', marginTop: 2, maxWidth: 120, textAlign: 'center' },
   checklistRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F0F4F8' },
-  checklistLabel: { fontSize: 14, color: '#333', marginLeft: 10, flex: 1 },
+  checklistLabel: { fontSize: 14, color: '#333', marginLeft: 0, flex: 1 },
   medicalSection: { marginTop: 16, padding: 14, backgroundColor: '#F0F4F8', borderRadius: 12, borderWidth: 1, borderColor: '#E0E7EE' },
   medicalRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#E0E7EE' },
   medicalLabel: { fontSize: 14, color: '#333', fontWeight: '500', marginBottom: 8 },

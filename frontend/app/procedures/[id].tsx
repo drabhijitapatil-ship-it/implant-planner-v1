@@ -1585,13 +1585,13 @@ export default function ProcedureDetailScreen() {
 
             {/* Confirmation Statement */}
             {procedure.phase4_step2_data?.confirmation_statement !== undefined && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, padding: 10, backgroundColor: procedure.phase4_step2_data.confirmation_statement ? '#E8F5E9' : '#FFEBEE', borderRadius: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, padding: 10, backgroundColor: procedure.phase4_step2_data.confirmation_statement ? '#E8F5E9' : '#FFEBEE', borderRadius: 8, flexWrap: 'wrap' }}>
                 <Ionicons
                   name={procedure.phase4_step2_data.confirmation_statement ? 'checkmark-circle' : 'close-circle'}
                   size={22}
                   color={procedure.phase4_step2_data.confirmation_statement ? '#4CAF50' : '#F44336'}
                 />
-                <Text style={{ marginLeft: 10, fontSize: 14, fontWeight: '600', color: '#333' }}>
+                <Text style={{ marginLeft: 10, fontSize: 14, fontWeight: '600', color: '#333', flexShrink: 1 }}>
                   Confirmation: {procedure.phase4_step2_data.confirmation_statement ? 'Treatment Confirmed Complete' : 'Not Confirmed'}
                 </Text>
               </View>

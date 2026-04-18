@@ -47,6 +47,7 @@ export default function Phase2SubmissionScreen() {
   const [prostheticComponent, setProstheticComponent] = useState('');
   const [prostheticOpen, setProstheticOpen] = useState(false);
   const [healingAbutmentCuffHeight, setHealingAbutmentCuffHeight] = useState<string[]>(['']);
+  const [accessChannelOpenings, setAccessChannelOpenings] = useState<string[]>([]);
   const [suturesPlaced, setSuturesPlaced] = useState(true);
   const [hemostasisAchieved, setHemostasisAchieved] = useState(true);
 
@@ -85,6 +86,7 @@ export default function Phase2SubmissionScreen() {
       setImplantPositions(positions);
       setTorqueValues(new Array(count).fill(''));
       setHealingAbutmentCuffHeight(new Array(count).fill(''));
+      setAccessChannelOpenings(new Array(count).fill(''));
 
       const pType = procRes.data.implant_procedure_type || '';
       setProcedureType(pType);
@@ -107,8 +109,8 @@ export default function Phase2SubmissionScreen() {
     setPreSurgeryChecklist(prev => ({ ...prev, [itemId]: !prev[itemId] }));
   };
 
-  const togglePostOp = (itemId: string) => {
-    setPostOpChecklist(prev => ({ ...prev, [itemId]: !prev[itemId] }));
+  const togglePostOp = (itemId: string, val?: boolean) => {
+    setPostOpChecklist(prev => ({ ...prev, [itemId]: val !== undefined ? val : !prev[itemId] }));
   };
 
   // ── IOPA / OPG Upload helpers ──
@@ -220,6 +222,7 @@ export default function Phase2SubmissionScreen() {
         implant_other_notes: implantOtherNotes || null,
         prosthetic_component: prostheticComponent,
         healing_abutment_cuff_height: prostheticComponent === 'Healing Abutment Placed' ? healingAbutmentCuffHeight : null,
+        access_channel_openings: prostheticComponent === 'Immediate Loading Done' ? accessChannelOpenings : null,
         sutures_placed: suturesPlaced,
         hemostasis_achieved: hemostasisAchieved,
         iopa_files: [...iopaFiles, ...new Array(extraIopaCount).fill(null)]
@@ -273,11 +276,18 @@ export default function Phase2SubmissionScreen() {
               <Text style={s.sectionTitle}>Pre-Surgery Checklist</Text>
             </View>
             {CHECKLIST_DATA.surgical.items.map(item => (
-              <TouchableOpacity key={item.id} style={s.checkRow} onPress={() => togglePreSurgery(item.id)}>
-                <Ionicons name={preSurgeryChecklist[item.id] ? 'checkbox' : 'square-outline'}
-                  size={22} color={preSurgeryChecklist[item.id] ? '#4CAF50' : '#999'} />
-                <Text style={s.checkLabel}>{item.label}</Text>
-              </TouchableOpacity>
+              <View key={item.id} style={s.checkRow}>
+                <Text style={[s.checkLabel, { flex: 1 }]}>{item.label} <Text style={{ color: '#DC3545' }}>*</Text></Text>
+                <View style={{ flexDirection: 'row', gap: 6 }}>
+                  {['Yes', 'No'].map(opt => (
+                    <TouchableOpacity key={opt}
+                      style={[s.ynBtn, preSurgeryChecklist[item.id] === true && opt === 'Yes' && s.ynYes, preSurgeryChecklist[item.id] === false && opt === 'No' && s.ynNo]}
+                      onPress={() => setPreSurgeryChecklist(prev => ({ ...prev, [item.id]: opt === 'Yes' }))}>
+                      <Text style={[s.ynText, (preSurgeryChecklist[item.id] === true && opt === 'Yes') || (preSurgeryChecklist[item.id] === false && opt === 'No') ? s.ynTextActive : {}]}>{opt}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
             ))}
           </View>
 
@@ -407,6 +417,45 @@ export default function Phase2SubmissionScreen() {
                     <Text style={s.torqueUnit}>mm</Text>
                   </View>
                 ))}
+              </View>
+            )}
+
+            {/* Access Channel Opening - shown when Immediate Loading Done */}
+            {prostheticComponent === 'Immediate Loading Done' && implantPositions.length > 0 && (
+              <View style={s.torqueSection}>
+                <Text style={s.torqueTitle}>Access Channel Opening</Text>
+                {implantPositions.map((pos, idx) => {
+                  const toothNum = parseInt(pos, 10) || 0;
+                  const anteriorTeeth = new Set([11,12,13,21,22,23,31,32,33,41,42,43]);
+                  const upperPosterior = new Set([14,15,16,17,24,25,26,27]);
+                  const lowerPosterior = new Set([34,35,36,37,44,45,46,47]);
+                  const options: string[] = ['Facial'];
+                  if (upperPosterior.has(toothNum) || lowerPosterior.has(toothNum)) options.push('Occlusal');
+                  if (anteriorTeeth.has(toothNum)) options.push('Incisal/Cingulum');
+                  if (lowerPosterior.has(toothNum)) options.push('Lingual');
+                  if (upperPosterior.has(toothNum)) options.push('Palatal');
+                  const selected = accessChannelOpenings[idx] || '';
+                  return (
+                    <View key={idx} style={{ marginBottom: 12 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '600', color: '#BF360C', marginBottom: 6 }}>
+                        Implant {idx + 1}{pos ? ` (#${pos})` : ''} <Text style={{ color: '#DC3545' }}>*</Text>
+                      </Text>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                        {options.map(opt => (
+                          <TouchableOpacity key={opt}
+                            style={[s.chip, selected === opt && s.chipActive]}
+                            onPress={() => {
+                              const updated = [...accessChannelOpenings];
+                              updated[idx] = opt;
+                              setAccessChannelOpenings(updated);
+                            }}>
+                            <Text style={[s.chipText, selected === opt && s.chipTextActive]}>{opt}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                  );
+                })}
               </View>
             )}
 
@@ -684,4 +733,9 @@ const s = StyleSheet.create({
   toggleBtnActive: { borderColor: '#1565C0', backgroundColor: '#E3F2FD' },
   toggleBtnText: { fontSize: 14, color: '#666', fontWeight: '600' },
   toggleBtnTextActive: { color: '#1565C0' },
+  ynBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, borderWidth: 1.5, borderColor: '#D0DCE8', backgroundColor: '#F8FAFC', minWidth: 50, alignItems: 'center' },
+  ynYes: { borderColor: '#4CAF50', backgroundColor: '#4CAF50' },
+  ynNo: { borderColor: '#F44336', backgroundColor: '#F44336' },
+  ynText: { fontSize: 13, color: '#666', fontWeight: '600' },
+  ynTextActive: { color: '#FFF' },
 });
