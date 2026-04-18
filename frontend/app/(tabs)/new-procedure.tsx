@@ -256,6 +256,7 @@ export default function NewProcedureScreen() {
     procedure_date: '',
     procedure_time: '',
     implant_procedure_type: '',
+    teeth_present: [] as string[],
     arch: '',
     loading_type: [] as string[],
     prosthetic_plan: '',
@@ -336,6 +337,7 @@ export default function NewProcedureScreen() {
                 procedure_date: proc.procedure_date || '',
                 procedure_time: proc.procedure_time || '',
                 implant_procedure_type: proc.implant_procedure_type || '',
+                teeth_present: Array.isArray(proc.teeth_present) ? proc.teeth_present : [],
                 arch: proc.arch || '',
                 loading_type: Array.isArray(proc.loading_type) ? proc.loading_type : [],
                 prosthetic_plan: proc.prosthetic_plan || '',
@@ -883,6 +885,92 @@ export default function NewProcedureScreen() {
             options={['Maxillary', 'Mandibular']} onChange={v => updateForm('arch', v)} required data-testid="arch-dropdown" />
         )}
       </View>
+
+      {/* ─── Teeth Present (FDI Chart - Non-Full-Arch Only) ─── */}
+      {formData.implant_procedure_type && !isFullArch && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Teeth Present</Text>
+          <Text style={{ fontSize: 12, color: '#666', marginBottom: 10 }}>
+            Tap to select all teeth present in the patient's mouth. Selected teeth are highlighted in blue.
+          </Text>
+          {/* Upper Jaw */}
+          <Text style={{ fontSize: 12, fontWeight: '700', color: '#1565C0', marginBottom: 4, textAlign: 'center' }}>Upper Jaw (Maxillary)</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 2 }}>
+            <View style={{ flexDirection: 'row' }}>
+              {['18','17','16','15','14','13','12','11'].map(t => {
+                const sel = formData.teeth_present.includes(t);
+                const isMolar = ['16','17','18','26','27','28','36','37','38','46','47','48'].includes(t);
+                const w = isMolar ? 26 : ['14','15','24','25','34','35','44','45'].includes(t) ? 23 : ['13','23','33','43'].includes(t) ? 22 : 20;
+                return (
+                  <TouchableOpacity key={t} onPress={() => {
+                    const cur = formData.teeth_present;
+                    updateForm('teeth_present', sel ? cur.filter((x: string) => x !== t) : [...cur, t]);
+                  }} style={{ width: w, height: isMolar ? 32 : 28, borderRadius: isMolar ? 5 : 9, backgroundColor: sel ? '#1E88E5' : '#E8EDF2', borderWidth: 1.5, borderColor: sel ? '#1565C0' : '#C5CDD5', alignItems: 'center', justifyContent: 'center', marginHorizontal: 1 }} data-testid={`tp-${t}`}>
+                    <Text style={{ fontWeight: '700', fontSize: 9, color: sel ? '#FFF' : '#37474F' }}>{t}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <View style={{ width: 6 }} />
+            <View style={{ flexDirection: 'row' }}>
+              {['21','22','23','24','25','26','27','28'].map(t => {
+                const sel = formData.teeth_present.includes(t);
+                const isMolar = ['16','17','18','26','27','28','36','37','38','46','47','48'].includes(t);
+                const w = isMolar ? 26 : ['14','15','24','25','34','35','44','45'].includes(t) ? 23 : ['13','23','33','43'].includes(t) ? 22 : 20;
+                return (
+                  <TouchableOpacity key={t} onPress={() => {
+                    const cur = formData.teeth_present;
+                    updateForm('teeth_present', sel ? cur.filter((x: string) => x !== t) : [...cur, t]);
+                  }} style={{ width: w, height: isMolar ? 32 : 28, borderRadius: isMolar ? 5 : 9, backgroundColor: sel ? '#1E88E5' : '#E8EDF2', borderWidth: 1.5, borderColor: sel ? '#1565C0' : '#C5CDD5', alignItems: 'center', justifyContent: 'center', marginHorizontal: 1 }} data-testid={`tp-${t}`}>
+                    <Text style={{ fontWeight: '700', fontSize: 9, color: sel ? '#FFF' : '#37474F' }}>{t}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+          <View style={{ height: 1, backgroundColor: '#C5CDD5', marginVertical: 6, marginHorizontal: 20 }} />
+          {/* Lower Jaw */}
+          <Text style={{ fontSize: 12, fontWeight: '700', color: '#1565C0', marginBottom: 4, textAlign: 'center' }}>Lower Jaw (Mandibular)</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 2 }}>
+            <View style={{ flexDirection: 'row' }}>
+              {['48','47','46','45','44','43','42','41'].map(t => {
+                const sel = formData.teeth_present.includes(t);
+                const isMolar = ['16','17','18','26','27','28','36','37','38','46','47','48'].includes(t);
+                const w = isMolar ? 26 : ['14','15','24','25','34','35','44','45'].includes(t) ? 23 : ['13','23','33','43'].includes(t) ? 22 : 20;
+                return (
+                  <TouchableOpacity key={t} onPress={() => {
+                    const cur = formData.teeth_present;
+                    updateForm('teeth_present', sel ? cur.filter((x: string) => x !== t) : [...cur, t]);
+                  }} style={{ width: w, height: isMolar ? 32 : 28, borderRadius: isMolar ? 5 : 9, backgroundColor: sel ? '#1E88E5' : '#E8EDF2', borderWidth: 1.5, borderColor: sel ? '#1565C0' : '#C5CDD5', alignItems: 'center', justifyContent: 'center', marginHorizontal: 1 }} data-testid={`tp-${t}`}>
+                    <Text style={{ fontWeight: '700', fontSize: 9, color: sel ? '#FFF' : '#37474F' }}>{t}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <View style={{ width: 6 }} />
+            <View style={{ flexDirection: 'row' }}>
+              {['31','32','33','34','35','36','37','38'].map(t => {
+                const sel = formData.teeth_present.includes(t);
+                const isMolar = ['16','17','18','26','27','28','36','37','38','46','47','48'].includes(t);
+                const w = isMolar ? 26 : ['14','15','24','25','34','35','44','45'].includes(t) ? 23 : ['13','23','33','43'].includes(t) ? 22 : 20;
+                return (
+                  <TouchableOpacity key={t} onPress={() => {
+                    const cur = formData.teeth_present;
+                    updateForm('teeth_present', sel ? cur.filter((x: string) => x !== t) : [...cur, t]);
+                  }} style={{ width: w, height: isMolar ? 32 : 28, borderRadius: isMolar ? 5 : 9, backgroundColor: sel ? '#1E88E5' : '#E8EDF2', borderWidth: 1.5, borderColor: sel ? '#1565C0' : '#C5CDD5', alignItems: 'center', justifyContent: 'center', marginHorizontal: 1 }} data-testid={`tp-${t}`}>
+                    <Text style={{ fontWeight: '700', fontSize: 9, color: sel ? '#FFF' : '#37474F' }}>{t}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+          {formData.teeth_present.length > 0 && (
+            <Text style={{ fontSize: 12, color: '#1565C0', fontWeight: '600', marginTop: 8, textAlign: 'center' }}>
+              {formData.teeth_present.length} teeth selected
+            </Text>
+          )}
+        </View>
+      )}
 
       {/* ─── Clinical Examination ─── */}
       {formData.implant_procedure_type && (
