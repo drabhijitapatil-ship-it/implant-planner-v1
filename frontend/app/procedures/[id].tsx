@@ -1153,6 +1153,19 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
+        {/* AI Surgical Summary — persists after Phase 2 approval */}
+        {procedure.ai_surgical_notes && (
+          <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#3F51B5' }]} data-testid="ai-surgical-summary-section">
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <Ionicons name="sparkles" size={20} color="#3F51B5" />
+              <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#3F51B5', fontSize: 17 }]}>AI Surgical Summary</Text>
+            </View>
+            <View style={{ backgroundColor: '#E8EAF6', borderRadius: 12, padding: 14 }}>
+              <Text style={{ fontSize: 13, color: '#37474F', lineHeight: 20 }}>{procedure.ai_surgical_notes}</Text>
+            </View>
+          </View>
+        )}
+
         {/* Legacy Phase 2 remark (for older procedures without phase2_data) */}
         {!procedure.phase2_data && procedure.phase2_remark && (
           <View style={styles.section} data-testid="phase2-remark-section">
