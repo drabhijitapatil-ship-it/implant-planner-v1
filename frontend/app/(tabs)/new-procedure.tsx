@@ -951,30 +951,27 @@ export default function NewProcedureScreen() {
             formData.implant_procedure_type === 'Implant Placement with Guided Bone Regeneration' ||
             formData.implant_procedure_type === 'Guided Surgery') && (
           <>
-          <Text style={[styles.subSectionTitle, { fontSize: 14, color: '#1565C0', marginTop: 8 }]}>Periodontal Status</Text>
-          <View style={styles.fieldContainer}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              <Text style={{ fontSize: 13, fontWeight: '600', color: '#1565C0' }}>Select Status <Text style={{ color: '#DC3545' }}>*</Text></Text>
-              <TouchableOpacity
-                onPress={() => Alert.alert(
-                  'Periodontal Status Assessment',
-                  'Check for the following factors:\n\n' +
-                  '\u2022 History of untreated periodontal conditions\n' +
-                  '\u2022 Pocket probing depth around remaining natural teeth\n' +
-                  '\u2022 Bleeding on probing\n' +
-                  '\u2022 Plaque control and oral hygiene status\n' +
-                  '\u2022 Tooth mobility\n' +
-                  '\u2022 Furcation involvement in molars'
-                )}
-                data-testid="periodontal-status-info-btn"
-              >
-                <Ionicons name="information-circle" size={20} color="#1565C0" />
-              </TouchableOpacity>
-            </View>
-            <Dropdown label="" value={formData.periodontal_status}
-              options={['Good', 'Fair', 'Poor']} onChange={v => updateForm('periodontal_status', v)}
-              placeholder="Select periodontal status" />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, marginBottom: 2 }}>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0' }}>Periodontal Status <Text style={{ color: '#DC3545' }}>*</Text></Text>
+            <TouchableOpacity
+              onPress={() => Alert.alert(
+                'Periodontal Status Assessment',
+                'Check for the following factors:\n\n' +
+                '\u2022 History of untreated periodontal conditions\n' +
+                '\u2022 Pocket probing depth around remaining natural teeth\n' +
+                '\u2022 Bleeding on probing\n' +
+                '\u2022 Plaque control and oral hygiene status\n' +
+                '\u2022 Tooth mobility\n' +
+                '\u2022 Furcation involvement in molars'
+              )}
+              data-testid="periodontal-status-info-btn"
+            >
+              <Ionicons name="information-circle" size={20} color="#1565C0" />
+            </TouchableOpacity>
           </View>
+          <Dropdown label="" value={formData.periodontal_status}
+            options={['Good', 'Fair', 'Poor']} onChange={v => updateForm('periodontal_status', v)}
+            placeholder="Select periodontal status" />
           </>
           )}
 
