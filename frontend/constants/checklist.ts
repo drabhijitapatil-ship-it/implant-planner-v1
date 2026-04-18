@@ -280,6 +280,21 @@ export function getProstheticOptions(procedureType: string, loadingTypes: string
     }
   }
 
+  // Multiple Conventional Implants → also add Multiple Single Crown options
+  if (procedureType === 'Multiple Conventional Implants') {
+    const MULTIPLE_SINGLE_CROWN_OPTIONS = [
+      'Screw Retained Multiple Single Crowns - Zirconia',
+      'Screw Retained Multiple Single Crowns - Metal',
+      'Screw Retained Multiple Single Crowns - Porcelain Fused to Metal',
+      'Cement Retained Multiple Single Crowns - Zirconia',
+      'Cement Retained Multiple Single Crowns - Metal',
+      'Cement Retained Multiple Single Crowns - Porcelain Fused to Metal',
+    ];
+    for (const o of MULTIPLE_SINGLE_CROWN_OPTIONS) {
+      if (!options.includes(o)) options.push(o);
+    }
+  }
+
   // Full-Arch → Full arch options
   if (FULL_ARCH_GROUP.has(procedureType)) {
     options.push(...FULL_ARCH_OPTIONS);
