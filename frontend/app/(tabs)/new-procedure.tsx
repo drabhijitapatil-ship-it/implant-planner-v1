@@ -1192,10 +1192,10 @@ export default function NewProcedureScreen() {
 
       {/* ─── Phase 1 Checklist ─── */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Phase 1 Checklist</Text>
+        <Text style={styles.sectionTitle}>Phase 1 Checklist <Text style={{ color: '#DC3545' }}>*</Text></Text>
         {CHECKLIST_DATA.pre_surgical.items.filter(item => item.id !== 'medical_assessment').filter(item => !(isFullArch && item.id === 'oral_prophylaxis')).map(item => (
           <View key={item.id} style={styles.checklistRow}>
-            <Text style={[styles.checklistLabel, { flex: 1 }]}>{item.label} <Text style={{ color: '#DC3545' }}>*</Text></Text>
+            <Text style={[styles.checklistLabel, { flex: 1 }]}>{item.label}</Text>
             <View style={{ flexDirection: 'row', gap: 6 }}>
               {['Yes', 'No'].map(opt => (
                 <TouchableOpacity key={opt}
