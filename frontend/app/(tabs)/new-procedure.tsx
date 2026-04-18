@@ -577,7 +577,9 @@ export default function NewProcedureScreen() {
       sanitized.implant_procedure_type === 'Single Conventional Implant' ||
       sanitized.implant_procedure_type === 'Multiple Conventional Implants' ||
       sanitized.implant_procedure_type === 'Immediate Implant' ||
-      sanitized.implant_procedure_type === 'Partial Extraction Therapy'
+      sanitized.implant_procedure_type === 'Partial Extraction Therapy' ||
+      sanitized.implant_procedure_type === 'Implant Placement with Guided Bone Regeneration' ||
+      sanitized.implant_procedure_type === 'Guided Surgery'
     )) {
       Alert.alert('Missing Field', 'Please select Periodontal Status.');
       return;
@@ -945,7 +947,9 @@ export default function NewProcedureScreen() {
           {(formData.implant_procedure_type === 'Single Conventional Implant' ||
             formData.implant_procedure_type === 'Multiple Conventional Implants' ||
             formData.implant_procedure_type === 'Immediate Implant' ||
-            formData.implant_procedure_type === 'Partial Extraction Therapy') && (
+            formData.implant_procedure_type === 'Partial Extraction Therapy' ||
+            formData.implant_procedure_type === 'Implant Placement with Guided Bone Regeneration' ||
+            formData.implant_procedure_type === 'Guided Surgery') && (
           <>
           <Text style={[styles.subSectionTitle, { fontSize: 14, color: '#1565C0', marginTop: 8 }]}>Periodontal Status</Text>
           <View style={styles.fieldContainer}>
