@@ -2006,6 +2006,9 @@ def _build_case_context(proc: dict) -> str:
             parts.append(f"Implant Notes: {p2.get('implant_other_notes')}")
         if p2.get('sutures_placed'):
             parts.append(f"Sutures Placed: {p2.get('sutures_placed')}")
+        aco = p2.get('access_channel_openings') or []
+        if aco and any(a for a in aco):
+            parts.append(f"Access Channel Openings: {', '.join([a for a in aco if a])}")
 
     # Phase 3 - Second Stage Surgical
     p3 = proc.get('phase3_data') or {}

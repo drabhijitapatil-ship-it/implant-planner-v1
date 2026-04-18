@@ -144,14 +144,36 @@ export default function Phase4Step1Screen() {
               <Ionicons name="card-outline" size={20} color="#1565C0" />
               <Text style={s.sectionTitle}>Payment & Components</Text>
             </View>
-            <TouchableOpacity style={s.checkRow} onPress={() => setPaymentComplete(!paymentComplete)}>
-              <Ionicons name={paymentComplete ? 'checkbox' : 'square-outline'} size={22} color={paymentComplete ? '#4CAF50' : '#999'} />
-              <Text style={s.checkLabel}>Complete Payment Done</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.checkRow} onPress={() => setComponentsAvailable(!componentsAvailable)}>
-              <Ionicons name={componentsAvailable ? 'checkbox' : 'square-outline'} size={22} color={componentsAvailable ? '#4CAF50' : '#999'} />
-              <Text style={s.checkLabel}>All Prosthetic Components Available</Text>
-            </TouchableOpacity>
+            <View style={s.checkRow}>
+              <Text style={[s.checkLabel, { flex: 1 }]}>Complete Payment Done <Text style={{ color: '#DC3545' }}>*</Text></Text>
+              <View style={{ flexDirection: 'row', gap: 6 }}>
+                {['Yes', 'No'].map(opt => (
+                  <TouchableOpacity key={opt}
+                    style={[{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, borderWidth: 1.5, borderColor: '#D0DCE8', backgroundColor: '#F8FAFC', minWidth: 50, alignItems: 'center' as const },
+                      paymentComplete === true && opt === 'Yes' && { borderColor: '#4CAF50', backgroundColor: '#4CAF50' },
+                      paymentComplete === false && opt === 'No' && { borderColor: '#F44336', backgroundColor: '#F44336' }]}
+                    onPress={() => setPaymentComplete(opt === 'Yes')}>
+                    <Text style={[{ fontSize: 13, color: '#666', fontWeight: '600' as const },
+                      (paymentComplete === true && opt === 'Yes') || (paymentComplete === false && opt === 'No') ? { color: '#FFF' } : {}]}>{opt}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+            <View style={s.checkRow}>
+              <Text style={[s.checkLabel, { flex: 1 }]}>All Prosthetic Components Available <Text style={{ color: '#DC3545' }}>*</Text></Text>
+              <View style={{ flexDirection: 'row', gap: 6 }}>
+                {['Yes', 'No'].map(opt => (
+                  <TouchableOpacity key={opt}
+                    style={[{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, borderWidth: 1.5, borderColor: '#D0DCE8', backgroundColor: '#F8FAFC', minWidth: 50, alignItems: 'center' as const },
+                      componentsAvailable === true && opt === 'Yes' && { borderColor: '#4CAF50', backgroundColor: '#4CAF50' },
+                      componentsAvailable === false && opt === 'No' && { borderColor: '#F44336', backgroundColor: '#F44336' }]}
+                    onPress={() => setComponentsAvailable(opt === 'Yes')}>
+                    <Text style={[{ fontSize: 13, color: '#666', fontWeight: '600' as const },
+                      (componentsAvailable === true && opt === 'Yes') || (componentsAvailable === false && opt === 'No') ? { color: '#FFF' } : {}]}>{opt}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
           </View>
 
           {/* ── Impressions ── */}

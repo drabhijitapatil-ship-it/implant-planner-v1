@@ -152,14 +152,21 @@ export default function Stage2SurgicalSubmissionScreen() {
 
             {CHECKLIST_ITEMS.map(item => (
               <View key={item.id}>
-                <TouchableOpacity style={s.checkRow} onPress={() => toggleChecklist(item.id)}>
-                  <Ionicons
-                    name={checklistState[item.id] ? 'checkbox' : 'square-outline'}
-                    size={22}
-                    color={checklistState[item.id] ? '#4CAF50' : '#999'}
-                  />
-                  <Text style={s.checkLabel}>{item.label}</Text>
-                </TouchableOpacity>
+                <View style={s.checkRow}>
+                  <Text style={[s.checkLabel, { flex: 1 }]}>{item.label} <Text style={{ color: '#DC3545' }}>*</Text></Text>
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    {['Yes', 'No'].map(opt => (
+                      <TouchableOpacity key={opt}
+                        style={[{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, borderWidth: 1.5, borderColor: '#D0DCE8', backgroundColor: '#F8FAFC', minWidth: 50, alignItems: 'center' as const },
+                          checklistState[item.id] === true && opt === 'Yes' && { borderColor: '#4CAF50', backgroundColor: '#4CAF50' },
+                          checklistState[item.id] === false && opt === 'No' && { borderColor: '#F44336', backgroundColor: '#F44336' }]}
+                        onPress={() => setChecklistState(prev => ({ ...prev, [item.id]: opt === 'Yes' }))}>
+                        <Text style={[{ fontSize: 13, color: '#666', fontWeight: '600' as const },
+                          (checklistState[item.id] === true && opt === 'Yes') || (checklistState[item.id] === false && opt === 'No') ? { color: '#FFF' } : {}]}>{opt}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
 
                 {/* Upload IOPA Radiographs below Radiograph Made */}
                 {item.id === 'radiograph_made' && checklistState[item.id] && (
