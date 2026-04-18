@@ -573,7 +573,12 @@ export default function NewProcedureScreen() {
       Alert.alert('Missing Field', 'Please select at least one loading type.');
       return;
     }
-    if (!sanitized.periodontal_status) {
+    if (!sanitized.periodontal_status && (
+      sanitized.implant_procedure_type === 'Single Conventional Implant' ||
+      sanitized.implant_procedure_type === 'Multiple Conventional Implants' ||
+      sanitized.implant_procedure_type === 'Immediate Implant' ||
+      sanitized.implant_procedure_type === 'Partial Extraction Therapy'
+    )) {
       Alert.alert('Missing Field', 'Please select Periodontal Status.');
       return;
     }
@@ -936,7 +941,12 @@ export default function NewProcedureScreen() {
             </>
           )}
 
-          {/* Periodontal Status – shown for all procedure types */}
+          {/* Periodontal Status – shown for specific procedure types */}
+          {(formData.implant_procedure_type === 'Single Conventional Implant' ||
+            formData.implant_procedure_type === 'Multiple Conventional Implants' ||
+            formData.implant_procedure_type === 'Immediate Implant' ||
+            formData.implant_procedure_type === 'Partial Extraction Therapy') && (
+          <>
           <Text style={[styles.subSectionTitle, { fontSize: 14, color: '#1565C0', marginTop: 8 }]}>Periodontal Status</Text>
           <View style={styles.fieldContainer}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
@@ -961,6 +971,8 @@ export default function NewProcedureScreen() {
               options={['Good', 'Fair', 'Poor']} onChange={v => updateForm('periodontal_status', v)}
               placeholder="Select periodontal status" />
           </View>
+          </>
+          )}
 
           {/* Occlusal Analysis – Non-Full-Arch */}
           {isNonFullArch && (
