@@ -273,11 +273,11 @@ export default function Phase2SubmissionScreen() {
           <View style={s.section}>
             <View style={s.sectionHeader}>
               <Ionicons name="clipboard-outline" size={20} color="#1565C0" />
-              <Text style={s.sectionTitle}>Pre-Surgery Checklist</Text>
+              <Text style={s.sectionTitle}>Pre-Surgery Checklist <Text style={{ color: '#DC3545' }}>*</Text></Text>
             </View>
             {CHECKLIST_DATA.surgical.items.map(item => (
               <View key={item.id} style={s.checkRow}>
-                <Text style={[s.checkLabel, { flex: 1 }]}>{item.label} <Text style={{ color: '#DC3545' }}>*</Text></Text>
+                <Text style={[s.checkLabel, { flex: 1 }]}>{item.label}</Text>
                 <View style={{ flexDirection: 'row', gap: 6 }}>
                   {['Yes', 'No'].map(opt => (
                     <TouchableOpacity key={opt}
@@ -610,7 +610,7 @@ export default function Phase2SubmissionScreen() {
           <View style={s.section}>
             <View style={s.sectionHeader}>
               <Ionicons name="bandage-outline" size={20} color="#7B1FA2" />
-              <Text style={s.sectionTitle}>Post-Operative Checklist</Text>
+              <Text style={s.sectionTitle}>Post-Operative Checklist <Text style={{ color: '#DC3545' }}>*</Text></Text>
             </View>
             {[
               { id: 'post_op_radiograph', label: 'Post-operative Radiograph Made' },
@@ -618,7 +618,7 @@ export default function Phase2SubmissionScreen() {
               { id: 'medications_prescribed', label: 'Medications Prescribed' },
             ].map(item => (
               <View key={item.id} style={s.checkRow}>
-                <Text style={[s.checkLabel, { flex: 1 }]}>{item.label} <Text style={{ color: '#DC3545' }}>*</Text></Text>
+                <Text style={[s.checkLabel, { flex: 1 }]}>{item.label}</Text>
                 <View style={{ flexDirection: 'row', gap: 6 }}>
                   {['Yes', 'No'].map(opt => (
                     <TouchableOpacity key={opt}

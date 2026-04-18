@@ -43,14 +43,47 @@ export default function Phase4Step1Screen() {
   const [impressionType, setImpressionType] = useState('');
   const [studentNotes, setStudentNotes] = useState('');
 
+  // Per-implant prosthetic plan for multiple implants (non-bridge)
+  const [perImplantPlans, setPerImplantPlans] = useState<{ prosthesis: string; material: string; openProsthesis: boolean; openMaterial: boolean }[]>([]);
+  const [implantPositions, setImplantPositions] = useState<string[]>([]);
+
   useEffect(() => { loadProcedure(); }, []);
 
   const loadProcedure = async () => {
     try {
-      const res = await api.get(`/procedures/${id}`);
-      setProcedure(res.data);
+      const [procRes, planRes] = await Promise.all([
+        api.get(`/procedures/${id}`),
+        api.get(`/procedures/${id}/implant-plan`),
+      ]);
+      setProcedure(procRes.data);
+      const positions = (planRes.data.implant_plans || []).map((p: any) => p.position || p.tooth_number || '');
+      setImplantPositions(positions);
+      // Initialize per-implant plans if needed
+      if (positions.length > 1) {
+        setPerImplantPlans(positions.map(() => ({ prosthesis: '', material: '', openProsthesis: false, openMaterial: false })));
+      }
     } catch {}
   };
+
+  // Determine if per-implant mode: Multiple implants + no bridge in Phase 1 prosthetic plan
+  const isPerImplantMode = (() => {
+    if (!procedure) return false;
+    const procType = procedure.implant_procedure_type || '';
+    if (!MULTIPLE_GROUP.has(procType)) return false;
+    const plan = (procedure.prosthetic_plan || '').toLowerCase();
+    const hasBridge = plan.includes('bridge');
+    return !hasBridge && implantPositions.length > 1;
+  })();
+
+  // Crown-only options for per-implant mode (no bridge options)
+  const perImplantOptions = [
+    'Cement Retained Crown FP1',
+    'Cement Retained Crown FP2',
+    'Cement Retained Crown FP3',
+    'Screw Retained Crown FP1',
+    'Screw Retained Crown FP2',
+    'Screw Retained Crown FP3',
+  ];
 
   const getOptions = () => {
     if (!procedure) return [];
@@ -64,23 +97,51 @@ export default function Phase4Step1Screen() {
   const showOverdenture = finalProsthesis && finalProsthesis.includes('Overdenture');
 
   const handleSubmit = async () => {
-    if (!finalProsthesis) { Alert.alert('Missing', 'Please select Final Prosthesis'); return; }
-    if (!paymentComplete) { Alert.alert('Missing', 'Please confirm payment is complete'); return; }
-    if (!componentsAvailable) { Alert.alert('Missing', 'Please confirm all components are available'); return; }
+    if (isPerImplantMode) {
+      // Validate per-implant plans
+      for (let i = 0; i < perImplantPlans.length; i++) {
+        if (!perImplantPlans[i].prosthesis) {
+          Alert.alert('Missing', `Please select prosthesis for Implant ${i + 1}${implantPositions[i] ? ` (#${implantPositions[i]})` : ''}`);
+          return;
+        }
+        const showMat = perImplantPlans[i].prosthesis.includes('FP1') || perImplantPlans[i].prosthesis.includes('FP2') || perImplantPlans[i].prosthesis.includes('FP3');
+        if (showMat && !perImplantPlans[i].material) {
+          Alert.alert('Missing', `Please select material for Implant ${i + 1}${implantPositions[i] ? ` (#${implantPositions[i]})` : ''}`);
+          return;
+        }
+      }
+    } else {
+      if (!finalProsthesis) { Alert.alert('Missing', 'Please select Final Prosthesis'); return; }
+    }
     if (!impressionType) { Alert.alert('Missing', 'Please select impression type'); return; }
 
     setLoading(true);
     try {
-      await api.post(`/procedures/${id}/stage2/prosthetic`, {
-        final_prosthetic_plan: finalProsthesis + (prostheticMaterial ? ` - ${prostheticMaterial}` : ''),
-        prosthetic_material: prostheticMaterial || null,
+      const payload: any = {
         custom_abutment: customAbutment || null,
         overdenture_attachment: overdentureAttachment || null,
         payment_complete: paymentComplete,
         components_available: componentsAvailable,
         impression_type: impressionType,
         student_notes: studentNotes || null,
-      });
+      };
+
+      if (isPerImplantMode) {
+        payload.per_implant_plans = perImplantPlans.map((p, idx) => ({
+          position: implantPositions[idx] || '',
+          prosthesis: p.prosthesis,
+          material: p.material || null,
+        }));
+        payload.final_prosthetic_plan = perImplantPlans.map((p, idx) =>
+          `#${implantPositions[idx] || idx + 1}: ${p.prosthesis}${p.material ? ' - ' + p.material : ''}`
+        ).join('; ');
+        payload.prosthetic_material = perImplantPlans.map(p => p.material).filter(Boolean).join(', ') || null;
+      } else {
+        payload.final_prosthetic_plan = finalProsthesis + (prostheticMaterial ? ` - ${prostheticMaterial}` : '');
+        payload.prosthetic_material = prostheticMaterial || null;
+      }
+
+      await api.post(`/procedures/${id}/stage2/prosthetic`, payload);
       Alert.alert('Success', 'Phase 4 Step 1 submitted! Awaiting approval.',
         [{ text: 'OK', onPress: () => router.back() }]);
     } catch (error: any) {
@@ -125,14 +186,40 @@ export default function Phase4Step1Screen() {
               <Text style={s.sectionTitle}>Final Prosthesis Selection</Text>
             </View>
             {procedure && <Text style={s.helperText}>Procedure Type: {procedure.implant_procedure_type}</Text>}
-            {renderDropdown('Final Prosthesis Type', finalProsthesis, getOptions(),
-              prosthesisOpen, setProsthesisOpen, (v) => { setFinalProsthesis(v); setProstheticMaterial(''); setOverdentureAttachment(''); })}
 
-            {showMaterial && renderDropdown('Prosthetic Material', prostheticMaterial, FP_MATERIAL_OPTIONS,
-              materialOpen, setMaterialOpen, setProstheticMaterial)}
+            {isPerImplantMode ? (
+              <>
+                <Text style={[s.helperText, { color: '#1565C0', fontWeight: '600', fontStyle: 'normal', marginBottom: 8 }]}>
+                  Each implant requires a separate prosthesis selection
+                </Text>
+                {perImplantPlans.map((plan, idx) => (
+                  <View key={idx} style={{ backgroundColor: '#F8F9FE', borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#E0E7EE' }}>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#6A1B9A', marginBottom: 8 }}>
+                      Implant {idx + 1}{implantPositions[idx] ? ` (#${implantPositions[idx]})` : ''}
+                    </Text>
+                    {renderDropdown(`Prosthesis Type`, plan.prosthesis, perImplantOptions,
+                      plan.openProsthesis, (v) => { const u = [...perImplantPlans]; u[idx] = { ...u[idx], openProsthesis: v }; setPerImplantPlans(u); },
+                      (v) => { const u = [...perImplantPlans]; u[idx] = { ...u[idx], prosthesis: v, material: '', openProsthesis: false }; setPerImplantPlans(u); })}
 
-            {showOverdenture && renderDropdown('Overdenture Attachment', overdentureAttachment, OVERDENTURE_ATTACHMENT_OPTIONS,
-              attachmentOpen, setAttachmentOpen, setOverdentureAttachment)}
+                    {(plan.prosthesis.includes('FP1') || plan.prosthesis.includes('FP2') || plan.prosthesis.includes('FP3')) &&
+                      renderDropdown('Prosthetic Material', plan.material, FP_MATERIAL_OPTIONS,
+                        plan.openMaterial, (v) => { const u = [...perImplantPlans]; u[idx] = { ...u[idx], openMaterial: v }; setPerImplantPlans(u); },
+                        (v) => { const u = [...perImplantPlans]; u[idx] = { ...u[idx], material: v, openMaterial: false }; setPerImplantPlans(u); })}
+                  </View>
+                ))}
+              </>
+            ) : (
+              <>
+                {renderDropdown('Final Prosthesis Type', finalProsthesis, getOptions(),
+                  prosthesisOpen, setProsthesisOpen, (v) => { setFinalProsthesis(v); setProstheticMaterial(''); setOverdentureAttachment(''); })}
+
+                {showMaterial && renderDropdown('Prosthetic Material', prostheticMaterial, FP_MATERIAL_OPTIONS,
+                  materialOpen, setMaterialOpen, setProstheticMaterial)}
+
+                {showOverdenture && renderDropdown('Overdenture Attachment', overdentureAttachment, OVERDENTURE_ATTACHMENT_OPTIONS,
+                  attachmentOpen, setAttachmentOpen, setOverdentureAttachment)}
+              </>
+            )}
 
             {renderDropdown('Custom Abutment (optional)', customAbutment, CUSTOM_ABUTMENT_OPTIONS,
               abutmentOpen, setAbutmentOpen, setCustomAbutment, false)}
@@ -142,10 +229,10 @@ export default function Phase4Step1Screen() {
           <View style={s.section}>
             <View style={s.sectionHeader}>
               <Ionicons name="card-outline" size={20} color="#1565C0" />
-              <Text style={s.sectionTitle}>Payment & Components</Text>
+              <Text style={s.sectionTitle}>Payment & Components <Text style={{ color: '#DC3545' }}>*</Text></Text>
             </View>
             <View style={s.checkRow}>
-              <Text style={[s.checkLabel, { flex: 1 }]}>Complete Payment Done <Text style={{ color: '#DC3545' }}>*</Text></Text>
+              <Text style={[s.checkLabel, { flex: 1 }]}>Complete Payment Done</Text>
               <View style={{ flexDirection: 'row', gap: 6 }}>
                 {['Yes', 'No'].map(opt => (
                   <TouchableOpacity key={opt}
@@ -160,7 +247,7 @@ export default function Phase4Step1Screen() {
               </View>
             </View>
             <View style={s.checkRow}>
-              <Text style={[s.checkLabel, { flex: 1 }]}>All Prosthetic Components Available <Text style={{ color: '#DC3545' }}>*</Text></Text>
+              <Text style={[s.checkLabel, { flex: 1 }]}>All Prosthetic Components Available</Text>
               <View style={{ flexDirection: 'row', gap: 6 }}>
                 {['Yes', 'No'].map(opt => (
                   <TouchableOpacity key={opt}

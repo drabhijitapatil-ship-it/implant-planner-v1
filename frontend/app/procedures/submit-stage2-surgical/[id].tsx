@@ -147,13 +147,13 @@ export default function Stage2SurgicalSubmissionScreen() {
           <View style={s.section}>
             <View style={s.sectionHeader}>
               <Ionicons name="clipboard-outline" size={20} color="#1565C0" />
-              <Text style={s.sectionTitle}>Second Stage Checklist</Text>
+              <Text style={s.sectionTitle}>Second Stage Checklist <Text style={{ color: '#DC3545' }}>*</Text></Text>
             </View>
 
             {CHECKLIST_ITEMS.map(item => (
               <View key={item.id}>
                 <View style={s.checkRow}>
-                  <Text style={[s.checkLabel, { flex: 1 }]}>{item.label} <Text style={{ color: '#DC3545' }}>*</Text></Text>
+                  <Text style={[s.checkLabel, { flex: 1 }]}>{item.label}</Text>
                   <View style={{ flexDirection: 'row', gap: 6 }}>
                     {['Yes', 'No'].map(opt => (
                       <TouchableOpacity key={opt}

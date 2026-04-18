@@ -79,11 +79,11 @@ export default function Phase4Step2Screen() {
           <View style={s.section}>
             <View style={s.sectionHeader}>
               <Ionicons name="flask-outline" size={20} color="#D84315" />
-              <Text style={s.sectionTitle}>Trial and Delivery Checklist</Text>
+              <Text style={s.sectionTitle}>Trial and Delivery Checklist <Text style={{ color: '#DC3545' }}>*</Text></Text>
             </View>
             {TRIAL_ITEMS.map(item => (
               <View key={item.id} style={s.checkRow}>
-                <Text style={[s.checkLabel, { flex: 1 }]}>{item.label} <Text style={{ color: '#DC3545' }}>*</Text></Text>
+                <Text style={[s.checkLabel, { flex: 1 }]}>{item.label}</Text>
                 <View style={{ flexDirection: 'row', gap: 6 }}>
                   {['Yes', 'No'].map(opt => (
                     <TouchableOpacity key={opt}
@@ -125,7 +125,7 @@ export default function Phase4Step2Screen() {
               I hereby confirm that the prosthesis has been delivered to the patient, all trial procedures have been completed satisfactorily, and the treatment is ready for final sign-off.
             </Text>
             <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-              <Text style={{ fontSize: 14, fontWeight: '600', color: '#333', flex: 1 }}>Treatment Confirmed Complete <Text style={{ color: '#DC3545' }}>*</Text></Text>
+              <Text style={{ fontSize: 14, fontWeight: '600', color: '#333', flex: 1 }}>Treatment Confirmed Complete</Text>
               <View style={{ flexDirection: 'row', gap: 6 }}>
                 {['Yes', 'No'].map(opt => (
                   <TouchableOpacity key={opt}
