@@ -268,6 +268,7 @@ export default function NewProcedureScreen() {
     ridge_contour: '',
     soft_tissue_thickness: '',
     keratinized_mucosa: '',
+    periodontal_status: '',
     // Occlusal Analysis (non-full-arch)
     occlusal_scheme: '',
     parafunction_habit: '',
@@ -347,6 +348,7 @@ export default function NewProcedureScreen() {
                 ridge_contour: proc.ridge_contour || '',
                 soft_tissue_thickness: proc.soft_tissue_thickness || '',
                 keratinized_mucosa: proc.keratinized_mucosa || '',
+                periodontal_status: proc.periodontal_status || '',
                 // Occlusal Analysis (non-full-arch)
                 occlusal_scheme: proc.occlusal_scheme || '',
                 parafunction_habit: proc.parafunction_habit || '',
@@ -390,7 +392,7 @@ export default function NewProcedureScreen() {
           prosthetic_plan: '', prosthetic_plan_other: '', bone_graft_specifications: '',
           edentulous_sites: [] as string[], occlusocervical_height: '', mesiodistal_space: '',
           arch_condition: '', ridge_contour: '',
-          soft_tissue_thickness: '', keratinized_mucosa: '', occlusal_scheme: '',
+          soft_tissue_thickness: '', keratinized_mucosa: '', periodontal_status: '', occlusal_scheme: '',
           parafunction_habit: '', vertical_dimension: '', opposing_dentition: '',
           vertical_dimension_mm: '', available_interarch_space: '', opposing_arch: '', tmj: '', smile_line: '', gingival_biotype: '',
           medical_assessment: {} as Record<string, string>, medical_risk_level: '',
@@ -558,7 +560,8 @@ export default function NewProcedureScreen() {
     setFormData(sanitized);
 
     // Validate required fields
-    const required = ['patient_name', 'registration_number', 'supervisor_id', 'implant_incharge_id',
+    const required = ['patient_name', 'age', 'sex', 'profession', 'mobile_number', 'chief_complaint',
+      'registration_number', 'supervisor_id', 'implant_incharge_id',
       'receipt_number', 'amount_paid', 'procedure_date', 'procedure_time', 'implant_procedure_type'];
     for (const f of required) {
       if (!(sanitized as any)[f]) {
@@ -568,6 +571,10 @@ export default function NewProcedureScreen() {
     }
     if (sanitized.loading_type.length === 0) {
       Alert.alert('Missing Field', 'Please select at least one loading type.');
+      return;
+    }
+    if (!sanitized.periodontal_status) {
+      Alert.alert('Missing Field', 'Please select Periodontal Status.');
       return;
     }
     if (!cbctFiles[0] || !cbctFiles[1]) {
@@ -718,13 +725,13 @@ export default function NewProcedureScreen() {
         </View>
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <View style={[styles.fieldContainer, { flex: 1 }]}>
-            <Text style={styles.label}>Age (years)</Text>
+            <Text style={styles.label}>Age (years) <Text style={{ color: '#DC3545' }}>*</Text></Text>
             <TextInput style={styles.input} value={formData.age}
               onChangeText={v => updateForm('age', v.replace(/[^0-9]/g, ''))} placeholder="e.g. 45"
               keyboardType="numeric" maxLength={3} data-testid="age-input" />
           </View>
           <View style={[styles.fieldContainer, { flex: 1 }]}>
-            <Text style={styles.label}>Sex</Text>
+            <Text style={styles.label}>Sex <Text style={{ color: '#DC3545' }}>*</Text></Text>
             <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
               {['Male', 'Female'].map(opt => (
                 <TouchableOpacity key={opt}
@@ -737,13 +744,13 @@ export default function NewProcedureScreen() {
           </View>
         </View>
         <View style={styles.fieldContainer}>
-          <Text style={styles.label}>Profession</Text>
+          <Text style={styles.label}>Profession <Text style={{ color: '#DC3545' }}>*</Text></Text>
           <TextInput style={styles.input} value={formData.profession}
             onChangeText={v => updateForm('profession', v)} placeholder="Enter profession"
             data-testid="profession-input" />
         </View>
         <View style={styles.fieldContainer}>
-          <Text style={styles.label}>Mobile Number</Text>
+          <Text style={styles.label}>Mobile Number <Text style={{ color: '#DC3545' }}>*</Text></Text>
           <TextInput style={styles.input} value={formData.mobile_number}
             onChangeText={v => updateForm('mobile_number', v.replace(/[^0-9+\-\s]/g, ''))} placeholder="Enter mobile number"
             keyboardType="phone-pad" maxLength={15} data-testid="mobile-number-input" />
@@ -771,7 +778,7 @@ export default function NewProcedureScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Chief Complaint</Text>
         <View style={styles.fieldContainer}>
-          <Text style={styles.label}>Chief Complaint</Text>
+          <Text style={styles.label}>Chief Complaint <Text style={{ color: '#DC3545' }}>*</Text></Text>
           <TextInput
             style={[styles.input, { height: 90, textAlignVertical: 'top', paddingTop: 10 }]}
             value={formData.chief_complaint}
@@ -928,6 +935,32 @@ export default function NewProcedureScreen() {
                 options={KERATINIZED_MUCOSA_OPTIONS} onChange={v => updateForm('keratinized_mucosa', v)} />
             </>
           )}
+
+          {/* Periodontal Status – shown for all procedure types */}
+          <Text style={[styles.subSectionTitle, { fontSize: 14, color: '#1565C0', marginTop: 8 }]}>Periodontal Status</Text>
+          <View style={styles.fieldContainer}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: '#333' }}>Periodontal Status <Text style={{ color: '#DC3545' }}>*</Text></Text>
+              <TouchableOpacity
+                onPress={() => Alert.alert(
+                  'Periodontal Status Assessment',
+                  'Check for the following factors:\n\n' +
+                  '\u2022 History of untreated periodontal conditions\n' +
+                  '\u2022 Pocket probing depth around remaining natural teeth\n' +
+                  '\u2022 Bleeding on probing\n' +
+                  '\u2022 Plaque control and oral hygiene status\n' +
+                  '\u2022 Tooth mobility\n' +
+                  '\u2022 Furcation involvement in molars'
+                )}
+                data-testid="periodontal-status-info-btn"
+              >
+                <Ionicons name="information-circle" size={20} color="#1565C0" />
+              </TouchableOpacity>
+            </View>
+            <Dropdown label="" value={formData.periodontal_status}
+              options={['Good', 'Fair', 'Poor']} onChange={v => updateForm('periodontal_status', v)}
+              placeholder="Select periodontal status" />
+          </View>
 
           {/* Occlusal Analysis – Non-Full-Arch */}
           {isNonFullArch && (

@@ -229,6 +229,7 @@ class ProcedureCreate(BaseModel):
     patient_email: Optional[str] = Field("", max_length=255)
     registration_number: str = Field(..., max_length=50)
     chief_complaint: Optional[str] = Field("", max_length=1000)
+    periodontal_status: Optional[str] = Field("", max_length=20)
     supervisor_id: str = Field(..., max_length=50)
     supervisor_name: str = Field(..., max_length=100)
     implant_incharge_id: str = Field(..., max_length=50)
@@ -2844,7 +2845,7 @@ async def generate_case_report(
     has_clinical = any(procedure.get(k) for k in [
         "occlusocervical_height", "mesiodistal_space",
         "edentulous_sites", "edentulous_site", "arch_condition",
-        "ridge_contour", "soft_tissue_thickness", "keratinized_mucosa",
+        "ridge_contour", "soft_tissue_thickness", "keratinized_mucosa", "periodontal_status",
     ])
     if has_clinical:
         add_section_title("Clinical Examination — Intraoral", 30, 136, 229)
@@ -2867,6 +2868,7 @@ async def generate_case_report(
         add_field("Ridge Contour", procedure.get("ridge_contour"))
         add_field("Soft Tissue Thickness", procedure.get("soft_tissue_thickness"))
         add_field("Keratinized Mucosa", procedure.get("keratinized_mucosa"))
+        add_field("Periodontal Status", procedure.get("periodontal_status"))
         pdf.ln(3)
 
     # ── Occlusal Analysis ────────────────────────────────────
