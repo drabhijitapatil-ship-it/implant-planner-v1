@@ -230,6 +230,7 @@ class ProcedureCreate(BaseModel):
     registration_number: str = Field(..., max_length=50)
     chief_complaint: Optional[str] = Field("", max_length=1000)
     periodontal_status: Optional[str] = Field("", max_length=20)
+    teeth_present: Optional[List[str]] = Field(default_factory=list)
     supervisor_id: str = Field(..., max_length=50)
     supervisor_name: str = Field(..., max_length=100)
     implant_incharge_id: str = Field(..., max_length=50)
@@ -313,6 +314,7 @@ class ProcedureUpdate(BaseModel):
     patient_email: Optional[str] = Field(None, max_length=255)
     registration_number: Optional[str] = Field(None, max_length=50)
     chief_complaint: Optional[str] = Field(None, max_length=1000)
+    teeth_present: Optional[List[str]] = None
     supervisor_id: Optional[str] = Field(None, max_length=50)
     supervisor_name: Optional[str] = Field(None, max_length=100)
     implant_incharge_id: Optional[str] = Field(None, max_length=50)
@@ -1962,6 +1964,9 @@ def _build_case_context(proc: dict) -> str:
         parts.append(f"Smile Line: {proc.get('smile_line')}")
     if proc.get('gingival_biotype'):
         parts.append(f"Gingival Biotype: {proc.get('gingival_biotype')}")
+    teeth = proc.get('teeth_present') or []
+    if teeth:
+        parts.append(f"Teeth Present: {', '.join(sorted(teeth, key=lambda x: int(x) if x.isdigit() else 0))}")
 
     # Implant plans
     plans = proc.get('implant_plans') or []
@@ -2880,6 +2885,9 @@ async def generate_case_report(
         add_field("Soft Tissue Thickness", procedure.get("soft_tissue_thickness"))
         add_field("Keratinized Mucosa", procedure.get("keratinized_mucosa"))
         add_field("Periodontal Status", procedure.get("periodontal_status"))
+        teeth = procedure.get("teeth_present") or []
+        if teeth:
+            add_field("Teeth Present", ", ".join(sorted(teeth, key=lambda x: int(x) if x.isdigit() else 0)))
         pdf.ln(3)
 
     # ── Occlusal Analysis ────────────────────────────────────
