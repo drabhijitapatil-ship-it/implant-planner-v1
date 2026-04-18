@@ -192,21 +192,64 @@ export default function Phase4Step1Screen() {
                 <Text style={[s.helperText, { color: '#1565C0', fontWeight: '600', fontStyle: 'normal', marginBottom: 8 }]}>
                   Each implant requires a separate prosthesis selection
                 </Text>
-                {perImplantPlans.map((plan, idx) => (
-                  <View key={idx} style={{ backgroundColor: '#F8F9FE', borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#E0E7EE' }}>
-                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#6A1B9A', marginBottom: 8 }}>
-                      Implant {idx + 1}{implantPositions[idx] ? ` (#${implantPositions[idx]})` : ''}
-                    </Text>
-                    {renderDropdown(`Prosthesis Type`, plan.prosthesis, perImplantOptions,
-                      plan.openProsthesis, (v) => { const u = [...perImplantPlans]; u[idx] = { ...u[idx], openProsthesis: v }; setPerImplantPlans(u); },
-                      (v) => { const u = [...perImplantPlans]; u[idx] = { ...u[idx], prosthesis: v, material: '', openProsthesis: false }; setPerImplantPlans(u); })}
+                {perImplantPlans.map((plan, idx) => {
+                  const showMat = plan.prosthesis.includes('FP1') || plan.prosthesis.includes('FP2') || plan.prosthesis.includes('FP3');
+                  return (
+                    <View key={idx} style={{ backgroundColor: '#F8F9FE', borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#E0E7EE' }}>
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: '#6A1B9A', marginBottom: 8 }}>
+                        Implant {idx + 1}{implantPositions[idx] ? ` (#${implantPositions[idx]})` : ''}
+                      </Text>
 
-                    {(plan.prosthesis.includes('FP1') || plan.prosthesis.includes('FP2') || plan.prosthesis.includes('FP3')) &&
-                      renderDropdown('Prosthetic Material', plan.material, FP_MATERIAL_OPTIONS,
-                        plan.openMaterial, (v) => { const u = [...perImplantPlans]; u[idx] = { ...u[idx], openMaterial: v }; setPerImplantPlans(u); },
-                        (v) => { const u = [...perImplantPlans]; u[idx] = { ...u[idx], material: v, openMaterial: false }; setPerImplantPlans(u); })}
-                  </View>
-                ))}
+                      {/* Prosthesis Type */}
+                      <View style={s.field}>
+                        <Text style={s.label}>Prosthesis Type <Text style={{ color: '#DC3545' }}>*</Text></Text>
+                        <TouchableOpacity style={s.dropdown} onPress={() => {
+                          setPerImplantPlans(prev => prev.map((p, i) => i === idx ? { ...p, openProsthesis: !p.openProsthesis, openMaterial: false } : { ...p, openProsthesis: false, openMaterial: false }));
+                        }}>
+                          <Text style={[s.dropdownText, !plan.prosthesis && { color: '#999' }]}>{plan.prosthesis || 'Select...'}</Text>
+                          <Ionicons name={plan.openProsthesis ? 'chevron-up' : 'chevron-down'} size={18} color="#666" />
+                        </TouchableOpacity>
+                        {plan.openProsthesis && (
+                          <ScrollView style={s.ddList} nestedScrollEnabled>
+                            {perImplantOptions.map(opt => (
+                              <TouchableOpacity key={opt} style={[s.ddItem, plan.prosthesis === opt && s.ddItemActive]}
+                                onPress={() => {
+                                  setPerImplantPlans(prev => prev.map((p, i) => i === idx ? { ...p, prosthesis: opt, material: '', openProsthesis: false } : p));
+                                }}>
+                                <Text style={[s.ddItemText, plan.prosthesis === opt && { color: '#1A73E8', fontWeight: '700' }]}>{opt}</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </ScrollView>
+                        )}
+                      </View>
+
+                      {/* Material */}
+                      {showMat && (
+                        <View style={s.field}>
+                          <Text style={s.label}>Prosthetic Material <Text style={{ color: '#DC3545' }}>*</Text></Text>
+                          <TouchableOpacity style={s.dropdown} onPress={() => {
+                            setPerImplantPlans(prev => prev.map((p, i) => i === idx ? { ...p, openMaterial: !p.openMaterial, openProsthesis: false } : { ...p, openProsthesis: false, openMaterial: false }));
+                          }}>
+                            <Text style={[s.dropdownText, !plan.material && { color: '#999' }]}>{plan.material || 'Select...'}</Text>
+                            <Ionicons name={plan.openMaterial ? 'chevron-up' : 'chevron-down'} size={18} color="#666" />
+                          </TouchableOpacity>
+                          {plan.openMaterial && (
+                            <ScrollView style={s.ddList} nestedScrollEnabled>
+                              {FP_MATERIAL_OPTIONS.map(opt => (
+                                <TouchableOpacity key={opt} style={[s.ddItem, plan.material === opt && s.ddItemActive]}
+                                  onPress={() => {
+                                    setPerImplantPlans(prev => prev.map((p, i) => i === idx ? { ...p, material: opt, openMaterial: false } : p));
+                                  }}>
+                                  <Text style={[s.ddItemText, plan.material === opt && { color: '#1A73E8', fontWeight: '700' }]}>{opt}</Text>
+                                </TouchableOpacity>
+                              ))}
+                            </ScrollView>
+                          )}
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
               </>
             ) : (
               <>
