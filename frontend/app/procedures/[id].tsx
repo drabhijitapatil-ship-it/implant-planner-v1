@@ -2130,6 +2130,20 @@ export default function ProcedureDetailScreen() {
           </View>
         ) : null}
 
+        {/* Edit History Footer — shows who last edited any field, visible to all viewers including students */}
+        {procedure.last_edited_by && procedure.last_edited_at && (
+          <View style={styles.editHistoryFooter} data-testid="edit-history-footer">
+            <Ionicons name="create-outline" size={14} color="#78909C" />
+            <Text style={styles.editHistoryText}>
+              Last edited by <Text style={styles.editHistoryName}>{procedure.last_edited_by}</Text>
+              {' on '}
+              <Text style={styles.editHistoryDate}>
+                {format(new Date(procedure.last_edited_at), 'MMM dd, yyyy • hh:mm a')}
+              </Text>
+            </Text>
+          </View>
+        )}
+
         {/* Extra bottom spacing for the fixed buttons */}
         <View style={{ height: (canExportPDF() || canViewAiSummary()) ? 70 : 10 }} />
       </ScrollView>
@@ -2659,6 +2673,37 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#E0E7EE',
     gap: 6,
+  },
+  editHistoryFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginHorizontal: 16,
+    marginTop: 8,
+    backgroundColor: '#ECEFF1',
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#78909C',
+  },
+  editHistoryText: {
+    fontSize: 11,
+    color: '#546E7A',
+    fontStyle: 'italic',
+    flexShrink: 1,
+    textAlign: 'center',
+  },
+  editHistoryName: {
+    fontWeight: '700',
+    color: '#37474F',
+    fontStyle: 'normal',
+  },
+  editHistoryDate: {
+    fontWeight: '600',
+    color: '#455A64',
+    fontStyle: 'normal',
   },
   bottomBarRow: {
     flexDirection: 'row',
