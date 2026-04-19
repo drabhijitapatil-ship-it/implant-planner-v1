@@ -18,7 +18,16 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import api, { getAuthFileUrl, getToken } from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { STATUS_COLORS, STATUS_LABELS, CHECKLIST_DATA } from '../../constants/checklist';
+import {
+  STATUS_COLORS, STATUS_LABELS, CHECKLIST_DATA,
+  PROCEDURE_TYPES, LOADING_TYPES,
+  ARCH_CONDITION_OPTIONS, RIDGE_CONTOUR_OPTIONS, SOFT_TISSUE_OPTIONS, KERATINIZED_MUCOSA_OPTIONS,
+  OCCLUSAL_SCHEME_OPTIONS, PARAFUNCTION_HABIT_OPTIONS, VERTICAL_DIMENSION_OPTIONS, TMJ_OPTIONS,
+  SMILE_LINE_OPTIONS, GINGIVAL_BIOTYPE_OPTIONS,
+  FLAP_DESIGN_OPTIONS, DRILLING_TYPE_OPTIONS, PROSTHETIC_COMPONENT_OPTIONS,
+  FP_MATERIAL_OPTIONS, OVERDENTURE_ATTACHMENT_OPTIONS, CUSTOM_ABUTMENT_OPTIONS,
+  getProstheticOptions,
+} from '../../constants/checklist';
 import { format } from 'date-fns';
 import { generateProcedurePDF } from '../../utils/pdfGenerator';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';
@@ -31,11 +40,98 @@ const EditContext = createContext<{
   editingField: string | null;
   editValues: Record<string, any>;
   saving: boolean;
+  procedure: any;
   startEdit: (key: string, val: any) => void;
   saveField: (key: string) => void;
   cancelEdit: () => void;
   setEditValues: React.Dispatch<React.SetStateAction<Record<string, any>>>;
 } | null>(null);
+
+// ─── Field Options Map ───────────────────────────────────
+// Maps fieldKey → picker config. When editing a field present here,
+// InfoRow renders a Dropdown/Chip picker constrained to these options
+// (instead of a free-text TextInput).
+type FieldOptionsConfig = {
+  options: string[] | { value: string; label: string }[];
+  multi?: boolean;   // multi-select array (e.g. loading_type)
+  bool?: boolean;    // Yes/No → store true/false
+};
+
+const FIELD_OPTIONS: Record<string, FieldOptionsConfig> = {
+  // Patient / Demographics
+  sex: { options: ['Male', 'Female'] },
+  periodontal_status: { options: ['Good', 'Fair', 'Poor'] },
+
+  // Procedure Details
+  implant_procedure_type: { options: PROCEDURE_TYPES },
+  arch: { options: ['Maxillary', 'Mandibular'] },
+  loading_type: { options: LOADING_TYPES, multi: true },
+
+  // Clinical Examination
+  arch_condition: { options: ARCH_CONDITION_OPTIONS },
+  ridge_contour: { options: RIDGE_CONTOUR_OPTIONS },
+  soft_tissue_thickness: { options: SOFT_TISSUE_OPTIONS },
+  keratinized_mucosa: { options: KERATINIZED_MUCOSA_OPTIONS },
+
+  // Occlusal Analysis
+  occlusal_scheme: { options: OCCLUSAL_SCHEME_OPTIONS },
+  parafunction_habit: { options: PARAFUNCTION_HABIT_OPTIONS },
+  vertical_dimension: { options: VERTICAL_DIMENSION_OPTIONS },
+  opposing_dentition: { options: ['Natural Dentition', 'Fixed Partial Denture', 'Fixed Implant Prosthesis', 'Removable Prosthesis', 'Edentulous'] },
+  opposing_arch: { options: ['Natural Dentition', 'Fixed Partial Denture', 'Fixed Implant Prosthesis', 'Removable Prosthesis', 'Edentulous'] },
+  tmj: { options: TMJ_OPTIONS },
+
+  // Aesthetic Risk
+  smile_line: { options: SMILE_LINE_OPTIONS },
+  gingival_biotype: { options: GINGIVAL_BIOTYPE_OPTIONS },
+
+  // Medical Assessment (nested) — handled per-field
+  'medical_assessment.diabetes': { options: ['No', 'Controlled', 'Uncontrolled'] },
+  'medical_assessment.smoking': { options: ['No', 'Light (<10/day)', 'Heavy (>10/day)'] },
+  'medical_assessment.anticoagulant': { options: ['No', 'Yes'] },
+  'medical_assessment.osteoporosis': { options: ['No', 'Yes'] },
+  'medical_assessment.radiation': { options: ['No', 'Yes'] },
+
+  // Phase 2 — Surgical
+  'phase2_data.anesthesia_adequate': { options: ['Yes', 'No'] },
+  'phase2_data.flap_design': { options: FLAP_DESIGN_OPTIONS },
+  'phase2_data.drilling_type': { options: DRILLING_TYPE_OPTIONS },
+  'phase2_data.implant_seated_correctly': { options: ['Yes', 'No'], bool: true },
+  'phase2_data.bone_graft_used': { options: ['Yes', 'No'], bool: true },
+  'phase2_data.prosthetic_component': { options: PROSTHETIC_COMPONENT_OPTIONS },
+  'phase2_data.sutures_placed': { options: ['Yes', 'No'], bool: true },
+  'phase2_data.hemostasis_achieved': { options: ['Yes', 'No'], bool: true },
+
+  // Phase 4 Step 1 — Prosthetic
+  'phase4_step1_data.prosthetic_material': { options: FP_MATERIAL_OPTIONS },
+  'phase4_step1_data.overdenture_attachment': { options: OVERDENTURE_ATTACHMENT_OPTIONS },
+  'phase4_step1_data.custom_abutment': { options: CUSTOM_ABUTMENT_OPTIONS },
+  'phase4_step1_data.impression_type': {
+    options: [
+      { value: 'intraoral_scans', label: 'Intraoral Scans' },
+      { value: 'conventional_impressions', label: 'Conventional Impressions' },
+    ],
+  },
+  'phase4_step1_data.payment_complete': { options: ['Yes', 'No'], bool: true },
+  'phase4_step1_data.components_available': { options: ['Yes', 'No'], bool: true },
+};
+
+// Resolve options at runtime for fields whose options depend on other fields
+function resolveFieldOptions(fieldKey: string, procedure: any): FieldOptionsConfig | null {
+  // Dynamic: Prosthetic Plan depends on procedure_type + loading_type
+  if (fieldKey === 'prosthetic_plan' && procedure?.implant_procedure_type) {
+    const opts = getProstheticOptions(procedure.implant_procedure_type, procedure.loading_type || []);
+    return opts.length > 0 ? { options: opts } : null;
+  }
+  if (fieldKey === 'final_prosthetic_plan' || fieldKey === 'phase4_step1_data.final_prosthetic_plan') {
+    if (procedure?.implant_procedure_type) {
+      const opts = getProstheticOptions(procedure.implant_procedure_type, procedure.loading_type || []);
+      return opts.length > 0 ? { options: opts } : null;
+    }
+    return null;
+  }
+  return FIELD_OPTIONS[fieldKey] || null;
+}
 
 export default function ProcedureDetailScreen() {
   const { id, edit } = useLocalSearchParams();
@@ -81,14 +177,21 @@ export default function ProcedureDetailScreen() {
   const saveField = async (fieldKey: string) => {
     setSaving(true);
     try {
+      // Resolve raw input value, converting Yes/No → bool where configured
+      const cfg = resolveFieldOptions(fieldKey, procedure);
+      let rawValue = editValues[fieldKey];
+      if (cfg?.bool) {
+        if (rawValue === 'Yes') rawValue = true;
+        else if (rawValue === 'No') rawValue = false;
+      }
       const fields: any = {};
       // Support nested field paths like "phase2_data.torque_values"
       if (fieldKey.includes('.')) {
         const [parent, child] = fieldKey.split('.');
         const current = procedure[parent] || {};
-        fields[parent] = { ...current, [child]: editValues[fieldKey] };
+        fields[parent] = { ...current, [child]: rawValue };
       } else {
-        fields[fieldKey] = editValues[fieldKey];
+        fields[fieldKey] = rawValue;
       }
       const res = await api.patch(`/procedures/${id}/edit-fields`, { fields });
       setProcedure(res.data);
@@ -394,7 +497,7 @@ export default function ProcedureDetailScreen() {
   }
 
   return (
-    <EditContext.Provider value={canEditField() ? { isEditMode, editingField, editValues, saving, startEdit, saveField, cancelEdit, setEditValues } : null}>
+    <EditContext.Provider value={canEditField() ? { isEditMode, editingField, editValues, saving, procedure, startEdit, saveField, cancelEdit, setEditValues } : null}>
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Edit Mode Banner */}
@@ -731,18 +834,18 @@ export default function ProcedureDetailScreen() {
         {procedure.implant_procedure_type && (
           <View style={styles.section} data-testid="procedure-type-section">
             <Text style={styles.sectionTitle}>Procedure Details</Text>
-            <InfoRow icon="construct" label="Procedure Type" value={procedure.implant_procedure_type} />
+            <InfoRow icon="construct" label="Procedure Type" value={procedure.implant_procedure_type} fieldKey="implant_procedure_type" />
             {procedure.arch && (
-              <InfoRow icon="tablet-landscape" label="Arch" value={procedure.arch} />
+              <InfoRow icon="tablet-landscape" label="Arch" value={procedure.arch} fieldKey="arch" />
             )}
             {procedure.loading_type?.length > 0 && (
-              <InfoRow icon="flash" label="Loading Type" value={procedure.loading_type.join(', ')} />
+              <InfoRow icon="flash" label="Loading Type" value={procedure.loading_type.join(', ')} fieldKey="loading_type" />
             )}
             {procedure.prosthetic_plan && (
-              <InfoRow icon="build" label="Prosthetic Plan" value={procedure.prosthetic_plan} />
+              <InfoRow icon="build" label="Prosthetic Plan" value={procedure.prosthetic_plan} fieldKey="prosthetic_plan" />
             )}
             {procedure.prosthetic_plan_other && (
-              <InfoRow icon="create" label="Prosthetic Plan (Other)" value={procedure.prosthetic_plan_other} />
+              <InfoRow icon="create" label="Prosthetic Plan (Other)" value={procedure.prosthetic_plan_other} fieldKey="prosthetic_plan_other" />
             )}
           </View>
         )}
@@ -766,22 +869,22 @@ export default function ProcedureDetailScreen() {
               </View>
             )}
             {procedure.edentulous_sites?.length > 0 && (
-              <InfoRow icon="grid" label="Edentulous Sites" value={procedure.edentulous_sites.join(', ')} />
+              <InfoRow icon="grid" label="Edentulous Sites" value={procedure.edentulous_sites.join(', ')} fieldKey="edentulous_sites" />
             )}
             {procedure.edentulous_site && !procedure.edentulous_sites?.length && (
-              <InfoRow icon="grid" label="Edentulous Site" value={procedure.edentulous_site} />
+              <InfoRow icon="grid" label="Edentulous Site" value={procedure.edentulous_site} fieldKey="edentulous_site" />
             )}
             {procedure.arch_condition && (
-              <InfoRow icon="ellipse" label={procedure.arch === 'Maxillary' ? 'Maxillary Arch Condition' : procedure.arch === 'Mandibular' ? 'Mandibular Arch Condition' : 'Arch Condition'} value={procedure.arch_condition} />
+              <InfoRow icon="ellipse" label={procedure.arch === 'Maxillary' ? 'Maxillary Arch Condition' : procedure.arch === 'Mandibular' ? 'Mandibular Arch Condition' : 'Arch Condition'} value={procedure.arch_condition} fieldKey="arch_condition" />
             )}
             {procedure.ridge_contour && (
-              <InfoRow icon="analytics" label="Ridge Contour" value={procedure.ridge_contour} />
+              <InfoRow icon="analytics" label="Ridge Contour" value={procedure.ridge_contour} fieldKey="ridge_contour" />
             )}
             {procedure.soft_tissue_thickness && (
-              <InfoRow icon="layers" label="Soft Tissue Thickness" value={procedure.soft_tissue_thickness} />
+              <InfoRow icon="layers" label="Soft Tissue Thickness" value={procedure.soft_tissue_thickness} fieldKey="soft_tissue_thickness" />
             )}
             {procedure.keratinized_mucosa && (
-              <InfoRow icon="resize" label="Keratinized Mucosa" value={procedure.keratinized_mucosa} />
+              <InfoRow icon="resize" label="Keratinized Mucosa" value={procedure.keratinized_mucosa} fieldKey="keratinized_mucosa" />
             )}
           </View>
         )}
@@ -797,25 +900,25 @@ export default function ProcedureDetailScreen() {
               <InfoRow icon="resize" label={procedure.arch === 'Maxillary' ? 'Maxillary Restorative Space' : procedure.arch === 'Mandibular' ? 'Mandibular Restorative Space' : 'Restorative Space'} value={`${procedure.available_interarch_space} mm`} />
             )}
             {procedure.opposing_arch && (
-              <InfoRow icon="people" label="Opposing Arch" value={procedure.opposing_arch} />
+              <InfoRow icon="people" label="Opposing Arch" value={procedure.opposing_arch} fieldKey="opposing_arch" />
             )}
             {procedure.occlusal_scheme && (
-              <InfoRow icon="swap-horizontal" label="Occlusal Scheme" value={procedure.occlusal_scheme} />
+              <InfoRow icon="swap-horizontal" label="Occlusal Scheme" value={procedure.occlusal_scheme} fieldKey="occlusal_scheme" />
             )}
             {procedure.parafunction_habit && (
-              <InfoRow icon="alert-circle" label="Parafunctional Habits" value={procedure.parafunction_habit} />
+              <InfoRow icon="alert-circle" label="Parafunctional Habits" value={procedure.parafunction_habit} fieldKey="parafunction_habit" />
             )}
             {procedure.vertical_dimension && (
-              <InfoRow icon="arrow-up" label="Vertical Dimension" value={procedure.vertical_dimension} />
+              <InfoRow icon="arrow-up" label="Vertical Dimension" value={procedure.vertical_dimension} fieldKey="vertical_dimension" />
             )}
             {procedure.vertical_dimension_mm && (
-              <InfoRow icon="arrow-up" label="Vertical Dimension (mm)" value={procedure.vertical_dimension_mm} />
+              <InfoRow icon="arrow-up" label="Vertical Dimension (mm)" value={procedure.vertical_dimension_mm} fieldKey="vertical_dimension_mm" />
             )}
             {procedure.opposing_dentition && (
-              <InfoRow icon="git-compare" label="Opposing Dentition" value={procedure.opposing_dentition} />
+              <InfoRow icon="git-compare" label="Opposing Dentition" value={procedure.opposing_dentition} fieldKey="opposing_dentition" />
             )}
             {procedure.tmj && (
-              <InfoRow icon="pulse" label="TMJ Assessment" value={procedure.tmj} />
+              <InfoRow icon="pulse" label="TMJ Assessment" value={procedure.tmj} fieldKey="tmj" />
             )}
           </View>
         )}
@@ -828,10 +931,10 @@ export default function ProcedureDetailScreen() {
               <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#C2185B' }]}>Aesthetic Risk Assessment</Text>
             </View>
             {procedure.smile_line && (
-              <InfoRow icon="eye" label="Smile Line" value={procedure.smile_line} />
+              <InfoRow icon="eye" label="Smile Line" value={procedure.smile_line} fieldKey="smile_line" />
             )}
             {procedure.gingival_biotype && (
-              <InfoRow icon="leaf" label="Gingival Biotype" value={procedure.gingival_biotype} />
+              <InfoRow icon="leaf" label="Gingival Biotype" value={procedure.gingival_biotype} fieldKey="gingival_biotype" />
             )}
           </View>
         )}
@@ -1062,22 +1165,22 @@ export default function ProcedureDetailScreen() {
             <View style={{ marginBottom: 16 }}>
               <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', marginBottom: 8 }}>Surgical Procedure</Text>
               {procedure.phase2_data.anesthesia_adequate && (
-                <InfoRow icon="water" label="Anaesthesia Adequate" value={procedure.phase2_data.anesthesia_adequate} />
+                <InfoRow icon="water" label="Anaesthesia Adequate" value={procedure.phase2_data.anesthesia_adequate} fieldKey="phase2_data.anesthesia_adequate" />
               )}
               {procedure.phase2_data.anesthesia_details && (
-                <InfoRow icon="alert" label="Anaesthesia Notes" value={procedure.phase2_data.anesthesia_details} />
+                <InfoRow icon="alert" label="Anaesthesia Notes" value={procedure.phase2_data.anesthesia_details} fieldKey="phase2_data.anesthesia_details" />
               )}
               {procedure.phase2_data.flap_design && (
-                <InfoRow icon="cut" label="Incision / Flap Design" value={procedure.phase2_data.flap_design} />
+                <InfoRow icon="cut" label="Incision / Flap Design" value={procedure.phase2_data.flap_design} fieldKey="phase2_data.flap_design" />
               )}
               {procedure.phase2_data.drilling_type && (
-                <InfoRow icon="hardware-chip" label="Drilling Type" value={procedure.phase2_data.drilling_type} />
+                <InfoRow icon="hardware-chip" label="Drilling Type" value={procedure.phase2_data.drilling_type} fieldKey="phase2_data.drilling_type" />
               )}
               {procedure.phase2_data.implant_seated_correctly !== undefined && (
-                <InfoRow icon="checkmark-done" label="Implant Seated Correctly" value={procedure.phase2_data.implant_seated_correctly ? 'Yes' : 'No'} />
+                <InfoRow icon="checkmark-done" label="Implant Seated Correctly" value={procedure.phase2_data.implant_seated_correctly ? 'Yes' : 'No'} fieldKey="phase2_data.implant_seated_correctly" />
               )}
               {procedure.phase2_data.implant_seated_comment && (
-                <InfoRow icon="chatbox" label="Implant Seating Notes" value={procedure.phase2_data.implant_seated_comment} />
+                <InfoRow icon="chatbox" label="Implant Seating Notes" value={procedure.phase2_data.implant_seated_comment} fieldKey="phase2_data.implant_seated_comment" />
               )}
               {procedure.phase2_data.torque_values && procedure.phase2_data.torque_values.length > 0 && (
                 <View style={{ marginVertical: 6 }}>
@@ -1111,10 +1214,10 @@ export default function ProcedureDetailScreen() {
                   : <InfoRow icon="resize" label="Healing Abutment Cuff Height" value={`${procedure.phase2_data.healing_abutment_cuff_height} mm`} />
               )}
               {procedure.phase2_data.sutures_placed !== undefined && (
-                <InfoRow icon="bandage" label="Sutures Placed" value={procedure.phase2_data.sutures_placed ? 'Yes' : 'No'} />
+                <InfoRow icon="bandage" label="Sutures Placed" value={procedure.phase2_data.sutures_placed ? 'Yes' : 'No'} fieldKey="phase2_data.sutures_placed" />
               )}
               {procedure.phase2_data.hemostasis_achieved !== undefined && (
-                <InfoRow icon="water" label="Hemostasis Achieved" value={procedure.phase2_data.hemostasis_achieved ? 'Yes' : 'No'} />
+                <InfoRow icon="water" label="Hemostasis Achieved" value={procedure.phase2_data.hemostasis_achieved ? 'Yes' : 'No'} fieldKey="phase2_data.hemostasis_achieved" />
               )}
 
               {/* Post Surgical Radiographs - IOPA Thumbnails */}
@@ -1602,25 +1705,25 @@ export default function ProcedureDetailScreen() {
               <View style={{ marginBottom: 16 }}>
                 <Text style={{ fontSize: 14, fontWeight: '700', color: '#EF6C00', marginBottom: 8 }}>Prosthetic Plan</Text>
                 {procedure.phase4_step1_data.final_prosthetic_plan && (
-                  <InfoRow icon="build" label="Final Prosthetic Plan" value={procedure.phase4_step1_data.final_prosthetic_plan} />
+                  <InfoRow icon="build" label="Final Prosthetic Plan" value={procedure.phase4_step1_data.final_prosthetic_plan} fieldKey="phase4_step1_data.final_prosthetic_plan" />
                 )}
                 {procedure.phase4_step1_data.prosthetic_material && (
-                  <InfoRow icon="diamond" label="Prosthetic Material" value={procedure.phase4_step1_data.prosthetic_material} />
+                  <InfoRow icon="diamond" label="Prosthetic Material" value={procedure.phase4_step1_data.prosthetic_material} fieldKey="phase4_step1_data.prosthetic_material" />
                 )}
                 {procedure.phase4_step1_data.custom_abutment && (
-                  <InfoRow icon="settings" label="Custom Abutment" value={procedure.phase4_step1_data.custom_abutment} />
+                  <InfoRow icon="settings" label="Custom Abutment" value={procedure.phase4_step1_data.custom_abutment} fieldKey="phase4_step1_data.custom_abutment" />
                 )}
                 {procedure.phase4_step1_data.overdenture_attachment && (
-                  <InfoRow icon="link" label="Overdenture Attachment" value={procedure.phase4_step1_data.overdenture_attachment} />
+                  <InfoRow icon="link" label="Overdenture Attachment" value={procedure.phase4_step1_data.overdenture_attachment} fieldKey="phase4_step1_data.overdenture_attachment" />
                 )}
                 {procedure.phase4_step1_data.impression_type && (
-                  <InfoRow icon="scan" label="Impression Type" value={procedure.phase4_step1_data.impression_type === 'intraoral_scans' ? 'Intraoral Scans' : 'Conventional Impressions'} />
+                  <InfoRow icon="scan" label="Impression Type" value={procedure.phase4_step1_data.impression_type === 'intraoral_scans' ? 'Intraoral Scans' : 'Conventional Impressions'} fieldKey="phase4_step1_data.impression_type" />
                 )}
                 {procedure.phase4_step1_data.payment_complete !== undefined && (
-                  <InfoRow icon="card" label="Payment Complete" value={procedure.phase4_step1_data.payment_complete ? 'Yes' : 'No'} />
+                  <InfoRow icon="card" label="Payment Complete" value={procedure.phase4_step1_data.payment_complete ? 'Yes' : 'No'} fieldKey="phase4_step1_data.payment_complete" />
                 )}
                 {procedure.phase4_step1_data.components_available !== undefined && (
-                  <InfoRow icon="cube" label="Components Available" value={procedure.phase4_step1_data.components_available ? 'Yes' : 'No'} />
+                  <InfoRow icon="cube" label="Components Available" value={procedure.phase4_step1_data.components_available ? 'Yes' : 'No'} fieldKey="phase4_step1_data.components_available" />
                 )}
               </View>
             )}
@@ -2128,7 +2231,26 @@ function InfoRow({ icon, label, value, fieldKey, onEdit, isEditing: isEditingPro
 
   const handleStartEdit = () => {
     if (onEdit && fieldKey) { onEdit(fieldKey, value); return; }
-    if (useCtx) editCtx.startEdit(key, value || '');
+    if (useCtx) {
+      // Seed edit value from the raw procedure field (not the formatted display text),
+      // so dropdown pickers match the stored value correctly.
+      const cfg = resolveFieldOptions(key, editCtx.procedure);
+      let seed: any;
+      if (cfg) {
+        if (key.includes('.')) {
+          const [p, c] = key.split('.');
+          seed = editCtx.procedure?.[p]?.[c];
+        } else {
+          seed = editCtx.procedure?.[key];
+        }
+        if (cfg.bool) seed = seed === true ? 'Yes' : seed === false ? 'No' : '';
+        else if (cfg.multi) seed = Array.isArray(seed) ? seed : [];
+        else seed = seed == null ? '' : String(seed);
+      } else {
+        seed = value || '';
+      }
+      editCtx.startEdit(key, seed);
+    }
   };
   const handleSave = () => {
     if (onSaveProp) { onSaveProp(); return; }
@@ -2138,12 +2260,20 @@ function InfoRow({ icon, label, value, fieldKey, onEdit, isEditing: isEditingPro
     if (onCancelProp) { onCancelProp(); return; }
     if (useCtx) editCtx.cancelEdit();
   };
-  const handleChange = (v: string) => {
+  const handleChange = (v: any) => {
     if (onEditChangeProp) { onEditChangeProp(v); return; }
     if (useCtx) editCtx.setEditValues(prev => ({ ...prev, [key]: v }));
   };
 
   const showPencil = (editCtx?.isEditMode || !!onEdit) && !isEditing;
+
+  // Resolve picker config if the field has predefined options
+  const pickerCfg = useCtx && isEditing ? resolveFieldOptions(key, editCtx.procedure) : null;
+
+  // Normalize options to {value, label}[]
+  const normOptions = pickerCfg
+    ? (pickerCfg.options as any[]).map(o => typeof o === 'string' ? { value: o, label: o } : o)
+    : [];
 
   return (
     <View style={styles.infoRow}>
@@ -2152,20 +2282,72 @@ function InfoRow({ icon, label, value, fieldKey, onEdit, isEditing: isEditingPro
         {isEditing ? (
           <View style={{ flex: 1 }}>
             <Text style={styles.infoLabel}>{label}</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
-              <TextInput
-                style={{ flex: 1, borderWidth: 1, borderColor: '#1565C0', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, fontSize: 13, backgroundColor: '#F0F7FF' }}
-                value={String(editValue ?? '')}
-                onChangeText={handleChange}
-                autoFocus
-              />
-              <TouchableOpacity onPress={handleSave} style={{ backgroundColor: '#4CAF50', borderRadius: 6, padding: 6 }} disabled={!!saving}>
-                {saving ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="checkmark" size={16} color="#FFF" />}
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleCancel} style={{ backgroundColor: '#F44336', borderRadius: 6, padding: 6 }}>
-                <Ionicons name="close" size={16} color="#FFF" />
-              </TouchableOpacity>
-            </View>
+            {pickerCfg ? (
+              // ── Dropdown / Chip Picker ────────────────────────
+              <View style={{ marginTop: 6 }}>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                  {normOptions.map(opt => {
+                    const selected = pickerCfg.multi
+                      ? Array.isArray(editValue) && editValue.includes(opt.value)
+                      : editValue === opt.value;
+                    return (
+                      <TouchableOpacity
+                        key={opt.value}
+                        onPress={() => {
+                          if (pickerCfg.multi) {
+                            const curr = Array.isArray(editValue) ? editValue : [];
+                            const next = curr.includes(opt.value)
+                              ? curr.filter((v: string) => v !== opt.value)
+                              : [...curr, opt.value];
+                            handleChange(next);
+                          } else {
+                            handleChange(opt.value);
+                          }
+                        }}
+                        style={{
+                          paddingHorizontal: 12,
+                          paddingVertical: 6,
+                          borderRadius: 16,
+                          borderWidth: 1,
+                          borderColor: selected ? '#1565C0' : '#CFD8DC',
+                          backgroundColor: selected ? '#1565C0' : '#FFF',
+                        }}
+                      >
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: selected ? '#FFF' : '#37474F' }}>
+                          {opt.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                  <TouchableOpacity onPress={handleSave} style={{ backgroundColor: '#4CAF50', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', gap: 4 }} disabled={!!saving}>
+                    {saving ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="checkmark" size={14} color="#FFF" />}
+                    <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }}>Save</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleCancel} style={{ backgroundColor: '#F44336', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Ionicons name="close" size={14} color="#FFF" />
+                    <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              // ── Plain Text Input ─────────────────────────────
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                <TextInput
+                  style={{ flex: 1, borderWidth: 1, borderColor: '#1565C0', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, fontSize: 13, backgroundColor: '#F0F7FF' }}
+                  value={String(editValue ?? '')}
+                  onChangeText={handleChange}
+                  autoFocus
+                />
+                <TouchableOpacity onPress={handleSave} style={{ backgroundColor: '#4CAF50', borderRadius: 6, padding: 6 }} disabled={!!saving}>
+                  {saving ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="checkmark" size={16} color="#FFF" />}
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleCancel} style={{ backgroundColor: '#F44336', borderRadius: 6, padding: 6 }}>
+                  <Ionicons name="close" size={16} color="#FFF" />
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         ) : (
           <View style={{ flex: 1 }}>
@@ -2174,7 +2356,7 @@ function InfoRow({ icon, label, value, fieldKey, onEdit, isEditing: isEditingPro
           </View>
         )}
         {showPencil && (
-          <TouchableOpacity onPress={handleStartEdit} style={{ padding: 4 }}>
+          <TouchableOpacity onPress={handleStartEdit} style={{ padding: 4 }} data-testid={`edit-field-${key}`}>
             <Ionicons name="pencil" size={14} color="#1565C0" />
           </TouchableOpacity>
         )}
