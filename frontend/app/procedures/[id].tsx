@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, createContext, useContext as useReactContext } from 'react';
 import {
   View,
   Text,
@@ -24,8 +24,6 @@ import { generateProcedurePDF } from '../../utils/pdfGenerator';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';
 import CaseCompletionBadge from '../../components/CaseCompletionBadge';
 import * as Linking from 'expo-linking';
-
-import React, { createContext, useContext as useReactContext } from 'react';
 
 // Edit mode context for passing edit state to InfoRow
 const EditContext = createContext<{
