@@ -8,6 +8,9 @@ import {
   RefreshControl,
   ActivityIndicator,
   TextInput,
+  Alert,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,14 +18,16 @@ import api from '../../utils/api';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { format } from 'date-fns';
 import { STATUS_COLORS, STATUS_LABELS } from '../../constants/checklist';
-import BackToDashboard from '../../components/BackToDashboard';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function ProceduresScreen() {
+  const { user } = useAuth();
   const [procedures, setProcedures] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const router = useRouter();
   const params = useLocalSearchParams<{ filter?: string; phase?: string }>();
 
@@ -65,60 +70,137 @@ export default function ProceduresScreen() {
     loadProcedures();
   };
 
-  const renderProcedure = ({ item }: any) => (
-    <TouchableOpacity
-      style={styles.procedureCard}
-      onPress={() => router.push(`/procedures/${item.id}`)}
-    >
-      <View style={styles.procedureHeader}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.patientName}>{item.patient_name}</Text>
-          <Text style={styles.registrationNumber}>#{item.registration_number}</Text>
+  const handleArchive = async (id: string) => {
+    setMenuOpenId(null);
+    Alert.alert('Archive', 'Archive this case? It will be moved to Archived Cases.', [
+      { text: 'Cancel' },
+      { text: 'Archive', onPress: async () => {
+        try {
+          await api.post(`/procedures/${id}/archive`);
+          setProcedures((prev: any) => prev.filter((p: any) => p.id !== id));
+          Alert.alert('Done', 'Case archived');
+        } catch (e: any) { Alert.alert('Error', e.response?.data?.detail || 'Failed'); }
+      }}
+    ]);
+  };
+
+  const handleDelete = async (id: string) => {
+    setMenuOpenId(null);
+    Alert.alert('Delete', 'Permanently delete this case? This cannot be undone.', [
+      { text: 'Cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        try {
+          await api.delete(`/procedures/${id}`);
+          setProcedures((prev: any) => prev.filter((p: any) => p.id !== id));
+          Alert.alert('Done', 'Case deleted');
+        } catch (e: any) { Alert.alert('Error', e.response?.data?.detail || 'Failed'); }
+      }}
+    ]);
+  };
+
+  const handleEdit = (id: string) => {
+    setMenuOpenId(null);
+    router.push(`/procedures/${id}`);
+  };
+
+  const getMenuActions = (item: any) => {
+    const role = user?.role;
+    if (role === 'nurse') return [];
+    const actions: { key: string; label: string; icon: string; color: string; onPress: () => void }[] = [];
+    const isCompleted = item.status === 'completed';
+
+    if (role === 'implant_incharge') {
+      if (!isCompleted) actions.push({ key: 'edit', label: 'Edit', icon: 'create-outline', color: '#1565C0', onPress: () => handleEdit(item.id) });
+      actions.push({ key: 'delete', label: 'Delete', icon: 'trash-outline', color: '#1565C0', onPress: () => handleDelete(item.id) });
+      actions.push({ key: 'archive', label: 'Archive', icon: 'archive-outline', color: '#1565C0', onPress: () => handleArchive(item.id) });
+    } else if (role === 'supervisor') {
+      if (!isCompleted) actions.push({ key: 'edit', label: 'Edit', icon: 'create-outline', color: '#1565C0', onPress: () => handleEdit(item.id) });
+      actions.push({ key: 'archive', label: 'Archive', icon: 'archive-outline', color: '#1565C0', onPress: () => handleArchive(item.id) });
+    } else if (role === 'student') {
+      actions.push({ key: 'archive', label: 'Archive', icon: 'archive-outline', color: '#1565C0', onPress: () => handleArchive(item.id) });
+    }
+    return actions;
+  };
+
+  const renderProcedure = ({ item }: any) => {
+    const actions = getMenuActions(item);
+    const isMenuOpen = menuOpenId === item.id;
+
+    return (
+      <TouchableOpacity
+        style={styles.procedureCard}
+        onPress={() => { setMenuOpenId(null); router.push(`/procedures/${item.id}`); }}
+      >
+        <View style={styles.procedureHeader}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.patientName}>{item.patient_name}</Text>
+            <Text style={styles.registrationNumber}>#{item.registration_number}</Text>
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[item.status as keyof typeof STATUS_COLORS] }]}>
+            <Text style={styles.statusText}>{STATUS_LABELS[item.status as keyof typeof STATUS_LABELS]}</Text>
+          </View>
         </View>
-        <View
-          style={[
-            styles.statusBadge,
-            { backgroundColor: STATUS_COLORS[item.status as keyof typeof STATUS_COLORS] },
-          ]}
-        >
-          <Text style={styles.statusText}>
-            {STATUS_LABELS[item.status as keyof typeof STATUS_LABELS]}
+
+        <View style={styles.divider} />
+
+        {item.student_name ? (
+          <View style={styles.detailRow}>
+            <Ionicons name="person" size={16} color="#666" />
+            <Text style={styles.detailText}>Student: {item.student_name}</Text>
+          </View>
+        ) : null}
+
+        <View style={styles.detailRow}>
+          <Ionicons name="school" size={16} color="#666" />
+          <Text style={styles.detailText}>Supervisor: {item.supervisor_name}</Text>
+        </View>
+
+        <View style={styles.detailRow}>
+          <Ionicons name="calendar" size={16} color="#666" />
+          <Text style={styles.detailText}>
+            {format(new Date(item.procedure_date), 'MMM dd, yyyy')} at {item.procedure_time}
           </Text>
         </View>
-      </View>
 
-      <View style={styles.divider} />
-
-      <View style={styles.detailRow}>
-        <Ionicons name="person" size={16} color="#666" />
-        <Text style={styles.detailText}>Student: {item.student_name}</Text>
-      </View>
-
-      <View style={styles.detailRow}>
-        <Ionicons name="school" size={16} color="#666" />
-        <Text style={styles.detailText}>Supervisor: {item.supervisor_name}</Text>
-      </View>
-
-      <View style={styles.detailRow}>
-        <Ionicons name="calendar" size={16} color="#666" />
-        <Text style={styles.detailText}>
-          {format(new Date(item.procedure_date), 'MMM dd, yyyy')} at {item.procedure_time}
-        </Text>
-      </View>
-
-      <View style={styles.detailRow}>
-        <Ionicons name="location" size={16} color="#666" />
-        <Text style={styles.detailText}>Site: {item.implant_site}</Text>
-      </View>
-
-      {item.rejection_reason && (
-        <View style={styles.rejectionContainer}>
-          <Ionicons name="alert-circle" size={16} color="#F44336" />
-          <Text style={styles.rejectionText}>{item.rejection_reason}</Text>
+        <View style={styles.detailRow}>
+          <Ionicons name="location" size={16} color="#666" />
+          <Text style={styles.detailText}>Site: {item.implant_site}</Text>
         </View>
-      )}
-    </TouchableOpacity>
-  );
+
+        {item.rejection_reason && (
+          <View style={styles.rejectionContainer}>
+            <Ionicons name="alert-circle" size={16} color="#F44336" />
+            <Text style={styles.rejectionText}>{item.rejection_reason}</Text>
+          </View>
+        )}
+
+        {/* Three-dot menu */}
+        {actions.length > 0 && (
+          <View style={{ position: 'relative', alignItems: 'flex-end', marginTop: 4 }}>
+            <TouchableOpacity
+              onPress={(e) => { e.stopPropagation(); setMenuOpenId(isMenuOpen ? null : item.id); }}
+              style={{ padding: 4 }}
+              data-testid={`three-dot-menu-${item.id}`}
+            >
+              <Ionicons name="ellipsis-vertical" size={20} color="#666" />
+            </TouchableOpacity>
+            {isMenuOpen && (
+              <View style={styles.popupMenu} data-testid={`popup-menu-${item.id}`}>
+                {actions.map(action => (
+                  <TouchableOpacity key={action.key} style={styles.popupItem}
+                    onPress={(e) => { e.stopPropagation(); action.onPress(); }}
+                    data-testid={`menu-${action.key}-${item.id}`}>
+                    <Ionicons name={action.icon as any} size={18} color={action.color} />
+                    <Text style={[styles.popupItemText, { color: action.color }]}>{action.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   const filterButtons = [
     { key: 'all', label: 'All' },
@@ -356,5 +438,33 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#F44336',
     flex: 1,
+  },
+  popupMenu: {
+    position: 'absolute',
+    bottom: 30,
+    right: 0,
+    backgroundColor: '#FFF',
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#1565C0',
+    paddingVertical: 4,
+    minWidth: 140,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 100,
+  },
+  popupItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  popupItemText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

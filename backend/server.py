@@ -1164,6 +1164,9 @@ async def get_procedures(
 ):
     query = {}
     
+    # Exclude archived procedures by default
+    query["archived"] = {"$ne": True}
+    
     # Filter based on role
     if current_user["role"] == "student":
         query["student_id"] = current_user["_id"]
@@ -1210,6 +1213,23 @@ async def get_procedures(
         proc["id"] = proc["_id"]
     
     return procedures
+
+
+@api_router.get("/procedures/archived")
+async def get_archived_procedures(current_user: dict = Depends(get_current_user)):
+    """Get archived procedures visible to the current user."""
+    query = {"archived": True}
+    role = current_user["role"]
+    uid = current_user["_id"]
+    if role == "student":
+        query["$or"] = [{"created_by_id": uid}, {"student_id": uid}]
+    elif role == "supervisor":
+        query["$or"] = [{"created_by_id": uid}, {"supervisor_id": uid}]
+    procedures = []
+    async for proc in db.procedures.find(query, {"_id": 0}).sort("archived_at", -1):
+        procedures.append(proc)
+    return procedures
+
 
 @api_router.get("/procedures/{procedure_id}")
 async def get_procedure(procedure_id: str, current_user: dict = Depends(get_current_user)):
@@ -1308,6 +1328,35 @@ async def delete_procedure(procedure_id: str, current_user: dict = Depends(get_c
     await db.notifications.delete_many({"procedure_id": procedure_id})
     
     return {"message": "Procedure deleted successfully"}
+
+
+@api_router.post("/procedures/{procedure_id}/archive")
+async def archive_procedure(procedure_id: str, current_user: dict = Depends(get_current_user)):
+    """Archive a procedure. Available to all roles except nurse."""
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if current_user["role"] == "nurse":
+        raise HTTPException(status_code=403, detail="Nurses cannot archive procedures")
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"archived": True, "archived_by": current_user["_id"], "archived_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return {"message": "Procedure archived successfully"}
+
+
+@api_router.post("/procedures/{procedure_id}/unarchive")
+async def unarchive_procedure(procedure_id: str, current_user: dict = Depends(get_current_user)):
+    """Unarchive a procedure."""
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"archived": False}, "$unset": {"archived_by": "", "archived_at": ""}}
+    )
+    return {"message": "Procedure unarchived successfully"}
+
 
 # File Upload for CBCT
 ALLOWED_EXTENSIONS = {'.pdf', '.png', '.jpg', '.jpeg', '.heif', '.heic'}

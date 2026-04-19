@@ -1891,28 +1891,16 @@ export default function ProcedureDetailScreen() {
         ) : null}
 
         {/* Extra bottom spacing for the fixed buttons */}
-        <View style={{ height: (canExportPDF() || canViewAiSummary() || user?.role === 'implant_incharge') ? 100 : 20 }} />
+        <View style={{ height: (canExportPDF() || canViewAiSummary()) ? 70 : 10 }} />
       </ScrollView>
 
-      {/* Fixed bottom bar — action buttons */}
-      <View style={styles.bottomBar}>
-        {user?.role === 'implant_incharge' && (
-          <View style={[styles.bottomBarRow, { alignSelf: 'stretch' }]}>
-            <TouchableOpacity
-              style={[styles.barButton, { backgroundColor: '#F44336', flex: 1 }]}
-              onPress={handleDeleteProcedure}
-              data-testid="delete-procedure-btn"
-            >
-              <Ionicons name="trash" size={16} color="#FFF" />
-              <Text style={styles.barButtonText}>DELETE</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        {(canExportPDF() || canViewAiSummary()) && (
-          <View style={[styles.bottomBarRow, { alignSelf: 'stretch' }]}>
+      {/* Fixed bottom bar — compact centered action buttons */}
+      {(canExportPDF() || canViewAiSummary()) && (
+        <View style={styles.bottomBar}>
+          <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10, paddingHorizontal: 30 }}>
             {canExportPDF() && (
               <TouchableOpacity
-                style={[styles.barButton, { backgroundColor: '#43A047', flex: 1 }, pdfLoading && styles.buttonDisabled]}
+                style={[styles.barButtonCompact, { backgroundColor: '#43A047' }, pdfLoading && styles.buttonDisabled]}
                 onPress={handleExportPDF}
                 disabled={pdfLoading}
                 data-testid="export-pdf-btn"
@@ -1921,15 +1909,15 @@ export default function ProcedureDetailScreen() {
                   <ActivityIndicator color="#FFF" size="small" />
                 ) : (
                   <>
-                    <Ionicons name="document-text" size={16} color="#FFF" />
-                    <Text style={styles.barButtonText}>EXPORT PDF</Text>
+                    <Ionicons name="document-text" size={14} color="#FFF" />
+                    <Text style={styles.barButtonTextCompact}>EXPORT PDF</Text>
                   </>
                 )}
               </TouchableOpacity>
             )}
             {canViewAiSummary() && (
               <TouchableOpacity
-                style={[styles.barButton, { backgroundColor: '#0D47A1', flex: 1 }, aiSummaryLoading && styles.buttonDisabled]}
+                style={[styles.barButtonCompact, { backgroundColor: '#0D47A1' }, aiSummaryLoading && styles.buttonDisabled]}
                 onPress={async () => {
                   setAiSummaryLoading(true);
                   try {
@@ -1946,15 +1934,15 @@ export default function ProcedureDetailScreen() {
                   <ActivityIndicator color="#FFF" size="small" />
                 ) : (
                   <>
-                    <Ionicons name="sparkles" size={16} color="#FFF" />
-                    <Text style={styles.barButtonText}>AI SUMMARY</Text>
+                    <Ionicons name="sparkles" size={14} color="#FFF" />
+                    <Text style={styles.barButtonTextCompact}>AI SUMMARY</Text>
                   </>
                 )}
               </TouchableOpacity>
             )}
           </View>
-        )}
-      </View>
+        </View>
+      )}
 
       {/* Floating AI Chat Button */}
       {procedure.status !== 'draft' && (
@@ -2312,6 +2300,26 @@ const styles = StyleSheet.create({
   barButtonText: {
     color: '#FFF',
     fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  barButtonCompact: {
+    flexDirection: 'row',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  barButtonTextCompact: {
+    color: '#FFF',
+    fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.3,
   },

@@ -44,6 +44,7 @@ function DrawerMenu({
       ? [{ key: 'users', icon: 'people-outline' as const, label: 'Users', route: '/user-management' }]
       : []),
     { key: 'profile', icon: 'person-circle-outline' as const, label: 'My Profile', route: '/profile' },
+    { key: 'archived', icon: 'archive-outline' as const, label: 'Archived Cases', route: '/archived' },
   ];
 
   return (
@@ -333,6 +334,13 @@ export default function TabsLayout() {
           name="profile"
           options={{
             title: 'My Profile',
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="archived"
+          options={{
+            title: 'Archived Cases',
             href: null,
           }}
         />
