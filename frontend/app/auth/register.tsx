@@ -132,6 +132,26 @@ export default function RegisterScreen() {
                 )}
               </TouchableOpacity>
 
+              <Text style={{ fontSize: 11, color: '#78909C', textAlign: 'center', marginTop: 12, paddingHorizontal: 8, lineHeight: 16 }}>
+                By registering, you agree to our{' '}
+                <Text
+                  style={{ color: '#1565C0', fontWeight: '700' }}
+                  onPress={() => router.push('/legal/terms')}
+                  data-testid="register-terms-link"
+                >
+                  Terms of Service
+                </Text>
+                {' '}and{' '}
+                <Text
+                  style={{ color: '#1565C0', fontWeight: '700' }}
+                  onPress={() => router.push('/legal/privacy-policy')}
+                  data-testid="register-privacy-link"
+                >
+                  Privacy Policy
+                </Text>
+                .
+              </Text>
+
               <TouchableOpacity
                 style={styles.linkButton}
                 onPress={() => router.back()}
