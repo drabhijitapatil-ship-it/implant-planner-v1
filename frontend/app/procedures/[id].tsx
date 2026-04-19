@@ -26,6 +26,7 @@ import {
   SMILE_LINE_OPTIONS, GINGIVAL_BIOTYPE_OPTIONS,
   FLAP_DESIGN_OPTIONS, DRILLING_TYPE_OPTIONS, PROSTHETIC_COMPONENT_OPTIONS,
   FP_MATERIAL_OPTIONS, OVERDENTURE_ATTACHMENT_OPTIONS, CUSTOM_ABUTMENT_OPTIONS,
+  MEDICAL_RISK_FACTORS, calculateMedicalRisk,
   getProstheticOptions,
 } from '../../constants/checklist';
 import { format } from 'date-fns';
@@ -963,18 +964,83 @@ export default function ProcedureDetailScreen() {
                 (['osteoporosis', 'radiation'].includes(key) && (value as string) === 'Yes');
               const iconName = isNoRisk ? 'checkmark-circle' : isHighRisk ? 'warning' : 'alert-circle';
               const iconColor = isNoRisk ? '#4CAF50' : isHighRisk ? '#F44336' : '#FF9800';
+              const factor = MEDICAL_RISK_FACTORS.find(f => f.id === key);
+              const factorLabel = factor?.label || key.replace(/_/g, ' ');
+              const medFieldKey = `medical_assessment.${key}`;
+              const rowEditing = editingField === medFieldKey;
+              const rowEditValue = editValues[medFieldKey] ?? value;
+
+              const handleStartRowEdit = () => {
+                if (!factor) return;
+                startEdit(medFieldKey, value);
+              };
+              const handleSaveRow = async () => {
+                const updatedMedical = { ...procedure.medical_assessment, [key]: rowEditValue };
+                const riskInfo = calculateMedicalRisk(updatedMedical);
+                setSaving(true);
+                try {
+                  const res = await api.patch(`/procedures/${id}/edit-fields`, {
+                    fields: { medical_assessment: updatedMedical, medical_risk_level: riskInfo.level },
+                  });
+                  setProcedure(res.data);
+                  setEditingField(null);
+                  Alert.alert('Saved', 'Medical assessment updated');
+                } catch (e: any) {
+                  Alert.alert('Error', e.response?.data?.detail || 'Failed to save');
+                } finally { setSaving(false); }
+              };
+
               return (
-                <View key={key} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' }}>
-                  <Ionicons name={iconName} size={20} color={iconColor} />
-                  <View style={{ marginLeft: 12, flex: 1 }}>
-                    <Text style={{ fontSize: 12, color: '#666', textTransform: 'capitalize' }}>{key.replace(/_/g, ' ')}</Text>
-                    <Text style={{ fontSize: 14, color: '#1A1A1A', fontWeight: '500' }}>{value as string}</Text>
+                <View key={key} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Ionicons name={iconName} size={20} color={iconColor} />
+                    <View style={{ marginLeft: 12, flex: 1 }}>
+                      <Text style={{ fontSize: 12, color: '#666', textTransform: 'capitalize' }}>{factorLabel}</Text>
+                      <Text style={{ fontSize: 14, color: '#1A1A1A', fontWeight: '500' }}>{value as string}</Text>
+                    </View>
+                    {!isNoRisk && !rowEditing && (
+                      <View style={{ backgroundColor: isHighRisk ? '#FFEBEE' : '#FFF3E0', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, marginRight: 6 }}>
+                        <Text style={{ fontSize: 10, fontWeight: '600', color: isHighRisk ? '#F44336' : '#FF9800' }}>
+                          {isHighRisk ? 'HIGH' : 'MODERATE'}
+                        </Text>
+                      </View>
+                    )}
+                    {canEditField() && !rowEditing && factor && (
+                      <TouchableOpacity onPress={handleStartRowEdit} style={{ padding: 4 }} data-testid={`edit-medical-${key}`}>
+                        <Ionicons name="pencil" size={14} color="#1565C0" />
+                      </TouchableOpacity>
+                    )}
                   </View>
-                  {!isNoRisk && (
-                    <View style={{ backgroundColor: isHighRisk ? '#FFEBEE' : '#FFF3E0', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 }}>
-                      <Text style={{ fontSize: 10, fontWeight: '600', color: isHighRisk ? '#F44336' : '#FF9800' }}>
-                        {isHighRisk ? 'HIGH' : 'MODERATE'}
-                      </Text>
+                  {rowEditing && factor && (
+                    <View style={{ marginTop: 8, marginLeft: 32 }}>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                        {factor.options.map(opt => {
+                          const selected = rowEditValue === opt;
+                          return (
+                            <TouchableOpacity
+                              key={opt}
+                              onPress={() => setEditValues(prev => ({ ...prev, [medFieldKey]: opt }))}
+                              style={{
+                                paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1,
+                                borderColor: selected ? '#1565C0' : '#CFD8DC',
+                                backgroundColor: selected ? '#1565C0' : '#FFF',
+                              }}
+                            >
+                              <Text style={{ fontSize: 12, fontWeight: '600', color: selected ? '#FFF' : '#37474F' }}>{opt}</Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                      <View style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
+                        <TouchableOpacity onPress={handleSaveRow} disabled={saving} style={{ backgroundColor: '#4CAF50', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                          {saving ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="checkmark" size={14} color="#FFF" />}
+                          <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }}>Save</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={cancelEdit} style={{ backgroundColor: '#F44336', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                          <Ionicons name="close" size={14} color="#FFF" />
+                          <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }}>Cancel</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   )}
                 </View>
