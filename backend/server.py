@@ -1424,6 +1424,40 @@ async def edit_procedure_fields(procedure_id: str, request: Request, current_use
         update_op,
     )
     
+    # Notify the other case stakeholders (student owner, assigned supervisor, assigned in-charge)
+    # whenever any edit is made — so they see the activity as a badge on the Alerts tab and get a push.
+    if log_entries:
+        editor_id = current_user.get("_id")
+        patient_label = proc.get("patient_name") or proc.get("patient_id") or "case"
+        fields_changed = ", ".join(sorted({e["field"].split(".")[-1].replace("_", " ") for e in log_entries}))[:120]
+        actor_role_short = {
+            "implant_incharge": "Implant In-Charge",
+            "supervisor": "Supervisor",
+            "student": "Student",
+            "administrator": "Administrator",
+            "nurse": "Nurse",
+        }.get(editor_role, editor_role.title())
+        msg = f"{actor_role_short} {editor_name} edited {patient_label}: {fields_changed}"
+        candidate_ids = [uid for uid in [proc.get("student_id"), proc.get("supervisor_id"), proc.get("implant_incharge_id")] if uid and uid != editor_id]
+        # Deduplicate
+        recipient_ids = list(dict.fromkeys(candidate_ids))
+        for uid in recipient_ids:
+            await db.notifications.insert_one({
+                "user_id": uid,
+                "procedure_id": procedure_id,
+                "message": msg,
+                "type": "case_edited",
+                "read": False,
+                "created_at": datetime.utcnow(),
+            })
+        if recipient_ids:
+            await send_expo_push_notifications(
+                recipient_ids,
+                f"Case edited · {patient_label}",
+                msg,
+                {"procedure_id": procedure_id, "type": "case_edited"},
+            )
+    
     updated = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0})
     return updated
 
