@@ -101,8 +101,8 @@ export default function CaseCompletionBadge({ procedureId, status }: Props) {
           <View style={st.badgeDetails}>
             <View style={st.badgeRow}>
               <Ionicons name="person" size={14} color="#666" />
-              <Text style={st.badgeLabel}>Student:</Text>
-              <Text style={st.badgeValue}>{badge.student_name}</Text>
+              <Text style={st.badgeLabel}>{badge.created_by_role === 'supervisor' ? 'Supervisor:' : badge.created_by_role === 'implant_incharge' ? 'Implant Incharge:' : 'Student:'}</Text>
+              <Text style={st.badgeValue}>{badge.student_name || badge.created_by_name || 'N/A'}</Text>
             </View>
             <View style={st.badgeRow}>
               <Ionicons name="medkit" size={14} color="#666" />

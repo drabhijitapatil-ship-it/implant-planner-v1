@@ -246,7 +246,7 @@ export default function NewProcedureScreen() {
     patient_email: '',
     registration_number: '',
     chief_complaint: '',
-    student_name: user?.name || '',
+    student_name: user?.role === 'student' ? (user?.name || '') : '',
     supervisor_id: (user?.role === 'supervisor' || user?.role === 'implant_incharge') ? (user?.id || '') : '',
     supervisor_name: (user?.role === 'supervisor' || user?.role === 'implant_incharge') ? (user?.name || '') : '',
     implant_incharge_id: user?.role === 'implant_incharge' ? (user?.id || '') : '',
