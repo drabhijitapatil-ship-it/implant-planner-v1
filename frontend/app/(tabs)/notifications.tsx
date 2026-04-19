@@ -127,7 +127,6 @@ export default function NotificationsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <BackToDashboard />
 
       {notifications.length === 0 ? (
         <View style={styles.emptyState}>

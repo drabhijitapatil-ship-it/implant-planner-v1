@@ -131,7 +131,6 @@ export default function Stage2SurgicalSubmissionScreen() {
 
   return (
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
-      <BackToDashboard />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} nestedScrollEnabled>
           <Text style={s.pageTitle}>Phase 3 - Second Stage Surgical</Text>

@@ -149,7 +149,6 @@ export default function ProceduresScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <BackToDashboard />
 
       <View style={styles.filterContainer}>
         {filterButtons.map((btn) => (
