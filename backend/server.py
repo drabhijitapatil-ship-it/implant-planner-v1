@@ -1065,7 +1065,7 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
         # Supervisor creates: supervisor approval implicit, only incharge needs to approve
         procedure_dict.update({
             "student_id": None,
-            "student_name": procedure.student_name or "",
+            "student_name": "",
             "status": "draft",
             "current_phase": 1,
             "supervisor_phase1_approved": True,
@@ -1084,7 +1084,7 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
         # Implant In-Charge creates: starts as draft, goes through normal approval flow
         procedure_dict.update({
             "student_id": None,
-            "student_name": procedure.student_name or "",
+            "student_name": "",
             "status": "draft",
             "current_phase": 1,
             "supervisor_phase1_approved": False,
