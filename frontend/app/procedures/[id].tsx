@@ -25,6 +25,20 @@ import CaseImplantPlanning from '../../components/CaseImplantPlanning';
 import CaseCompletionBadge from '../../components/CaseCompletionBadge';
 import * as Linking from 'expo-linking';
 
+import React, { createContext, useContext as useReactContext } from 'react';
+
+// Edit mode context for passing edit state to InfoRow
+const EditContext = createContext<{
+  isEditMode: boolean;
+  editingField: string | null;
+  editValues: Record<string, any>;
+  saving: boolean;
+  startEdit: (key: string, val: any) => void;
+  saveField: (key: string) => void;
+  cancelEdit: () => void;
+  setEditValues: React.Dispatch<React.SetStateAction<Record<string, any>>>;
+} | null>(null);
+
 export default function ProcedureDetailScreen() {
   const { id, edit } = useLocalSearchParams();
   const { user } = useAuth();
@@ -89,64 +103,8 @@ export default function ProcedureDetailScreen() {
 
   const cancelEdit = () => { setEditingField(null); };
 
-  // Editable field component
-  const EditableRow = ({ fieldKey, label, value, icon }: { fieldKey: string; label: string; value: string; icon?: string }) => {
-    const isEditing = editingField === fieldKey;
-    return (
-      <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6, gap: 8 }}>
-        {icon && <Ionicons name={icon as any} size={16} color="#666" />}
-        <Text style={{ fontSize: 13, color: '#666', width: 110 }}>{label}</Text>
-        {isEditing ? (
-          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <TextInput
-              style={{ flex: 1, borderWidth: 1, borderColor: '#1565C0', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, fontSize: 13, backgroundColor: '#F0F7FF' }}
-              value={String(editValues[fieldKey] ?? '')}
-              onChangeText={v => setEditValues(prev => ({ ...prev, [fieldKey]: v }))}
-              autoFocus
-            />
-            <TouchableOpacity onPress={() => saveField(fieldKey)} style={{ backgroundColor: '#4CAF50', borderRadius: 6, padding: 6 }} disabled={saving}>
-              {saving ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="checkmark" size={16} color="#FFF" />}
-            </TouchableOpacity>
-            <TouchableOpacity onPress={cancelEdit} style={{ backgroundColor: '#F44336', borderRadius: 6, padding: 6 }}>
-              <Ionicons name="close" size={16} color="#FFF" />
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Text style={{ flex: 1, fontSize: 14, color: '#1A1A2E', fontWeight: '500' }}>{value || '—'}</Text>
-            {canEditField() && (
-              <TouchableOpacity onPress={() => startEdit(fieldKey, value)} style={{ padding: 4 }} data-testid={`edit-${fieldKey}`}>
-                <Ionicons name="pencil" size={14} color="#1565C0" />
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-      </View>
-    );
-  };
-
-  // Wrapper to make InfoRow editable in edit mode
-  const EditableInfoRow = ({ icon, label, value, fieldKey }: { icon: string; label: string; value: string; fieldKey: string }) => {
-    const isEditing = editingField === fieldKey;
-    if (!canEditField()) {
-      return <InfoRow icon={icon} label={label} value={value} />;
-    }
-    return (
-      <InfoRow
-        icon={icon}
-        label={label}
-        value={value}
-        fieldKey={fieldKey}
-        onEdit={startEdit}
-        isEditing={isEditing}
-        editValue={editValues[fieldKey] ?? ''}
-        onEditChange={(v) => setEditValues(prev => ({ ...prev, [fieldKey]: v }))}
-        onSave={() => saveField(fieldKey)}
-        onCancel={cancelEdit}
-        saving={saving}
-      />
-    );
-  };
+  // EditableInfoRow uses context-aware InfoRow (no longer needed as separate wrapper)
+  // All InfoRow components automatically show pencil icons in edit mode via EditContext
 
   useEffect(() => { getToken('access_token').then(t => setAuthToken(t || '')); }, []);
 
@@ -438,13 +396,21 @@ export default function ProcedureDetailScreen() {
   }
 
   return (
+    <EditContext.Provider value={canEditField() ? { isEditMode, editingField, editValues, saving, startEdit, saveField, cancelEdit, setEditValues } : null}>
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Edit Mode Banner */}
         {isEditMode && (
           <View style={{ backgroundColor: '#E3F2FD', borderBottomWidth: 2, borderBottomColor: '#1565C0', paddingHorizontal: 16, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 10 }} data-testid="edit-mode-banner">
             <Ionicons name="create" size={20} color="#1565C0" />
-            <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', flex: 1 }}>Edit Mode — Tap pencil icon to edit any field</Text>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', flex: 1 }}>Edit Mode — Tap pencil icon to edit</Text>
+            <TouchableOpacity
+              style={{ backgroundColor: '#F9A825', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 6 }}
+              onPress={() => router.push('/(tabs)/dashboard')}
+              data-testid="edit-done-btn"
+            >
+              <Text style={{ color: '#FFF', fontSize: 13, fontWeight: '700' }}>Done</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -737,17 +703,8 @@ export default function ProcedureDetailScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Patient Information</Text>
-          {isEditMode ? (
-            <>
-              <EditableInfoRow fieldKey="patient_name" label="Patient Name" value={procedure.patient_name} icon="person" />
-              <EditableInfoRow fieldKey="registration_number" label="Registration Number" value={procedure.registration_number} icon="card" />
-            </>
-          ) : (
-            <>
-              <InfoRow icon="person" label="Patient Name" value={procedure.patient_name} />
-              <InfoRow icon="card" label="Registration Number" value={procedure.registration_number} />
-            </>
-          )}
+          <InfoRow icon="person" label="Patient Name" value={procedure.patient_name} />
+          <InfoRow icon="card" label="Registration Number" value={procedure.registration_number} />
           <InfoRow icon="medical" label="Implant Site" value={procedure.implant_site} />
         </View>
 
@@ -2150,15 +2107,46 @@ export default function ProcedureDetailScreen() {
       </Modal>
 
     </SafeAreaView>
+    </EditContext.Provider>
   );
 }
 
-function InfoRow({ icon, label, value, fieldKey, onEdit, isEditing, editValue, onEditChange, onSave, onCancel, saving }: {
+function InfoRow({ icon, label, value, fieldKey, onEdit, isEditing: isEditingProp, editValue: editValueProp, onEditChange: onEditChangeProp, onSave: onSaveProp, onCancel: onCancelProp, saving: savingProp }: {
   icon: string; label: string; value: string;
   fieldKey?: string; onEdit?: (key: string, val: string) => void;
   isEditing?: boolean; editValue?: string; onEditChange?: (v: string) => void;
   onSave?: () => void; onCancel?: () => void; saving?: boolean;
 }) {
+  const editCtx = useReactContext(EditContext);
+  
+  // Auto-derive fieldKey from label if not provided
+  const key = fieldKey || label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  
+  // Use context-based editing if available and no explicit props passed
+  const useCtx = editCtx && !onEdit;
+  const isEditing = isEditingProp || (useCtx && editCtx.editingField === key);
+  const editValue = editValueProp ?? (useCtx ? (editCtx.editValues[key] ?? '') : '');
+  const saving = savingProp || (useCtx && editCtx.saving);
+
+  const handleStartEdit = () => {
+    if (onEdit && fieldKey) { onEdit(fieldKey, value); return; }
+    if (useCtx) editCtx.startEdit(key, value || '');
+  };
+  const handleSave = () => {
+    if (onSaveProp) { onSaveProp(); return; }
+    if (useCtx) editCtx.saveField(key);
+  };
+  const handleCancel = () => {
+    if (onCancelProp) { onCancelProp(); return; }
+    if (useCtx) editCtx.cancelEdit();
+  };
+  const handleChange = (v: string) => {
+    if (onEditChangeProp) { onEditChangeProp(v); return; }
+    if (useCtx) editCtx.setEditValues(prev => ({ ...prev, [key]: v }));
+  };
+
+  const showPencil = (editCtx?.isEditMode || !!onEdit) && !isEditing;
+
   return (
     <View style={styles.infoRow}>
       <Ionicons name={icon as any} size={20} color="#666" />
@@ -2169,14 +2157,14 @@ function InfoRow({ icon, label, value, fieldKey, onEdit, isEditing, editValue, o
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
               <TextInput
                 style={{ flex: 1, borderWidth: 1, borderColor: '#1565C0', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, fontSize: 13, backgroundColor: '#F0F7FF' }}
-                value={editValue ?? ''}
-                onChangeText={onEditChange}
+                value={String(editValue ?? '')}
+                onChangeText={handleChange}
                 autoFocus
               />
-              <TouchableOpacity onPress={onSave} style={{ backgroundColor: '#4CAF50', borderRadius: 6, padding: 6 }} disabled={saving}>
+              <TouchableOpacity onPress={handleSave} style={{ backgroundColor: '#4CAF50', borderRadius: 6, padding: 6 }} disabled={!!saving}>
                 {saving ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="checkmark" size={16} color="#FFF" />}
               </TouchableOpacity>
-              <TouchableOpacity onPress={onCancel} style={{ backgroundColor: '#F44336', borderRadius: 6, padding: 6 }}>
+              <TouchableOpacity onPress={handleCancel} style={{ backgroundColor: '#F44336', borderRadius: 6, padding: 6 }}>
                 <Ionicons name="close" size={16} color="#FFF" />
               </TouchableOpacity>
             </View>
@@ -2187,8 +2175,8 @@ function InfoRow({ icon, label, value, fieldKey, onEdit, isEditing, editValue, o
             <Text style={styles.infoValue}>{value}</Text>
           </View>
         )}
-        {!isEditing && onEdit && fieldKey && (
-          <TouchableOpacity onPress={() => onEdit(fieldKey, value)} style={{ padding: 4 }}>
+        {showPencil && (
+          <TouchableOpacity onPress={handleStartEdit} style={{ padding: 4 }}>
             <Ionicons name="pencil" size={14} color="#1565C0" />
           </TouchableOpacity>
         )}

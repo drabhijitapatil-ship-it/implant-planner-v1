@@ -117,14 +117,14 @@ export default function NotificationsScreen() {
           </Text>
         </View>
         {!item.read && <View style={styles.unreadDot} />}
-        {isIncharge && item.procedure_id && (
+        {isIncharge && item.procedure_id && item.procedure_details?.status !== 'completed' && (
           <View style={{ position: 'relative' }}>
             <TouchableOpacity onPress={(e) => { e.stopPropagation(); setMenuOpenId(isOpen ? null : item.id); }} style={{ padding: 4 }} data-testid={`alert-menu-${item.id}`}>
               <Ionicons name="ellipsis-vertical" size={18} color="#666" />
             </TouchableOpacity>
             {isOpen && (
               <View style={styles.alertPopup} data-testid={`alert-popup-${item.id}`}>
-                <TouchableOpacity style={styles.alertPopupItem} onPress={(e) => { e.stopPropagation(); setMenuOpenId(null); router.push(`/procedures/${item.procedure_id}`); }}>
+                <TouchableOpacity style={styles.alertPopupItem} onPress={(e) => { e.stopPropagation(); setMenuOpenId(null); router.push(`/procedures/${item.procedure_id}?edit=true`); }}>
                   <Ionicons name="create-outline" size={16} color="#1565C0" />
                   <Text style={{ fontSize: 13, fontWeight: '600', color: '#1565C0' }}>Edit Phase</Text>
                 </TouchableOpacity>
