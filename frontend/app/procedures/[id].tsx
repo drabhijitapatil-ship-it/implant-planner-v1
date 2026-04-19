@@ -26,7 +26,7 @@ import CaseCompletionBadge from '../../components/CaseCompletionBadge';
 import * as Linking from 'expo-linking';
 
 export default function ProcedureDetailScreen() {
-  const { id } = useLocalSearchParams();
+  const { id, edit } = useLocalSearchParams();
   const { user } = useAuth();
   const router = useRouter();
   
@@ -48,6 +48,105 @@ export default function ProcedureDetailScreen() {
   const [aiChatHistory, setAiChatHistory] = useState<any[]>([]);
   const [aiChatInput, setAiChatInput] = useState('');
   const [aiChatSending, setAiChatSending] = useState(false);
+  
+  // Edit mode state
+  const isEditMode = edit === 'true' && (user?.role === 'implant_incharge' || user?.role === 'supervisor');
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [editValues, setEditValues] = useState<Record<string, any>>({});
+  const [saving, setSaving] = useState(false);
+
+  const canEditField = () => {
+    if (!isEditMode) return false;
+    if (procedure?.status === 'completed') return false;
+    return true;
+  };
+
+  const startEdit = (fieldKey: string, currentValue: any) => {
+    setEditingField(fieldKey);
+    setEditValues(prev => ({ ...prev, [fieldKey]: currentValue }));
+  };
+
+  const saveField = async (fieldKey: string) => {
+    setSaving(true);
+    try {
+      const fields: any = {};
+      // Support nested field paths like "phase2_data.torque_values"
+      if (fieldKey.includes('.')) {
+        const [parent, child] = fieldKey.split('.');
+        const current = procedure[parent] || {};
+        fields[parent] = { ...current, [child]: editValues[fieldKey] };
+      } else {
+        fields[fieldKey] = editValues[fieldKey];
+      }
+      const res = await api.patch(`/procedures/${id}/edit-fields`, { fields });
+      setProcedure(res.data);
+      setEditingField(null);
+      Alert.alert('Saved', 'Field updated successfully');
+    } catch (e: any) {
+      Alert.alert('Error', e.response?.data?.detail || 'Failed to save');
+    } finally { setSaving(false); }
+  };
+
+  const cancelEdit = () => { setEditingField(null); };
+
+  // Editable field component
+  const EditableRow = ({ fieldKey, label, value, icon }: { fieldKey: string; label: string; value: string; icon?: string }) => {
+    const isEditing = editingField === fieldKey;
+    return (
+      <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6, gap: 8 }}>
+        {icon && <Ionicons name={icon as any} size={16} color="#666" />}
+        <Text style={{ fontSize: 13, color: '#666', width: 110 }}>{label}</Text>
+        {isEditing ? (
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <TextInput
+              style={{ flex: 1, borderWidth: 1, borderColor: '#1565C0', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, fontSize: 13, backgroundColor: '#F0F7FF' }}
+              value={String(editValues[fieldKey] ?? '')}
+              onChangeText={v => setEditValues(prev => ({ ...prev, [fieldKey]: v }))}
+              autoFocus
+            />
+            <TouchableOpacity onPress={() => saveField(fieldKey)} style={{ backgroundColor: '#4CAF50', borderRadius: 6, padding: 6 }} disabled={saving}>
+              {saving ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="checkmark" size={16} color="#FFF" />}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={cancelEdit} style={{ backgroundColor: '#F44336', borderRadius: 6, padding: 6 }}>
+              <Ionicons name="close" size={16} color="#FFF" />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={{ flex: 1, fontSize: 14, color: '#1A1A2E', fontWeight: '500' }}>{value || '—'}</Text>
+            {canEditField() && (
+              <TouchableOpacity onPress={() => startEdit(fieldKey, value)} style={{ padding: 4 }} data-testid={`edit-${fieldKey}`}>
+                <Ionicons name="pencil" size={14} color="#1565C0" />
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  // Wrapper to make InfoRow editable in edit mode
+  const EditableInfoRow = ({ icon, label, value, fieldKey }: { icon: string; label: string; value: string; fieldKey: string }) => {
+    const isEditing = editingField === fieldKey;
+    if (!canEditField()) {
+      return <InfoRow icon={icon} label={label} value={value} />;
+    }
+    return (
+      <InfoRow
+        icon={icon}
+        label={label}
+        value={value}
+        fieldKey={fieldKey}
+        onEdit={startEdit}
+        isEditing={isEditing}
+        editValue={editValues[fieldKey] ?? ''}
+        onEditChange={(v) => setEditValues(prev => ({ ...prev, [fieldKey]: v }))}
+        onSave={() => saveField(fieldKey)}
+        onCancel={cancelEdit}
+        saving={saving}
+      />
+    );
+  };
 
   useEffect(() => { getToken('access_token').then(t => setAuthToken(t || '')); }, []);
 
@@ -339,8 +438,16 @@ export default function ProcedureDetailScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Edit Mode Banner */}
+        {isEditMode && (
+          <View style={{ backgroundColor: '#E3F2FD', borderBottomWidth: 2, borderBottomColor: '#1565C0', paddingHorizontal: 16, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 10 }} data-testid="edit-mode-banner">
+            <Ionicons name="create" size={20} color="#1565C0" />
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', flex: 1 }}>Edit Mode — Tap pencil icon to edit any field</Text>
+          </View>
+        )}
+
         <View style={styles.statusCard}>
           <View
             style={[
@@ -630,8 +737,17 @@ export default function ProcedureDetailScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Patient Information</Text>
-          <InfoRow icon="person" label="Patient Name" value={procedure.patient_name} />
-          <InfoRow icon="card" label="Registration Number" value={procedure.registration_number} />
+          {isEditMode ? (
+            <>
+              <EditableInfoRow fieldKey="patient_name" label="Patient Name" value={procedure.patient_name} icon="person" />
+              <EditableInfoRow fieldKey="registration_number" label="Registration Number" value={procedure.registration_number} icon="card" />
+            </>
+          ) : (
+            <>
+              <InfoRow icon="person" label="Patient Name" value={procedure.patient_name} />
+              <InfoRow icon="card" label="Registration Number" value={procedure.registration_number} />
+            </>
+          )}
           <InfoRow icon="medical" label="Implant Site" value={procedure.implant_site} />
         </View>
 
@@ -2037,13 +2153,45 @@ export default function ProcedureDetailScreen() {
   );
 }
 
-function InfoRow({ icon, label, value }: { icon: string; label: string; value: string }) {
+function InfoRow({ icon, label, value, fieldKey, onEdit, isEditing, editValue, onEditChange, onSave, onCancel, saving }: {
+  icon: string; label: string; value: string;
+  fieldKey?: string; onEdit?: (key: string, val: string) => void;
+  isEditing?: boolean; editValue?: string; onEditChange?: (v: string) => void;
+  onSave?: () => void; onCancel?: () => void; saving?: boolean;
+}) {
   return (
     <View style={styles.infoRow}>
       <Ionicons name={icon as any} size={20} color="#666" />
-      <View style={styles.infoContent}>
-        <Text style={styles.infoLabel}>{label}</Text>
-        <Text style={styles.infoValue}>{value}</Text>
+      <View style={[styles.infoContent, { flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
+        {isEditing ? (
+          <View style={{ flex: 1 }}>
+            <Text style={styles.infoLabel}>{label}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+              <TextInput
+                style={{ flex: 1, borderWidth: 1, borderColor: '#1565C0', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, fontSize: 13, backgroundColor: '#F0F7FF' }}
+                value={editValue ?? ''}
+                onChangeText={onEditChange}
+                autoFocus
+              />
+              <TouchableOpacity onPress={onSave} style={{ backgroundColor: '#4CAF50', borderRadius: 6, padding: 6 }} disabled={saving}>
+                {saving ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="checkmark" size={16} color="#FFF" />}
+              </TouchableOpacity>
+              <TouchableOpacity onPress={onCancel} style={{ backgroundColor: '#F44336', borderRadius: 6, padding: 6 }}>
+                <Ionicons name="close" size={16} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <View style={{ flex: 1 }}>
+            <Text style={styles.infoLabel}>{label}</Text>
+            <Text style={styles.infoValue}>{value}</Text>
+          </View>
+        )}
+        {!isEditing && onEdit && fieldKey && (
+          <TouchableOpacity onPress={() => onEdit(fieldKey, value)} style={{ padding: 4 }}>
+            <Ionicons name="pencil" size={14} color="#1565C0" />
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -2072,7 +2220,9 @@ const styles = StyleSheet.create({
     color: '#90A4AE',
   },
   statusCard: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 12,
     alignItems: 'center',
   },
   statusBadge: {

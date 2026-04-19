@@ -72,35 +72,37 @@ export default function ProceduresScreen() {
 
   const handleArchive = async (id: string) => {
     setMenuOpenId(null);
+    if (!id) { Alert.alert('Error', 'Missing case ID'); return; }
     Alert.alert('Archive', 'Archive this case? It will be moved to Archived Cases.', [
       { text: 'Cancel' },
       { text: 'Archive', onPress: async () => {
         try {
           await api.post(`/procedures/${id}/archive`);
-          setProcedures((prev: any) => prev.filter((p: any) => p.id !== id));
+          setProcedures((prev: any) => prev.filter((p: any) => (p.id || p._id) !== id));
           Alert.alert('Done', 'Case archived');
-        } catch (e: any) { Alert.alert('Error', e.response?.data?.detail || 'Failed'); }
+        } catch (e: any) { Alert.alert('Error', e.response?.data?.detail || 'Failed to archive'); }
       }}
     ]);
   };
 
   const handleDelete = async (id: string) => {
     setMenuOpenId(null);
+    if (!id) { Alert.alert('Error', 'Missing case ID'); return; }
     Alert.alert('Delete', 'Permanently delete this case? This cannot be undone.', [
       { text: 'Cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
         try {
           await api.delete(`/procedures/${id}`);
-          setProcedures((prev: any) => prev.filter((p: any) => p.id !== id));
+          setProcedures((prev: any) => prev.filter((p: any) => (p.id || p._id) !== id));
           Alert.alert('Done', 'Case deleted');
-        } catch (e: any) { Alert.alert('Error', e.response?.data?.detail || 'Failed'); }
+        } catch (e: any) { Alert.alert('Error', e.response?.data?.detail || 'Failed to delete'); }
       }}
     ]);
   };
 
   const handleEdit = (id: string) => {
     setMenuOpenId(null);
-    router.push(`/procedures/${id}`);
+    router.push(`/procedures/${id}?edit=true`);
   };
 
   const getMenuActions = (item: any) => {
@@ -108,16 +110,17 @@ export default function ProceduresScreen() {
     if (role === 'nurse') return [];
     const actions: { key: string; label: string; icon: string; color: string; onPress: () => void }[] = [];
     const isCompleted = item.status === 'completed';
+    const pid = item.id || item._id;
 
     if (role === 'implant_incharge') {
-      if (!isCompleted) actions.push({ key: 'edit', label: 'Edit', icon: 'create-outline', color: '#1565C0', onPress: () => handleEdit(item.id) });
-      actions.push({ key: 'delete', label: 'Delete', icon: 'trash-outline', color: '#1565C0', onPress: () => handleDelete(item.id) });
-      actions.push({ key: 'archive', label: 'Archive', icon: 'archive-outline', color: '#1565C0', onPress: () => handleArchive(item.id) });
+      if (!isCompleted) actions.push({ key: 'edit', label: 'Edit', icon: 'create-outline', color: '#1565C0', onPress: () => handleEdit(pid) });
+      actions.push({ key: 'delete', label: 'Delete', icon: 'trash-outline', color: '#1565C0', onPress: () => handleDelete(pid) });
+      actions.push({ key: 'archive', label: 'Archive', icon: 'archive-outline', color: '#1565C0', onPress: () => handleArchive(pid) });
     } else if (role === 'supervisor') {
-      if (!isCompleted) actions.push({ key: 'edit', label: 'Edit', icon: 'create-outline', color: '#1565C0', onPress: () => handleEdit(item.id) });
-      actions.push({ key: 'archive', label: 'Archive', icon: 'archive-outline', color: '#1565C0', onPress: () => handleArchive(item.id) });
+      if (!isCompleted) actions.push({ key: 'edit', label: 'Edit', icon: 'create-outline', color: '#1565C0', onPress: () => handleEdit(pid) });
+      actions.push({ key: 'archive', label: 'Archive', icon: 'archive-outline', color: '#1565C0', onPress: () => handleArchive(pid) });
     } else if (role === 'student') {
-      actions.push({ key: 'archive', label: 'Archive', icon: 'archive-outline', color: '#1565C0', onPress: () => handleArchive(item.id) });
+      actions.push({ key: 'archive', label: 'Archive', icon: 'archive-outline', color: '#1565C0', onPress: () => handleArchive(pid) });
     }
     return actions;
   };
