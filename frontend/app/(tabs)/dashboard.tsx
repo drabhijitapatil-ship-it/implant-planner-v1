@@ -11,6 +11,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { STATUS_COLORS, STATUS_LABELS } from '../../constants/checklist';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { RecentActivityWidget } from '../../components/RecentActivityWidget';
 
 // ── Status helpers ────────────────────────────────────────
 const ACTION_NEEDED_MAP: Record<string, { label: string; icon: string; color: string }> = {
@@ -404,6 +405,7 @@ function SupervisorDashboard({ stats, procedures, selectedDate, setSelectedDate,
       )}
 
       <ProcedureCalendar procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
+      <RecentActivityWidget router={router} limit={5} />
     </>
   );
 }
@@ -559,6 +561,7 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
       </View>
 
       <ProcedureCalendar procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
+      <RecentActivityWidget router={router} limit={5} />
     </>
   );
 }

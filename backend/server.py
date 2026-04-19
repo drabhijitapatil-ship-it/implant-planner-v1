@@ -1231,6 +1231,50 @@ async def get_archived_procedures(current_user: dict = Depends(get_current_user)
     return procedures
 
 
+@api_router.get("/procedures/recent-activity")
+async def get_recent_activity(limit: int = 10, current_user: dict = Depends(get_current_user)):
+    """Return the most recent edit_log entries across all procedures accessible to the user.
+    Only Supervisors, Implant In-Charges, and Administrators can view this feed.
+    """
+    role = current_user.get("role")
+    if role not in ("supervisor", "implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Only Supervisors and Implant In-Charges can view recent activity")
+    
+    limit = max(1, min(int(limit or 10), 50))
+    pipeline = [
+        {"$match": {"edit_log": {"$exists": True, "$ne": []}}},
+        {"$project": {
+            "_id": 0,
+            "procedure_id": {"$toString": "$_id"},
+            "patient_name": 1,
+            "patient_id": 1,
+            "implant_procedure_type": 1,
+            "status": 1,
+            "created_by_name": 1,
+            "edit_log": 1,
+        }},
+        {"$unwind": "$edit_log"},
+        {"$sort": {"edit_log.edited_at": -1}},
+        {"$limit": limit},
+        {"$project": {
+            "procedure_id": 1,
+            "patient_name": 1,
+            "patient_id": 1,
+            "implant_procedure_type": 1,
+            "status": 1,
+            "created_by_name": 1,
+            "field": "$edit_log.field",
+            "old_value": "$edit_log.old_value",
+            "new_value": "$edit_log.new_value",
+            "edited_by": "$edit_log.edited_by",
+            "edited_by_role": "$edit_log.edited_by_role",
+            "edited_at": "$edit_log.edited_at",
+        }},
+    ]
+    entries = await db.procedures.aggregate(pipeline).to_list(length=limit)
+    return {"activities": entries}
+
+
 @api_router.get("/procedures/{procedure_id}")
 async def get_procedure(procedure_id: str, current_user: dict = Depends(get_current_user)):
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
