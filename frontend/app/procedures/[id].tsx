@@ -163,6 +163,7 @@ export default function ProcedureDetailScreen() {
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Record<string, any>>({});
   const [saving, setSaving] = useState(false);
+  const [showEditHistory, setShowEditHistory] = useState(false);
 
   const canEditField = () => {
     if (!isEditMode) return false;
@@ -2130,9 +2131,14 @@ export default function ProcedureDetailScreen() {
           </View>
         ) : null}
 
-        {/* Edit History Footer — shows who last edited any field, visible to all viewers including students */}
+        {/* Edit History Footer — tappable, opens full timeline modal. Visible to all viewers including students. */}
         {procedure.last_edited_by && procedure.last_edited_at && (
-          <View style={styles.editHistoryFooter} data-testid="edit-history-footer">
+          <TouchableOpacity
+            style={styles.editHistoryFooter}
+            onPress={() => setShowEditHistory(true)}
+            activeOpacity={0.7}
+            data-testid="edit-history-footer"
+          >
             <Ionicons name="create-outline" size={14} color="#78909C" />
             <Text style={styles.editHistoryText}>
               Last edited by <Text style={styles.editHistoryName}>{procedure.last_edited_by}</Text>
@@ -2141,12 +2147,109 @@ export default function ProcedureDetailScreen() {
                 {format(new Date(procedure.last_edited_at), 'MMM dd, yyyy • hh:mm a')}
               </Text>
             </Text>
-          </View>
+            {(procedure.edit_log?.length || 0) > 0 && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text style={{ fontSize: 11, color: '#1565C0', fontWeight: '700' }}>View history</Text>
+                <Ionicons name="chevron-forward" size={12} color="#1565C0" />
+              </View>
+            )}
+          </TouchableOpacity>
         )}
 
         {/* Extra bottom spacing for the fixed buttons */}
         <View style={{ height: (canExportPDF() || canViewAiSummary()) ? 70 : 10 }} />
       </ScrollView>
+
+      {/* Edit History Timeline Modal */}
+      <Modal visible={showEditHistory} animationType="slide" transparent onRequestClose={() => setShowEditHistory(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+          <View style={{ backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '85%', paddingBottom: 20 }}>
+            {/* Header */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#ECEFF1' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="time-outline" size={22} color="#1565C0" />
+                <Text style={{ fontSize: 17, fontWeight: '700', color: '#0D47A1' }}>Edit History</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowEditHistory(false)} style={{ padding: 4 }} data-testid="close-edit-history">
+                <Ionicons name="close-circle" size={28} color="#78909C" />
+              </TouchableOpacity>
+            </View>
+            {/* Timeline */}
+            <ScrollView contentContainerStyle={{ padding: 16 }}>
+              {(procedure.edit_log?.length || 0) === 0 ? (
+                <View style={{ alignItems: 'center', padding: 30 }}>
+                  <Ionicons name="document-outline" size={40} color="#B0BEC5" />
+                  <Text style={{ fontSize: 14, color: '#78909C', marginTop: 10, textAlign: 'center' }}>
+                    No detailed edit history yet. Future edits will be logged here.
+                  </Text>
+                </View>
+              ) : (
+                [...procedure.edit_log].reverse().map((entry: any, idx: number) => {
+                  const fmt = (v: any): string => {
+                    if (v === null || v === undefined || v === '') return '—';
+                    if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+                    if (Array.isArray(v)) return v.join(', ') || '—';
+                    if (typeof v === 'object') return JSON.stringify(v);
+                    return String(v);
+                  };
+                  const fieldLabel = entry.field
+                    .replace(/^phase2_data\./, 'Phase 2 · ')
+                    .replace(/^phase3_data\./, 'Phase 3 · ')
+                    .replace(/^phase4_step1_data\./, 'Phase 4 · ')
+                    .replace(/^medical_assessment\./, 'Medical · ')
+                    .replace(/_/g, ' ')
+                    .replace(/\b\w/g, c => c.toUpperCase());
+                  const roleLabel = entry.edited_by_role === 'implant_incharge' ? 'Implant In-Charge'
+                    : entry.edited_by_role === 'supervisor' ? 'Supervisor'
+                    : entry.edited_by_role === 'student' ? 'Student' : '';
+                  return (
+                    <View key={idx} style={{ flexDirection: 'row', marginBottom: 14 }} data-testid={`edit-log-entry-${idx}`}>
+                      {/* Timeline dot + line */}
+                      <View style={{ alignItems: 'center', marginRight: 12 }}>
+                        <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#1565C0', marginTop: 6 }} />
+                        {idx < procedure.edit_log.length - 1 && (
+                          <View style={{ width: 2, flex: 1, backgroundColor: '#CFD8DC', marginTop: 2 }} />
+                        )}
+                      </View>
+                      {/* Entry card */}
+                      <View style={{ flex: 1, backgroundColor: '#F8FAFC', borderRadius: 10, padding: 12, borderLeftWidth: 3, borderLeftColor: '#1565C0' }}>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#0D47A1', marginBottom: 4 }}>{fieldLabel}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
+                          <Text style={{ fontSize: 12, color: '#B0BEC5', textDecorationLine: 'line-through', maxWidth: '45%' }} numberOfLines={2}>
+                            {fmt(entry.old_value)}
+                          </Text>
+                          <Ionicons name="arrow-forward" size={12} color="#546E7A" />
+                          <Text style={{ fontSize: 12, color: '#2E7D32', fontWeight: '600', maxWidth: '45%' }} numberOfLines={2}>
+                            {fmt(entry.new_value)}
+                          </Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Ionicons name="person-circle-outline" size={13} color="#78909C" />
+                          <Text style={{ fontSize: 11, color: '#546E7A' }}>
+                            {entry.edited_by}{roleLabel ? ` · ${roleLabel}` : ''}
+                          </Text>
+                          <Text style={{ fontSize: 11, color: '#90A4AE' }}>·</Text>
+                          <Text style={{ fontSize: 11, color: '#90A4AE' }}>
+                            {entry.edited_at ? format(new Date(entry.edited_at), 'MMM dd, hh:mm a') : ''}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </ScrollView>
+            {/* Close button */}
+            <TouchableOpacity
+              onPress={() => setShowEditHistory(false)}
+              style={{ marginHorizontal: 20, marginTop: 8, backgroundColor: '#1565C0', borderRadius: 10, paddingVertical: 12, alignItems: 'center' }}
+              data-testid="close-edit-history-btn"
+            >
+              <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '700' }}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Fixed bottom bar — compact centered action buttons */}
       {(canExportPDF() || canViewAiSummary()) && (
