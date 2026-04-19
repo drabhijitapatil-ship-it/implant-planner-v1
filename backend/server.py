@@ -1332,16 +1332,52 @@ async def edit_procedure_fields(procedure_id: str, request: Request, current_use
         raise HTTPException(status_code=400, detail="No fields to update")
     
     # Prevent editing protected fields
-    protected = {"_id", "id", "created_by_id", "created_by_name", "created_by_role", "created_at"}
+    protected = {"_id", "id", "created_by_id", "created_by_name", "created_by_role", "created_at", "edit_log"}
     fields = {k: v for k, v in fields.items() if k not in protected}
     
-    fields["updated_at"] = datetime.now(timezone.utc).isoformat()
-    fields["last_edited_by"] = current_user.get("name", current_user["_id"])
-    fields["last_edited_at"] = datetime.now(timezone.utc).isoformat()
+    # Build per-field edit log entries (diff old vs new)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    editor_name = current_user.get("name") or current_user.get("_id")
+    editor_role = current_user.get("role", "")
+    log_entries = []
+    for key, new_val in fields.items():
+        old_val = proc.get(key)
+        # For dict fields (e.g. medical_assessment, phase2_data, phase4_step1_data),
+        # log each changed sub-key separately so the timeline is granular.
+        if isinstance(new_val, dict) and isinstance(old_val, dict):
+            for sub_key, sub_new in new_val.items():
+                sub_old = old_val.get(sub_key)
+                if sub_old != sub_new:
+                    log_entries.append({
+                        "field": f"{key}.{sub_key}",
+                        "old_value": sub_old,
+                        "new_value": sub_new,
+                        "edited_by": editor_name,
+                        "edited_by_role": editor_role,
+                        "edited_at": now_iso,
+                    })
+        else:
+            if old_val != new_val:
+                log_entries.append({
+                    "field": key,
+                    "old_value": old_val,
+                    "new_value": new_val,
+                    "edited_by": editor_name,
+                    "edited_by_role": editor_role,
+                    "edited_at": now_iso,
+                })
+    
+    fields["updated_at"] = now_iso
+    fields["last_edited_by"] = editor_name
+    fields["last_edited_at"] = now_iso
+    
+    update_op: dict = {"$set": fields}
+    if log_entries:
+        update_op["$push"] = {"edit_log": {"$each": log_entries}}
     
     await db.procedures.update_one(
         {"_id": ObjectId(procedure_id)},
-        {"$set": fields}
+        update_op,
     )
     
     updated = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0})
