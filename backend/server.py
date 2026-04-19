@@ -1305,6 +1305,50 @@ async def update_procedure(
     updated_procedure["id"] = updated_procedure["_id"]
     return updated_procedure
 
+
+@api_router.patch("/procedures/{procedure_id}/edit-fields")
+async def edit_procedure_fields(procedure_id: str, request: Request, current_user: dict = Depends(get_current_user)):
+    """Flexible field-level editing for In-Charge and Supervisors."""
+    if current_user["role"] == "nurse":
+        raise HTTPException(status_code=403, detail="Nurses have read-only access")
+    
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    
+    if current_user["role"] == "student":
+        raise HTTPException(status_code=403, detail="Students cannot edit via this endpoint")
+    
+    if current_user["role"] == "supervisor":
+        if proc.get("supervisor_id") != current_user["_id"] and proc.get("created_by_id") != current_user["_id"]:
+            raise HTTPException(status_code=403, detail="Access denied — not your case")
+    
+    if proc.get("status") == "completed":
+        raise HTTPException(status_code=403, detail="Cannot edit completed cases")
+    
+    body = await request.json()
+    fields = body.get("fields", {})
+    if not fields:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    
+    # Prevent editing protected fields
+    protected = {"_id", "id", "created_by_id", "created_by_name", "created_by_role", "created_at"}
+    fields = {k: v for k, v in fields.items() if k not in protected}
+    
+    fields["updated_at"] = datetime.now(timezone.utc).isoformat()
+    fields["last_edited_by"] = current_user.get("name", current_user["_id"])
+    fields["last_edited_at"] = datetime.now(timezone.utc).isoformat()
+    
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": fields}
+    )
+    
+    updated = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0})
+    return updated
+
+
+
 @api_router.delete("/procedures/{procedure_id}")
 async def delete_procedure(procedure_id: str, current_user: dict = Depends(get_current_user)):
     proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
