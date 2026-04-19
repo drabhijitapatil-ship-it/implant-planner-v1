@@ -21,7 +21,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { STATUS_COLORS, STATUS_LABELS, CHECKLIST_DATA } from '../../constants/checklist';
 import { format } from 'date-fns';
 import { generateProcedurePDF } from '../../utils/pdfGenerator';
-import BackToDashboard from '../../components/BackToDashboard';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';
 import CaseCompletionBadge from '../../components/CaseCompletionBadge';
 import * as Linking from 'expo-linking';
@@ -1892,21 +1891,13 @@ export default function ProcedureDetailScreen() {
         ) : null}
 
         {/* Extra bottom spacing for the fixed buttons */}
-        <View style={{ height: (canExportPDF() || canViewAiSummary()) ? 130 : 80 }} />
+        <View style={{ height: (canExportPDF() || canViewAiSummary() || user?.role === 'implant_incharge') ? 100 : 20 }} />
       </ScrollView>
 
-      {/* Fixed bottom bar — 2-row grid, all buttons same size */}
+      {/* Fixed bottom bar — action buttons */}
       <View style={styles.bottomBar}>
-        <View style={[styles.bottomBarRow, user?.role === 'implant_incharge' && { alignSelf: 'stretch' }]}>
-          <TouchableOpacity
-            style={[styles.barButton, { backgroundColor: '#007AFF' }, user?.role === 'implant_incharge' && { flex: 1 }]}
-            onPress={() => router.push('/(tabs)/dashboard')}
-            data-testid="back-to-dashboard-btn"
-          >
-            <Ionicons name="home" size={16} color="#FFF" />
-            <Text style={styles.barButtonText}>Dashboard</Text>
-          </TouchableOpacity>
-          {user?.role === 'implant_incharge' && (
+        {user?.role === 'implant_incharge' && (
+          <View style={[styles.bottomBarRow, { alignSelf: 'stretch' }]}>
             <TouchableOpacity
               style={[styles.barButton, { backgroundColor: '#F44336', flex: 1 }]}
               onPress={handleDeleteProcedure}
@@ -1915,8 +1906,8 @@ export default function ProcedureDetailScreen() {
               <Ionicons name="trash" size={16} color="#FFF" />
               <Text style={styles.barButtonText}>DELETE</Text>
             </TouchableOpacity>
-          )}
-        </View>
+          </View>
+        )}
         {(canExportPDF() || canViewAiSummary()) && (
           <View style={[styles.bottomBarRow, { alignSelf: 'stretch' }]}>
             {canExportPDF() && (
@@ -1968,7 +1959,7 @@ export default function ProcedureDetailScreen() {
       {/* Floating AI Chat Button */}
       {procedure.status !== 'draft' && (
         <TouchableOpacity
-          style={{ position: 'absolute', bottom: 130, right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#0D47A1', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 8, zIndex: 999 }}
+          style={{ position: 'absolute', bottom: 100, right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#0D47A1', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 8, zIndex: 999 }}
           onPress={() => setAiChatVisible(true)}
           data-testid="ai-chat-fab"
         >

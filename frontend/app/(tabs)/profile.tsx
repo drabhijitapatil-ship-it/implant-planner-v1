@@ -146,7 +146,6 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <BackToDashboard />
       <ScrollView>
         <View style={styles.profileHeader}>
           <TouchableOpacity 

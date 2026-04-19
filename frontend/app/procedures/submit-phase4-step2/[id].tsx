@@ -63,7 +63,6 @@ export default function Phase4Step2Screen() {
 
   return (
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
-      <BackToDashboard />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} nestedScrollEnabled>
           <Text style={s.pageTitle}>Phase 4 Step 2 - Trial & Prosthesis Delivery</Text>
