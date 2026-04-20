@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import api, { getAuthFileUrl, getToken } from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { showUploadPicker } from '../../utils/uploadPicker';
+import { downloadConsentTemplate } from '../../utils/consentPdf';
 import {
   STATUS_COLORS, STATUS_LABELS, CHECKLIST_DATA,
   PROCEDURE_TYPES, LOADING_TYPES,
@@ -752,36 +753,59 @@ export default function ProcedureDetailScreen() {
         {canSubmitPhase2() && (
           <View style={styles.phase2ButtonContainer}>
             {procedure.patient_consent_form ? (
-              <TouchableOpacity
-                style={styles.phase2Button}
-                onPress={() => router.push(`/procedures/submit-phase2/${id}`)}
-                data-testid="phase2-submit-btn"
-              >
-                <Ionicons name="checkmark-circle" size={24} color="#FFF" />
-                <View style={styles.phase2ButtonTextContainer}>
-                  <Text style={styles.phase2ButtonTitle}>PHASE 1 APPROVED</Text>
-                  <Text style={styles.phase2ButtonSubtitle}>Tap to complete Phase 2 - Surgical Checklist</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={24} color="#FFF" />
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity
+                  style={styles.phase2Button}
+                  onPress={() => router.push(`/procedures/submit-phase2/${id}`)}
+                  data-testid="phase2-submit-btn"
+                >
+                  <Ionicons name="checkmark-circle" size={24} color="#FFF" />
+                  <View style={styles.phase2ButtonTextContainer}>
+                    <Text style={styles.phase2ButtonTitle}>PHASE 1 APPROVED</Text>
+                    <Text style={styles.phase2ButtonSubtitle}>Tap to complete Phase 2 - Surgical Checklist</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={24} color="#FFF" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => downloadConsentTemplate(id as string)}
+                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, marginTop: 6 }}
+                  data-testid="reprint-consent-btn"
+                >
+                  <Ionicons name="download-outline" size={14} color="#1565C0" />
+                  <Text style={{ fontSize: 12, color: '#1565C0', fontWeight: '600' }}>Reprint blank consent template</Text>
+                </TouchableOpacity>
+              </>
             ) : (
-              <TouchableOpacity
-                style={[styles.phase2Button, { backgroundColor: uploadingConsent ? '#90CAF9' : '#1565C0' }]}
-                onPress={uploadConsentForProcedure}
-                disabled={uploadingConsent}
-                data-testid="upload-consent-phase2-btn"
-              >
-                {uploadingConsent ? (
-                  <ActivityIndicator size="small" color="#FFF" />
-                ) : (
-                  <Ionicons name="cloud-upload" size={24} color="#FFF" />
-                )}
-                <View style={styles.phase2ButtonTextContainer}>
-                  <Text style={styles.phase2ButtonTitle}>UPLOAD PATIENT CONSENT FORM</Text>
-                  <Text style={styles.phase2ButtonSubtitle}>Phase 2 will unlock once the signed consent is uploaded</Text>
-                </View>
-                {!uploadingConsent && <Ionicons name="chevron-forward" size={24} color="#FFF" />}
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity
+                  style={[styles.phase2Button, { backgroundColor: uploadingConsent ? '#90CAF9' : '#1565C0' }]}
+                  onPress={uploadConsentForProcedure}
+                  disabled={uploadingConsent}
+                  data-testid="upload-consent-phase2-btn"
+                >
+                  {uploadingConsent ? (
+                    <ActivityIndicator size="small" color="#FFF" />
+                  ) : (
+                    <Ionicons name="cloud-upload" size={24} color="#FFF" />
+                  )}
+                  <View style={styles.phase2ButtonTextContainer}>
+                    <Text style={styles.phase2ButtonTitle}>UPLOAD PATIENT CONSENT FORM</Text>
+                    <Text style={styles.phase2ButtonSubtitle}>Phase 2 will unlock once the signed consent is uploaded</Text>
+                  </View>
+                  {!uploadingConsent && <Ionicons name="chevron-forward" size={24} color="#FFF" />}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => downloadConsentTemplate(id as string)}
+                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#ECEFF1', borderRadius: 8, paddingVertical: 10, marginTop: 8 }}
+                  data-testid="download-consent-template-btn"
+                >
+                  <Ionicons name="print-outline" size={16} color="#37474F" />
+                  <Text style={{ fontSize: 13, color: '#37474F', fontWeight: '700' }}>Print blank consent template</Text>
+                </TouchableOpacity>
+                <Text style={{ fontSize: 11, color: '#78909C', textAlign: 'center', marginTop: 4, fontStyle: 'italic' }}>
+                  Template is pre-filled with patient & procedure details. Print, get the patient to sign, then tap Upload above.
+                </Text>
+              </>
             )}
           </View>
         )}
