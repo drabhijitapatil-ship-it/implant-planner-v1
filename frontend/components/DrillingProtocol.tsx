@@ -75,6 +75,97 @@ export default function DrillingProtocolScreen({
     } finally { setLoading(false); }
   };
 
+  const buildDrillingHtml = (): string => {
+    if (!protocol) return '';
+    const stepsHtml = protocol.steps.map((s, i) => `
+      <tr style="background:${i % 2 === 0 ? '#F8FBFF' : '#FFF'}">
+        <td style="padding:8px;text-align:center;font-weight:700;color:#1565C0">${s.step}</td>
+        <td style="padding:8px;font-weight:600">${s.drill_type}</td>
+        <td style="padding:8px;text-align:center">${s.diameter} mm</td>
+        <td style="padding:8px;text-align:center">${s.depth} mm</td>
+        <td style="padding:8px;text-align:center">${s.code || '—'}</td>
+        <td style="padding:8px;text-align:center">${s.rpm}</td>
+        <td style="padding:8px;text-align:center">${s.irrigation ? 'Yes' : 'No'}</td>
+      </tr>
+    `).join('');
+    const notesHtml = protocol.notes?.length
+      ? protocol.notes.map(n => `<li style="padding:4px 0;color:#555">${n}</li>`).join('')
+      : '<li style="color:#999">No additional notes</li>';
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <style>
+          body { font-family: 'Helvetica','Arial',sans-serif; padding:24px; font-size:12px; color:#263238; }
+          .header { text-align:center; border-bottom:3px solid #1565C0; padding-bottom:16px; margin-bottom:20px; }
+          .header h1 { margin:0; color:#1565C0; font-size:22px; }
+          .header p { margin:4px 0; color:#666; font-size:11px; }
+          .info-box { background:#E3F2FD; border-radius:8px; padding:14px; margin-bottom:18px; }
+          .info-row { display:flex; justify-content:space-between; margin:4px 0; }
+          .info-label { font-weight:700; color:#333; }
+          .info-value { color:#1565C0; }
+          table { width:100%; border-collapse:collapse; margin-bottom:18px; }
+          th { background:#1565C0; color:#FFF; padding:10px 8px; text-align:center; font-size:11px; }
+          td { border-bottom:1px solid #E0E0E0; font-size:11px; }
+          .notes { background:#FFF8E1; border-radius:8px; padding:14px; }
+          .notes h3 { margin:0 0 8px; color:#F57F17; font-size:14px; }
+          .footer { text-align:center; margin-top:24px; padding-top:12px; border-top:1px solid #E0E0E0; color:#999; font-size:10px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>Drilling Protocol</h1>
+          <p>${implant.brand} – ${implant.system}</p>
+          <p>${implant.diameter} × ${implant.length} mm  ·  Bone: ${boneType}${tooth ? '  ·  Tooth: ' + tooth : ''}</p>
+        </div>
+        <table>
+          <tr><th>Step</th><th>Drill</th><th>Ø</th><th>Depth</th><th>Code</th><th>RPM</th><th>Irrigation</th></tr>
+          ${stepsHtml}
+        </table>
+        <div class="notes"><h3>Clinical Notes</h3><ul>${notesHtml}</ul></div>
+        <div class="footer"><p>Implanr — Implant Planning Assistant</p></div>
+      </body>
+      </html>
+    `;
+  };
+
+  const handlePrintPDF = async () => {
+    if (!protocol) return;
+    setExporting(true);
+    try {
+      if (Platform.OS === 'web') {
+        const res = await api.post('/drilling-protocols/export-pdf', {
+          brand: implant.brand, system: implant.system,
+          diameter: implant.diameter, length: implant.length,
+          bone_density: boneType, tooth,
+        }, { responseType: 'blob' });
+        const blob = new Blob([res.data], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        const iframe = document.createElement('iframe');
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = '0';
+        iframe.src = url;
+        document.body.appendChild(iframe);
+        iframe.onload = () => {
+          try { iframe.contentWindow?.focus(); iframe.contentWindow?.print(); }
+          catch { window.open(url, '_blank'); }
+        };
+        setTimeout(() => {
+          try { document.body.removeChild(iframe); } catch {}
+          URL.revokeObjectURL(url);
+        }, 60000);
+      } else {
+        await Print.printAsync({ html: buildDrillingHtml() });
+      }
+    } catch { Alert.alert('Error', 'Failed to open print dialog.'); }
+    finally { setExporting(false); }
+  };
+
   const handleExportPDF = async () => {
     if (!protocol) return;
     setExporting(true);
@@ -336,13 +427,29 @@ export default function DrillingProtocolScreen({
               ))}
             </View>
 
-            {/* Export PDF */}
-            <TouchableOpacity style={p.exportBtn} onPress={handleExportPDF} disabled={exporting}
-              data-testid="export-pdf-btn">
-              {exporting ? <ActivityIndicator color="#FFF" size="small" /> : (
-                <><Ionicons name="download-outline" size={18} color="#FFF" /><Text style={p.exportBtnText}>Export PDF</Text></>
-              )}
-            </TouchableOpacity>
+            {/* Print + Export PDF row */}
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TouchableOpacity
+                style={[p.exportBtn, { flex: 1, backgroundColor: '#37474F' }]}
+                onPress={handlePrintPDF}
+                disabled={exporting}
+                data-testid="print-pdf-btn"
+              >
+                {exporting ? <ActivityIndicator color="#FFF" size="small" /> : (
+                  <><Ionicons name="print" size={18} color="#FFF" /><Text style={p.exportBtnText}>Print</Text></>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[p.exportBtn, { flex: 1 }]}
+                onPress={handleExportPDF}
+                disabled={exporting}
+                data-testid="export-pdf-btn"
+              >
+                {exporting ? <ActivityIndicator color="#FFF" size="small" /> : (
+                  <><Ionicons name="download-outline" size={18} color="#FFF" /><Text style={p.exportBtnText}>Export PDF</Text></>
+                )}
+              </TouchableOpacity>
+            </View>
           </>
         )}
       </ScrollView>

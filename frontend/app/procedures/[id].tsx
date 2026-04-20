@@ -2336,6 +2336,21 @@ export default function ProcedureDetailScreen() {
           <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10, paddingHorizontal: 30 }}>
             {canExportPDF() && (
               <TouchableOpacity
+                style={[styles.barButtonCompact, { backgroundColor: '#37474F' }, pdfLoading && styles.buttonDisabled]}
+                onPress={async () => {
+                  setPdfLoading(true);
+                  try {
+                    const { printProcedurePDF } = await import('../../utils/pdfGenerator');
+                    await printProcedurePDF(procedure);
+                  } finally { setPdfLoading(false); }
+                }}
+                disabled={pdfLoading}
+                data-testid="print-case-report-btn"
+              >
+                <Ionicons name="print" size={14} color="#FFF" />
+                <Text style={styles.barButtonTextCompact}>PRINT</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
                 style={[styles.barButtonCompact, { backgroundColor: '#43A047' }, pdfLoading && styles.buttonDisabled]}
                 onPress={handleExportPDF}
                 disabled={pdfLoading}

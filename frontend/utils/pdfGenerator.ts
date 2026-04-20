@@ -1,16 +1,15 @@
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import { format } from 'date-fns';
 
-export const generateProcedurePDF = async (procedure: any) => {
-  try {
-    const isCompleted = procedure.status === 'completed';
-    const statusBadgeText = isCompleted
-      ? 'TREATMENT COMPLETE - ALL PROTOCOLS APPROVED'
-      : 'STAGE 1 IMPLANT PLACEMENT DONE SUCCESSFULLY';
-
-    const html = `
+/** Build the full HTML for the procedure case report (shared by download + print flows). */
+export const buildProcedurePdfHtml = (procedure: any): string => {
+  const isCompleted = procedure.status === 'completed';
+  const statusBadgeText = isCompleted
+    ? 'TREATMENT COMPLETE - ALL PROTOCOLS APPROVED'
+    : 'STAGE 1 IMPLANT PLACEMENT DONE SUCCESSFULLY';
+  const html = `
       <!DOCTYPE html>
       <html>
         <head>
@@ -396,6 +395,22 @@ export const generateProcedurePDF = async (procedure: any) => {
         </body>
       </html>
     `;
+  return html;
+};
+
+/** Generate the PDF and open the Share sheet (or trigger browser download on web). */
+export const generateProcedurePDF = async (procedure: any) => {
+  try {
+    const html = buildProcedurePdfHtml(procedure);
+
+    if (Platform.OS === 'web') {
+      // Browser: open the HTML report in a new tab; user can Save As PDF.
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 15000);
+      return url;
+    }
 
     const { uri } = await Print.printToFileAsync({ html });
     const isAvailable = await Sharing.isAvailableAsync();
@@ -415,6 +430,46 @@ export const generateProcedurePDF = async (procedure: any) => {
     console.error('Error generating PDF:', error);
     Alert.alert('Error', 'Failed to generate PDF. Please try again.');
     throw error;
+  }
+};
+
+/** Open the native print dialog (AirPrint / Android Print Services) with the case report. */
+export const printProcedurePDF = async (procedure: any) => {
+  try {
+    const html = buildProcedurePdfHtml(procedure);
+
+    if (Platform.OS === 'web') {
+      // Open the HTML in a hidden iframe, call window.print() on load.
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.src = url;
+      document.body.appendChild(iframe);
+      iframe.onload = () => {
+        try {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+        } catch {
+          window.open(url, '_blank');
+        }
+      };
+      setTimeout(() => {
+        try { document.body.removeChild(iframe); } catch {}
+        URL.revokeObjectURL(url);
+      }, 60000);
+      return;
+    }
+
+    await Print.printAsync({ html });
+  } catch (error) {
+    console.error('Error printing PDF:', error);
+    Alert.alert('Error', 'Failed to open the print dialog.');
   }
 };
 
