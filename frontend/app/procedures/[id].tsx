@@ -2335,6 +2335,7 @@ export default function ProcedureDetailScreen() {
         <View style={styles.bottomBar}>
           <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10, paddingHorizontal: 30 }}>
             {canExportPDF() && (
+              <>
               <TouchableOpacity
                 style={[styles.barButtonCompact, { backgroundColor: '#37474F' }, pdfLoading && styles.buttonDisabled]}
                 onPress={async () => {
@@ -2365,6 +2366,7 @@ export default function ProcedureDetailScreen() {
                   </>
                 )}
               </TouchableOpacity>
+              </>
             )}
             {canViewAiSummary() && (
               <TouchableOpacity
