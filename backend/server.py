@@ -1548,6 +1548,211 @@ ALLOWED_EXTENSIONS = {'.pdf', '.png', '.jpg', '.jpeg', '.heif', '.heic'}
 MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB
 
 
+@api_router.get("/procedures/{procedure_id}/consent-form-template")
+async def generate_consent_template(
+    procedure_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Generate a printable Patient Consent Form pre-filled with case data plus signature fields.
+    Users print this, collect the patient's handwritten signature, then upload the signed copy
+    via /upload-consent.
+    """
+    procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    
+    role = current_user.get("role")
+    uid = current_user.get("_id")
+    is_stakeholder = (
+        procedure.get("created_by_id") == uid or
+        procedure.get("student_id") == uid or
+        procedure.get("supervisor_id") == uid or
+        procedure.get("implant_incharge_id") == uid or
+        role in ("nurse", "implant_incharge", "administrator", "supervisor")
+    )
+    if not is_stakeholder:
+        raise HTTPException(status_code=403, detail="Not allowed to view this consent form")
+    
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT
+    
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=18*mm, rightMargin=18*mm, topMargin=15*mm, bottomMargin=15*mm)
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name='TitleC', fontName='Helvetica-Bold', fontSize=16, textColor=colors.HexColor('#0D47A1'), alignment=1, spaceAfter=4))
+    styles.add(ParagraphStyle(name='SubC', fontName='Helvetica', fontSize=10, textColor=colors.HexColor('#546E7A'), alignment=1, spaceAfter=12))
+    styles.add(ParagraphStyle(name='H2', fontName='Helvetica-Bold', fontSize=11, textColor=colors.HexColor('#1565C0'), spaceBefore=10, spaceAfter=4))
+    styles.add(ParagraphStyle(name='Body', fontName='Helvetica', fontSize=9.5, textColor=colors.HexColor('#263238'), leading=13, alignment=TA_JUSTIFY))
+    styles.add(ParagraphStyle(name='BulletC', fontName='Helvetica', fontSize=9.5, textColor=colors.HexColor('#263238'), leading=13, leftIndent=14, bulletIndent=2))
+    styles.add(ParagraphStyle(name='SigLabel', fontName='Helvetica-Bold', fontSize=9, textColor=colors.HexColor('#37474F')))
+    styles.add(ParagraphStyle(name='SmallGrey', fontName='Helvetica-Oblique', fontSize=8, textColor=colors.HexColor('#78909C')))
+    
+    story = []
+    
+    # ── Header ──
+    story.append(Paragraph("INFORMED CONSENT — DENTAL IMPLANT PROCEDURE", styles['TitleC']))
+    story.append(Paragraph("Please read carefully before signing. Keep one signed copy for your records.", styles['SubC']))
+    story.append(HRFlowable(width="100%", thickness=0.8, color=colors.HexColor('#CFD8DC'), spaceAfter=8))
+    
+    # ── Patient Information ──
+    story.append(Paragraph("Patient Information", styles['H2']))
+    patient_rows = [
+        ["Patient Name:", procedure.get("patient_name") or "____________________________", "Age:", str(procedure.get("age") or "____")],
+        ["Sex:", procedure.get("sex") or "____", "Registration No.:", procedure.get("registration_number") or "____________"],
+        ["Mobile:", procedure.get("mobile_number") or "____________", "Email:", procedure.get("email") or "____________"],
+        ["Chief Complaint:", Paragraph(procedure.get("chief_complaint") or "____________________________________________________", styles['Body']), "", ""],
+    ]
+    pt = Table(patient_rows, colWidths=[30*mm, 70*mm, 25*mm, 45*mm])
+    pt.setStyle(TableStyle([
+        ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
+        ('FONTSIZE', (0,0), (-1,-1), 9),
+        ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
+        ('FONTNAME', (2,0), (2,-1), 'Helvetica-Bold'),
+        ('TEXTCOLOR', (0,0), (-1,-1), colors.HexColor('#263238')),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+        ('SPAN', (1,3), (3,3)),
+    ]))
+    story.append(pt)
+    story.append(Spacer(1, 6))
+    
+    # ── Procedure Details ──
+    story.append(Paragraph("Planned Procedure", styles['H2']))
+    proc_rows = [
+        ["Procedure Type:", procedure.get("implant_procedure_type") or "____________________"],
+        ["Arch:", procedure.get("arch") or "____________________"],
+        ["Site / Teeth:", ", ".join(procedure.get("edentulous_sites") or []) or procedure.get("edentulous_site") or "____________"],
+        ["Loading Protocol:", ", ".join(procedure.get("loading_type") or []) or "____________________"],
+        ["Treating Clinician:", procedure.get("student_name") or procedure.get("created_by_name") or "____________________"],
+        ["Supervising Clinician:", procedure.get("supervisor_name") or "____________________"],
+        ["Implant In-Charge:", procedure.get("implant_incharge_name") or "____________________"],
+        ["Scheduled Date:", f"{procedure.get('procedure_date','__________')} at {procedure.get('procedure_time','______')}"],
+    ]
+    prt = Table(proc_rows, colWidths=[45*mm, 125*mm])
+    prt.setStyle(TableStyle([
+        ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
+        ('FONTSIZE', (0,0), (-1,-1), 9),
+        ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
+        ('TEXTCOLOR', (0,0), (-1,-1), colors.HexColor('#263238')),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ('BACKGROUND', (0,0), (0,-1), colors.HexColor('#F5F7FA')),
+    ]))
+    story.append(prt)
+    
+    # ── Nature of Procedure ──
+    story.append(Paragraph("1. Nature of the Procedure", styles['H2']))
+    story.append(Paragraph(
+        "A dental implant is a titanium or zirconia post surgically placed into the jawbone to replace one or more missing teeth. "
+        "The procedure may involve local anaesthesia, incision of gum tissue, drilling of the bone, placement of the implant, "
+        "bone grafting if needed, and closure with sutures. A prosthetic tooth (crown / bridge / denture) is fitted after a healing period.",
+        styles['Body']
+    ))
+    
+    # ── Risks ──
+    story.append(Paragraph("2. Known Risks & Complications", styles['H2']))
+    risks = [
+        "Pain, swelling, bruising, and bleeding for several days after surgery.",
+        "Infection at the surgical site requiring antibiotics or further intervention.",
+        "Injury to adjacent teeth, nerves, blood vessels, or the maxillary sinus.",
+        "Temporary or, rarely, permanent numbness of the lip, chin, or tongue.",
+        "Failure of the implant to integrate with the bone, requiring removal and possible re-placement.",
+        "Need for additional procedures such as bone grafting, sinus lift, or soft-tissue augmentation.",
+        "Mechanical complications over time — screw loosening, prosthesis fracture, or wear.",
+        "Aesthetic outcome may vary depending on individual tissue response.",
+    ]
+    for r in risks:
+        story.append(Paragraph(f"•&nbsp;&nbsp;{r}", styles['BulletC']))
+    
+    # ── Alternatives ──
+    story.append(Paragraph("3. Alternatives to Treatment", styles['H2']))
+    story.append(Paragraph(
+        "Alternatives include no treatment, conventional fixed partial dentures (bridges), removable partial or complete "
+        "dentures, and orthodontic repositioning where appropriate. The treating clinician has explained the advantages, "
+        "limitations, and costs of each option.",
+        styles['Body']
+    ))
+    
+    # ── Patient Responsibilities ──
+    story.append(Paragraph("4. My Responsibilities as a Patient", styles['H2']))
+    obligations = [
+        "To disclose complete medical history, current medications, allergies, and any substance use.",
+        "To follow all pre-operative and post-operative instructions.",
+        "To attend all scheduled follow-up appointments.",
+        "To maintain good oral hygiene and refrain from smoking during healing.",
+        "To pay the agreed professional fees as per the clinic's schedule.",
+    ]
+    for o in obligations:
+        story.append(Paragraph(f"•&nbsp;&nbsp;{o}", styles['BulletC']))
+    
+    # ── Consent Statement ──
+    story.append(Paragraph("5. Consent Statement", styles['H2']))
+    story.append(Paragraph(
+        "I have read and understood the information above. I have had the opportunity to ask questions, and all my questions "
+        "have been answered to my satisfaction. I understand that the practice of dentistry is not an exact science and that "
+        "no guarantees have been made to me regarding the outcome of this procedure. I hereby authorize the treating clinician "
+        "and their team to perform the dental implant procedure described above, along with any additional procedures deemed "
+        "necessary during treatment in my best interest.",
+        styles['Body']
+    ))
+    story.append(Spacer(1, 6))
+    story.append(Paragraph(
+        "I also consent to the photographing, videotaping, or recording of the procedure for clinical, educational, and "
+        "record-keeping purposes, with appropriate safeguards on my identity.",
+        styles['Body']
+    ))
+    
+    # ── Signatures ──
+    story.append(Spacer(1, 16))
+    story.append(HRFlowable(width="100%", thickness=0.8, color=colors.HexColor('#CFD8DC'), spaceAfter=8))
+    story.append(Paragraph("Signatures", styles['H2']))
+    sig_line = "________________________________"
+    sig_rows = [
+        ["Patient Signature:", sig_line, "Date:", "____________"],
+        ["Patient Name (printed):", procedure.get("patient_name") or sig_line, "", ""],
+        ["", "", "", ""],
+        ["Guardian Signature (if minor):", sig_line, "Date:", "____________"],
+        ["Guardian Name (printed):", sig_line, "Relationship:", "____________"],
+        ["", "", "", ""],
+        ["Treating Clinician Signature:", sig_line, "Date:", "____________"],
+        ["Treating Clinician Name:", procedure.get("student_name") or procedure.get("created_by_name") or sig_line, "", ""],
+        ["", "", "", ""],
+        ["Witness Signature:", sig_line, "Date:", "____________"],
+        ["Witness Name (printed):", sig_line, "", ""],
+    ]
+    st = Table(sig_rows, colWidths=[48*mm, 70*mm, 20*mm, 32*mm])
+    st.setStyle(TableStyle([
+        ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
+        ('FONTSIZE', (0,0), (-1,-1), 9),
+        ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
+        ('FONTNAME', (2,0), (2,-1), 'Helvetica-Bold'),
+        ('TEXTCOLOR', (0,0), (-1,-1), colors.HexColor('#263238')),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+        ('TOPPADDING', (0,0), (-1,-1), 2),
+    ]))
+    story.append(st)
+    
+    story.append(Spacer(1, 14))
+    story.append(Paragraph(
+        "Print two copies — one for the patient, one for the clinical record. After the patient signs, upload a scan or "
+        "photograph of the signed form into the Implanr app to unlock Phase 2.",
+        styles['SmallGrey']
+    ))
+    
+    doc.build(story)
+    buf.seek(0)
+    filename = f"Consent_{(procedure.get('patient_name') or 'Patient').replace(' ', '_')}.pdf"
+    return StreamingResponse(
+        buf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
+
+
 @api_router.post("/uploads/consent-temp")
 async def upload_consent_temp(
     file: UploadFile = File(...),

@@ -132,6 +132,14 @@ export function PatientConsentSection({ router }: { router: any }) {
                 </>
               )}
             </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => downloadConsentTemplate(c.id)}
+              style={styles.printBtn}
+              data-testid={`consent-print-${c.id}`}
+            >
+              <Ionicons name="print-outline" size={14} color="#37474F" />
+              <Text style={styles.printBtnText}>Print blank template</Text>
+            </TouchableOpacity>
           </View>
         ))
       )}
@@ -190,4 +198,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   uploadBtnText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
+  printBtn: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#ECEFF1',
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  printBtnText: { color: '#37474F', fontSize: 12, fontWeight: '600' },
 });
