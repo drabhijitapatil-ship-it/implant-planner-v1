@@ -651,17 +651,6 @@ export default function NewProcedureScreen() {
           cbct_original_name: cbctFiles[0]?.original_name || '',
           cbct_content_type: cbctFiles[0]?.content_type || '',
         } : {}),
-        ...(consentFile ? {
-          patient_consent_form: {
-            filename: consentFile.filename,
-            original_name: consentFile.original_name,
-            content_type: consentFile.content_type,
-            uploaded_by_name: user?.name || '',
-            uploaded_by_role: user?.role || '',
-            uploaded_at: new Date().toISOString(),
-            version: 1,
-          },
-        } : {}),
       };
 
       const res = await api.post('/procedures', payload);
@@ -1387,52 +1376,6 @@ export default function NewProcedureScreen() {
             placeholder="Enter bone graft details" multiline />
         </View>
       )}
-
-      {/* ─── Patient Consent Form ─── */}
-      <View style={styles.section} data-testid="patient-consent-section">
-        <Text style={styles.sectionTitle}>Patient Consent</Text>
-        <Text style={{ fontSize: 12, color: '#546E7A', marginBottom: 10 }}>
-          Upload a signed consent form (PDF or photo). You can skip this now — a nurse can add it later — but Phase 2 will stay locked until it's uploaded.
-        </Text>
-        {consentFile ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: '#E8F5E9', borderRadius: 10, borderWidth: 1, borderColor: '#4CAF50', gap: 10 }}>
-            <Ionicons name="shield-checkmark" size={22} color="#2E7D32" />
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1B5E20' }} numberOfLines={1}>
-                {consentFile.original_name || 'consent_form'}
-              </Text>
-              <Text style={{ fontSize: 11, color: '#2E7D32' }}>Consent form uploaded</Text>
-            </View>
-            <TouchableOpacity onPress={() => setConsentFile(null)} data-testid="consent-remove-btn">
-              <Ionicons name="close-circle" size={22} color="#E53935" />
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <TouchableOpacity
-            onPress={pickConsentForm}
-            disabled={consentUploading}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-              backgroundColor: consentUploading ? '#90CAF9' : '#1565C0',
-              paddingVertical: 14,
-              borderRadius: 10,
-            }}
-            data-testid="upload-consent-btn"
-          >
-            {consentUploading ? (
-              <ActivityIndicator color="#FFF" />
-            ) : (
-              <>
-                <Ionicons name="cloud-upload" size={20} color="#FFF" />
-                <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '700' }}>Upload Patient Consent Form</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
-      </View>
 
       {/* ─── Continue Button ─── */}
       <TouchableOpacity style={styles.continueBtn} onPress={handleContinueToImplants}

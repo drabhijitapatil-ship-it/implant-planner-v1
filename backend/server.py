@@ -1644,6 +1644,32 @@ async def generate_consent_template(
     ]))
     story.append(prt)
     
+    # ── Selected Implants (if any) ──
+    implants = procedure.get("implants") or procedure.get("selected_implants") or []
+    if implants:
+        implant_rows = [["#", "Site", "Brand / System", "Diameter × Length"]]
+        for i, imp in enumerate(implants, 1):
+            site = imp.get("tooth") or imp.get("site") or imp.get("fdi") or "—"
+            brand = imp.get("brand") or imp.get("manufacturer") or "—"
+            system = imp.get("system") or imp.get("line") or ""
+            label = f"{brand} {system}".strip()
+            dia = imp.get("diameter") or imp.get("width") or "—"
+            length = imp.get("length") or "—"
+            implant_rows.append([str(i), str(site), label, f"{dia} × {length} mm"])
+        it = Table(implant_rows, colWidths=[10*mm, 30*mm, 85*mm, 45*mm])
+        it.setStyle(TableStyle([
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0,0), (-1,-1), 8.5),
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#E3F2FD')),
+            ('TEXTCOLOR', (0,0), (-1,-1), colors.HexColor('#263238')),
+            ('GRID', (0,0), (-1,-1), 0.4, colors.HexColor('#CFD8DC')),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+            ('TOPPADDING', (0,0), (-1,-1), 4),
+        ]))
+        story.append(Paragraph("Planned Implant(s)", styles['H2']))
+        story.append(it)
+    
     # ── Nature of Procedure ──
     story.append(Paragraph("1. Nature of the Procedure", styles['H2']))
     story.append(Paragraph(
@@ -1689,8 +1715,32 @@ async def generate_consent_template(
     for o in obligations:
         story.append(Paragraph(f"•&nbsp;&nbsp;{o}", styles['BulletC']))
     
+    # ── Data Protection & Digital Record Consent ──
+    story.append(Paragraph("6. Data Protection &amp; Digital Record Consent", styles['H2']))
+    story.append(Paragraph(
+        "<b>In plain language:</b> I understand that my clinical information — including my name, contact details, "
+        "medical history, radiographs, photographs, and treatment records — will be stored in the Implanr application "
+        "and shared with the clinicians and authorized staff directly involved in my care (including treating clinician, "
+        "supervising faculty or senior dentist, implant in-charge, nurses, and the designated administrator of the clinic or "
+        "institution). I am free to withdraw this consent at any time in writing, understanding that withdrawal may affect "
+        "the continuity of my treatment.",
+        styles['Body']
+    ))
+    story.append(Spacer(1, 4))
+    story.append(Paragraph(
+        "<b>Formal clause:</b> I expressly and voluntarily consent, under the Digital Personal Data Protection Act, 2023 "
+        "(and, where applicable, the General Data Protection Regulation, HIPAA, or other governing law of my jurisdiction), "
+        "to the collection, storage, processing, and transmission of my identifiable health data within the Implanr "
+        "application for the specific purposes of clinical evaluation, treatment planning, treatment delivery, audit, "
+        "and the maintenance of my longitudinal clinical record. I further consent to access by, and sharing with, "
+        "the individuals lawfully involved in my treatment as listed above. I acknowledge that the application provider "
+        "and the treating Operator have undertaken to apply reasonable technical and organisational safeguards to "
+        "protect my data against unauthorised access or disclosure.",
+        styles['Body']
+    ))
+    
     # ── Consent Statement ──
-    story.append(Paragraph("5. Consent Statement", styles['H2']))
+    story.append(Paragraph("7. Consent Statement", styles['H2']))
     story.append(Paragraph(
         "I have read and understood the information above. I have had the opportunity to ask questions, and all my questions "
         "have been answered to my satisfaction. I understand that the practice of dentistry is not an exact science and that "
