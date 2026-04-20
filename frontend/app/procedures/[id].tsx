@@ -18,6 +18,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import api, { getAuthFileUrl, getToken } from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { showUploadPicker } from '../../utils/uploadPicker';
 import {
   STATUS_COLORS, STATUS_LABELS, CHECKLIST_DATA,
   PROCEDURE_TYPES, LOADING_TYPES,
@@ -164,6 +165,30 @@ export default function ProcedureDetailScreen() {
   const [editValues, setEditValues] = useState<Record<string, any>>({});
   const [saving, setSaving] = useState(false);
   const [showEditHistory, setShowEditHistory] = useState(false);
+  const [uploadingConsent, setUploadingConsent] = useState(false);
+
+  const uploadConsentForProcedure = async () => {
+    try {
+      const picked = await showUploadPicker(['application/pdf', 'image/png', 'image/jpeg', 'image/heic', 'image/heif']);
+      if (!picked) return;
+      setUploadingConsent(true);
+      const payload = new FormData();
+      payload.append('file', {
+        uri: picked.uri,
+        name: picked.name || 'consent_form.pdf',
+        type: picked.type || 'application/pdf',
+      } as any);
+      const res = await api.post(`/procedures/${id}/upload-consent`, payload, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setProcedure(res.data);
+      Alert.alert('Uploaded', 'Patient consent form uploaded. Phase 2 is now unlocked.');
+    } catch (err: any) {
+      Alert.alert('Upload Failed', err.response?.data?.detail || 'Could not upload consent form');
+    } finally {
+      setUploadingConsent(false);
+    }
+  };
 
   const canEditField = () => {
     if (!isEditMode) return false;
@@ -723,21 +748,41 @@ export default function ProcedureDetailScreen() {
           })()
         )}
 
-        {/* Submit Phase 2 Button for Students - GREEN COLOR */}
+        {/* Submit Phase 2 Button — gated by Patient Consent Form */}
         {canSubmitPhase2() && (
           <View style={styles.phase2ButtonContainer}>
-            <TouchableOpacity
-              style={styles.phase2Button}
-              onPress={() => router.push(`/procedures/submit-phase2/${id}`)}
-              data-testid="phase2-submit-btn"
-            >
-              <Ionicons name="checkmark-circle" size={24} color="#FFF" />
-              <View style={styles.phase2ButtonTextContainer}>
-                <Text style={styles.phase2ButtonTitle}>PHASE 1 APPROVED</Text>
-                <Text style={styles.phase2ButtonSubtitle}>Tap to complete Phase 2 - Surgical Checklist</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={24} color="#FFF" />
-            </TouchableOpacity>
+            {procedure.patient_consent_form ? (
+              <TouchableOpacity
+                style={styles.phase2Button}
+                onPress={() => router.push(`/procedures/submit-phase2/${id}`)}
+                data-testid="phase2-submit-btn"
+              >
+                <Ionicons name="checkmark-circle" size={24} color="#FFF" />
+                <View style={styles.phase2ButtonTextContainer}>
+                  <Text style={styles.phase2ButtonTitle}>PHASE 1 APPROVED</Text>
+                  <Text style={styles.phase2ButtonSubtitle}>Tap to complete Phase 2 - Surgical Checklist</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={24} color="#FFF" />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.phase2Button, { backgroundColor: uploadingConsent ? '#90CAF9' : '#1565C0' }]}
+                onPress={uploadConsentForProcedure}
+                disabled={uploadingConsent}
+                data-testid="upload-consent-phase2-btn"
+              >
+                {uploadingConsent ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <Ionicons name="cloud-upload" size={24} color="#FFF" />
+                )}
+                <View style={styles.phase2ButtonTextContainer}>
+                  <Text style={styles.phase2ButtonTitle}>UPLOAD PATIENT CONSENT FORM</Text>
+                  <Text style={styles.phase2ButtonSubtitle}>Phase 2 will unlock once the signed consent is uploaded</Text>
+                </View>
+                {!uploadingConsent && <Ionicons name="chevron-forward" size={24} color="#FFF" />}
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
