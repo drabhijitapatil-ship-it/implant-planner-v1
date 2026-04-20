@@ -5,6 +5,7 @@ import { format } from 'date-fns';
 import api from '../utils/api';
 import { showUploadPicker } from '../utils/uploadPicker';
 import { downloadConsentTemplate, printConsentTemplate } from '../utils/consentPdf';
+import ExportPrintMenu from './ExportPrintMenu';
 
 type PendingCase = {
   id: string;
@@ -133,23 +134,22 @@ export function PatientConsentSection({ router }: { router: any }) {
                 </>
               )}
             </TouchableOpacity>
-            <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
-              <TouchableOpacity
-                onPress={() => printConsentTemplate(c.id)}
-                style={[styles.printBtn, { flex: 1, backgroundColor: '#37474F' }]}
-                data-testid={`consent-print-${c.id}`}
-              >
-                <Ionicons name="print" size={13} color="#FFF" />
-                <Text style={[styles.printBtnText, { color: '#FFF' }]}>Print</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => downloadConsentTemplate(c.id)}
-                style={[styles.printBtn, { flex: 1 }]}
-                data-testid={`consent-download-${c.id}`}
-              >
-                <Ionicons name="download-outline" size={13} color="#37474F" />
-                <Text style={styles.printBtnText}>Download PDF</Text>
-              </TouchableOpacity>
+            <View style={{ marginTop: 6 }}>
+              <ExportPrintMenu
+                label="Export / Print consent"
+                buttonStyle={{ backgroundColor: '#37474F', paddingVertical: 10, borderRadius: 8 }}
+                textStyle={{ fontSize: 12, color: '#FFF', fontWeight: '700', letterSpacing: 0.2 }}
+                triggerIcon="share-outline"
+                triggerIconSize={14}
+                testID={`consent-export-print-${c.id}`}
+                printTestID={`consent-print-${c.id}`}
+                exportTestID={`consent-download-${c.id}`}
+                popoverTitle="Patient Consent Form"
+                printLabel="Print consent form"
+                exportLabel="Download PDF"
+                onPrint={() => printConsentTemplate(c.id)}
+                onExport={() => downloadConsentTemplate(c.id)}
+              />
             </View>
           </View>
         ))

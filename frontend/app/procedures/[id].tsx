@@ -35,6 +35,7 @@ import { format } from 'date-fns';
 import { generateProcedurePDF } from '../../utils/pdfGenerator';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';
 import CaseCompletionBadge from '../../components/CaseCompletionBadge';
+import ExportPrintMenu from '../../components/ExportPrintMenu';
 import * as Linking from 'expo-linking';
 
 // Edit mode context for passing edit state to InfoRow
@@ -794,23 +795,20 @@ export default function ProcedureDetailScreen() {
                   </View>
                   {!uploadingConsent && <Ionicons name="chevron-forward" size={24} color="#FFF" />}
                 </TouchableOpacity>
-                <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-                  <TouchableOpacity
-                    onPress={() => printConsentTemplate(id as string)}
-                    style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#37474F', borderRadius: 8, paddingVertical: 10 }}
-                    data-testid="print-consent-template-btn"
-                  >
-                    <Ionicons name="print" size={16} color="#FFF" />
-                    <Text style={{ fontSize: 13, color: '#FFF', fontWeight: '700' }}>Print consent form</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => downloadConsentTemplate(id as string)}
-                    style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#ECEFF1', borderRadius: 8, paddingVertical: 10 }}
-                    data-testid="download-consent-template-btn"
-                  >
-                    <Ionicons name="download-outline" size={16} color="#37474F" />
-                    <Text style={{ fontSize: 13, color: '#37474F', fontWeight: '700' }}>Download PDF</Text>
-                  </TouchableOpacity>
+                <View style={{ marginTop: 8 }}>
+                  <ExportPrintMenu
+                    label="Export / Print consent form"
+                    buttonStyle={{ backgroundColor: '#37474F', paddingVertical: 12, borderRadius: 8 }}
+                    textStyle={{ fontSize: 13, color: '#FFF', fontWeight: '700', letterSpacing: 0.3 }}
+                    triggerIcon="share-outline"
+                    triggerIconSize={16}
+                    testID="consent-export-print-btn"
+                    popoverTitle="Patient Consent Form"
+                    printLabel="Print consent form"
+                    exportLabel="Download PDF"
+                    onPrint={() => printConsentTemplate(id as string)}
+                    onExport={() => downloadConsentTemplate(id as string)}
+                  />
                 </View>
                 <Text style={{ fontSize: 11, color: '#78909C', textAlign: 'center', marginTop: 4, fontStyle: 'italic' }}>
                   Template is pre-filled with patient & procedure details. Print, get the patient to sign, then tap Upload above.
@@ -2335,38 +2333,26 @@ export default function ProcedureDetailScreen() {
         <View style={styles.bottomBar}>
           <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10, paddingHorizontal: 30 }}>
             {canExportPDF() && (
-              <>
-              <TouchableOpacity
-                style={[styles.barButtonCompact, { backgroundColor: '#37474F' }, pdfLoading && styles.buttonDisabled]}
-                onPress={async () => {
+              <ExportPrintMenu
+                label="EXPORT / PRINT"
+                buttonStyle={[styles.barButtonCompact, { backgroundColor: '#1565C0', flex: 1 }]}
+                textStyle={styles.barButtonTextCompact}
+                triggerIconSize={14}
+                loading={pdfLoading}
+                disabled={pdfLoading}
+                testID="case-report-export-print-btn"
+                popoverTitle="Case Report"
+                printLabel="Print Case Report"
+                exportLabel="Export Case Report PDF"
+                onPrint={async () => {
                   setPdfLoading(true);
                   try {
                     const { printProcedurePDF } = await import('../../utils/pdfGenerator');
                     await printProcedurePDF(procedure);
                   } finally { setPdfLoading(false); }
                 }}
-                disabled={pdfLoading}
-                data-testid="print-case-report-btn"
-              >
-                <Ionicons name="print" size={14} color="#FFF" />
-                <Text style={styles.barButtonTextCompact}>PRINT</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.barButtonCompact, { backgroundColor: '#43A047' }, pdfLoading && styles.buttonDisabled]}
-                onPress={handleExportPDF}
-                disabled={pdfLoading}
-                data-testid="export-pdf-btn"
-              >
-                {pdfLoading ? (
-                  <ActivityIndicator color="#FFF" size="small" />
-                ) : (
-                  <>
-                    <Ionicons name="document-text" size={14} color="#FFF" />
-                    <Text style={styles.barButtonTextCompact}>EXPORT PDF</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-              </>
+                onExport={handleExportPDF}
+              />
             )}
             {canViewAiSummary() && (
               <TouchableOpacity
