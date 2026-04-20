@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import api from '../utils/api';
 import { showUploadPicker } from '../utils/uploadPicker';
+import { downloadConsentTemplate, printConsentTemplate } from '../utils/consentPdf';
 
 type PendingCase = {
   id: string;
@@ -132,14 +133,24 @@ export function PatientConsentSection({ router }: { router: any }) {
                 </>
               )}
             </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => downloadConsentTemplate(c.id)}
-              style={styles.printBtn}
-              data-testid={`consent-print-${c.id}`}
-            >
-              <Ionicons name="print-outline" size={14} color="#37474F" />
-              <Text style={styles.printBtnText}>Print blank template</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
+              <TouchableOpacity
+                onPress={() => printConsentTemplate(c.id)}
+                style={[styles.printBtn, { flex: 1, backgroundColor: '#37474F' }]}
+                data-testid={`consent-print-${c.id}`}
+              >
+                <Ionicons name="print" size={13} color="#FFF" />
+                <Text style={[styles.printBtnText, { color: '#FFF' }]}>Print</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => downloadConsentTemplate(c.id)}
+                style={[styles.printBtn, { flex: 1 }]}
+                data-testid={`consent-download-${c.id}`}
+              >
+                <Ionicons name="download-outline" size={13} color="#37474F" />
+                <Text style={styles.printBtnText}>Download PDF</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         ))
       )}

@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import api, { getAuthFileUrl, getToken } from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { showUploadPicker } from '../../utils/uploadPicker';
-import { downloadConsentTemplate } from '../../utils/consentPdf';
+import { downloadConsentTemplate, printConsentTemplate } from '../../utils/consentPdf';
 import {
   STATUS_COLORS, STATUS_LABELS, CHECKLIST_DATA,
   PROCEDURE_TYPES, LOADING_TYPES,
@@ -794,14 +794,24 @@ export default function ProcedureDetailScreen() {
                   </View>
                   {!uploadingConsent && <Ionicons name="chevron-forward" size={24} color="#FFF" />}
                 </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => downloadConsentTemplate(id as string)}
-                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#ECEFF1', borderRadius: 8, paddingVertical: 10, marginTop: 8 }}
-                  data-testid="download-consent-template-btn"
-                >
-                  <Ionicons name="print-outline" size={16} color="#37474F" />
-                  <Text style={{ fontSize: 13, color: '#37474F', fontWeight: '700' }}>Print blank consent template</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                  <TouchableOpacity
+                    onPress={() => printConsentTemplate(id as string)}
+                    style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#37474F', borderRadius: 8, paddingVertical: 10 }}
+                    data-testid="print-consent-template-btn"
+                  >
+                    <Ionicons name="print" size={16} color="#FFF" />
+                    <Text style={{ fontSize: 13, color: '#FFF', fontWeight: '700' }}>Print consent form</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => downloadConsentTemplate(id as string)}
+                    style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#ECEFF1', borderRadius: 8, paddingVertical: 10 }}
+                    data-testid="download-consent-template-btn"
+                  >
+                    <Ionicons name="download-outline" size={16} color="#37474F" />
+                    <Text style={{ fontSize: 13, color: '#37474F', fontWeight: '700' }}>Download PDF</Text>
+                  </TouchableOpacity>
+                </View>
                 <Text style={{ fontSize: 11, color: '#78909C', textAlign: 'center', marginTop: 4, fontStyle: 'italic' }}>
                   Template is pre-filled with patient & procedure details. Print, get the patient to sign, then tap Upload above.
                 </Text>
