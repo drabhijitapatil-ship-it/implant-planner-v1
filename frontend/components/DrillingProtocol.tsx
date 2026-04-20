@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import api from '../utils/api';
+import ExportPrintMenu from './ExportPrintMenu';
 
 type DrillStep = {
   step: number; drill_type: string; code: string;
@@ -427,29 +428,24 @@ export default function DrillingProtocolScreen({
               ))}
             </View>
 
-            {/* Print + Export PDF row */}
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <TouchableOpacity
-                style={[p.exportBtn, { flex: 1, backgroundColor: '#37474F' }]}
-                onPress={handlePrintPDF}
-                disabled={exporting}
-                data-testid="print-pdf-btn"
-              >
-                {exporting ? <ActivityIndicator color="#FFF" size="small" /> : (
-                  <><Ionicons name="print" size={18} color="#FFF" /><Text style={p.exportBtnText}>Print</Text></>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[p.exportBtn, { flex: 1 }]}
-                onPress={handleExportPDF}
-                disabled={exporting}
-                data-testid="export-pdf-btn"
-              >
-                {exporting ? <ActivityIndicator color="#FFF" size="small" /> : (
-                  <><Ionicons name="download-outline" size={18} color="#FFF" /><Text style={p.exportBtnText}>Export PDF</Text></>
-                )}
-              </TouchableOpacity>
-            </View>
+            {/* Export / Print consolidated menu */}
+            <ExportPrintMenu
+              label="Export / Print protocol"
+              buttonStyle={[p.exportBtn, { backgroundColor: '#1565C0' }]}
+              textStyle={p.exportBtnText}
+              triggerIcon="share-outline"
+              triggerIconSize={18}
+              loading={exporting}
+              disabled={exporting}
+              testID="drilling-export-print-btn"
+              printTestID="print-pdf-btn"
+              exportTestID="export-pdf-btn"
+              popoverTitle="Drilling Protocol"
+              printLabel="Print drilling protocol"
+              exportLabel="Export drilling protocol PDF"
+              onPrint={handlePrintPDF}
+              onExport={handleExportPDF}
+            />
           </>
         )}
       </ScrollView>
