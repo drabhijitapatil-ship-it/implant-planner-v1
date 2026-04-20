@@ -282,6 +282,8 @@ class ProcedureCreate(BaseModel):
     cbct_content_type: Optional[str] = Field("", max_length=100)
     # Multiple CBCT files (new format)
     cbct_files: Optional[List[Dict[str, str]]] = None  # [{filename, original_name, content_type}]
+    # Patient Consent Form (uploaded via /uploads/consent-temp or POST /procedures/{id}/upload-consent)
+    patient_consent_form: Optional[Dict[str, Any]] = None  # {filename, original_name, content_type, uploaded_by_*, uploaded_at, version}
 
     @field_validator('patient_name')
     @classmethod
@@ -1135,6 +1137,31 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
     
     procedure_dict["_id"] = procedure_id
     procedure_dict["id"] = procedure_id
+    
+    # If no consent form was uploaded during Phase 1 creation, notify all nurses so they
+    # can pick it up from their dashboard.
+    if not procedure_dict.get("patient_consent_form"):
+        nurses = await db.users.find({"role": "nurse"}, {"_id": 1}).to_list(100)
+        nurse_ids = [str(n["_id"]) for n in nurses]
+        creator_label = procedure.student_name or current_user.get("name", "A user")
+        msg = f"New case by {creator_label} for {procedure.patient_name} awaiting patient consent form upload."
+        for nid in nurse_ids:
+            await db.notifications.insert_one({
+                "user_id": nid,
+                "procedure_id": procedure_id,
+                "message": msg,
+                "type": "consent_pending",
+                "read": False,
+                "created_at": datetime.utcnow(),
+            })
+        if nurse_ids:
+            await send_expo_push_notifications(
+                nurse_ids,
+                "Consent form pending",
+                msg,
+                {"procedure_id": procedure_id, "type": "consent_pending"},
+            )
+    
     return procedure_dict
 
 
@@ -1519,6 +1546,162 @@ async def unarchive_procedure(procedure_id: str, current_user: dict = Depends(ge
 # File Upload for CBCT
 ALLOWED_EXTENSIONS = {'.pdf', '.png', '.jpg', '.jpeg', '.heif', '.heic'}
 MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB
+
+
+@api_router.post("/uploads/consent-temp")
+async def upload_consent_temp(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+):
+    """Upload Patient Consent Form before procedure creation (from Phase 1 form). Returns a temp reference to attach."""
+    ext = Path(file.filename).suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"File type not allowed. Allowed: {', '.join(ALLOWED_EXTENSIONS)}")
+    contents = await file.read()
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File size exceeds 25MB limit")
+    unique_name = f"{uuid.uuid4().hex}{ext}"
+    file_path = UPLOADS_DIR / unique_name
+    with open(file_path, "wb") as f:
+        f.write(contents)
+    return {
+        "filename": unique_name,
+        "original_name": file.filename,
+        "content_type": file.content_type or "application/pdf",
+    }
+
+
+@api_router.post("/procedures/{procedure_id}/upload-consent")
+async def upload_consent_for_procedure(
+    procedure_id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Upload (or replace) the Patient Consent Form for an existing case.
+    Permitted: case creator, assigned student, supervisor, in-charge, nurse, administrator.
+    When replaced, the previous consent is archived into consent_history[] for audit.
+    """
+    procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    
+    role = current_user.get("role")
+    uid = current_user.get("_id")
+    is_stakeholder = (
+        procedure.get("created_by_id") == uid or
+        procedure.get("student_id") == uid or
+        procedure.get("supervisor_id") == uid or
+        procedure.get("implant_incharge_id") == uid or
+        role in ("nurse", "implant_incharge", "administrator", "supervisor")
+    )
+    if not is_stakeholder:
+        raise HTTPException(status_code=403, detail="Not allowed to upload consent for this case")
+    
+    ext = Path(file.filename).suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"File type not allowed. Allowed: {', '.join(ALLOWED_EXTENSIONS)}")
+    contents = await file.read()
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File size exceeds 25MB limit")
+    unique_name = f"{uuid.uuid4().hex}{ext}"
+    file_path = UPLOADS_DIR / unique_name
+    with open(file_path, "wb") as f:
+        f.write(contents)
+    
+    previous = procedure.get("patient_consent_form")
+    version = (previous.get("version", 1) + 1) if previous else 1
+    consent_entry = {
+        "filename": unique_name,
+        "original_name": file.filename,
+        "content_type": file.content_type or "application/pdf",
+        "uploaded_by_id": uid,
+        "uploaded_by_name": current_user.get("name", ""),
+        "uploaded_by_role": role or "",
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
+        "version": version,
+    }
+    
+    update_op: dict = {
+        "$set": {
+            "patient_consent_form": consent_entry,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+    }
+    if previous:
+        update_op["$push"] = {"consent_history": previous}
+    
+    await db.procedures.update_one({"_id": ObjectId(procedure_id)}, update_op)
+    
+    # Notify other stakeholders that consent is now on file
+    patient_label = procedure.get("patient_name") or procedure.get("patient_id") or "case"
+    stakeholders = [s for s in [
+        procedure.get("student_id"),
+        procedure.get("supervisor_id"),
+        procedure.get("implant_incharge_id"),
+    ] if s and s != uid]
+    for sid in stakeholders:
+        await db.notifications.insert_one({
+            "user_id": sid,
+            "procedure_id": procedure_id,
+            "message": f"{current_user.get('name','A user')} uploaded the patient consent form for {patient_label}. Phase 2 is now unlocked.",
+            "type": "consent_uploaded",
+            "read": False,
+            "created_at": datetime.utcnow(),
+        })
+    if stakeholders:
+        await send_expo_push_notifications(
+            stakeholders,
+            f"Consent uploaded · {patient_label}",
+            f"Patient consent form uploaded by {current_user.get('name','')}. Phase 2 is unlocked.",
+            {"procedure_id": procedure_id, "type": "consent_uploaded"},
+        )
+    
+    updated = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0})
+    return updated
+
+
+@api_router.get("/procedures/nurse/pending-consents")
+async def get_pending_consents(current_user: dict = Depends(get_current_user)):
+    """List all cases still awaiting a patient consent upload.
+    Returns cases where Phase 1 has been submitted (pending or already approved) but no consent form is on file.
+    Restricted to nurses, implant in-charges and administrators.
+    """
+    role = current_user.get("role")
+    if role not in ("nurse", "implant_incharge", "administrator", "supervisor"):
+        raise HTTPException(status_code=403, detail="Only authorized clinical staff can view pending consents")
+    
+    statuses_needing_consent = [
+        "pending_phase1", "phase1_approved", "pending_phase2",
+        "phase2_approved", "pending_stage2_surgical", "stage2_surgical_approved",
+        "pending_stage2_prosthetic", "phase2_submitted",
+    ]
+    query = {
+        "status": {"$in": statuses_needing_consent},
+        "$or": [
+            {"patient_consent_form": {"$exists": False}},
+            {"patient_consent_form": None},
+        ],
+        "archived": {"$ne": True},
+    }
+    cursor = db.procedures.find(query, {
+        "_id": 1, "patient_name": 1, "patient_id": 1, "student_name": 1, "created_by_name": 1,
+        "implant_procedure_type": 1, "status": 1, "created_at": 1, "supervisor_name": 1, "implant_incharge_name": 1,
+    }).sort("created_at", -1).limit(100)
+    
+    items = []
+    async for doc in cursor:
+        items.append({
+            "id": str(doc["_id"]),
+            "patient_name": doc.get("patient_name", ""),
+            "patient_id": doc.get("patient_id", ""),
+            "student_name": doc.get("student_name") or doc.get("created_by_name", ""),
+            "implant_procedure_type": doc.get("implant_procedure_type", ""),
+            "status": doc.get("status", ""),
+            "supervisor_name": doc.get("supervisor_name", ""),
+            "implant_incharge_name": doc.get("implant_incharge_name", ""),
+            "created_at": doc.get("created_at").isoformat() if doc.get("created_at") else "",
+        })
+    return {"cases": items}
 
 
 @api_router.post("/uploads/cbct-temp")
@@ -4161,6 +4344,13 @@ async def submit_phase2(
     # Check if Phase 1 is approved
     if procedure["status"] != "phase1_approved":
         raise HTTPException(status_code=400, detail="Phase 1 must be approved before submitting Phase 2")
+    
+    # Gate: Patient Consent Form MUST be on file before Phase 2 can be submitted.
+    if not procedure.get("patient_consent_form"):
+        raise HTTPException(
+            status_code=400,
+            detail="Patient Consent Form is required before starting Phase 2. Please upload the consent form first."
+        )
     
     # Build the update data
     existing_checklist = procedure.get("checklist") or {}

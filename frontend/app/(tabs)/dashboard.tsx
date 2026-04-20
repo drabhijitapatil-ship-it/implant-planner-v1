@@ -12,6 +12,7 @@ import { STATUS_COLORS, STATUS_LABELS } from '../../constants/checklist';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { RecentActivityWidget } from '../../components/RecentActivityWidget';
+import { PatientConsentSection } from '../../components/PatientConsentSection';
 
 // ── Status helpers ────────────────────────────────────────
 const ACTION_NEEDED_MAP: Record<string, { label: string; icon: string; color: string }> = {
@@ -617,6 +618,7 @@ export default function DashboardScreen() {
   const isStudent = role === 'student';
   const isSupervisor = role === 'supervisor';
   const isInCharge = role === 'implant_incharge' || role === 'administrator';
+  const isNurse = role === 'nurse';
 
   return (
     <SafeAreaView style={s.container} edges={['bottom']}>
@@ -627,6 +629,8 @@ export default function DashboardScreen() {
       >
         <Header user={user} router={router} />
 
+        {isNurse && <PatientConsentSection router={router} />}
+
         {isStudent && (
           <StudentDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
         )}
@@ -636,7 +640,7 @@ export default function DashboardScreen() {
         {isInCharge && (
           <InChargeDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
         )}
-        {!isStudent && !isSupervisor && !isInCharge && (
+        {!isStudent && !isSupervisor && !isInCharge && !isNurse && (
           <StudentDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
         )}
 
