@@ -79,7 +79,8 @@ async function printDrillingProtocolPdf(payload: Parameters<typeof fetchDrilling
       };
       reader.readAsDataURL(blob);
     }
-  } catch {
+  } catch (err) {
+    console.error('[DrillingProtocol] Print failed:', err);
     Alert.alert('Print failed', 'Could not open the drilling protocol PDF.');
   }
 }
@@ -111,7 +112,8 @@ async function exportDrillingProtocolPdf(payload: Parameters<typeof fetchDrillin
       };
       reader.readAsDataURL(blob);
     }
-  } catch {
+  } catch (err) {
+    console.error('[DrillingProtocol] Export failed:', err);
     Alert.alert('Export failed', 'Could not export the drilling protocol PDF.');
   }
 }
@@ -723,8 +725,11 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
             )}
             {expandedProtocol === idx && !plan.bone_type && (
               <View style={st.inlineProtocol}>
-                <Text style={{ fontSize: 12, color: '#999', textAlign: 'center', padding: 8 }}>
-                  Bone type not set. Edit this implant to set bone type for drilling protocol.
+                <Text style={{ fontSize: 12, color: '#C62828', textAlign: 'center', padding: 8, fontWeight: '600' }}>
+                  Bone type is not set for this implant.
+                </Text>
+                <Text style={{ fontSize: 11, color: '#78909C', textAlign: 'center', paddingHorizontal: 12, paddingBottom: 8 }}>
+                  Drilling Protocol (and its Print / Export PDF) will unlock once the supervising student sets a bone type.
                 </Text>
               </View>
             )}
