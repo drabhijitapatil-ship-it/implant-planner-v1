@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { format } from 'date-fns';
 import api from '../utils/api';
+import AutoclaveRow, { InstrumentsAutoclaved } from './AutoclaveRow';
 
 type ConsentCase = {
   id: string;
@@ -25,6 +26,7 @@ type ConsentCase = {
   procedure_date: string;
   procedure_time: string;
   consent_uploaded: boolean;
+  instruments_autoclaved?: InstrumentsAutoclaved;
 };
 
 type NurseFilter = 'pending' | 'completed' | 'all';
@@ -130,15 +132,30 @@ export default function NurseCasesScreen() {
               {item.procedure_time ? ` · ${fmtTime(item.procedure_time)}` : ''}
             </Text>
           ) : null}
-          <View style={[styles.pill, uploaded ? styles.pillOk : styles.pillWarn]}>
-            <Ionicons
-              name={uploaded ? 'checkmark-circle' : 'alert-circle'}
-              size={12}
-              color="#FFF"
+          <View style={styles.pillRow}>
+            <View style={[styles.pill, uploaded ? styles.pillOk : styles.pillWarn]}>
+              <Ionicons
+                name={uploaded ? 'checkmark-circle' : 'alert-circle'}
+                size={12}
+                color="#FFF"
+              />
+              <Text style={styles.pillText}>
+                {uploaded ? 'Consent form uploaded' : 'Consent form pending'}
+              </Text>
+            </View>
+            <AutoclaveRow
+              caseId={item.id}
+              procedureDate={item.procedure_date}
+              procedureTime={item.procedure_time}
+              marked={!!item.instruments_autoclaved?.marked}
+              markedAt={item.instruments_autoclaved?.marked_at}
+              compact
+              onToggled={(next) => {
+                setCases((prev) =>
+                  prev.map((x) => (x.id === item.id ? { ...x, instruments_autoclaved: next } : x)),
+                );
+              }}
             />
-            <Text style={styles.pillText}>
-              {uploaded ? 'Consent form uploaded' : 'Consent form pending'}
-            </Text>
           </View>
         </View>
         <Ionicons name="chevron-forward" size={20} color="#B0BEC5" />
@@ -147,7 +164,7 @@ export default function NurseCasesScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={[]}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Cases</Text>
       </View>
@@ -231,7 +248,7 @@ export default function NurseCasesScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F7FA' },
-  header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 10 },
+  header: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8 },
   headerTitle: { fontSize: 22, fontWeight: '700', color: '#0D47A1' },
   chipsRow: {
     flexDirection: 'row',
@@ -302,6 +319,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
+  },
+  pillRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
     marginTop: 6,
   },
   pillOk: { backgroundColor: '#2E7D32' },

@@ -625,7 +625,53 @@ export default function ProcedureDetailScreen() {
           </View>
         </View>
 
-        {/* Phase Indicator and Approval Status */}
+        {/* Consent form action row — between Treatment Progress and below blocks.
+            Available to users who can upload consent (nurse, student owner, supervisor, in-charge, admin).
+            Blue "Upload / Replace" button + grey Export/Print popover button. */}
+        {(() => {
+          const canUpload = user?.role === 'nurse'
+            || user?.role === 'implant_incharge'
+            || user?.role === 'administrator'
+            || user?.role === 'supervisor'
+            || user?.id === procedure.student_id;
+          if (!canUpload) return null;
+          const consentUploaded = !!procedure.patient_consent_form;
+          return (
+            <View style={styles.consentActionRow} testID="consent-action-row">
+              <TouchableOpacity
+                style={[styles.consentActionBtn, styles.consentActionBtnPrimary, uploadingConsent && styles.buttonDisabled]}
+                onPress={uploadConsentForProcedure}
+                disabled={uploadingConsent}
+                activeOpacity={0.85}
+                testID="consent-upload-btn"
+              >
+                {uploadingConsent ? (
+                  <ActivityIndicator color="#FFF" size="small" />
+                ) : (
+                  <>
+                    <Ionicons name={consentUploaded ? 'refresh' : 'cloud-upload-outline'} size={16} color="#FFF" />
+                    <Text style={styles.consentActionBtnText}>
+                      {consentUploaded ? 'Replace consent form' : 'Upload consent form'}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <ExportPrintMenu
+                label="Export / Print consent form"
+                buttonStyle={[styles.consentActionBtn, styles.consentActionBtnSecondary]}
+                textStyle={styles.consentActionBtnTextSecondary}
+                triggerIcon="share-outline"
+                triggerIconSize={14}
+                testID="consent-export-print-action"
+                popoverTitle="Patient Consent Form"
+                printLabel="Print consent form"
+                exportLabel="Download PDF"
+                onPrint={() => printConsentTemplate(id as string)}
+                onExport={() => downloadConsentTemplate(id as string)}
+              />
+            </View>
+          );
+        })()}
         {(procedure.status === 'pending_phase1' || procedure.status === 'pending_phase2' ||
           procedure.status === 'pending_stage2_surgical' || procedure.status === 'pending_stage2_prosthetic') && (
           <View style={styles.approvalSection}>
@@ -3162,6 +3208,37 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#388E3C',
     marginTop: 1,
+  },
+  consentActionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  consentActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 11,
+    borderRadius: 10,
+    minHeight: 42,
+  },
+  consentActionBtnPrimary: { backgroundColor: '#1565C0' },
+  consentActionBtnSecondary: { backgroundColor: '#607D8B' },
+  consentActionBtnText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  consentActionBtnTextSecondary: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   timelineContainer: {
     margin: 16,
