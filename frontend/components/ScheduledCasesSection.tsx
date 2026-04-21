@@ -366,6 +366,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
+    flexGrow: 0,
+    flexShrink: 0,
   },
   consentPillOk: { backgroundColor: '#2E7D32' },
   consentPillWarn: { backgroundColor: '#C62828' },

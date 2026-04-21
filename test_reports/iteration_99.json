@@ -1,0 +1,64 @@
+{
+  "summary": "Iteration 99 — Frontend-only visual parity test for pillRow across three nurse surfaces. Measured live DOM dimensions via page.evaluate across Scheduled Cases (surface 3), Nurse Home date cards (surface 1) and Nurse Cases tab (surface 2) after logging in as nurse.1@dental.edu. Pill visual parity specification (paddingH:8, paddingV:4, radius:6, heights within 2px, side-by-side on same row with no stretching) is SATISFIED on all surfaces where both pills render. However, a regression was detected: tapping the compact autoclave pill inside a nurse-case-card on the Cases tab propagates the press to the parent card and navigates to the case detail (expected: event propagation prevented).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "AutoclaveRow (compact) inside NurseCasesScreen card",
+        "issue": "Tapping autoclave toggle causes parent card navigation (/procedures -> /procedures/<caseId>). The e.stopPropagation() inside toggle() does not prevent the parent TouchableOpacity in react-native-web. onPress receives a gesture event whose stopPropagation does not travel through React Native's responder system.",
+        "selector": "[data-testid^=\"autoclave-toggle-\"]",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "measurements": {
+    "scheduled_card_69cf9bdfdafb502718057bcd": {
+      "consent": { "h": 22, "w": 161.8, "padding": "4px 8px", "radius": "6px", "top": 758 },
+      "autoclave": { "h": 24, "w": 164.1, "padding": "4px 8px", "radius": "6px", "top": 758 },
+      "height_delta_px": 2,
+      "same_row": true
+    },
+    "nurse_case_card_69cf9ab1_pending": {
+      "consent": { "h": 22, "w": 155.3, "padding": "4px 8px", "radius": "6px", "top": 1915 },
+      "autoclave": { "h": 24, "w": 194.3, "padding": "4px 8px", "radius": "6px", "top": 1915 },
+      "height_delta_px": 2,
+      "same_row": true
+    },
+    "nurse_case_card_69cf9bdf_uploaded": {
+      "consent": { "h": 22, "w": 161.8, "padding": "4px 8px", "radius": "6px", "top": 2040 },
+      "autoclave": { "h": 24, "w": 164.1, "padding": "4px 8px", "radius": "6px", "top": 2040 },
+      "height_delta_px": 2,
+      "same_row": true
+    },
+    "nurse_home_date_cards_mar30": "Clicked day 30 in April 2026 calendar (day 30 shown was Mon, Mar 30 — past date). Autoclave row is hidden by design (showRow = marked || !locked; past date is locked + unmarked). Only consent pill rendered — correct per spec. Did not get a date with future non-locked cases within budget to measure both pills side-by-side on surface 1.",
+    "labels_verified": [
+      "Consent form uploaded",
+      "Consent form pending",
+      "Instruments autoclaved",
+      "Mark instruments autoclaved"
+    ]
+  },
+  "visual_parity_verdict": "PASS on Scheduled Cases and Nurse Cases Screen — heights within 2px tolerance, identical padding (4px/8px), identical border radius (6px), same rendered top coordinate proving single-line layout, pills hug their own content (different widths, no flex stretching).",
+  "autoclave_toggle_behavior": "FAIL on Nurse Cases tab: tapping autoclave navigates to case detail. The e.stopPropagation() in AutoclaveRow.toggle is not effective because in react-native-web the gesture event does not bubble in a way that React Native's TouchableOpacity parent will respect. Need to wrap the compact TouchableOpacity with onStartShouldSetResponderCapture or add pointer-event handling (e.g., an intermediate <View onStartShouldSetResponder={() => true} onResponderRelease={toggle}>) OR use a Pressable with explicit DOM onClick stopPropagation wrapper via onPressIn with native event capture. Surface 3 (scheduled-card) was not verified for the tap-navigation-regression in this run but likely shares the same defect since it uses the same shared AutoclaveRow compact component.",
+  "test_report_links": [],
+  "action_items": [
+    "Fix event propagation on compact AutoclaveRow: stopPropagation inside onPress is insufficient on react-native-web. Options: (a) wrap compact TouchableOpacity in a <View onStartShouldSetResponder={()=>true} onResponderTerminationRequest={()=>false}> to capture the gesture before the parent card; (b) on web, attach a DOM onClickCapture via ref that calls ev.stopPropagation(); (c) restructure so the pillRow is outside the parent card's TouchableOpacity press area.",
+    "Re-verify scheduled-card surface for same tap-propagation regression (likely affected too since it uses shared component).",
+    "Optional: verify surface 1 (nurse-home-date-card) when both pills render by selecting a future non-locked date — Mar 30 test showed autoclave correctly hidden for past/locked dates."
+  ],
+  "critical_code_review_comments": [
+    "AutoclaveRow.tsx toggle(e): relying on e?.stopPropagation() inside RN onPress is fragile — RN's responder system doesn't forward DOM bubble prevention to a RN TouchableOpacity parent on web. Confirmed failure on Cases tab.",
+    "ScheduledCasesSection.tsx still contains a dead internal AutoclaveRow component + autoclaveRow styles (lines 86-148, 375-409) that are no longer used (SharedAutoclaveRow is used). Also an undeclared Alert reference at line 107 (Alert.alert) — a latent ReferenceError if that codepath is hit. Dead code should be removed.",
+    "NurseHomeCalendar hasAnyUploaded helper is hoisted but defined after export; works in TS but slightly odd ordering — minor."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (frontend-only)", "frontend": "80% (visual parity PASS; tap-propagation FAIL)" },
+  "test_credentials": "nurse.1@dental.edu / Nurse@123 (from request)",
+  "seed_data_creation": "None",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Expo is in Metro CI mode; bundle must be pre-warmed via curl on /node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=app (took ~2min first time, then cached). Viewport 480x900. Surfaces 2 & 3 confirmed visual parity via page.evaluate(el.getBoundingClientRect + getComputedStyle). Surface 1 needs a future non-locked date to see both pills; past dates correctly hide autoclave due to showRow = marked || !locked. Bug found: tapping autoclave on Cases tab navigates to detail — stopPropagation in RN onPress not effective on react-native-web with nested TouchableOpacity.",
+  "rca of the issue": "Root cause of tap-propagation bug: in AutoclaveRow.tsx, the inner TouchableOpacity relies on `e?.stopPropagation?.()` inside the async `toggle` handler. On react-native-web (RNW), TouchableOpacity is a View with pressability — its onPress fires via RNW's custom Responder system, not via native DOM capture/bubble. When both parent (card) and child (autoclave) are TouchableOpacity, both end up being the 'terminating responder' targets and both onPress handlers run. Calling stopPropagation on the synthetic event is a no-op for the RN responder chain. Fix: use Pressable with an onPressIn wrapper that registers a native DOM onClickCapture, OR wrap the inner touchable in <View onStartShouldSetResponderCapture={() => true}>. Reproduction: login as nurse -> Cases tab -> All filter -> tap any autoclave pill -> URL changes to /procedures/<caseId>. Mitigation: temporary UX — move the autoclave pill outside the card TouchableOpacity tap region, OR convert the card from TouchableOpacity to a two-part layout (tappable header + non-tappable pillRow)."
+}

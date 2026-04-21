@@ -164,6 +164,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
+    flexGrow: 0,
+    flexShrink: 0,
   },
   rowOff: { backgroundColor: '#ECEFF1', borderWidth: 1, borderColor: '#CFD8DC' },
   rowOn: { backgroundColor: '#2E7D32', borderWidth: 1, borderColor: '#2E7D32' },
