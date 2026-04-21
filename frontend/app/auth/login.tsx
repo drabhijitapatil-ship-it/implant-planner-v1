@@ -157,6 +157,7 @@ export default function LoginScreen() {
                   onPress={handleLogin}
                   disabled={loading}
                   style={[styles.loginButton, loading && styles.buttonDisabled]}
+                  testID="login-submit-btn"
                   data-testid="login-submit-btn"
                 >
                   {loading ? (
