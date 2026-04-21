@@ -100,31 +100,48 @@ export default function AutoclaveRow({
       ]}
       testID={`autoclave-toggle-${caseId}`}
     >
-      <View style={[compact ? styles.checkboxCompact : styles.checkbox, marked && styles.checkboxOn]}>
-        {busy ? (
-          <ActivityIndicator size="small" color={marked ? '#2E7D32' : '#2E7D32'} />
-        ) : marked ? (
-          <Ionicons name="checkmark" size={compact ? 10 : 14} color="#2E7D32" />
-        ) : null}
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text
-          style={[
-            compact ? styles.labelCompact : styles.label,
-            marked && (compact ? { color: '#FFF' } : { color: '#1B5E20' }),
-          ]}
-          numberOfLines={1}
-        >
-          {marked ? 'Instruments autoclaved ✓' : 'Mark instruments Autoclaved'}
-        </Text>
-        {!compact && marked && markedAt ? (
-          <Text style={styles.hint} numberOfLines={1}>
-            {locked ? 'Locked · ' : ''}Marked {format(parseISO(markedAt), 'MMM dd · hh:mm a')}
+      {compact ? (
+        // Render as a single pill, matching the "Consent form uploaded" pill visually.
+        <>
+          {busy ? (
+            <ActivityIndicator size="small" color={marked ? '#FFF' : '#2E7D32'} />
+          ) : (
+            <Ionicons
+              name={marked ? 'checkmark-circle' : 'ellipse-outline'}
+              size={12}
+              color={marked ? '#FFF' : '#546E7A'}
+            />
+          )}
+          <Text
+            style={[styles.labelCompact, marked ? styles.labelCompactOn : styles.labelCompactOff]}
+            numberOfLines={1}
+          >
+            {marked ? 'Instruments autoclaved' : 'Mark instruments autoclaved'}
           </Text>
-        ) : !compact && !canInteract ? (
-          <Text style={styles.hint} numberOfLines={1}>Locked — within 1 hr of surgery</Text>
-        ) : null}
-      </View>
+        </>
+      ) : (
+        <>
+          <View style={[styles.checkbox, marked && styles.checkboxOn]}>
+            {busy ? (
+              <ActivityIndicator size="small" color="#2E7D32" />
+            ) : marked ? (
+              <Ionicons name="checkmark" size={14} color="#2E7D32" />
+            ) : null}
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.label, marked && { color: '#1B5E20' }]} numberOfLines={1}>
+              {marked ? 'Instruments autoclaved ✓' : 'Mark instruments Autoclaved'}
+            </Text>
+            {marked && markedAt ? (
+              <Text style={styles.hint} numberOfLines={1}>
+                {locked ? 'Locked · ' : ''}Marked {format(parseISO(markedAt), 'MMM dd · hh:mm a')}
+              </Text>
+            ) : !canInteract ? (
+              <Text style={styles.hint} numberOfLines={1}>Locked — within 1 hr of surgery</Text>
+            ) : null}
+          </View>
+        </>
+      )}
     </TouchableOpacity>
   );
 }
@@ -148,7 +165,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 6,
   },
-  rowOff: { backgroundColor: '#FAFAFA', borderWidth: 1, borderColor: '#CFD8DC' },
+  rowOff: { backgroundColor: '#ECEFF1', borderWidth: 1, borderColor: '#CFD8DC' },
   rowOn: { backgroundColor: '#2E7D32', borderWidth: 1, borderColor: '#2E7D32' },
   checkbox: {
     width: 22,
@@ -182,9 +199,10 @@ const styles = StyleSheet.create({
   labelCompact: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#455A64',
     letterSpacing: 0.3,
   },
+  labelCompactOn: { color: '#FFF' },
+  labelCompactOff: { color: '#546E7A' },
   hint: {
     fontSize: 10,
     color: '#78909C',

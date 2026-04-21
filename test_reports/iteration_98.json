@@ -1,0 +1,42 @@
+{
+  "summary": "Iteration 98 verification — three bug/visual fixes (drilling PDF fallback, consent_uploaded in nurse scheduled-cases, pillRow on Scheduled Cases card). BACKEND (pytest): 13/13 pass in test_iteration98_fixes.py. Drilling PDF endpoint POST /api/drilling-protocols/export-pdf: (a) supported brand B&B Dental/3P with OR without steps[] → 200 ≥3KB %PDF-1.4; (b) UNSUPPORTED Straumann/BLX + steps[] → 200 PDF (fallback render path, normalised steps render without KeyError); (c) UNSUPPORTED with NO steps[] (or empty steps[]) → 404 unchanged; (d) missing required fields → 400; (e) unauth → 401/403. Nurse scheduled-cases endpoint: every case item now carries `consent_uploaded: bool` alongside `instruments_autoclaved`. Iter-96/97 regression intact. FRONTEND (Playwright at preview URL, 480x900): Nurse Home Scheduled Cases card (scheduled-card-69cf9bdfdafb502718057bcd) renders pillRow with BOTH: (1) green 'Consent form uploaded' pill (checkmark-circle icon), (2) compact green 'Instruments autoclaved' pill (testID autoclave-toggle-<id>, bg #2E7D32, padding 4px 8px, matching dimensions). Both pills visually identical in height/padding — see /app/test_reports/nurse_scheduled_v4.png. IMPORTANT NOTE: The expo preview was in Metro-CI mode so hot-reload did NOT pick up the updated ScheduledCasesSection.tsx / AutoclaveRow.tsx bundles automatically — I had to `sudo supervisorctl restart expo` for the preview cluster to serve the latest code. Before restart, the DOM clearly rendered the OLD non-compact AutoclaveRow with timestamp and NO consent pill. After restart it matched the spec. Main agent should be aware that Metro CI mode blocks hot-reload verification.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration98_fixes.py",
+    "/app/test_reports/pytest/pytest_results_iteration98.xml"
+  ],
+  "action_items": [
+    "INFRA (non-product): expo supervisor runs with CI=true → 'Metro is running in CI mode, reloads are disabled'. Hot-reload doesn't fire on .tsx edits, which made the visual refinements look missing until a manual `sudo supervisorctl restart expo`. Consider removing CI=true from the expo supervisor env OR documenting a post-edit restart step for iteration agents. Not a product bug.",
+    "MINOR (carryover from iter-97): `data-testid` on RN-Web TouchableOpacity at /app/frontend/app/procedures/[id].tsx:2464 (ai-chat-fab) doesn't forward to DOM. Cosmetic testability only."
+  ],
+  "critical_code_review_comments": [
+    "Fallback path in export_drilling_pdf (server.py L8512-8540) relies on client-supplied steps with a regex extraction for diameter/rpm/depth. If a brand sends only labels like 'Round Bur' with no mm value, the `diameter`/`depth`/`rpm` cells render as blank strings — the PDF still generates but columns look empty. Consider a stricter Pydantic schema for the `steps` array with required numeric fields OR a non-empty default ('—').",
+    "POST /drilling-protocols/export-pdf currently accepts `body: dict` untyped. Recommend a DrillingProtocolExportRequest Pydantic model with optional `steps: Optional[List[DrillingStep]]` for OpenAPI docs + validation.",
+    "server.py is now 8899 lines — still well over the 700-line guideline. Extract the drilling-protocol PDF path and the nurse scheduled-cases path into their own router modules before the file grows further.",
+    "ScheduledCasesSection.tsx uses `api.get(...)` inside a setState(catch=>[]) swallow — any 5xx silently shows 'No surgeries scheduled' without a retry/error surface. Add a tiny error banner with the refresh button.",
+    "AutoclaveRow compact pill has different width for marked vs unmarked (label length differs: 'Instruments autoclaved' vs 'Mark instruments autoclaved') — acceptable per spec, but if pillRow wraps on narrow phones the line-break won't be deterministic between states."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration98_fixes.py (new)",
+    "/app/test_reports/iteration_98.json (new)",
+    "/app/test_reports/pytest/pytest_results_iteration98.xml (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13)",
+    "frontend": "100% — pillRow with both pills verified on Nurse Home Scheduled Cases card after expo restart"
+  },
+  "test_credentials": "nurse.1@dental.edu/Nurse@123, Paresh.gandhi/Supervisor@123, Gaurav.pandey/Student@123, Abhijit.patil/Admin@123 — all login fine via identifier field (email-shaped or username-shaped).",
+  "seed_data_creation": "None. Drilling-protocols/export-pdf is stateless; scheduled-cases GET is read-only; iter-96 reminder sweep is idempotent.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "If Metro stays in CI mode (expo supervisor env has CI=true), .tsx edits will NOT hot-reload. When the UI appears to not match the code, run `sudo supervisorctl restart expo` and wait ~20s for the first bundle before retesting. Cache-busting query strings are not sufficient. The Nurse scheduled-card testID is `scheduled-card-<caseId>`, pillRow child nodes render inline (consent pill first, autoclave pill second). The one demo case in preview is 69cf9bdfdafb502718057bcd (patient 'Approval UI Test', 10:00 AM, status phase1_approved).",
+  "rca of the issue": "NO PRODUCT BUGS FOUND. The only friction was tooling: Metro bundler running with CI=true causes silent staleness. Product code in ScheduledCasesSection.tsx, AutoclaveRow.tsx and server.py matches the iteration-98 spec verbatim. All 13 backend tests pass; frontend pillRow renders correctly once expo is restarted."
+}

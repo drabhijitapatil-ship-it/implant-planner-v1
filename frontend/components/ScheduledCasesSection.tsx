@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import api from '../utils/api';
+import SharedAutoclaveRow, { InstrumentsAutoclaved as SharedInstrumentsAutoclaved } from './AutoclaveRow';
 
 type InstrumentsAutoclaved = {
   marked: boolean;
@@ -23,6 +24,7 @@ type ScheduledCase = {
   supervisor_name?: string;
   implant_incharge_name?: string;
   instruments_autoclaved?: InstrumentsAutoclaved;
+  consent_uploaded?: boolean;
 };
 
 const DAYS_WINDOW = 5;
@@ -214,18 +216,17 @@ export function ScheduledCasesSection({ router }: { router: any }) {
                 {dayHeader(g.date)} <Text style={styles.groupCount}>· {g.items.length}</Text>
               </Text>
               {g.items.map((c) => {
-                const locked = isLocked(c.procedure_date, c.procedure_time);
                 const marked = !!c.instruments_autoclaved?.marked;
-                // Per spec: only show the control for nurses who can still act. Already-marked state
-                // stays visible after lock as a read-only summary so the nurse can see their own entry.
-                const showAutoclaveRow = marked || !locked;
+                const consentUploaded = !!c.consent_uploaded;
                 return (
-                  <View key={c.id} style={styles.card} testID={`scheduled-card-${c.id}`}>
-                    <TouchableOpacity
-                      style={styles.cardMain}
-                      onPress={() => router.push(`/procedures/${c.id}`)}
-                      activeOpacity={0.8}
-                    >
+                  <TouchableOpacity
+                    key={c.id}
+                    style={styles.card}
+                    onPress={() => router.push(`/procedures/${c.id}`)}
+                    activeOpacity={0.85}
+                    testID={`scheduled-card-${c.id}`}
+                  >
+                    <View style={styles.cardMain}>
                       <View style={styles.timePill}>
                         <Ionicons name="time-outline" size={12} color="#FFF" />
                         <Text style={styles.timePillText}>{formatTimeSlot(c.procedure_time)}</Text>
@@ -238,14 +239,26 @@ export function ScheduledCasesSection({ router }: { router: any }) {
                         </Text>
                       </View>
                       <Ionicons name="chevron-forward" size={18} color="#B0BEC5" />
-                    </TouchableOpacity>
-                    {showAutoclaveRow && (
-                      <AutoclaveRow
+                    </View>
+                    <View style={styles.pillRow}>
+                      <View style={[styles.consentPill, consentUploaded ? styles.consentPillOk : styles.consentPillWarn]}>
+                        <Ionicons
+                          name={consentUploaded ? 'checkmark-circle' : 'alert-circle'}
+                          size={12}
+                          color="#FFF"
+                        />
+                        <Text style={styles.consentPillText}>
+                          {consentUploaded ? 'Consent form uploaded' : 'Consent form pending'}
+                        </Text>
+                      </View>
+                      <SharedAutoclaveRow
                         caseId={c.id}
-                        locked={locked}
+                        procedureDate={c.procedure_date}
+                        procedureTime={c.procedure_time}
                         marked={marked}
                         markedAt={c.instruments_autoclaved?.marked_at}
-                        onToggled={(next) => {
+                        compact
+                        onToggled={(next: SharedInstrumentsAutoclaved) => {
                           setCases((prev) =>
                             prev.map((x) =>
                               x.id === c.id ? { ...x, instruments_autoclaved: next } : x,
@@ -253,8 +266,8 @@ export function ScheduledCasesSection({ router }: { router: any }) {
                           );
                         }}
                       />
-                    )}
-                  </View>
+                    </View>
+                  </TouchableOpacity>
                 );
               })}
             </View>
@@ -336,6 +349,27 @@ const styles = StyleSheet.create({
     gap: 10,
     padding: 12,
   },
+  pillRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    paddingTop: 0,
+  },
+  consentPill: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  consentPillOk: { backgroundColor: '#2E7D32' },
+  consentPillWarn: { backgroundColor: '#C62828' },
+  consentPillText: { color: '#FFF', fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
   autoclaveRow: {
     flexDirection: 'row',
     alignItems: 'center',

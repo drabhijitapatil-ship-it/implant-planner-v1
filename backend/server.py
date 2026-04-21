@@ -2084,7 +2084,7 @@ async def get_nurse_scheduled_cases(
         "_id": 1, "patient_name": 1, "patient_id": 1, "student_name": 1, "created_by_name": 1,
         "implant_procedure_type": 1, "status": 1, "procedure_date": 1, "procedure_time": 1,
         "supervisor_name": 1, "implant_incharge_name": 1, "created_at": 1,
-        "instruments_autoclaved": 1,
+        "instruments_autoclaved": 1, "patient_consent_form": 1,
     }).limit(200)
 
     items = []
@@ -2101,6 +2101,7 @@ async def get_nurse_scheduled_cases(
             "supervisor_name": doc.get("supervisor_name", ""),
             "implant_incharge_name": doc.get("implant_incharge_name", ""),
             "instruments_autoclaved": _serialise_instruments_autoclaved(doc.get("instruments_autoclaved")),
+            "consent_uploaded": bool(doc.get("patient_consent_form")),
         })
     # Sort chronologically: procedure_date asc, then procedure_time asc (10:00 < 14:00)
     items.sort(key=lambda x: (x["procedure_date"] or "", x["procedure_time"] or ""))
@@ -8499,12 +8500,49 @@ async def export_drilling_pdf(
     if not all([brand, system, diameter, length, bone]):
         raise HTTPException(status_code=400, detail="All fields required")
 
+    # Accept optional pre-computed steps from the frontend. This lets the PDF
+    # render exactly what the user saw inline (covers brands/systems not yet
+    # in DRILLING_PROTOCOLS without blocking clinical use).
+    client_steps = body.get("steps")
     key = f"{brand}|{system}"
     proto = DRILLING_PROTOCOLS.get(key)
-    if not proto:
+    if not proto and not client_steps:
         raise HTTPException(status_code=404, detail="No protocol available")
+    protocol_type = None
+    if not proto and client_steps:
+        # Fallback render path — trust client payload and normalise to the
+        # downstream table shape: drill_type/code/diameter/depth/rpm/irrigation.
+        import re as _re
+        steps = []
+        for idx, s in enumerate(client_steps, start=1):
+            drill = str(s.get("drill") or "Drill")
+            speed = str(s.get("speed") or "")
+            depth_str = str(s.get("depth") or "")
+            # Try to pull a numeric diameter from the drill label ("2.2 mm", "Ø2.2", "2.2mm").
+            m_dia = _re.search(r"(\d+(?:\.\d+)?)\s*mm", drill) or _re.search(r"[Øø]\s*(\d+(?:\.\d+)?)", drill)
+            diameter_val: Any = float(m_dia.group(1)) if m_dia else ""
+            # Pull numeric mm from depth field if present.
+            m_depth = _re.search(r"(\d+(?:\.\d+)?)", depth_str)
+            depth_val: Any = float(m_depth.group(1)) if m_depth else depth_str or ""
+            # Pull a numeric RPM from the speed field.
+            m_rpm = _re.search(r"(\d+)", speed)
+            rpm_val: Any = int(m_rpm.group(1)) if m_rpm else speed or ""
+            steps.append({
+                "step": int(s.get("step") or idx),
+                "drill_type": drill,
+                "code": str(s.get("code") or ""),
+                "diameter": diameter_val,
+                "depth": depth_val,
+                "rpm": rpm_val,
+                "irrigation": True,
+            })
+        proto = {"protocol_family": "client", "sequence": steps, "system_name": f"{brand} {system}"}
+        protocol_type = "Custom Protocol"
 
-    if proto.get("protocol_family") == "conical_rbt":
+    if proto.get("protocol_family") == "client":
+        # steps already assembled from client payload above
+        pass
+    elif proto.get("protocol_family") == "conical_rbt":
         steps = _generate_conical_rbt_protocol(proto, diameter, length, bone)
     elif proto.get("protocol_family") == "alpha_bio_spi":
         steps = _generate_alpha_bio_spi_protocol(proto, diameter, length, bone)
@@ -8603,7 +8641,7 @@ async def export_drilling_pdf(
 
     # Info table
     info_data = [
-        ["Implant System:", proto["system_name"]],
+        ["Implant System:", proto.get("system_name") or f"{brand} {system}"],
         ["Implant Size:", f"{diameter} x {length} mm"],
         ["Bone Density:", bone],
         ["Protocol:", protocol_type],

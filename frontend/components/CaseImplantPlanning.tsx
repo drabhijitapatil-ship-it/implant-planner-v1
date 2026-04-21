@@ -25,6 +25,7 @@ async function fetchDrillingPdfBlob(payload: {
   patientName?: string;
   patientId?: string;
   procedureDate?: string;
+  steps?: { step: number; drill: string; speed: string; depth: string; note: string }[];
 }): Promise<Blob> {
   const res = await api.post(
     '/drilling-protocols/export-pdf',
@@ -38,6 +39,9 @@ async function fetchDrillingPdfBlob(payload: {
       patient_name: payload.patientName || '',
       patient_id: payload.patientId || '',
       procedure_date: payload.procedureDate || '',
+      // Forward pre-computed steps so PDF always renders, even for brand/system
+      // combos that aren't in the backend's DRILLING_PROTOCOLS dictionary.
+      steps: payload.steps || [],
     },
     { responseType: 'blob' },
   );
@@ -705,8 +709,14 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
                     popoverTitle="Drilling Protocol"
                     printLabel="Print drilling protocol"
                     exportLabel="Export drilling protocol PDF"
-                    onPrint={() => printDrillingProtocolPdf({ implant: plan, bone: plan.bone_type, tooth: plan.tooth || '', patientName, patientId, procedureDate })}
-                    onExport={() => exportDrillingProtocolPdf({ implant: plan, bone: plan.bone_type, tooth: plan.tooth || '', patientName, patientId, procedureDate })}
+                    onPrint={() => {
+                      const steps = generateDrillingProtocol(plan.brand, plan.system, plan.diameter, plan.bone_type, plan.length);
+                      return printDrillingProtocolPdf({ implant: plan, bone: plan.bone_type, tooth: plan.tooth || '', patientName, patientId, procedureDate, steps });
+                    }}
+                    onExport={() => {
+                      const steps = generateDrillingProtocol(plan.brand, plan.system, plan.diameter, plan.bone_type, plan.length);
+                      return exportDrillingProtocolPdf({ implant: plan, bone: plan.bone_type, tooth: plan.tooth || '', patientName, patientId, procedureDate, steps });
+                    }}
                   />
                 </View>
               </View>
