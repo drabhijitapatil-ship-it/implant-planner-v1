@@ -1322,6 +1322,10 @@ async def get_procedure(procedure_id: str, current_user: dict = Depends(get_curr
     
     procedure["_id"] = str(procedure["_id"])
     procedure["id"] = procedure["_id"]
+    # Normalise instruments_autoclaved payload so "unmarked" always looks like None/null,
+    # keeping the response contract identical to POST mark-instruments-autoclaved and
+    # GET /procedures/nurse/scheduled-cases.
+    procedure["instruments_autoclaved"] = _serialise_instruments_autoclaved(procedure.get("instruments_autoclaved"))
     return procedure
 
 @api_router.put("/procedures/{procedure_id}")
