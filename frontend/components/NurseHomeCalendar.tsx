@@ -220,11 +220,11 @@ export function NurseHomeCalendar({ router }: { router: any }) {
                     <View style={[styles.statusPill, c.consent_uploaded ? styles.statusOk : styles.statusWarn]}>
                       <Ionicons
                         name={c.consent_uploaded ? 'checkmark-circle' : 'alert-circle'}
-                        size={11}
+                        size={12}
                         color="#FFF"
                       />
                       <Text style={styles.statusPillText}>
-                        {c.consent_uploaded ? 'Consent uploaded' : 'Consent pending'}
+                        {c.consent_uploaded ? 'Consent form uploaded' : 'Consent form pending'}
                       </Text>
                     </View>
                     <AutoclaveRow
@@ -356,10 +356,12 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 5,
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    flexGrow: 0,
+    flexShrink: 0,
   },
   pillRow: {
     flexDirection: 'row',
@@ -370,5 +372,5 @@ const styles = StyleSheet.create({
   },
   statusOk: { backgroundColor: '#2E7D32' },
   statusWarn: { backgroundColor: '#C62828' },
-  statusPillText: { color: '#FFF', fontSize: 10, fontWeight: '700' },
+  statusPillText: { color: '#FFF', fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
 });
