@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   rowOff: { backgroundColor: '#FAFAFA', borderWidth: 1, borderColor: '#CFD8DC' },
-  rowOn: { backgroundColor: '#2E7D32', borderWidth: 0 },
+  rowOn: { backgroundColor: '#2E7D32', borderWidth: 1, borderColor: '#2E7D32' },
   checkbox: {
     width: 22,
     height: 22,
