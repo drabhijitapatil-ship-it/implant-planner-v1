@@ -1,0 +1,31 @@
+{
+  "summary": "Iteration 92 — Retest of the two iteration-91 HIGH fixes. (A) data-testid→testID migration in PatientConsentSection.tsx + ScheduledCasesSection.tsx: ALL required testIDs now emit as [data-testid=...] in DOM — fix verified. (B) Nurse backend role guard on GET /api/procedures/{id} broadened to any non-draft: pytest 15/15 pass, including explicit nurse 200 for pending_stage2_surgical case 69cfde7c356c7405230a9dbd, nurse 200 across 5 distinct statuses, and nurse 403 on draft. Frontend: nurse in-app navigation (tap consent card) loads /procedures/{id} successfully, shows 'Patient Information' heading, and the 5 restricted testIDs (phase2-full-data-section, phase3-full-data-section, phase4-step1-full-data-section, phase4-step2-full-data-section, case-report-export-print-btn) are all ABSENT. Section order PC_BEFORE_SC correct. Consent card calendar line renders ('Sun, Apr 05 · 10:00 AM'). All passes.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_nurse_case_detail_iteration92.py",
+    "/app/backend/tests/test_nurse_scheduled_cases_iteration91.py",
+    "/app/test_reports/pytest/pytest_results_iteration92.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Nurse guard on GET /api/procedures/{id} is correctly limited to status=='draft' for 403; all other non-draft statuses allowed. Code is clean (lines 1317-1321).",
+    "PatientConsentSection + ScheduledCasesSection now use canonical RN testID prop consistently — good fix.",
+    "Minor: on the case-detail page, direct-URL navigation (page reload / external link / email) currently 403s because the axios module-scope token is not rehydrated from persistent storage on a fresh window load. Real user flow via in-app router.push works. Consider persisting token in localStorage or reading it from the cookie on axios init so deep-links keep working after a refresh.",
+    "Consent-card outer <View> has testID but only the inner cardHeader <TouchableOpacity> is clickable — fine, but consider adding onPress to the outer card OR moving testID to the TouchableOpacity for easier automated clicking; current setup required clicking the patient-name text to trigger navigation in tests."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_nurse_case_detail_iteration92.py (new)"
+  ],
+  "success_rate": { "backend": "100% (15/15 — 5 new iter92 + 10 iter91 regression)", "frontend": "100% on nurse scope (dashboard testIDs + section order + calendar line + in-app case-detail + restricted-sections hidden)" },
+  "test_credentials": "Nurse: nurse.1@dental.edu / Nurse@123; Supervisor: Paresh.gandhi / Supervisor@123; In-Charge: Abhijit.patil / Admin@123; Student: Gaurav.pandey / Student@123. All confirmed working.",
+  "seed_data_creation": "none — used existing seed (case id 69cfde7c356c7405230a9dbd in pending_stage2_surgical / Phase 3 pending status).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Important navigation pitfall when writing Playwright for this app: `page.goto('/procedures/{id}')` after a successful login causes a 403 because the axios instance keeps its auth token in memory and a full page load re-initializes the module without rehydrating the token from localStorage (localStorage is actually empty post-login — axios stores the token in a module variable). To reach case-detail from a Playwright test, navigate via in-app router: click the card or any interactive element inside it (e.g. `page.get_by_text('<patient-name>', exact=True).first.click(force=True)`). The outer [data-testid=consent-card-<id>] is NOT a button — it wraps a TouchableOpacity (the cardHeader); forcing a click on the outer View does not fire onPress. Scheduled cards by contrast ARE TouchableOpacity themselves so `click()` on their [data-testid=scheduled-card-<id>] should work. Also: ngrok tunnel warnings in expo logs are benign noise; backend preview URL is stable.",
+  "rca of the issue": "Iteration 91 had two HIGH issues: (1) `data-testid` prop was dropped by react-native-web when placed on <View>/<TouchableOpacity> — fixed by renaming to RN-canonical `testID`, which RN-web auto-forwards to DOM as `data-testid`. Verified: patient-consent-section(1), scheduled-cases-section(1), consent-refresh(1), scheduled-refresh(1), consent-show-more-btn(1 when >5), consent-card-*(5), scheduled-card-*(1+), scheduled-group-*(1+) all now queryable. (2) Nurse GET /api/procedures/{id} returned 403 for non-approved statuses — fixed by widening guard to only block status=='draft'. Backend pytest proves 200 for pending_stage2_surgical + 4 additional statuses. Frontend: nurse in-app navigation to /procedures/69cfde7c356c7405230a9dbd now renders 'Patient Information' and none of phase2-full-data-section/phase3-full-data-section/phase4-step1-full-data-section/phase4-step2-full-data-section/case-report-export-print-btn, as required. No regressions observed."
+}
