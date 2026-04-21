@@ -625,9 +625,9 @@ export default function ProcedureDetailScreen() {
           </View>
         </View>
 
-        {/* Consent form action row — between Treatment Progress and below blocks.
-            Available to users who can upload consent (nurse, student owner, supervisor, in-charge, admin).
-            Blue "Upload / Replace" button + grey Export/Print popover button. */}
+        {/* Consent form action row — only shown during Phase 1 lifecycle (pending_phase1 or phase1_approved).
+            After Phase 2 submission onwards, the consent form is locked and this row disappears.
+            Stacked vertically (one button per row) for readability on narrow screens. */}
         {(() => {
           const canUpload = user?.role === 'nurse'
             || user?.role === 'implant_incharge'
@@ -635,6 +635,8 @@ export default function ProcedureDetailScreen() {
             || user?.role === 'supervisor'
             || user?.id === procedure.student_id;
           if (!canUpload) return null;
+          const phase1Window = procedure.status === 'pending_phase1' || procedure.status === 'phase1_approved';
+          if (!phase1Window) return null;
           const consentUploaded = !!procedure.patient_consent_form;
           return (
             <View style={styles.consentActionRow} testID="consent-action-row">
@@ -2094,6 +2096,9 @@ export default function ProcedureDetailScreen() {
               torqueValues={procedure.torque_values}
               procedureStatus={procedure.status}
               procedureType={procedure.implant_procedure_type}
+              patientName={procedure.patient_name}
+              patientId={procedure.patient_id}
+              procedureDate={procedure.procedure_date}
             />
           </View>
         )}
@@ -2250,6 +2255,9 @@ export default function ProcedureDetailScreen() {
             torqueValues={procedure.torque_values}
             procedureStatus={procedure.status}
             procedureType={procedure.implant_procedure_type}
+            patientName={procedure.patient_name}
+            patientId={procedure.patient_id}
+            procedureDate={procedure.procedure_date}
           />
         )}
 
@@ -2448,8 +2456,8 @@ export default function ProcedureDetailScreen() {
         </View>
       )}
 
-      {/* Floating AI Chat Button */}
-      {procedure.status !== 'draft' && (
+      {/* Floating AI Chat Button — hidden for nurses (they don't use AI clinical tooling). */}
+      {procedure.status !== 'draft' && user?.role !== 'nurse' && (
         <TouchableOpacity
           style={{ position: 'absolute', bottom: 100, right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#0D47A1', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 8, zIndex: 999 }}
           onPress={() => setAiChatVisible(true)}
@@ -3210,24 +3218,27 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   consentActionRow: {
-    flexDirection: 'row',
-    gap: 8,
+    flexDirection: 'column',
+    gap: 10,
     marginHorizontal: 16,
     marginTop: 4,
-    marginBottom: 12,
+    marginBottom: 14,
+    alignSelf: 'center',
+    width: '92%',
+    maxWidth: 360,
   },
   consentActionBtn: {
-    flex: 1,
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 11,
     borderRadius: 10,
-    minHeight: 42,
+    minHeight: 44,
   },
   consentActionBtnPrimary: { backgroundColor: '#1565C0' },
-  consentActionBtnSecondary: { backgroundColor: '#607D8B' },
+  consentActionBtnSecondary: { backgroundColor: '#37474F' },
   consentActionBtnText: {
     color: '#FFF',
     fontSize: 13,

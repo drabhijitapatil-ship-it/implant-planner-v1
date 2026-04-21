@@ -22,6 +22,7 @@ function DrawerMenu({
   visible,
   onClose,
   isAdmin,
+  isNurse,
   userName,
   userRole,
   profilePhoto,
@@ -31,6 +32,7 @@ function DrawerMenu({
   visible: boolean;
   onClose: () => void;
   isAdmin: boolean;
+  isNurse: boolean;
   userName: string;
   userRole: string;
   profilePhoto: string | null;
@@ -44,7 +46,10 @@ function DrawerMenu({
       ? [{ key: 'users', icon: 'people-outline' as const, label: 'Users', route: '/user-management' }]
       : []),
     { key: 'profile', icon: 'person-circle-outline' as const, label: 'My Profile', route: '/profile' },
-    { key: 'archived', icon: 'archive-outline' as const, label: 'Archived Cases', route: '/archived' },
+    // Nurses do not need the Archived Cases view (they never archive cases).
+    ...(isNurse
+      ? []
+      : [{ key: 'archived', icon: 'archive-outline' as const, label: 'Archived Cases', route: '/archived' }]),
   ];
 
   return (
@@ -230,6 +235,7 @@ export default function TabsLayout() {
         visible={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         isAdmin={isAdmin}
+        isNurse={isNurse}
         userName={user?.name || user?.username || ''}
         userRole={roleName}
         profilePhoto={user?.profile_photo || null}
