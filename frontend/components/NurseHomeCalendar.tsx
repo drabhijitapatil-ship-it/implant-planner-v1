@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Calendar } from 'react-native-calendars';
 import { format } from 'date-fns';
 import api from '../utils/api';
+import AutoclaveRow, { InstrumentsAutoclaved } from './AutoclaveRow';
 
 type ConsentCase = {
   id: string;
@@ -22,6 +23,7 @@ type ConsentCase = {
   procedure_date: string;
   procedure_time: string;
   consent_uploaded: boolean;
+  instruments_autoclaved?: InstrumentsAutoclaved;
 };
 
 function fmtTime(t: string): string {
@@ -214,15 +216,30 @@ export function NurseHomeCalendar({ router }: { router: any }) {
                   <Text style={styles.metaStudent} numberOfLines={1}>
                     <Ionicons name="person-outline" size={10} color="#546E7A" /> {c.student_name}
                   </Text>
-                  <View style={[styles.statusPill, c.consent_uploaded ? styles.statusOk : styles.statusWarn]}>
-                    <Ionicons
-                      name={c.consent_uploaded ? 'checkmark-circle' : 'alert-circle'}
-                      size={11}
-                      color="#FFF"
+                  <View style={styles.pillRow}>
+                    <View style={[styles.statusPill, c.consent_uploaded ? styles.statusOk : styles.statusWarn]}>
+                      <Ionicons
+                        name={c.consent_uploaded ? 'checkmark-circle' : 'alert-circle'}
+                        size={11}
+                        color="#FFF"
+                      />
+                      <Text style={styles.statusPillText}>
+                        {c.consent_uploaded ? 'Consent uploaded' : 'Consent pending'}
+                      </Text>
+                    </View>
+                    <AutoclaveRow
+                      caseId={c.id}
+                      procedureDate={c.procedure_date}
+                      procedureTime={c.procedure_time}
+                      marked={!!c.instruments_autoclaved?.marked}
+                      markedAt={c.instruments_autoclaved?.marked_at}
+                      compact
+                      onToggled={(next) => {
+                        setCases((prev) =>
+                          prev.map((x) => (x.id === c.id ? { ...x, instruments_autoclaved: next } : x)),
+                        );
+                      }}
                     />
-                    <Text style={styles.statusPillText}>
-                      {c.consent_uploaded ? 'Consent uploaded' : 'Consent pending'}
-                    </Text>
                   </View>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color="#B0BEC5" />
@@ -343,6 +360,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 5,
+  },
+  pillRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
     marginTop: 6,
   },
   statusOk: { backgroundColor: '#2E7D32' },
