@@ -12,6 +12,7 @@ import uuid
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr, field_validator
 from typing import List, Optional, Dict, Any
+import asyncio
 from datetime import datetime, timedelta, timezone
 import re
 from fpdf import FPDF
@@ -562,6 +563,130 @@ async def send_expo_push_notifications(user_ids: List[str], title: str, body: st
             )
     except Exception as e:
         logging.error(f"Failed to send push notification: {e}")
+
+
+# ───────────────────────────────────────────────────────────────────
+# Pre-surgery reminder scheduler
+# ───────────────────────────────────────────────────────────────────
+# Sends a single in-app notification + Expo push to student/supervisor/incharge
+# ~24 hours before a scheduled surgery if the case still has:
+#   - consent form pending, AND/OR
+#   - instruments not yet autoclaved.
+# Idempotent via `pre_surgery_reminder_sent` flag on the procedure doc.
+
+def _surgery_dt_from_strings(date_str: str, time_str: str) -> Optional[datetime]:
+    """Shared helper to parse procedure_date (YYYY-MM-DD) + procedure_time into naive datetime."""
+    if not date_str or not time_str:
+        return None
+    time_norm = time_str.strip().upper().replace(" ", "")
+    try:
+        return datetime.strptime(f"{date_str} {time_norm}", "%Y-%m-%d %I:%M%p")
+    except ValueError:
+        pass
+    try:
+        return datetime.strptime(f"{date_str} {time_str.strip()}", "%Y-%m-%d %H:%M")
+    except ValueError:
+        return None
+
+
+async def run_pre_surgery_reminders():
+    """Scan for Phase-2-ready cases ~24 hours out and send single pending-checklist reminder.
+
+    Window: now <= surgery_time - 24h < now + check_interval. Because we run hourly,
+    using a 2-hour tolerance window (22h..26h remaining) catches every case exactly once
+    and is tolerant to scheduler drift. Idempotent via `pre_surgery_reminder_sent` flag.
+    """
+    try:
+        now = datetime.now()
+        # Find candidate cases in the next 2 days (narrow MongoDB query first).
+        date_strs = [(now.date() + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(3)]
+        cursor = db.procedures.find({
+            "status": "phase1_approved",
+            "procedure_date": {"$in": date_strs},
+            "archived": {"$ne": True},
+            "pre_surgery_reminder_sent": {"$ne": True},
+        })
+        async for proc in cursor:
+            surgery_dt = _surgery_dt_from_strings(
+                proc.get("procedure_date", ""), proc.get("procedure_time", "")
+            )
+            if not surgery_dt:
+                continue
+            hours_out = (surgery_dt - now).total_seconds() / 3600.0
+            # Fire exactly once when we're inside the 22h..26h window before surgery.
+            if not (22.0 <= hours_out <= 26.0):
+                continue
+
+            consent_pending = not bool(proc.get("patient_consent_form"))
+            instruments_pending = not bool((proc.get("instruments_autoclaved") or {}).get("marked"))
+
+            if not consent_pending and not instruments_pending:
+                # Everything prepped — skip, but mark so we don't recheck.
+                await db.procedures.update_one(
+                    {"_id": proc["_id"]},
+                    {"$set": {"pre_surgery_reminder_sent": True, "pre_surgery_reminder_at": now}},
+                )
+                continue
+
+            issues = []
+            if consent_pending:
+                issues.append("patient consent form is not uploaded")
+            if instruments_pending:
+                issues.append("instruments are not yet autoclaved")
+            issue_text = " and ".join(issues)
+            title = "Pre-surgery checklist reminder"
+            patient_label = proc.get("patient_name") or "your patient"
+            time_label = proc.get("procedure_time") or ""
+            body = f"Surgery for {patient_label} is in ~24 hours ({time_label}) — {issue_text}."
+
+            # Recipients: student owner + supervisor + implant-incharge (dedupe, skip blanks).
+            raw_ids = [
+                proc.get("student_id"),
+                proc.get("supervisor_id"),
+                proc.get("implant_incharge_id"),
+            ]
+            recipient_ids = [str(x) for x in raw_ids if x]
+            recipient_ids = list(dict.fromkeys(recipient_ids))  # preserve order, dedupe
+
+            # 1) In-app notifications
+            for uid in recipient_ids:
+                await db.notifications.insert_one({
+                    "user_id": uid,
+                    "procedure_id": str(proc["_id"]),
+                    "message": body,
+                    "type": "reminder",
+                    "read": False,
+                    "created_at": now,
+                })
+
+            # 2) Expo push
+            await send_expo_push_notifications(
+                recipient_ids,
+                title,
+                body,
+                {"procedure_id": str(proc["_id"]), "kind": "pre_surgery_reminder"},
+            )
+
+            # 3) Mark as sent
+            await db.procedures.update_one(
+                {"_id": proc["_id"]},
+                {"$set": {"pre_surgery_reminder_sent": True, "pre_surgery_reminder_at": now}},
+            )
+            logging.info(
+                "Pre-surgery reminder sent for %s (%s). Recipients: %d, issues: %s",
+                patient_label, proc["_id"], len(recipient_ids), issue_text,
+            )
+    except Exception as exc:
+        logging.error("Pre-surgery reminder sweep failed: %s", exc)
+
+
+async def pre_surgery_reminder_loop(interval_seconds: int = 3600):
+    """Background task that calls run_pre_surgery_reminders every `interval_seconds`."""
+    # Small initial delay to let the app finish starting up.
+    await asyncio.sleep(30)
+    while True:
+        await run_pre_surgery_reminders()
+        await asyncio.sleep(interval_seconds)
 
 # Auth Routes
 @api_router.post("/auth/register", response_model=UserResponse)
@@ -1980,6 +2105,15 @@ async def get_nurse_scheduled_cases(
     # Sort chronologically: procedure_date asc, then procedure_time asc (10:00 < 14:00)
     items.sort(key=lambda x: (x["procedure_date"] or "", x["procedure_time"] or ""))
     return {"cases": items, "window_days": days, "start_date": date_strs[0], "end_date": date_strs[-1]}
+
+
+@api_router.post("/admin/run-pre-surgery-reminders")
+async def admin_run_pre_surgery_reminders(current_user: dict = Depends(get_current_user)):
+    """On-demand trigger for the pre-surgery reminder sweep. Admins only (used by ops and tests)."""
+    if current_user.get("role") not in ("administrator", "implant_incharge"):
+        raise HTTPException(status_code=403, detail="Administrator or Implant In-Charge role required")
+    await run_pre_surgery_reminders()
+    return {"ok": True, "ran_at": datetime.utcnow().isoformat()}
 
 
 def _serialise_instruments_autoclaved(raw: Optional[dict]) -> Optional[dict]:
@@ -8570,6 +8704,13 @@ logger = logging.getLogger(__name__)
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+
+
+@app.on_event("startup")
+async def start_pre_surgery_scheduler():
+    """Kick off the background reminder loop once per worker."""
+    asyncio.create_task(pre_surgery_reminder_loop(3600))
+    logging.info("Pre-surgery reminder scheduler started (interval=3600s).")
 
 @app.on_event("startup")
 async def seed_on_startup():
