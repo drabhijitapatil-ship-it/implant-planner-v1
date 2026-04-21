@@ -95,7 +95,34 @@ export default function NotificationsScreen() {
 
   const renderNotification = ({ item }: any) => {
     const isIncharge = user?.role === 'implant_incharge';
+    const isNurse = user?.role === 'nurse';
     const isOpen = menuOpenId === item.id;
+    // Nurse: display-only card (no tap navigation, no action menu)
+    if (isNurse) {
+      return (
+        <View
+          style={[styles.notificationCard, !item.read && styles.unreadCard]}
+          testID={`nurse-alert-${item.id}`}
+        >
+          <View style={[styles.iconContainer, { backgroundColor: getNotificationColor(item.type) }]}>
+            <Ionicons name={getNotificationIcon(item.type)} size={24} color="#FFF" />
+          </View>
+          <View style={styles.notificationContent}>
+            <Text style={styles.notificationMessage}>{item.message}</Text>
+            {item.procedure_details && (
+              <Text style={styles.procedureInfo}>
+                {item.procedure_details.patient_name} •{' '}
+                {format(new Date(item.procedure_details.procedure_date), 'MMM dd, yyyy')}
+              </Text>
+            )}
+            <Text style={styles.timestamp}>
+              {format(new Date(item.created_at), 'MMM dd, yyyy HH:mm')}
+            </Text>
+          </View>
+          {!item.read && <View style={styles.unreadDot} />}
+        </View>
+      );
+    }
     return (
       <TouchableOpacity
         style={[styles.notificationCard, !item.read && styles.unreadCard]}
@@ -157,7 +184,8 @@ export default function NotificationsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
 
-      {/* Search bar */}
+      {/* Search bar — hidden for nurse (display-only alerts feed) */}
+      {user?.role !== 'nurse' && (
       <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', margin: 12, marginBottom: 4, borderRadius: 12, borderWidth: 1, borderColor: '#E0E7EE', paddingHorizontal: 10 }}>
         <Ionicons name="search" size={18} color="#999" />
         <TextInput
@@ -175,6 +203,7 @@ export default function NotificationsScreen() {
           </TouchableOpacity>
         )}
       </View>
+      )}
 
       {filteredNotifications.length === 0 ? (
         <View style={styles.emptyState}>
