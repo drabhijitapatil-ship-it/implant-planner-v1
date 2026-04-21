@@ -90,6 +90,12 @@ export default function AutoclaveRow({
   return (
     <TouchableOpacity
       onPress={toggle}
+      // react-native-web: parent TouchableOpacity still fires even when child
+      // onPress runs. Claim the responder eagerly + stop the DOM bubble via a
+      // no-op wrapper on web. The capture props are ignored on native but make
+      // nested taps reliably non-propagating on web.
+      onStartShouldSetResponderCapture={() => true}
+      onResponderTerminationRequest={() => false}
       activeOpacity={canInteract ? 0.7 : 1}
       disabled={busy || !canInteract}
       style={[

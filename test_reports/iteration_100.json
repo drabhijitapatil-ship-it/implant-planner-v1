@@ -1,0 +1,50 @@
+{
+  "summary": "Iteration 100 — retest of the AutoclaveRow tap-propagation fix across three nurse surfaces. AutoclaveRow.tsx was updated in iter100 to add onStartShouldSetResponderCapture={() => true} and onResponderTerminationRequest={() => false} on the wrapping TouchableOpacity. All three target surfaces now behave correctly: tapping the compact autoclave pill does NOT navigate to the case detail, and tapping the card body still navigates correctly. Regression fix VERIFIED.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_matrix": {
+    "surface_1_nurse_home_calendar_date_card": {
+      "pill_tap_no_navigation": "PASS (URL stayed /dashboard after tapping autoclave pill inside nurse-home-date-card-69cf9bdfdafb502718057bcd on Sat Apr 25 2026)",
+      "card_body_tap_navigates": "PASS (URL navigated to /procedures/69cf9bdfdafb502718057bcd when card body tapped)"
+    },
+    "surface_2_nurse_cases_screen": {
+      "pill_tap_no_navigation": "PASS for 3 distinct pills: 69cf9ab1dafb502718057bc3 (pending), 69cf9bdfdafb502718057bcd (uploaded/approved), 69cfae83a19e1d1819e0f6e5 — all three clicks stayed on /procedures. Pill toggle state also updated in UI confirming the /api/procedures/<id>/mark-instruments-autoclaved POST fired.",
+      "card_body_tap_navigates": "PASS (URL navigated to /procedures/69cf9bdfdafb502718057bcd when card header area tapped on nurse-case-card)"
+    },
+    "surface_3_scheduled_cases_section": {
+      "pill_tap_no_navigation": "PASS (URL stayed /dashboard after tapping autoclave pill on scheduled-card-69cf9bdfdafb502718057bcd)",
+      "card_body_tap_navigates": "PASS (URL navigated to /procedures/69cf9bdfdafb502718057bcd when card body tapped)"
+    }
+  },
+  "iter99_visual_parity_regression_note": "Not re-measured pixel-perfect in this iter because the only change was onStartShouldSetResponderCapture/onResponderTerminationRequest props which do not affect layout/styles. Screenshots visually confirm pill row (consent + autoclave) on same row with identical look, paddingH:8 paddingV:4 radius:6, both pills hug content.",
+  "testing_gotchas_for_next_agent": [
+    "Expo Router (tabs) keeps both /dashboard and /procedures content mounted in DOM (tab stack). So `document.querySelectorAll('[data-testid^=\"autoclave-toggle-\"]')` returns pills from BOTH screens. Always filter by ancestor testid (scheduled-card-*, nurse-case-card-*, or nurse-home-date-card-*) before clicking, otherwise `page.mouse.click(x,y)` may click through to the visible overlay tab's content at same coordinates and record a false-positive navigation. Use page.evaluate with ancestor-walk to pick the correct pill instance.",
+    "When asserting no-navigation, do NOT use `if cid in page.url` — use `if '/procedures/' in url_after and url_after.rstrip('/').split('/')[-1] != 'procedures'` to detect ANY case-detail navigation (the original misfired click in this run went to a different caseId than expected and my initial flawed assertion returned PASS falsely).",
+    "Bottom tab label for nurse is 'Cases' (not 'My Cases') and the anchor href is /procedures (NurseCasesScreen is mounted at app/(tabs)/procedures.tsx and branches by role).",
+    "Calendar day testids are formatted as 'undefined.day_2026-04-25' (react-native-calendars default prefix with undefined id).",
+    "To surface a date-card with visible autoclave pill on Surface 1, click a future non-locked date — Sat Apr 25 2026 works for demo case 69cf9bdfdafb502718057bcd."
+  ],
+  "noise_observed_but_not_blocking": [
+    "Console errors: `Notifications.removeNotificationSubscription is not a function` (expo-notifications v compat issue) — fires on tab change, does not affect UX.",
+    "Console errors: `Unexpected text node: . A text node cannot be a child of a <View>` repeats on /procedures/<id> case detail render — stray whitespace text node inside a <Text style=...>...</Text> sibling. Not new to this iteration.",
+    "Console error on case detail: `TypeError: Cannot read properties of undefined (reading 'find')` at app/procedures/[id].tsx:487 — pre-existing; unrelated to this fix."
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AutoclaveRow.tsx lines 97-98: fix uses onStartShouldSetResponderCapture + onResponderTerminationRequest on the inner TouchableOpacity. Confirmed effective on react-native-web across all three surfaces. Recommend leaving the extra `e?.stopPropagation()` inside toggle() as a belt-and-suspenders for native — it’s a no-op on RNW but doesn’t hurt.",
+    "Dead code in /app/frontend/components/ScheduledCasesSection.tsx flagged in iter99 (internal AutoclaveRow component and autoclaveRow styles, undeclared Alert ref) still present — not blocking this iter's fix verification but should be cleaned up."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (frontend-only)", "frontend": "100% (all 3 surfaces: pill-no-nav + card-body-nav both PASS)" },
+  "test_credentials": "nurse.1@dental.edu / Nurse@123 (as provided)",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter100 fix VERIFIED. If further AutoclaveRow changes are made, use the DOM ancestor-walk technique in this report (page.evaluate) to pick the correct pill instance — pills from Home and /procedures coexist in the DOM. Target demo cases on Home calendar are on Sat Apr 25 2026 (69cf9bdfdafb502718057bcd, uploaded) and Sun Apr 26 (69cfae83a19e1d1819e0f6e5). NurseCasesScreen filter 'All' shows all 17 cases; pills are only rendered for future non-locked procedures.",
+  "rca of the issue": "Previously (iter99), relying on e?.stopPropagation() inside RN onPress did not prevent the parent TouchableOpacity from firing on react-native-web because RNW's onPress fires via its custom Responder system, not DOM bubbling. Fix: claim the responder eagerly at capture phase (onStartShouldSetResponderCapture={() => true}) and refuse to give it back (onResponderTerminationRequest={() => false}). This ensures the pill is the active responder as soon as touch starts, so the parent card's onPress never fires. Verified across all three surfaces."
+}
