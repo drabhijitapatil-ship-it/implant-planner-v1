@@ -418,6 +418,8 @@ export default function ProcedureDetailScreen() {
   
   const canExportPDF = () => {
     if (!procedure) return false;
+    // Nurses only see Phase 1 info; the case report PDF contains all phases, so hide it.
+    if (user?.role === 'nurse') return false;
     // Allow PDF export from pending_phase1 onwards (all non-draft statuses)
     return procedure.status !== 'draft';
   };
@@ -1285,7 +1287,7 @@ export default function ProcedureDetailScreen() {
         )}
 
         {/* ═══════════ PHASE 2: SURGICAL PROTOCOLS - Full Data Display ═══════════ */}
-        {procedure.phase2_data && Object.keys(procedure.phase2_data).length > 0 && (
+        {user?.role !== 'nurse' && procedure.phase2_data && Object.keys(procedure.phase2_data).length > 0 && (
           <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#0D47A1' }]} data-testid="phase2-full-data-section">
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <Ionicons name="medkit" size={22} color="#0D47A1" />
@@ -1496,7 +1498,7 @@ export default function ProcedureDetailScreen() {
         )}
 
         {/* ═══════════ PHASE 3: SECOND STAGE SURGICAL - Full Data Display ═══════════ */}
-        {(procedure.phase3_data || procedure.stage2_surgical_remark || procedure.phase3_student_notes) && (
+        {user?.role !== 'nurse' && (procedure.phase3_data || procedure.stage2_surgical_remark || procedure.phase3_student_notes) && (
           <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#2E7D32' }]} data-testid="phase3-full-data-section">
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <Ionicons name="git-branch" size={22} color="#2E7D32" />
@@ -1837,7 +1839,7 @@ export default function ProcedureDetailScreen() {
         )}
 
         {/* ═══════════ PHASE 4 STEP 1: PROSTHETIC PROTOCOL - Full Data Display ═══════════ */}
-        {(procedure.phase4_step1_data || procedure.stage2_prosthetic_remark || procedure.phase4_step1_student_notes) && (
+        {user?.role !== 'nurse' && (procedure.phase4_step1_data || procedure.stage2_prosthetic_remark || procedure.phase4_step1_student_notes) && (
           <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#FF6F00' }]} data-testid="phase4-step1-full-data-section">
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <Ionicons name="construct" size={22} color="#FF6F00" />
@@ -1897,7 +1899,7 @@ export default function ProcedureDetailScreen() {
         )}
 
         {/* ═══════════ PHASE 4 STEP 2: TRIAL & DELIVERY - Full Data Display ═══════════ */}
-        {(procedure.phase4_step2_data || procedure.phase4_step2_student_notes) && (
+        {user?.role !== 'nurse' && (procedure.phase4_step2_data || procedure.phase4_step2_student_notes) && (
           <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#AD1457' }]} data-testid="phase4-step2-full-data-section">
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <Ionicons name="ribbon" size={22} color="#AD1457" />
