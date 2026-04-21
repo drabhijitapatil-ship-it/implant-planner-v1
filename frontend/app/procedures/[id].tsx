@@ -2461,6 +2461,7 @@ export default function ProcedureDetailScreen() {
         <TouchableOpacity
           style={{ position: 'absolute', bottom: 100, right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#0D47A1', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 8, zIndex: 999 }}
           onPress={() => setAiChatVisible(true)}
+          testID="ai-chat-fab"
           data-testid="ai-chat-fab"
         >
           <Ionicons name="chatbubble-ellipses" size={26} color="#FFF" />
