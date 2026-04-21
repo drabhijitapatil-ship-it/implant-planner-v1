@@ -883,6 +883,23 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
+        {/* Instruments Autoclaved Badge — visible to non-nurse roles once a nurse has marked. */}
+        {user?.role !== 'nurse' && procedure.instruments_autoclaved?.marked && (
+          <View style={styles.autoclaveBadge} testID="instruments-autoclaved-badge">
+            <View style={styles.autoclaveBadgeIcon}>
+              <Ionicons name="shield-checkmark" size={16} color="#FFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.autoclaveBadgeTitle}>Nurse has prepped instruments ✓</Text>
+              <Text style={styles.autoclaveBadgeSub} numberOfLines={1}>
+                Autoclaved
+                {procedure.instruments_autoclaved?.marked_by_name ? ` by ${procedure.instruments_autoclaved.marked_by_name}` : ''}
+                {procedure.instruments_autoclaved?.marked_at ? ` · ${format(new Date(procedure.instruments_autoclaved.marked_at), 'MMM dd · hh:mm a')}` : ''}
+              </Text>
+            </View>
+          </View>
+        )}
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Patient Information</Text>
           <InfoRow icon="person" label="Patient Name" value={procedure.patient_name} />
@@ -3113,6 +3130,38 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#388E3C',
     textAlign: 'center',
+  },
+  autoclaveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: 16,
+    marginTop: 6,
+    marginBottom: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#81C784',
+  },
+  autoclaveBadgeIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: '#2E7D32',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  autoclaveBadgeTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1B5E20',
+  },
+  autoclaveBadgeSub: {
+    fontSize: 11,
+    color: '#388E3C',
+    marginTop: 1,
   },
   timelineContainer: {
     margin: 16,

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Response, Request, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Response, Request, Query, Body
 from fastapi import status as http_status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
@@ -1955,6 +1955,7 @@ async def get_nurse_scheduled_cases(
         "_id": 1, "patient_name": 1, "patient_id": 1, "student_name": 1, "created_by_name": 1,
         "implant_procedure_type": 1, "status": 1, "procedure_date": 1, "procedure_time": 1,
         "supervisor_name": 1, "implant_incharge_name": 1, "created_at": 1,
+        "instruments_autoclaved": 1,
     }).limit(200)
 
     items = []
@@ -1970,10 +1971,90 @@ async def get_nurse_scheduled_cases(
             "procedure_time": doc.get("procedure_time", ""),
             "supervisor_name": doc.get("supervisor_name", ""),
             "implant_incharge_name": doc.get("implant_incharge_name", ""),
+            "instruments_autoclaved": _serialise_instruments_autoclaved(doc.get("instruments_autoclaved")),
         })
     # Sort chronologically: procedure_date asc, then procedure_time asc (10:00 < 14:00)
     items.sort(key=lambda x: (x["procedure_date"] or "", x["procedure_time"] or ""))
     return {"cases": items, "window_days": days, "start_date": date_strs[0], "end_date": date_strs[-1]}
+
+
+def _serialise_instruments_autoclaved(raw: Optional[dict]) -> Optional[dict]:
+    """Convert mongo doc (with datetime) into a JSON-safe dict. Returns None when unmarked."""
+    if not raw or not raw.get("marked"):
+        return None
+    marked_at = raw.get("marked_at")
+    return {
+        "marked": True,
+        "marked_by": str(raw.get("marked_by") or ""),
+        "marked_by_name": raw.get("marked_by_name") or "",
+        "marked_at": marked_at.isoformat() if isinstance(marked_at, datetime) else (marked_at or ""),
+    }
+
+
+def _parse_procedure_datetime(date_str: str, time_str: str) -> Optional[datetime]:
+    """Parse procedure_date (YYYY-MM-DD) + procedure_time (either '10:00' or '10:00 AM') to a naive datetime."""
+    if not date_str or not time_str:
+        return None
+    time_norm = time_str.strip().upper().replace(" ", "")
+    fmts_24h = ["%H:%M"]
+    fmts_12h = ["%I:%M%p"]
+    for fmt in fmts_24h + fmts_12h:
+        try:
+            if fmt in fmts_12h:
+                return datetime.strptime(f"{date_str} {time_norm}", f"%Y-%m-%d {fmt}")
+            return datetime.strptime(f"{date_str} {time_str.strip()}", f"%Y-%m-%d {fmt}")
+        except ValueError:
+            continue
+    return None
+
+
+@api_router.post("/procedures/{procedure_id}/mark-instruments-autoclaved")
+async def mark_instruments_autoclaved(
+    procedure_id: str,
+    payload: dict = Body(default={}),
+    current_user: dict = Depends(get_current_user),
+):
+    """Nurse checkbox: toggle whether instruments have been autoclaved for a scheduled case.
+    Window: can only be toggled until 1 hour before the scheduled procedure datetime.
+    After that window the record becomes immutable (returns 409).
+    Unknown procedure_date/time (shouldn't happen for Phase-2 cases) falls back to allowing the toggle.
+    Body: { marked: bool }. Defaults to True if omitted.
+    """
+    if current_user.get("role") != "nurse":
+        raise HTTPException(status_code=403, detail="Only nurses can mark instruments autoclaved")
+
+    procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    marked = bool(payload.get("marked", True))
+
+    # Enforce 1-hour window
+    surgery_dt = _parse_procedure_datetime(procedure.get("procedure_date", ""), procedure.get("procedure_time", ""))
+    if surgery_dt is not None:
+        cutoff = surgery_dt - timedelta(hours=1)
+        if datetime.now() >= cutoff:
+            raise HTTPException(
+                status_code=409,
+                detail="Instruments autoclaved status is locked within 1 hour of the scheduled surgery time.",
+            )
+
+    if marked:
+        value = {
+            "marked": True,
+            "marked_by": current_user["_id"],
+            "marked_by_name": current_user.get("full_name") or current_user.get("name") or current_user.get("email", ""),
+            "marked_at": datetime.utcnow(),
+        }
+    else:
+        value = {"marked": False}
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"instruments_autoclaved": value}},
+    )
+
+    return {"instruments_autoclaved": _serialise_instruments_autoclaved(value)}
 
 
 @api_router.post("/uploads/cbct-temp")
