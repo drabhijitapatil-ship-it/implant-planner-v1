@@ -8491,6 +8491,10 @@ async def export_drilling_pdf(
     length = float(body.get("length", 0))
     bone = body.get("bone_density", "")
     tooth = body.get("tooth", "")
+    # Optional patient context — drawn as a banner at the top of the A4 PDF.
+    patient_name = (body.get("patient_name") or "").strip()
+    patient_id_str = (body.get("patient_id") or "").strip()
+    procedure_date = (body.get("procedure_date") or "").strip()
 
     if not all([brand, system, diameter, length, bone]):
         raise HTTPException(status_code=400, detail="All fields required")
@@ -8573,6 +8577,23 @@ async def export_drilling_pdf(
                             leftMargin=15*mm, rightMargin=15*mm)
     styles = getSampleStyleSheet()
     elements = []
+
+    # Patient banner (only if any patient context provided)
+    banner_bits = []
+    if patient_name:
+        banner_bits.append(f"<b>Patient:</b> {patient_name}")
+    if patient_id_str:
+        banner_bits.append(f"<b>ID:</b> {patient_id_str}")
+    if procedure_date:
+        banner_bits.append(f"<b>Surgery date:</b> {procedure_date}")
+    banner_bits.append(f"<b>Generated:</b> {datetime.now().strftime('%b %d, %Y · %H:%M')}")
+    banner_style = ParagraphStyle(
+        'banner', parent=styles['BodyText'], fontSize=10,
+        textColor=colors.HexColor('#FFFFFF'), leading=14,
+        backColor=colors.HexColor('#0D47A1'), borderPadding=6,
+    )
+    elements.append(Paragraph(" &nbsp;·&nbsp; ".join(banner_bits), banner_style))
+    elements.append(Spacer(1, 4*mm))
 
     # Title
     title_style = ParagraphStyle('title', parent=styles['Title'], fontSize=18,

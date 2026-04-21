@@ -102,16 +102,16 @@ export default function AutoclaveRow({
     >
       <View style={[compact ? styles.checkboxCompact : styles.checkbox, marked && styles.checkboxOn]}>
         {busy ? (
-          <ActivityIndicator size="small" color={marked ? '#FFF' : '#2E7D32'} />
+          <ActivityIndicator size="small" color={marked ? '#2E7D32' : '#2E7D32'} />
         ) : marked ? (
-          <Ionicons name="checkmark" size={compact ? 11 : 14} color="#FFF" />
+          <Ionicons name="checkmark" size={compact ? 10 : 14} color="#2E7D32" />
         ) : null}
       </View>
       <View style={{ flex: 1 }}>
         <Text
           style={[
             compact ? styles.labelCompact : styles.label,
-            marked && { color: '#1B5E20' },
+            marked && (compact ? { color: '#FFF' } : { color: '#1B5E20' }),
           ]}
           numberOfLines={1}
         >
@@ -143,14 +143,13 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
     paddingHorizontal: 8,
-    paddingVertical: 5,
+    paddingVertical: 4,
     borderRadius: 6,
-    marginTop: 6,
   },
-  rowOff: { backgroundColor: '#FAFAFA' },
-  rowOn: { backgroundColor: '#E8F5E9' },
+  rowOff: { backgroundColor: '#FAFAFA', borderWidth: 1, borderColor: '#CFD8DC' },
+  rowOn: { backgroundColor: '#2E7D32', borderWidth: 0 },
   checkbox: {
     width: 22,
     height: 22,
@@ -162,9 +161,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   checkboxCompact: {
-    width: 16,
-    height: 16,
-    borderRadius: 4,
+    width: 13,
+    height: 13,
+    borderRadius: 3,
     borderWidth: 1.5,
     borderColor: '#2E7D32',
     backgroundColor: '#FFF',
@@ -172,8 +171,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   checkboxOn: {
-    backgroundColor: '#2E7D32',
-    borderColor: '#2E7D32',
+    backgroundColor: '#FFF',
+    borderColor: '#FFF',
   },
   label: {
     fontSize: 13,
@@ -184,6 +183,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#455A64',
+    letterSpacing: 0.3,
   },
   hint: {
     fontSize: 10,

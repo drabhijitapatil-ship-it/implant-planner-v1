@@ -15,6 +15,103 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../utils/api';
+import ExportPrintMenu from './ExportPrintMenu';
+
+// ── Drilling Protocol PDF helpers (A4, backend-rendered) ────────────────────
+async function fetchDrillingPdfBlob(payload: {
+  implant: { brand: string; system: string; diameter: number; length?: number };
+  bone: string;
+  tooth: string;
+  patientName?: string;
+  patientId?: string;
+  procedureDate?: string;
+}): Promise<Blob> {
+  const res = await api.post(
+    '/drilling-protocols/export-pdf',
+    {
+      brand: payload.implant.brand,
+      system: payload.implant.system,
+      diameter: payload.implant.diameter,
+      length: payload.implant.length || 0,
+      bone_density: payload.bone || 'D2',
+      tooth: payload.tooth,
+      patient_name: payload.patientName || '',
+      patient_id: payload.patientId || '',
+      procedure_date: payload.procedureDate || '',
+    },
+    { responseType: 'blob' },
+  );
+  return new Blob([res.data], { type: 'application/pdf' });
+}
+
+async function printDrillingProtocolPdf(payload: Parameters<typeof fetchDrillingPdfBlob>[0]) {
+  try {
+    const blob = await fetchDrillingPdfBlob(payload);
+    if (Platform.OS === 'web') {
+      const url = URL.createObjectURL(blob);
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.src = url;
+      document.body.appendChild(iframe);
+      iframe.onload = () => {
+        try { iframe.contentWindow?.focus(); iframe.contentWindow?.print(); }
+        catch { window.open(url, '_blank'); }
+      };
+      setTimeout(() => { try { document.body.removeChild(iframe); } catch {} URL.revokeObjectURL(url); }, 60000);
+    } else {
+      // Mobile: route through expo-print with blob → base64
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const base64 = (reader.result as string).split(',')[1];
+          const Print = await import('expo-print');
+          await Print.printAsync({ uri: `data:application/pdf;base64,${base64}` });
+        } catch { /* swallow — user can cancel */ }
+      };
+      reader.readAsDataURL(blob);
+    }
+  } catch {
+    Alert.alert('Print failed', 'Could not open the drilling protocol PDF.');
+  }
+}
+
+async function exportDrillingProtocolPdf(payload: Parameters<typeof fetchDrillingPdfBlob>[0]) {
+  try {
+    const blob = await fetchDrillingPdfBlob(payload);
+    const filename = `DrillingProtocol_${payload.implant.brand}_${payload.implant.diameter}x${payload.implant.length || ''}_${payload.bone}.pdf`;
+    if (Platform.OS === 'web') {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } else {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const base64 = (reader.result as string).split(',')[1];
+          const FileSystem = await import('expo-file-system/legacy');
+          const Sharing = await import('expo-sharing');
+          const path = `${FileSystem.cacheDirectory}${filename}`;
+          await FileSystem.writeAsStringAsync(path, base64, { encoding: FileSystem.EncodingType.Base64 });
+          if (await Sharing.isAvailableAsync()) {
+            await Sharing.shareAsync(path, { mimeType: 'application/pdf', dialogTitle: 'Drilling Protocol' });
+          }
+        } catch { /* swallow */ }
+      };
+      reader.readAsDataURL(blob);
+    }
+  } catch {
+    Alert.alert('Export failed', 'Could not export the drilling protocol PDF.');
+  }
+}
+
 
 // ── FDI Tooth Chart Data ───────────────────────────────────
 const UPPER_RIGHT = ['17','16','15','14','13','12','11'];
@@ -47,6 +144,10 @@ interface Props {
   status?: string;
   readOnly?: boolean;
   medicalAssessment?: Record<string, string>;
+  /** Optional patient context forwarded to the Drilling Protocol PDF header banner. */
+  patientName?: string;
+  patientId?: string;
+  procedureDate?: string;
 }
 
 // ── Drilling Protocol Generator ────────────────────────────
@@ -404,7 +505,7 @@ function generateDrillingProtocol(brand: string, system: string, diameter: numbe
   return protocol;
 }
 
-export default function CaseImplantPlanning({ procedureId, isOwner, userRole, torqueValues, procedureStatus, procedureType, medicalAssessment }: Props) {
+export default function CaseImplantPlanning({ procedureId, isOwner, userRole, torqueValues, procedureStatus, procedureType, medicalAssessment, patientName, patientId, procedureDate }: Props) {
   const [plans, setPlans] = useState<ImplantPlanItem[]>([]);
   const [systems, setSystems] = useState<ImplantSystem[]>([]);
   const [toothRecs, setToothRecs] = useState<Record<string,any>>({});
@@ -592,6 +693,22 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
                   </View>
                   )
                 ))}
+                {/* Print / Export Drilling Protocol PDF — single entry, same popover as elsewhere */}
+                <View style={{ marginTop: 8 }}>
+                  <ExportPrintMenu
+                    label="Print / Export Drilling Protocol PDF"
+                    buttonStyle={{ backgroundColor: '#37474F', paddingVertical: 10, borderRadius: 8 }}
+                    textStyle={{ color: '#FFF', fontSize: 12, fontWeight: '700', letterSpacing: 0.3 }}
+                    triggerIcon="share-outline"
+                    triggerIconSize={14}
+                    testID={`drilling-export-print-${idx}`}
+                    popoverTitle="Drilling Protocol"
+                    printLabel="Print drilling protocol"
+                    exportLabel="Export drilling protocol PDF"
+                    onPrint={() => printDrillingProtocolPdf({ implant: plan, bone: plan.bone_type, tooth: plan.tooth || '', patientName, patientId, procedureDate })}
+                    onExport={() => exportDrillingProtocolPdf({ implant: plan, bone: plan.bone_type, tooth: plan.tooth || '', patientName, patientId, procedureDate })}
+                  />
+                </View>
               </View>
             )}
             {expandedProtocol === idx && !plan.bone_type && (
