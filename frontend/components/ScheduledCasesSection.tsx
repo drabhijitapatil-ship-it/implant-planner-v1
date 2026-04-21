@@ -82,7 +82,7 @@ export function ScheduledCasesSection({ router }: { router: any }) {
   }
 
   return (
-    <View style={styles.section} data-testid="scheduled-cases-section">
+    <View style={styles.section} testID="scheduled-cases-section">
       <View style={styles.header}>
         <Ionicons name="calendar" size={16} color="#2E7D32" />
         <Text style={styles.title}>Scheduled Cases</Text>
@@ -92,7 +92,7 @@ export function ScheduledCasesSection({ router }: { router: any }) {
           </View>
         )}
         <View style={{ flex: 1 }} />
-        <TouchableOpacity onPress={load} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} data-testid="scheduled-refresh">
+        <TouchableOpacity onPress={load} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} testID="scheduled-refresh">
           <Ionicons name="refresh" size={16} color="#78909C" />
         </TouchableOpacity>
       </View>
@@ -113,7 +113,7 @@ export function ScheduledCasesSection({ router }: { router: any }) {
         <>
           {grouped.map((g) => (
             <View key={g.date} style={{ marginBottom: 6 }}>
-              <Text style={styles.groupHeader} data-testid={`scheduled-group-${g.date}`}>
+              <Text style={styles.groupHeader} testID={`scheduled-group-${g.date}`}>
                 {dayHeader(g.date)} <Text style={styles.groupCount}>· {g.items.length}</Text>
               </Text>
               {g.items.map((c) => (
@@ -122,7 +122,7 @@ export function ScheduledCasesSection({ router }: { router: any }) {
                   style={styles.card}
                   onPress={() => router.push(`/procedures/${c.id}`)}
                   activeOpacity={0.8}
-                  data-testid={`scheduled-card-${c.id}`}
+                  testID={`scheduled-card-${c.id}`}
                 >
                   <View style={styles.timePill}>
                     <Ionicons name="time-outline" size={12} color="#FFF" />
@@ -144,7 +144,7 @@ export function ScheduledCasesSection({ router }: { router: any }) {
             <TouchableOpacity
               onPress={() => setShowAll(!showAll)}
               style={styles.showMoreBtn}
-              data-testid="scheduled-show-more-btn"
+              testID="scheduled-show-more-btn"
             >
               <Ionicons name={showAll ? 'chevron-up' : 'chevron-down'} size={14} color="#2E7D32" />
               <Text style={styles.showMoreText}>

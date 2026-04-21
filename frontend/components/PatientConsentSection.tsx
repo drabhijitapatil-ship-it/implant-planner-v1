@@ -75,7 +75,7 @@ export function PatientConsentSection({ router }: { router: any }) {
   };
 
   return (
-    <View style={styles.section} data-testid="patient-consent-section">
+    <View style={styles.section} testID="patient-consent-section">
       <View style={styles.header}>
         <Ionicons name="document-text" size={16} color="#1565C0" />
         <Text style={styles.title}>Patient Consent Forms</Text>
@@ -85,7 +85,7 @@ export function PatientConsentSection({ router }: { router: any }) {
           </View>
         )}
         <View style={{ flex: 1 }} />
-        <TouchableOpacity onPress={load} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} data-testid="consent-refresh">
+        <TouchableOpacity onPress={load} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} testID="consent-refresh">
           <Ionicons name="refresh" size={16} color="#78909C" />
         </TouchableOpacity>
       </View>
@@ -106,7 +106,7 @@ export function PatientConsentSection({ router }: { router: any }) {
           return (
             <>
               {visible.map((c) => (
-          <View key={c.id} style={styles.card} data-testid={`consent-card-${c.id}`}>
+          <View key={c.id} style={styles.card} testID={`consent-card-${c.id}`}>
             <TouchableOpacity
               style={styles.cardHeader}
               onPress={() => router.push(`/procedures/${c.id}`)}
@@ -140,7 +140,7 @@ export function PatientConsentSection({ router }: { router: any }) {
               onPress={() => handleUpload(c.id)}
               disabled={uploadingId === c.id}
               style={[styles.uploadBtn, uploadingId === c.id && { backgroundColor: '#90CAF9' }]}
-              data-testid={`consent-upload-${c.id}`}
+              testID={`consent-upload-${c.id}`}
             >
               {uploadingId === c.id ? (
                 <ActivityIndicator size="small" color="#FFF" />
@@ -174,7 +174,7 @@ export function PatientConsentSection({ router }: { router: any }) {
                 <TouchableOpacity
                   onPress={() => setShowAll(!showAll)}
                   style={styles.showMoreBtn}
-                  data-testid="consent-show-more-btn"
+                  testID="consent-show-more-btn"
                 >
                   <Ionicons
                     name={showAll ? 'chevron-up' : 'chevron-down'}
