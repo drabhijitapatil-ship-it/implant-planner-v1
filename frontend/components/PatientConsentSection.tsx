@@ -15,6 +15,8 @@ type PendingCase = {
   implant_procedure_type: string;
   status: string;
   created_at: string;
+  procedure_date?: string;
+  procedure_time?: string;
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -32,6 +34,7 @@ export function PatientConsentSection({ router }: { router: any }) {
   const [loading, setLoading] = useState(true);
   const [cases, setCases] = useState<PendingCase[]>([]);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -98,7 +101,11 @@ export function PatientConsentSection({ router }: { router: any }) {
           <Text style={styles.emptySubtext}>No cases are waiting for a consent form.</Text>
         </View>
       ) : (
-        cases.map((c) => (
+        (() => {
+          const visible = showAll ? cases : cases.slice(0, 5);
+          return (
+            <>
+              {visible.map((c) => (
           <View key={c.id} style={styles.card} data-testid={`consent-card-${c.id}`}>
             <TouchableOpacity
               style={styles.cardHeader}
@@ -113,6 +120,16 @@ export function PatientConsentSection({ router }: { router: any }) {
                 <Text style={styles.statusText} numberOfLines={1}>
                   {STATUS_LABELS[c.status] || c.status}
                 </Text>
+                {(c.procedure_date || c.procedure_time) ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                    <Ionicons name="calendar-outline" size={12} color="#1565C0" />
+                    <Text style={styles.scheduleText} numberOfLines={1}>
+                      {c.procedure_date ? format(new Date(c.procedure_date), 'EEE, MMM dd') : ''}
+                      {c.procedure_date && c.procedure_time ? '  ·  ' : ''}
+                      {c.procedure_time ? formatTimeSlot(c.procedure_time) : ''}
+                    </Text>
+                  </View>
+                ) : null}
                 {c.created_at ? (
                   <Text style={styles.dateText}>Created {format(new Date(c.created_at), 'MMM dd, hh:mm a')}</Text>
                 ) : null}
@@ -152,10 +169,42 @@ export function PatientConsentSection({ router }: { router: any }) {
               />
             </View>
           </View>
-        ))
+              ))}
+              {cases.length > 5 && (
+                <TouchableOpacity
+                  onPress={() => setShowAll(!showAll)}
+                  style={styles.showMoreBtn}
+                  data-testid="consent-show-more-btn"
+                >
+                  <Ionicons
+                    name={showAll ? 'chevron-up' : 'chevron-down'}
+                    size={14}
+                    color="#1565C0"
+                  />
+                  <Text style={styles.showMoreText}>
+                    {showAll ? 'Show less' : `Show more (${cases.length - 5})`}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </>
+          );
+        })()
       )}
     </View>
   );
+}
+
+/** Format "10:00" → "10:00 AM", "14:00" → "2:00 PM", pass through "10:00 AM" unchanged. */
+function formatTimeSlot(t: string): string {
+  if (!t) return '';
+  if (/am|pm/i.test(t)) return t.toUpperCase().replace(/\s+/g, ' ');
+  const m = t.match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return t;
+  const h = parseInt(m[1], 10);
+  const mm = m[2];
+  const suffix = h >= 12 ? 'PM' : 'AM';
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${h12}:${mm} ${suffix}`;
 }
 
 const styles = StyleSheet.create({
@@ -198,6 +247,18 @@ const styles = StyleSheet.create({
   meta: { fontSize: 12, color: '#546E7A', marginTop: 2 },
   statusText: { fontSize: 11, color: '#FB8C00', fontWeight: '600', marginTop: 2 },
   dateText: { fontSize: 10, color: '#90A4AE', marginTop: 2 },
+  scheduleText: { fontSize: 11, color: '#1565C0', fontWeight: '600' },
+  showMoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 10,
+    marginTop: 2,
+    backgroundColor: '#E3F2FD',
+    borderRadius: 8,
+  },
+  showMoreText: { fontSize: 12, fontWeight: '700', color: '#1565C0' },
   uploadBtn: {
     marginTop: 10,
     flexDirection: 'row',

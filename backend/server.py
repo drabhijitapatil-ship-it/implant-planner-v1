@@ -1904,6 +1904,7 @@ async def get_pending_consents(current_user: dict = Depends(get_current_user)):
     cursor = db.procedures.find(query, {
         "_id": 1, "patient_name": 1, "patient_id": 1, "student_name": 1, "created_by_name": 1,
         "implant_procedure_type": 1, "status": 1, "created_at": 1, "supervisor_name": 1, "implant_incharge_name": 1,
+        "procedure_date": 1, "procedure_time": 1,
     }).sort("created_at", -1).limit(100)
     
     items = []
@@ -1918,8 +1919,60 @@ async def get_pending_consents(current_user: dict = Depends(get_current_user)):
             "supervisor_name": doc.get("supervisor_name", ""),
             "implant_incharge_name": doc.get("implant_incharge_name", ""),
             "created_at": doc.get("created_at").isoformat() if doc.get("created_at") else "",
+            "procedure_date": doc.get("procedure_date", ""),
+            "procedure_time": doc.get("procedure_time", ""),
         })
     return {"cases": items}
+
+
+@api_router.get("/procedures/nurse/scheduled-cases")
+async def get_nurse_scheduled_cases(
+    days: int = 5,
+    current_user: dict = Depends(get_current_user),
+):
+    """Phase-2-ready cases scheduled in the next `days` (default 5, starting today).
+    Only shown to nurses/in-charges/admins/supervisors. A case is 'Phase 2-ready' when
+    Phase 1 has been approved (status == 'phase1_approved') — i.e. actual surgery is
+    queued but Phase 2 hasn't been submitted yet.
+    Sorted chronologically (earliest first).
+    """
+    role = current_user.get("role")
+    if role not in ("nurse", "implant_incharge", "administrator", "supervisor"):
+        raise HTTPException(status_code=403, detail="Only authorized clinical staff can view scheduled cases")
+
+    if days < 1 or days > 30:
+        days = 5
+    today = datetime.now().date()
+    date_strs = [(today + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days)]
+
+    query = {
+        "status": "phase1_approved",
+        "procedure_date": {"$in": date_strs},
+        "archived": {"$ne": True},
+    }
+    cursor = db.procedures.find(query, {
+        "_id": 1, "patient_name": 1, "patient_id": 1, "student_name": 1, "created_by_name": 1,
+        "implant_procedure_type": 1, "status": 1, "procedure_date": 1, "procedure_time": 1,
+        "supervisor_name": 1, "implant_incharge_name": 1, "created_at": 1,
+    }).limit(200)
+
+    items = []
+    async for doc in cursor:
+        items.append({
+            "id": str(doc["_id"]),
+            "patient_name": doc.get("patient_name", ""),
+            "patient_id": doc.get("patient_id", ""),
+            "student_name": doc.get("student_name") or doc.get("created_by_name", ""),
+            "implant_procedure_type": doc.get("implant_procedure_type", ""),
+            "status": doc.get("status", ""),
+            "procedure_date": doc.get("procedure_date", ""),
+            "procedure_time": doc.get("procedure_time", ""),
+            "supervisor_name": doc.get("supervisor_name", ""),
+            "implant_incharge_name": doc.get("implant_incharge_name", ""),
+        })
+    # Sort chronologically: procedure_date asc, then procedure_time asc (10:00 < 14:00)
+    items.sort(key=lambda x: (x["procedure_date"] or "", x["procedure_time"] or ""))
+    return {"cases": items, "window_days": days, "start_date": date_strs[0], "end_date": date_strs[-1]}
 
 
 @api_router.post("/uploads/cbct-temp")

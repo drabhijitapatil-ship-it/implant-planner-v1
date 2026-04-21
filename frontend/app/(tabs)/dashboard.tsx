@@ -13,6 +13,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { RecentActivityWidget } from '../../components/RecentActivityWidget';
 import { PatientConsentSection } from '../../components/PatientConsentSection';
+import { ScheduledCasesSection } from '../../components/ScheduledCasesSection';
 
 // ── Status helpers ────────────────────────────────────────
 const ACTION_NEEDED_MAP: Record<string, { label: string; icon: string; color: string }> = {
@@ -630,6 +631,7 @@ export default function DashboardScreen() {
         <Header user={user} router={router} />
 
         {isNurse && <PatientConsentSection router={router} />}
+        {isNurse && <ScheduledCasesSection router={router} />}
 
         {isStudent && (
           <StudentDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
