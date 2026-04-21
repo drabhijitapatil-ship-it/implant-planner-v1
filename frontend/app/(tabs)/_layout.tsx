@@ -295,7 +295,7 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="procedures"
           options={{
-            title: 'My Cases',
+            title: isNurse ? 'Cases' : 'My Cases',
             tabBarIcon: ({ color }) => (
               <Ionicons name="folder-open-outline" size={24} color={color} />
             ),

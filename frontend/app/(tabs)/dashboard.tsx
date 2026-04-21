@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { RecentActivityWidget } from '../../components/RecentActivityWidget';
 import { PatientConsentSection } from '../../components/PatientConsentSection';
 import { ScheduledCasesSection } from '../../components/ScheduledCasesSection';
+import { NurseHomeCalendar } from '../../components/NurseHomeCalendar';
 
 // ── Status helpers ────────────────────────────────────────
 const ACTION_NEEDED_MAP: Record<string, { label: string; icon: string; color: string }> = {
@@ -630,6 +631,7 @@ export default function DashboardScreen() {
       >
         <Header user={user} router={router} />
 
+        {isNurse && <NurseHomeCalendar router={router} />}
         {isNurse && <PatientConsentSection router={router} />}
         {isNurse && <ScheduledCasesSection router={router} />}
 

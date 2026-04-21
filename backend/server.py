@@ -2061,6 +2061,50 @@ async def mark_instruments_autoclaved(
     return {"instruments_autoclaved": _serialise_instruments_autoclaved(value)}
 
 
+@api_router.get("/procedures/nurse/consent-cases")
+async def get_nurse_consent_cases(current_user: dict = Depends(get_current_user)):
+    """Return all nurse-visible cases with consent-upload status + schedule metadata.
+    Used by the nurse Home calendar, Home tiles, and Cases tab filters.
+    Only returns cases past the draft stage (i.e. the nurse can actually act on them).
+    """
+    role = current_user.get("role")
+    if role not in ("nurse", "implant_incharge", "administrator", "supervisor"):
+        raise HTTPException(status_code=403, detail="Only authorized clinical staff can view consent cases")
+
+    query = {
+        "status": {"$nin": ["draft", "rejected"]},
+        "archived": {"$ne": True},
+    }
+    cursor = db.procedures.find(query, {
+        "_id": 1, "patient_name": 1, "patient_id": 1, "student_name": 1, "created_by_name": 1,
+        "implant_procedure_type": 1, "status": 1, "procedure_date": 1, "procedure_time": 1,
+        "supervisor_name": 1, "implant_incharge_name": 1, "created_at": 1,
+        "patient_consent_form": 1, "instruments_autoclaved": 1,
+    }).limit(1000)
+
+    items = []
+    async for doc in cursor:
+        items.append({
+            "id": str(doc["_id"]),
+            "patient_name": doc.get("patient_name", ""),
+            "patient_id": doc.get("patient_id", ""),
+            "student_name": doc.get("student_name") or doc.get("created_by_name", ""),
+            "implant_procedure_type": doc.get("implant_procedure_type", ""),
+            "status": doc.get("status", ""),
+            "procedure_date": doc.get("procedure_date", ""),
+            "procedure_time": doc.get("procedure_time", ""),
+            "supervisor_name": doc.get("supervisor_name", ""),
+            "implant_incharge_name": doc.get("implant_incharge_name", ""),
+            "created_at": doc.get("created_at").isoformat() if doc.get("created_at") else "",
+            "consent_uploaded": bool(doc.get("patient_consent_form")),
+            "instruments_autoclaved": _serialise_instruments_autoclaved(doc.get("instruments_autoclaved")),
+        })
+    items.sort(key=lambda x: (x["procedure_date"] or "", x["procedure_time"] or ""))
+    completed = sum(1 for x in items if x["consent_uploaded"])
+    pending = len(items) - completed
+    return {"cases": items, "completed_count": completed, "pending_count": pending}
+
+
 @api_router.post("/uploads/cbct-temp")
 async def upload_cbct_temp(
     file: UploadFile = File(...),

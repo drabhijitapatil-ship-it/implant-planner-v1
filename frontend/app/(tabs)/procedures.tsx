@@ -19,8 +19,18 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { format } from 'date-fns';
 import { STATUS_COLORS, STATUS_LABELS } from '../../constants/checklist';
 import { useAuth } from '../../contexts/AuthContext';
+import NurseCasesScreen from '../../components/NurseCasesScreen';
 
 export default function ProceduresScreen() {
+  const { user } = useAuth();
+  // Nurses get a simplified Pending/Completed/All flow driven by consent-upload status.
+  if (user?.role === 'nurse') {
+    return <NurseCasesScreen />;
+  }
+  return <DefaultProceduresScreen />;
+}
+
+function DefaultProceduresScreen() {
   const { user } = useAuth();
   const [procedures, setProcedures] = useState([]);
   const [loading, setLoading] = useState(true);
