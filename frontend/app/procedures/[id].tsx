@@ -560,7 +560,7 @@ export default function ProcedureDetailScreen() {
         </View>
 
         {/* Treatment Timeline / Progress Tracker */}
-        <View style={styles.timelineContainer} data-testid="treatment-timeline">
+        <View style={styles.timelineContainer} testID="treatment-timeline" data-testid="treatment-timeline">
           <Text style={styles.timelineTitle}>Treatment Progress</Text>
           <View style={styles.timelineSteps}>
             {[
