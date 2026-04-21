@@ -1,0 +1,51 @@
+{
+  "summary": "Iteration 93 — Mark Instruments Autoclaved feature: BOTH backend (pytest 16/16) and frontend flows PASS. Backend: POST /api/procedures/{id}/mark-instruments-autoclaved returns 200+serialised object for nurse mark=true; 200+null for nurse mark=false; 403 for student/supervisor/in-charge; 409 with 1-hour-window detail for both near-term (now+30m) and past-dated procedures; GET /procedures/nurse/scheduled-cases surfaces instruments_autoclaved on every case; GET /procedures/{id} exposes the field for case-detail. _parse_procedure_datetime accepts '10:00', '10:00 AM', '02:30 PM'. Frontend (480px): autoclave-toggle-<id> renders inside scheduled-card with initial marked state 'Instruments autoclaved ✓' + 'Marked Apr 21 · 08:18 AM'; clicking toggles to 'Mark instruments Autoclaved', click again reverts, POSTs fire on each click, URL stays on /dashboard (no navigation). instruments-autoclaved-badge renders for supervisor + implant_incharge on the marked case with text 'Nurse has prepped instruments ✓ / Autoclaved by Nurse 1 · Apr 21 · 08:23 AM'; badge ABSENT for supervisor/in-charge on unmarked case; badge ABSENT on case-detail when logged in as nurse. NOTE: expo required `supervisorctl restart expo` for the new ScheduledCasesSection.tsx to be picked up (CI mode, watch disabled) — flagged in context_for_next_testing_agent.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "GET /api/procedures/{id}",
+        "issue": "After a nurse unmarks (POST with marked=false), DB stores {marked:false} and this GET returns the raw object, whereas the POST response and GET /procedures/nurse/scheduled-cases both normalize unmarked to null via _serialise_instruments_autoclaved. Frontend badge still hides correctly because it guards on marked===true, but this is an inconsistency. Fix options: (a) $unset the field on unmark, or (b) pass the raw doc through _serialise_instruments_autoclaved in the case-detail GET handler."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "case-detail (/procedures/[id].tsx)",
+        "issues": [
+          "Recurring RN-web console warning 'Unexpected text node: . A text node cannot be a child of a <View>.' fires on every case-detail render. Pre-existing (not introduced by this feature) but still noise — likely a stray whitespace/interpolated empty string inside a <View> in [id].tsx. Worth a cleanup pass."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_autoclave_iteration93.py",
+    "/app/test_reports/pytest/pytest_results_iteration93.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: Normalize unmarked response on GET /api/procedures/{id} (either $unset on unmark or run _serialise_instruments_autoclaved in case-detail GET) so the contract matches POST and scheduled-cases list.",
+    "OPTIONAL: Track down the RN-web 'Unexpected text node' warnings in app/procedures/[id].tsx — cosmetic console noise."
+  ],
+  "critical_code_review_comments": [
+    "The 1-hour lock logic relies on naive datetime comparison (datetime.now() vs a naive parsed datetime). If the server timezone differs from user-local, the cutoff could be off by hours. Consider making the parsing timezone-aware or documenting that procedure_time is assumed to be in the server's local zone.",
+    "AutoclaveRow clicks fire a POST on every toggle without debouncing beyond the local `busy` flag. Fine for current UI but consider optimistic-local update + rollback on error to avoid the brief 'stale state' flash during network latency.",
+    "_serialise_instruments_autoclaved returns None when raw.marked is false, but the DB writer sets {marked:false} on unmark rather than $unset. Cleaner: either $unset the field on unmark, or keep {marked:false} but always funnel responses through the serialiser (case-detail endpoint currently does not).",
+    "isLocked() in ScheduledCasesSection.tsx parses date+time using `new Date('YYYY-MM-DD'+'T00:00:00')` which is interpreted in local tz — consistent with backend naive comparison but coupling both to server/client locales is fragile; consider storing an ISO datetime on the procedure doc."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_autoclave_iteration93.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (16/16 — 4 parse helper + 6 mark/unmark + 3 role-guard + 2 lock + 1 list contract)",
+    "frontend": "100% on the autoclave feature scope (nurse toggle + 3 role badge visibility cases matched expectations)"
+  },
+  "test_credentials": "Nurse: nurse.1@dental.edu / Nurse@123; Supervisor: Paresh.gandhi / Supervisor@123; In-Charge: Abhijit.patil / Admin@123; Student: Gaurav.pandey / Student@123. All confirmed working.",
+  "seed_data_creation": "Test temporarily inserts two phase1_approved clones (near_term_case + past_case) via pymongo with mutated procedure_date/time; cleaned up via pytest fixture teardown. Verified via mongo shell afterwards — no leftover docs.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "IMPORTANT: expo runs in CI mode (watch disabled). When /app/frontend/components/* is modified, Metro does NOT hot-reload — you MUST run `sudo supervisorctl restart expo` and wait ~25s for tunnel before UI tests see the new bundle. I hit this initially: autoclave-toggle wasn't rendered on nurse dashboard until expo was restarted, even though the source code was correct. The same likely applies to /app/frontend/app/procedures/[id].tsx changes. Also: on 480px viewport the nurse dashboard order is PatientConsents → ScheduledCases, so you must wheel-scroll ~10x 1200px to get the scheduled-card into view. Supervisor/In-Charge/Student don't have nurse dashboard sections — navigate via bottom-tab 'My Cases' + the search input; patient names for iter93 are 'Approval UI Test' (marked) and 'Restore Test' (unmarked). 'Approval UI Test' is owned by Gaurav.pandey so student can reach it; in iter93 I searched but got no result — student dashboard filters may hide it depending on status, not a feature bug. Future-case safe test id remains 69cf9bdfdafb502718057bcd (2026-04-25 10:00, phase1_approved) — currently left in marked=True state by the tests.",
+  "rca of the issue": "Not applicable — no iteration-93 blocker found. One minor backend inconsistency documented (GET /procedures/{id} returns raw {marked:false} after unmark instead of null like POST/list do). Single developer pre-existing frontend console warning 'Unexpected text node' noted but not caused by this iteration."
+}
