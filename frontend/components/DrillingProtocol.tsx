@@ -51,6 +51,7 @@ export default function DrillingProtocolScreen({
   patientName,
   patientId,
   procedureDate,
+  procedureId,
 }: {
   implant: { brand: string; system: string; diameter: number; length: number };
   tooth: string;
@@ -59,6 +60,7 @@ export default function DrillingProtocolScreen({
   patientName?: string;
   patientId?: string;
   procedureDate?: string;
+  procedureId?: string;
 }) {
   const [boneType, setBoneType] = useState('');
   const [protocol, setProtocol] = useState<ProtocolData | null>(null);
@@ -73,7 +75,7 @@ export default function DrillingProtocolScreen({
       const res = await api.post('/drilling-protocols/generate', {
         brand: implant.brand, system: implant.system,
         diameter: implant.diameter, length: implant.length,
-        bone_density: boneType, tooth, patient_name: patientName, patient_id: patientId, procedure_date: procedureDate,
+        bone_density: boneType, tooth, patient_name: patientName, patient_id: patientId, procedure_date: procedureDate, procedure_id: procedureId,
       });
       setProtocol(res.data);
       setCurrentStep(0);
@@ -146,7 +148,7 @@ export default function DrillingProtocolScreen({
         const res = await api.post('/drilling-protocols/export-pdf', {
           brand: implant.brand, system: implant.system,
           diameter: implant.diameter, length: implant.length,
-          bone_density: boneType, tooth, patient_name: patientName, patient_id: patientId, procedure_date: procedureDate,
+          bone_density: boneType, tooth, patient_name: patientName, patient_id: patientId, procedure_date: procedureDate, procedure_id: procedureId,
         }, { responseType: 'blob' });
         const blob = new Blob([res.data], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
@@ -182,7 +184,7 @@ export default function DrillingProtocolScreen({
         const res = await api.post('/drilling-protocols/export-pdf', {
           brand: implant.brand, system: implant.system,
           diameter: implant.diameter, length: implant.length,
-          bone_density: boneType, tooth, patient_name: patientName, patient_id: patientId, procedure_date: procedureDate,
+          bone_density: boneType, tooth, patient_name: patientName, patient_id: patientId, procedure_date: procedureDate, procedure_id: procedureId,
         }, { responseType: 'blob' });
         const blob = new Blob([res.data], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
