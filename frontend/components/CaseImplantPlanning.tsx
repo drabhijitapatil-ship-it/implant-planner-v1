@@ -18,7 +18,7 @@ import api from '../utils/api';
 import ExportPrintMenu from './ExportPrintMenu';
 
 // ── Drilling Protocol PDF helpers (A4, backend-rendered) ────────────────────
-async function fetchDrillingPdfBlob(payload: {
+type DrillingPdfPayload = {
   implant: { brand: string; system: string; diameter: number; length?: number };
   bone: string;
   tooth: string;
@@ -26,32 +26,56 @@ async function fetchDrillingPdfBlob(payload: {
   patientId?: string;
   procedureDate?: string;
   steps?: { step: number; drill: string; speed: string; depth: string; note: string }[];
-}): Promise<Blob> {
-  const res = await api.post(
-    '/drilling-protocols/export-pdf',
-    {
-      brand: payload.implant.brand,
-      system: payload.implant.system,
-      diameter: payload.implant.diameter,
-      length: payload.implant.length || 0,
-      bone_density: payload.bone || 'D2',
-      tooth: payload.tooth,
-      patient_name: payload.patientName || '',
-      patient_id: payload.patientId || '',
-      procedure_date: payload.procedureDate || '',
-      // Forward pre-computed steps so PDF always renders, even for brand/system
-      // combos that aren't in the backend's DRILLING_PROTOCOLS dictionary.
-      steps: payload.steps || [],
-    },
-    { responseType: 'blob' },
-  );
+};
+
+/** Build the POST body expected by /api/drilling-protocols/export-pdf. */
+function buildDrillingPdfBody(payload: DrillingPdfPayload) {
+  return {
+    brand: payload.implant.brand,
+    system: payload.implant.system,
+    diameter: payload.implant.diameter,
+    length: payload.implant.length || 0,
+    bone_density: payload.bone || 'D2',
+    tooth: payload.tooth,
+    patient_name: payload.patientName || '',
+    patient_id: payload.patientId || '',
+    procedure_date: payload.procedureDate || '',
+    // Forward pre-computed steps so PDF always renders, even for brand/system
+    // combos that aren't in the backend's DRILLING_PROTOCOLS dictionary.
+    steps: payload.steps || [],
+  };
+}
+
+/** Web-only: fetch as browser Blob via axios. */
+async function fetchDrillingPdfBlob(payload: DrillingPdfPayload): Promise<Blob> {
+  const res = await api.post('/drilling-protocols/export-pdf', buildDrillingPdfBody(payload), {
+    responseType: 'blob',
+  });
   return new Blob([res.data], { type: 'application/pdf' });
 }
 
-async function printDrillingProtocolPdf(payload: Parameters<typeof fetchDrillingPdfBlob>[0]) {
+/** Native-safe: POST → ArrayBuffer → base64 → temp file on disk. Returns file URI. */
+async function fetchDrillingPdfToCacheNative(payload: DrillingPdfPayload, filename: string): Promise<string | null> {
   try {
-    const blob = await fetchDrillingPdfBlob(payload);
+    const res = await api.post('/drilling-protocols/export-pdf', buildDrillingPdfBody(payload), {
+      responseType: 'arraybuffer',
+    });
+    const { Buffer } = await import('buffer');
+    const base64 = Buffer.from(res.data).toString('base64');
+    const FileSystem = await import('expo-file-system/legacy');
+    const path = `${FileSystem.cacheDirectory}${filename}`;
+    await FileSystem.writeAsStringAsync(path, base64, { encoding: FileSystem.EncodingType.Base64 });
+    return path;
+  } catch (err) {
+    console.error('[DrillingProtocol] fetchDrillingPdfToCacheNative failed:', err);
+    return null;
+  }
+}
+
+async function printDrillingProtocolPdf(payload: DrillingPdfPayload) {
+  try {
     if (Platform.OS === 'web') {
+      const blob = await fetchDrillingPdfBlob(payload);
       const url = URL.createObjectURL(blob);
       const iframe = document.createElement('iframe');
       iframe.style.position = 'fixed';
@@ -67,50 +91,46 @@ async function printDrillingProtocolPdf(payload: Parameters<typeof fetchDrilling
         catch { window.open(url, '_blank'); }
       };
       setTimeout(() => { try { document.body.removeChild(iframe); } catch {} URL.revokeObjectURL(url); }, 60000);
-    } else {
-      // Mobile: route through expo-print with blob → base64
-      const reader = new FileReader();
-      reader.onload = async () => {
-        try {
-          const base64 = (reader.result as string).split(',')[1];
-          const Print = await import('expo-print');
-          await Print.printAsync({ uri: `data:application/pdf;base64,${base64}` });
-        } catch { /* swallow — user can cancel */ }
-      };
-      reader.readAsDataURL(blob);
+      return;
     }
+    // Native: save to cache then route via expo-print.
+    const filename = `DrillingProtocol_${payload.implant.brand}_${payload.implant.diameter}x${payload.implant.length || ''}_${payload.bone}.pdf`;
+    const uri = await fetchDrillingPdfToCacheNative(payload, filename);
+    if (!uri) throw new Error('Could not prepare PDF for printing');
+    const Print = await import('expo-print');
+    await Print.printAsync({ uri });
   } catch (err) {
     console.error('[DrillingProtocol] Print failed:', err);
     Alert.alert('Print failed', 'Could not open the drilling protocol PDF.');
   }
 }
 
-async function exportDrillingProtocolPdf(payload: Parameters<typeof fetchDrillingPdfBlob>[0]) {
+async function exportDrillingProtocolPdf(payload: DrillingPdfPayload) {
+  const filename = `DrillingProtocol_${payload.implant.brand}_${payload.implant.diameter}x${payload.implant.length || ''}_${payload.bone}.pdf`;
   try {
-    const blob = await fetchDrillingPdfBlob(payload);
-    const filename = `DrillingProtocol_${payload.implant.brand}_${payload.implant.diameter}x${payload.implant.length || ''}_${payload.bone}.pdf`;
     if (Platform.OS === 'web') {
+      const blob = await fetchDrillingPdfBlob(payload);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
+      return;
+    }
+    // Native: save to cache then trigger iOS/Android Share sheet.
+    const uri = await fetchDrillingPdfToCacheNative(payload, filename);
+    if (!uri) throw new Error('Could not prepare PDF for export');
+    const Sharing = await import('expo-sharing');
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: 'Drilling Protocol',
+        UTI: 'com.adobe.pdf',
+      });
     } else {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        try {
-          const base64 = (reader.result as string).split(',')[1];
-          const FileSystem = await import('expo-file-system/legacy');
-          const Sharing = await import('expo-sharing');
-          const path = `${FileSystem.cacheDirectory}${filename}`;
-          await FileSystem.writeAsStringAsync(path, base64, { encoding: FileSystem.EncodingType.Base64 });
-          if (await Sharing.isAvailableAsync()) {
-            await Sharing.shareAsync(path, { mimeType: 'application/pdf', dialogTitle: 'Drilling Protocol' });
-          }
-        } catch { /* swallow */ }
-      };
-      reader.readAsDataURL(blob);
+      const WebBrowser = await import('expo-web-browser');
+      await WebBrowser.openBrowserAsync(uri);
     }
   } catch (err) {
     console.error('[DrillingProtocol] Export failed:', err);
