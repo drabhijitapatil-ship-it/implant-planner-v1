@@ -1,7 +1,7 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Response, Request, Query, Body
 from fastapi import status as http_status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse, HTMLResponse
 from dotenv import load_dotenv
 import io
 from starlette.middleware.cors import CORSMiddleware
@@ -2379,6 +2379,215 @@ async def serve_upload(filename: str, token: Optional[str] = Query(None), curren
             raise HTTPException(status_code=403, detail="Access denied")
     
     return FileResponse(file_path, filename=procedure.get("cbct_original_name", filename) if procedure else filename)
+
+
+# ───────────────────────────────────────────────────────────────────
+# Public tokenised CBCT viewer (for QR codes embedded in Drilling PDF)
+# ───────────────────────────────────────────────────────────────────
+# Token format: HMAC-SHA256 signed JSON payload {"p": <procedure_id>, "e": <unix_expiry>}
+# base64url-encoded. Verified server-side before serving the viewer or any file.
+
+import hmac as _hmac
+import hashlib as _hashlib
+import base64 as _base64
+import json as _json_cbct
+
+CBCT_TOKEN_TTL_HOURS = 24
+
+
+def _sign_cbct_token(procedure_id: str) -> str:
+    """Return a short signed token valid for 24h from now."""
+    exp = int((datetime.now(timezone.utc) + timedelta(hours=CBCT_TOKEN_TTL_HOURS)).timestamp())
+    payload = _json_cbct.dumps({"p": procedure_id, "e": exp}, separators=(",", ":")).encode()
+    b64 = _base64.urlsafe_b64encode(payload).rstrip(b"=")
+    sig = _hmac.new(SECRET_KEY.encode(), b64, _hashlib.sha256).digest()
+    sig_b64 = _base64.urlsafe_b64encode(sig).rstrip(b"=")
+    return f"{b64.decode()}.{sig_b64.decode()}"
+
+
+def _verify_cbct_token(token: str) -> Optional[str]:
+    """Return procedure_id if the token is valid + unexpired, else None."""
+    try:
+        b64, sig_b64 = token.split(".", 1)
+        expected = _hmac.new(SECRET_KEY.encode(), b64.encode(), _hashlib.sha256).digest()
+        got = _base64.urlsafe_b64decode(sig_b64 + "=" * (-len(sig_b64) % 4))
+        if not _hmac.compare_digest(expected, got):
+            return None
+        data = _json_cbct.loads(_base64.urlsafe_b64decode(b64 + "=" * (-len(b64) % 4)))
+        if int(data.get("e", 0)) < int(datetime.now(timezone.utc).timestamp()):
+            return None
+        return str(data["p"])
+    except Exception:
+        return None
+
+
+async def _list_cbct_files(proc: dict) -> List[dict]:
+    """Return normalised list of CBCT file entries for a procedure doc.
+    Supports both the legacy single-file (cbct_file) and the new cbct_files array.
+    Each entry: {filename, original_name, content_type}
+    """
+    items: List[dict] = []
+    seen = set()
+    for f in (proc.get("cbct_files") or []):
+        fn = f.get("filename")
+        if fn and fn not in seen:
+            items.append({
+                "filename": fn,
+                "original_name": f.get("original_name") or fn,
+                "content_type": f.get("content_type") or "application/octet-stream",
+            })
+            seen.add(fn)
+    legacy = proc.get("cbct_file")
+    if legacy and legacy not in seen:
+        items.append({
+            "filename": legacy,
+            "original_name": proc.get("cbct_original_name") or legacy,
+            "content_type": proc.get("cbct_content_type") or "application/octet-stream",
+        })
+    return items
+
+
+def _maybe_convert_heic_to_jpeg(path: Path) -> Optional[bytes]:
+    """Convert HEIC → JPEG bytes so browsers without HEIC support can render it."""
+    try:
+        import pillow_heif  # type: ignore
+        pillow_heif.register_heif_opener()
+        from PIL import Image as _PIL_Image
+        img = _PIL_Image.open(str(path)).convert("RGB")
+        buf = BytesIO()
+        img.save(buf, format="JPEG", quality=85)
+        return buf.getvalue()
+    except Exception as exc:
+        logging.warning("HEIC→JPEG conversion failed for %s: %s", path, exc)
+        return None
+
+
+@api_router.post("/procedures/{procedure_id}/cbct-qr-token")
+async def mint_cbct_qr_token(procedure_id: str, current_user: dict = Depends(get_current_user)):
+    """Mint a fresh 24-hour signed token for a case's CBCT QR viewer.
+    Only users who can view the case can mint a token (same rules as GET /procedures/{id}).
+    """
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    role = current_user.get("role")
+    if role in ("administrator", "implant_incharge", "nurse"):
+        allowed = True
+    elif role == "supervisor" and proc.get("supervisor_id") == str(current_user["_id"]):
+        allowed = True
+    elif role == "student" and proc.get("student_id") == str(current_user["_id"]):
+        allowed = True
+    else:
+        allowed = False
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Not authorised for this case")
+    token = _sign_cbct_token(procedure_id)
+    return {"token": token, "expires_in_hours": CBCT_TOKEN_TTL_HOURS}
+
+
+@app.get("/cbct/view/{token}", response_class=HTMLResponse)
+async def cbct_public_viewer(token: str):
+    """Public HTML viewer reached by scanning the QR code on the printed drilling PDF.
+    Renders a minimal gallery of CBCT files for that procedure. Each file can be opened
+    via /cbct/file/{token}/{filename} which validates the token on every request.
+    """
+    procedure_id = _verify_cbct_token(token)
+    if not procedure_id:
+        return HTMLResponse(
+            "<html><body style='font-family:system-ui;text-align:center;padding:40px'>"
+            "<h2>Link expired or invalid</h2>"
+            "<p>Ask the care team to re-print the drilling protocol to regenerate the QR code.</p>"
+            "</body></html>", status_code=403,
+        )
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        return HTMLResponse("Procedure not found", status_code=404)
+    files = await _list_cbct_files(proc)
+    patient = proc.get("patient_name") or "Patient"
+    items_html = ""
+    for f in files:
+        ct = (f.get("content_type") or "").lower()
+        is_image = ct.startswith("image/") or ct.startswith("application/dicom")
+        is_pdf = "pdf" in ct
+        preview_url = f"/cbct/file/{token}/{f['filename']}"
+        if is_image:
+            thumb_inner = f"<img src='{preview_url}'/>"
+        else:
+            icon = "📄" if is_pdf else "📁"
+            thumb_inner = f"<span class='icon'>{icon}</span>"
+        orig = f["original_name"]
+        meta = ct or "file"
+        items_html += (
+            f"<a class='item' href='{preview_url}' target='_blank'>"
+            f"<div class='thumb'>{thumb_inner}</div>"
+            f"<div class='label'>{orig}</div>"
+            f"<div class='meta'>{meta}</div>"
+            f"</a>"
+        )
+    if not items_html:
+        items_html = "<p class='empty'>No CBCT files uploaded for this case yet.</p>"
+    html = f"""<!doctype html>
+<html><head><meta charset='utf-8'>
+<meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>CBCT — {patient}</title>
+<style>
+ body {{ font-family: -apple-system, system-ui, sans-serif; margin:0; background:#0D1B2A; color:#E0E7EE; }}
+ header {{ background:#1565C0; color:#FFF; padding:14px 18px; }}
+ header h1 {{ margin:0; font-size:18px; letter-spacing:0.3px; }}
+ header p {{ margin:2px 0 0; font-size:12px; opacity:0.85; }}
+ .grid {{ display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:12px; padding:14px; }}
+ .item {{ background:#1a2a3d; border-radius:10px; overflow:hidden; text-decoration:none; color:inherit; display:flex; flex-direction:column; border:1px solid #2a3f5a; }}
+ .item:hover {{ border-color:#64B5F6; }}
+ .thumb {{ aspect-ratio:1; display:flex; align-items:center; justify-content:center; background:#0a1624; }}
+ .thumb img {{ width:100%; height:100%; object-fit:cover; }}
+ .thumb .icon {{ font-size:42px; }}
+ .label {{ font-size:12px; padding:8px 8px 2px; word-break:break-all; }}
+ .meta {{ font-size:10px; opacity:0.6; padding:0 8px 8px; }}
+ .empty {{ text-align:center; padding:40px; opacity:0.7; }}
+ footer {{ text-align:center; font-size:11px; opacity:0.6; padding:10px; }}
+</style></head>
+<body>
+  <header>
+    <h1>CBCT Files — {patient}</h1>
+    <p>Tap any file to view · Link valid for 24 h from printing</p>
+  </header>
+  <div class='grid'>{items_html}</div>
+  <footer>Implanr · Secure CBCT QR Viewer</footer>
+</body></html>"""
+    return HTMLResponse(html)
+
+
+@app.get("/cbct/file/{token}/{filename}")
+async def cbct_public_file(token: str, filename: str):
+    """Stream a single CBCT file once token is verified. Auto-converts HEIC to JPEG
+    for browsers that can't render HEIC natively (non-Safari on non-iOS)."""
+    procedure_id = _verify_cbct_token(token)
+    if not procedure_id:
+        raise HTTPException(status_code=403, detail="Link expired or invalid")
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    files = await _list_cbct_files(proc)
+    entry = next((f for f in files if f["filename"] == filename), None)
+    if not entry:
+        raise HTTPException(status_code=404, detail="File not associated with this procedure")
+    path = UPLOADS_DIR / filename
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    content_type = (entry.get("content_type") or "application/octet-stream").lower()
+    # HEIC → JPEG auto-conversion (non-Safari browsers can't render HEIC)
+    if content_type in ("image/heic", "image/heif") or filename.lower().endswith((".heic", ".heif")):
+        converted = _maybe_convert_heic_to_jpeg(path)
+        if converted:
+            return Response(content=converted, media_type="image/jpeg")
+    with open(path, "rb") as fh:
+        return Response(content=fh.read(), media_type=content_type)
 
 
 # ── Clinical Case Album: Photo Step Definitions ─────────────────────
@@ -8483,19 +8692,45 @@ async def export_drilling_pdf(
     """Generate a PDF of the drilling protocol."""
     from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import mm
+    from reportlab.lib.enums import TA_CENTER
     brand = body.get("brand", "")
     system = body.get("system", "")
     diameter = float(body.get("diameter", 0))
     length = float(body.get("length", 0))
     bone = body.get("bone_density", "")
     tooth = body.get("tooth", "")
-    # Optional patient context — drawn as a banner at the top of the A4 PDF.
+    # Optional patient/case context — drawn as a banner + care team + QR on the A4 PDF.
     patient_name = (body.get("patient_name") or "").strip()
     patient_id_str = (body.get("patient_id") or "").strip()
     procedure_date = (body.get("procedure_date") or "").strip()
+    procedure_id = (body.get("procedure_id") or "").strip()
+
+    # Enrich from the procedure doc (care team, autoclave stamp, CBCT token for QR).
+    proc_doc = None
+    if procedure_id:
+        try:
+            proc_doc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+        except Exception:
+            proc_doc = None
+    student_name_ctx = (proc_doc.get("student_name") if proc_doc else None) or (body.get("student_name") or "")
+    supervisor_name_ctx = (proc_doc.get("supervisor_name") if proc_doc else None) or (body.get("supervisor_name") or "")
+    incharge_name_ctx = (proc_doc.get("implant_incharge_name") if proc_doc else None) or (body.get("implant_incharge_name") or "")
+    autoclave_info = (proc_doc.get("instruments_autoclaved") if proc_doc else None) or {}
+    autoclave_marked = bool(autoclave_info.get("marked"))
+    autoclave_by = autoclave_info.get("marked_by_name") or ""
+    autoclave_at = autoclave_info.get("marked_at")
+    if isinstance(autoclave_at, datetime):
+        autoclave_at_str = autoclave_at.strftime("%b %d, %Y · %H:%M")
+    elif isinstance(autoclave_at, str) and autoclave_at:
+        try:
+            autoclave_at_str = datetime.fromisoformat(autoclave_at.replace("Z", "+00:00")).strftime("%b %d, %Y · %H:%M")
+        except Exception:
+            autoclave_at_str = autoclave_at
+    else:
+        autoclave_at_str = ""
 
     if not all([brand, system, diameter, length, bone]):
         raise HTTPException(status_code=400, detail="All fields required")
@@ -8616,7 +8851,7 @@ async def export_drilling_pdf(
     styles = getSampleStyleSheet()
     elements = []
 
-    # Patient banner (only if any patient context provided)
+    # ── Patient banner (centered text on blue strip) ────────────────────
     banner_bits = []
     if patient_name:
         banner_bits.append(f"<b>Patient:</b> {patient_name}")
@@ -8626,20 +8861,35 @@ async def export_drilling_pdf(
         banner_bits.append(f"<b>Surgery date:</b> {procedure_date}")
     banner_bits.append(f"<b>Generated:</b> {datetime.now().strftime('%b %d, %Y · %H:%M')}")
     banner_style = ParagraphStyle(
-        'banner', parent=styles['BodyText'], fontSize=10,
+        'banner', parent=styles['BodyText'], fontSize=10, alignment=TA_CENTER,
         textColor=colors.HexColor('#FFFFFF'), leading=14,
         backColor=colors.HexColor('#0D47A1'), borderPadding=6,
     )
     elements.append(Paragraph(" &nbsp;·&nbsp; ".join(banner_bits), banner_style))
     elements.append(Spacer(1, 4*mm))
 
-    # Title
+    # ── Title + QR code row ─────────────────────────────────────────────
     title_style = ParagraphStyle('title', parent=styles['Title'], fontSize=18,
-                                  textColor=colors.HexColor('#1565C0'), spaceAfter=6)
-    elements.append(Paragraph("Drilling Protocol – Surgical Reference", title_style))
-    elements.append(Spacer(1, 4*mm))
+                                  textColor=colors.HexColor('#1565C0'), spaceAfter=6, alignment=0)
+    # Build QR pointing at the public CBCT gallery (only if we have a procedure_id).
+    qr_cell = ""
+    if procedure_id:
+        try:
+            import qrcode as _qrcode_mod
+            token = _sign_cbct_token(procedure_id)
+            # Use the backend public base (same host, /cbct/view/<token>)
+            public_base = os.environ.get("CBCT_PUBLIC_BASE_URL") or os.environ.get("EXPO_PUBLIC_BACKEND_URL", "").strip() or ""
+            qr_url = f"{public_base.rstrip('/')}/cbct/view/{token}"
+            qr_img = _qrcode_mod.make(qr_url)
+            qr_buf = BytesIO()
+            qr_img.save(qr_buf, format="PNG")
+            qr_buf.seek(0)
+            qr_cell = RLImage(qr_buf, width=28*mm, height=28*mm)
+        except Exception as exc:
+            logging.warning("QR generation failed: %s", exc)
+            qr_cell = ""
 
-    # Info table
+    # Two-column layout: left = title + info table; right = QR + label.
     info_data = [
         ["Implant System:", proto.get("system_name") or f"{brand} {system}"],
         ["Implant Size:", f"{diameter} x {length} mm"],
@@ -8648,36 +8898,85 @@ async def export_drilling_pdf(
     ]
     if tooth:
         info_data.insert(0, ["Tooth (FDI):", tooth])
-    info_table = Table(info_data, colWidths=[45*mm, 120*mm])
+    info_table = Table(info_data, colWidths=[38*mm, 80*mm])
     info_table.setStyle(TableStyle([
         ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 11),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('FONTSIZE', (0, 0), (-1, -1), 10.5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
         ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#263238')),
         ('TEXTCOLOR', (1, 0), (1, -1), colors.HexColor('#1565C0')),
     ]))
-    elements.append(info_table)
+    qr_caption_style = ParagraphStyle(
+        'qr_cap', parent=styles['BodyText'], fontSize=7.5, alignment=TA_CENTER,
+        textColor=colors.HexColor('#546E7A'), leading=9,
+    )
+    qr_stack = Table([
+        [qr_cell if qr_cell else Paragraph("", qr_caption_style)],
+        [Paragraph("Scan for CBCT<br/>(valid 24 h)", qr_caption_style)],
+    ], colWidths=[32*mm])
+    qr_stack.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+    ]))
+    title_para = Paragraph("Drilling Protocol – Surgical Reference", title_style)
+    left_col = Table([[title_para], [Spacer(1, 2*mm)], [info_table]], colWidths=[118*mm])
+    left_col.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+    ]))
+    header_row = Table([[left_col, qr_stack]], colWidths=[120*mm, 50*mm])
+    header_row.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+    ]))
+    elements.append(header_row)
     elements.append(Spacer(1, 8*mm))
 
-    # Drilling sequence table
+    # ── Care team row (postgrad student + supervisor + implant in-charge) ──
+    team_bits = []
+    if student_name_ctx:
+        team_bits.append(f"<b>Postgraduate student:</b> {student_name_ctx}")
+    if supervisor_name_ctx:
+        team_bits.append(f"<b>Supervisor:</b> {supervisor_name_ctx}")
+    if incharge_name_ctx:
+        team_bits.append(f"<b>Implant In-Charge:</b> {incharge_name_ctx}")
+    if team_bits:
+        team_style = ParagraphStyle(
+            'team', parent=styles['BodyText'], fontSize=9.5, alignment=TA_CENTER,
+            textColor=colors.HexColor('#37474F'), leading=12,
+            backColor=colors.HexColor('#ECEFF1'), borderPadding=5,
+        )
+        elements.append(Paragraph(" &nbsp;·&nbsp; ".join(team_bits), team_style))
+        elements.append(Spacer(1, 6*mm))
+
+    # ── Drilling sequence (centered title) ──────────────────────────────
     elements.append(Paragraph("Drilling Sequence", ParagraphStyle('h2', parent=styles['Heading2'],
-                               fontSize=14, textColor=colors.HexColor('#263238'))))
+                               fontSize=14, textColor=colors.HexColor('#263238'), alignment=TA_CENTER)))
     elements.append(Spacer(1, 3*mm))
 
+    # Render Drill Type and Depth columns via Paragraph so long text wraps inside the cell.
+    cell_style = ParagraphStyle('cell', parent=styles['BodyText'], fontSize=9.5, leading=11, alignment=TA_CENTER)
     header = ["Step", "Drill Type", "Code", "Diameter", "Depth", "RPM", "Irrigation"]
     table_data = [header]
     for s in steps:
+        depth_str = f"{s['depth']} mm" if not str(s['depth']).lower().endswith('mm') else str(s['depth'])
         table_data.append([
             str(s["step"]),
-            s["drill_type"],
-            s["code"],
+            Paragraph(str(s["drill_type"]), cell_style),
+            str(s["code"]),
             f"{s['diameter']} mm",
-            f"{s['depth']} mm",
+            Paragraph(depth_str, cell_style),
             str(s["rpm"]),
             "Yes" if s["irrigation"] else "No",
         ])
 
-    col_widths = [12*mm, 40*mm, 28*mm, 22*mm, 20*mm, 25*mm, 22*mm]
+    col_widths = [12*mm, 40*mm, 26*mm, 20*mm, 30*mm, 20*mm, 22*mm]
     t = Table(table_data, colWidths=col_widths)
 
     drill_colors = {
