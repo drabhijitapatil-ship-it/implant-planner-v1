@@ -115,7 +115,8 @@ async function exportDrillingProtocolPdf(payload: DrillingPdfPayload) {
       a.href = url;
       a.download = filename;
       a.click();
-      URL.revokeObjectURL(url);
+      // Delay revoke so mobile Safari/Chrome finish fetching the blob before it's released.
+      setTimeout(() => URL.revokeObjectURL(url), 15000);
       return;
     }
     // Native: save to cache then trigger iOS/Android Share sheet.
