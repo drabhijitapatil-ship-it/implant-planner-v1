@@ -25,6 +25,7 @@ type DrillingPdfPayload = {
   patientName?: string;
   patientId?: string;
   procedureDate?: string;
+  procedureId?: string;
   steps?: { step: number; drill: string; speed: string; depth: string; note: string }[];
 };
 
@@ -40,6 +41,7 @@ function buildDrillingPdfBody(payload: DrillingPdfPayload) {
     patient_name: payload.patientName || '',
     patient_id: payload.patientId || '',
     procedure_date: payload.procedureDate || '',
+    procedure_id: payload.procedureId || '',
     // Forward pre-computed steps so PDF always renders, even for brand/system
     // combos that aren't in the backend's DRILLING_PROTOCOLS dictionary.
     steps: payload.steps || [],
@@ -734,11 +736,11 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
                     exportLabel="Export drilling protocol PDF"
                     onPrint={() => {
                       const steps = generateDrillingProtocol(plan.brand, plan.system, plan.diameter, plan.bone_type, plan.length);
-                      return printDrillingProtocolPdf({ implant: plan, bone: plan.bone_type, tooth: plan.tooth || '', patientName, patientId, procedureDate, steps });
+                      return printDrillingProtocolPdf({ implant: plan, bone: plan.bone_type, tooth: plan.tooth || '', patientName, patientId, procedureDate, procedureId, steps });
                     }}
                     onExport={() => {
                       const steps = generateDrillingProtocol(plan.brand, plan.system, plan.diameter, plan.bone_type, plan.length);
-                      return exportDrillingProtocolPdf({ implant: plan, bone: plan.bone_type, tooth: plan.tooth || '', patientName, patientId, procedureDate, steps });
+                      return exportDrillingProtocolPdf({ implant: plan, bone: plan.bone_type, tooth: plan.tooth || '', patientName, patientId, procedureDate, procedureId, steps });
                     }}
                   />
                 </View>
