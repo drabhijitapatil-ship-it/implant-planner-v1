@@ -28,6 +28,7 @@ function DrawerMenu({
   profilePhoto,
   onNavigate,
   onLogout,
+  hasUnseenWhatsNew,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -38,6 +39,7 @@ function DrawerMenu({
   profilePhoto: string | null;
   onNavigate: (route: string) => void;
   onLogout: () => void;
+  hasUnseenWhatsNew: boolean;
 }) {
   const insets = useSafeAreaInsets();
 
@@ -99,6 +101,9 @@ function DrawerMenu({
             >
               <Ionicons name={item.icon} size={22} color="#37474F" />
               <Text style={d.menuLabel}>{item.label}</Text>
+              {item.key === 'profile' && hasUnseenWhatsNew && (
+                <View style={badgeStyles.reddotInline} testID="drawer-profile-reddot" />
+              )}
               <Ionicons name="chevron-forward" size={18} color="#B0BEC5" />
             </TouchableOpacity>
           ))}
@@ -189,6 +194,9 @@ export default function TabsLayout() {
   usePushNotifications();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  // Red-dot indicator on the hamburger + "My Profile" row when the user has
+  // unseen changelog entries. Cleared when they ack (/whatsnew GET returns 0).
+  const [hasUnseenWhatsNew, setHasUnseenWhatsNew] = useState(false);
 
   const role = user?.role;
   const isAdmin = role === 'administrator' || role === 'implant_incharge';
@@ -201,11 +209,27 @@ export default function TabsLayout() {
     } catch {}
   }, []);
 
+  const fetchWhatsNewIndicator = useCallback(async () => {
+    try {
+      const res = await api.get('/whatsnew');
+      setHasUnseenWhatsNew((res.data?.entries || []).length > 0);
+    } catch {
+      setHasUnseenWhatsNew(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchUnreadCount();
+    fetchWhatsNewIndicator();
     const interval = setInterval(fetchUnreadCount, 30000);
     return () => clearInterval(interval);
-  }, [fetchUnreadCount]);
+  }, [fetchUnreadCount, fetchWhatsNewIndicator]);
+
+  // Re-check on drawer open (catches the case where user opens What's new from
+  // Profile, taps "Got it" elsewhere, then returns).
+  useEffect(() => {
+    if (drawerOpen) fetchWhatsNewIndicator();
+  }, [drawerOpen, fetchWhatsNewIndicator]);
 
   const roleName = (role || '').replace(/_/g, ' ');
 
@@ -217,7 +241,8 @@ export default function TabsLayout() {
     logout();
   };
 
-  // Header menu button (hamburger)
+  // Header menu button (hamburger) — red dot appears when there are unseen
+  // What's-new entries (cleared on ack via GET /whatsnew returning empty).
   const HeaderLeft = () => (
     <TouchableOpacity
       onPress={() => setDrawerOpen(true)}
@@ -225,7 +250,12 @@ export default function TabsLayout() {
       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       data-testid="menu-hamburger"
     >
-      <Ionicons name="menu" size={26} color="#263238" />
+      <View>
+        <Ionicons name="menu" size={26} color="#263238" />
+        {hasUnseenWhatsNew && (
+          <View style={badgeStyles.reddot} data-testid="profile-whatsnew-reddot" />
+        )}
+      </View>
     </TouchableOpacity>
   );
 
@@ -241,6 +271,7 @@ export default function TabsLayout() {
         profilePhoto={user?.profile_photo || null}
         onNavigate={handleNavigate}
         onLogout={handleLogout}
+        hasUnseenWhatsNew={hasUnseenWhatsNew}
       />
       <Tabs
         screenOptions={{
@@ -374,5 +405,23 @@ const badgeStyles = StyleSheet.create({
     color: '#FFF',
     fontSize: 10,
     fontWeight: '700',
+  },
+  reddot: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#E53935',
+    borderWidth: 1.5,
+    borderColor: '#FFF',
+  },
+  reddotInline: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#E53935',
+    marginLeft: 6,
   },
 });

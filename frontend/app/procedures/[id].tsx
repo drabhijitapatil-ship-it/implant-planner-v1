@@ -167,6 +167,9 @@ export default function ProcedureDetailScreen() {
   const [editValues, setEditValues] = useState<Record<string, any>>({});
   const [saving, setSaving] = useState(false);
   const [showEditHistory, setShowEditHistory] = useState(false);
+  // Bottom-sheet for Implant In-Charge's "Edit Patient Consent Form" on any
+  // case they didn't schedule. Exposes Reprint + Upload actions.
+  const [showInchargeConsentEdit, setShowInchargeConsentEdit] = useState(false);
   const [uploadingConsent, setUploadingConsent] = useState(false);
 
   const uploadConsentForProcedure = async () => {
@@ -730,6 +733,20 @@ export default function ProcedureDetailScreen() {
                 >
                   <Ionicons name="document-text-outline" size={16} color="#FFF" />
                   <Text style={styles.consentActionBtnTextSecondary}>View uploaded consent form</Text>
+                </TouchableOpacity>
+              )}
+              {/* Implant In-Charge can ALWAYS edit the consent on any case
+                  they're not the owner of. Opens a bottom-sheet with the
+                  same two actions (Reprint + Upload) as the scheduler. */}
+              {user?.role === 'implant_incharge' && !canUpload && (
+                <TouchableOpacity
+                  style={[styles.consentActionBtn, styles.consentActionBtnPrimary]}
+                  onPress={() => setShowInchargeConsentEdit(true)}
+                  activeOpacity={0.85}
+                  testID="incharge-edit-consent-btn"
+                >
+                  <Ionicons name="create-outline" size={16} color="#FFF" />
+                  <Text style={styles.consentActionBtnText}>Edit Patient Consent Form</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -2377,6 +2394,64 @@ export default function ProcedureDetailScreen() {
         {/* Extra bottom spacing for the fixed buttons */}
         <View style={{ height: (canExportPDF() || canViewAiSummary()) ? 70 : 10 }} />
       </ScrollView>
+
+      {/* Implant In-Charge "Edit Patient Consent Form" bottom-sheet.
+          Opens on non-owner cases so the In-Charge can override the consent
+          without leaving the screen. Any replacement triggers an edit_log
+          entry on the backend (same code path as the scheduler). */}
+      <Modal
+        visible={showInchargeConsentEdit}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowInchargeConsentEdit(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+          <View style={{ backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 24 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#ECEFF1' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="create-outline" size={22} color="#1565C0" />
+                <Text style={{ fontSize: 17, fontWeight: '700', color: '#0D47A1' }}>Edit Patient Consent Form</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowInchargeConsentEdit(false)} style={{ padding: 4 }} testID="close-incharge-consent-edit">
+                <Ionicons name="close-circle" size={28} color="#78909C" />
+              </TouchableOpacity>
+            </View>
+            <View style={{ padding: 16, gap: 10 }}>
+              <TouchableOpacity
+                style={[styles.consentActionBtn, styles.consentActionBtnSecondary]}
+                onPress={async () => { setShowInchargeConsentEdit(false); await downloadConsentTemplate(id as string); }}
+                activeOpacity={0.85}
+                testID="incharge-reprint-consent-btn"
+              >
+                <Ionicons name="print-outline" size={16} color="#FFF" />
+                <Text style={styles.consentActionBtnTextSecondary}>Reprint Consent Form</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.consentActionBtn, styles.consentActionBtnPrimary, uploadingConsent && styles.buttonDisabled]}
+                disabled={uploadingConsent}
+                onPress={async () => {
+                  setShowInchargeConsentEdit(false);
+                  await uploadConsentForProcedure();
+                }}
+                activeOpacity={0.85}
+                testID="incharge-upload-consent-btn"
+              >
+                {uploadingConsent ? (
+                  <ActivityIndicator color="#FFF" size="small" />
+                ) : (
+                  <>
+                    <Ionicons name="cloud-upload-outline" size={16} color="#FFF" />
+                    <Text style={styles.consentActionBtnText}>Upload Consent Form</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <Text style={{ fontSize: 11, color: '#78909C', textAlign: 'center', marginTop: 4, fontStyle: 'italic' }}>
+                Any replacement is logged in the case's edit history with your name and timestamp.
+              </Text>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Edit History Timeline Modal */}
       <Modal visible={showEditHistory} animationType="slide" transparent onRequestClose={() => setShowEditHistory(false)}>

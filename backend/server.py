@@ -2113,8 +2113,25 @@ async def upload_consent_for_procedure(
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
     }
+    # Track the consent change in both dedicated consent_history (versioned
+    # file archive) AND the unified edit_log so it surfaces in the case's
+    # "Edit History" modal + the Recent Activity feed.
+    edit_log_entry = {
+        "field": "patient_consent_form",
+        "old_value": (previous.get("original_name") if previous else None) or ("v" + str(previous.get("version")) if previous else None),
+        "new_value": f"v{version} · {file.filename}",
+        "edited_by": current_user.get("name", ""),
+        "edited_by_role": role or "",
+        "edited_at": datetime.now(timezone.utc).isoformat(),
+    }
     if previous:
-        update_op["$push"] = {"consent_history": previous}
+        update_op["$push"] = {
+            "consent_history": previous,
+            "edit_log": edit_log_entry,
+        }
+    else:
+        # First upload → still log it so we have a timeline entry for the initial upload.
+        update_op["$push"] = {"edit_log": edit_log_entry}
     
     await db.procedures.update_one({"_id": ObjectId(procedure_id)}, update_op)
     
