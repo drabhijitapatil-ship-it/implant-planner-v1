@@ -748,7 +748,7 @@ export default function NewProcedureScreen() {
           <Ionicons name="arrow-back" size={22} color="#1A73E8" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit>
+          <Text style={styles.headerTitle}>
             Phase 1 - Diagnosis and Treatment Planning
           </Text>
           <Text style={styles.stepIndicator}>Step 1 of 2: Case Details</Text>
@@ -1401,7 +1401,7 @@ export default function NewProcedureScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F0F4F8' },
   headerBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
-  headerTitle: { fontSize: 20, fontWeight: '800', color: '#0D47A1', marginLeft: 12 },
+  headerTitle: { fontSize: 18, fontWeight: '800', color: '#0D47A1', marginLeft: 12, lineHeight: 22 },
   backBtn: { padding: 6 },
   stepIndicator: { fontSize: 13, color: '#1565C0', fontWeight: '700', marginLeft: 12, marginTop: 2, marginBottom: 12, letterSpacing: 0.3 },
   stepHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E0E7EE' },

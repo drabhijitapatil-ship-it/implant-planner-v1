@@ -8,6 +8,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import api from '../../../utils/api';
 import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
+import { PhaseHeader } from '../../../components/PhaseHeader';
 import { Ionicons } from '@expo/vector-icons';
 import {
   PHASE4_SINGLE_MULTIPLE_OPTIONS,
@@ -174,10 +175,13 @@ export default function Phase4Step1Screen() {
 
   return (
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+      <PhaseHeader
+        title="Phase 4 - Prosthetic Rehabilitation"
+        subtitle="Step 1 of 2: Prosthetic Planning"
+        testID="phase4-step1-submit-header"
+      />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} nestedScrollEnabled>
-          <Text style={s.pageTitle}>Phase 4 Step 1 - Final Prosthesis & Impressions</Text>
-
           {/* ── Final Prosthesis Selection ── */}
           <View style={s.section}>
             <View style={s.sectionHeader}>
