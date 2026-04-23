@@ -213,6 +213,20 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Help</Text>
+          <TouchableOpacity
+            style={styles.legalRow}
+            onPress={() => router.push('/help-workflow?mode=review')}
+            data-testid="link-how-it-works"
+            testID="link-how-it-works"
+          >
+            <Ionicons name="help-circle-outline" size={22} color="#1565C0" />
+            <Text style={styles.legalRowText}>How it works</Text>
+            <Ionicons name="chevron-forward" size={18} color="#999" />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Legal</Text>
           <TouchableOpacity
             style={styles.legalRow}
