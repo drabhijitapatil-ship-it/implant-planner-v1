@@ -748,13 +748,12 @@ export default function NewProcedureScreen() {
           <Ionicons name="arrow-back" size={22} color="#1A73E8" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>New Case</Text>
-          <Text style={{ fontSize: 13, fontWeight: '700', color: '#0D47A1', marginTop: 2 }}>
+          <Text style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit>
             Phase 1 - Diagnosis and Treatment Planning
           </Text>
+          <Text style={styles.stepIndicator}>Step 1 of 2: Case Details</Text>
         </View>
       </View>
-      <Text style={styles.stepIndicator}>Step 1 of 2: Case Details</Text>
 
       {/* ─── Patient Info ─── */}
       <View style={styles.section}>
@@ -1402,9 +1401,9 @@ export default function NewProcedureScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F0F4F8' },
   headerBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
-  headerTitle: { fontSize: 20, fontWeight: '700', color: '#1A1A2E', marginLeft: 12 },
+  headerTitle: { fontSize: 20, fontWeight: '800', color: '#0D47A1', marginLeft: 12 },
   backBtn: { padding: 6 },
-  stepIndicator: { fontSize: 13, color: '#1565C0', fontWeight: '700', marginLeft: 54, marginBottom: 12, letterSpacing: 0.5 },
+  stepIndicator: { fontSize: 13, color: '#1565C0', fontWeight: '700', marginLeft: 12, marginTop: 2, marginBottom: 12, letterSpacing: 0.3 },
   stepHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E0E7EE' },
   stepTitle: { fontSize: 18, fontWeight: '700', color: '#0D47A1', marginLeft: 12 },
   section: { backgroundColor: '#FFF', borderRadius: 16, marginHorizontal: 16, marginBottom: 16, padding: 18, shadowColor: '#1565C0', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3, borderWidth: 1, borderColor: '#E8EDF5' },
