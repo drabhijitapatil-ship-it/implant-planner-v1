@@ -9,6 +9,7 @@ import api, { getAuthFileUrl, getToken } from '../../../utils/api';
 import { showUploadPicker } from '../../../utils/uploadPicker';
 import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
+import { PhaseHeader } from '../../../components/PhaseHeader';
 import { Ionicons } from '@expo/vector-icons';
 import { CHECKLIST_DATA } from '../../../constants/checklist';
 
@@ -131,10 +132,12 @@ export default function Stage2SurgicalSubmissionScreen() {
 
   return (
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+      <PhaseHeader
+        title="Phase 3 - Healing and Second Stage Surgery"
+        testID="phase3-submit-header"
+      />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} nestedScrollEnabled>
-          <Text style={s.pageTitle}>Phase 3 - Healing and Second Stage Surgery</Text>
-
           <View style={s.infoBox}>
             <Ionicons name="information-circle" size={22} color="#1565C0" />
             <Text style={s.infoText}>

@@ -8,6 +8,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import api from '../../../utils/api';
 import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
+import { PhaseHeader } from '../../../components/PhaseHeader';
 import { Ionicons } from '@expo/vector-icons';
 import { CHECKLIST_DATA } from '../../../constants/checklist';
 
@@ -63,10 +64,13 @@ export default function Phase4Step2Screen() {
 
   return (
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+      <PhaseHeader
+        title="Phase 4 - Prosthetic Rehabilitation"
+        subtitle="Step 2 of 2: Final Restoration"
+        testID="phase4-step2-submit-header"
+      />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} nestedScrollEnabled>
-          <Text style={s.pageTitle}>Phase 4 Step 2 - Trial & Prosthesis Delivery</Text>
-
           <View style={s.infoBox}>
             <Ionicons name="star" size={22} color="#FF6F00" />
             <Text style={s.infoText}>
