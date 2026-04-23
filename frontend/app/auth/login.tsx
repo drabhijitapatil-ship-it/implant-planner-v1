@@ -17,6 +17,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useAuth } from '../../contexts/AuthContext';
+import api from '../../utils/api';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -65,9 +66,17 @@ export default function LoginScreen() {
       const me = await refreshUser();
       if (!me?.workflow_seen_at) {
         router.replace('/onboarding');
-      } else {
-        router.replace('/(tabs)/dashboard');
+        return;
       }
+      // Returning users: check for unseen "What's new" entries before dashboard.
+      try {
+        const wn = await api.get('/whatsnew');
+        if ((wn.data?.entries || []).length > 0) {
+          router.replace('/whatsnew');
+          return;
+        }
+      } catch { /* non-fatal — fall through to dashboard */ }
+      router.replace('/(tabs)/dashboard');
     } catch (error: any) {
       const detail =
         error.response?.data?.detail ||

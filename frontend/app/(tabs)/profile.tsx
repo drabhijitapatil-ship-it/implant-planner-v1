@@ -224,6 +224,16 @@ export default function ProfileScreen() {
             <Text style={styles.legalRowText}>How it works</Text>
             <Ionicons name="chevron-forward" size={18} color="#999" />
           </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.legalRow}
+            onPress={() => router.push('/whatsnew?mode=history')}
+            data-testid="link-whats-new"
+            testID="link-whats-new"
+          >
+            <Ionicons name="sparkles-outline" size={22} color="#FF8F00" />
+            <Text style={styles.legalRowText}>What's new</Text>
+            <Ionicons name="chevron-forward" size={18} color="#999" />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.section}>
