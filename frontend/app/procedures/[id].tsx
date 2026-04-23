@@ -817,14 +817,21 @@ export default function ProcedureDetailScreen() {
                   </View>
                   <Ionicons name="chevron-forward" size={24} color="#FFF" />
                 </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => downloadConsentTemplate(id as string)}
-                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, marginTop: 6 }}
-                  data-testid="reprint-consent-btn"
-                >
-                  <Ionicons name="download-outline" size={14} color="#1565C0" />
-                  <Text style={{ fontSize: 12, color: '#1565C0', fontWeight: '600' }}>Reprint blank consent template</Text>
-                </TouchableOpacity>
+                {user?.role !== 'nurse' && procedure.instruments_autoclaved?.marked && (
+                  <View style={styles.autoclaveBadge} testID="instruments-autoclaved-badge">
+                    <View style={styles.autoclaveBadgeIcon}>
+                      <Ionicons name="shield-checkmark" size={16} color="#FFF" />
+                    </View>
+                    <View style={styles.autoclaveBadgeTextWrap}>
+                      <Text style={styles.autoclaveBadgeTitle}>Nurse has prepped instruments</Text>
+                      <Text style={styles.autoclaveBadgeSub} numberOfLines={1}>
+                        Autoclaved
+                        {procedure.instruments_autoclaved?.marked_by_name ? ` by ${procedure.instruments_autoclaved.marked_by_name}` : ''}
+                        {procedure.instruments_autoclaved?.marked_at ? ` · ${format(new Date(procedure.instruments_autoclaved.marked_at), 'MMM dd · hh:mm a')}` : ''}
+                      </Text>
+                    </View>
+                  </View>
+                )}
               </>
             ) : (
               <>
@@ -931,22 +938,7 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
-        {/* Instruments Autoclaved Badge — visible to non-nurse roles once a nurse has marked. */}
-        {user?.role !== 'nurse' && procedure.instruments_autoclaved?.marked && (
-          <View style={styles.autoclaveBadge} testID="instruments-autoclaved-badge">
-            <View style={styles.autoclaveBadgeIcon}>
-              <Ionicons name="shield-checkmark" size={16} color="#FFF" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.autoclaveBadgeTitle}>Nurse has prepped instruments ✓</Text>
-              <Text style={styles.autoclaveBadgeSub} numberOfLines={1}>
-                Autoclaved
-                {procedure.instruments_autoclaved?.marked_by_name ? ` by ${procedure.instruments_autoclaved.marked_by_name}` : ''}
-                {procedure.instruments_autoclaved?.marked_at ? ` · ${format(new Date(procedure.instruments_autoclaved.marked_at), 'MMM dd · hh:mm a')}` : ''}
-              </Text>
-            </View>
-          </View>
-        )}
+        {/* Instruments Autoclaved Badge moved inline under PHASE 1 APPROVED button (canSubmitPhase2). */}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Patient Information</Text>
@@ -3189,16 +3181,19 @@ const styles = StyleSheet.create({
   autoclaveBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginHorizontal: 16,
-    marginTop: 6,
+    gap: 8,
+    alignSelf: 'center',
+    marginTop: 8,
     marginBottom: 10,
-    paddingVertical: 10,
+    paddingVertical: 8,
     paddingHorizontal: 12,
     backgroundColor: '#E8F5E9',
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#81C784',
+  },
+  autoclaveBadgeTextWrap: {
+    flexShrink: 1,
   },
   autoclaveBadgeIcon: {
     width: 28,
