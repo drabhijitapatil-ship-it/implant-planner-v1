@@ -671,6 +671,11 @@ export default function ProcedureDetailScreen() {
                 onPrint={() => printConsentTemplate(id as string)}
                 onExport={() => downloadConsentTemplate(id as string)}
               />
+              {!consentUploaded && (
+                <Text style={styles.consentActionHint}>
+                  Template is pre-filled with patient & procedure details. Print, get the patient to sign, then tap Upload above.
+                </Text>
+              )}
             </View>
           );
         })()}
@@ -834,43 +839,27 @@ export default function ProcedureDetailScreen() {
                 )}
               </>
             ) : (
-              <>
-                <TouchableOpacity
-                  style={[styles.phase2Button, { backgroundColor: uploadingConsent ? '#90CAF9' : '#1565C0' }]}
-                  onPress={uploadConsentForProcedure}
-                  disabled={uploadingConsent}
-                  data-testid="upload-consent-phase2-btn"
-                >
-                  {uploadingConsent ? (
-                    <ActivityIndicator size="small" color="#FFF" />
-                  ) : (
-                    <Ionicons name="cloud-upload" size={24} color="#FFF" />
-                  )}
-                  <View style={styles.phase2ButtonTextContainer}>
-                    <Text style={styles.phase2ButtonTitle}>UPLOAD PATIENT CONSENT FORM</Text>
-                    <Text style={styles.phase2ButtonSubtitle}>Phase 2 will unlock once the signed consent is uploaded</Text>
-                  </View>
-                  {!uploadingConsent && <Ionicons name="chevron-forward" size={24} color="#FFF" />}
-                </TouchableOpacity>
-                <View style={{ marginTop: 8 }}>
-                  <ExportPrintMenu
-                    label="Export / Print consent form"
-                    buttonStyle={{ backgroundColor: '#37474F', paddingVertical: 12, borderRadius: 8 }}
-                    textStyle={{ fontSize: 13, color: '#FFF', fontWeight: '700', letterSpacing: 0.3 }}
-                    triggerIcon="share-outline"
-                    triggerIconSize={16}
-                    testID="consent-export-print-btn"
-                    popoverTitle="Patient Consent Form"
-                    printLabel="Print consent form"
-                    exportLabel="Download PDF"
-                    onPrint={() => printConsentTemplate(id as string)}
-                    onExport={() => downloadConsentTemplate(id as string)}
-                  />
+              <TouchableOpacity
+                style={[styles.phase2Button, { backgroundColor: uploadingConsent ? '#90CAF9' : '#1565C0' }]}
+                onPress={uploadConsentForProcedure}
+                disabled={uploadingConsent}
+                data-testid="upload-consent-phase2-btn"
+              >
+                {uploadingConsent ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <Ionicons name="cloud-upload" size={22} color="#FFF" />
+                )}
+                <View style={styles.phase2ButtonTextContainer}>
+                  <Text style={[styles.phase2ButtonTitle, { fontSize: 15 }]} numberOfLines={1} adjustsFontSizeToFit>
+                    UPLOAD CONSENT FORM
+                  </Text>
+                  <Text style={styles.phase2ButtonSubtitle} numberOfLines={1} adjustsFontSizeToFit>
+                    Phase 2 unlocks once the signed consent is uploaded
+                  </Text>
                 </View>
-                <Text style={{ fontSize: 11, color: '#78909C', textAlign: 'center', marginTop: 4, fontStyle: 'italic' }}>
-                  Template is pre-filled with patient & procedure details. Print, get the patient to sign, then tap Upload above.
-                </Text>
-              </>
+                {!uploadingConsent && <Ionicons name="chevron-forward" size={22} color="#FFF" />}
+              </TouchableOpacity>
             )}
           </View>
         )}
@@ -3277,6 +3266,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: 0.3,
+  },
+  consentActionHint: {
+    fontSize: 11,
+    color: '#78909C',
+    textAlign: 'center',
+    marginTop: 4,
+    fontStyle: 'italic',
   },
   timelineContainer: {
     margin: 16,
