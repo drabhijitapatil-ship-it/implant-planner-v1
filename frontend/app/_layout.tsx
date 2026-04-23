@@ -43,6 +43,7 @@ export default function RootLayout() {
               <Stack.Screen name="legal/terms" options={{ headerShown: true, title: 'Terms of Service', headerBackTitle: 'Back' }} />
               <Stack.Screen name="onboarding" />
               <Stack.Screen name="help-workflow" />
+              <Stack.Screen name="whatsnew" />
             </Stack>
           </ActivityTracker>
         </TabletFrame>

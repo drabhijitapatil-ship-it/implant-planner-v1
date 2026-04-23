@@ -209,6 +209,10 @@ class UserResponse(BaseModel):
     # Timestamp when the user dismissed the first-login onboarding + workflow help.
     # Null means they haven't seen it yet → frontend routes them through onboarding.
     workflow_seen_at: Optional[datetime] = None
+    # Latest "What's new" version the user has acknowledged. Null means they
+    # haven't seen any → frontend shows the most-recent changelog entry before
+    # routing to dashboard. Bumped by POST /api/whatsnew/ack.
+    last_seen_whatsnew_version: Optional[str] = None
 
 class ChecklistItem(BaseModel):
     id: Optional[str] = None
@@ -813,7 +817,124 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         role=current_user["role"],
         profile_photo=current_user.get("profile_photo"),
         workflow_seen_at=current_user.get("workflow_seen_at"),
+        last_seen_whatsnew_version=current_user.get("last_seen_whatsnew_version"),
     )
+
+# --- "What's New" changelog ─────────────────────────────────────────────────
+# To ship a new changelog entry: prepend a dict to the TOP of WHATSNEW_ENTRIES
+# with a monotonically-increasing semver. Entries newer than the user's
+# `last_seen_whatsnew_version` will be shown on their next login, filtered by
+# the optional `roles` field.
+#
+# Versions must sort correctly with `_parse_version` — use dotted numerics only
+# (e.g. "1.3", "1.3.1", "2.0"). Do NOT reuse or reorder shipped versions.
+WHATSNEW_ENTRIES: List[Dict[str, Any]] = [
+    {
+        "version": "1.3",
+        "date": "2026-04-24",
+        "title": "Cleaner review experience for Supervisors & In-Charges",
+        "roles": ["supervisor", "implant_incharge", "administrator"],
+        "items": [
+            "A new \"Awaiting student to start Phase N\" indicator tells you at a glance who's blocking progress on any case you didn't schedule.",
+            "When a student or nurse uploads a signed Patient Consent Form, you can now view it in read-only mode right from the case screen.",
+            "The consent form upload + template export buttons are now visible only to the case scheduler and nurses — less clutter for everyone else.",
+        ],
+    },
+    {
+        "version": "1.3",
+        "date": "2026-04-24",
+        "title": "Your default consent-form workflow just got simpler",
+        "roles": ["nurse"],
+        "items": [
+            "You now have default access to upload / replace and print consent forms on every scheduled case — no matter who scheduled it.",
+            "Mark instruments autoclaved and your name + timestamp prints as a stamp on the Drilling Protocol PDF for full traceability.",
+            "24-hour pre-surgery reminders notify you if consent is still pending or instruments aren't autoclaved yet.",
+        ],
+    },
+    {
+        "version": "1.3",
+        "date": "2026-04-24",
+        "title": "Tighter case screen + cleaner PDFs",
+        "roles": ["student"],
+        "items": [
+            "The PHASE 1 APPROVED card now shows the Nurse's autoclave confirmation right below it.",
+            "The Drilling Protocol PDF now includes your Care Team, an autoclave stamp, and a QR code linking to the patient's CBCT.",
+            "Consent controls are de-cluttered: one Upload, one Export/Print, one place for instructions.",
+        ],
+    },
+]
+
+
+def _parse_version(v: str) -> tuple:
+    """Turn '1.3.1' → (1, 3, 1). Missing/invalid → (0, 0, 0)."""
+    try:
+        return tuple(int(p) for p in (v or "0").split(".") if p.isdigit())
+    except Exception:
+        return (0, 0, 0)
+
+
+def _latest_whatsnew_version() -> str:
+    if not WHATSNEW_ENTRIES:
+        return "0"
+    return max((e["version"] for e in WHATSNEW_ENTRIES), key=_parse_version)
+
+
+def _entries_for_user(user: dict) -> List[Dict[str, Any]]:
+    """Return changelog entries newer than user's last-seen, filtered by role."""
+    seen = _parse_version(user.get("last_seen_whatsnew_version") or "0")
+    role = user.get("role")
+    out: List[Dict[str, Any]] = []
+    for e in WHATSNEW_ENTRIES:
+        if _parse_version(e["version"]) <= seen:
+            continue
+        roles = e.get("roles")
+        if roles and role not in roles:
+            continue
+        out.append({
+            "version": e["version"],
+            "date": e.get("date"),
+            "title": e.get("title"),
+            "items": e.get("items", []),
+        })
+    return out
+
+
+@api_router.get("/whatsnew")
+async def get_whatsnew(current_user: dict = Depends(get_current_user)):
+    """Return unseen, role-matched changelog entries for this user."""
+    return {
+        "latest_version": _latest_whatsnew_version(),
+        "entries": _entries_for_user(current_user),
+    }
+
+
+@api_router.get("/whatsnew/history")
+async def get_whatsnew_history(current_user: dict = Depends(get_current_user)):
+    """Return the full role-matched changelog history (for Profile → What's new)."""
+    role = current_user.get("role")
+    history = []
+    for e in WHATSNEW_ENTRIES:
+        roles = e.get("roles")
+        if roles and role not in roles:
+            continue
+        history.append({
+            "version": e["version"],
+            "date": e.get("date"),
+            "title": e.get("title"),
+            "items": e.get("items", []),
+        })
+    return {"entries": history}
+
+
+@api_router.post("/whatsnew/ack")
+async def ack_whatsnew(current_user: dict = Depends(get_current_user)):
+    """Mark the user as having seen the most recent changelog version. Idempotent."""
+    latest = _latest_whatsnew_version()
+    await db.users.update_one(
+        {"_id": ObjectId(current_user["_id"])},
+        {"$set": {"last_seen_whatsnew_version": latest}},
+    )
+    return {"last_seen_whatsnew_version": latest}
 
 # --- Onboarding / Help-Workflow acknowledgement ---
 # Called when the user dismisses the first-login onboarding slides + workflow

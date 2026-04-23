@@ -10,6 +10,7 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
+import api from '../utils/api';
 
 type Step = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -107,9 +108,16 @@ export default function HelpWorkflowScreen() {
       await refreshUser();
     } catch {
       // Even if ack fails, don't trap the user — move on.
-    } finally {
-      router.replace('/(tabs)/dashboard');
     }
+    // On first-run: chain into "What's new" if any unseen entries exist.
+    try {
+      const wn = await api.get('/whatsnew');
+      if ((wn.data?.entries || []).length > 0) {
+        router.replace('/whatsnew');
+        return;
+      }
+    } catch { /* non-fatal */ }
+    router.replace('/(tabs)/dashboard');
   };
 
   const close = () => {
