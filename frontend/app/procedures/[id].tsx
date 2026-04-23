@@ -625,56 +625,112 @@ export default function ProcedureDetailScreen() {
           </View>
         </View>
 
+        {/* ── Passive "Awaiting student to start Phase N" indicator ─────────
+             For reviewers (Supervisor / In-Charge / Administrator) who are NOT
+             the case owner — they can't tap to act on the next phase themselves,
+             so we surface who is blocking progress at a glance. Hidden for the
+             owner (who sees the big actionable CTA instead) and for Nurse. */}
+        {(() => {
+          const isOwner = !!(procedure.student_id && user?.id === procedure.student_id)
+            || !!(procedure.created_by_id && user?.id === procedure.created_by_id);
+          const isReviewer = user?.role === 'supervisor'
+            || user?.role === 'implant_incharge'
+            || user?.role === 'administrator';
+          if (!isReviewer || isOwner) return null;
+          const waitingMap: Record<string, string> = {
+            phase1_approved: 'Awaiting student to start Phase 2 — Surgical Checklist',
+            phase2_approved: 'Awaiting student to start Phase 3 — Second Stage Surgical',
+            stage2_surgical_approved: 'Awaiting student to start Phase 4 — Prosthetic Protocol',
+            stage2_prosthetic_step1_approved: 'Awaiting student to start Phase 4 Step 2 — Trial & Delivery',
+          };
+          const msg = waitingMap[procedure.status];
+          if (!msg) return null;
+          return (
+            <View style={styles.awaitingRow} testID="awaiting-next-phase-indicator">
+              <Ionicons name="hourglass-outline" size={14} color="#546E7A" />
+              <Text style={styles.awaitingText}>{msg}</Text>
+            </View>
+          );
+        })()}
+
         {/* Consent form action row — only shown during Phase 1 lifecycle (pending_phase1 or phase1_approved).
             After Phase 2 submission onwards, the consent form is locked and this row disappears.
-            Stacked vertically (one button per row) for readability on narrow screens. */}
+            Upload is restricted to the case scheduler (owner) + Nurse. Non-owner Supervisor /
+            In-Charge / Admin can only VIEW the uploaded file once it exists — they don't get
+            the Upload button or the blank template print/export, which aren't useful for them. */}
         {(() => {
-          const canUpload = user?.role === 'nurse'
-            || user?.role === 'implant_incharge'
-            || user?.role === 'administrator'
-            || user?.role === 'supervisor'
-            || user?.id === procedure.student_id;
-          if (!canUpload) return null;
+          const isOwner = !!(procedure.student_id && user?.id === procedure.student_id)
+            || !!(procedure.created_by_id && user?.id === procedure.created_by_id);
+          const canUpload = user?.role === 'nurse' || isOwner;
+          const canViewOnly = !canUpload
+            && (user?.role === 'supervisor' || user?.role === 'implant_incharge' || user?.role === 'administrator');
           const phase1Window = procedure.status === 'pending_phase1' || procedure.status === 'phase1_approved';
           if (!phase1Window) return null;
           const consentUploaded = !!procedure.patient_consent_form;
+          // Non-owner sup/in-charge/admin: only render when there's actually an uploaded consent to view.
+          if (canViewOnly && !consentUploaded) return null;
+          if (!canUpload && !canViewOnly) return null;
+          const openUploadedConsent = async () => {
+            try {
+              const baseUrl = (process.env.EXPO_PUBLIC_BACKEND_URL || '').replace(/\/$/, '');
+              const fileUrl = `${baseUrl}/uploads/${procedure.patient_consent_form}?token=${authToken}`;
+              await Linking.openURL(fileUrl);
+            } catch {
+              Alert.alert('Error', 'Could not open consent form');
+            }
+          };
           return (
             <View style={styles.consentActionRow} testID="consent-action-row">
-              <TouchableOpacity
-                style={[styles.consentActionBtn, styles.consentActionBtnPrimary, uploadingConsent && styles.buttonDisabled]}
-                onPress={uploadConsentForProcedure}
-                disabled={uploadingConsent}
-                activeOpacity={0.85}
-                testID="consent-upload-btn"
-              >
-                {uploadingConsent ? (
-                  <ActivityIndicator color="#FFF" size="small" />
-                ) : (
-                  <>
-                    <Ionicons name={consentUploaded ? 'refresh' : 'cloud-upload-outline'} size={16} color="#FFF" />
-                    <Text style={styles.consentActionBtnText}>
-                      {consentUploaded ? 'Replace consent form' : 'Upload consent form'}
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-              <ExportPrintMenu
-                label="Export / Print consent form"
-                buttonStyle={[styles.consentActionBtn, styles.consentActionBtnSecondary]}
-                textStyle={styles.consentActionBtnTextSecondary}
-                triggerIcon="share-outline"
-                triggerIconSize={14}
-                testID="consent-export-print-action"
-                popoverTitle="Patient Consent Form"
-                printLabel="Print consent form"
-                exportLabel="Download PDF"
-                onPrint={() => printConsentTemplate(id as string)}
-                onExport={() => downloadConsentTemplate(id as string)}
-              />
-              {!consentUploaded && (
+              {canUpload && (
+                <TouchableOpacity
+                  style={[styles.consentActionBtn, styles.consentActionBtnPrimary, uploadingConsent && styles.buttonDisabled]}
+                  onPress={uploadConsentForProcedure}
+                  disabled={uploadingConsent}
+                  activeOpacity={0.85}
+                  testID="consent-upload-btn"
+                >
+                  {uploadingConsent ? (
+                    <ActivityIndicator color="#FFF" size="small" />
+                  ) : (
+                    <>
+                      <Ionicons name={consentUploaded ? 'refresh' : 'cloud-upload-outline'} size={16} color="#FFF" />
+                      <Text style={styles.consentActionBtnText}>
+                        {consentUploaded ? 'Replace consent form' : 'Upload consent form'}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+              {canUpload && (
+                <ExportPrintMenu
+                  label="Export / Print consent form"
+                  buttonStyle={[styles.consentActionBtn, styles.consentActionBtnSecondary]}
+                  textStyle={styles.consentActionBtnTextSecondary}
+                  triggerIcon="share-outline"
+                  triggerIconSize={14}
+                  testID="consent-export-print-action"
+                  popoverTitle="Patient Consent Form"
+                  printLabel="Print consent form"
+                  exportLabel="Download PDF"
+                  onPrint={() => printConsentTemplate(id as string)}
+                  onExport={() => downloadConsentTemplate(id as string)}
+                />
+              )}
+              {canUpload && !consentUploaded && (
                 <Text style={styles.consentActionHint}>
                   Template is pre-filled with patient & procedure details. Print, get the patient to sign, then tap Upload above.
                 </Text>
+              )}
+              {canViewOnly && consentUploaded && (
+                <TouchableOpacity
+                  style={[styles.consentActionBtn, styles.consentActionBtnSecondary]}
+                  onPress={openUploadedConsent}
+                  activeOpacity={0.85}
+                  testID="consent-view-uploaded-btn"
+                >
+                  <Ionicons name="document-text-outline" size={16} color="#FFF" />
+                  <Text style={styles.consentActionBtnTextSecondary}>View uploaded consent form</Text>
+                </TouchableOpacity>
               )}
             </View>
           );
@@ -3273,6 +3329,28 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 4,
     fontStyle: 'italic',
+  },
+  awaitingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    alignSelf: 'center',
+    marginHorizontal: 16,
+    marginTop: 2,
+    marginBottom: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: '#ECEFF1',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#CFD8DC',
+  },
+  awaitingText: {
+    fontSize: 12,
+    color: '#546E7A',
+    fontWeight: '600',
+    flexShrink: 1,
   },
   timelineContainer: {
     margin: 16,
