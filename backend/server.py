@@ -830,6 +830,18 @@ async def get_me(current_user: dict = Depends(get_current_user)):
 # (e.g. "1.3", "1.3.1", "2.0"). Do NOT reuse or reorder shipped versions.
 WHATSNEW_ENTRIES: List[Dict[str, Any]] = [
     {
+        "version": "1.4",
+        "date": "2026-04-24",
+        "title": "Phases have clearer, clinically-accurate names",
+        "items": [
+            "Phase 1 is now \"Diagnosis and Treatment Planning\".",
+            "Phase 2 is now \"Implant Surgery\".",
+            "Phase 3 is now \"Healing and Second Stage Surgery\".",
+            "Phase 4 is now \"Prosthetic Rehabilitation\" with Step 1 \"Prosthetic Planning\" and Step 2 \"Final Restoration\".",
+            "Case-report PDFs now lead with a \"Phase 1 - Diagnosis and Treatment Planning\" heading right before Patient Information.",
+        ],
+    },
+    {
         "version": "1.3",
         "date": "2026-04-24",
         "title": "Cleaner review experience for Supervisors & In-Charges",
@@ -3308,7 +3320,7 @@ def _build_case_context(proc: dict) -> str:
     # Phase 3 - Second Stage Surgical
     p3 = proc.get('phase3_data') or {}
     if p3:
-        parts.append("\n--- Phase 3: Second Stage Surgical ---")
+        parts.append("\n--- Phase 3: Healing and Second Stage Surgery ---")
         isq = p3.get('isq_value')
         if isq:
             if isinstance(isq, list):
@@ -3325,7 +3337,7 @@ def _build_case_context(proc: dict) -> str:
     # Phase 4 - Prosthetic Protocol
     p4 = proc.get('phase4_step1_data') or {}
     if p4:
-        parts.append("\n--- Phase 4: Prosthetic Protocol ---")
+        parts.append("\n--- Phase 4: Prosthetic Rehabilitation ---")
         if p4.get('final_prosthetic_plan'):
             parts.append(f"Final Prosthetic Plan: {p4.get('final_prosthetic_plan')}")
         if p4.get('prosthetic_material'):
@@ -3517,7 +3529,7 @@ F. Medical Assessment & ASA Classification (medical conditions affecting treatme
 G. Implant Selection & Planning (for each planned site: tooth number, implant brand/system/dimensions, bone dimensions, bone type, implant-to-bone safety margins, bone density classification)"""
 
     phase2_sections = """
-**Phase 2 — Surgical Protocol & Outcomes**
+**Phase 2 — Implant Surgery & Outcomes**
 H. Surgical Approach (anesthesia, flap design, drilling protocol)
 I. Implant Placement & Primary Stability (insertion torque values per implant, thresholds for the selected loading protocol)
 J. Bone Augmentation (if performed: type, material, rationale)
@@ -4121,8 +4133,17 @@ async def generate_case_report(
     pdf.cell(0, 10, safe(f"Status: {status_text}"), ln=True, align="C")
     pdf.set_text_color(0, 0, 0)
 
-    # ── Page 2: Patient & Treatment Details ──────────────────
+    # ── Page 2: Phase 1 banner + Patient & Treatment Details ──────
     pdf.add_page()
+    # Phase 1 heading must lead the clinical section per product spec.
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.set_text_color(0, 122, 255)
+    pdf.cell(0, 10, safe("Phase 1 - Diagnosis and Treatment Planning"), ln=True, align="L")
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_draw_color(0, 122, 255)
+    pdf.set_line_width(0.5)
+    pdf.line(pdf.get_x(), pdf.get_y(), pdf.get_x() + 190, pdf.get_y())
+    pdf.ln(4)
     add_section_title("Patient & Treatment Details")
     add_field("Patient Name", procedure.get("patient_name"))
     add_field("Age", f"{procedure.get('age', '')} years" if procedure.get("age") else None)
@@ -4265,9 +4286,9 @@ async def generate_case_report(
                 pdf.cell(0, 6, safe(f"    Risk: {imp.get('risk_level')} (Score: {imp.get('risk_score', '')})"), ln=True)
             pdf.ln(2)
 
-    # ── Phase 1: Pre-Surgical ────────────────────────────────
+    # ── Phase 1: Diagnosis and Treatment Planning ─────────────
     pdf.add_page()
-    add_section_title("Phase 1 - Pre-Surgical Protocol", 0, 122, 255)
+    add_section_title("Phase 1 - Diagnosis and Treatment Planning", 0, 122, 255)
     checklist = procedure.get("checklist", {})
     if isinstance(checklist, dict):
         add_checklist_section("Pre-Surgical Checklist", checklist.get("pre_surgical"))
@@ -4275,8 +4296,8 @@ async def generate_case_report(
     if phase1_date:
         add_field("Phase 1 Completed", phase1_date.isoformat() if isinstance(phase1_date, datetime) else str(phase1_date))
 
-    # ── Phase 2: Surgical ────────────────────────────────────
-    add_section_title("Phase 2 - Surgical Protocol", 255, 107, 53)
+    # ── Phase 2: Implant Surgery ──────────────────────────────
+    add_section_title("Phase 2 - Implant Surgery", 255, 107, 53)
     p2 = procedure.get("phase2_data", {})
     if isinstance(p2, dict) and p2:
         pre_surg = p2.get("pre_surgery_checklist", {})
@@ -4396,7 +4417,7 @@ async def generate_case_report(
         add_field("Phase 3 Completed", phase3_date.isoformat() if isinstance(phase3_date, datetime) else str(phase3_date))
 
     # ── Phase 4: Prosthetic ──────────────────────────────────
-    add_section_title("Phase 4 - Prosthetic Protocol", 156, 39, 176)
+    add_section_title("Phase 4 - Prosthetic Rehabilitation", 156, 39, 176)
     p4s1 = procedure.get("phase4_step1_data", {})
     if isinstance(p4s1, dict) and p4s1:
         pdf.set_font("Helvetica", "BI", 11)
@@ -4929,7 +4950,7 @@ async def approve_procedure(
                     await db.notifications.insert_one({
                         "user_id": procedure["student_id"],
                         "procedure_id": procedure_id,
-                        "message": "Phase 1 (Pre-surgical) approved! You can now submit Phase 2 (Surgical) after completing the procedure.",
+                        "message": "Phase 1 (Diagnosis and Treatment Planning) approved! You can now submit Phase 2 (Implant Surgery) after completing the procedure.",
                         "type": "approved",
                         "read": False,
                         "created_at": datetime.utcnow()
@@ -4937,7 +4958,7 @@ async def approve_procedure(
                     await send_expo_push_notifications(
                         [procedure["student_id"]],
                         "Phase 1 Approved!",
-                        "Pre-surgical protocol approved. You can now submit Phase 2.",
+                        "Diagnosis and Treatment Planning approved. You can now submit Phase 2.",
                         {"procedure_id": procedure_id, "type": "approved"},
                     )
             else:
@@ -5401,7 +5422,7 @@ async def submit_stage2_surgical(
         await db.notifications.insert_one({
             "user_id": uid,
             "procedure_id": procedure_id,
-            "message": f"Phase 3: Second Stage Surgical Protocol submitted by {procedure['student_name']} for patient {procedure['patient_name']}",
+            "message": f"Phase 3: Healing and Second Stage Surgery submitted by {procedure['student_name']} for patient {procedure['patient_name']}",
             "type": "approval_request",
             "read": False,
             "created_at": datetime.utcnow()
@@ -5410,8 +5431,8 @@ async def submit_stage2_surgical(
     push_recipients = list(set([procedure["supervisor_id"], procedure["implant_incharge_id"]]))
     await send_expo_push_notifications(
         push_recipients,
-        "Phase 3: Second Stage Surgical Protocol Requires Approval",
-        f"{procedure['student_name']} submitted Phase 3 Second Stage Surgical Protocol for {procedure['patient_name']}",
+        "Phase 3: Healing and Second Stage Surgery Requires Approval",
+        f"{procedure['student_name']} submitted Phase 3 Healing and Second Stage Surgery for {procedure['patient_name']}",
         {"procedure_id": procedure_id, "type": "approval_request"},
     )
 
@@ -5484,7 +5505,7 @@ async def submit_stage2_prosthetic(
         await db.notifications.insert_one({
             "user_id": uid,
             "procedure_id": procedure_id,
-            "message": f"Phase 4: Prosthetic Protocol submitted by {procedure['student_name']} for patient {procedure['patient_name']}",
+            "message": f"Phase 4: Prosthetic Rehabilitation submitted by {procedure['student_name']} for patient {procedure['patient_name']}",
             "type": "approval_request",
             "read": False,
             "created_at": datetime.utcnow()
@@ -5493,8 +5514,8 @@ async def submit_stage2_prosthetic(
     push_recipients = list(set([procedure["supervisor_id"], procedure["implant_incharge_id"]]))
     await send_expo_push_notifications(
         push_recipients,
-        "Phase 4: Prosthetic Protocol Requires Approval",
-        f"{procedure['student_name']} submitted Phase 4 Prosthetic Protocol for {procedure['patient_name']}",
+        "Phase 4: Prosthetic Rehabilitation Requires Approval",
+        f"{procedure['student_name']} submitted Phase 4 Prosthetic Rehabilitation for {procedure['patient_name']}",
         {"procedure_id": procedure_id, "type": "approval_request"},
     )
 
@@ -5560,7 +5581,7 @@ async def approve_stage2_surgical(
             await db.notifications.insert_one({
                 "user_id": procedure["student_id"],
                 "procedure_id": procedure_id,
-                "message": "Phase 3 approved! You can now submit Phase 4 - Prosthetic Protocol.",
+                "message": "Phase 3 approved! You can now submit Phase 4 - Prosthetic Rehabilitation.",
                 "type": "approved",
                 "read": False,
                 "created_at": datetime.utcnow()
@@ -5568,7 +5589,7 @@ async def approve_stage2_surgical(
             await send_expo_push_notifications(
                 [procedure["student_id"]],
                 "Phase 3 Approved!",
-                "You can now submit Phase 4 - Prosthetic Protocol.",
+                "You can now submit Phase 4 - Prosthetic Rehabilitation.",
                 {"procedure_id": procedure_id, "type": "approved"},
             )
         else:

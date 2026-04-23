@@ -567,19 +567,19 @@ export default function ProcedureDetailScreen() {
           <Text style={styles.timelineTitle}>Treatment Progress</Text>
           <View style={styles.timelineSteps}>
             {[
-              { key: 'phase1', label: 'Phase 1', subtitle: 'Pre-surgical', 
+              { key: 'phase1', label: 'Phase 1', subtitle: 'Diagnosis and Treatment Planning', 
                 done: ['phase1_approved','pending_phase2','phase2_approved','pending_stage2_surgical','stage2_surgical_approved','pending_stage2_prosthetic','completed'].includes(procedure.status),
                 active: procedure.status === 'pending_phase1',
                 timestamp: procedure.phase1_completed_at },
-              { key: 'phase2', label: 'Phase 2', subtitle: 'Surgical',
+              { key: 'phase2', label: 'Phase 2', subtitle: 'Implant Surgery',
                 done: ['phase2_approved','pending_stage2_surgical','stage2_surgical_approved','pending_stage2_prosthetic','completed'].includes(procedure.status),
                 active: ['phase1_approved','pending_phase2'].includes(procedure.status),
                 timestamp: procedure.phase2_completed_at },
-              { key: 'stage2s', label: 'Phase 3', subtitle: 'Second Stage Surgical',
+              { key: 'stage2s', label: 'Phase 3', subtitle: 'Healing and Second Stage Surgery',
                 done: ['stage2_surgical_approved','pending_stage2_prosthetic','completed'].includes(procedure.status),
                 active: ['phase2_approved','pending_stage2_surgical'].includes(procedure.status),
                 timestamp: procedure.stage2_surgical_completed_at },
-              { key: 'stage2p', label: 'Phase 4', subtitle: 'Prosthetic Protocol',
+              { key: 'stage2p', label: 'Phase 4', subtitle: 'Prosthetic Rehabilitation',
                 done: procedure.status === 'completed',
                 active: ['stage2_surgical_approved','pending_stage2_prosthetic'].includes(procedure.status),
                 timestamp: procedure.stage2_prosthetic_completed_at },
@@ -641,10 +641,10 @@ export default function ProcedureDetailScreen() {
             || user?.role === 'administrator';
           if (!isReviewer || isOwner) return null;
           const waitingMap: Record<string, string> = {
-            phase1_approved: 'Awaiting student to start Phase 2 — Surgical Checklist',
-            phase2_approved: 'Awaiting student to start Phase 3 — Second Stage Surgical',
-            stage2_surgical_approved: 'Awaiting student to start Phase 4 — Prosthetic Protocol',
-            stage2_prosthetic_step1_approved: 'Awaiting student to start Phase 4 Step 2 — Trial & Delivery',
+            phase1_approved: 'Awaiting student to start Phase 2 — Implant Surgery',
+            phase2_approved: 'Awaiting student to start Phase 3 — Healing and Second Stage Surgery',
+            stage2_surgical_approved: 'Awaiting student to start Phase 4 — Prosthetic Rehabilitation',
+            stage2_prosthetic_step1_approved: 'Awaiting student to start Phase 4 Step 2 — Final Restoration',
           };
           const msg = waitingMap[procedure.status];
           if (!msg) return null;
@@ -891,7 +891,7 @@ export default function ProcedureDetailScreen() {
                   <Ionicons name="checkmark-circle" size={24} color="#FFF" />
                   <View style={styles.phase2ButtonTextContainer}>
                     <Text style={styles.phase2ButtonTitle}>PHASE 1 APPROVED</Text>
-                    <Text style={styles.phase2ButtonSubtitle}>Tap to complete Phase 2 - Surgical Checklist</Text>
+                    <Text style={styles.phase2ButtonSubtitle}>Tap to complete Phase 2 - Implant Surgery</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={24} color="#FFF" />
                 </TouchableOpacity>
@@ -948,7 +948,7 @@ export default function ProcedureDetailScreen() {
               <Ionicons name="medkit" size={24} color="#FFF" />
               <View style={styles.phase2ButtonTextContainer}>
                 <Text style={styles.phase2ButtonTitle}>PHASE 2 APPROVED</Text>
-                <Text style={styles.phase2ButtonSubtitle}>Tap to start Phase 3 - Second Stage Surgical Protocol</Text>
+                <Text style={styles.phase2ButtonSubtitle}>Tap to start Phase 3 - Healing and Second Stage Surgery</Text>
               </View>
               <Ionicons name="chevron-forward" size={24} color="#FFF" />
             </TouchableOpacity>
@@ -1441,7 +1441,7 @@ export default function ProcedureDetailScreen() {
           <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#0D47A1' }]} data-testid="phase2-full-data-section">
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <Ionicons name="medkit" size={22} color="#0D47A1" />
-              <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#0D47A1', fontSize: 17 }]}>Phase 2 — Surgical Protocols</Text>
+              <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#0D47A1', fontSize: 17 }]}>Phase 2 — Implant Surgery</Text>
             </View>
 
             {/* Pre-Surgery Checklist */}
@@ -1652,7 +1652,7 @@ export default function ProcedureDetailScreen() {
           <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#2E7D32' }]} data-testid="phase3-full-data-section">
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <Ionicons name="git-branch" size={22} color="#2E7D32" />
-              <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#2E7D32', fontSize: 17 }]}>Phase 3 — Second Stage Surgical</Text>
+              <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#2E7D32', fontSize: 17 }]}>Phase 3 — Healing and Second Stage Surgery</Text>
             </View>
 
             {/* Phase 3 Checklist Items */}
@@ -1993,7 +1993,7 @@ export default function ProcedureDetailScreen() {
           <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#FF6F00' }]} data-testid="phase4-step1-full-data-section">
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <Ionicons name="construct" size={22} color="#FF6F00" />
-              <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#E65100', fontSize: 17 }]}>Phase 4 — Prosthetic Protocol (Step 1)</Text>
+              <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#E65100', fontSize: 17 }]}>Phase 4 — Prosthetic Rehabilitation (Step 1 — Prosthetic Planning)</Text>
             </View>
 
             {/* Prosthetic Plan Details */}
@@ -2155,8 +2155,8 @@ export default function ProcedureDetailScreen() {
         {procedure.checklist && (
           <>
             {renderChecklistSection('surgical', 'Phase 2: Surgical Protocol')}
-            {renderChecklistSection('second_stage', 'Phase 3: Second Stage Surgical Protocol')}
-            {renderChecklistSection('prosthetic_phase', 'Phase 4: Prosthetic Protocol')}
+            {renderChecklistSection('second_stage', 'Phase 3: Healing and Second Stage Surgery')}
+            {renderChecklistSection('prosthetic_phase', 'Phase 4: Prosthetic Rehabilitation')}
           </>
         )}
 

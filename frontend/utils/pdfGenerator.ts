@@ -379,9 +379,9 @@ export const buildProcedurePdfHtml = (procedure: any): string => {
           <div class="section">
             <div class="section-title">Approval Timeline</div>
             <table>
-              <tr><td class="info-label">Phase 1 (Pre-surgical) Completed:</td><td class="info-value">${procedure.phase1_completed_at ? format(new Date(procedure.phase1_completed_at), 'MMMM dd, yyyy HH:mm') : 'N/A'}</td></tr>
+              <tr><td class="info-label">Phase 1 (Diagnosis and Treatment Planning) Completed:</td><td class="info-value">${procedure.phase1_completed_at ? format(new Date(procedure.phase1_completed_at), 'MMMM dd, yyyy HH:mm') : 'N/A'}</td></tr>
               <tr><td class="info-label">Phase 2 (Surgical) Completed:</td><td class="info-value">${procedure.phase2_completed_at ? format(new Date(procedure.phase2_completed_at), 'MMMM dd, yyyy HH:mm') : 'N/A'}</td></tr>
-              ${procedure.stage2_surgical_completed_at ? `<tr><td class="info-label">Phase 3 (Second Stage Surgical) Completed:</td><td class="info-value">${format(new Date(procedure.stage2_surgical_completed_at), 'MMMM dd, yyyy HH:mm')}</td></tr>` : ''}
+              ${procedure.stage2_surgical_completed_at ? `<tr><td class="info-label">Phase 3 (Healing and Second Stage Surgery) Completed:</td><td class="info-value">${format(new Date(procedure.stage2_surgical_completed_at), 'MMMM dd, yyyy HH:mm')}</td></tr>` : ''}
               ${procedure.stage2_prosthetic_completed_at ? `<tr><td class="info-label">Phase 4 (Prosthetic) Completed:</td><td class="info-value">${format(new Date(procedure.stage2_prosthetic_completed_at), 'MMMM dd, yyyy HH:mm')}</td></tr>` : ''}
               ${procedure.treatment_completed_at ? `<tr><td class="info-label">Treatment Completed:</td><td class="info-value">${format(new Date(procedure.treatment_completed_at), 'MMMM dd, yyyy HH:mm')}</td></tr>` : ''}
             </table>

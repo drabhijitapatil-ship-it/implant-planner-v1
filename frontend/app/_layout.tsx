@@ -35,10 +35,10 @@ export default function RootLayout() {
               <Stack.Screen name="implantlens/index" />
               <Stack.Screen name="implantlens/[caseId]" />
               <Stack.Screen name="procedures/[id]" options={{ headerShown: true, title: 'Case Details', headerBackTitle: 'Back' }} />
-              <Stack.Screen name="procedures/submit-phase2/[id]" options={{ headerShown: true, title: 'Phase 2 - Surgical Protocol', headerBackTitle: 'Back' }} />
-              <Stack.Screen name="procedures/submit-stage2-surgical/[id]" options={{ headerShown: true, title: 'Phase 3 - Second Stage', headerBackTitle: 'Back' }} />
-              <Stack.Screen name="procedures/submit-stage2-prosthetic/[id]" options={{ headerShown: true, title: 'Phase 4 - Prosthesis', headerBackTitle: 'Back' }} />
-              <Stack.Screen name="procedures/submit-phase4-step2/[id]" options={{ headerShown: true, title: 'Phase 4 - Final Delivery', headerBackTitle: 'Back' }} />
+              <Stack.Screen name="procedures/submit-phase2/[id]" options={{ headerShown: true, title: 'Phase 2 - Implant Surgery', headerBackTitle: 'Back' }} />
+              <Stack.Screen name="procedures/submit-stage2-surgical/[id]" options={{ headerShown: true, title: 'Phase 3 - Healing and Second Stage Surgery', headerBackTitle: 'Back' }} />
+              <Stack.Screen name="procedures/submit-stage2-prosthetic/[id]" options={{ headerShown: true, title: 'Phase 4 - Prosthetic Planning', headerBackTitle: 'Back' }} />
+              <Stack.Screen name="procedures/submit-phase4-step2/[id]" options={{ headerShown: true, title: 'Phase 4 - Final Restoration', headerBackTitle: 'Back' }} />
               <Stack.Screen name="legal/privacy-policy" options={{ headerShown: true, title: 'Privacy Policy', headerBackTitle: 'Back' }} />
               <Stack.Screen name="legal/terms" options={{ headerShown: true, title: 'Terms of Service', headerBackTitle: 'Back' }} />
               <Stack.Screen name="onboarding" />
