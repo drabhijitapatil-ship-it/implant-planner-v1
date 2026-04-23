@@ -133,7 +133,7 @@ export default function Stage2SurgicalSubmissionScreen() {
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} nestedScrollEnabled>
-          <Text style={s.pageTitle}>Phase 3 - Second Stage Surgical</Text>
+          <Text style={s.pageTitle}>Phase 3 - Healing and Second Stage Surgery</Text>
 
           <View style={s.infoBox}>
             <Ionicons name="information-circle" size={22} color="#1565C0" />

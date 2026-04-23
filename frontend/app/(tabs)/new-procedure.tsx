@@ -747,7 +747,12 @@ export default function NewProcedureScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#1A73E8" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>New Case - Phase 1</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.headerTitle}>New Case</Text>
+          <Text style={{ fontSize: 13, fontWeight: '700', color: '#0D47A1', marginTop: 2 }}>
+            Phase 1 - Diagnosis and Treatment Planning
+          </Text>
+        </View>
       </View>
       <Text style={styles.stepIndicator}>Step 1 of 2: Case Details</Text>
 
