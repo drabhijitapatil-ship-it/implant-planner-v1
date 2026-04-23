@@ -949,13 +949,44 @@ export default function ProcedureDetailScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Staff</Text>
-          {procedure.student_name ? (
-            <InfoRow icon="school" label="Student" value={procedure.student_name} />
-          ) : procedure.created_by_name && procedure.created_by_role !== 'student' ? (
-            <InfoRow icon="person" label={procedure.created_by_role === 'supervisor' ? 'Operator (Supervisor)' : procedure.created_by_role === 'implant_incharge' ? 'Operator (Implant Incharge)' : 'Operator'} value={procedure.created_by_name} />
-          ) : null}
-          <InfoRow icon="school" label="Supervisor" value={procedure.supervisor_name} />
-          <InfoRow icon="medkit" label="Implant Incharge" value={procedure.implant_incharge_name} />
+          {user?.role === 'nurse' ? (
+            // Nurse view — keep existing full-staff render, unchanged.
+            <>
+              {procedure.student_name ? (
+                <InfoRow icon="school" label="Student" value={procedure.student_name} />
+              ) : procedure.created_by_name && procedure.created_by_role !== 'student' ? (
+                <InfoRow icon="person" label={procedure.created_by_role === 'supervisor' ? 'Operator (Supervisor)' : procedure.created_by_role === 'implant_incharge' ? 'Operator (Implant Incharge)' : 'Operator'} value={procedure.created_by_name} />
+              ) : null}
+              <InfoRow icon="school" label="Supervisor" value={procedure.supervisor_name} />
+              <InfoRow icon="medkit" label="Implant Incharge" value={procedure.implant_incharge_name} />
+            </>
+          ) : procedure.created_by_role === 'implant_incharge' ? (
+            // In-Charge scheduled the case — show only Implant In-Charge.
+            <InfoRow
+              icon="medkit"
+              label="Implant Incharge"
+              value={procedure.implant_incharge_name || procedure.created_by_name}
+            />
+          ) : procedure.created_by_role === 'supervisor' ? (
+            // Supervisor scheduled the case — show Supervisor + Implant In-Charge only.
+            <>
+              <InfoRow
+                icon="school"
+                label="Supervisor"
+                value={procedure.supervisor_name || procedure.created_by_name}
+              />
+              <InfoRow icon="medkit" label="Implant Incharge" value={procedure.implant_incharge_name} />
+            </>
+          ) : (
+            // Student-scheduled (default) — show Student + Supervisor + Implant In-Charge.
+            <>
+              {procedure.student_name ? (
+                <InfoRow icon="school" label="Student" value={procedure.student_name} />
+              ) : null}
+              <InfoRow icon="school" label="Supervisor" value={procedure.supervisor_name} />
+              <InfoRow icon="medkit" label="Implant Incharge" value={procedure.implant_incharge_name} />
+            </>
+          )}
         </View>
 
         <View style={styles.section}>
