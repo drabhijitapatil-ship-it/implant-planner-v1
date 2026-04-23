@@ -206,6 +206,9 @@ class UserResponse(BaseModel):
     email: str
     role: str
     profile_photo: Optional[str] = None
+    # Timestamp when the user dismissed the first-login onboarding + workflow help.
+    # Null means they haven't seen it yet → frontend routes them through onboarding.
+    workflow_seen_at: Optional[datetime] = None
 
 class ChecklistItem(BaseModel):
     id: Optional[str] = None
@@ -808,8 +811,22 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         name=current_user["name"],
         email=current_user["email"],
         role=current_user["role"],
-        profile_photo=current_user.get("profile_photo")
+        profile_photo=current_user.get("profile_photo"),
+        workflow_seen_at=current_user.get("workflow_seen_at"),
     )
+
+# --- Onboarding / Help-Workflow acknowledgement ---
+# Called when the user dismisses the first-login onboarding slides + workflow
+# chart. Writes a timestamp so the client won't re-show these screens on
+# subsequent logins from any device. Idempotent.
+@api_router.post("/auth/me/ack-workflow")
+async def ack_workflow(current_user: dict = Depends(get_current_user)):
+    now = datetime.now(timezone.utc)
+    await db.users.update_one(
+        {"_id": ObjectId(current_user["_id"])},
+        {"$set": {"workflow_seen_at": now}},
+    )
+    return {"workflow_seen_at": now.isoformat()}
 
 # --- Logout (JWT Session Invalidation) ---
 @api_router.post("/auth/logout")

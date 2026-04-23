@@ -26,7 +26,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [emailFocus, setEmailFocus] = useState(false);
   const [passwordFocus, setPasswordFocus] = useState(false);
-  const { login } = useAuth();
+  const { login, refreshUser } = useAuth();
   const router = useRouter();
 
   // Animations
@@ -60,7 +60,14 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await login(email.trim(), password.trim());
-      router.replace('/(tabs)/dashboard');
+      // Ensure we have the full user doc (login response may omit
+      // workflow_seen_at); then route first-timers through onboarding.
+      const me = await refreshUser();
+      if (!me?.workflow_seen_at) {
+        router.replace('/onboarding');
+      } else {
+        router.replace('/(tabs)/dashboard');
+      }
     } catch (error: any) {
       const detail =
         error.response?.data?.detail ||

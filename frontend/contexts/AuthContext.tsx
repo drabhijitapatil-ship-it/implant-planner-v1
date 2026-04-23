@@ -9,6 +9,10 @@ interface User {
   email: string;
   role: string;
   profile_photo?: string | null;
+  /** ISO timestamp set when the user first dismisses the onboarding + workflow
+   *  help. Null/undefined means they haven't seen it → frontend routes them
+   *  through /onboarding → /help-workflow once before the dashboard. */
+  workflow_seen_at?: string | null;
 }
 
 interface AuthContextType {
@@ -19,6 +23,10 @@ interface AuthContextType {
   logout: () => Promise<void>;
   updateProfilePhoto: (photoBase64: string) => Promise<void>;
   recordActivity: () => void;
+  /** Re-fetch /auth/me and update context (used after ack-workflow). */
+  refreshUser: () => Promise<User | null>;
+  /** Hit POST /auth/me/ack-workflow so onboarding + workflow help stop showing. */
+  ackWorkflow: () => Promise<void>;
 }
 
 // Auto-logout after 20 minutes of inactivity. Clinic devices are often shared,
@@ -142,8 +150,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const refreshUser = async (): Promise<User | null> => {
+    try {
+      const resp = await api.get('/auth/me');
+      setUser(resp.data);
+      await setToken('user', JSON.stringify(resp.data));
+      return resp.data as User;
+    } catch {
+      // Silent — /auth/me has its own 401 handling via interceptor.
+      return null;
+    }
+  };
+
+  const ackWorkflow = async () => {
+    await api.post('/auth/me/ack-workflow');
+    // Don't refetch here — caller decides whether to refresh user context.
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, updateProfilePhoto, recordActivity }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, updateProfilePhoto, recordActivity, refreshUser, ackWorkflow }}>
       {children}
     </AuthContext.Provider>
   );

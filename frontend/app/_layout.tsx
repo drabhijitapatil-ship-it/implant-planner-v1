@@ -41,6 +41,8 @@ export default function RootLayout() {
               <Stack.Screen name="procedures/submit-phase4-step2/[id]" options={{ headerShown: true, title: 'Phase 4 - Final Delivery', headerBackTitle: 'Back' }} />
               <Stack.Screen name="legal/privacy-policy" options={{ headerShown: true, title: 'Privacy Policy', headerBackTitle: 'Back' }} />
               <Stack.Screen name="legal/terms" options={{ headerShown: true, title: 'Terms of Service', headerBackTitle: 'Back' }} />
+              <Stack.Screen name="onboarding" />
+              <Stack.Screen name="help-workflow" />
             </Stack>
           </ActivityTracker>
         </TabletFrame>
