@@ -77,13 +77,15 @@ export default function Stage2SurgicalSubmissionScreen() {
       setIopaFiles([null]);
     }
     // Pull Phase 2 fields so we can render the Phase 3 banner and decide checklist shape.
+    // Phase 2 surgical fields are nested under `phase2_data` by the backend.
     try {
       const p = await api.get(`/procedures/${id}`);
       const d = p.data || {};
-      setPhase2Component(d.prosthetic_component || '');
-      setPhase2ProsthesisType(d.prosthesis_type || '');
-      setPhase2ProsthesisOther(d.prosthesis_type_other || '');
-      if (Array.isArray(d.healing_abutment_cuff_height)) setPhase2HealingCuffs(d.healing_abutment_cuff_height);
+      const p2 = d.phase2_data || {};
+      setPhase2Component(p2.prosthetic_component || '');
+      setPhase2ProsthesisType(p2.prosthesis_type || '');
+      setPhase2ProsthesisOther(p2.prosthesis_type_other || '');
+      if (Array.isArray(p2.healing_abutment_cuff_height)) setPhase2HealingCuffs(p2.healing_abutment_cuff_height);
     } catch {}
   };
 

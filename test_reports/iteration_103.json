@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration 103 — Backend regression for Phase 2 / Phase 3 Dynamic Workflow (prosthesis_type + Immediate Prosthesis Done / Healing Abutment Placed PDF banners). 10/10 pytest cases PASSED. Verified (1) POST /api/procedures/{id}/submit-phase2 accepts new prosthesis_type, prosthesis_type_other, healing_abutment_cuff_height fields without 422, and persists them inside procedure.phase2_data (re-fetch verified); (2) POST /api/procedures/{id}/case-report returns valid %PDF with 'Prosthesis Type' label + 'Immediate Prosthesis Done' banner for Immediate Loading flow and with 'Healing Abutment Placed' banner for Healing Abutment flow (text extracted via pypdf); (3) Pydantic max_length=200 validation on prosthesis_type returns 422 on oversize input; (4) Regression on /api/dashboard/stats, /api/procedures, /api/whatsnew, /api/procedures/{id}, /api/procedures/{id}/consent-pdf, /api/drilling-protocols/export-pdf — all 200 (consent-pdf 404 is acceptable — case has no uploaded consent). No backend/frontend bugs observed in the tested scope.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": { "ui_bugs": [], "integration_issues": [], "design_issues": [] },
+  "tests_executed": [
+    "TestRegressionEndpoints::test_dashboard_stats_200 — PASS",
+    "TestRegressionEndpoints::test_procedures_list_200 — PASS (38 procedures in DB)",
+    "TestRegressionEndpoints::test_whats_new_200 — PASS (/api/whatsnew, no hyphen)",
+    "TestRegressionEndpoints::test_get_procedure_detail_200 — PASS",
+    "TestRegressionEndpoints::test_consent_pdf_endpoint — PASS (404 accepted — no consent attached)",
+    "TestRegressionEndpoints::test_drilling_protocol_pdf_regression — PASS (MIS Lance + 4.2x10 D2 → 200 %PDF)",
+    "TestSubmitPhase2AcceptsNewFields::test_immediate_loading_with_prosthesis_type_persists — PASS (persistence verified via GET)",
+    "TestSubmitPhase2AcceptsNewFields::test_submit_phase2_rejects_oversize_prosthesis_type — PASS (422 on 250-char prosthesis_type)",
+    "TestCaseReportPdfBanners::test_immediate_loading_pdf_banner — PASS (PDF text contains 'Prosthesis Type', 'Immediate Prosthesis Done', 'TEST_Custom Hybrid Prosthesis')",
+    "TestCaseReportPdfBanners::test_healing_abutment_pdf_banner — PASS (PDF text contains 'Healing Abutment Placed')"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_phase2_phase3_dynamic_workflow_iteration103.py",
+    "/app/test_reports/pytest/iteration_103_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is 9441 lines — should be split into domain modules (auth, procedures, phases, pdf, drilling). Any future Phase 2/3 tweak risks shifting unrelated line numbers in refactors.",
+    "The Phase 2 section of case_report_pdf (L4305-4399) contains duplicated `p2 = procedure.get('phase2_data', {})` on L4305 and again L4384 — harmless but confusing. Consolidate.",
+    "submit-phase2 (L5290+) silently drops `sutures_placed`, `hemostasis_achieved` when False because `phase2_surgical_data` stores raw None/True/False — OK — but `bone_graft_used or False` on L5335 means a nurse passing `false` explicitly is collapsed to False, indistinguishable from 'not provided'. Consider storing the raw value.",
+    "Phase 3 banner (L4409-4435) uses `procedure.get('implant_plans')` for tooth labels but Phase 2 uses the local `implant_plans` variable (from earlier in the function). Both should agree; if a proc has a `plans` key instead of `implant_plans` Phase 3 labels will fall back to 'Implant N'.",
+    "healing_abutment_cuff_height Pydantic type is `Optional[Any]` — accepting str or list. Consider `Optional[Union[str, List[str]]]` for schema-level validation + OpenAPI correctness."
+  ],
+  "updated_files": ["/app/backend/tests/test_phase2_phase3_dynamic_workflow_iteration103.py"],
+  "success_rate": { "backend": "100% (10/10 pytest)", "frontend": "n/a (backend-only per request)" },
+  "test_credentials": "Abhijit.patil / Admin@123 (implant_incharge). Login endpoint accepts {identifier, password}; returns access_token (JWT).",
+  "seed_data_creation": "Submitted Phase 2 on procedure 69cfde8b356c7405230a9dcc with prosthetic_component='Immediate Loading Done', prosthesis_type='Other', prosthesis_type_other='TEST_Custom Hybrid Prosthesis'. Procedure now in status 'pending_phase2'. This was intended per main-agent guidance ('you can freely POST submit-phase2 on phase1_approved procs').",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase 2/3 dynamic workflow backend is verified. Procedure 69cfde8b356c7405230a9dcc has been advanced to pending_phase2 with Immediate Loading data during iter103 — if the next tester needs a fresh phase1_approved proc with consent, pick from the DB or create one. Test file is idempotent (if submit-phase2 returns 400 because Phase 1 is no longer 'approved', it falls through and just asserts persistence). The drilling-protocol PDF endpoint requires `brand` + `system` (note: 'Lance +' with space) + diameter + length + bone_density as flat keys, not nested. /api/whatsnew is the working path (/api/whats-new returns 404)."
+}
