@@ -3,13 +3,17 @@ import { View } from 'react-native';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { TabletFrame } from '../components/TabletFrame';
+import { useScreenCaptureProtection } from '../hooks/useScreenCaptureProtection';
 
 /**
  * ActivityTracker wraps the Stack and captures any touch anywhere in the app to
- * reset the session inactivity timer used by AuthContext.
+ * reset the session inactivity timer used by AuthContext. Also enables the
+ * HIPAA screen-capture guard (FLAG_SECURE on Android / preventScreenCapture on
+ * iOS) while the user is authenticated.
  */
 function ActivityTracker({ children }: { children: React.ReactNode }) {
-  const { recordActivity } = useAuth();
+  const { recordActivity, user } = useAuth();
+  useScreenCaptureProtection(!!user);
   return (
     <View
       style={{ flex: 1 }}

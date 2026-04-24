@@ -577,6 +577,66 @@ async def send_expo_push_notifications(user_ids: List[str], title: str, body: st
 
 
 # ───────────────────────────────────────────────────────────────────
+# HIPAA access audit log
+# ───────────────────────────────────────────────────────────────────
+# Every PHI-touching endpoint (procedure view, PDF export, consent view,
+# login success/failure) records a row here. TTL index prunes entries
+# older than 180 days automatically — adjust retention per institutional
+# policy (HIPAA requires ≥6 years for audit logs against BAs, but
+# app-level access logs are typically kept 180d–1y with archival to
+# cold storage for compliance).
+async def log_access(
+    *,
+    action: str,
+    resource_type: Optional[str] = None,
+    resource_id: Optional[str] = None,
+    user: Optional[dict] = None,
+    request: Optional[Request] = None,
+    outcome: str = "success",
+    extra: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Append-only audit record. Failures are swallowed so audit never
+    breaks the request path — but we log to stderr so ops can alert."""
+    try:
+        doc = {
+            "action": action,
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+            "user_id": (user or {}).get("_id"),
+            "user_name": (user or {}).get("name"),
+            "user_role": (user or {}).get("role"),
+            "outcome": outcome,
+            "created_at": datetime.now(timezone.utc),
+        }
+        if request is not None:
+            fwd = request.headers.get("x-forwarded-for", "")
+            client_ip = fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else None)
+            doc["ip"] = client_ip
+            ua = request.headers.get("user-agent")
+            if ua:
+                doc["user_agent"] = ua[:300]
+        if extra:
+            # Strip any obviously-sensitive keys before storing.
+            safe_extra = {k: v for k, v in extra.items() if k.lower() not in {"password", "token", "authorization", "cookie"}}
+            if safe_extra:
+                doc["extra"] = safe_extra
+        await db.access_logs.insert_one(doc)
+    except Exception as e:
+        logging.error(f"[audit] log_access failed for action={action}: {e}")
+
+
+async def _ensure_access_log_indexes() -> None:
+    """Create TTL + query indexes on startup. Idempotent."""
+    try:
+        await db.access_logs.create_index("created_at", expireAfterSeconds=180 * 24 * 3600)
+        await db.access_logs.create_index([("user_id", 1), ("created_at", -1)])
+        await db.access_logs.create_index([("resource_type", 1), ("resource_id", 1), ("created_at", -1)])
+    except Exception as e:
+        logging.warning(f"[audit] index creation skipped: {e}")
+
+
+
+# ───────────────────────────────────────────────────────────────────
 # Pre-surgery reminder scheduler
 # ───────────────────────────────────────────────────────────────────
 # Sends a single in-app notification + Expo push to student/supervisor/incharge
@@ -760,6 +820,7 @@ async def login(request: Request, user: UserLogin):
 
     if not db_user:
         logging.warning(f"Login failed: no user found for '{identifier}'")
+        await log_access(action="login", outcome="failure", request=request, extra={"identifier": identifier[:60]})
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     # Try password as-is, then common mobile keyboard variations
@@ -781,6 +842,7 @@ async def login(request: Request, user: UserLogin):
 
     if not matched:
         logging.warning(f"Login failed: wrong password for user '{db_user['name']}'")
+        await log_access(action="login", outcome="failure", user={"_id": str(db_user["_id"]), "name": db_user["name"], "role": db_user.get("role")}, request=request, extra={"reason": "wrong_password"})
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     user_id_str = str(db_user["_id"])
@@ -802,6 +864,13 @@ async def login(request: Request, user: UserLogin):
         email=db_user["email"],
         role=db_user["role"],
         profile_photo=db_user.get("profile_photo")
+    )
+
+    await log_access(
+        action="login",
+        outcome="success",
+        user={"_id": user_id_str, "name": db_user["name"], "role": db_user.get("role")},
+        request=request,
     )
     
     return {
@@ -1582,7 +1651,7 @@ async def get_recent_activity(limit: int = 10, current_user: dict = Depends(get_
 
 
 @api_router.get("/procedures/{procedure_id}")
-async def get_procedure(procedure_id: str, current_user: dict = Depends(get_current_user)):
+async def get_procedure(procedure_id: str, request: Request, current_user: dict = Depends(get_current_user)):
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     
     if not procedure:
@@ -1590,13 +1659,16 @@ async def get_procedure(procedure_id: str, current_user: dict = Depends(get_curr
     
     # Check access
     if current_user["role"] == "student" and procedure["student_id"] != current_user["_id"]:
+        await log_access(action="procedure_view", resource_type="procedure", resource_id=procedure_id, user=current_user, request=request, outcome="denied")
         raise HTTPException(status_code=403, detail="Access denied")
     elif current_user["role"] == "supervisor" and procedure["supervisor_id"] != current_user["_id"]:
+        await log_access(action="procedure_view", resource_type="procedure", resource_id=procedure_id, user=current_user, request=request, outcome="denied")
         raise HTTPException(status_code=403, detail="Access denied")
     elif current_user["role"] == "nurse":
         # Nurses can view any case where Phase 1 has been submitted (draft is hidden).
         # They only see Phase 1 data on the UI (frontend-enforced).
         if procedure.get("status") == "draft":
+            await log_access(action="procedure_view", resource_type="procedure", resource_id=procedure_id, user=current_user, request=request, outcome="denied")
             raise HTTPException(status_code=403, detail="Nurses cannot view draft procedures")
     
     procedure["_id"] = str(procedure["_id"])
@@ -1605,6 +1677,7 @@ async def get_procedure(procedure_id: str, current_user: dict = Depends(get_curr
     # keeping the response contract identical to POST mark-instruments-autoclaved and
     # GET /procedures/nurse/scheduled-cases.
     procedure["instruments_autoclaved"] = _serialise_instruments_autoclaved(procedure.get("instruments_autoclaved"))
+    await log_access(action="procedure_view", resource_type="procedure", resource_id=procedure_id, user=current_user, request=request, extra={"patient_name": procedure.get("patient_name")})
     return procedure
 
 @api_router.put("/procedures/{procedure_id}")
@@ -2456,6 +2529,50 @@ async def admin_run_pre_surgery_reminders(current_user: dict = Depends(get_curre
         raise HTTPException(status_code=403, detail="Administrator or Implant In-Charge role required")
     await run_pre_surgery_reminders()
     return {"ok": True, "ran_at": datetime.utcnow().isoformat()}
+
+
+@api_router.get("/admin/access-logs")
+async def admin_get_access_logs(
+    limit: int = 100,
+    skip: int = 0,
+    user_id: Optional[str] = None,
+    resource_type: Optional[str] = None,
+    resource_id: Optional[str] = None,
+    action: Optional[str] = None,
+    outcome: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """HIPAA: paginated audit viewer for admins / in-charges.
+    Returns ObjectId-free documents sorted by most recent first."""
+    if current_user.get("role") not in ("administrator", "implant_incharge"):
+        raise HTTPException(status_code=403, detail="Administrator or Implant In-Charge role required")
+    if limit < 1 or limit > 500:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 500")
+    if skip < 0:
+        raise HTTPException(status_code=400, detail="skip must be >= 0")
+
+    query: Dict[str, Any] = {}
+    if user_id:
+        query["user_id"] = user_id
+    if resource_type:
+        query["resource_type"] = resource_type
+    if resource_id:
+        query["resource_id"] = resource_id
+    if action:
+        query["action"] = action
+    if outcome:
+        query["outcome"] = outcome
+
+    total = await db.access_logs.count_documents(query)
+    cursor = db.access_logs.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit)
+    items = []
+    async for doc in cursor:
+        # datetime → ISO string for JSON safety
+        if isinstance(doc.get("created_at"), datetime):
+            doc["created_at"] = doc["created_at"].isoformat()
+        items.append(doc)
+    return {"total": total, "skip": skip, "limit": limit, "items": items}
+
 
 
 def _serialise_instruments_autoclaved(raw: Optional[dict]) -> Optional[dict]:
@@ -4212,12 +4329,21 @@ async def get_smart_planner(
 @api_router.post("/procedures/{procedure_id}/case-report")
 async def generate_case_report(
     procedure_id: str,
+    request: Request,
     current_user: dict = Depends(get_current_user),
 ):
     """Generate a comprehensive Case Report PDF."""
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await log_access(
+        action="pdf_export",
+        resource_type="case_report",
+        resource_id=procedure_id,
+        user=current_user,
+        request=request,
+        extra={"patient_name": procedure.get("patient_name")},
+    )
 
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -9472,6 +9598,29 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+# ── HIPAA / secrets hardening: redact bearer tokens + ?token= URLs from access logs.
+# Uvicorn's default access logger logs the full request line which can include
+# ?token=<jwt> when the frontend hits /api/uploads/... Protect against leakage.
+class _SensitiveLogRedactor(logging.Filter):
+    _token_re = re.compile(r"token=[^\s&\"]+", re.IGNORECASE)
+    _bearer_re = re.compile(r"Bearer\s+[A-Za-z0-9._\-]+", re.IGNORECASE)
+
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: D401
+        try:
+            msg = record.getMessage()
+            if "token=" in msg or "Bearer" in msg:
+                msg = self._token_re.sub("token=<redacted>", msg)
+                msg = self._bearer_re.sub("Bearer <redacted>", msg)
+                record.msg = msg
+                record.args = ()
+        except Exception:
+            pass
+        return True
+
+for _name in ("uvicorn.access", "uvicorn.error", "uvicorn", __name__, "root"):
+    logging.getLogger(_name).addFilter(_SensitiveLogRedactor())
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
@@ -9482,6 +9631,11 @@ async def start_pre_surgery_scheduler():
     """Kick off the background reminder loop once per worker."""
     asyncio.create_task(pre_surgery_reminder_loop(3600))
     logging.info("Pre-surgery reminder scheduler started (interval=3600s).")
+
+@app.on_event("startup")
+async def ensure_access_log_indexes_on_start():
+    """HIPAA: guarantee the access_logs collection has TTL + query indexes."""
+    await _ensure_access_log_indexes()
 
 @app.on_event("startup")
 async def seed_on_startup():

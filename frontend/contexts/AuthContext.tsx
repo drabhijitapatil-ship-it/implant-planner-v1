@@ -29,9 +29,10 @@ interface AuthContextType {
   ackWorkflow: () => Promise<void>;
 }
 
-// Auto-logout after 20 minutes of inactivity. Clinic devices are often shared,
+// Auto-logout after 15 minutes of inactivity. Clinic devices are often shared,
 // so a session timeout protects patient data when a user walks away.
-const SESSION_TIMEOUT_MS = 20 * 60 * 1000;
+// 15 min aligns with HIPAA best-practice recommendations for workstation timeout.
+const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -73,7 +74,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         logout().then(() => {
           Alert.alert(
             'Session Expired',
-            'You have been logged out after 20 minutes of inactivity. Please log in again.'
+            'You have been logged out after 15 minutes of inactivity. Please log in again.'
           );
         });
       }
