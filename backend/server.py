@@ -9603,7 +9603,7 @@ logger = logging.getLogger(__name__)
 # Uvicorn's default access logger logs the full request line which can include
 # ?token=<jwt> when the frontend hits /api/uploads/... Protect against leakage.
 class _SensitiveLogRedactor(logging.Filter):
-    _token_re = re.compile(r"token=[^\s&\"]+", re.IGNORECASE)
+    _token_re = re.compile(r"(?:access_token|refresh_token|api_key|api-key|token)=[^\s&\"]+", re.IGNORECASE)
     _bearer_re = re.compile(r"Bearer\s+[A-Za-z0-9._\-]+", re.IGNORECASE)
 
     def filter(self, record: logging.LogRecord) -> bool:  # noqa: D401
