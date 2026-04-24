@@ -1774,6 +1774,176 @@ async def edit_procedure_fields(procedure_id: str, request: Request, current_use
 
 
 
+# ───────────────────────────────────────────────────────────────────
+# Phase 2 Edit Request — student flags wrong prosthesis/cuff data
+# captured in Phase 2 so the Supervisor/In-Charge can correct it
+# before Phase 3 is submitted. Non-blocking; reuses /edit-fields
+# for the actual save (see Phase2EditModal on the client).
+# Payload body: { "fields": ["prosthesis_type"|"healing_abutment_cuff_height"|"other"], "note": "<=500 chars" }
+# ───────────────────────────────────────────────────────────────────
+class Phase2EditRequestCreate(BaseModel):
+    fields: List[str] = Field(default_factory=list)
+    note: Optional[str] = Field(None, max_length=500)
+
+@api_router.post("/procedures/{procedure_id}/phase2-edit-request")
+async def create_phase2_edit_request(
+    procedure_id: str,
+    body: Phase2EditRequestCreate,
+    current_user: dict = Depends(get_current_user),
+):
+    """Student-only: file an edit request against locked Phase 2 data."""
+    if current_user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Only the case student can request a Phase 2 edit")
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if proc.get("student_id") != current_user["_id"]:
+        raise HTTPException(status_code=403, detail="Access denied — not your case")
+    if not proc.get("phase2_data"):
+        raise HTTPException(status_code=400, detail="Phase 2 has not been submitted yet")
+    # Block duplicate pending requests
+    existing = [r for r in (proc.get("phase2_edit_requests") or []) if r.get("status") == "pending"]
+    if existing:
+        raise HTTPException(status_code=409, detail="An edit request is already pending on this case")
+
+    allowed = {"prosthesis_type", "healing_abutment_cuff_height", "other"}
+    req_fields = [f for f in (body.fields or []) if f in allowed]
+    if not req_fields and not (body.note or "").strip():
+        raise HTTPException(status_code=400, detail="Select at least one field or add a note")
+
+    now = datetime.now(timezone.utc)
+    request_doc = {
+        "id": str(uuid.uuid4()),
+        "requested_by": current_user["_id"],
+        "requested_by_name": current_user.get("name") or current_user["_id"],
+        "requested_at": now.isoformat(),
+        "fields": req_fields,
+        "note": (body.note or "").strip() or None,
+        "status": "pending",
+        "resolved_by": None,
+        "resolved_by_name": None,
+        "resolved_by_role": None,
+        "resolved_at": None,
+    }
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$push": {"phase2_edit_requests": request_doc}},
+    )
+
+    # Notify supervisor + in-charge (both can resolve per product spec 1c)
+    recipients = list(dict.fromkeys([r for r in [proc.get("supervisor_id"), proc.get("implant_incharge_id")] if r]))
+    patient_label = proc.get("patient_name") or "case"
+    pretty_fields = ", ".join(f.replace("_", " ") for f in req_fields) if req_fields else "Phase 2 data"
+    msg = f"{request_doc['requested_by_name']} requested edit on {pretty_fields} for {patient_label}"
+    for uid in recipients:
+        await db.notifications.insert_one({
+            "user_id": uid,
+            "procedure_id": procedure_id,
+            "message": msg,
+            "type": "phase2_edit_request",
+            "read": False,
+            "created_at": datetime.utcnow(),
+        })
+    if recipients:
+        await send_expo_push_notifications(
+            recipients,
+            f"Phase 2 edit requested · {patient_label}",
+            msg,
+            {"procedure_id": procedure_id, "type": "phase2_edit_request", "request_id": request_doc["id"]},
+        )
+    return request_doc
+
+
+@api_router.post("/procedures/{procedure_id}/phase2-edit-request/{request_id}/cancel")
+async def cancel_phase2_edit_request(
+    procedure_id: str,
+    request_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Student-only: cancel a pending request they filed."""
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    reqs = proc.get("phase2_edit_requests") or []
+    target = next((r for r in reqs if r.get("id") == request_id), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="Edit request not found")
+    if target.get("status") != "pending":
+        raise HTTPException(status_code=400, detail=f"Request already {target.get('status')}")
+    if target.get("requested_by") != current_user["_id"]:
+        raise HTTPException(status_code=403, detail="Only the requesting student can cancel this request")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id), "phase2_edit_requests.id": request_id},
+        {"$set": {
+            "phase2_edit_requests.$.status": "cancelled",
+            "phase2_edit_requests.$.resolved_at": now_iso,
+            "phase2_edit_requests.$.resolved_by": current_user["_id"],
+            "phase2_edit_requests.$.resolved_by_name": current_user.get("name") or current_user["_id"],
+            "phase2_edit_requests.$.resolved_by_role": "student",
+        }},
+    )
+    return {"ok": True, "status": "cancelled"}
+
+
+@api_router.post("/procedures/{procedure_id}/phase2-edit-request/{request_id}/resolve")
+async def resolve_phase2_edit_request(
+    procedure_id: str,
+    request_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Supervisor or In-Charge marks the request resolved after saving edits."""
+    if current_user["role"] not in ("supervisor", "implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Only Supervisor or Implant In-Charge can resolve")
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if current_user["role"] == "supervisor" and proc.get("supervisor_id") != current_user["_id"]:
+        raise HTTPException(status_code=403, detail="Access denied — not your case")
+    reqs = proc.get("phase2_edit_requests") or []
+    target = next((r for r in reqs if r.get("id") == request_id), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="Edit request not found")
+    if target.get("status") != "pending":
+        raise HTTPException(status_code=400, detail=f"Request already {target.get('status')}")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    resolver_name = current_user.get("name") or current_user["_id"]
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id), "phase2_edit_requests.id": request_id},
+        {"$set": {
+            "phase2_edit_requests.$.status": "resolved",
+            "phase2_edit_requests.$.resolved_at": now_iso,
+            "phase2_edit_requests.$.resolved_by": current_user["_id"],
+            "phase2_edit_requests.$.resolved_by_name": resolver_name,
+            "phase2_edit_requests.$.resolved_by_role": current_user["role"],
+        }},
+    )
+    # Notify the student who filed it
+    student_id = target.get("requested_by")
+    if student_id:
+        role_label = {"implant_incharge": "Implant In-Charge", "supervisor": "Supervisor"}.get(current_user["role"], current_user["role"].title())
+        patient_label = proc.get("patient_name") or "your case"
+        msg = f"{role_label} {resolver_name} updated Phase 2 data for {patient_label}"
+        await db.notifications.insert_one({
+            "user_id": student_id,
+            "procedure_id": procedure_id,
+            "message": msg,
+            "type": "phase2_edit_resolved",
+            "read": False,
+            "created_at": datetime.utcnow(),
+        })
+        await send_expo_push_notifications(
+            [student_id],
+            f"Phase 2 updated · {patient_label}",
+            msg,
+            {"procedure_id": procedure_id, "type": "phase2_edit_resolved"},
+        )
+    return {"ok": True, "status": "resolved"}
+
+
+
+
 @api_router.delete("/procedures/{procedure_id}")
 async def delete_procedure(procedure_id: str, current_user: dict = Depends(get_current_user)):
     proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})

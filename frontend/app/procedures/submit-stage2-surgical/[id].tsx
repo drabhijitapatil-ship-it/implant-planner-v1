@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity,
-  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Switch, Image, Linking,
+  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Switch, Image, Linking, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -60,6 +60,17 @@ export default function Stage2SurgicalSubmissionScreen() {
   // Notes
   const [studentNotes, setStudentNotes] = useState('');
 
+  // ── Phase 2 edit-request workflow ──
+  // Student can flag wrong prosthesis/cuff data locked in Phase 2.
+  // Non-blocking: student can still submit Phase 3, sees a pending-banner
+  // until Supervisor/In-Charge resolves (via Phase2EditModal on case-detail).
+  const [pendingEditRequest, setPendingEditRequest] = useState<any>(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editFieldsSel, setEditFieldsSel] = useState<Record<string, boolean>>({});
+  const [editNote, setEditNote] = useState('');
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const isOwner = !!user && user.role === 'student';
+
   useEffect(() => { loadImplantPlan(); }, []);
 
   const loadImplantPlan = async () => {
@@ -86,7 +97,47 @@ export default function Stage2SurgicalSubmissionScreen() {
       setPhase2ProsthesisType(p2.prosthesis_type || '');
       setPhase2ProsthesisOther(p2.prosthesis_type_other || '');
       if (Array.isArray(p2.healing_abutment_cuff_height)) setPhase2HealingCuffs(p2.healing_abutment_cuff_height);
+      // Latest pending edit request (backend blocks more than one at a time).
+      const reqs: any[] = Array.isArray(d.phase2_edit_requests) ? d.phase2_edit_requests : [];
+      setPendingEditRequest(reqs.find(r => r?.status === 'pending') || null);
     } catch {}
+  };
+
+  // ── Phase 2 edit-request handlers (student only) ──
+  const openEditRequestModal = () => {
+    setEditFieldsSel({});
+    setEditNote('');
+    setEditModalOpen(true);
+  };
+  const submitEditRequest = async () => {
+    const chosen = Object.keys(editFieldsSel).filter(k => editFieldsSel[k]);
+    if (chosen.length === 0 && !editNote.trim()) {
+      Alert.alert('Nothing to send', 'Please select at least one field or add a note.');
+      return;
+    }
+    setEditSubmitting(true);
+    try {
+      const res = await api.post(`/procedures/${id}/phase2-edit-request`, {
+        fields: chosen,
+        note: editNote.trim() || null,
+      });
+      setPendingEditRequest(res.data);
+      setEditModalOpen(false);
+      Alert.alert('Request sent', 'Your Supervisor and Implant In-Charge have been notified. You can still submit Phase 3 — a pending-edit indicator will stay visible until they update the data.');
+    } catch (err: any) {
+      Alert.alert('Could not send', err?.response?.data?.detail || 'Failed to send edit request');
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+  const cancelEditRequest = async () => {
+    if (!pendingEditRequest?.id) return;
+    try {
+      await api.post(`/procedures/${id}/phase2-edit-request/${pendingEditRequest.id}/cancel`);
+      setPendingEditRequest(null);
+    } catch (err: any) {
+      Alert.alert('Could not cancel', err?.response?.data?.detail || 'Failed to cancel request');
+    }
   };
 
   const toggleChecklist = (itemId: string) => {
@@ -188,6 +239,12 @@ export default function Stage2SurgicalSubmissionScreen() {
               <Text style={{ marginTop: 6, fontSize: 13, color: '#33691E' }}>
                 {phase2ProsthesisType === 'Other' ? (phase2ProsthesisOther || 'Other') : (phase2ProsthesisType || '—')}
               </Text>
+              {isOwner && !pendingEditRequest && (
+                <TouchableOpacity style={s.requestEditBtn} onPress={openEditRequestModal} data-testid="phase3-request-edit-btn">
+                  <Ionicons name="alert-circle-outline" size={16} color="#E65100" />
+                  <Text style={s.requestEditBtnText}>Need Changes — Request Edit</Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
           {phase2Component === 'Healing Abutment Placed' && (
@@ -199,6 +256,30 @@ export default function Stage2SurgicalSubmissionScreen() {
                 </Text>
               )) : (
                 <Text style={{ marginTop: 4, fontSize: 13, color: '#1A237E' }}>No cuff heights recorded</Text>
+              )}
+              {isOwner && !pendingEditRequest && (
+                <TouchableOpacity style={s.requestEditBtn} onPress={openEditRequestModal} data-testid="phase3-request-edit-btn">
+                  <Ionicons name="alert-circle-outline" size={16} color="#E65100" />
+                  <Text style={s.requestEditBtnText}>Need Changes — Request Edit</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
+          {/* ── Pending edit-request banner ── */}
+          {pendingEditRequest && (
+            <View style={[s.section, { borderLeftWidth: 4, borderLeftColor: '#F9A825', backgroundColor: '#FFFDE7' }]} testID="phase3-pending-edit-banner">
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="time-outline" size={18} color="#E65100" />
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#E65100', flex: 1 }}>Edit requested — waiting for Supervisor / In-Charge</Text>
+              </View>
+              {!!pendingEditRequest.note && (
+                <Text style={{ marginTop: 6, fontSize: 12, color: '#6D4C41', fontStyle: 'italic' }}>“{pendingEditRequest.note}”</Text>
+              )}
+              {isOwner && (
+                <TouchableOpacity style={s.cancelRequestBtn} onPress={cancelEditRequest} data-testid="phase3-cancel-edit-request-btn">
+                  <Text style={s.cancelRequestText}>Cancel request</Text>
+                </TouchableOpacity>
               )}
             </View>
           )}
@@ -386,6 +467,68 @@ export default function Stage2SurgicalSubmissionScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* ── Phase 2 Edit Request Modal ── */}
+      <Modal visible={editModalOpen} transparent animationType="slide" onRequestClose={() => setEditModalOpen(false)}>
+        <View style={s.modalBackdrop}>
+          <View style={s.modalSheet}>
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle}>Request Phase 2 Edit</Text>
+              <TouchableOpacity onPress={() => setEditModalOpen(false)} data-testid="phase3-edit-modal-close">
+                <Ionicons name="close" size={22} color="#607D8B" />
+              </TouchableOpacity>
+            </View>
+            <Text style={s.modalHint}>Select what needs changing. Your Supervisor and Implant In-Charge will be notified.</Text>
+            {phase2Component === 'Immediate Loading Done' && (
+              <TouchableOpacity
+                style={[s.modalChoice, editFieldsSel.prosthesis_type && s.modalChoiceActive]}
+                onPress={() => setEditFieldsSel(v => ({ ...v, prosthesis_type: !v.prosthesis_type }))}
+                data-testid="phase3-edit-choice-prosthesis-type">
+                <Ionicons name={editFieldsSel.prosthesis_type ? 'checkbox' : 'square-outline'} size={20} color={editFieldsSel.prosthesis_type ? '#1565C0' : '#90A4AE'} />
+                <Text style={s.modalChoiceText}>Prosthesis Type</Text>
+              </TouchableOpacity>
+            )}
+            {phase2Component === 'Healing Abutment Placed' && (
+              <TouchableOpacity
+                style={[s.modalChoice, editFieldsSel.healing_abutment_cuff_height && s.modalChoiceActive]}
+                onPress={() => setEditFieldsSel(v => ({ ...v, healing_abutment_cuff_height: !v.healing_abutment_cuff_height }))}
+                data-testid="phase3-edit-choice-cuff-height">
+                <Ionicons name={editFieldsSel.healing_abutment_cuff_height ? 'checkbox' : 'square-outline'} size={20} color={editFieldsSel.healing_abutment_cuff_height ? '#1565C0' : '#90A4AE'} />
+                <Text style={s.modalChoiceText}>Healing Abutment Cuff Height</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={[s.modalChoice, editFieldsSel.other && s.modalChoiceActive]}
+              onPress={() => setEditFieldsSel(v => ({ ...v, other: !v.other }))}
+              data-testid="phase3-edit-choice-other">
+              <Ionicons name={editFieldsSel.other ? 'checkbox' : 'square-outline'} size={20} color={editFieldsSel.other ? '#1565C0' : '#90A4AE'} />
+              <Text style={s.modalChoiceText}>Other</Text>
+            </TouchableOpacity>
+            <Text style={[s.label, { marginTop: 12 }]}>Note to reviewer (optional)</Text>
+            <TextInput
+              style={[s.input, s.textArea]}
+              value={editNote}
+              onChangeText={setEditNote}
+              placeholder="Briefly describe what's wrong and what should change..."
+              multiline
+              maxLength={500}
+              data-testid="phase3-edit-note-input"
+            />
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+              <TouchableOpacity style={[s.modalBtn, s.modalCancel]} onPress={() => setEditModalOpen(false)} disabled={editSubmitting}>
+                <Text style={s.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.modalBtn, s.modalSubmit, editSubmitting && { opacity: 0.6 }]}
+                onPress={submitEditRequest}
+                disabled={editSubmitting}
+                data-testid="phase3-edit-submit-btn">
+                {editSubmitting ? <ActivityIndicator color="#FFF" /> : <Text style={s.modalSubmitText}>Send Request</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -411,4 +554,21 @@ const s = StyleSheet.create({
   helperText: { fontSize: 12, color: '#90A4AE', fontStyle: 'italic', marginTop: 4 },
   submitBtn: { flexDirection: 'row', backgroundColor: '#1565C0', borderRadius: 14, padding: 16, alignItems: 'center', justifyContent: 'center', gap: 8, shadowColor: '#1565C0', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 5 },
   submitText: { color: '#FFF', fontSize: 16, fontWeight: '700', letterSpacing: 0.5 },
+  requestEditBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginTop: 10, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: '#FFB74D', backgroundColor: '#FFF3E0' },
+  requestEditBtnText: { fontSize: 12.5, fontWeight: '700', color: '#E65100', letterSpacing: 0.2 },
+  cancelRequestBtn: { alignSelf: 'flex-start', marginTop: 10, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: '#CFD8DC', backgroundColor: '#FFF' },
+  cancelRequestText: { fontSize: 12, fontWeight: '600', color: '#607D8B' },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(13,71,161,0.35)', justifyContent: 'flex-end' },
+  modalSheet: { backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '85%' },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  modalTitle: { fontSize: 17, fontWeight: '800', color: '#0D47A1' },
+  modalHint: { fontSize: 13, color: '#546E7A', marginBottom: 14, lineHeight: 19 },
+  modalChoice: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: '#E0E7EE', marginBottom: 8 },
+  modalChoiceActive: { borderColor: '#1565C0', backgroundColor: '#E3F2FD' },
+  modalChoiceText: { fontSize: 14, fontWeight: '600', color: '#37474F' },
+  modalBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
+  modalCancel: { backgroundColor: '#ECEFF1' },
+  modalCancelText: { fontSize: 14, fontWeight: '700', color: '#546E7A' },
+  modalSubmit: { backgroundColor: '#1565C0' },
+  modalSubmitText: { fontSize: 14, fontWeight: '700', color: '#FFF' },
 });
