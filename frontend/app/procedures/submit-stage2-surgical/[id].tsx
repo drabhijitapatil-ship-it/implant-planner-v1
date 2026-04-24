@@ -23,6 +23,28 @@ export default function Stage2SurgicalSubmissionScreen() {
   const notesLabel = isFaculty ? "Operator's Notes" : "Student Notes";
   const [loading, setLoading] = useState(false);
 
+  // ── Phase 2 context (drives the Phase 3 simplified checklist + banner per product spec) ──
+  // If Phase 2 selected "Immediate Loading Done" or "Healing Abutment Placed",
+  // we show a summary banner at the top and trim the checklist to 4 items
+  // (no All-Components-Available, no Healing-Abutment-Placed rows).
+  const [phase2Component, setPhase2Component] = useState<string>('');
+  const [phase2ProsthesisType, setPhase2ProsthesisType] = useState<string>('');
+  const [phase2ProsthesisOther, setPhase2ProsthesisOther] = useState<string>('');
+  const [phase2HealingCuffs, setPhase2HealingCuffs] = useState<string[]>([]);
+
+  // Always drop the Healing-Abutment-Placed checklist row — by product spec, Phase 3 never
+  // re-captures it. When Phase 2 had Immediate Loading / Healing Abutment, also drop the
+  // All-Components-Available row so only the 4 spec'd items remain.
+  const simplifyChecklist = phase2Component === 'Immediate Loading Done'
+    || phase2Component === 'Healing Abutment Placed';
+  const CHECKLIST_ITEMS_FILTERED = React.useMemo(() => (
+    CHECKLIST_DATA.second_stage.items.filter(i => {
+      if (i.id === 'healing_abutment') return false; // never surface in Phase 3 per spec
+      if (simplifyChecklist && i.id === 'components_available') return false;
+      return true;
+    })
+  ), [simplifyChecklist]);
+
   // Checklist state
   const [checklistState, setChecklistState] = useState<Record<string, boolean>>({});
   // Text fields embedded in checklist
@@ -54,6 +76,15 @@ export default function Stage2SurgicalSubmissionScreen() {
       setIsqValues(['']);
       setIopaFiles([null]);
     }
+    // Pull Phase 2 fields so we can render the Phase 3 banner and decide checklist shape.
+    try {
+      const p = await api.get(`/procedures/${id}`);
+      const d = p.data || {};
+      setPhase2Component(d.prosthetic_component || '');
+      setPhase2ProsthesisType(d.prosthesis_type || '');
+      setPhase2ProsthesisOther(d.prosthesis_type_other || '');
+      if (Array.isArray(d.healing_abutment_cuff_height)) setPhase2HealingCuffs(d.healing_abutment_cuff_height);
+    } catch {}
   };
 
   const toggleChecklist = (itemId: string) => {
@@ -92,8 +123,11 @@ export default function Stage2SurgicalSubmissionScreen() {
   };
 
   const handleSubmit = async () => {
-    // Validate all checklist items answered (Yes or No)
-    const unanswered = CHECKLIST_ITEMS.filter(i => checklistState[i.id] === undefined);
+    // Validate all visible checklist items answered — ISQ item is optional per product spec
+    // (user can tick Yes + enter a value, or skip entirely).
+    const unanswered = CHECKLIST_ITEMS_FILTERED.filter(
+      i => i.id !== 'isq_checked' && checklistState[i.id] === undefined
+    );
     if (unanswered.length > 0) {
       Alert.alert('Checklist Incomplete', `Please answer: ${unanswered[0].label}`);
       return;
@@ -145,6 +179,28 @@ export default function Stage2SurgicalSubmissionScreen() {
             </Text>
           </View>
 
+          {/* ── Phase 2 summary banner (per product spec) ── */}
+          {phase2Component === 'Immediate Loading Done' && (
+            <View style={[s.section, { borderLeftWidth: 4, borderLeftColor: '#2E7D32', backgroundColor: '#F1F8E9' }]} testID="phase3-immediate-prosthesis-banner">
+              <Text style={{ fontSize: 15, fontWeight: '800', color: '#1B5E20' }}>Immediate Prosthesis Done</Text>
+              <Text style={{ marginTop: 6, fontSize: 13, color: '#33691E' }}>
+                {phase2ProsthesisType === 'Other' ? (phase2ProsthesisOther || 'Other') : (phase2ProsthesisType || '—')}
+              </Text>
+            </View>
+          )}
+          {phase2Component === 'Healing Abutment Placed' && (
+            <View style={[s.section, { borderLeftWidth: 4, borderLeftColor: '#1565C0', backgroundColor: '#E3F2FD' }]} testID="phase3-healing-abutment-banner">
+              <Text style={{ fontSize: 15, fontWeight: '800', color: '#0D47A1' }}>Healing Abutment Placed</Text>
+              {phase2HealingCuffs.length > 0 ? phase2HealingCuffs.map((h, i) => (
+                <Text key={i} style={{ marginTop: 4, fontSize: 13, color: '#1A237E' }}>
+                  {implantPositions[i] ? `Tooth #${implantPositions[i]}` : `Implant ${i + 1}`}: {h || '—'} mm
+                </Text>
+              )) : (
+                <Text style={{ marginTop: 4, fontSize: 13, color: '#1A237E' }}>No cuff heights recorded</Text>
+              )}
+            </View>
+          )}
+
           {/* ── Checklist ── */}
           <View style={s.section}>
             <View style={s.sectionHeader}>
@@ -152,7 +208,7 @@ export default function Stage2SurgicalSubmissionScreen() {
               <Text style={s.sectionTitle}>Second Stage Checklist <Text style={{ color: '#DC3545' }}>*</Text></Text>
             </View>
 
-            {CHECKLIST_ITEMS.map(item => (
+            {CHECKLIST_ITEMS_FILTERED.map(item => (
               <View key={item.id}>
                 <View style={s.checkRow}>
                   <Text style={[s.checkLabel, { flex: 1 }]}>{item.label}</Text>

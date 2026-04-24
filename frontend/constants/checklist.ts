@@ -33,7 +33,7 @@ export const CHECKLIST_DATA = {
       { id: 'components_available', label: 'All Components Available (Second stage and Prosthetic)' },
       { id: 'implant_site_exam', label: 'Implant site examination done' },
       { id: 'radiograph_made', label: 'Radiograph Made' },
-      { id: 'isq_checked', label: 'Implant ISQ value checked', hasTextInput: true, textLabel: 'ISQ Value (optional)' },
+      { id: 'isq_checked', label: 'Implant ISQ value checked', hasTextInput: true, textLabel: 'ISQ Value' },
       { id: 'healing_abutment', label: 'Healing Abutment Placed', hasTextInput: true, textLabel: 'Cuff height (mm)' },
       { id: 'prosthetic_plan_eval', label: 'Prosthetic Plan Evaluated and Finalized' },
     ],

@@ -401,6 +401,10 @@ class Phase2Submit(BaseModel):
     bone_graft_details: Optional[str] = Field(None, max_length=1000)
     implant_other_notes: Optional[str] = Field(None, max_length=500)
     prosthetic_component: Optional[str] = Field(None, max_length=100)
+    # Prosthesis Type chosen when prosthetic_component == 'Immediate Loading Done'.
+    # Options are gated on the client based on Phase 1 procedure_type + teeth count.
+    prosthesis_type: Optional[str] = Field(None, max_length=200)
+    prosthesis_type_other: Optional[str] = Field(None, max_length=500)
     healing_abutment_cuff_height: Optional[Any] = None  # str or list of str (per implant)
     sutures_placed: Optional[bool] = True
     hemostasis_achieved: Optional[bool] = True
@@ -4336,8 +4340,18 @@ async def generate_case_report(
             add_field("Other Implant Notes", p2["implant_other_notes"])
         if p2.get("prosthetic_component"):
             add_field("Prosthetic Component", p2["prosthetic_component"])
+        # Prosthesis Type appears only on Immediate Loading cases per product spec.
+        if p2.get("prosthesis_type"):
+            pt = p2["prosthesis_type"]
+            if pt == "Other" and p2.get("prosthesis_type_other"):
+                pt = f"Other — {p2['prosthesis_type_other']}"
+            add_field("Prosthesis Type", pt)
         if p2.get("healing_abutment_cuff_height"):
-            add_field("Healing Abutment Cuff Height", f"{p2['healing_abutment_cuff_height']} mm")
+            hch = p2["healing_abutment_cuff_height"]
+            if isinstance(hch, list):
+                add_field("Healing Abutment Cuff Height", ", ".join([f"{v} mm" for v in hch if v]))
+            else:
+                add_field("Healing Abutment Cuff Height", f"{hch} mm")
         if p2.get("sutures_placed") is not None:
             add_field("Sutures Placed", "Yes" if p2["sutures_placed"] else "No")
         if p2.get("hemostasis_achieved") is not None:
@@ -4386,7 +4400,39 @@ async def generate_case_report(
 
     # ── Phase 3: Second Stage ────────────────────────────────
     pdf.add_page()
-    add_section_title("Phase 3 - Second Stage Surgery", 33, 150, 243)
+    add_section_title("Phase 3 - Healing and Second Stage Surgery", 33, 150, 243)
+    # Phase 2 carry-over context (per product spec, Phase 3 displays the
+    # Immediate Prosthesis Done / Healing Abutment Placed summary inherited
+    # from Phase 2).
+    p2_ctx = procedure.get("phase2_data", {}) or {}
+    pc = p2_ctx.get("prosthetic_component")
+    if pc == "Immediate Loading Done":
+        pt = p2_ctx.get("prosthesis_type") or ""
+        if pt == "Other" and p2_ctx.get("prosthesis_type_other"):
+            pt = f"Other - {p2_ctx['prosthesis_type_other']}"
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.set_text_color(27, 94, 32)
+        pdf.cell(0, 7, safe("Immediate Prosthesis Done"), ln=True)
+        pdf.set_font("Helvetica", "", 10)
+        pdf.set_text_color(0, 0, 0)
+        pdf.cell(0, 6, safe(f"  {pt or '-'}"), ln=True)
+        pdf.ln(2)
+    elif pc == "Healing Abutment Placed":
+        hch = p2_ctx.get("healing_abutment_cuff_height")
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.set_text_color(13, 71, 161)
+        pdf.cell(0, 7, safe("Healing Abutment Placed"), ln=True)
+        pdf.set_font("Helvetica", "", 10)
+        pdf.set_text_color(0, 0, 0)
+        if isinstance(hch, list):
+            plans = procedure.get("implant_plans") or []
+            for i, v in enumerate(hch):
+                label = plans[i].get("position") if i < len(plans) and isinstance(plans[i], dict) else None
+                prefix = f"Tooth #{label}" if label else f"Implant {i+1}"
+                pdf.cell(0, 6, safe(f"  {prefix}: {v or '-'} mm"), ln=True)
+        elif hch:
+            pdf.cell(0, 6, safe(f"  {hch} mm"), ln=True)
+        pdf.ln(2)
     p3 = procedure.get("phase3_data", {})
     if isinstance(p3, dict) and p3:
         chk = p3.get("checklist_items", {})
@@ -5290,6 +5336,8 @@ async def submit_phase2(
         "bone_graft_details": phase2_data.bone_graft_details,
         "implant_other_notes": phase2_data.implant_other_notes,
         "prosthetic_component": phase2_data.prosthetic_component,
+        "prosthesis_type": phase2_data.prosthesis_type,
+        "prosthesis_type_other": phase2_data.prosthesis_type_other,
         "healing_abutment_cuff_height": phase2_data.healing_abutment_cuff_height,
         "sutures_placed": phase2_data.sutures_placed,
         "hemostasis_achieved": phase2_data.hemostasis_achieved,
