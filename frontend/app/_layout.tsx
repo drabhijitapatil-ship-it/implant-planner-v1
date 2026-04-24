@@ -48,6 +48,7 @@ export default function RootLayout() {
               <Stack.Screen name="onboarding" />
               <Stack.Screen name="help-workflow" />
               <Stack.Screen name="whatsnew" />
+              <Stack.Screen name="admin/audit-log" options={{ headerShown: true, title: 'Audit Log', headerBackTitle: 'Back' }} />
             </Stack>
           </ActivityTracker>
         </TabletFrame>

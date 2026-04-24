@@ -4,6 +4,8 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse, HTMLResponse
 from dotenv import load_dotenv
 import io
+import csv
+import json
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
@@ -2540,6 +2542,8 @@ async def admin_get_access_logs(
     resource_id: Optional[str] = None,
     action: Optional[str] = None,
     outcome: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
 ):
     """HIPAA: paginated audit viewer for admins / in-charges.
@@ -2562,6 +2566,16 @@ async def admin_get_access_logs(
         query["action"] = action
     if outcome:
         query["outcome"] = outcome
+    date_filter: Dict[str, Any] = {}
+    try:
+        if start_date:
+            date_filter["$gte"] = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+        if end_date:
+            date_filter["$lt"] = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="start_date/end_date must be ISO 8601")
+    if date_filter:
+        query["created_at"] = date_filter
 
     total = await db.access_logs.count_documents(query)
     cursor = db.access_logs.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit)
@@ -2572,6 +2586,77 @@ async def admin_get_access_logs(
             doc["created_at"] = doc["created_at"].isoformat()
         items.append(doc)
     return {"total": total, "skip": skip, "limit": limit, "items": items}
+
+
+@api_router.get("/admin/access-logs/export-csv")
+async def admin_export_access_logs_csv(
+    user_id: Optional[str] = None,
+    resource_type: Optional[str] = None,
+    resource_id: Optional[str] = None,
+    action: Optional[str] = None,
+    outcome: Optional[str] = None,
+    start_date: Optional[str] = None,  # ISO date (inclusive)
+    end_date: Optional[str] = None,  # ISO date (exclusive upper bound)
+    current_user: dict = Depends(get_current_user),
+):
+    """HIPAA: CSV export of access logs for compliance review (capped at 10k rows)."""
+    if current_user.get("role") not in ("administrator", "implant_incharge"):
+        raise HTTPException(status_code=403, detail="Administrator or Implant In-Charge role required")
+
+    query: Dict[str, Any] = {}
+    if user_id: query["user_id"] = user_id
+    if resource_type: query["resource_type"] = resource_type
+    if resource_id: query["resource_id"] = resource_id
+    if action: query["action"] = action
+    if outcome: query["outcome"] = outcome
+
+    date_filter: Dict[str, Any] = {}
+    try:
+        if start_date:
+            date_filter["$gte"] = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+        if end_date:
+            date_filter["$lt"] = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="start_date/end_date must be ISO 8601")
+    if date_filter:
+        query["created_at"] = date_filter
+
+    cursor = db.access_logs.find(query, {"_id": 0}).sort("created_at", -1).limit(10000)
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "created_at", "action", "outcome", "user_id", "user_name", "user_role",
+        "resource_type", "resource_id", "ip", "user_agent", "extra",
+    ])
+    async for d in cursor:
+        writer.writerow([
+            d.get("created_at").isoformat() if isinstance(d.get("created_at"), datetime) else (d.get("created_at") or ""),
+            d.get("action") or "",
+            d.get("outcome") or "",
+            d.get("user_id") or "",
+            d.get("user_name") or "",
+            d.get("user_role") or "",
+            d.get("resource_type") or "",
+            d.get("resource_id") or "",
+            d.get("ip") or "",
+            (d.get("user_agent") or "")[:200],
+            json.dumps(d.get("extra"), default=str) if d.get("extra") else "",
+        ])
+
+    # Log the export itself — audit-of-the-audit
+    await log_access(
+        action="audit_export",
+        resource_type="access_logs",
+        user=current_user,
+        extra={"row_count": buf.getvalue().count("\n") - 1, "filters": {k: v for k, v in query.items() if k != "created_at"}},
+    )
+
+    filename = f"access_logs_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 
