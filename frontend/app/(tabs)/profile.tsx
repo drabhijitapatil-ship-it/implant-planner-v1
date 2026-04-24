@@ -236,6 +236,24 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* HIPAA — Compliance section. Only Implant In-Charge / Administrator
+            see this section. Everyone else has no render. */}
+        {(user?.role === 'implant_incharge' || user?.role === 'administrator') && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Compliance</Text>
+            <TouchableOpacity
+              style={styles.legalRow}
+              onPress={() => router.push('/admin/audit-log')}
+              data-testid="link-audit-log"
+              testID="link-audit-log"
+            >
+              <Ionicons name="shield-outline" size={22} color="#1565C0" />
+              <Text style={styles.legalRowText}>Audit log</Text>
+              <Ionicons name="chevron-forward" size={18} color="#999" />
+            </TouchableOpacity>
+          </View>
+        )}
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Legal</Text>
           <TouchableOpacity
