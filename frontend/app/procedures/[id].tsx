@@ -36,6 +36,7 @@ import { generateProcedurePDF } from '../../utils/pdfGenerator';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';
 import CaseCompletionBadge from '../../components/CaseCompletionBadge';
 import ExportPrintMenu from '../../components/ExportPrintMenu';
+import Phase2EditModal from '../../components/Phase2EditModal';
 import * as Linking from 'expo-linking';
 
 // Edit mode context for passing edit state to InfoRow
@@ -171,6 +172,8 @@ export default function ProcedureDetailScreen() {
   // case they didn't schedule. Exposes Reprint + Upload actions.
   const [showInchargeConsentEdit, setShowInchargeConsentEdit] = useState(false);
   const [uploadingConsent, setUploadingConsent] = useState(false);
+  // Phase 2 edit-request (reviewer side — supervisor/in-charge open modal when student flags an issue)
+  const [showPhase2EditModal, setShowPhase2EditModal] = useState(false);
 
   const uploadConsentForProcedure = async () => {
     try {
@@ -652,6 +655,39 @@ export default function ProcedureDetailScreen() {
             <View style={styles.awaitingRow} testID="awaiting-next-phase-indicator">
               <Ionicons name="hourglass-outline" size={14} color="#546E7A" />
               <Text style={styles.awaitingText}>{msg}</Text>
+            </View>
+          );
+        })()}
+
+        {/* Phase 2 edit-request banner for Supervisor / In-Charge / Admin.
+            Shown only if there is a pending request on this case. Tap "Edit Now"
+            opens Phase2EditModal which patches phase2_data.prosthesis_type /
+            healing_abutment_cuff_height and calls /resolve. */}
+        {(() => {
+          const pending = Array.isArray(procedure?.phase2_edit_requests)
+            ? procedure.phase2_edit_requests.find((r: any) => r?.status === 'pending')
+            : null;
+          if (!pending) return null;
+          const canResolve = user?.role === 'implant_incharge' || user?.role === 'administrator'
+            || (user?.role === 'supervisor' && procedure?.supervisor_id === user?.id);
+          if (!canResolve) return null;
+          return (
+            <View style={styles.phase2EditBanner} testID="phase2-edit-request-banner">
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <Ionicons name="alert-circle" size={18} color="#E65100" />
+                <Text style={styles.phase2EditBannerTitle}>
+                  {pending.requested_by_name || 'Student'} requested Phase 2 edit
+                </Text>
+              </View>
+              {!!pending.note && <Text style={styles.phase2EditBannerNote}>“{pending.note}”</Text>}
+              <TouchableOpacity
+                style={styles.phase2EditResolveBtn}
+                onPress={() => setShowPhase2EditModal(true)}
+                testID="phase2-edit-open-modal-btn"
+              >
+                <Ionicons name="create-outline" size={16} color="#FFF" />
+                <Text style={styles.phase2EditResolveText}>Edit Now</Text>
+              </TouchableOpacity>
             </View>
           );
         })()}
@@ -2689,6 +2725,18 @@ export default function ProcedureDetailScreen() {
         </View>
       </Modal>
 
+      {/* Phase 2 edit modal (supervisor/in-charge resolves student's request) */}
+      {procedure && (
+        <Phase2EditModal
+          visible={showPhase2EditModal}
+          onClose={() => setShowPhase2EditModal(false)}
+          procedureId={String(id)}
+          procedure={procedure}
+          request={Array.isArray(procedure.phase2_edit_requests) ? procedure.phase2_edit_requests.find((r: any) => r?.status === 'pending') : null}
+          onSaved={(updated) => setProcedure(updated)}
+        />
+      )}
+
     </SafeAreaView>
     </EditContext.Provider>
   );
@@ -3427,6 +3475,48 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     flexShrink: 1,
   },
+  phase2EditBanner: {
+    marginHorizontal: 16,
+    marginTop: 2,
+    marginBottom: 10,
+    padding: 12,
+    backgroundColor: '#FFF3E0',
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#F9A825',
+    borderWidth: 1,
+    borderColor: '#FFE0B2',
+  },
+  phase2EditBannerTitle: {
+    fontSize: 13.5,
+    color: '#E65100',
+    fontWeight: '800',
+    flex: 1,
+  },
+  phase2EditBannerNote: {
+    fontSize: 12.5,
+    color: '#6D4C41',
+    fontStyle: 'italic',
+    marginBottom: 8,
+    lineHeight: 17,
+  },
+  phase2EditResolveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#E65100',
+  },
+  phase2EditResolveText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFF',
+    letterSpacing: 0.2,
+  },
+
   timelineContainer: {
     margin: 16,
     marginTop: 0,
