@@ -47,6 +47,12 @@ export default function Phase2SubmissionScreen() {
   const [aiNotesLoading, setAiNotesLoading] = useState(false);
   const [prostheticComponent, setProstheticComponent] = useState('');
   const [prostheticOpen, setProstheticOpen] = useState(false);
+  // Immediate Loading prosthesis type (visible only when Prosthetic Component === 'Immediate Loading Done').
+  // Option set depends on Phase 1 procedure_type + teeth count per user spec.
+  const [prosthesisType, setProsthesisType] = useState('');
+  const [prosthesisTypeOpen, setProsthesisTypeOpen] = useState(false);
+  const [prosthesisTypeOther, setProsthesisTypeOther] = useState('');
+  const [teethCount, setTeethCount] = useState(0);
   const [healingAbutmentCuffHeight, setHealingAbutmentCuffHeight] = useState<string[]>(['']);
   const [accessChannelOpenings, setAccessChannelOpenings] = useState<string[]>([]);
   const [suturesPlaced, setSuturesPlaced] = useState(true);
@@ -91,6 +97,11 @@ export default function Phase2SubmissionScreen() {
 
       const pType = procRes.data.implant_procedure_type || '';
       setProcedureType(pType);
+      // teeth_present drives the Group A (single) vs Group B (multiple) split
+      // for Prosthesis Type options when one of the 4 overlapping procedure
+      // types (Immediate Implant, PET, GBR, Guided Surgery) is chosen.
+      const teeth = Array.isArray(procRes.data.teeth_present) ? procRes.data.teeth_present : [];
+      setTeethCount(teeth.length);
 
       // Determine IOPA slot count
       let iopaCount: number;
@@ -197,6 +208,12 @@ export default function Phase2SubmissionScreen() {
       }
     }
     if (!prostheticComponent) { Alert.alert('Missing', 'Please select Prosthetic Component'); return; }
+    if (prostheticComponent === 'Immediate Loading Done') {
+      if (!prosthesisType) { Alert.alert('Missing', 'Please select a Prosthesis Type'); return; }
+      if (prosthesisType === 'Other' && !prosthesisTypeOther.trim()) {
+        Alert.alert('Missing', 'Please describe the prosthesis type in the text box'); return;
+      }
+    }
 
     // Validate mandatory IOPA uploads
     const allIopaSlots = [...iopaFiles, ...new Array(extraIopaCount).fill(null)];
@@ -222,6 +239,9 @@ export default function Phase2SubmissionScreen() {
         bone_graft_details: boneGraftUsed ? boneGraftDetails || null : null,
         implant_other_notes: implantOtherNotes || null,
         prosthetic_component: prostheticComponent,
+        prosthesis_type: prostheticComponent === 'Immediate Loading Done' ? prosthesisType : null,
+        prosthesis_type_other: (prostheticComponent === 'Immediate Loading Done' && prosthesisType === 'Other')
+          ? prosthesisTypeOther.trim() : null,
         healing_abutment_cuff_height: prostheticComponent === 'Healing Abutment Placed' ? healingAbutmentCuffHeight : null,
         access_channel_openings: prostheticComponent === 'Immediate Loading Done' ? accessChannelOpenings : null,
         sutures_placed: suturesPlaced,
@@ -423,6 +443,48 @@ export default function Phase2SubmissionScreen() {
                 ))}
               </View>
             )}
+
+            {/* Prosthesis Type — only when Prosthetic Component === Immediate Loading Done.
+                Options depend on Phase 1 procedure_type + teeth count per product spec. */}
+            {prostheticComponent === 'Immediate Loading Done' && (() => {
+              // Overlapping modifier procedure types — Group A/B decided by teeth count.
+              const OVERLAP = new Set(['Immediate Implant','Partial Extraction Therapy','Implant Placement with Guided Bone Regeneration','Guided Surgery']);
+              const FULL_ARCH = new Set(['All on 4','All on 6','All on X']);
+              let options: string[] = [];
+              if (FULL_ARCH.has(procedureType)) {
+                options = [
+                  'Full Arch Temporary Prosthesis with Multiunit Abutments and Temporary Cylinders',
+                  'Temporary PMMA CAD Prosthesis with Multiunit Abutments and Temporary Cylinders',
+                  'Temporary PMMA CAD Prosthesis on Ti-Base',
+                ];
+              } else {
+                // single vs multi driven by procedureType OR teethCount for overlaps
+                const isSingle = procedureType === 'Single Conventional Implant'
+                  || (OVERLAP.has(procedureType) && teethCount <= 1);
+                if (isSingle) {
+                  options = ['PMMA Crown with Temporary Abutment', 'PMMA Crown with Ti-Base', 'Other'];
+                } else {
+                  options = ['PMMA Crowns with Temporary Abutment', 'PMMA Crowns with Ti-Base', 'PMMA Bridge with Temporary Abutment', 'Other'];
+                }
+              }
+              return (
+                <View style={s.section}>
+                  <Text style={s.torqueTitle}>Prosthesis Type</Text>
+                  {renderDropdown('Select prosthesis type', prosthesisType, options,
+                    prosthesisTypeOpen, setProsthesisTypeOpen, setProsthesisType)}
+                  {prosthesisType === 'Other' && (
+                    <TextInput
+                      style={[s.textArea, { marginTop: 8 }]}
+                      value={prosthesisTypeOther}
+                      onChangeText={setProsthesisTypeOther}
+                      placeholder="Describe the prosthesis type..."
+                      multiline
+                      data-testid="prosthesis-type-other-input"
+                    />
+                  )}
+                </View>
+              );
+            })()}
 
             {/* Access Channel Opening - shown when Immediate Loading Done */}
             {prostheticComponent === 'Immediate Loading Done' && implantPositions.length > 0 && (
