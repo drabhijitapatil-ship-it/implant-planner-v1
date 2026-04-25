@@ -351,6 +351,12 @@ class ProcedureUpdate(BaseModel):
     available_interarch_space: Optional[str] = Field(None, max_length=20)
     opposing_arch: Optional[str] = Field(None, max_length=50)
     arch_condition: Optional[str] = Field(None, max_length=50)
+    # Phase 1 default-prosthesis suggestion captured when the student confirms a
+    # 3-unit implant-supported bridge from the clinical-correlation prompt.
+    bridge_design: Optional[str] = Field(None, max_length=200)
+    bridge_material: Optional[str] = Field(None, max_length=80)
+    bridge_pontics: Optional[List[str]] = None
+    bridge_implants: Optional[List[str]] = None
 
     @field_validator('patient_name')
     @classmethod
@@ -4677,6 +4683,18 @@ async def generate_case_report(
     checklist = procedure.get("checklist", {})
     if isinstance(checklist, dict):
         add_checklist_section("Pre-Surgical Checklist", checklist.get("pre_surgical"))
+    # ── Phase 1 default-prosthesis suggestion (3-unit bridge) ──
+    bridge_design = procedure.get("bridge_design")
+    if bridge_design:
+        add_field("Default Prosthesis Plan", bridge_design)
+        if procedure.get("bridge_material"):
+            add_field("Bridge Material", procedure["bridge_material"])
+        impl = procedure.get("bridge_implants") or []
+        pont = procedure.get("bridge_pontics") or []
+        if impl:
+            add_field("Bridge Implants", ", ".join(map(str, impl)))
+        if pont:
+            add_field("Bridge Pontics", ", ".join(map(str, pont)))
     phase1_date = procedure.get("phase1_completed_at")
     if phase1_date:
         add_field("Phase 1 Completed", phase1_date.isoformat() if isinstance(phase1_date, datetime) else str(phase1_date))
