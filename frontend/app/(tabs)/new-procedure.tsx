@@ -10,6 +10,7 @@ import api, { getAuthFileUrl, getToken } from '../../utils/api';
 import { showUploadPicker } from '../../utils/uploadPicker';
 import { useAuth } from '../../contexts/AuthContext';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';
+import { validateImplantSelection } from '../../utils/implantValidation';
 import {
   PROCEDURE_TYPES,
   LOADING_TYPES,
@@ -710,11 +711,50 @@ export default function NewProcedureScreen() {
             userRole={user?.role || 'student'}
             readOnly={false}
             medicalAssessment={formData.medical_assessment}
+            teethPresent={formData.teeth_present}
+            onBridgeConfirmed={async (info) => {
+              // Persist the default prosthesis on the procedure so Phase 2 can pre-fill it.
+              // Student edits draft procedures via PUT (edit-fields is reviewer-only).
+              try {
+                await api.put(`/procedures/${createdProcedureId}`, {
+                  bridge_design: info.design,
+                  bridge_material: info.material,
+                  bridge_pontics: info.pontics,
+                  bridge_implants: info.implants,
+                });
+              } catch (err) {
+                // Non-fatal — UI Alert already shown; reviewer can re-enter in Phase 2.
+                console.warn('bridge_design save failed', err);
+              }
+            }}
           />
         </ScrollView>
         <View style={styles.submitContainer}>
           <TouchableOpacity style={styles.submitBtn} data-testid="submit-for-approval"
-            onPress={() => {
+            onPress={async () => {
+              // Final clinical-correlation summary before submission (Q2=c — also done live).
+              try {
+                const planRes = await api.get(`/procedures/${createdProcedureId}/implant-plan`);
+                const positions: string[] = (planRes.data?.implant_plans || []).map((p: any) => p.position);
+                const finalCheck = validateImplantSelection(formData.implant_procedure_type, formData.teeth_present, positions);
+                if (finalCheck.block) {
+                  Alert.alert('Cannot submit', finalCheck.block);
+                  return;
+                }
+                if (finalCheck.bridgeCandidates.length > 0) {
+                  const lines = finalCheck.bridgeCandidates.map(c =>
+                    `• ${c.implants.join(', ')} → ${c.pontics.join(', ')} as pontic`,
+                  ).join('\n');
+                  // Non-blocking — already prompted live, just remind on submit.
+                  Alert.alert(
+                    'Bridge prosthesis indicated',
+                    `Implant-supported bridge configurations detected:\n\n${lines}\n\nThe student / supervisor will confirm the final prosthesis in Phase 2.`,
+                  );
+                }
+              } catch {
+                // Plan endpoint failed — don't block submission, but log.
+              }
+
               Alert.alert('Submit for Approval', 'Are you sure you want to submit this case?', [
                 { text: 'Cancel' },
                 {

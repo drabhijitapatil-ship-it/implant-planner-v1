@@ -16,6 +16,14 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import api from '../utils/api';
 import ExportPrintMenu from './ExportPrintMenu';
+import {
+  validateImplantSelection,
+  detectBridgeCandidates,
+  describeBridgeCandidate,
+  BRIDGE_MATERIALS,
+  type BridgeMaterial,
+  type BridgeCandidate,
+} from '../utils/implantValidation';
 
 // ── Drilling Protocol PDF helpers (A4, backend-rendered) ────────────────────
 type DrillingPdfPayload = {
@@ -177,6 +185,11 @@ interface Props {
   patientName?: string;
   patientId?: string;
   procedureDate?: string;
+  /** Phase 1 missing teeth — required for the bridge / single-implant correlation rules. */
+  teethPresent?: string[];
+  /** Fired when the student confirms a 3-unit bridge on a candidate. Parent persists
+   *  these on the procedure document (default prosthesis + bridge material). */
+  onBridgeConfirmed?: (info: { design: string; material: BridgeMaterial; pontics: string[]; implants: string[] }) => void;
 }
 
 // ── Drilling Protocol Generator ────────────────────────────
@@ -534,7 +547,7 @@ function generateDrillingProtocol(brand: string, system: string, diameter: numbe
   return protocol;
 }
 
-export default function CaseImplantPlanning({ procedureId, isOwner, userRole, torqueValues, procedureStatus, procedureType, medicalAssessment, patientName, patientId, procedureDate }: Props) {
+export default function CaseImplantPlanning({ procedureId, isOwner, userRole, torqueValues, procedureStatus, procedureType, medicalAssessment, patientName, patientId, procedureDate, teethPresent, onBridgeConfirmed }: Props) {
   const [plans, setPlans] = useState<ImplantPlanItem[]>([]);
   const [systems, setSystems] = useState<ImplantSystem[]>([]);
   const [toothRecs, setToothRecs] = useState<Record<string,any>>({});
@@ -543,6 +556,9 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [expandedProtocol, setExpandedProtocol] = useState<number | null>(null);
+  // Bridge prompt — surfaced after a save reveals a new pontic between implants.
+  const [bridgePrompt, setBridgePrompt] = useState<BridgeCandidate | null>(null);
+  const [bridgeMaterialFor, setBridgeMaterialFor] = useState<BridgeCandidate | null>(null);
 
   // Editable: students until Phase 2 approved; supervisors/incharge at all stages
   const editableStatuses = ['draft', 'pending_phase1', 'phase1_approved', 'pending_phase2'];
@@ -583,6 +599,21 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
   };
 
   const handleAddImplant = (item: ImplantPlanItem) => {
+    // ── Phase 1 clinical correlation: gate hard rules before save ──
+    const otherPositions = plans
+      .filter((_, i) => i !== editingIdx)
+      .map(p => p.position);
+    const validation = validateImplantSelection(
+      procedureType,
+      teethPresent || [],
+      otherPositions,
+      item.position,
+    );
+    if (validation.block) {
+      Alert.alert('Cannot add implant', validation.block);
+      return;
+    }
+
     if (editingIdx !== null) {
       const updated = [...plans];
       updated[editingIdx] = item;
@@ -592,6 +623,16 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
       savePlans([...plans, item]);
     }
     setShowAddModal(false);
+
+    // ── Bridge nudge — surface AFTER save so the implant list reflects reality.
+    // Only the *new* candidate (one that didn't exist before this add) is shown,
+    // to avoid re-prompting on every edit of an already-known bridge case.
+    if (procedureType === 'Multiple Conventional Implants') {
+      const beforeKeys = new Set(detectBridgeCandidates(teethPresent || [], otherPositions).map(c => c.pontics.join(',')));
+      const after = detectBridgeCandidates(teethPresent || [], [...otherPositions, item.position]);
+      const fresh = after.find(c => !beforeKeys.has(c.pontics.join(',')));
+      if (fresh) setBridgePrompt(fresh);
+    }
   };
 
   const handleDeleteImplant = (idx: number) => {
@@ -799,6 +840,90 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
         procedureType={procedureType}
         procedureId={procedureId}
       />
+
+      {/* ── Bridge nudge — fired after a save reveals an implant-supported pontic ── */}
+      <Modal visible={!!bridgePrompt} transparent animationType="fade" onRequestClose={() => setBridgePrompt(null)}>
+        <View style={st.bridgeBackdrop}>
+          <View style={st.bridgeSheet}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <Ionicons name="git-network-outline" size={20} color="#1565C0" />
+              <Text style={st.bridgeTitle}>Three-unit bridge?</Text>
+            </View>
+            <Text style={st.bridgeBody}>
+              {bridgePrompt ? describeBridgeCandidate(bridgePrompt) : ''}
+            </Text>
+            <Text style={[st.bridgeBody, { marginTop: 8, fontWeight: '700', color: '#0D47A1' }]}>
+              Would you like to give a three-unit implant-supported bridge prosthesis?
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+              <TouchableOpacity
+                style={[st.bridgeBtn, st.bridgeBtnGhost]}
+                onPress={() => {
+                  // User declined — surface the clinical recommendation as info.
+                  const cand = bridgePrompt;
+                  setBridgePrompt(null);
+                  if (cand) {
+                    Alert.alert(
+                      'Three-unit bridge is indicated',
+                      `Clinical recommendation: a 3-unit bridge with ${cand.pontics.join(', ')} as the pontic. You may still choose your own prosthesis when entering Phase 2.`,
+                    );
+                  }
+                }}
+                testID="bridge-prompt-no"
+              >
+                <Text style={st.bridgeBtnGhostText}>No, choose my own</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[st.bridgeBtn, st.bridgeBtnPrimary]}
+                onPress={() => {
+                  // Yes → ask material before persisting.
+                  setBridgeMaterialFor(bridgePrompt);
+                  setBridgePrompt(null);
+                }}
+                testID="bridge-prompt-yes"
+              >
+                <Text style={st.bridgeBtnPrimaryText}>Yes, set as default</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Material picker after Yes ── */}
+      <Modal visible={!!bridgeMaterialFor} transparent animationType="slide" onRequestClose={() => setBridgeMaterialFor(null)}>
+        <View style={st.bridgeBackdrop}>
+          <View style={st.bridgeSheet}>
+            <Text style={st.bridgeTitle}>Bridge material</Text>
+            <Text style={st.bridgeBody}>Pick a starting material — you can refine it during Phase 4 prosthesis delivery.</Text>
+            {BRIDGE_MATERIALS.map(mat => (
+              <TouchableOpacity
+                key={mat}
+                style={st.bridgeMaterialRow}
+                onPress={() => {
+                  const cand = bridgeMaterialFor;
+                  setBridgeMaterialFor(null);
+                  if (cand && onBridgeConfirmed) {
+                    onBridgeConfirmed({
+                      design: 'Three-unit implant-supported bridge',
+                      material: mat,
+                      pontics: cand.pontics,
+                      implants: cand.implants,
+                    });
+                  }
+                  Alert.alert('Saved', `Default prosthesis set to: Three-unit implant-supported bridge (${mat}).`);
+                }}
+                testID={`bridge-material-${mat.replace(/\s+/g, '-').toLowerCase()}`}
+              >
+                <Ionicons name="ellipse-outline" size={18} color="#1565C0" />
+                <Text style={st.bridgeMaterialText}>{mat}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={[st.bridgeBtn, st.bridgeBtnGhost, { marginTop: 8 }]} onPress={() => setBridgeMaterialFor(null)}>
+              <Text style={st.bridgeBtnGhostText}>Skip — decide later</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1984,4 +2109,16 @@ const ms = StyleSheet.create({
   protocolPreviewSub: { fontSize: 11, color: '#666', fontWeight: '500' },
   protocolPreviewBody: { paddingHorizontal: 14, paddingBottom: 14, borderTopWidth: 1, borderTopColor: '#E3F2FD', paddingTop: 10 },
   protocolPreviewBone: { fontSize: 12, fontWeight: '600', color: '#555', marginBottom: 10, backgroundColor: '#E8EAF6', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, alignSelf: 'flex-start' },
+  // ── Bridge nudge modal styles ──
+  bridgeBackdrop: { flex: 1, backgroundColor: 'rgba(13,71,161,0.45)', justifyContent: 'center', padding: 24 },
+  bridgeSheet: { backgroundColor: '#FFF', borderRadius: 16, padding: 22, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
+  bridgeTitle: { fontSize: 17, fontWeight: '800', color: '#0D47A1', marginBottom: 4 },
+  bridgeBody: { fontSize: 13.5, color: '#37474F', lineHeight: 19 },
+  bridgeBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  bridgeBtnGhost: { borderWidth: 1.5, borderColor: '#CFD8DC', backgroundColor: '#FFF' },
+  bridgeBtnGhostText: { fontSize: 13.5, fontWeight: '700', color: '#546E7A' },
+  bridgeBtnPrimary: { backgroundColor: '#1565C0' },
+  bridgeBtnPrimaryText: { fontSize: 13.5, fontWeight: '700', color: '#FFF' },
+  bridgeMaterialRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1.5, borderColor: '#E0E7EE', marginTop: 8, backgroundColor: '#F8FAFC' },
+  bridgeMaterialText: { fontSize: 14, fontWeight: '600', color: '#37474F' },
 });
