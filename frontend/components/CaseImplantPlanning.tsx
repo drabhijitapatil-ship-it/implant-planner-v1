@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import api from '../utils/api';
 import ExportPrintMenu from './ExportPrintMenu';
 import { getImplantDetails } from '../constants/implantIndications';
+import { evaluateImplantSafety, shortSafetyChip, type SafetyVerdict } from '../utils/implantSafety';
 import {
   validateImplantSelection,
   detectBridgeCandidates,
@@ -1610,9 +1611,49 @@ function ModalContent(props: any) {
                     </Text>
                     {displayed.map((imp: any, i: number) => {
                       const isSelected = selectedImplant?.diameter === imp.diameter && selectedImplant?.length === imp.length && selectedImplant?.brand === imp.brand;
+                      const verdict = evaluateImplantSafety({
+                        toothPosition: position,
+                        boneWidthMm: parseFloat(boneWidth) || null,
+                        boneHeightMm: parseFloat(boneHeight) || null,
+                        implantDiameterMm: imp.diameter,
+                        implantLengthMm: imp.length,
+                      });
+                      const blocked = verdict.kind === 'length_block';
+                      const warning = verdict.kind === 'width_warning';
+                      const chip = shortSafetyChip(verdict);
+                      const handleTap = () => {
+                        if (isSelected) { setSelectedImplant(null); return; }
+                        if (blocked) { Alert.alert('Selection blocked', verdict.message); return; }
+                        const apply = () => {
+                          setSelectedImplant({ diameter: imp.diameter, length: imp.length, brand: imp.brand || selectedSystem?.brand || '', system: imp.system || selectedSystem?.system || '' });
+                          setShowProtocol(false);
+                        };
+                        if (warning) {
+                          Alert.alert('Bone margin warning', verdict.message, [
+                            { text: 'Change the selection', style: 'cancel' },
+                            { text: 'Continue with selection', onPress: async () => {
+                              apply();
+                              try {
+                                await api.post('/audit/safety-override', {
+                                  context: 'phase1_step2',
+                                  tooth_position: position,
+                                  bone_width: parseFloat(boneWidth) || null,
+                                  bone_height: parseFloat(boneHeight) || null,
+                                  implant_diameter: imp.diameter,
+                                  implant_length: imp.length,
+                                  margin_mm: (verdict as any).marginMm,
+                                  system: `${imp.brand || selectedSystem?.brand || ''} - ${imp.system || selectedSystem?.system || ''}`,
+                                });
+                              } catch {/* non-fatal */}
+                            } },
+                          ]);
+                          return;
+                        }
+                        apply();
+                      };
                       return (
-                        <TouchableOpacity key={i} style={[ms.implantOption, isSelected && ms.implantOptionSelected]}
-                          onPress={() => { setSelectedImplant({ diameter: imp.diameter, length: imp.length, brand: imp.brand || selectedSystem?.brand || '', system: imp.system || selectedSystem?.system || '' }); setShowProtocol(false); }}
+                        <TouchableOpacity key={i} style={[ms.implantOption, isSelected && ms.implantOptionSelected, blocked && { opacity: 0.55 }]}
+                          onPress={handleTap}
                           data-testid={`result-implant-${i}`}>
                           <Ionicons name={isSelected ? 'radio-button-on' : 'radio-button-off'} size={22} color={isSelected ? '#1E88E5' : '#CCC'} />
                           <View style={{ flex: 1 }}>
@@ -1622,12 +1663,18 @@ function ModalContent(props: any) {
                             </View>
                             <Text style={ms.implantSpec}>D: {imp.diameter}mm | L: {imp.length}mm</Text>
                             {imp.indication ? <Text style={ms.ddItemIndication}>{imp.indication}</Text> : null}
+                            {chip && (
+                              <View style={[ms.safetyChip, blocked ? ms.safetyChipBlocked : ms.safetyChipWarn]}>
+                                <Ionicons name={blocked ? 'close-circle' : 'warning'} size={12} color={blocked ? '#B71C1C' : '#E65100'} />
+                                <Text style={[ms.safetyChipText, { color: blocked ? '#B71C1C' : '#E65100' }]}>{chip}</Text>
+                              </View>
+                            )}
                           </View>
                           {imp.priority === 1 && <View style={[ms.bestBadge, { backgroundColor: '#E8F5E9' }]}><Text style={[ms.bestBadgeText, { color: '#2E7D32' }]}>P1</Text></View>}
                           {imp.priority === 2 && <View style={[ms.bestBadge, { backgroundColor: '#FFF3E0' }]}><Text style={[ms.bestBadgeText, { color: '#E65100' }]}>P2</Text></View>}
-                          {!imp.priority && i === 0 && <View style={ms.bestBadge}><Text style={ms.bestBadgeText}>Best</Text></View>}
-                          {!imp.priority && i === 1 && <View style={[ms.bestBadge, { backgroundColor: '#E3F2FD' }]}><Text style={[ms.bestBadgeText, { color: '#1565C0' }]}>2nd</Text></View>}
-                          {!imp.priority && i === 2 && <View style={[ms.bestBadge, { backgroundColor: '#FFF3E0' }]}><Text style={[ms.bestBadgeText, { color: '#E65100' }]}>3rd</Text></View>}
+                          {!imp.priority && i === 0 && !blocked && !warning && <View style={ms.bestBadge}><Text style={ms.bestBadgeText}>Best</Text></View>}
+                          {!imp.priority && i === 1 && !blocked && !warning && <View style={[ms.bestBadge, { backgroundColor: '#E3F2FD' }]}><Text style={[ms.bestBadgeText, { color: '#1565C0' }]}>2nd</Text></View>}
+                          {!imp.priority && i === 2 && !blocked && !warning && <View style={[ms.bestBadge, { backgroundColor: '#FFF3E0' }]}><Text style={[ms.bestBadgeText, { color: '#E65100' }]}>3rd</Text></View>}
                         </TouchableOpacity>
                       );
                     })}
@@ -2052,6 +2099,10 @@ const ms = StyleSheet.create({
   showMoreBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, marginTop: 4, borderRadius: 8, backgroundColor: '#F0F7FF' },
   showMoreText: { fontSize: 14, fontWeight: '600', color: '#1A73E8' },
   bestBadge: { backgroundColor: '#E8F5E9', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  safetyChip: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, marginTop: 4, borderWidth: 1 },
+  safetyChipBlocked: { backgroundColor: '#FFEBEE', borderColor: '#FFCDD2' },
+  safetyChipWarn: { backgroundColor: '#FFF3E0', borderColor: '#FFE0B2' },
+  safetyChipText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
   bestBadgeText: { fontSize: 10, fontWeight: '700', color: '#4CAF50' },
   summaryCard: { backgroundColor: '#FFF', borderRadius: 12, padding: 16, marginBottom: 16 },
   summaryLabel: { fontSize: 12, color: '#888', fontWeight: '600', marginTop: 8 },

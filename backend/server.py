@@ -2539,6 +2539,45 @@ async def admin_run_pre_surgery_reminders(current_user: dict = Depends(get_curre
     return {"ok": True, "ran_at": datetime.utcnow().isoformat()}
 
 
+class SafetyOverrideBody(BaseModel):
+    """Captures a clinician's decision to override the soft bone-margin warning
+    on the implant selection screen. Persisted into access_logs so the audit
+    viewer surfaces it under action=safety_override."""
+    context: str = Field(..., max_length=80)  # e.g. "implant_selection_home" / "phase1_step2"
+    tooth_position: Optional[str] = Field(None, max_length=4)
+    bone_width: Optional[float] = None
+    bone_height: Optional[float] = None
+    implant_diameter: Optional[float] = None
+    implant_length: Optional[float] = None
+    margin_mm: Optional[float] = None
+    system: Optional[str] = Field(None, max_length=120)
+
+
+@api_router.post("/audit/safety-override")
+async def audit_safety_override(
+    body: SafetyOverrideBody,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """HIPAA: log when a user dismisses the bone-margin soft-warning.
+    Body is intentionally minimal — no PHI, just clinical parameters and the
+    context string. Routed through the same access_logs collection used by
+    login / procedure_view / pdf_export so In-Charges can review overrides
+    in the existing /admin/access-logs viewer."""
+    extra = body.dict()
+    await log_access(
+        action="safety_override",
+        resource_type="implant_selection",
+        resource_id=body.system or None,
+        user=current_user,
+        request=request,
+        outcome="success",
+        extra=extra,
+    )
+    return {"ok": True}
+
+
+
 @api_router.get("/admin/access-logs")
 async def admin_get_access_logs(
     limit: int = 100,
@@ -3769,13 +3808,21 @@ async def ai_explain_recommendation(request: Request, current_user: dict = Depen
     plan = plans[implant_index] if implant_index < len(plans) else (plans[0] if plans else {})
     
     context = _build_case_context(proc)
-    prompt = f"""You are an expert implantologist. Based on the following clinical case data, explain in 3-4 concise sentences why the selected implant is appropriate for this case. Use clinical reasoning grounded in established scientific literature — reference bone-to-implant safety margins, anatomical considerations, bone density classification, and implant design rationale specific to the bone type and site. Do NOT cite or name any specific guidelines, organizations, or textbooks.
+    # ── Inject institutional Indications & Features for grounded reasoning ──
+    from implant_indications import get_details as _get_implant_details
+    inst = _get_implant_details(plan.get("brand"), plan.get("system"))
+    inst_block = ""
+    if inst:
+        if inst.get("indications"): inst_block += f"\nInstitutional Indications: {inst['indications']}"
+        if inst.get("features"):    inst_block += f"\nInstitutional Features: {inst['features']}"
+
+    prompt = f"""You are an expert implantologist. Based on the following clinical case data, explain in 3-4 concise sentences why the selected implant is appropriate for this case. Use clinical reasoning grounded in established scientific literature — reference bone-to-implant safety margins, anatomical considerations, bone density classification, and implant design rationale specific to the bone type and site. When institutional Indications/Features are provided below, anchor your reasoning in those system-specific properties (e.g. tapered body for soft bone, conical connection for crestal preservation) rather than generic platitudes. Do NOT cite or name any specific guidelines, organizations, or textbooks.
 
 Case Data:
 {context}
 
 Selected Implant: {plan.get('brand','')} {plan.get('system','')} {plan.get('diameter','')}×{plan.get('length','')}mm at site {plan.get('tooth_number','')}
-Bone Type: {plan.get('bone_type','N/A')}
+Bone Type: {plan.get('bone_type','N/A')}{inst_block}
 
 Provide a clinical explanation in professional scientific language. Do not mention any guideline names or references. Write as a professional clinical note."""
 
@@ -3824,10 +3871,21 @@ async def ai_explain_standalone(request: Request, current_user: dict = Depends(g
         context_parts.append(f"Procedures: {', '.join(procedures) if isinstance(procedures, list) else procedures}")
     context = "\n".join(context_parts)
 
-    prompt = f"""You are an expert implantologist. Based on the following clinical data, explain in 3-4 concise sentences why the selected implant is appropriate for this case. Use clinical reasoning grounded in established scientific literature — reference bone-to-implant safety margins, anatomical considerations, and implant design rationale. Do NOT cite or name any specific guidelines, organizations, or textbooks.
+    # ── Inject institutional Indications & Features so the LLM grounds its
+    # rationale in the same clinical doc the student saw on screen ──
+    from implant_indications import get_details as _get_implant_details
+    inst = _get_implant_details(brand, system)
+    inst_block = ""
+    if inst:
+        if inst.get("indications"):
+            inst_block += f"\nInstitutional Indications: {inst['indications']}"
+        if inst.get("features"):
+            inst_block += f"\nInstitutional Features: {inst['features']}"
+
+    prompt = f"""You are an expert implantologist. Based on the following clinical data, explain in 3-4 concise sentences why the selected implant is appropriate for this case. Use clinical reasoning grounded in established scientific literature — reference bone-to-implant safety margins, anatomical considerations, and implant design rationale. When institutional Indications/Features are provided below, anchor your reasoning in those system-specific properties (e.g. tapered body for soft bone, conical connection for crestal preservation) rather than generic platitudes. Do NOT cite or name any specific guidelines, organizations, or textbooks.
 
 Clinical Data:
-{context}
+{context}{inst_block}
 
 Provide a clinical explanation in professional scientific language. Do not mention any guideline names or references. Write as a professional clinical note."""
 

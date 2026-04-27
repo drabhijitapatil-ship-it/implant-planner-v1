@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 109 backend tests for new POST /api/audit/safety-override endpoint and the institutional-indications prompt enrichment in /api/ai/explain-standalone and /api/ai/explain-recommendation. 6/9 pass: safety-override endpoint is fully working (auth required, 422 on missing context, 200 on happy path, body persisted under extra in access_logs, RBAC blocks student & supervisor on /admin/access-logs). 3/9 fail with the SAME root cause: backend has no EMERGENT_LLM_KEY in /app/backend/.env, so _get_llm_key() returns '' and litellm raises AuthenticationError 500 on every AI call. The institutional prompt-enrichment code (server.py L3811-3817 and L3874-3883) is wired correctly and would work the moment the key is restored — confirmed by inspection. Regression on iter_105/106/107 still green (54 passed, 1 pre-existing skip).",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "/api/ai/explain-standalone and /api/ai/explain-recommendation",
+        "issue": "Both endpoints return 500 with 'litellm.AuthenticationError: OpenAIException - The api_key client option must be set'. Root cause: EMERGENT_LLM_KEY is missing from /app/backend/.env (grep shows only SECRET_KEY in .env). _get_llm_key() therefore returns '' and emergentintegrations cannot authenticate. This breaks ALL AI explain features end-to-end, not just the new institutional enrichment path.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_safety_override_explain_iteration109.py",
+    "/app/test_reports/pytest/iteration_109.xml"
+  ],
+  "action_items": [
+    "Add EMERGENT_LLM_KEY=<value> to /app/backend/.env and restart backend supervisor — this single change should flip the 3 failing AI tests to green (the institutional-indications block is already correctly wired).",
+    "After restoring the key, re-run pytest backend/tests/test_safety_override_explain_iteration109.py -v to confirm 9/9 pass."
+  ],
+  "critical_code_review_comments": [
+    "server.py L3792-3793: _get_llm_key() silently returns '' when EMERGENT_LLM_KEY is missing — the failure mode is opaque. Consider raising a 503 (or a clearer 500 with a server-side message like 'LLM key not configured') so ops sees the env-var problem instead of a downstream litellm exception.",
+    "GET /api/admin/access-logs returns the paginated shape {items,total,limit,skip} — this is correct and used by iter_105/106 tests. iter_109 test was updated to handle both shapes.",
+    "POST /api/audit/safety-override implementation is clean: SafetyOverrideBody Pydantic model enforces context (max 80 chars), all numeric fields optional, max_length on system, and log_access stores the dict under `extra`. resource_type=implant_selection and resource_id=system both look correct."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_safety_override_explain_iteration109.py (new)"
+  ],
+  "success_rate": {
+    "backend": "67% (6/9 — 100% on safety-override + RBAC; 0% on AI explain due to missing EMERGENT_LLM_KEY)",
+    "frontend": "not tested per request"
+  },
+  "test_credentials": "Used the documented creds: Abhijit.patil/Admin@123 (admin), Gaurav.pandey/Student@123 (student), Paresh.gandhi/Supervisor@123 (supervisor). All login successfully via POST /api/auth/login.",
+  "seed_data_creation": "Each safety-override test creates 1 audit row tagged with system='TEST_iter109_<epoch>' for unique lookup. No cleanup needed — access_logs is append-only audit and rows are auto-bounded by the existing 10000-row CSV export cap.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter_109 work focused on: (a) new POST /api/audit/safety-override endpoint — fully working (4/4 tests green: auth-required, 422-on-missing-context, happy-path-persisted, RBAC). (b) AI explain prompt enrichment with institutional Indications/Features from /app/backend/implant_indications.py — code is wired correctly (server.py L3811-3817 ai_explain_recommendation, L3874-3883 ai_explain_standalone) but cannot be exercised because EMERGENT_LLM_KEY is missing from /app/backend/.env (only SECRET_KEY is set). Once the main agent adds the key, the 3 AI tests in test_safety_override_explain_iteration109.py should pass without further code changes. iter_105/106/107 regression confirmed green (54 passed, 1 pre-existing skip on test_indexes_present which is skip-by-design).",
+  "rca_of_the_issue": "AI explain endpoints 500: missing env var. /app/backend/.env contains only SECRET_KEY (verified via `grep -i key /app/backend/.env`). server.py:3792 _get_llm_key() returns os.environ.get('EMERGENT_LLM_KEY','') which is empty. emergentintegrations -> litellm sees no api_key for openai/gpt-5.2 and raises AuthenticationError. Reproduction: any authenticated POST to /api/ai/explain-standalone or /api/ai/explain-recommendation returns 500 with 'OpenAIException - The api_key client option must be set'. Backend stderr shows the full stack from chat.send_message at server.py:3835. Mitigation: add EMERGENT_LLM_KEY=<value> to /app/backend/.env and `sudo supervisorctl restart backend`. No code change required — the new institutional-indications prompt block is correctly wired and will work the moment the key resolves."
+}
