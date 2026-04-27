@@ -83,11 +83,54 @@ export function detectBridgeCandidates(teeth: string[], implantPositions: string
   return cands;
 }
 
+export type CantileverCandidate = {
+  arch: Arch;
+  /** The missing tooth that becomes the cantilever pontic. */
+  pontic: string;
+  /** The single supporting implant (the "anchor"). */
+  implant: string;
+};
+
+/**
+ * A cantilever pontic = a missing tooth at the END of a consecutive missing
+ * run, supported by an implant on ONE side only (no implant on the other side
+ * because there's no tooth there or the run ends there). Examples:
+ *   • 24, 25 missing; implant only at 25 → 24 dangles distally as a cantilever.
+ *   • 36, 37, 38 missing; implants at 36 + 37 → 38 dangles as a cantilever.
+ * Multiple cantilevers can co-exist (one at each end of a run).
+ */
+export function detectCantileverCandidates(teeth: string[], implantPositions: string[]): CantileverCandidate[] {
+  const out: CantileverCandidate[] = [];
+  const runs = findMissingRuns(teeth);
+  for (const { arch, positions } of runs) {
+    if (positions.length < 2) continue;
+    const seq = seqOf(arch);
+    const implants = positions.filter(p => implantPositions.includes(p))
+      .sort((a, b) => seq.indexOf(a) - seq.indexOf(b));
+    if (implants.length === 0) continue;
+
+    // Mesial cantilever — first missing tooth without an implant; only support is to its distal side.
+    const first = positions[0];
+    if (!implantPositions.includes(first)) {
+      const nearest = implants[0];
+      if (seq.indexOf(nearest) === seq.indexOf(first) + 1) out.push({ arch, pontic: first, implant: nearest });
+    }
+    // Distal cantilever — last missing tooth without an implant; only support is to its mesial side.
+    const last = positions[positions.length - 1];
+    if (last !== first && !implantPositions.includes(last)) {
+      const nearest = implants[implants.length - 1];
+      if (seq.indexOf(nearest) === seq.indexOf(last) - 1) out.push({ arch, pontic: last, implant: nearest });
+    }
+  }
+  return out;
+}
+
 export type ImplantValidationResult = {
   /** Hard-blocking message — caller must abort the action. */
   block?: string;
   /** Soft prompts the caller should surface to the user. */
   bridgeCandidates: BridgeCandidate[];
+  cantileverCandidates: CantileverCandidate[];
 };
 
 /**
@@ -101,7 +144,7 @@ export function validateImplantSelection(
   pendingPosition?: string,
 ): ImplantValidationResult {
   const positions = pendingPosition ? [...implantPositions, pendingPosition] : implantPositions;
-  const result: ImplantValidationResult = { bridgeCandidates: [] };
+  const result: ImplantValidationResult = { bridgeCandidates: [], cantileverCandidates: [] };
 
   if (procedureType === 'Single Conventional Implant' && positions.length > 1) {
     result.block = 'More than one implant selected. Please change Type of Implant Procedure.';
@@ -110,6 +153,7 @@ export function validateImplantSelection(
 
   if (procedureType === 'Multiple Conventional Implants') {
     result.bridgeCandidates = detectBridgeCandidates(teethPresent, positions);
+    result.cantileverCandidates = detectCantileverCandidates(teethPresent, positions);
   }
 
   return result;
@@ -124,6 +168,10 @@ export function describeBridgeCandidate(c: BridgeCandidate): string {
   const implantStr = c.implants.join(' + ');
   const ponticStr = c.pontics.join(', ');
   return `Implants at ${implantStr} would replace ${ponticStr} as a ${c.implants.length + c.pontics.length}-unit implant-supported bridge with ${ponticStr} as ${c.pontics.length === 1 ? 'a pontic' : 'pontics'}.`;
+}
+
+export function describeCantileverCandidate(c: CantileverCandidate): string {
+  return `Tooth ${c.pontic} has implant support on one side only (implant at ${c.implant}). It would dangle as a cantilever pontic.`;
 }
 
 export const BRIDGE_MATERIALS = ['Metal', 'Porcelain Fused to Metal', 'Zirconia'] as const;

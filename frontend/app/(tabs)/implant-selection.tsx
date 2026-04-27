@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import api from '../../utils/api';
 import DrillingProtocolScreen from '../../components/DrillingProtocol';
+import { getImplantDetails } from '../../constants/implantIndications';
 
 // ── Types ──────────────────────────────────────────────────
 type ImplantSystem = {
@@ -322,6 +323,33 @@ export default function ImplantSelectionScreen() {
               {cSystem?.indication ? (
                 <View style={s.indBox}><Ionicons name="information-circle" size={14} color="#0D47A1" /><Text style={s.indText}>{cSystem.indication}</Text></View>
               ) : null}
+              {/* ── Verbatim Indications & Features from institutional doc ── */}
+              {(() => {
+                const detail = cSystem ? getImplantDetails(cSystem.brand, cSystem.system) : null;
+                if (!detail) return null;
+                return (
+                  <>
+                    {detail.indications ? (
+                      <View style={s.indBox} testID="lmc-indications-detail">
+                        <Ionicons name="checkmark-circle" size={14} color="#0D47A1" />
+                        <View style={{ flex: 1 }}>
+                          <Text style={[s.indText, { fontStyle: 'normal', fontWeight: '700', marginBottom: 2 }]}>Indications</Text>
+                          <Text style={s.indText}>{detail.indications}</Text>
+                        </View>
+                      </View>
+                    ) : null}
+                    {detail.features ? (
+                      <View style={s.indBox} testID="lmc-features-detail">
+                        <Ionicons name="sparkles" size={14} color="#0D47A1" />
+                        <View style={{ flex: 1 }}>
+                          <Text style={[s.indText, { fontStyle: 'normal', fontWeight: '700', marginBottom: 2 }]}>Features</Text>
+                          <Text style={s.indText}>{detail.features}</Text>
+                        </View>
+                      </View>
+                    ) : null}
+                  </>
+                );
+              })()}
             </View>
 
             {/* Step 3: Bone Measurements */}
