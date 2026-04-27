@@ -1,0 +1,32 @@
+{
+  "summary": "Re-ran the 3 previously-failing AI explain tests from iter_109 after EMERGENT_LLM_KEY was restored to /app/backend/.env. All 3 now PASS. Full file (9/9) is green. Quick regression sweep on iter_105/106/107 also still green (54 passed, 1 pre-existing design skip). Issue from iter_109 is fully resolved with no code changes needed beyond the env-var addition.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_safety_override_explain_iteration109.py",
+    "/app/test_reports/pytest/iteration_110.xml",
+    "/app/test_reports/pytest/iteration_110_full.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py L3792-3793 _get_llm_key() still silently returns '' when EMERGENT_LLM_KEY is missing — recommend raising 503 with a clear 'LLM key not configured' message instead of letting litellm AuthenticationError surface as opaque 500. Carried over from iter_109; not blocking but worth hardening for future ops."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (9/9 on iter_109 file, 54/54 on iter_105/106/107 regression with 1 pre-existing design skip)",
+    "frontend": "not tested per request"
+  },
+  "test_credentials": "Used documented creds: Abhijit.patil/Admin@123 (admin), Gaurav.pandey/Student@123 (student). Both authenticate via POST /api/auth/login as expected.",
+  "seed_data_creation": "No new seed data created in this iteration. The 3 AI tests reuse the existing harness from iter_109.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "iter_110 was a verification-only run. EMERGENT_LLM_KEY (sk-emergent-950A998B90c8f3f3aB) is confirmed present in /app/backend/.env. Both /api/ai/explain-standalone and /api/ai/explain-recommendation now return 200 with non-empty scientifically-grounded text. Institutional-indications prompt enrichment for known brand/system (server.py L3811-3817 and L3874-3883) is operational; unknown brand/system path also returns 200 (no exception when inst_block is empty). New POST /api/audit/safety-override endpoint and the access-logs RBAC remain green. Iter_109 is fully closed.",
+  "rca_of_the_issue": "Resolved — iter_109's CRITICAL was solely due to missing EMERGENT_LLM_KEY in /app/backend/.env. Main agent restored the key from emergent_integrations_manager. Re-running the same test file (no test/code changes) shows 9/9 green and confirms the new institutional Indications/Features prompt block works on both the known-system happy path and the unknown-system safety path."
+}
