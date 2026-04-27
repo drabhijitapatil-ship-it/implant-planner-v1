@@ -751,6 +751,15 @@ export default function NewProcedureScreen() {
                     `Implant-supported bridge configurations detected:\n\n${lines}\n\nThe student / supervisor will confirm the final prosthesis in Phase 2.`,
                   );
                 }
+                if (finalCheck.cantileverCandidates.length > 0) {
+                  const lines = finalCheck.cantileverCandidates.map(c =>
+                    `• Tooth ${c.pontic} (anchored on implant ${c.implant})`,
+                  ).join('\n');
+                  Alert.alert(
+                    'Cantilever pontic warning',
+                    `Cantilever pontics detected — review crown-to-implant ratio and occlusal load before proceeding:\n\n${lines}`,
+                  );
+                }
               } catch {
                 // Plan endpoint failed — don't block submission, but log.
               }

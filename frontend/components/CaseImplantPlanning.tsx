@@ -16,10 +16,13 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import api from '../utils/api';
 import ExportPrintMenu from './ExportPrintMenu';
+import { getImplantDetails } from '../constants/implantIndications';
 import {
   validateImplantSelection,
   detectBridgeCandidates,
+  detectCantileverCandidates,
   describeBridgeCandidate,
+  describeCantileverCandidate,
   BRIDGE_MATERIALS,
   type BridgeMaterial,
   type BridgeCandidate,
@@ -632,6 +635,17 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
       const after = detectBridgeCandidates(teethPresent || [], [...otherPositions, item.position]);
       const fresh = after.find(c => !beforeKeys.has(c.pontics.join(',')));
       if (fresh) setBridgePrompt(fresh);
+
+      // ── Cantilever soft warning — same "fresh-only" rule. Distinct from bridge.
+      const beforeCanti = new Set(detectCantileverCandidates(teethPresent || [], otherPositions).map(c => c.pontic));
+      const afterCanti = detectCantileverCandidates(teethPresent || [], [...otherPositions, item.position]);
+      const freshCanti = afterCanti.find(c => !beforeCanti.has(c.pontic));
+      if (freshCanti) {
+        Alert.alert(
+          'Cantilever pontic detected',
+          `${describeCantileverCandidate(freshCanti)}\n\nConfirm crown-to-implant ratio and occlusal load before proceeding. Cantilevers carry higher biomechanical risk — short cantilever length and balanced occlusion are essential.`,
+        );
+      }
     }
   };
 
@@ -1207,6 +1221,33 @@ function ModalContent(props: any) {
                           <Text style={ms.indicationBannerText}>{selectedSystem.indication}</Text>
                         </View>
                       ) : null}
+                      {/* ── Verbatim Indications & Features from institutional doc ── */}
+                      {(() => {
+                        const detail = getImplantDetails(selectedSystem.brand, selectedSystem.system);
+                        if (!detail) return null;
+                        return (
+                          <>
+                            {detail.indications ? (
+                              <View style={ms.indicationBanner} data-testid="phase1-indications-detail">
+                                <Ionicons name="checkmark-circle" size={16} color="#1565C0" />
+                                <View style={{ flex: 1 }}>
+                                  <Text style={[ms.indicationBannerText, { fontWeight: '700', marginBottom: 2 }]}>Indications</Text>
+                                  <Text style={ms.indicationBannerText}>{detail.indications}</Text>
+                                </View>
+                              </View>
+                            ) : null}
+                            {detail.features ? (
+                              <View style={ms.indicationBanner} data-testid="phase1-features-detail">
+                                <Ionicons name="sparkles" size={16} color="#1565C0" />
+                                <View style={{ flex: 1 }}>
+                                  <Text style={[ms.indicationBannerText, { fontWeight: '700', marginBottom: 2 }]}>Features</Text>
+                                  <Text style={ms.indicationBannerText}>{detail.features}</Text>
+                                </View>
+                              </View>
+                            ) : null}
+                          </>
+                        );
+                      })()}
                       <View style={ms.systemOptionsGrid}>
                         <View style={ms.systemOptionsCol}>
                           <Text style={ms.systemOptionsLabel}>Diameters (mm)</Text>
