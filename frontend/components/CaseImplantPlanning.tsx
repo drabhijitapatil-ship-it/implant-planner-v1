@@ -1215,16 +1215,18 @@ function ModalContent(props: any) {
                   {selectedSystem && (
                     <View style={ms.systemOptionsBox} data-testid="system-options-list">
                       <Text style={ms.systemOptionsTitle}>Available Options: {selectedSystem.brand} - {selectedSystem.system}</Text>
-                      {selectedSystem.indication ? (
-                        <View style={ms.indicationBanner} data-testid="selected-system-indication">
-                          <Ionicons name="information-circle" size={16} color="#1565C0" />
-                          <Text style={ms.indicationBannerText}>{selectedSystem.indication}</Text>
-                        </View>
-                      ) : null}
                       {/* ── Verbatim Indications & Features from institutional doc ── */}
                       {(() => {
                         const detail = getImplantDetails(selectedSystem.brand, selectedSystem.system);
-                        if (!detail) return null;
+                        if (!detail) {
+                          // Fallback to the legacy short indication when the system isn't in the doc yet.
+                          return selectedSystem.indication ? (
+                            <View style={ms.indicationBanner} data-testid="selected-system-indication">
+                              <Ionicons name="information-circle" size={16} color="#1565C0" />
+                              <Text style={ms.indicationBannerText}>{selectedSystem.indication}</Text>
+                            </View>
+                          ) : null;
+                        }
                         return (
                           <>
                             {detail.indications ? (
