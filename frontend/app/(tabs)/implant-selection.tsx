@@ -19,6 +19,7 @@ import * as Clipboard from 'expo-clipboard';
 import api from '../../utils/api';
 import DrillingProtocolScreen from '../../components/DrillingProtocol';
 import { getImplantDetails } from '../../constants/implantIndications';
+import { evaluateImplantSafety, annotateImplantSafety, shortSafetyChip, type SafetyVerdict } from '../../utils/implantSafety';
 
 // ── Types ──────────────────────────────────────────────────
 type ImplantSystem = {
@@ -589,6 +590,46 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
   // Use narrow options when narrow ridge is detected and narrow_options available
   const baseImplants = (hasNarrowRidge && narrowOptions.length > 0) ? narrowOptions : (recommended.length > 0 ? recommended : allOptions);
   const isUsingAllOptions = !hasNarrowRidge && recommended.length === 0 && allOptions.length > 0;
+  // Annotate every option with a per-implant safety verdict (Q2=b: greyed-out + chip).
+  const safetyAnnotated = annotateImplantSafety(baseImplants, {
+    toothPosition: tooth,
+    boneWidthMm: parseFloat(boneWidth) || null,
+    boneHeightMm: parseFloat(boneHeight) || null,
+  });
+
+  // Safety-aware tap — soft warning for width, hard block for length.
+  // Width override is logged to the access_logs collection per HIPAA spec Q3=a.
+  const handleImplantTap = (idx: number, imp: any) => {
+    if (selectedIdx === idx) { setSelectedIdx(null); return; } // unselect — always allowed
+    const verdict = safetyAnnotated[idx]?._safety as SafetyVerdict | undefined;
+    if (!verdict || verdict.kind === 'ok') { setSelectedIdx(idx); return; }
+    if (verdict.kind === 'length_block') {
+      Alert.alert('Selection blocked', verdict.message);
+      return;
+    }
+    // width_warning — soft, two options.
+    Alert.alert('Bone margin warning', verdict.message, [
+      { text: 'Change the selection', style: 'cancel' },
+      {
+        text: 'Continue with selection',
+        onPress: async () => {
+          setSelectedIdx(idx);
+          try {
+            await api.post('/audit/safety-override', {
+              context: 'implant_selection_home',
+              tooth_position: tooth,
+              bone_width: parseFloat(boneWidth) || null,
+              bone_height: parseFloat(boneHeight) || null,
+              implant_diameter: imp.diameter,
+              implant_length: imp.length,
+              margin_mm: (verdict as any).marginMm,
+              system: `${imp.brand} - ${imp.system}`,
+            });
+          } catch {/* non-fatal */}
+        },
+      },
+    ]);
+  };
   const isUsingNarrowOptions = hasNarrowRidge && narrowOptions.length > 0;
   const visibleImplants = showAll ? baseImplants : baseImplants.slice(0, 5);
   const hasMore = baseImplants.length > 5;
@@ -695,10 +736,14 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
             <Text style={s.selectHint}>Tap an implant to select it for drilling protocol</Text>
             {visibleImplants.map((imp: Implant, i: number) => {
               const isSelected = selectedIdx === i;
+              const verdict = safetyAnnotated[i]?._safety;
+              const blocked = verdict?.kind === 'length_block';
+              const warning = verdict?.kind === 'width_warning';
+              const chip = verdict ? shortSafetyChip(verdict) : null;
               return (
                 <TouchableOpacity key={`r-${i}`}
-                  style={[s.impCard, isSelected && s.impCardSelected]}
-                  onPress={() => setSelectedIdx(isSelected ? null : i)}
+                  style={[s.impCard, isSelected && s.impCardSelected, blocked && { opacity: 0.55 }]}
+                  onPress={() => handleImplantTap(i, imp)}
                   activeOpacity={0.7}
                   data-testid={`recommended-implant-${i}`}>
                   <Ionicons name={isSelected ? 'radio-button-on' : 'radio-button-off'} size={22} color={isSelected ? '#1565C0' : '#B0BEC5'} />
@@ -708,8 +753,14 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
                       <View style={[s.specBadge, isSelected && { backgroundColor: '#BBDEFB' }]}><Text style={[s.specText, isSelected && { color: '#0D47A1' }]}>Diameter: {imp.diameter} mm</Text></View>
                       <View style={[s.specBadge, isSelected && { backgroundColor: '#BBDEFB' }]}><Text style={[s.specText, isSelected && { color: '#0D47A1' }]}>Length: {imp.length} mm</Text></View>
                     </View>
+                    {chip && (
+                      <View style={[s.safetyChip, blocked ? s.safetyChipBlocked : s.safetyChipWarn]} testID={`safety-chip-${i}`}>
+                        <Ionicons name={blocked ? 'close-circle' : 'warning'} size={12} color={blocked ? '#B71C1C' : '#E65100'} />
+                        <Text style={[s.safetyChipText, { color: blocked ? '#B71C1C' : '#E65100' }]}>{chip}</Text>
+                      </View>
+                    )}
                   </View>
-                  {i === 0 && <View style={s.bestBadge}><Text style={s.bestBadgeText}>Best</Text></View>}
+                  {i === 0 && !blocked && !warning && <View style={s.bestBadge}><Text style={s.bestBadgeText}>Best</Text></View>}
                 </TouchableOpacity>
               );
             })}
@@ -1648,6 +1699,10 @@ const s = StyleSheet.create({
   selectHint: { fontSize: 11, color: '#78909C', marginBottom: 8, fontStyle: 'italic' },
   bestBadge: { backgroundColor: '#FFF8E1', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: '#FFD54F' },
   bestBadgeText: { fontSize: 10, fontWeight: '700', color: '#F57F17' },
+  safetyChip: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, marginTop: 6, borderWidth: 1 },
+  safetyChipBlocked: { backgroundColor: '#FFEBEE', borderColor: '#FFCDD2' },
+  safetyChipWarn: { backgroundColor: '#FFF3E0', borderColor: '#FFE0B2' },
+  safetyChipText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
   showMoreBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderWidth: 1, borderColor: '#1E88E5', borderRadius: 10, borderStyle: 'dashed', marginTop: 4 },
   showMoreText: { fontSize: 13, fontWeight: '600', color: '#1E88E5' },
   drillProtocolBtn: { flexDirection: 'row', backgroundColor: '#00695C', borderRadius: 12, padding: 14, alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8 },
