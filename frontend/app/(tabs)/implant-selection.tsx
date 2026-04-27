@@ -320,13 +320,15 @@ export default function ImplantSelectionScreen() {
                 </Text>
                 <Ionicons name="chevron-down" size={18} color="#8E8E93" />
               </TouchableOpacity>
-              {cSystem?.indication ? (
-                <View style={s.indBox}><Ionicons name="information-circle" size={14} color="#0D47A1" /><Text style={s.indText}>{cSystem.indication}</Text></View>
-              ) : null}
               {/* ── Verbatim Indications & Features from institutional doc ── */}
               {(() => {
                 const detail = cSystem ? getImplantDetails(cSystem.brand, cSystem.system) : null;
-                if (!detail) return null;
+                if (!detail) {
+                  // Fallback to the legacy short indication when the system isn't in the doc yet.
+                  return cSystem?.indication ? (
+                    <View style={s.indBox}><Ionicons name="information-circle" size={14} color="#0D47A1" /><Text style={s.indText}>{cSystem.indication}</Text></View>
+                  ) : null;
+                }
                 return (
                   <>
                     {detail.indications ? (
