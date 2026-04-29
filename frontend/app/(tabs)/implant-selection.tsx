@@ -588,14 +588,19 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
   const isBlocked = result.narrow_ridge_evaluation?.blocked;
 
   // Use narrow options when narrow ridge is detected and narrow_options available
-  const baseImplants = (hasNarrowRidge && narrowOptions.length > 0) ? narrowOptions : (recommended.length > 0 ? recommended : allOptions);
+  const baseImplantsRaw = (hasNarrowRidge && narrowOptions.length > 0) ? narrowOptions : (recommended.length > 0 ? recommended : allOptions);
   const isUsingAllOptions = !hasNarrowRidge && recommended.length === 0 && allOptions.length > 0;
-  // Annotate every option with a per-implant safety verdict (Q2=b: greyed-out + chip).
-  const safetyAnnotated = annotateImplantSafety(baseImplants, {
+  // Annotate every option with a per-implant safety verdict, then sort safest-first:
+  // hard-blocked (length) sink to the end; among the rest, largest bone-width margin wins.
+  const _annotated = annotateImplantSafety(baseImplantsRaw, {
     toothPosition: tooth,
     boneWidthMm: parseFloat(boneWidth) || null,
     boneHeightMm: parseFloat(boneHeight) || null,
   });
+  const _safetyRank = (v: SafetyVerdict) =>
+    v.kind === 'length_block' ? -Infinity : v.kind === 'width_warning' ? v.marginMm : Infinity;
+  const safetyAnnotated = [..._annotated].sort((a, b) => _safetyRank(b._safety) - _safetyRank(a._safety));
+  const baseImplants: Implant[] = safetyAnnotated;
 
   // Safety-aware tap — soft warning for width, hard block for length.
   // Width override is logged to the access_logs collection per HIPAA spec Q3=a.
@@ -997,8 +1002,53 @@ function SuggestResult({ result, tooth, toothInfo, onReset, onOpenProtocol }: {
   // Implant selection state: track by "sysIdx-impIdx"
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
-  const visibleSystems = showAll ? systems : systems.slice(0, 5);
-  const hasMore = systems.length > 5;
+  // Pre-annotate every system's implants with a per-implant safety verdict so
+  // we can display chips and gate selection on tap. Mirrors "Let Me Choose".
+  const annotatedSystems = systems.map(sys => ({
+    ...sys,
+    implants: annotateImplantSafety(sys.implants, {
+      toothPosition: tooth,
+      boneWidthMm: cg.bone_width != null ? Number(cg.bone_width) : null,
+      boneHeightMm: cg.bone_height != null ? Number(cg.bone_height) : null,
+    }),
+  }));
+
+  const visibleSystems = showAll ? annotatedSystems : annotatedSystems.slice(0, 5);
+  const hasMore = annotatedSystems.length > 5;
+
+  // Tap handler: hard-block (length) refuses; width-warning shows soft alert
+  // with audit log; ok selects silently. Selecting again deselects.
+  const handleSuggestTap = (sysIdx: number, impIdx: number, sys: any, imp: any) => {
+    const key = `${sysIdx}-${impIdx}`;
+    if (selectedKey === key) { setSelectedKey(null); return; }
+    const verdict = imp._safety as SafetyVerdict | undefined;
+    if (!verdict || verdict.kind === 'ok') { setSelectedKey(key); return; }
+    if (verdict.kind === 'length_block') {
+      Alert.alert('Selection blocked', verdict.message);
+      return;
+    }
+    Alert.alert('Bone margin warning', verdict.message, [
+      { text: 'Change the selection', style: 'cancel' },
+      {
+        text: 'Continue with selection',
+        onPress: async () => {
+          setSelectedKey(key);
+          try {
+            await api.post('/audit/safety-override', {
+              context: 'implant_selection_home_suggest',
+              tooth_position: tooth,
+              bone_width: cg.bone_width != null ? Number(cg.bone_width) : null,
+              bone_height: cg.bone_height != null ? Number(cg.bone_height) : null,
+              implant_diameter: imp.diameter,
+              implant_length: imp.length,
+              margin_mm: (verdict as any).marginMm,
+              system: `${sys.brand} - ${sys.system}`,
+            });
+          } catch {/* non-fatal */}
+        },
+      },
+    ]);
+  };
 
   const getSelectedImplant = (): { brand: string; system: string; diameter: number; length: number } | null => {
     if (!selectedKey) return null;
