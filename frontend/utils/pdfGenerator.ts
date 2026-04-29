@@ -390,7 +390,6 @@ export const buildProcedurePdfHtml = (procedure: any): string => {
           <div class="footer">
             <p>This is a computer-generated report</p>
             <p>Generated on ${format(new Date(), 'MMMM dd, yyyy HH:mm:ss')}</p>
-            <p>Dental Implant Manager - Department of Prosthodontics</p>
           </div>
         </body>
       </html>
