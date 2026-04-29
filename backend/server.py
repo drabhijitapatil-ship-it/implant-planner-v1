@@ -4544,7 +4544,6 @@ async def generate_case_report(
     pdf.cell(0, 15, safe("Implant Case Report"), ln=True, align="C")
     pdf.set_font("Helvetica", "", 14)
     pdf.set_text_color(80, 80, 80)
-    pdf.cell(0, 10, safe("Department of Prosthodontics"), ln=True, align="C")
     pdf.ln(10)
 
     # Case ID
@@ -5273,7 +5272,6 @@ async def generate_album(
     pdf.cell(0, 10, _safe(f"Implant In-Charge: {implant_incharge_name}"), ln=True, align="C")
     pdf.cell(0, 10, "", ln=True)
     pdf.set_font("Helvetica", "", 11)
-    pdf.cell(0, 10, "Department of Prosthodontics", ln=True, align="C")
     pdf.cell(0, 10, f"Generated: {datetime.now(timezone.utc).strftime('%B %d, %Y')}", ln=True, align="C")
 
     # Page 2 — Patient & Treatment Details
