@@ -706,8 +706,8 @@ export default function ProcedureDetailScreen() {
           const phase1Window = procedure.status === 'pending_phase1' || procedure.status === 'phase1_approved';
           if (!phase1Window) return null;
           const consentUploaded = !!procedure.patient_consent_form;
-          // Non-owner sup/in-charge/admin: only render when there's actually an uploaded consent to view.
-          if (canViewOnly && !consentUploaded) return null;
+          // Non-owner sup/in-charge/admin: render an "Awaiting Student/Nurse..." pill when
+          // no consent has been uploaded yet, so reviewers can see the status at a glance.
           if (!canUpload && !canViewOnly) return null;
           const openUploadedConsent = async () => {
             try {
@@ -718,6 +718,30 @@ export default function ProcedureDetailScreen() {
               Alert.alert('Error', 'Could not open consent form');
             }
           };
+          // Reviewers (supervisor / in-charge / admin) see a passive "Awaiting..." pill
+          // when consent is not yet uploaded. In-Charge also gets the "Edit Patient
+          // Consent Form" button so they can upload on the student/nurse's behalf.
+          if (canViewOnly && !consentUploaded) {
+            return (
+              <View style={styles.consentActionRow} testID="consent-action-row">
+                <View style={styles.awaitingRow} testID="awaiting-consent-indicator">
+                  <Ionicons name="hourglass-outline" size={14} color="#546E7A" />
+                  <Text style={styles.awaitingText}>Awaiting Student/Nurse to upload the patient consent form</Text>
+                </View>
+                {user?.role === 'implant_incharge' && (
+                  <TouchableOpacity
+                    style={[styles.consentActionBtn, styles.consentActionBtnPrimary]}
+                    onPress={() => setShowInchargeConsentEdit(true)}
+                    activeOpacity={0.85}
+                    testID="incharge-edit-consent-btn"
+                  >
+                    <Ionicons name="create-outline" size={16} color="#FFF" />
+                    <Text style={styles.consentActionBtnText}>Edit Patient Consent Form</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            );
+          }
           return (
             <View style={styles.consentActionRow} testID="consent-action-row">
               {canUpload && (
@@ -768,7 +792,7 @@ export default function ProcedureDetailScreen() {
                   testID="consent-view-uploaded-btn"
                 >
                   <Ionicons name="document-text-outline" size={16} color="#FFF" />
-                  <Text style={styles.consentActionBtnTextSecondary}>View uploaded consent form</Text>
+                  <Text style={styles.consentActionBtnTextSecondary}>Show Patient consent form</Text>
                 </TouchableOpacity>
               )}
               {/* Implant In-Charge can ALWAYS edit the consent on any case
