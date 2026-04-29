@@ -792,7 +792,7 @@ export default function ProcedureDetailScreen() {
                   testID="consent-view-uploaded-btn"
                 >
                   <Ionicons name="document-text-outline" size={16} color="#FFF" />
-                  <Text style={styles.consentActionBtnTextSecondary}>Show Patient consent form</Text>
+                  <Text style={styles.consentActionBtnTextSecondary}>View Patient Consent Form</Text>
                 </TouchableOpacity>
               )}
               {/* Implant In-Charge can ALWAYS edit the consent on any case
