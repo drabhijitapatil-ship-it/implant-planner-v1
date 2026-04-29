@@ -1160,18 +1160,30 @@ function SuggestResult({ result, tooth, toothInfo, onReset, onOpenProtocol }: {
                 </View>
                 {sys.indication ? <Text style={s.sugSysInd}>{sys.indication}</Text> : null}
                 <View style={s.sugSysSizes}>
-                  {sys.implants.map((imp, j) => {
+                  {sys.implants.map((imp: any, j: number) => {
                     const key = `${i}-${j}`;
                     const isSelected = selectedKey === key;
+                    const verdict = imp._safety as SafetyVerdict | undefined;
+                    const blocked = verdict?.kind === 'length_block';
+                    const warning = verdict?.kind === 'width_warning';
+                    const chip = verdict ? shortSafetyChip(verdict) : null;
                     return (
-                      <TouchableOpacity key={`imp-${j}`}
-                        style={[s.sugSizeBadge, isSelected && s.sugSizeBadgeSelected]}
-                        onPress={() => setSelectedKey(isSelected ? null : key)}
-                        activeOpacity={0.7}
-                        data-testid={`suggest-implant-${i}-${j}`}>
-                        <Ionicons name={isSelected ? 'radio-button-on' : 'radio-button-off'} size={14} color={isSelected ? '#0D47A1' : '#66BB6A'} />
-                        <Text style={[s.sugSizeText, isSelected && { color: '#0D47A1' }]}>D: {imp.diameter} mm  L: {imp.length} mm</Text>
-                      </TouchableOpacity>
+                      <View key={`imp-${j}`} style={{ alignItems: 'flex-start' }}>
+                        <TouchableOpacity
+                          style={[s.sugSizeBadge, isSelected && s.sugSizeBadgeSelected, blocked && { opacity: 0.55 }]}
+                          onPress={() => handleSuggestTap(i, j, sys, imp)}
+                          activeOpacity={0.7}
+                          data-testid={`suggest-implant-${i}-${j}`}>
+                          <Ionicons name={isSelected ? 'radio-button-on' : 'radio-button-off'} size={14} color={isSelected ? '#0D47A1' : '#66BB6A'} />
+                          <Text style={[s.sugSizeText, isSelected && { color: '#0D47A1' }]}>D: {imp.diameter} mm  L: {imp.length} mm</Text>
+                        </TouchableOpacity>
+                        {chip && (
+                          <View style={[s.safetyChip, blocked ? s.safetyChipBlocked : s.safetyChipWarn]} testID={`suggest-safety-chip-${i}-${j}`}>
+                            <Ionicons name={blocked ? 'close-circle' : 'warning'} size={12} color={blocked ? '#B71C1C' : '#E65100'} />
+                            <Text style={[s.safetyChipText, { color: blocked ? '#B71C1C' : '#E65100' }]}>{chip}</Text>
+                          </View>
+                        )}
+                      </View>
                     );
                   })}
                 </View>
