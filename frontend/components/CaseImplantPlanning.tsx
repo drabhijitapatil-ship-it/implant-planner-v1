@@ -1584,13 +1584,28 @@ function ModalContent(props: any) {
                 if (implants.length === 0) return <Text style={ms.noResults}>No implants found for these measurements.</Text>;
                 const isRestrictedResult = result.restricted_bone_height === true;
                 const isNarrowResult = hasNarrowRidge && mode === 'choose' && result.narrow_options?.length > 0;
-                const topMatches = implants.slice(0, 3);
-                // In "choose" mode, "Show More" reveals all system options beyond top 3
-                const allSystemOptions = mode === 'choose' ? (result.all_options || []) : implants;
+                // Safety-aware sort: rank length-blocks last, then by largest width margin first.
+                // Mirrors the Home tab "Let Me Choose" surface so Top 5 always surfaces the safest sizes.
+                const _safetyRank = (imp: any): number => {
+                  const v = evaluateImplantSafety({
+                    toothPosition: position,
+                    boneWidthMm: parseFloat(boneWidth) || null,
+                    boneHeightMm: parseFloat(boneHeight) || null,
+                    implantDiameterMm: imp.diameter,
+                    implantLengthMm: imp.length,
+                  });
+                  if (v.kind === 'length_block') return -Infinity;
+                  if (v.kind === 'width_warning') return v.marginMm;
+                  return Infinity;
+                };
+                const sortedImplants = [...implants].sort((a, b) => _safetyRank(b) - _safetyRank(a));
+                const topMatches = sortedImplants.slice(0, 5);
+                // In "choose" mode, "Show More" reveals all system options beyond top 5
+                const allSystemOptions = mode === 'choose' ? (result.all_options || []) : sortedImplants;
                 const remainingAll = allSystemOptions.filter((opt: any) =>
                   !topMatches.some((t: any) => t.diameter === opt.diameter && t.length === opt.length)
                 );
-                const remaining = mode === 'choose' ? remainingAll : implants.slice(3);
+                const remaining = mode === 'choose' ? remainingAll : sortedImplants.slice(5);
                 const displayed = showAllResults ? [...topMatches, ...remaining] : topMatches;
                 return (
                   <>
@@ -1607,7 +1622,7 @@ function ModalContent(props: any) {
                       </View>
                     )}
                     <Text style={ms.matchHeader}>
-                      {isRestrictedResult ? `Priority-Based Recommendations (${implants.length})` : isNarrowResult ? `Narrow Diameter Options (${implants.length})` : `Top ${Math.min(3, implants.length)} Best Matches`}
+                      {isRestrictedResult ? `Priority-Based Recommendations (${implants.length})` : isNarrowResult ? `Narrow Diameter Options (${implants.length})` : `Top ${Math.min(5, sortedImplants.length)} Best Matches`}
                     </Text>
                     {displayed.map((imp: any, i: number) => {
                       const isSelected = selectedImplant?.diameter === imp.diameter && selectedImplant?.length === imp.length && selectedImplant?.brand === imp.brand;
