@@ -718,9 +718,9 @@ export default function ProcedureDetailScreen() {
               Alert.alert('Error', 'Could not open consent form');
             }
           };
-          // Reviewers (supervisor / in-charge / admin) see a passive "Awaiting..." pill
-          // when consent is not yet uploaded. In-Charge also gets the "Edit Patient
-          // Consent Form" button so they can upload on the student/nurse's behalf.
+          // Reviewers (supervisor / in-charge / admin) see ONLY a passive "Awaiting..."
+          // pill when consent is not yet uploaded. The "Edit Patient Consent Form" action
+          // for In-Charge is gated to appear ONLY after the student/nurse has uploaded.
           if (canViewOnly && !consentUploaded) {
             return (
               <View style={styles.consentActionRow} testID="consent-action-row">
@@ -728,17 +728,6 @@ export default function ProcedureDetailScreen() {
                   <Ionicons name="hourglass-outline" size={14} color="#546E7A" />
                   <Text style={styles.awaitingText}>Awaiting Student/Nurse to upload the patient consent form</Text>
                 </View>
-                {user?.role === 'implant_incharge' && (
-                  <TouchableOpacity
-                    style={[styles.consentActionBtn, styles.consentActionBtnPrimary]}
-                    onPress={() => setShowInchargeConsentEdit(true)}
-                    activeOpacity={0.85}
-                    testID="incharge-edit-consent-btn"
-                  >
-                    <Ionicons name="create-outline" size={16} color="#FFF" />
-                    <Text style={styles.consentActionBtnText}>Edit Patient Consent Form</Text>
-                  </TouchableOpacity>
-                )}
               </View>
             );
           }
