@@ -1086,11 +1086,11 @@ export default function NewProcedureScreen() {
                           <View style={{ backgroundColor: '#E53935', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
                             <Text style={{ fontSize: 11, fontWeight: '800', color: '#FFF' }}>FDI {tooth}</Text>
                           </View>
-                          <Text style={{ fontSize: 12, fontWeight: '700', color: '#37474F' }}>Measurements</Text>
+                          <Text style={{ fontSize: 12, fontWeight: '700', color: '#37474F' }}>Measurements (mm)</Text>
                         </View>
-                        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-end' }}>
+                        <View style={{ flexDirection: 'row', gap: 8 }}>
                           <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 12, fontWeight: '600', color: '#1565C0', marginBottom: 4, minHeight: 32 }} numberOfLines={2}>Occlusocervical Height (mm) *</Text>
+                            <Text style={{ fontSize: 12, fontWeight: '600', color: '#1565C0', marginBottom: 4 }} numberOfLines={1}>Occlusocervical Height *</Text>
                             <TextInput
                               style={[styles.input, { borderColor: '#1565C0' }]}
                               placeholder="e.g. 12"
@@ -1102,7 +1102,7 @@ export default function NewProcedureScreen() {
                             />
                           </View>
                           <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 12, fontWeight: '600', color: '#1565C0', marginBottom: 4, minHeight: 32 }} numberOfLines={2}>Mesiodistal Space (mm) *</Text>
+                            <Text style={{ fontSize: 12, fontWeight: '600', color: '#1565C0', marginBottom: 4 }} numberOfLines={1}>Mesiodistal Space *</Text>
                             <TextInput
                               style={[styles.input, { borderColor: '#1565C0' }]}
                               placeholder="e.g. 15"
