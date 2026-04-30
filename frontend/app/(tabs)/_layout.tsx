@@ -52,6 +52,10 @@ function DrawerMenu({
     ...(isNurse
       ? []
       : [{ key: 'archived', icon: 'archive-outline' as const, label: 'Archived Cases', route: '/archived' }]),
+    // Discussion Forum — educational collaboration space. Nurses excluded.
+    ...(isNurse
+      ? []
+      : [{ key: 'forum', icon: 'chatbubbles-outline' as const, label: 'Discussion Forum', route: '/forum' }]),
   ];
 
   return (

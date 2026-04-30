@@ -51,6 +51,8 @@ export default function RootLayout() {
               <Stack.Screen name="admin/audit-log" options={{ headerShown: true, title: 'Audit Log', headerBackTitle: 'Back' }} />
               <Stack.Screen name="admin/student/[id]" options={{ headerShown: false }} />
               <Stack.Screen name="admin/supervisor/[id]" options={{ headerShown: false }} />
+              <Stack.Screen name="forum/index" options={{ headerShown: false }} />
+              <Stack.Screen name="forum/[threadId]" options={{ headerShown: false }} />
             </Stack>
           </ActivityTracker>
         </TabletFrame>

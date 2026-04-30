@@ -20,6 +20,7 @@ import { format } from 'date-fns';
 import { STATUS_COLORS, STATUS_LABELS } from '../../constants/checklist';
 import { useAuth } from '../../contexts/AuthContext';
 import NurseCasesScreen from '../../components/NurseCasesScreen';
+import ShareToForumModal from '../../components/ShareToForumModal';
 
 export default function ProceduresScreen() {
   const { user } = useAuth();
@@ -38,6 +39,7 @@ function DefaultProceduresScreen() {
   const [filter, setFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [shareCase, setShareCase] = useState<{ id: string; patientName?: string } | null>(null);
   const router = useRouter();
   const params = useLocalSearchParams<{ filter?: string; phase?: string }>();
 
@@ -131,6 +133,19 @@ function DefaultProceduresScreen() {
       actions.push({ key: 'archive', label: 'Archive', icon: 'archive-outline', color: '#1565C0', onPress: () => handleArchive(pid) });
     } else if (role === 'student') {
       actions.push({ key: 'archive', label: 'Archive', icon: 'archive-outline', color: '#1565C0', onPress: () => handleArchive(pid) });
+    }
+    // Add to Discussion Forum — Students (own case), Supervisors (supervised), In-Charges (any)
+    const canShare = role === 'implant_incharge'
+      || (role === 'supervisor' && item.supervisor_id === user?.id)
+      || (role === 'student' && (item.student_id === user?.id || item.created_by_id === user?.id));
+    if (canShare) {
+      actions.push({
+        key: 'forum',
+        label: 'Add to Discussion Forum',
+        icon: 'chatbubbles-outline',
+        color: '#1565C0',
+        onPress: () => setShareCase({ id: pid, patientName: item.patient_name }),
+      });
     }
     return actions;
   };
@@ -292,6 +307,15 @@ function DefaultProceduresScreen() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           contentContainerStyle={styles.listContainer}
           keyboardShouldPersistTaps="handled"
+        />
+      )}
+      {shareCase && (
+        <ShareToForumModal
+          visible={!!shareCase}
+          procedureId={shareCase.id}
+          patientName={shareCase.patientName}
+          onClose={() => setShareCase(null)}
+          onShared={(tid) => { setShareCase(null); router.push(`/forum/${tid}` as any); }}
         />
       )}
     </SafeAreaView>

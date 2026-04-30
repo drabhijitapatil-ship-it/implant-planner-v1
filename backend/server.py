@@ -10354,6 +10354,660 @@ async def export_drilling_pdf(
     return StreamingResponse(buf, media_type="application/pdf",
                               headers={"Content-Disposition": f"attachment; filename={filename}"})
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DISCUSSION FORUM (iteration 121)
+# ---------------------------------------------------------------------------
+# Collections:
+#   forum_threads   — one per shared case  {id, procedure_id, shared_by_*,
+#                     shared_at, status: open|closed|removed, closed_by_*,
+#                     close_reason, last_activity_at, reply_count, anonymous,
+#                     tags, participants: [user_id], bookmarks: [user_id],
+#                     watchers: [user_id]}
+#   forum_posts     — replies     {id, thread_id, author_*, body, attachments,
+#                     reactions: {type: [user_id]}, verified_by_*, mentions,
+#                     created_at, edited_at, deleted_at, deleted_by_*}
+# ═══════════════════════════════════════════════════════════════════════════
+
+FORUM_ATTACH_DIR = UPLOADS_DIR / 'forum'
+FORUM_ATTACH_DIR.mkdir(parents=True, exist_ok=True)
+FORUM_ALLOWED_EXT = {'.png', '.jpg', '.jpeg', '.pdf', '.heic', '.heif', '.webp'}
+FORUM_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+FORUM_EDIT_WINDOW = timedelta(minutes=15)
+FORUM_REACTIONS = {"thumbs", "heart", "think", "check"}
+FORUM_CLOSE_REASONS = {
+    "resolved": "Resolved — answer verified",
+    "off_topic": "Off-topic",
+    "privacy": "Patient privacy concern",
+    "other": "Other",
+}
+
+
+async def _ensure_forum_indexes():
+    try:
+        await db.forum_threads.create_index([("last_activity_at", -1)])
+        await db.forum_threads.create_index([("procedure_id", 1)])
+        await db.forum_threads.create_index([("status", 1)])
+        await db.forum_threads.create_index([("tags", 1)])
+        await db.forum_posts.create_index([("thread_id", 1), ("created_at", 1)])
+        await db.forum_posts.create_index([("body", "text")])
+    except Exception as e:
+        logging.error(f"[forum] index creation failed: {e}")
+
+
+class ForumShareRequest(BaseModel):
+    procedure_id: str
+    consent_acknowledged: bool = False
+    anonymous: bool = False
+
+
+class ForumPostCreate(BaseModel):
+    body: str = Field(..., min_length=1, max_length=5000)
+    attachments: Optional[List[Dict[str, Any]]] = None  # [{url, filename, type, size}]
+    reply_to: Optional[str] = None  # post_id being replied to
+
+
+class ForumPostEdit(BaseModel):
+    body: str = Field(..., min_length=1, max_length=5000)
+
+
+class ForumCloseRequest(BaseModel):
+    reason: str = "other"  # key from FORUM_CLOSE_REASONS
+    note: Optional[str] = Field(None, max_length=500)
+
+
+class ForumReactionRequest(BaseModel):
+    reaction: str  # must be in FORUM_REACTIONS
+
+
+def _forum_can_share(user: dict, procedure: dict) -> bool:
+    role = (user or {}).get("role")
+    if role == "nurse":
+        return False
+    if role in ("implant_incharge", "administrator"):
+        return True
+    uid = str(user.get("_id") or user.get("id") or "")
+    if role == "supervisor":
+        return procedure.get("supervisor_id") == uid
+    if role == "student":
+        return procedure.get("student_id") == uid or procedure.get("created_by_id") == uid
+    return False
+
+
+def _forum_can_moderate(user: dict, thread: dict) -> bool:
+    role = (user or {}).get("role")
+    if role in ("implant_incharge", "administrator"):
+        return True
+    uid = str(user.get("_id") or user.get("id") or "")
+    if thread.get("shared_by_id") == uid:
+        return True
+    if role == "supervisor" and thread.get("case_supervisor_id") == uid:
+        return True
+    return False
+
+
+def _forum_can_access(user: dict) -> bool:
+    return (user or {}).get("role") != "nurse"
+
+
+def _derive_forum_tags(procedure: dict) -> List[str]:
+    tags: List[str] = []
+    ptype = procedure.get("implant_procedure_type")
+    if ptype:
+        tags.append(ptype)
+    arch = procedure.get("arch")
+    if arch:
+        tags.append(arch)
+    if procedure.get("bone_graft_specifications"):
+        tags.append("Bone Graft")
+    ridge = (procedure.get("ridge_contour") or "").lower()
+    if "narrow" in ridge or "knife" in ridge:
+        tags.append("Narrow Ridge")
+    return sorted(set(tags))
+
+
+def _serialize_thread(t: dict, viewer_id: Optional[str] = None) -> dict:
+    out = {
+        "id": t.get("id"),
+        "procedure_id": t.get("procedure_id"),
+        "shared_by_id": t.get("shared_by_id"),
+        "shared_by_name": t.get("shared_by_name"),
+        "shared_by_role": t.get("shared_by_role"),
+        "shared_at": t.get("shared_at").isoformat() if t.get("shared_at") else None,
+        "status": t.get("status"),
+        "close_reason": t.get("close_reason"),
+        "close_note": t.get("close_note"),
+        "closed_by_id": t.get("closed_by_id"),
+        "closed_by_name": t.get("closed_by_name"),
+        "closed_at": t.get("closed_at").isoformat() if t.get("closed_at") else None,
+        "last_activity_at": t.get("last_activity_at").isoformat() if t.get("last_activity_at") else None,
+        "reply_count": t.get("reply_count", 0),
+        "anonymous": t.get("anonymous", False),
+        "tags": t.get("tags", []),
+        "patient_name": t.get("patient_name"),
+        "student_name": t.get("student_name"),
+        "supervisor_name": t.get("supervisor_name"),
+        "implant_procedure_type": t.get("implant_procedure_type"),
+        "case_status": t.get("case_status"),
+        "case_supervisor_id": t.get("case_supervisor_id"),
+    }
+    if out["anonymous"]:
+        # Redact patient + sharer identity for non-moderators
+        initials = "".join([p[0] for p in (t.get("patient_name") or "").split() if p])[:3].upper() or "A.P."
+        out["patient_name_display"] = f"{initials} (anonymous)"
+        out["shared_by_display"] = "Anonymous"
+    else:
+        out["patient_name_display"] = t.get("patient_name")
+        out["shared_by_display"] = t.get("shared_by_name")
+    if viewer_id:
+        out["bookmarked"] = viewer_id in (t.get("bookmarks") or [])
+        out["watching"] = viewer_id in (t.get("watchers") or [])
+    return out
+
+
+def _serialize_post(p: dict, viewer_id: Optional[str] = None) -> dict:
+    reactions = p.get("reactions") or {}
+    summary = {k: len(v or []) for k, v in reactions.items()}
+    mine = {k: (viewer_id in (v or [])) for k, v in reactions.items()} if viewer_id else {}
+    return {
+        "id": p.get("id"),
+        "thread_id": p.get("thread_id"),
+        "author_id": p.get("author_id"),
+        "author_name": p.get("author_name"),
+        "author_role": p.get("author_role"),
+        "body": p.get("body") if not p.get("deleted_at") else "[deleted]",
+        "attachments": p.get("attachments") or [],
+        "created_at": p.get("created_at").isoformat() if p.get("created_at") else None,
+        "edited_at": p.get("edited_at").isoformat() if p.get("edited_at") else None,
+        "deleted_at": p.get("deleted_at").isoformat() if p.get("deleted_at") else None,
+        "verified_by_id": p.get("verified_by_id"),
+        "verified_by_name": p.get("verified_by_name"),
+        "verified_at": p.get("verified_at").isoformat() if p.get("verified_at") else None,
+        "reactions_summary": summary,
+        "reactions_mine": mine,
+        "mentions": p.get("mentions") or [],
+        "reply_to": p.get("reply_to"),
+    }
+
+
+async def _forum_notify(user_ids: List[str], title: str, body: str, data: Dict[str, Any]):
+    now = datetime.now(timezone.utc)
+    for uid in set(user_ids):
+        if not uid:
+            continue
+        try:
+            await db.notifications.insert_one({
+                "id": str(uuid.uuid4()),
+                "user_id": uid,
+                "title": title,
+                "body": body,
+                "type": "forum",
+                "data": data,
+                "read": False,
+                "created_at": now,
+            })
+        except Exception as e:
+            logging.error(f"[forum] notification insert failed: {e}")
+    try:
+        await send_expo_push_notifications(list(set(user_ids)), title, body, {"type": "forum", **data})
+    except Exception:
+        pass
+
+
+@api_router.post("/forum/threads")
+async def forum_share_case(payload: ForumShareRequest, request: Request, current_user: dict = Depends(get_current_user)):
+    if not _forum_can_access(current_user):
+        raise HTTPException(status_code=403, detail="Nurses cannot use the Discussion Forum.")
+    if not payload.consent_acknowledged:
+        raise HTTPException(status_code=400, detail="Patient consent acknowledgment required before sharing.")
+    proc = await db.procedures.find_one({"_id": ObjectId(payload.procedure_id)} if ObjectId.is_valid(payload.procedure_id) else {"id": payload.procedure_id})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Case not found.")
+    if not _forum_can_share(current_user, proc):
+        raise HTTPException(status_code=403, detail="You cannot share this case.")
+    # Idempotent: return existing open thread if any
+    existing = await db.forum_threads.find_one({"procedure_id": payload.procedure_id, "status": "open"}, {"_id": 0})
+    if existing:
+        return {"thread": _serialize_thread(existing, viewer_id=str(current_user.get("_id") or current_user.get("id"))), "existing": True}
+    uid = str(current_user.get("_id") or current_user.get("id"))
+    now = datetime.now(timezone.utc)
+    tid = str(uuid.uuid4())
+    thread = {
+        "id": tid,
+        "procedure_id": payload.procedure_id,
+        "shared_by_id": uid,
+        "shared_by_name": current_user.get("name"),
+        "shared_by_role": current_user.get("role"),
+        "shared_at": now,
+        "status": "open",
+        "anonymous": bool(payload.anonymous),
+        "last_activity_at": now,
+        "reply_count": 0,
+        "tags": _derive_forum_tags(proc),
+        "patient_name": proc.get("patient_name"),
+        "student_name": proc.get("student_name"),
+        "supervisor_name": proc.get("supervisor_name"),
+        "implant_procedure_type": proc.get("implant_procedure_type"),
+        "case_status": proc.get("status"),
+        "case_supervisor_id": proc.get("supervisor_id"),
+        "participants": [uid],
+        "bookmarks": [],
+        "watchers": [uid],
+    }
+    await db.forum_threads.insert_one(thread)
+    await log_access(action="forum_share", outcome="success", user=current_user, request=request,
+                     resource_type="forum_thread", resource_id=tid, extra={"procedure_id": payload.procedure_id, "anonymous": payload.anonymous})
+    # Broadcast to all in-charges + admins
+    try:
+        mods = db.users.find({"role": {"$in": ["implant_incharge", "administrator"]}}, {"_id": 0, "id": 1})
+        mod_ids = [m.get("id") async for m in mods if m.get("id") and m.get("id") != uid]
+        patient_label = "anonymous case" if payload.anonymous else (proc.get("patient_name") or "a case")
+        await _forum_notify(mod_ids, "New Discussion Forum case", f"{current_user.get('name')} shared {patient_label} for discussion.", {"thread_id": tid})
+    except Exception:
+        pass
+    thread_clean = await db.forum_threads.find_one({"id": tid}, {"_id": 0})
+    return {"thread": _serialize_thread(thread_clean, viewer_id=uid), "existing": False}
+
+
+@api_router.get("/forum/threads")
+async def forum_list_threads(
+    status: Optional[str] = None,
+    q: Optional[str] = None,
+    tag: Optional[str] = None,
+    mine_only: bool = False,
+    bookmarked: bool = False,
+    limit: int = Query(20, ge=1, le=100),
+    skip: int = Query(0, ge=0),
+    current_user: dict = Depends(get_current_user),
+):
+    if not _forum_can_access(current_user):
+        raise HTTPException(status_code=403, detail="Nurses cannot use the Discussion Forum.")
+    uid = str(current_user.get("_id") or current_user.get("id"))
+    query: Dict[str, Any] = {}
+    if status:
+        if status not in ("open", "closed", "removed"):
+            raise HTTPException(status_code=400, detail="Invalid status filter.")
+        query["status"] = status
+    else:
+        # Hide removed threads from non-mods by default
+        role = current_user.get("role")
+        if role not in ("implant_incharge", "administrator"):
+            query["status"] = {"$in": ["open", "closed"]}
+    if tag:
+        query["tags"] = tag
+    if mine_only:
+        query["shared_by_id"] = uid
+    if bookmarked:
+        query["bookmarks"] = uid
+    if q:
+        qs = q.strip()
+        if qs:
+            query["$or"] = [
+                {"patient_name": {"$regex": qs, "$options": "i"}},
+                {"student_name": {"$regex": qs, "$options": "i"}},
+                {"supervisor_name": {"$regex": qs, "$options": "i"}},
+                {"implant_procedure_type": {"$regex": qs, "$options": "i"}},
+                {"tags": {"$regex": qs, "$options": "i"}},
+            ]
+    total = await db.forum_threads.count_documents(query)
+    cursor = db.forum_threads.find(query, {"_id": 0}).sort("last_activity_at", -1).skip(skip).limit(limit)
+    items = [_serialize_thread(t, viewer_id=uid) async for t in cursor]
+    return {"total": total, "skip": skip, "limit": limit, "items": items}
+
+
+@api_router.get("/forum/threads/{thread_id}")
+async def forum_get_thread(thread_id: str, request: Request, current_user: dict = Depends(get_current_user)):
+    if not _forum_can_access(current_user):
+        raise HTTPException(status_code=403, detail="Nurses cannot use the Discussion Forum.")
+    thread = await db.forum_threads.find_one({"id": thread_id}, {"_id": 0})
+    if not thread:
+        raise HTTPException(status_code=404, detail="Thread not found.")
+    if thread.get("status") == "removed" and current_user.get("role") not in ("implant_incharge", "administrator"):
+        raise HTTPException(status_code=404, detail="Thread not found.")
+    procedure = await db.procedures.find_one({"id": thread["procedure_id"]}, {"_id": 0})
+    uid = str(current_user.get("_id") or current_user.get("id"))
+    await log_access(action="forum_view_thread", outcome="success", user=current_user, request=request,
+                     resource_type="forum_thread", resource_id=thread_id)
+    return {
+        "thread": _serialize_thread(thread, viewer_id=uid),
+        "procedure": procedure,
+        "can_moderate": _forum_can_moderate(current_user, thread),
+        "can_remove": current_user.get("role") in ("implant_incharge", "administrator"),
+        "can_verify": current_user.get("role") in ("implant_incharge", "administrator"),
+    }
+
+
+@api_router.get("/forum/threads/{thread_id}/posts")
+async def forum_list_posts(
+    thread_id: str,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(30, ge=1, le=100),
+    current_user: dict = Depends(get_current_user),
+):
+    if not _forum_can_access(current_user):
+        raise HTTPException(status_code=403, detail="Nurses cannot use the Discussion Forum.")
+    thread = await db.forum_threads.find_one({"id": thread_id}, {"_id": 0, "status": 1})
+    if not thread:
+        raise HTTPException(status_code=404, detail="Thread not found.")
+    uid = str(current_user.get("_id") or current_user.get("id"))
+    total = await db.forum_posts.count_documents({"thread_id": thread_id})
+    cursor = db.forum_posts.find({"thread_id": thread_id}, {"_id": 0}).sort("created_at", 1).skip(skip).limit(limit)
+    items = [_serialize_post(p, viewer_id=uid) async for p in cursor]
+    return {"total": total, "skip": skip, "limit": limit, "items": items}
+
+
+def _extract_mentions(body: str) -> List[str]:
+    # Returns a list of usernames (without @) found in body. Bound to 10.
+    return list({m.group(1) for m in re.finditer(r"@([a-zA-Z0-9_.\-]{2,40})", body or "")})[:10]
+
+
+@api_router.post("/forum/threads/{thread_id}/posts")
+async def forum_add_post(thread_id: str, payload: ForumPostCreate, request: Request, current_user: dict = Depends(get_current_user)):
+    if not _forum_can_access(current_user):
+        raise HTTPException(status_code=403, detail="Nurses cannot use the Discussion Forum.")
+    thread = await db.forum_threads.find_one({"id": thread_id}, {"_id": 0})
+    if not thread:
+        raise HTTPException(status_code=404, detail="Thread not found.")
+    if thread.get("status") != "open":
+        raise HTTPException(status_code=409, detail=f"Thread is {thread.get('status')}; cannot add posts.")
+    uid = str(current_user.get("_id") or current_user.get("id"))
+    now = datetime.now(timezone.utc)
+    pid = str(uuid.uuid4())
+    mention_names = _extract_mentions(payload.body)
+    mentioned_ids: List[str] = []
+    if mention_names:
+        mcursor = db.users.find(
+            {"$or": [{"username": {"$in": mention_names}}, {"name": {"$in": mention_names}}]},
+            {"_id": 0, "id": 1, "name": 1, "username": 1},
+        )
+        mentioned_ids = [m.get("id") async for m in mcursor if m.get("id")]
+    # Validate attachments: only ones uploaded via /forum/upload are referenced
+    atts = []
+    for a in (payload.attachments or [])[:6]:
+        if not isinstance(a, dict):
+            continue
+        url = str(a.get("url") or "")
+        if "/uploads/forum/" not in url:
+            continue
+        atts.append({
+            "url": url,
+            "filename": str(a.get("filename") or "")[:120],
+            "type": str(a.get("type") or "image")[:20],
+            "size": int(a.get("size") or 0),
+        })
+    post = {
+        "id": pid,
+        "thread_id": thread_id,
+        "author_id": uid,
+        "author_name": current_user.get("name"),
+        "author_role": current_user.get("role"),
+        "body": payload.body,
+        "attachments": atts,
+        "reactions": {},
+        "mentions": mentioned_ids,
+        "reply_to": payload.reply_to,
+        "created_at": now,
+    }
+    await db.forum_posts.insert_one(post)
+    # Update thread counters + participants
+    participants = set(thread.get("participants") or [])
+    participants.add(uid)
+    watchers = set(thread.get("watchers") or [])
+    watchers.add(uid)
+    await db.forum_threads.update_one(
+        {"id": thread_id},
+        {
+            "$set": {"last_activity_at": now, "participants": list(participants), "watchers": list(watchers)},
+            "$inc": {"reply_count": 1},
+        },
+    )
+    await log_access(action="forum_post", outcome="success", user=current_user, request=request,
+                     resource_type="forum_thread", resource_id=thread_id)
+    # Notifications
+    notify_ids = [u for u in list(watchers) if u != uid]
+    if notify_ids:
+        snippet = payload.body[:140]
+        await _forum_notify(notify_ids, f"New reply — {thread.get('patient_name') or 'Forum'}", f"{current_user.get('name')}: {snippet}", {"thread_id": thread_id, "post_id": pid})
+    if mentioned_ids:
+        extra_mentions = [m for m in mentioned_ids if m != uid and m not in notify_ids]
+        if extra_mentions:
+            await _forum_notify(extra_mentions, f"You were mentioned", f"{current_user.get('name')} mentioned you.", {"thread_id": thread_id, "post_id": pid})
+    post_clean = await db.forum_posts.find_one({"id": pid}, {"_id": 0})
+    return _serialize_post(post_clean, viewer_id=uid)
+
+
+@api_router.patch("/forum/posts/{post_id}")
+async def forum_edit_post(post_id: str, payload: ForumPostEdit, current_user: dict = Depends(get_current_user)):
+    if not _forum_can_access(current_user):
+        raise HTTPException(status_code=403, detail="Nurses cannot use the Discussion Forum.")
+    post = await db.forum_posts.find_one({"id": post_id}, {"_id": 0})
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found.")
+    uid = str(current_user.get("_id") or current_user.get("id"))
+    if post.get("author_id") != uid:
+        raise HTTPException(status_code=403, detail="You can only edit your own posts.")
+    created = post.get("created_at")
+    if not isinstance(created, datetime):
+        raise HTTPException(status_code=500, detail="Corrupt post record.")
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    if datetime.now(timezone.utc) - created > FORUM_EDIT_WINDOW:
+        raise HTTPException(status_code=409, detail="Edit window (15 min) has passed.")
+    now = datetime.now(timezone.utc)
+    await db.forum_posts.update_one({"id": post_id}, {"$set": {"body": payload.body, "edited_at": now}})
+    post_clean = await db.forum_posts.find_one({"id": post_id}, {"_id": 0})
+    return _serialize_post(post_clean, viewer_id=uid)
+
+
+@api_router.delete("/forum/posts/{post_id}")
+async def forum_delete_post(post_id: str, current_user: dict = Depends(get_current_user)):
+    if not _forum_can_access(current_user):
+        raise HTTPException(status_code=403, detail="Nurses cannot use the Discussion Forum.")
+    post = await db.forum_posts.find_one({"id": post_id}, {"_id": 0})
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found.")
+    uid = str(current_user.get("_id") or current_user.get("id"))
+    role = current_user.get("role")
+    is_author = post.get("author_id") == uid
+    is_mod = role in ("implant_incharge", "administrator")
+    if not (is_author or is_mod):
+        raise HTTPException(status_code=403, detail="Not allowed to delete this post.")
+    now = datetime.now(timezone.utc)
+    await db.forum_posts.update_one({"id": post_id}, {"$set": {"deleted_at": now, "deleted_by_id": uid, "deleted_by_name": current_user.get("name")}})
+    return {"ok": True}
+
+
+@api_router.post("/forum/posts/{post_id}/reactions")
+async def forum_toggle_reaction(post_id: str, payload: ForumReactionRequest, current_user: dict = Depends(get_current_user)):
+    if not _forum_can_access(current_user):
+        raise HTTPException(status_code=403, detail="Nurses cannot use the Discussion Forum.")
+    if payload.reaction not in FORUM_REACTIONS:
+        raise HTTPException(status_code=400, detail=f"Invalid reaction. Allowed: {sorted(FORUM_REACTIONS)}")
+    post = await db.forum_posts.find_one({"id": post_id}, {"_id": 0})
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found.")
+    uid = str(current_user.get("_id") or current_user.get("id"))
+    reactions = post.get("reactions") or {}
+    lst = list(reactions.get(payload.reaction) or [])
+    if uid in lst:
+        lst.remove(uid)
+    else:
+        lst.append(uid)
+    await db.forum_posts.update_one({"id": post_id}, {"$set": {f"reactions.{payload.reaction}": lst}})
+    post_clean = await db.forum_posts.find_one({"id": post_id}, {"_id": 0})
+    return _serialize_post(post_clean, viewer_id=uid)
+
+
+@api_router.post("/forum/posts/{post_id}/verify")
+async def forum_verify_post(post_id: str, current_user: dict = Depends(get_current_user)):
+    if not _forum_can_access(current_user) or current_user.get("role") not in ("implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Only Implant In-Charge / Administrator can verify answers.")
+    post = await db.forum_posts.find_one({"id": post_id}, {"_id": 0})
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found.")
+    now = datetime.now(timezone.utc)
+    uid = str(current_user.get("_id") or current_user.get("id"))
+    # Only one verified post per thread — unverify any other in same thread
+    await db.forum_posts.update_many({"thread_id": post["thread_id"], "id": {"$ne": post_id}}, {"$unset": {"verified_by_id": "", "verified_by_name": "", "verified_at": ""}})
+    await db.forum_posts.update_one({"id": post_id}, {"$set": {"verified_by_id": uid, "verified_by_name": current_user.get("name"), "verified_at": now}})
+    post_clean = await db.forum_posts.find_one({"id": post_id}, {"_id": 0})
+    return _serialize_post(post_clean, viewer_id=uid)
+
+
+@api_router.delete("/forum/posts/{post_id}/verify")
+async def forum_unverify_post(post_id: str, current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") not in ("implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Only Implant In-Charge / Administrator can unverify.")
+    await db.forum_posts.update_one({"id": post_id}, {"$unset": {"verified_by_id": "", "verified_by_name": "", "verified_at": ""}})
+    return {"ok": True}
+
+
+@api_router.post("/forum/threads/{thread_id}/close")
+async def forum_close_thread(thread_id: str, payload: ForumCloseRequest, request: Request, current_user: dict = Depends(get_current_user)):
+    if not _forum_can_access(current_user):
+        raise HTTPException(status_code=403, detail="Nurses cannot use the Discussion Forum.")
+    thread = await db.forum_threads.find_one({"id": thread_id}, {"_id": 0})
+    if not thread:
+        raise HTTPException(status_code=404, detail="Thread not found.")
+    if not _forum_can_moderate(current_user, thread):
+        raise HTTPException(status_code=403, detail="Not allowed to close this thread.")
+    if thread.get("status") != "open":
+        raise HTTPException(status_code=409, detail=f"Thread is already {thread.get('status')}.")
+    if payload.reason not in FORUM_CLOSE_REASONS:
+        raise HTTPException(status_code=400, detail=f"Invalid reason. Allowed: {sorted(FORUM_CLOSE_REASONS)}")
+    now = datetime.now(timezone.utc)
+    uid = str(current_user.get("_id") or current_user.get("id"))
+    await db.forum_threads.update_one(
+        {"id": thread_id},
+        {"$set": {"status": "closed", "closed_by_id": uid, "closed_by_name": current_user.get("name"),
+                  "closed_at": now, "close_reason": payload.reason, "close_note": payload.note,
+                  "last_activity_at": now}},
+    )
+    await log_access(action="forum_close", outcome="success", user=current_user, request=request,
+                     resource_type="forum_thread", resource_id=thread_id, extra={"reason": payload.reason})
+    # Notify participants
+    notify_ids = [u for u in (thread.get("participants") or []) if u != uid]
+    if notify_ids:
+        await _forum_notify(notify_ids, "Discussion closed", f"{current_user.get('name')} closed the discussion.", {"thread_id": thread_id})
+    updated = await db.forum_threads.find_one({"id": thread_id}, {"_id": 0})
+    return _serialize_thread(updated, viewer_id=uid)
+
+
+@api_router.post("/forum/threads/{thread_id}/reopen")
+async def forum_reopen_thread(thread_id: str, request: Request, current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") not in ("implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Only Implant In-Charge / Administrator can reopen.")
+    thread = await db.forum_threads.find_one({"id": thread_id}, {"_id": 0})
+    if not thread:
+        raise HTTPException(status_code=404, detail="Thread not found.")
+    if thread.get("status") == "open":
+        return _serialize_thread(thread, viewer_id=str(current_user.get("_id") or current_user.get("id")))
+    now = datetime.now(timezone.utc)
+    await db.forum_threads.update_one(
+        {"id": thread_id},
+        {"$set": {"status": "open", "last_activity_at": now},
+         "$unset": {"closed_by_id": "", "closed_by_name": "", "closed_at": "", "close_reason": "", "close_note": ""}},
+    )
+    await log_access(action="forum_reopen", outcome="success", user=current_user, request=request,
+                     resource_type="forum_thread", resource_id=thread_id)
+    updated = await db.forum_threads.find_one({"id": thread_id}, {"_id": 0})
+    return _serialize_thread(updated, viewer_id=str(current_user.get("_id") or current_user.get("id")))
+
+
+@api_router.delete("/forum/threads/{thread_id}")
+async def forum_remove_thread(thread_id: str, request: Request, current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") not in ("implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Only Implant In-Charge / Administrator can remove a case from the forum.")
+    thread = await db.forum_threads.find_one({"id": thread_id}, {"_id": 0})
+    if not thread:
+        raise HTTPException(status_code=404, detail="Thread not found.")
+    now = datetime.now(timezone.utc)
+    uid = str(current_user.get("_id") or current_user.get("id"))
+    await db.forum_threads.update_one(
+        {"id": thread_id},
+        {"$set": {"status": "removed", "closed_by_id": uid, "closed_by_name": current_user.get("name"),
+                  "closed_at": now, "last_activity_at": now}},
+    )
+    await log_access(action="forum_remove", outcome="success", user=current_user, request=request,
+                     resource_type="forum_thread", resource_id=thread_id)
+    return {"ok": True}
+
+
+@api_router.post("/forum/threads/{thread_id}/bookmark")
+async def forum_toggle_bookmark(thread_id: str, current_user: dict = Depends(get_current_user)):
+    if not _forum_can_access(current_user):
+        raise HTTPException(status_code=403, detail="Nurses cannot use the Discussion Forum.")
+    thread = await db.forum_threads.find_one({"id": thread_id}, {"_id": 0})
+    if not thread:
+        raise HTTPException(status_code=404, detail="Thread not found.")
+    uid = str(current_user.get("_id") or current_user.get("id"))
+    marks = list(thread.get("bookmarks") or [])
+    if uid in marks:
+        marks.remove(uid)
+        state = False
+    else:
+        marks.append(uid)
+        state = True
+    await db.forum_threads.update_one({"id": thread_id}, {"$set": {"bookmarks": marks}})
+    return {"bookmarked": state}
+
+
+@api_router.post("/forum/threads/{thread_id}/watch")
+async def forum_toggle_watch(thread_id: str, current_user: dict = Depends(get_current_user)):
+    if not _forum_can_access(current_user):
+        raise HTTPException(status_code=403, detail="Nurses cannot use the Discussion Forum.")
+    thread = await db.forum_threads.find_one({"id": thread_id}, {"_id": 0})
+    if not thread:
+        raise HTTPException(status_code=404, detail="Thread not found.")
+    uid = str(current_user.get("_id") or current_user.get("id"))
+    w = list(thread.get("watchers") or [])
+    if uid in w:
+        w.remove(uid)
+        state = False
+    else:
+        w.append(uid)
+        state = True
+    await db.forum_threads.update_one({"id": thread_id}, {"$set": {"watchers": w}})
+    return {"watching": state}
+
+
+@api_router.post("/forum/upload")
+async def forum_upload_attachment(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    if not _forum_can_access(current_user):
+        raise HTTPException(status_code=403, detail="Nurses cannot upload to the Discussion Forum.")
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in FORUM_ALLOWED_EXT:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type. Allowed: {sorted(FORUM_ALLOWED_EXT)}")
+    content = await file.read()
+    if len(content) > FORUM_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="File exceeds 10 MB limit.")
+    unique = f"forum_{uuid.uuid4().hex}{ext}"
+    path = FORUM_ATTACH_DIR / unique
+    with open(path, "wb") as f:
+        f.write(content)
+    url = f"/api/uploads/forum/{unique}"
+    return {"url": url, "filename": file.filename or unique, "size": len(content), "type": "pdf" if ext == ".pdf" else "image"}
+
+
+@api_router.get("/uploads/forum/{filename}")
+async def serve_forum_upload(filename: str, token: Optional[str] = Query(None), current_user: dict = Depends(get_current_user_optional)):
+    if not current_user and token:
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            uid = payload.get("sub")
+            if uid:
+                current_user = await db.users.find_one({"id": uid}, {"_id": 0, "password": 0})
+        except Exception:
+            pass
+    if not current_user or current_user.get("role") == "nurse":
+        raise HTTPException(status_code=403, detail="Access denied.")
+    safe = filename.replace("..", "").lstrip("/")
+    path = FORUM_ATTACH_DIR / safe
+    if not path.exists() or not path.is_file():
+        raise HTTPException(status_code=404, detail="File not found.")
+    return FileResponse(str(path))
+
+
 app.include_router(api_router)
 
 app.add_middleware(
@@ -10408,6 +11062,11 @@ async def start_pre_surgery_scheduler():
 async def ensure_access_log_indexes_on_start():
     """HIPAA: guarantee the access_logs collection has TTL + query indexes."""
     await _ensure_access_log_indexes()
+
+@app.on_event("startup")
+async def ensure_forum_indexes_on_start():
+    """Forum: ensure thread/post indexes for listing + full-text search."""
+    await _ensure_forum_indexes()
 
 @app.on_event("startup")
 async def seed_on_startup():
