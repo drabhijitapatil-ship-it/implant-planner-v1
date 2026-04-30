@@ -1567,9 +1567,10 @@ async def get_procedures(
         query["status"] = {"$in": ["phase1_approved", "phase2_approved", "approved", "stage2_surgical_approved", "completed"]}
     # administrator and implant_incharge can see all
 
-    # Optional student_id filter — only honoured for In-Charge / Administrator
-    # (used by the per-student drill-down screen). For other roles it's ignored.
-    if student_id and current_user["role"] in ("implant_incharge", "administrator"):
+    # Optional student_id filter — honoured for In-Charge / Administrator.
+    # Supervisors can also use it but the supervisor $and scope applies on top
+    # (i.e. student_id AND (supervisor_id == self OR created_by_id == self)).
+    if student_id and current_user["role"] in ("implant_incharge", "administrator", "supervisor"):
         query["student_id"] = student_id
     
     if phase and current_user["role"] != "nurse":
@@ -1680,10 +1681,12 @@ async def get_recent_activity(
 @api_router.get("/admin/students/{student_id}/summary")
 async def get_student_summary(student_id: str, current_user: dict = Depends(get_current_user)):
     """Return profile + aggregated KPIs + phase pipeline + monthly throughput
-    for a single student. Visible only to Implant In-Charge / Administrator.
+    for a single student. Visible to Implant In-Charge / Administrator (full scope)
+    and Supervisors (scoped to cases they supervise).
     """
-    if current_user.get("role") not in ("implant_incharge", "administrator"):
-        raise HTTPException(status_code=403, detail="Only Implant In-Charge / Administrator can view student summaries")
+    role = current_user.get("role")
+    if role not in ("implant_incharge", "administrator", "supervisor"):
+        raise HTTPException(status_code=403, detail="Only Implant In-Charge / Administrator / Supervisor can view student summaries")
 
     # Profile (best-effort — students may also exist purely via their procedures)
     profile = None
@@ -1704,6 +1707,16 @@ async def get_student_summary(student_id: str, current_user: dict = Depends(get_
 
     # Aggregations across this student's procedures
     base_match: Dict[str, Any] = {"student_id": student_id, "archived": {"$ne": True}}
+    # Supervisor scope: only count cases they supervise / created
+    if role == "supervisor":
+        base_match["$or"] = [
+            {"supervisor_id": current_user["_id"]},
+            {"created_by_id": current_user["_id"]},
+        ]
+        # If supervisor has 0 cases for this student, return zeroed stats early
+        any_case = await db.procedures.find_one(base_match)
+        if not any_case:
+            raise HTTPException(status_code=403, detail="No cases for this student under your supervision")
 
     # KPI counts
     kpi_pipeline = [
@@ -1776,6 +1789,172 @@ async def get_student_summary(student_id: str, current_user: dict = Depends(get_
         "kpis": kpis,
         "phase_pipeline": phase_pipeline,
         "monthly_throughput": monthly,
+    }
+
+
+# ── Nudge a student (in-app notification + push) ──────────────────────
+NUDGE_COOLDOWN_MINUTES = 30
+NUDGE_MAX_LEN = 500
+
+
+class NudgePayload(BaseModel):
+    message: str = Field(..., min_length=1, max_length=NUDGE_MAX_LEN)
+    case_ids: Optional[List[str]] = None
+
+
+async def _verify_nudge_access(student_id: str, current_user: dict) -> dict:
+    """Ensure sender is allowed to nudge this student. Supervisors can only
+    nudge students whose cases they actively supervise. Returns student profile."""
+    role = current_user.get("role")
+    if role not in ("implant_incharge", "administrator", "supervisor"):
+        raise HTTPException(status_code=403, detail="Only In-Charge / Administrator / Supervisor can nudge students")
+    if role == "supervisor":
+        any_case = await db.procedures.find_one({
+            "student_id": student_id,
+            "$or": [
+                {"supervisor_id": current_user["_id"]},
+                {"created_by_id": current_user["_id"]},
+            ],
+            "archived": {"$ne": True},
+        })
+        if not any_case:
+            raise HTTPException(status_code=403, detail="You can only nudge students for cases under your supervision")
+    # Resolve student profile (best-effort)
+    student = None
+    try:
+        student = await db.users.find_one({"_id": ObjectId(student_id)})
+    except Exception:
+        pass
+    if not student:
+        student = await db.users.find_one({"_id": student_id})
+    return student or {"_id": student_id, "name": "Student"}
+
+
+@api_router.post("/students/{student_id}/nudge")
+async def nudge_student(
+    student_id: str,
+    payload: NudgePayload,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    student = await _verify_nudge_access(student_id, current_user)
+    # 30-min cooldown per (sender, student) pair
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=NUDGE_COOLDOWN_MINUTES)
+    recent = await db.notifications.find_one({
+        "user_id": student_id,
+        "from_user_id": current_user["_id"],
+        "type": "nudge",
+        "created_at": {"$gte": cutoff},
+    })
+    if recent:
+        last = recent.get("created_at")
+        try:
+            if last.tzinfo is None:
+                last = last.replace(tzinfo=timezone.utc)
+            seconds_remaining = max(0, int((last + timedelta(minutes=NUDGE_COOLDOWN_MINUTES) - datetime.now(timezone.utc)).total_seconds()))
+        except Exception:
+            seconds_remaining = NUDGE_COOLDOWN_MINUTES * 60
+        raise HTTPException(
+            status_code=429,
+            detail={"message": "You recently nudged this student. Please wait before sending another.", "seconds_remaining": seconds_remaining},
+        )
+    case_ids = [cid for cid in (payload.case_ids or []) if isinstance(cid, str) and cid][:10]
+    notif = {
+        "user_id": student_id,
+        "from_user_id": current_user["_id"],
+        "from_user_name": current_user.get("name"),
+        "from_user_role": current_user.get("role"),
+        "type": "nudge",
+        "message": payload.message.strip()[:NUDGE_MAX_LEN],
+        "case_ids": case_ids,
+        "procedure_id": case_ids[0] if len(case_ids) == 1 else None,
+        "read": False,
+        "created_at": datetime.now(timezone.utc),
+    }
+    insert_res = await db.notifications.insert_one(dict(notif))
+    # Push notification (best-effort — function silently no-ops if no token)
+    sender_label = current_user.get("name") or current_user.get("role") or "Implanr"
+    try:
+        await send_expo_push_notifications(
+            [student_id],
+            f"Nudge from {sender_label}",
+            payload.message.strip()[:200],
+            {"type": "nudge", "from_user_id": current_user["_id"]},
+        )
+    except Exception as e:
+        logging.warning(f"nudge push failed: {e}")
+    # HIPAA audit row
+    try:
+        await log_access(
+            action="nudge_student",
+            outcome="success",
+            user_id=current_user["_id"],
+            resource_type="user",
+            resource_id=student_id,
+            ip=(request.client.host if request and request.client else None),
+        )
+    except Exception:
+        pass
+    return {
+        "id": str(insert_res.inserted_id),
+        "student_id": student_id,
+        "student_name": student.get("name"),
+        "message": notif["message"],
+        "case_ids": case_ids,
+        "created_at": notif["created_at"].isoformat(),
+        "cooldown_minutes": NUDGE_COOLDOWN_MINUTES,
+    }
+
+
+@api_router.get("/students/{student_id}/nudge-history")
+async def get_nudge_history(
+    student_id: str,
+    limit: int = 5,
+    current_user: dict = Depends(get_current_user),
+):
+    """Return recent nudges sent to this student. Visible to in-charge / admin
+    (full history) and to supervisors (only nudges they themselves sent)."""
+    role = current_user.get("role")
+    if role not in ("implant_incharge", "administrator", "supervisor"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if role == "supervisor":
+        await _verify_nudge_access(student_id, current_user)  # raises if no supervised cases
+    limit = max(1, min(int(limit or 5), 50))
+    q: Dict[str, Any] = {"user_id": student_id, "type": "nudge"}
+    if role == "supervisor":
+        q["from_user_id"] = current_user["_id"]
+    cooldown_cutoff = datetime.now(timezone.utc) - timedelta(minutes=NUDGE_COOLDOWN_MINUTES)
+    # Cooldown status for the *current sender*
+    my_recent = await db.notifications.find_one(
+        {"user_id": student_id, "from_user_id": current_user["_id"], "type": "nudge", "created_at": {"$gte": cooldown_cutoff}}
+    )
+    cooldown_seconds_remaining = 0
+    if my_recent:
+        try:
+            ca = my_recent["created_at"]
+            if ca.tzinfo is None:
+                ca = ca.replace(tzinfo=timezone.utc)
+            cooldown_seconds_remaining = max(0, int((ca + timedelta(minutes=NUDGE_COOLDOWN_MINUTES) - datetime.now(timezone.utc)).total_seconds()))
+        except Exception:
+            cooldown_seconds_remaining = 0
+    rows = await db.notifications.find(q).sort("created_at", -1).limit(limit).to_list(length=limit)
+    history = []
+    for r in rows:
+        history.append({
+            "id": str(r.get("_id")),
+            "from_user_id": r.get("from_user_id"),
+            "from_user_name": r.get("from_user_name"),
+            "from_user_role": r.get("from_user_role"),
+            "message": r.get("message"),
+            "case_ids": r.get("case_ids", []),
+            "read": bool(r.get("read")),
+            "read_at": r.get("read_at").isoformat() if r.get("read_at") else None,
+            "created_at": r.get("created_at").isoformat() if r.get("created_at") else None,
+        })
+    return {
+        "history": history,
+        "cooldown_minutes": NUDGE_COOLDOWN_MINUTES,
+        "cooldown_seconds_remaining": cooldown_seconds_remaining,
     }
 
 

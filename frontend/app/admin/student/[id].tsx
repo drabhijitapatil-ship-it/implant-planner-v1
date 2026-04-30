@@ -11,6 +11,7 @@ import api from '../../../utils/api';
 import { useAuth } from '../../../contexts/AuthContext';
 import { STATUS_COLORS, STATUS_LABELS } from '../../../constants/checklist';
 import { RecentActivityWidget } from '../../../components/RecentActivityWidget';
+import { NudgeBottomSheet } from '../../../components/NudgeBottomSheet';
 
 type Summary = {
   profile: { id?: string; name?: string; email?: string; role?: string; username?: string } | null;
@@ -50,10 +51,11 @@ export default function StudentDrillDown() {
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
+  const [nudgeOpen, setNudgeOpen] = useState(false);
 
   // Defensive role gate — bounce non-privileged users out
   useEffect(() => {
-    if (user && !['implant_incharge', 'administrator'].includes(user.role)) {
+    if (user && !['implant_incharge', 'administrator', 'supervisor'].includes(user.role)) {
       router.replace('/(tabs)/dashboard');
     }
   }, [user, router]);
@@ -123,6 +125,17 @@ export default function StudentDrillDown() {
             {profile?.email || profile?.username || 'Student performance'}
           </Text>
         </View>
+        {user && ['implant_incharge', 'administrator', 'supervisor'].includes(user.role) && (
+          <TouchableOpacity
+            onPress={() => setNudgeOpen(true)}
+            style={s.nudgeBtn}
+            data-testid="open-nudge-btn"
+            activeOpacity={0.85}
+          >
+            <Ionicons name="megaphone-outline" size={14} color="#FFF" />
+            <Text style={s.nudgeBtnText}>Nudge</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView
@@ -249,6 +262,14 @@ export default function StudentDrillDown() {
         {/* Recent activity for THIS student — auto-paginated */}
         <RecentActivityWidget router={router} limit={5} studentId={id as string} />
       </ScrollView>
+      <NudgeBottomSheet
+        visible={nudgeOpen}
+        onClose={() => setNudgeOpen(false)}
+        studentId={id as string}
+        studentName={studentName}
+        pendingCount={k.pending_approval || 0}
+        pendingCaseIds={procedures.filter(p => PENDING_STATUSES.includes(p.status)).map(p => p.id).slice(0, 10)}
+      />
     </SafeAreaView>
   );
 }
@@ -286,6 +307,12 @@ const s = StyleSheet.create({
   backBtn: { padding: 6 },
   headerTitle: { fontSize: 18, fontWeight: '800', color: '#0D47A1' },
   headerSubtitle: { fontSize: 12, color: '#78909C', marginTop: 2 },
+  nudgeBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999,
+    backgroundColor: '#1565C0',
+  },
+  nudgeBtnText: { fontSize: 11, fontWeight: '800', color: '#FFF', letterSpacing: 0.3 },
 
   kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, paddingTop: 16 },
   kpiTile: {
