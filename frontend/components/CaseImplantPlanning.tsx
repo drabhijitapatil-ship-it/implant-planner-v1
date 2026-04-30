@@ -191,6 +191,9 @@ interface Props {
   procedureDate?: string;
   /** Phase 1 missing teeth — required for the bridge / single-implant correlation rules. */
   teethPresent?: string[];
+  /** Phase 1 FDI chart red-marked teeth — when provided, ONLY these teeth are
+   *  selectable in the Implant Planning modal's tooth picker. Others are locked. */
+  missingTeeth?: string[];
   /** Fired when the student confirms a 3-unit bridge on a candidate. Parent persists
    *  these on the procedure document (default prosthesis + bridge material). */
   onBridgeConfirmed?: (info: { design: string; material: BridgeMaterial; pontics: string[]; implants: string[] }) => void;
@@ -551,7 +554,7 @@ function generateDrillingProtocol(brand: string, system: string, diameter: numbe
   return protocol;
 }
 
-export default function CaseImplantPlanning({ procedureId, isOwner, userRole, torqueValues, procedureStatus, procedureType, medicalAssessment, patientName, patientId, procedureDate, teethPresent, onBridgeConfirmed }: Props) {
+export default function CaseImplantPlanning({ procedureId, isOwner, userRole, torqueValues, procedureStatus, procedureType, medicalAssessment, patientName, patientId, procedureDate, teethPresent, missingTeeth, onBridgeConfirmed }: Props) {
   const [plans, setPlans] = useState<ImplantPlanItem[]>([]);
   const [systems, setSystems] = useState<ImplantSystem[]>([]);
   const [toothRecs, setToothRecs] = useState<Record<string,any>>({});
@@ -854,6 +857,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
         medicalAssessment={medicalAssessment}
         procedureType={procedureType}
         procedureId={procedureId}
+        allowedTeeth={missingTeeth}
       />
 
       {/* ── Bridge nudge — fired after a save reveals an implant-supported pontic ── */}
@@ -944,11 +948,13 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
 }
 
 // ── Add/Edit Implant Modal Component ───────────────────────
-function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPositions, editItem, medicalAssessment, procedureType, procedureId }: {
+function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPositions, editItem, medicalAssessment, procedureType, procedureId, allowedTeeth }: {
   visible: boolean; onClose: () => void; onSave: (item: ImplantPlanItem) => void;
   systems: ImplantSystem[]; toothRecs: Record<string,any>; usedPositions: string[];
   editItem?: ImplantPlanItem; medicalAssessment?: Record<string, string>;
   procedureType?: string; procedureId: string;
+  /** When provided, only teeth in this list can be selected in the tooth picker. */
+  allowedTeeth?: string[];
 }) {
   const [step, setStep] = useState(1);
   const [position, setPosition] = useState('');
@@ -1082,6 +1088,7 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
         toothInfo={toothInfo}
         procedureType={procedureType}
         procedureId={procedureId}
+        allowedTeeth={allowedTeeth}
       />
     </Modal>
   );
@@ -1097,7 +1104,7 @@ function ModalContent(props: any) {
     riskResult, riskLoading, showSystemDD, setShowSystemDD, systemSearch, setSystemSearch,
     showAllResults, setShowAllResults,
     sProcedures, setSProcedures, handleSearch, handleCalcRisk, handleConfirm, toothInfo,
-    systems, usedPositions, onSave, procedureType, procedureId,
+    systems, usedPositions, onSave, procedureType, procedureId, allowedTeeth,
   } = props;
 
   const BONE_TYPES = ['D1','D2','D3','D4'];
@@ -1163,8 +1170,14 @@ function ModalContent(props: any) {
               <MiniDentalChart
                 selected={position}
                 disabled={usedPositions}
+                allowedTeeth={allowedTeeth}
                 onSelect={(t) => setPosition(t)}
               />
+              {Array.isArray(allowedTeeth) && allowedTeeth.length > 0 && (
+                <Text style={{ fontSize: 11, color: '#546E7A', textAlign: 'center', marginTop: 4, fontStyle: 'italic' }}>
+                  Only the {allowedTeeth.length} {allowedTeeth.length === 1 ? 'tooth' : 'teeth'} marked missing in Phase 1 Step 1 can be selected.
+                </Text>
+              )}
               {position && toothInfo && (
                 <View style={ms.recBox}>
                   <Text style={ms.recTitle}>Tooth {position}: {toothInfo.region}</Text>
@@ -1958,9 +1971,15 @@ function ModalContent(props: any) {
 }
 
 // ── Mini FDI Dental Chart (compact) ────────────────────────
-function MiniDentalChart({ selected, disabled, onSelect }: {
+function MiniDentalChart({ selected, disabled, onSelect, allowedTeeth }: {
   selected: string; disabled: string[]; onSelect: (t: string) => void;
+  /** When provided, teeth NOT in this list render as locked/grey and are unselectable. */
+  allowedTeeth?: string[];
 }) {
+  const isAllowed = (t: string): boolean => {
+    if (!Array.isArray(allowedTeeth)) return true; // no constraint
+    return allowedTeeth.includes(t);
+  };
   const renderRow = (left: string[], right: string[], label: string) => (
     <View style={dc.row}>
       <Text style={dc.label}>{label}</Text>
@@ -1968,10 +1987,11 @@ function MiniDentalChart({ selected, disabled, onSelect }: {
         {left.map(t => {
           const isSel = selected === t;
           const isDis = disabled.includes(t);
+          const isLocked = !isAllowed(t);
           return (
-            <TouchableOpacity key={t} style={[dc.tooth, isSel && dc.toothSel, isDis && dc.toothDis]}
-              onPress={() => !isDis && onSelect(t)} disabled={isDis}>
-              <Text style={[dc.toothNum, isSel && dc.toothNumSel, isDis && dc.toothNumDis]}>{t}</Text>
+            <TouchableOpacity key={t} style={[dc.tooth, isSel && dc.toothSel, isDis && dc.toothDis, isLocked && dc.toothLocked]}
+              onPress={() => !isDis && !isLocked && onSelect(t)} disabled={isDis || isLocked}>
+              <Text style={[dc.toothNum, isSel && dc.toothNumSel, isDis && dc.toothNumDis, isLocked && dc.toothNumLocked]}>{t}</Text>
             </TouchableOpacity>
           );
         })}
@@ -1979,10 +1999,11 @@ function MiniDentalChart({ selected, disabled, onSelect }: {
         {right.map(t => {
           const isSel = selected === t;
           const isDis = disabled.includes(t);
+          const isLocked = !isAllowed(t);
           return (
-            <TouchableOpacity key={t} style={[dc.tooth, isSel && dc.toothSel, isDis && dc.toothDis]}
-              onPress={() => !isDis && onSelect(t)} disabled={isDis}>
-              <Text style={[dc.toothNum, isSel && dc.toothNumSel, isDis && dc.toothNumDis]}>{t}</Text>
+            <TouchableOpacity key={t} style={[dc.tooth, isSel && dc.toothSel, isDis && dc.toothDis, isLocked && dc.toothLocked]}
+              onPress={() => !isDis && !isLocked && onSelect(t)} disabled={isDis || isLocked}>
+              <Text style={[dc.toothNum, isSel && dc.toothNumSel, isDis && dc.toothNumDis, isLocked && dc.toothNumLocked]}>{t}</Text>
             </TouchableOpacity>
           );
         })}
@@ -2008,9 +2029,11 @@ const dc = StyleSheet.create({
   tooth: { width: 28, height: 28, borderRadius: 6, backgroundColor: '#E8EDF2', alignItems: 'center', justifyContent: 'center', marginHorizontal: 1, borderWidth: 1, borderColor: '#C5CDD5' },
   toothSel: { backgroundColor: '#1E88E5', borderColor: '#1565C0' },
   toothDis: { backgroundColor: '#FFCDD2', borderColor: '#EF9A9A' },
+  toothLocked: { backgroundColor: '#ECEFF1', borderColor: '#CFD8DC', opacity: 0.55 },
   toothNum: { fontSize: 9, fontWeight: '700', color: '#37474F' },
   toothNumSel: { color: '#FFF' },
   toothNumDis: { color: '#E57373' },
+  toothNumLocked: { color: '#B0BEC5' },
 });
 
 // ── Styles ─────────────────────────────────────────────────

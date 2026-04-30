@@ -258,6 +258,8 @@ export default function NewProcedureScreen() {
     procedure_time: '',
     implant_procedure_type: '',
     teeth_present: [] as string[],
+    missing_teeth: [] as string[],
+    edentulous_site_measurements: {} as Record<string, { oc?: string; md?: string }>,
     arch: '',
     loading_type: [] as string[],
     prosthetic_plan: '',
@@ -712,6 +714,7 @@ export default function NewProcedureScreen() {
             readOnly={false}
             medicalAssessment={formData.medical_assessment}
             teethPresent={formData.teeth_present}
+            missingTeeth={formData.missing_teeth}
             onBridgeConfirmed={async (info) => {
               // Persist the default prosthesis on the procedure so Phase 2 can pre-fill it.
               // Student edits draft procedures via PUT (edit-fields is reviewer-only).
@@ -967,91 +970,89 @@ export default function NewProcedureScreen() {
         )}
       </View>
 
-      {/* ─── Teeth Present (FDI Chart - Non-Full-Arch Only) ─── */}
-      {formData.implant_procedure_type && !isFullArch && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Teeth Present</Text>
-          <Text style={{ fontSize: 12, color: '#666', marginBottom: 10 }}>
-            Tap to select all teeth present in the patient's mouth. Selected teeth are highlighted in blue.
-          </Text>
-          {/* Upper Jaw */}
-          <Text style={{ fontSize: 12, fontWeight: '700', color: '#1565C0', marginBottom: 4, textAlign: 'center' }}>Upper Jaw (Maxillary)</Text>
-          <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 2 }}>
-            <View style={{ flexDirection: 'row' }}>
-              {['18','17','16','15','14','13','12','11'].map(t => {
-                const sel = (formData.teeth_present || []).includes(t);
-                const isMolar = ['16','17','18','26','27','28','36','37','38','46','47','48'].includes(t);
-                const w = isMolar ? 26 : ['14','15','24','25','34','35','44','45'].includes(t) ? 23 : ['13','23','33','43'].includes(t) ? 22 : 20;
-                return (
-                  <TouchableOpacity key={t} onPress={() => {
-                    const cur = formData.teeth_present || [];
-                    updateForm('teeth_present', sel ? cur.filter((x: string) => x !== t) : [...cur, t]);
-                  }} style={{ width: w, height: isMolar ? 32 : 28, borderRadius: isMolar ? 5 : 9, backgroundColor: sel ? '#1E88E5' : '#E8EDF2', borderWidth: 1.5, borderColor: sel ? '#1565C0' : '#C5CDD5', alignItems: 'center', justifyContent: 'center', marginHorizontal: 1 }} data-testid={`tp-${t}`}>
-                    <Text style={{ fontWeight: '700', fontSize: 9, color: sel ? '#FFF' : '#37474F' }}>{t}</Text>
-                  </TouchableOpacity>
-                );
-              })}
+      {/* ─── FDI Chart (Non-Full-Arch Only) — Missing Teeth selector ─── */}
+      {formData.implant_procedure_type && !isFullArch && (() => {
+        const ptype = formData.implant_procedure_type;
+        const EXTRACT_SET = new Set(['Immediate Implant', 'Partial Extraction Therapy']);
+        const isExtractFlow = EXTRACT_SET.has(ptype);
+        const sectionTitle = isExtractFlow ? 'Select teeth' : 'Missing Teeth';
+        const subLabel = isExtractFlow
+          ? (ptype === 'Immediate Implant'
+              ? 'Mark tooth/teeth for Immediate Implant'
+              : 'Mark tooth/teeth for Partial Extraction Therapy')
+          : 'Select missing tooth/teeth';
+        const missing = formData.missing_teeth || [];
+        const toggleTooth = (t: string) => {
+          const cur = formData.missing_teeth || [];
+          updateForm('missing_teeth', cur.includes(t) ? cur.filter((x: string) => x !== t) : [...cur, t]);
+        };
+        const renderTooth = (t: string) => {
+          const marked = missing.includes(t); // red when marked
+          const isMolar = ['16','17','18','26','27','28','36','37','38','46','47','48'].includes(t);
+          const w = isMolar ? 26 : ['14','15','24','25','34','35','44','45'].includes(t) ? 23 : ['13','23','33','43'].includes(t) ? 22 : 20;
+          return (
+            <TouchableOpacity
+              key={t}
+              onPress={() => toggleTooth(t)}
+              style={{
+                width: w, height: isMolar ? 32 : 28,
+                borderRadius: isMolar ? 5 : 9,
+                backgroundColor: marked ? '#E53935' : '#1E88E5',
+                borderWidth: 1.5,
+                borderColor: marked ? '#B71C1C' : '#1565C0',
+                alignItems: 'center', justifyContent: 'center', marginHorizontal: 1,
+              }}
+              data-testid={`fdi-${t}`}
+            >
+              <Text style={{ fontWeight: '700', fontSize: 9, color: '#FFF' }}>{t}</Text>
+            </TouchableOpacity>
+          );
+        };
+        // Client-side count validation (matched server-side)
+        let countError: string | null = null;
+        if (ptype === 'Conventional Single Implant' && missing.length !== 1 && missing.length > 0) {
+          countError = 'Conventional Single Implant requires exactly 1 tooth.';
+        } else if (ptype === 'Multiple Conventional Implants' && missing.length === 1) {
+          countError = 'Multiple Conventional Implants requires at least 2 teeth.';
+        }
+        return (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{sectionTitle}</Text>
+            <Text style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>{subLabel}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: '#1E88E5' }} />
+                <Text style={{ fontSize: 10, color: '#546E7A' }}>Present</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: '#E53935' }} />
+                <Text style={{ fontSize: 10, color: '#546E7A' }}>{isExtractFlow ? 'Selected for extraction' : 'Missing'}</Text>
+              </View>
             </View>
-            <View style={{ width: 6 }} />
-            <View style={{ flexDirection: 'row' }}>
-              {['21','22','23','24','25','26','27','28'].map(t => {
-                const sel = (formData.teeth_present || []).includes(t);
-                const isMolar = ['16','17','18','26','27','28','36','37','38','46','47','48'].includes(t);
-                const w = isMolar ? 26 : ['14','15','24','25','34','35','44','45'].includes(t) ? 23 : ['13','23','33','43'].includes(t) ? 22 : 20;
-                return (
-                  <TouchableOpacity key={t} onPress={() => {
-                    const cur = formData.teeth_present || [];
-                    updateForm('teeth_present', sel ? cur.filter((x: string) => x !== t) : [...cur, t]);
-                  }} style={{ width: w, height: isMolar ? 32 : 28, borderRadius: isMolar ? 5 : 9, backgroundColor: sel ? '#1E88E5' : '#E8EDF2', borderWidth: 1.5, borderColor: sel ? '#1565C0' : '#C5CDD5', alignItems: 'center', justifyContent: 'center', marginHorizontal: 1 }} data-testid={`tp-${t}`}>
-                    <Text style={{ fontWeight: '700', fontSize: 9, color: sel ? '#FFF' : '#37474F' }}>{t}</Text>
-                  </TouchableOpacity>
-                );
-              })}
+            <Text style={{ fontSize: 12, fontWeight: '700', color: '#1565C0', marginBottom: 4, textAlign: 'center' }}>Upper Jaw (Maxillary)</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 2 }}>
+              <View style={{ flexDirection: 'row' }}>{['18','17','16','15','14','13','12','11'].map(renderTooth)}</View>
+              <View style={{ width: 6 }} />
+              <View style={{ flexDirection: 'row' }}>{['21','22','23','24','25','26','27','28'].map(renderTooth)}</View>
             </View>
+            <View style={{ height: 1, backgroundColor: '#C5CDD5', marginVertical: 6, marginHorizontal: 20 }} />
+            <Text style={{ fontSize: 12, fontWeight: '700', color: '#1565C0', marginBottom: 4, textAlign: 'center' }}>Lower Jaw (Mandibular)</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 2 }}>
+              <View style={{ flexDirection: 'row' }}>{['48','47','46','45','44','43','42','41'].map(renderTooth)}</View>
+              <View style={{ width: 6 }} />
+              <View style={{ flexDirection: 'row' }}>{['31','32','33','34','35','36','37','38'].map(renderTooth)}</View>
+            </View>
+            {missing.length > 0 && (
+              <Text style={{ fontSize: 12, color: '#B71C1C', fontWeight: '700', marginTop: 8, textAlign: 'center' }}>
+                {missing.length} {missing.length === 1 ? 'tooth' : 'teeth'} marked — {missing.sort().join(', ')}
+              </Text>
+            )}
+            {countError && (
+              <Text style={{ fontSize: 11, color: '#B71C1C', marginTop: 6, textAlign: 'center', fontWeight: '600' }}>{countError}</Text>
+            )}
           </View>
-          <View style={{ height: 1, backgroundColor: '#C5CDD5', marginVertical: 6, marginHorizontal: 20 }} />
-          {/* Lower Jaw */}
-          <Text style={{ fontSize: 12, fontWeight: '700', color: '#1565C0', marginBottom: 4, textAlign: 'center' }}>Lower Jaw (Mandibular)</Text>
-          <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 2 }}>
-            <View style={{ flexDirection: 'row' }}>
-              {['48','47','46','45','44','43','42','41'].map(t => {
-                const sel = (formData.teeth_present || []).includes(t);
-                const isMolar = ['16','17','18','26','27','28','36','37','38','46','47','48'].includes(t);
-                const w = isMolar ? 26 : ['14','15','24','25','34','35','44','45'].includes(t) ? 23 : ['13','23','33','43'].includes(t) ? 22 : 20;
-                return (
-                  <TouchableOpacity key={t} onPress={() => {
-                    const cur = formData.teeth_present || [];
-                    updateForm('teeth_present', sel ? cur.filter((x: string) => x !== t) : [...cur, t]);
-                  }} style={{ width: w, height: isMolar ? 32 : 28, borderRadius: isMolar ? 5 : 9, backgroundColor: sel ? '#1E88E5' : '#E8EDF2', borderWidth: 1.5, borderColor: sel ? '#1565C0' : '#C5CDD5', alignItems: 'center', justifyContent: 'center', marginHorizontal: 1 }} data-testid={`tp-${t}`}>
-                    <Text style={{ fontWeight: '700', fontSize: 9, color: sel ? '#FFF' : '#37474F' }}>{t}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            <View style={{ width: 6 }} />
-            <View style={{ flexDirection: 'row' }}>
-              {['31','32','33','34','35','36','37','38'].map(t => {
-                const sel = (formData.teeth_present || []).includes(t);
-                const isMolar = ['16','17','18','26','27','28','36','37','38','46','47','48'].includes(t);
-                const w = isMolar ? 26 : ['14','15','24','25','34','35','44','45'].includes(t) ? 23 : ['13','23','33','43'].includes(t) ? 22 : 20;
-                return (
-                  <TouchableOpacity key={t} onPress={() => {
-                    const cur = formData.teeth_present || [];
-                    updateForm('teeth_present', sel ? cur.filter((x: string) => x !== t) : [...cur, t]);
-                  }} style={{ width: w, height: isMolar ? 32 : 28, borderRadius: isMolar ? 5 : 9, backgroundColor: sel ? '#1E88E5' : '#E8EDF2', borderWidth: 1.5, borderColor: sel ? '#1565C0' : '#C5CDD5', alignItems: 'center', justifyContent: 'center', marginHorizontal: 1 }} data-testid={`tp-${t}`}>
-                    <Text style={{ fontWeight: '700', fontSize: 9, color: sel ? '#FFF' : '#37474F' }}>{t}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-          {(formData.teeth_present || []).length > 0 && (
-            <Text style={{ fontSize: 12, color: '#1565C0', fontWeight: '600', marginTop: 8, textAlign: 'center' }}>
-              {(formData.teeth_present || []).length} teeth selected
-            </Text>
-          )}
-        </View>
-      )}
+        );
+      })()}
 
       {/* ─── Clinical Examination ─── */}
       {formData.implant_procedure_type && (
@@ -1063,30 +1064,86 @@ export default function NewProcedureScreen() {
             <>
               <Text style={styles.subSectionTitle}>Intraoral Examination</Text>
               <Text style={[styles.subSectionTitle, { fontSize: 14, color: '#1565C0', marginTop: 4 }]}>Edentulous Site</Text>
-              <View style={{ marginBottom: 8 }}>
-                <Text style={{ fontSize: 13, fontWeight: '600', color: '#1565C0', marginBottom: 4 }}>Occlusocervical Height (mm) <Text style={{ color: '#DC3545' }}>*</Text></Text>
-                <TextInput
-                  style={[styles.input, { borderColor: '#1565C0' }]}
-                  placeholder="e.g. 12"
-                  keyboardType="decimal-pad"
-                  maxLength={5}
-                  value={formData.occlusocervical_height}
-                  onChangeText={v => updateForm('occlusocervical_height', v)}
-                  data-testid="occlusocervical-height-input"
-                />
-              </View>
-              <View style={{ marginBottom: 8 }}>
-                <Text style={{ fontSize: 13, fontWeight: '600', color: '#333', marginBottom: 4 }}>Mesiodistal Space (mm) *</Text>
-                <TextInput
-                  style={[styles.input, { borderColor: '#1565C0' }]}
-                  placeholder="e.g. 15"
-                  keyboardType="decimal-pad"
-                  maxLength={5}
-                  value={formData.mesiodistal_space}
-                  onChangeText={v => updateForm('mesiodistal_space', v)}
-                  data-testid="mesiodistal-space-input"
-                />
-              </View>
+              {(formData.missing_teeth || []).length >= 2 ? (
+                // Per-tooth rows — each red-marked tooth gets its own oc/md inputs
+                <View style={{ marginBottom: 8 }}>
+                  <Text style={{ fontSize: 12, color: '#546E7A', marginBottom: 8 }}>
+                    Enter the measurements for each tooth marked on the FDI chart.
+                  </Text>
+                  {[...(formData.missing_teeth || [])].sort().map((tooth: string) => {
+                    const row = (formData.edentulous_site_measurements || {})[tooth] || {};
+                    const setField = (field: 'oc' | 'md', v: string) => {
+                      const next = { ...(formData.edentulous_site_measurements || {}) };
+                      next[tooth] = { ...(next[tooth] || {}), [field]: v };
+                      updateForm('edentulous_site_measurements', next);
+                    };
+                    return (
+                      <View key={`ed-${tooth}`} style={{ backgroundColor: '#FAFAFA', borderRadius: 10, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: '#ECEFF1' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                          <View style={{ backgroundColor: '#E53935', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
+                            <Text style={{ fontSize: 11, fontWeight: '800', color: '#FFF' }}>FDI {tooth}</Text>
+                          </View>
+                          <Text style={{ fontSize: 12, fontWeight: '700', color: '#37474F' }}>Measurements</Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', gap: 8 }}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 12, fontWeight: '600', color: '#1565C0', marginBottom: 4 }}>Occlusocervical Height (mm) *</Text>
+                            <TextInput
+                              style={[styles.input, { borderColor: '#1565C0' }]}
+                              placeholder="e.g. 12"
+                              keyboardType="decimal-pad"
+                              maxLength={5}
+                              value={row.oc || ''}
+                              onChangeText={(v) => setField('oc', v)}
+                              data-testid={`oc-height-${tooth}`}
+                            />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 12, fontWeight: '600', color: '#1565C0', marginBottom: 4 }}>Mesiodistal Space (mm) *</Text>
+                            <TextInput
+                              style={[styles.input, { borderColor: '#1565C0' }]}
+                              placeholder="e.g. 15"
+                              keyboardType="decimal-pad"
+                              maxLength={5}
+                              value={row.md || ''}
+                              onChangeText={(v) => setField('md', v)}
+                              data-testid={`md-space-${tooth}`}
+                            />
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : (
+                // Single-tooth (or nothing marked yet) — current fields unchanged
+                <>
+                  <View style={{ marginBottom: 8 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: '#1565C0', marginBottom: 4 }}>Occlusocervical Height (mm) <Text style={{ color: '#DC3545' }}>*</Text></Text>
+                    <TextInput
+                      style={[styles.input, { borderColor: '#1565C0' }]}
+                      placeholder="e.g. 12"
+                      keyboardType="decimal-pad"
+                      maxLength={5}
+                      value={formData.occlusocervical_height}
+                      onChangeText={v => updateForm('occlusocervical_height', v)}
+                      data-testid="occlusocervical-height-input"
+                    />
+                  </View>
+                  <View style={{ marginBottom: 8 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: '#333', marginBottom: 4 }}>Mesiodistal Space (mm) *</Text>
+                    <TextInput
+                      style={[styles.input, { borderColor: '#1565C0' }]}
+                      placeholder="e.g. 15"
+                      keyboardType="decimal-pad"
+                      maxLength={5}
+                      value={formData.mesiodistal_space}
+                      onChangeText={v => updateForm('mesiodistal_space', v)}
+                      data-testid="mesiodistal-space-input"
+                    />
+                  </View>
+                </>
+              )}
               <Dropdown label="Ridge Contour" value={formData.ridge_contour}
                 options={RIDGE_CONTOUR_OPTIONS} onChange={v => updateForm('ridge_contour', v)} />
               <Dropdown label="Soft Tissue Thickness" value={formData.soft_tissue_thickness}
