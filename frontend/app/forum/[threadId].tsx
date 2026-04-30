@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, Image, Platform, Modal, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, Image, Platform, Modal, Pressable, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../contexts/AuthContext';
 import api, { getToken } from '../../utils/api';
 import { BACKEND_URL } from '../../utils/config';
@@ -87,6 +88,91 @@ export default function ForumThreadScreen() {
   const [closeNote, setCloseNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [attachPreviewUrls, setAttachPreviewUrls] = useState<Record<string, string>>({});
+  const [showAttachSheet, setShowAttachSheet] = useState(false);
+
+  // ── Attachment helpers ─────────────────────────────────────────
+  const uploadAsset = async (asset: { uri: string; name: string; mimeType?: string; size?: number }) => {
+    if ((asset.size || 0) > 10 * 1024 * 1024) {
+      Alert.alert('Too large', 'Attachment must be 10 MB or smaller.');
+      return;
+    }
+    const form = new FormData();
+    if (Platform.OS === 'web') {
+      const blob = await fetch(asset.uri).then(r => r.blob());
+      form.append('file', blob, asset.name || 'file');
+    } else {
+      form.append('file', { uri: asset.uri, name: asset.name || 'file', type: asset.mimeType || 'application/octet-stream' } as any);
+    }
+    const up = await api.post('/forum/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+    setAttachments(prev => [...prev, up.data]);
+  };
+
+  const pickFromCamera = async () => {
+    setShowAttachSheet(false);
+    try {
+      if (Platform.OS !== 'web') {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) {
+          Alert.alert('Camera permission needed', 'Enable camera access to capture clinical photos.');
+          return;
+        }
+      }
+      const res = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.85,
+        allowsEditing: false,
+      });
+      if (res.canceled) return;
+      const a = res.assets?.[0];
+      if (!a) return;
+      const filename = a.fileName || `photo_${Date.now()}.jpg`;
+      await uploadAsset({ uri: a.uri, name: filename, mimeType: a.mimeType || 'image/jpeg', size: a.fileSize });
+    } catch (e: any) {
+      Alert.alert('Camera failed', e?.response?.data?.detail || e?.message || 'Unknown error');
+    }
+  };
+
+  const pickFromLibrary = async () => {
+    setShowAttachSheet(false);
+    try {
+      if (Platform.OS !== 'web') {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) {
+          Alert.alert('Permission needed', 'Enable photo library access to attach images.');
+          return;
+        }
+      }
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.85,
+        allowsEditing: false,
+      });
+      if (res.canceled) return;
+      const a = res.assets?.[0];
+      if (!a) return;
+      const filename = a.fileName || `image_${Date.now()}.jpg`;
+      await uploadAsset({ uri: a.uri, name: filename, mimeType: a.mimeType || 'image/jpeg', size: a.fileSize });
+    } catch (e: any) {
+      Alert.alert('Library access failed', e?.response?.data?.detail || e?.message || 'Unknown error');
+    }
+  };
+
+  const pickFromFiles = async () => {
+    setShowAttachSheet(false);
+    try {
+      const res = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'image/*'],
+        multiple: false,
+        copyToCacheDirectory: true,
+      });
+      if (res.canceled) return;
+      const a = res.assets?.[0];
+      if (!a) return;
+      await uploadAsset({ uri: a.uri, name: a.name || 'file', mimeType: a.mimeType, size: a.size });
+    } catch (e: any) {
+      Alert.alert('File pick failed', e?.response?.data?.detail || e?.message || 'Unknown error');
+    }
+  };
 
   const load = useCallback(async () => {
     if (!threadId) return;
@@ -122,33 +208,7 @@ export default function ForumThreadScreen() {
     })();
   }, [posts]);
 
-  const pickAttachment = async () => {
-    try {
-      const res = await DocumentPicker.getDocumentAsync({
-        type: ['image/*', 'application/pdf'],
-        multiple: false,
-        copyToCacheDirectory: true,
-      });
-      if (res.canceled) return;
-      const asset = res.assets?.[0];
-      if (!asset) return;
-      if ((asset.size || 0) > 10 * 1024 * 1024) {
-        Alert.alert('Too large', 'Attachment must be 10 MB or smaller.');
-        return;
-      }
-      const form = new FormData();
-      if (Platform.OS === 'web') {
-        const blob = await fetch(asset.uri).then(r => r.blob());
-        form.append('file', blob, asset.name || 'file');
-      } else {
-        form.append('file', { uri: asset.uri, name: asset.name || 'file', type: asset.mimeType || 'application/octet-stream' } as any);
-      }
-      const up = await api.post('/forum/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } });
-      setAttachments(prev => [...prev, up.data]);
-    } catch (e: any) {
-      Alert.alert('Upload failed', e?.response?.data?.detail || e?.message || 'Unknown error');
-    }
-  };
+  const pickAttachment = () => setShowAttachSheet(true);
 
   const submitPost = async () => {
     const body = composer.trim();
@@ -241,6 +301,11 @@ export default function ForumThreadScreen() {
 
   return (
     <SafeAreaView style={s.screen} edges={['top']}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="arrow-back" size={24} color="#37474F" />
@@ -448,6 +513,50 @@ export default function ForumThreadScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* Attachment-source action sheet */}
+      <Modal visible={showAttachSheet} transparent animationType="fade" onRequestClose={() => setShowAttachSheet(false)}>
+        <Pressable style={s.overlay} onPress={() => setShowAttachSheet(false)}>
+          <Pressable style={s.sheetCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={s.sheetTitle}>Attach to your reply</Text>
+            <Text style={s.sheetSub}>Max 10 MB per file. Images and PDFs only.</Text>
+            <TouchableOpacity style={s.sheetOption} onPress={pickFromCamera} data-testid="attach-camera-btn">
+              <View style={[s.sheetIcon, { backgroundColor: '#E3F2FD' }]}>
+                <Ionicons name="camera" size={22} color="#1565C0" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.sheetLabel}>Take Photo</Text>
+                <Text style={s.sheetHelp}>Use your camera (e.g. clinical photograph)</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#B0BEC5" />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.sheetOption} onPress={pickFromLibrary} data-testid="attach-library-btn">
+              <View style={[s.sheetIcon, { backgroundColor: '#F3E5F5' }]}>
+                <Ionicons name="images" size={22} color="#7B1FA2" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.sheetLabel}>Photo Library</Text>
+                <Text style={s.sheetHelp}>Choose an image from your gallery</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#B0BEC5" />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.sheetOption} onPress={pickFromFiles} data-testid="attach-files-btn">
+              <View style={[s.sheetIcon, { backgroundColor: '#FFF3E0' }]}>
+                <Ionicons name="document-attach" size={22} color="#E65100" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.sheetLabel}>PDF or Document</Text>
+                <Text style={s.sheetHelp}>Choose a PDF or image from Files / cloud storage</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#B0BEC5" />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.sheetCancel} onPress={() => setShowAttachSheet(false)}>
+              <Text style={s.sheetCancelTxt}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -521,4 +630,14 @@ const s = StyleSheet.create({
   cancelTxt: { fontSize: 14, fontWeight: '600', color: '#546E7A' },
   confirmCloseBtn: { flex: 1.4, paddingVertical: 12, borderRadius: 8, backgroundColor: '#E65100', alignItems: 'center' },
   confirmCloseTxt: { fontSize: 14, fontWeight: '700', color: '#FFF' },
+  // ── Attachment action sheet ─────────────────────────────────
+  sheetCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 18, width: '100%', maxWidth: 440 },
+  sheetTitle: { fontSize: 17, fontWeight: '700', color: '#37474F' },
+  sheetSub: { fontSize: 12, color: '#90A4AE', marginBottom: 14, marginTop: 2 },
+  sheetOption: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 4, borderTopWidth: 1, borderTopColor: '#F5F5F5' },
+  sheetIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  sheetLabel: { fontSize: 14, fontWeight: '700', color: '#37474F' },
+  sheetHelp: { fontSize: 12, color: '#78909C', marginTop: 2 },
+  sheetCancel: { marginTop: 14, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: '#CFD8DC', alignItems: 'center' },
+  sheetCancelTxt: { fontSize: 14, fontWeight: '600', color: '#546E7A' },
 });
