@@ -35,26 +35,58 @@ function prettyField(field: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export function RecentActivityWidget({ router, limit = 5 }: { router: any; limit?: number }) {
+export function RecentActivityWidget({ router, limit = 5, studentId }: { router: any; limit?: number; studentId?: string }) {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<ActivityEntry[]>([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const fetchPage = useCallback(async (skip: number) => {
+    const params = new URLSearchParams({ limit: String(limit), skip: String(skip) });
+    if (studentId) params.set('student_id', studentId);
+    const res = await api.get(`/procedures/recent-activity?${params.toString()}`);
+    return (res.data.activities || []).filter(
+      (a: ActivityEntry) => typeof a.new_value !== 'object' || a.new_value === null,
+    );
+  }, [limit, studentId]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get(`/procedures/recent-activity?limit=${limit}`);
-      // Hide bulk "wrote whole dict" entries — only show granular ones
-      const filtered = (res.data.activities || []).filter(
-        (a: ActivityEntry) => typeof a.new_value !== 'object' || a.new_value === null,
-      );
-      setItems(filtered.slice(0, limit));
+      const first = await fetchPage(0);
+      setItems(first);
+      // probe whether there's a next page (cheap: ask for 1 row at the next offset)
+      try {
+        const params = new URLSearchParams({ limit: '1', skip: String(limit) });
+        if (studentId) params.set('student_id', studentId);
+        const probe = await api.get(`/procedures/recent-activity?${params.toString()}`);
+        setHasMore((probe.data.activities || []).length > 0);
+      } catch { setHasMore(false); }
     } catch (e) {
-      // Silently hide widget on auth/permission errors
       setItems([]);
+      setHasMore(false);
     } finally {
       setLoading(false);
     }
-  }, [limit]);
+  }, [fetchPage, limit, studentId]);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const next = await fetchPage(items.length);
+      setItems(prev => [...prev, ...next]);
+      // probe next page
+      try {
+        const params = new URLSearchParams({ limit: '1', skip: String(items.length + next.length) });
+        if (studentId) params.set('student_id', studentId);
+        const probe = await api.get(`/procedures/recent-activity?${params.toString()}`);
+        setHasMore((probe.data.activities || []).length > 0);
+      } catch { setHasMore(false); }
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [fetchPage, items.length, hasMore, loadingMore, studentId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -118,6 +150,23 @@ export function RecentActivityWidget({ router, limit = 5 }: { router: any; limit
             );
           })
         )}
+        {!loading && hasMore && (
+          <TouchableOpacity
+            style={styles.showMoreBtn}
+            onPress={loadMore}
+            disabled={loadingMore}
+            data-testid="recent-activity-show-more"
+          >
+            {loadingMore ? (
+              <ActivityIndicator size="small" color="#1A73E8" />
+            ) : (
+              <>
+                <Ionicons name="chevron-down" size={14} color="#1A73E8" />
+                <Text style={styles.showMoreText}>Show more</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -156,4 +205,11 @@ const styles = StyleSheet.create({
   oldVal: { fontSize: 11, color: '#B0BEC5', textDecorationLine: 'line-through', maxWidth: '42%' },
   newVal: { fontSize: 11, color: '#2E7D32', fontWeight: '600', maxWidth: '42%' },
   rowMeta: { fontSize: 10, color: '#90A4AE', marginTop: 2 },
+  showMoreBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, paddingVertical: 10, marginTop: 6, marginBottom: 4,
+    borderRadius: 10, backgroundColor: '#E3F2FD',
+    borderWidth: 1, borderColor: '#BBDEFB',
+  },
+  showMoreText: { fontSize: 12, fontWeight: '700', color: '#1A73E8', letterSpacing: 0.2 },
 });

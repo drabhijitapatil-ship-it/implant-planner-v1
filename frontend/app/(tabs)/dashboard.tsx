@@ -512,30 +512,8 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
         </View>
       )}
 
-      {/* Student Performance */}
-      {studentStats.length > 0 && (
-        <View style={s.section}>
-          <View style={s.sectionHeader}>
-            <Ionicons name="school-outline" size={18} color="#1565C0" />
-            <Text style={[s.sectionTitle, { color: '#1565C0' }]}>Student Performance</Text>
-          </View>
-          {studentStats.filter((st: any) => st.student_name).map((st: any, idx: number) => (
-            <View key={idx} style={s.perfCard}>
-              <View style={s.perfRank}>
-                <Text style={s.perfRankText}>#{idx + 1}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.perfName}>{st.student_name}</Text>
-                <View style={s.perfStats}>
-                  <View style={s.perfChip}><Text style={[s.perfChipText, { color: '#1A73E8' }]}>{st.total} total</Text></View>
-                  <View style={s.perfChip}><Text style={[s.perfChipText, { color: '#4CAF50' }]}>{st.completed} done</Text></View>
-                  <View style={s.perfChip}><Text style={[s.perfChipText, { color: '#FF9800' }]}>{st.active} active</Text></View>
-                </View>
-              </View>
-            </View>
-          ))}
-        </View>
-      )}
+      {/* Student Performance — top performers, paginated 5-at-a-time, tappable */}
+      {studentStats.length > 0 && <StudentPerformanceSection rows={studentStats.filter((st: any) => st.student_name)} router={router} />}
 
       {/* Quick Actions */}
       <View style={s.section}>
@@ -568,6 +546,74 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
     </>
   );
 }
+
+// ── Student Performance Section (interactive + Show More) ─────────────
+function StudentPerformanceSection({ rows, router }: { rows: any[]; router: any }) {
+  const [visible, setVisible] = useState(5);
+  const shown = rows.slice(0, visible);
+  const remaining = Math.max(0, rows.length - visible);
+  const hasMore = remaining > 0;
+  const showLess = visible > 5;
+  return (
+    <View style={s.section}>
+      <View style={s.sectionHeader}>
+        <Ionicons name="school-outline" size={18} color="#1565C0" />
+        <Text style={[s.sectionTitle, { color: '#1565C0' }]}>Student Performance</Text>
+      </View>
+      {shown.map((st: any, idx: number) => {
+        const sid = st.student_id;
+        const onPress = sid ? () => router.push(`/admin/student/${sid}`) : undefined;
+        return (
+          <TouchableOpacity
+            key={`perf-${idx}`}
+            style={s.perfCard}
+            activeOpacity={onPress ? 0.7 : 1}
+            onPress={onPress}
+            data-testid={`student-perf-${idx}`}
+            accessibilityRole="button"
+          >
+            <View style={s.perfRank}><Text style={s.perfRankText}>#{idx + 1}</Text></View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.perfName}>{st.student_name}</Text>
+              <View style={s.perfStats}>
+                <View style={s.perfChip}><Text style={[s.perfChipText, { color: '#1A73E8' }]}>{st.total} total</Text></View>
+                <View style={s.perfChip}><Text style={[s.perfChipText, { color: '#4CAF50' }]}>{st.completed} done</Text></View>
+                <View style={s.perfChip}><Text style={[s.perfChipText, { color: '#FF9800' }]}>{st.active} active</Text></View>
+              </View>
+            </View>
+            {onPress && <Ionicons name="chevron-forward" size={18} color="#B0BEC5" />}
+          </TouchableOpacity>
+        );
+      })}
+      {(hasMore || showLess) && (
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+          {hasMore && (
+            <TouchableOpacity
+              style={[s.showMoreBtn, { flex: 1 }]}
+              onPress={() => setVisible(v => v + 5)}
+              data-testid="student-perf-show-more"
+            >
+              <Ionicons name="chevron-down" size={14} color="#1A73E8" />
+              <Text style={s.showMoreText}>Show more ({Math.min(5, remaining)} of {remaining})</Text>
+            </TouchableOpacity>
+          )}
+          {showLess && (
+            <TouchableOpacity
+              style={[s.showMoreBtn, { flex: 1, backgroundColor: '#ECEFF1' }]}
+              onPress={() => setVisible(5)}
+              data-testid="student-perf-show-less"
+            >
+              <Ionicons name="chevron-up" size={14} color="#546E7A" />
+              <Text style={[s.showMoreText, { color: '#546E7A' }]}>Show less</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
+
 
 // ── Stat Card Component ───────────────────────────────────
 function StatCard({ label, value, color, icon, onPress }: { label: string; value: number | string; color: string; icon: string; onPress?: () => void }) {
@@ -748,6 +794,15 @@ const s = StyleSheet.create({
   perfStats: { flexDirection: 'row', gap: 8, marginTop: 4 },
   perfChip: { backgroundColor: '#F5F7FA', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
   perfChipText: { fontSize: 10, fontWeight: '600' },
+
+  // Show more / less button used by Student Performance + Recent Activity
+  showMoreBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, paddingVertical: 10, marginTop: 4,
+    borderRadius: 10, backgroundColor: '#E3F2FD',
+    borderWidth: 1, borderColor: '#BBDEFB',
+  },
+  showMoreText: { fontSize: 12, fontWeight: '700', color: '#1A73E8', letterSpacing: 0.2 },
 
   // Quick Actions (InCharge)
   quickActions: { flexDirection: 'row', gap: 10 },
