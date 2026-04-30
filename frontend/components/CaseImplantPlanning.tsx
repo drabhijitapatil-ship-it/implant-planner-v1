@@ -562,6 +562,8 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
   const [saving, setSaving] = useState(false);
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  /** One-shot tooth pre-selection when opening the Add-Implant modal from a "Pending" card. */
+  const [pendingPreset, setPendingPreset] = useState<string | undefined>(undefined);
   const [expandedProtocol, setExpandedProtocol] = useState<number | null>(null);
   // Bridge prompt — surfaced after a save reveals a new pontic between implants.
   const [bridgePrompt, setBridgePrompt] = useState<BridgeCandidate | null>(null);
@@ -827,10 +829,39 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
         </View>
       )}
 
+      {canEdit && plans.length < 6 && Array.isArray(missingTeeth) && missingTeeth.length > 0 && (() => {
+        const planned = new Set(plans.map(p => p.position));
+        const pending = missingTeeth.filter(t => !planned.has(t));
+        if (pending.length === 0) return null;
+        return (
+          <View style={st.pendingWrap} data-testid="pending-implant-teeth">
+            <View style={st.pendingHeader}>
+              <Ionicons name="alert-circle-outline" size={14} color="#E65100" />
+              <Text style={st.pendingHeaderText}>Pending Implant Selection</Text>
+              <Text style={st.pendingHint}>Tap a tooth to start its implant plan</Text>
+            </View>
+            <View style={st.pendingRow}>
+              {pending.sort().map(t => (
+                <TouchableOpacity
+                  key={`pending-${t}`}
+                  style={st.pendingChip}
+                  onPress={() => { setEditingIdx(null); setPendingPreset(t); setShowAddModal(true); }}
+                  data-testid={`pending-implant-tooth-${t}`}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="add-circle" size={14} color="#E65100" />
+                  <Text style={st.pendingChipText}>FDI {t}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        );
+      })()}
+
       {canEdit && plans.length < 6 && (
         <TouchableOpacity
           style={st.addButton}
-          onPress={() => { setEditingIdx(null); setShowAddModal(true); }}
+          onPress={() => { setEditingIdx(null); setPendingPreset(undefined); setShowAddModal(true); }}
           disabled={saving}
           data-testid="add-implant-btn"
         >
@@ -848,10 +879,11 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
       {/* Add/Edit Modal */}
       <ImplantPlanModal
         visible={showAddModal}
-        onClose={() => { setShowAddModal(false); setEditingIdx(null); }}
+        onClose={() => { setShowAddModal(false); setEditingIdx(null); setPendingPreset(undefined); }}
         onSave={handleAddImplant}
         systems={systems}
         toothRecs={toothRecs}
+        presetPosition={pendingPreset}
         usedPositions={editingIdx !== null ? usedPositions.filter((_, i) => i !== editingIdx) : usedPositions}
         editItem={editingIdx !== null ? plans[editingIdx] : undefined}
         medicalAssessment={medicalAssessment}
@@ -948,16 +980,27 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
 }
 
 // ── Add/Edit Implant Modal Component ───────────────────────
-function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPositions, editItem, medicalAssessment, procedureType, procedureId, allowedTeeth }: {
+function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPositions, editItem, medicalAssessment, procedureType, procedureId, allowedTeeth, presetPosition }: {
   visible: boolean; onClose: () => void; onSave: (item: ImplantPlanItem) => void;
   systems: ImplantSystem[]; toothRecs: Record<string,any>; usedPositions: string[];
   editItem?: ImplantPlanItem; medicalAssessment?: Record<string, string>;
   procedureType?: string; procedureId: string;
   /** When provided, only teeth in this list can be selected in the tooth picker. */
   allowedTeeth?: string[];
+  /** Optional tooth to pre-select when opening the modal (from Phase 1 Step 1 missing-teeth quick-click). */
+  presetPosition?: string;
 }) {
   const [step, setStep] = useState(1);
   const [position, setPosition] = useState('');
+
+  // When the modal opens freshly (no editItem) with a presetPosition provided,
+  // auto-fill the tooth position so the student skips the picker step.
+  useEffect(() => {
+    if (!visible) return;
+    if (editItem) { setPosition(editItem.position || ''); return; }
+    if (presetPosition) setPosition(presetPosition);
+    else setPosition('');
+  }, [visible, presetPosition, editItem]);
   const [mode, setMode] = useState<'choose'|'suggest'>('choose');
   const [selectedSystem, setSelectedSystem] = useState<ImplantSystem | null>(null);
   const [boneWidth, setBoneWidth] = useState('');
@@ -2082,6 +2125,24 @@ const st = StyleSheet.create({
   emptySubtext: { fontSize: 12, color: '#BBB' },
   addButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginHorizontal: 16, marginTop: 12, padding: 14, borderRadius: 12, borderWidth: 2, borderColor: '#1E88E5', borderStyle: 'dashed' },
   addButtonText: { fontSize: 14, fontWeight: '600', color: '#1E88E5' },
+
+  // "Pending Implant Selection" block — quick-start cards seeded from Phase 1 missing teeth
+  pendingWrap: {
+    marginHorizontal: 16, marginTop: 12, padding: 12,
+    backgroundColor: '#FFF8E1', borderRadius: 12,
+    borderWidth: 1, borderColor: '#FFD54F',
+  },
+  pendingHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' },
+  pendingHeaderText: { fontSize: 12, fontWeight: '800', color: '#E65100', letterSpacing: 0.3 },
+  pendingHint: { fontSize: 10, color: '#8D6E63', fontStyle: 'italic', flex: 1, textAlign: 'right' },
+  pendingRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  pendingChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: 999, borderWidth: 1.5, borderColor: '#FFB74D',
+    backgroundColor: '#FFF3E0',
+  },
+  pendingChipText: { fontSize: 11, fontWeight: '800', color: '#E65100', letterSpacing: 0.3 },
 });
 
 const ms = StyleSheet.create({
