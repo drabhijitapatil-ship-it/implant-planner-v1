@@ -89,6 +89,8 @@ export default function ForumListScreen() {
   useEffect(() => {
     if (isNurse) return;
     fetchThreads();
+    // Stamp last-seen-at timestamp to clear the hamburger red dot.
+    api.post('/forum/mark-seen').catch(() => {});
   }, [fetchThreads, isNurse]);
 
   useFocusEffect(useCallback(() => { if (!isNurse) fetchThreads(); }, [fetchThreads, isNurse]));

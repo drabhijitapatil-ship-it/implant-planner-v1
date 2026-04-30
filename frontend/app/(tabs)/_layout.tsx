@@ -29,6 +29,7 @@ function DrawerMenu({
   onNavigate,
   onLogout,
   hasUnseenWhatsNew,
+  hasUnreadForum,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -40,6 +41,7 @@ function DrawerMenu({
   onNavigate: (route: string) => void;
   onLogout: () => void;
   hasUnseenWhatsNew: boolean;
+  hasUnreadForum: boolean;
 }) {
   const insets = useSafeAreaInsets();
 
@@ -107,6 +109,9 @@ function DrawerMenu({
               <Text style={d.menuLabel}>{item.label}</Text>
               {item.key === 'profile' && hasUnseenWhatsNew && (
                 <View style={badgeStyles.reddotInline} testID="drawer-profile-reddot" />
+              )}
+              {item.key === 'forum' && hasUnreadForum && (
+                <View style={badgeStyles.reddotInline} testID="drawer-forum-reddot" />
               )}
               <Ionicons name="chevron-forward" size={18} color="#B0BEC5" />
             </TouchableOpacity>
@@ -201,6 +206,8 @@ export default function TabsLayout() {
   // Red-dot indicator on the hamburger + "My Profile" row when the user has
   // unseen changelog entries. Cleared when they ack (/whatsnew GET returns 0).
   const [hasUnseenWhatsNew, setHasUnseenWhatsNew] = useState(false);
+  // Red-dot indicator for Discussion Forum activity since user's last visit.
+  const [hasUnreadForum, setHasUnreadForum] = useState(false);
 
   const role = user?.role;
   const isAdmin = role === 'administrator' || role === 'implant_incharge';
@@ -222,18 +229,29 @@ export default function TabsLayout() {
     }
   }, []);
 
+  const fetchForumUnread = useCallback(async () => {
+    if (isNurse) { setHasUnreadForum(false); return; }
+    try {
+      const res = await api.get('/forum/unread-summary');
+      setHasUnreadForum(!!res.data?.has_unread);
+    } catch {
+      setHasUnreadForum(false);
+    }
+  }, [isNurse]);
+
   useEffect(() => {
     fetchUnreadCount();
     fetchWhatsNewIndicator();
-    const interval = setInterval(fetchUnreadCount, 30000);
+    fetchForumUnread();
+    const interval = setInterval(() => { fetchUnreadCount(); fetchForumUnread(); }, 30000);
     return () => clearInterval(interval);
-  }, [fetchUnreadCount, fetchWhatsNewIndicator]);
+  }, [fetchUnreadCount, fetchWhatsNewIndicator, fetchForumUnread]);
 
   // Re-check on drawer open (catches the case where user opens What's new from
   // Profile, taps "Got it" elsewhere, then returns).
   useEffect(() => {
-    if (drawerOpen) fetchWhatsNewIndicator();
-  }, [drawerOpen, fetchWhatsNewIndicator]);
+    if (drawerOpen) { fetchWhatsNewIndicator(); fetchForumUnread(); }
+  }, [drawerOpen, fetchWhatsNewIndicator, fetchForumUnread]);
 
   const roleName = (role || '').replace(/_/g, ' ');
 
@@ -256,7 +274,7 @@ export default function TabsLayout() {
     >
       <View>
         <Ionicons name="menu" size={26} color="#263238" />
-        {hasUnseenWhatsNew && (
+        {(hasUnseenWhatsNew || hasUnreadForum) && (
           <View style={badgeStyles.reddot} data-testid="profile-whatsnew-reddot" />
         )}
       </View>
@@ -276,6 +294,7 @@ export default function TabsLayout() {
         onNavigate={handleNavigate}
         onLogout={handleLogout}
         hasUnseenWhatsNew={hasUnseenWhatsNew}
+        hasUnreadForum={hasUnreadForum}
       />
       <Tabs
         screenOptions={{
