@@ -2234,6 +2234,9 @@ export default function ProcedureDetailScreen() {
               patientId={procedure.patient_id}
               procedureDate={procedure.procedure_date}
               missingTeeth={procedure.missing_teeth}
+              edentulousSiteMeasurements={procedure.edentulous_site_measurements}
+              defaultOcclusocervical={procedure.occlusocervical_height}
+              defaultMesiodistal={procedure.mesiodistal_space}
             />
           </View>
         )}
@@ -2394,6 +2397,9 @@ export default function ProcedureDetailScreen() {
             patientId={procedure.patient_id}
             procedureDate={procedure.procedure_date}
             missingTeeth={procedure.missing_teeth}
+            edentulousSiteMeasurements={procedure.edentulous_site_measurements}
+            defaultOcclusocervical={procedure.occlusocervical_height}
+            defaultMesiodistal={procedure.mesiodistal_space}
           />
         )}
 

@@ -715,6 +715,9 @@ export default function NewProcedureScreen() {
             medicalAssessment={formData.medical_assessment}
             teethPresent={formData.teeth_present}
             missingTeeth={formData.missing_teeth}
+            edentulousSiteMeasurements={formData.edentulous_site_measurements}
+            defaultOcclusocervical={formData.occlusocervical_height}
+            defaultMesiodistal={formData.mesiodistal_space}
             onBridgeConfirmed={async (info) => {
               // Persist the default prosthesis on the procedure so Phase 2 can pre-fill it.
               // Student edits draft procedures via PUT (edit-fields is reviewer-only).
