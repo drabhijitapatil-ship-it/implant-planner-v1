@@ -316,7 +316,7 @@ export default function ForumThreadScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 140 }}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }} keyboardShouldPersistTaps="handled">
         {/* Case Summary */}
         <View style={s.summaryCard}>
           <View style={s.summaryHeader}>
@@ -485,31 +485,34 @@ export default function ForumThreadScreen() {
       <Modal visible={showClose} transparent animationType="fade" onRequestClose={() => setShowClose(false)}>
         <Pressable style={s.overlay} onPress={() => setShowClose(false)}>
           <Pressable style={s.modalCard} onPress={(e) => e.stopPropagation()}>
-            <Text style={s.modalTitle}>Close Discussion</Text>
-            <Text style={s.modalSub}>Choose a reason:</Text>
-            {CLOSE_REASONS.map(r => (
-              <TouchableOpacity key={r.key} style={[s.reasonRow, closeReason === r.key && s.reasonRowOn]} onPress={() => setCloseReason(r.key)}>
-                <View style={[s.radio, closeReason === r.key && s.radioOn]}>
-                  {closeReason === r.key && <View style={s.radioDot} />}
-                </View>
-                <Text style={s.reasonTxt}>{r.label}</Text>
-              </TouchableOpacity>
-            ))}
-            <TextInput
-              style={[s.input, { borderWidth: 1, borderColor: '#CFD8DC', marginTop: 10, padding: 10, borderRadius: 8, minHeight: 60 }]}
-              placeholder="Optional note (visible to participants)"
-              value={closeNote}
-              onChangeText={setCloseNote}
-              multiline
-            />
-            <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
-              <TouchableOpacity style={s.cancelBtn} onPress={() => setShowClose(false)}>
-                <Text style={s.cancelTxt}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={s.confirmCloseBtn} onPress={closeThread} data-testid="forum-close-confirm-btn">
-                <Text style={s.confirmCloseTxt}>Close Discussion</Text>
-              </TouchableOpacity>
-            </View>
+            <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <Text style={s.modalTitle}>Close Discussion</Text>
+              <Text style={s.modalSub}>Choose a reason:</Text>
+              {CLOSE_REASONS.map(r => (
+                <TouchableOpacity key={r.key} style={[s.reasonRow, closeReason === r.key && s.reasonRowOn]} onPress={() => setCloseReason(r.key)}>
+                  <View style={[s.radio, closeReason === r.key && s.radioOn]}>
+                    {closeReason === r.key && <View style={s.radioDot} />}
+                  </View>
+                  <Text style={s.reasonTxt}>{r.label}</Text>
+                </TouchableOpacity>
+              ))}
+              <TextInput
+                style={s.closeNoteInput}
+                placeholder="Optional note (visible to participants)"
+                placeholderTextColor="#90A4AE"
+                value={closeNote}
+                onChangeText={setCloseNote}
+                multiline
+              />
+              <View style={s.modalActionsRow}>
+                <TouchableOpacity style={s.cancelBtn} onPress={() => setShowClose(false)}>
+                  <Text style={s.cancelTxt}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.confirmCloseBtn} onPress={closeThread} data-testid="forum-close-confirm-btn">
+                  <Text style={s.confirmCloseTxt}>Close Discussion</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
@@ -606,7 +609,7 @@ const s = StyleSheet.create({
   verifyBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 14, backgroundColor: '#F5F5F5' },
   verifyBtnOn: { backgroundColor: '#C8E6C9' },
   verifyBtnTxt: { fontSize: 11, fontWeight: '700', color: '#78909C' },
-  composer: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: '#FFF', padding: 10, borderTopWidth: 1, borderTopColor: '#ECEFF1' },
+  composer: { backgroundColor: '#FFF', padding: 10, borderTopWidth: 1, borderTopColor: '#ECEFF1' },
   attachedRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 8 },
   attachedChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#E3F2FD', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, maxWidth: 200 },
   attachedTxt: { fontSize: 11, color: '#1565C0', flex: 1 },
@@ -617,7 +620,7 @@ const s = StyleSheet.create({
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
   errorTxt: { fontSize: 14, color: '#C62828', marginTop: 10, textAlign: 'center' },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  modalCard: { backgroundColor: '#FFF', borderRadius: 14, padding: 20, width: '100%', maxWidth: 440 },
+  modalCard: { backgroundColor: '#FFF', borderRadius: 14, padding: 20, width: '100%', maxWidth: 440, maxHeight: '85%' },
   modalTitle: { fontSize: 17, fontWeight: '700', color: '#37474F', marginBottom: 4 },
   modalSub: { fontSize: 13, color: '#78909C', marginBottom: 14 },
   reasonRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: 8, marginBottom: 6 },
@@ -626,6 +629,8 @@ const s = StyleSheet.create({
   radioOn: { borderColor: '#1565C0' },
   radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#1565C0' },
   reasonTxt: { fontSize: 13, color: '#37474F', flex: 1 },
+  closeNoteInput: { borderWidth: 1, borderColor: '#CFD8DC', marginTop: 10, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8, minHeight: 60, fontSize: 14, color: '#37474F', backgroundColor: '#FAFAFA', textAlignVertical: 'top' },
+  modalActionsRow: { flexDirection: 'row', gap: 10, marginTop: 16 },
   cancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: '#CFD8DC', alignItems: 'center' },
   cancelTxt: { fontSize: 14, fontWeight: '600', color: '#546E7A' },
   confirmCloseBtn: { flex: 1.4, paddingVertical: 12, borderRadius: 8, backgroundColor: '#E65100', alignItems: 'center' },
