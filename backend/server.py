@@ -10971,6 +10971,42 @@ async def forum_toggle_watch(thread_id: str, current_user: dict = Depends(get_cu
     return {"watching": state}
 
 
+@api_router.get("/forum/unread-summary")
+async def forum_unread_summary(current_user: dict = Depends(get_current_user)):
+    """Returns count of forum threads with new activity since the user last
+    visited the forum list. Drives the red-dot indicator on the hamburger /
+    drawer 'Discussion Forum' entry. Nurses always get 0."""
+    if not _forum_can_access(current_user):
+        return {"unread_threads": 0, "has_unread": False}
+    uid = str(current_user.get("_id") or current_user.get("id"))
+    last_seen = current_user.get("forum_last_seen_at")
+    if not isinstance(last_seen, datetime):
+        # Never visited — show dot if any open thread exists
+        last_seen = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    elif last_seen.tzinfo is None:
+        last_seen = last_seen.replace(tzinfo=timezone.utc)
+    role = current_user.get("role")
+    query: Dict[str, Any] = {
+        "status": {"$in": ["open", "closed"]} if role not in ("implant_incharge", "administrator") else {"$ne": None},
+        "last_activity_at": {"$gt": last_seen},
+    }
+    count = await db.forum_threads.count_documents(query)
+    return {"unread_threads": count, "has_unread": count > 0}
+
+
+@api_router.post("/forum/mark-seen")
+async def forum_mark_seen(current_user: dict = Depends(get_current_user)):
+    """Stamp the user's last-visit timestamp; clears the red-dot."""
+    if not _forum_can_access(current_user):
+        return {"ok": True}
+    uid = str(current_user.get("_id") or current_user.get("id"))
+    try:
+        await db.users.update_one({"_id": ObjectId(uid)}, {"$set": {"forum_last_seen_at": datetime.now(timezone.utc)}})
+    except Exception as e:
+        logging.error(f"[forum] mark-seen update failed: {e}")
+    return {"ok": True}
+
+
 @api_router.post("/forum/upload")
 async def forum_upload_attachment(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
     if not _forum_can_access(current_user):
