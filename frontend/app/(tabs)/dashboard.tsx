@@ -515,6 +515,11 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
       {/* Student Performance — top performers, paginated 5-at-a-time, tappable */}
       {studentStats.length > 0 && <StudentPerformanceSection rows={studentStats.filter((st: any) => st.student_name)} router={router} />}
 
+      {/* Supervisor Performance — top supervisors, paginated, tappable */}
+      {(stats.supervisor_stats || []).length > 0 && (
+        <SupervisorPerformanceSection rows={(stats.supervisor_stats || []).filter((sp: any) => sp.supervisor_name)} router={router} />
+      )}
+
       {/* Quick Actions */}
       <View style={s.section}>
         <View style={s.sectionHeader}>
@@ -602,6 +607,81 @@ function StudentPerformanceSection({ rows, router }: { rows: any[]; router: any 
               style={[s.showMoreBtn, { flex: 1, backgroundColor: '#ECEFF1' }]}
               onPress={() => setVisible(5)}
               data-testid="student-perf-show-less"
+            >
+              <Ionicons name="chevron-up" size={14} color="#546E7A" />
+              <Text style={[s.showMoreText, { color: '#546E7A' }]}>Show less</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
+
+
+// ── Supervisor Performance Section (interactive + Show More) ─────────
+function SupervisorPerformanceSection({ rows, router }: { rows: any[]; router: any }) {
+  const [visible, setVisible] = useState(5);
+  const shown = rows.slice(0, visible);
+  const remaining = Math.max(0, rows.length - visible);
+  const hasMore = remaining > 0;
+  const showLess = visible > 5;
+  return (
+    <View style={s.section}>
+      <View style={s.sectionHeader}>
+        <Ionicons name="ribbon-outline" size={18} color="#6A1B9A" />
+        <Text style={[s.sectionTitle, { color: '#6A1B9A' }]}>Supervisor Performance</Text>
+      </View>
+      {shown.map((sp: any, idx: number) => {
+        const sid = sp.supervisor_id;
+        const onPress = sid ? () => router.push(`/admin/supervisor/${sid}`) : undefined;
+        const decided = (sp.approved || 0) + (sp.rejected || 0);
+        const approvalRate = decided > 0 ? Math.round(((sp.approved || 0) / decided) * 100) : null;
+        return (
+          <TouchableOpacity
+            key={`sup-perf-${idx}`}
+            style={s.perfCard}
+            activeOpacity={onPress ? 0.7 : 1}
+            onPress={onPress}
+            data-testid={`supervisor-perf-${idx}`}
+            accessibilityRole="button"
+          >
+            <View style={[s.perfRank, { backgroundColor: '#F3E5F5' }]}>
+              <Text style={[s.perfRankText, { color: '#6A1B9A' }]}>#{idx + 1}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.perfName}>{sp.supervisor_name}</Text>
+              <View style={s.perfStats}>
+                <View style={s.perfChip}><Text style={[s.perfChipText, { color: '#1A73E8' }]}>{sp.total} cases</Text></View>
+                <View style={s.perfChip}><Text style={[s.perfChipText, { color: '#4CAF50' }]}>{sp.approved} approved</Text></View>
+                <View style={s.perfChip}><Text style={[s.perfChipText, { color: '#FF9800' }]}>{sp.pending} pending</Text></View>
+                {approvalRate !== null && (
+                  <View style={s.perfChip}><Text style={[s.perfChipText, { color: '#6A1B9A' }]}>{approvalRate}% approval</Text></View>
+                )}
+              </View>
+            </View>
+            {onPress && <Ionicons name="chevron-forward" size={18} color="#B0BEC5" />}
+          </TouchableOpacity>
+        );
+      })}
+      {(hasMore || showLess) && (
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+          {hasMore && (
+            <TouchableOpacity
+              style={[s.showMoreBtn, { flex: 1, backgroundColor: '#F3E5F5', borderColor: '#CE93D8' }]}
+              onPress={() => setVisible(v => v + 5)}
+              data-testid="supervisor-perf-show-more"
+            >
+              <Ionicons name="chevron-down" size={14} color="#6A1B9A" />
+              <Text style={[s.showMoreText, { color: '#6A1B9A' }]}>Show more ({Math.min(5, remaining)} of {remaining})</Text>
+            </TouchableOpacity>
+          )}
+          {showLess && (
+            <TouchableOpacity
+              style={[s.showMoreBtn, { flex: 1, backgroundColor: '#ECEFF1' }]}
+              onPress={() => setVisible(5)}
+              data-testid="supervisor-perf-show-less"
             >
               <Ionicons name="chevron-up" size={14} color="#546E7A" />
               <Text style={[s.showMoreText, { color: '#546E7A' }]}>Show less</Text>

@@ -1544,6 +1544,7 @@ async def get_procedures(
     phase: Optional[str] = None,
     date: Optional[str] = None,
     student_id: Optional[str] = None,
+    supervisor_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
     query = {}
@@ -1572,6 +1573,9 @@ async def get_procedures(
     # (i.e. student_id AND (supervisor_id == self OR created_by_id == self)).
     if student_id and current_user["role"] in ("implant_incharge", "administrator", "supervisor"):
         query["student_id"] = student_id
+
+    if supervisor_id and current_user["role"] in ("implant_incharge", "administrator"):
+        query["supervisor_id"] = supervisor_id
     
     if phase and current_user["role"] != "nurse":
         phase_status_map = {
@@ -1789,6 +1793,216 @@ async def get_student_summary(student_id: str, current_user: dict = Depends(get_
         "kpis": kpis,
         "phase_pipeline": phase_pipeline,
         "monthly_throughput": monthly,
+    }
+
+
+# ── In-Charge / Admin: per-supervisor summary for the drill-down screen ──
+@api_router.get("/admin/supervisors/{supervisor_id}/summary")
+async def get_supervisor_summary(supervisor_id: str, current_user: dict = Depends(get_current_user)):
+    """Return profile + supervisor-specific KPIs (review-load, turnaround, peer comparison)
+    + per-phase approval distribution + monthly decisions + supervised students mini-list
+    + recent review actions. Visible only to Implant In-Charge / Administrator."""
+    if current_user.get("role") not in ("implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Only Implant In-Charge / Administrator can view supervisor summaries")
+
+    # Profile
+    profile = None
+    try:
+        u = await db.users.find_one({"_id": ObjectId(supervisor_id)})
+    except Exception:
+        u = None
+    if not u:
+        u = await db.users.find_one({"_id": supervisor_id})
+    if u:
+        profile = {
+            "id": str(u.get("_id")),
+            "name": u.get("name"),
+            "email": u.get("email"),
+            "role": u.get("role"),
+            "username": u.get("username"),
+        }
+
+    base_match: Dict[str, Any] = {"supervisor_id": supervisor_id, "archived": {"$ne": True}}
+
+    # KPI counts (supervisor's view: how many cases under them, decided how)
+    REJECTED = ["rejected", "permanently_rejected", "stage2_surgical_rejected", "stage2_prosthetic_rejected"]
+    PENDING = ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic"]
+    total = await db.procedures.count_documents(base_match)
+    approved = await db.procedures.count_documents({**base_match, "supervisor_phase1_approved": True})
+    rejected = await db.procedures.count_documents({**base_match, "status": {"$in": REJECTED}})
+    pending = await db.procedures.count_documents({**base_match, "status": {"$in": PENDING}})
+    completed = await db.procedures.count_documents({**base_match, "status": "completed"})
+    permanent_rej = await db.procedures.count_documents({**base_match, "status": "permanently_rejected"})
+
+    # Stale reviews (pending >48h since case created/submitted)
+    stale_cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
+    stale_count = await db.procedures.count_documents({
+        **base_match,
+        "status": {"$in": PENDING},
+        "created_at": {"$lt": stale_cutoff},
+    })
+
+    # Avg review-turnaround (hours): created_at -> supervisor_phase1_approved_at
+    review_times: List[float] = []
+    async for proc in db.procedures.find({**base_match, "supervisor_phase1_approved_at": {"$exists": True}}, {"created_at": 1, "supervisor_phase1_approved_at": 1}):
+        c = proc.get("created_at"); a = proc.get("supervisor_phase1_approved_at")
+        if not c or not a:
+            continue
+        if c.tzinfo is None: c = c.replace(tzinfo=timezone.utc)
+        if a.tzinfo is None: a = a.replace(tzinfo=timezone.utc)
+        delta = (a - c).total_seconds() / 3600.0
+        if 0 <= delta <= 24 * 90:  # cap at 90 days; ignore obvious data anomalies
+            review_times.append(delta)
+    avg_review_hours = round(sum(review_times) / len(review_times), 1) if review_times else None
+
+    decided = approved + rejected
+    approval_rate = round((approved / decided) * 100, 1) if decided else None
+    rejection_rate = round((rejected / decided) * 100, 1) if decided else None
+    permanent_rate = round((permanent_rej / rejected) * 100, 1) if rejected else None
+
+    kpis = {
+        "total": total,
+        "approved": approved,
+        "rejected": rejected,
+        "pending": pending,
+        "completed": completed,
+        "stale_count": stale_count,
+        "avg_review_hours": avg_review_hours,
+        "approval_rate": approval_rate,
+        "rejection_rate": rejection_rate,
+        "permanent_rejection_share": permanent_rate,
+    }
+
+    # Per-phase approval distribution
+    phase_approvals = {
+        "phase1": await db.procedures.count_documents({**base_match, "supervisor_phase1_approved": True}),
+        "phase2": await db.procedures.count_documents({**base_match, "supervisor_phase2_approved": True}),
+        "phase3": await db.procedures.count_documents({**base_match, "stage2_surgical_supervisor_approved": True}),
+        "phase4": await db.procedures.count_documents({**base_match, "stage2_prosthetic_supervisor_approved": True}),
+    }
+
+    # Monthly decisions (approvals + rejections in each of the last 6 months)
+    now = datetime.now(timezone.utc)
+    monthly: List[Dict[str, Any]] = []
+    for offset in range(5, -1, -1):
+        y, m = now.year, now.month - offset
+        while m <= 0:
+            m += 12; y -= 1
+        start = datetime(y, m, 1, tzinfo=timezone.utc)
+        end = datetime(y + 1, 1, 1, tzinfo=timezone.utc) if m == 12 else datetime(y, m + 1, 1, tzinfo=timezone.utc)
+        approvals = await db.procedures.count_documents({**base_match, "supervisor_phase1_approved_at": {"$gte": start, "$lt": end}})
+        # Rejections in window: heuristic — status flipped to rejected via edit_log timestamps; fallback: count by created_at
+        rejs = await db.procedures.count_documents({**base_match, "status": {"$in": REJECTED}, "created_at": {"$gte": start, "$lt": end}})
+        monthly.append({"label": start.strftime("%b %Y"), "approvals": approvals, "rejections": rejs})
+
+    # Supervised students top-5 (by case count under this supervisor)
+    sup_students_pipeline = [
+        {"$match": base_match},
+        {"$group": {
+            "_id": "$student_id",
+            "student_name": {"$first": "$student_name"},
+            "total": {"$sum": 1},
+            "completed": {"$sum": {"$cond": [{"$eq": ["$status", "completed"]}, 1, 0]}},
+            "active": {"$sum": {"$cond": [{"$not": {"$in": ["$status", ["completed"] + REJECTED]}}, 1, 0]}},
+        }},
+        {"$sort": {"total": -1}},
+        {"$limit": 5},
+    ]
+    supervised_students: List[Dict[str, Any]] = []
+    async for d in db.procedures.aggregate(sup_students_pipeline):
+        if not d.get("_id"):
+            continue
+        supervised_students.append({
+            "student_id": d.get("_id"),
+            "student_name": d.get("student_name", "Unknown"),
+            "total": d["total"],
+            "completed": d["completed"],
+            "active": d["active"],
+        })
+
+    # Peer comparison — compute median + percentile across all supervisors
+    peer_avg_times: List[float] = []
+    peer_rejection_rates: List[float] = []
+    async for s_doc in db.procedures.aggregate([
+        {"$match": {"supervisor_id": {"$exists": True, "$nin": [None, ""]}, "archived": {"$ne": True}}},
+        {"$group": {
+            "_id": "$supervisor_id",
+            "approved": {"$sum": {"$cond": [{"$eq": ["$supervisor_phase1_approved", True]}, 1, 0]}},
+            "rejected": {"$sum": {"$cond": [{"$in": ["$status", REJECTED]}, 1, 0]}},
+        }},
+    ]):
+        d_total = (s_doc.get("approved", 0) or 0) + (s_doc.get("rejected", 0) or 0)
+        if d_total >= 3:
+            peer_rejection_rates.append((s_doc.get("rejected", 0) / d_total) * 100)
+    # Avg-time peer pool
+    async for s_doc in db.procedures.aggregate([
+        {"$match": {"supervisor_phase1_approved_at": {"$exists": True}, "archived": {"$ne": True}}},
+        {"$project": {"supervisor_id": 1, "diff_h": {"$divide": [{"$subtract": ["$supervisor_phase1_approved_at", "$created_at"]}, 1000 * 60 * 60]}}},
+        {"$match": {"diff_h": {"$gte": 0, "$lte": 24 * 90}}},
+        {"$group": {"_id": "$supervisor_id", "avg_h": {"$avg": "$diff_h"}, "n": {"$sum": 1}}},
+        {"$match": {"n": {"$gte": 3}}},
+    ]):
+        peer_avg_times.append(s_doc["avg_h"])
+
+    def _percentile(value: Optional[float], pool: List[float], lower_is_better: bool = True) -> Optional[int]:
+        if value is None or not pool:
+            return None
+        # percentage of peers this value beats
+        if lower_is_better:
+            beats = sum(1 for x in pool if value < x)
+        else:
+            beats = sum(1 for x in pool if value > x)
+        return round((beats / len(pool)) * 100)
+
+    def _median(pool: List[float]) -> Optional[float]:
+        if not pool:
+            return None
+        sp = sorted(pool); n = len(sp)
+        return round(sp[n // 2] if n % 2 == 1 else (sp[n // 2 - 1] + sp[n // 2]) / 2, 1)
+
+    peer_comparison = {
+        "review_time_percentile": _percentile(avg_review_hours, peer_avg_times, lower_is_better=True),
+        "rejection_rate_percentile": _percentile(rejection_rate, peer_rejection_rates, lower_is_better=False),
+        "peer_median_review_hours": _median(peer_avg_times),
+        "peer_median_rejection_rate": _median(peer_rejection_rates),
+        "peer_count_review_time": len(peer_avg_times),
+        "peer_count_rejection_rate": len(peer_rejection_rates),
+    }
+
+    # Recent review actions — last 10 supervisor approval/rejection events from edit_log
+    recent_actions: List[Dict[str, Any]] = []
+    pipeline = [
+        {"$match": {"supervisor_id": supervisor_id, "edit_log": {"$exists": True, "$ne": []}}},
+        {"$project": {"_id": 0, "procedure_id": {"$toString": "$_id"}, "patient_name": 1, "status": 1, "edit_log": 1}},
+        {"$unwind": "$edit_log"},
+        {"$match": {"edit_log.edited_by": supervisor_id}},
+        {"$sort": {"edit_log.edited_at": -1}},
+        {"$limit": 10},
+        {"$project": {
+            "procedure_id": 1, "patient_name": 1, "status": 1,
+            "field": "$edit_log.field",
+            "new_value": "$edit_log.new_value",
+            "edited_at": "$edit_log.edited_at",
+        }},
+    ]
+    async for r in db.procedures.aggregate(pipeline):
+        recent_actions.append({
+            "procedure_id": r.get("procedure_id"),
+            "patient_name": r.get("patient_name"),
+            "status": r.get("status"),
+            "field": r.get("field"),
+            "new_value": str(r.get("new_value"))[:60] if r.get("new_value") is not None else None,
+            "edited_at": r.get("edited_at").isoformat() if r.get("edited_at") else None,
+        })
+
+    return {
+        "profile": profile,
+        "kpis": kpis,
+        "phase_approvals": phase_approvals,
+        "monthly_decisions": monthly,
+        "supervised_students": supervised_students,
+        "peer_comparison": peer_comparison,
+        "recent_actions": recent_actions,
     }
 
 
@@ -6906,6 +7120,31 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
                 })
             student_stats.sort(key=lambda x: x["completed"], reverse=True)
             result["student_stats"] = student_stats
+
+            # Supervisor stats — aggregate cases per supervisor with review-load metrics
+            sup_pipeline = [
+                {"$match": {"supervisor_id": {"$exists": True, "$nin": [None, ""]}}},
+                {"$group": {
+                    "_id": "$supervisor_id",
+                    "supervisor_name": {"$first": "$supervisor_name"},
+                    "total": {"$sum": 1},
+                    "approved": {"$sum": {"$cond": [{"$eq": ["$supervisor_phase1_approved", True]}, 1, 0]}},
+                    "rejected": {"$sum": {"$cond": [{"$in": ["$status", ["rejected", "permanently_rejected"]]}, 1, 0]}},
+                    "pending": {"$sum": {"$cond": [{"$in": ["$status", ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic"]]}, 1, 0]}},
+                }}
+            ]
+            supervisor_stats: List[Dict[str, Any]] = []
+            async for doc in db.procedures.aggregate(sup_pipeline):
+                supervisor_stats.append({
+                    "supervisor_id": doc.get("_id"),
+                    "supervisor_name": doc.get("supervisor_name", "Unknown"),
+                    "total": doc["total"],
+                    "approved": doc["approved"],
+                    "rejected": doc["rejected"],
+                    "pending": doc["pending"],
+                })
+            supervisor_stats.sort(key=lambda x: x["total"], reverse=True)
+            result["supervisor_stats"] = supervisor_stats
 
     return result
 
