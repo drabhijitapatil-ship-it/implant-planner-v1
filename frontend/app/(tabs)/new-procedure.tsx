@@ -10,7 +10,7 @@ import api, { getAuthFileUrl, getToken } from '../../utils/api';
 import { showUploadPicker } from '../../utils/uploadPicker';
 import { useAuth } from '../../contexts/AuthContext';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';
-import { validateImplantSelection } from '../../utils/implantValidation';
+import { validateImplantSelection, findMissingRuns, clusterLeader } from '../../utils/implantValidation';
 import {
   PROCEDURE_TYPES,
   LOADING_TYPES,
@@ -341,6 +341,8 @@ export default function NewProcedureScreen() {
                 procedure_time: proc.procedure_time || '',
                 implant_procedure_type: proc.implant_procedure_type || '',
                 teeth_present: Array.isArray(proc.teeth_present) ? proc.teeth_present : [],
+                missing_teeth: Array.isArray(proc.missing_teeth) ? proc.missing_teeth : [],
+                edentulous_site_measurements: (proc.edentulous_site_measurements && typeof proc.edentulous_site_measurements === 'object') ? proc.edentulous_site_measurements : {},
                 arch: proc.arch || '',
                 loading_type: Array.isArray(proc.loading_type) ? proc.loading_type : [],
                 prosthetic_plan: proc.prosthetic_plan || '',
@@ -1068,56 +1070,126 @@ export default function NewProcedureScreen() {
               <Text style={styles.subSectionTitle}>Intraoral Examination</Text>
               <Text style={[styles.subSectionTitle, { fontSize: 14, color: '#1565C0', marginTop: 4 }]}>Edentulous Site</Text>
               {(formData.missing_teeth || []).length >= 2 ? (
-                // Per-tooth rows — each red-marked tooth gets its own oc/md inputs
-                <View style={{ marginBottom: 8 }}>
-                  <Text style={{ fontSize: 12, color: '#546E7A', marginBottom: 8 }}>
-                    Enter the measurements for each tooth marked on the FDI chart.
-                  </Text>
-                  {[...(formData.missing_teeth || [])].sort().map((tooth: string) => {
-                    const row = (formData.edentulous_site_measurements || {})[tooth] || {};
-                    const setField = (field: 'oc' | 'md', v: string) => {
-                      const next = { ...(formData.edentulous_site_measurements || {}) };
-                      next[tooth] = { ...(next[tooth] || {}), [field]: v };
-                      updateForm('edentulous_site_measurements', next);
-                    };
-                    return (
-                      <View key={`ed-${tooth}`} style={{ backgroundColor: '#FAFAFA', borderRadius: 10, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: '#ECEFF1' }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                          <View style={{ backgroundColor: '#E53935', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
-                            <Text style={{ fontSize: 11, fontWeight: '800', color: '#FFF' }}>FDI {tooth}</Text>
+                // Cluster-aware per-tooth rows. Adjacent missing teeth in the
+                // same arch share a single Mesiodistal Space (the contiguous
+                // edentulous span), but each tooth keeps its own per-tooth
+                // Occlusocervical Height. Singletons render with both fields.
+                (() => {
+                  const runs = findMissingRuns(formData.missing_teeth || []);
+                  const setOc = (tooth: string, v: string) => {
+                    const next = { ...(formData.edentulous_site_measurements || {}) };
+                    next[tooth] = { ...(next[tooth] || {}), oc: v };
+                    updateForm('edentulous_site_measurements', next);
+                  };
+                  const setMd = (tooth: string, v: string) => {
+                    const next = { ...(formData.edentulous_site_measurements || {}) };
+                    next[tooth] = { ...(next[tooth] || {}), md: v };
+                    updateForm('edentulous_site_measurements', next);
+                  };
+                  return (
+                    <View style={{ marginBottom: 8 }}>
+                      <Text style={{ fontSize: 12, color: '#546E7A', marginBottom: 8 }}>
+                        Enter the measurements for each tooth marked on the FDI chart. Adjacent missing teeth share one mesiodistal span.
+                      </Text>
+                      {runs.map((run) => {
+                        const archLabel = run.arch === 'maxillary' ? 'Maxillary' : 'Mandibular';
+                        const positions = run.positions; // already arch-sorted
+                        const isCluster = positions.length >= 2;
+                        const leader = clusterLeader(positions) || positions[0];
+                        const leaderRow = (formData.edentulous_site_measurements || {})[leader] || {};
+                        if (!isCluster) {
+                          // Singleton tooth (Scenario 1) — both oc + md per tooth
+                          const tooth = positions[0];
+                          const row = (formData.edentulous_site_measurements || {})[tooth] || {};
+                          return (
+                            <View key={`ed-single-${tooth}`} style={{ backgroundColor: '#FAFAFA', borderRadius: 10, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: '#ECEFF1' }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                                <View style={{ backgroundColor: '#E53935', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
+                                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#FFF' }}>FDI {tooth}</Text>
+                                </View>
+                                <Text style={{ fontSize: 12, fontWeight: '700', color: '#37474F' }}>Measurements (mm)</Text>
+                              </View>
+                              <View style={{ flexDirection: 'row', gap: 8 }}>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#1565C0', marginBottom: 4 }} numberOfLines={1}>Occlusocervical Height *</Text>
+                                  <TextInput
+                                    style={[styles.input, { borderColor: '#1565C0' }]}
+                                    placeholder="e.g. 12"
+                                    keyboardType="decimal-pad"
+                                    maxLength={5}
+                                    value={row.oc || ''}
+                                    onChangeText={(v) => setOc(tooth, v)}
+                                    data-testid={`oc-height-${tooth}`}
+                                  />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#1565C0', marginBottom: 4 }} numberOfLines={1}>Mesiodistal Space *</Text>
+                                  <TextInput
+                                    style={[styles.input, { borderColor: '#1565C0' }]}
+                                    placeholder="e.g. 15"
+                                    keyboardType="decimal-pad"
+                                    maxLength={5}
+                                    value={row.md || ''}
+                                    onChangeText={(v) => setMd(tooth, v)}
+                                    data-testid={`md-space-${tooth}`}
+                                  />
+                                </View>
+                              </View>
+                            </View>
+                          );
+                        }
+                        // Cluster (Scenario 2) — one shared mesiodistal span, per-tooth oc rows
+                        return (
+                          <View key={`ed-cluster-${run.arch}-${leader}`} style={{ backgroundColor: '#FAFAFA', borderRadius: 10, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: '#ECEFF1' }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                              <Text style={{ fontSize: 12, fontWeight: '700', color: '#37474F' }}>Adjacent Missing Cluster ({archLabel})</Text>
+                              {positions.map((t) => (
+                                <View key={`pill-${t}`} style={{ backgroundColor: '#E53935', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
+                                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#FFF' }}>FDI {t}</Text>
+                                </View>
+                              ))}
+                            </View>
+                            <View style={{ marginBottom: 10 }}>
+                              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1565C0', marginBottom: 4 }} numberOfLines={1}>Mesiodistal Space — total cluster span (mm) *</Text>
+                              <TextInput
+                                style={[styles.input, { borderColor: '#1565C0' }]}
+                                placeholder="e.g. 24"
+                                keyboardType="decimal-pad"
+                                maxLength={5}
+                                value={leaderRow.md || ''}
+                                onChangeText={(v) => setMd(leader, v)}
+                                data-testid={`md-cluster-${leader}`}
+                              />
+                              <Text style={{ fontSize: 11, color: '#78909C', marginTop: 4, fontStyle: 'italic' }}>
+                                Measure between the two natural teeth bordering this missing cluster.
+                              </Text>
+                            </View>
+                            <Text style={{ fontSize: 12, fontWeight: '600', color: '#1565C0', marginBottom: 6 }}>Occlusocervical Height per tooth (mm) *</Text>
+                            {positions.map((tooth) => {
+                              const row = (formData.edentulous_site_measurements || {})[tooth] || {};
+                              return (
+                                <View key={`ed-cluster-row-${tooth}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                                  <View style={{ backgroundColor: '#E53935', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, minWidth: 56, alignItems: 'center' }}>
+                                    <Text style={{ fontSize: 11, fontWeight: '800', color: '#FFF' }}>FDI {tooth}</Text>
+                                  </View>
+                                  <TextInput
+                                    style={[styles.input, { borderColor: '#1565C0', flex: 1, marginBottom: 0 }]}
+                                    placeholder="e.g. 12"
+                                    keyboardType="decimal-pad"
+                                    maxLength={5}
+                                    value={row.oc || ''}
+                                    onChangeText={(v) => setOc(tooth, v)}
+                                    data-testid={`oc-height-${tooth}`}
+                                  />
+                                </View>
+                              );
+                            })}
                           </View>
-                          <Text style={{ fontSize: 12, fontWeight: '700', color: '#37474F' }}>Measurements (mm)</Text>
-                        </View>
-                        <View style={{ flexDirection: 'row', gap: 8 }}>
-                          <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 12, fontWeight: '600', color: '#1565C0', marginBottom: 4 }} numberOfLines={1}>Occlusocervical Height *</Text>
-                            <TextInput
-                              style={[styles.input, { borderColor: '#1565C0' }]}
-                              placeholder="e.g. 12"
-                              keyboardType="decimal-pad"
-                              maxLength={5}
-                              value={row.oc || ''}
-                              onChangeText={(v) => setField('oc', v)}
-                              data-testid={`oc-height-${tooth}`}
-                            />
-                          </View>
-                          <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 12, fontWeight: '600', color: '#1565C0', marginBottom: 4 }} numberOfLines={1}>Mesiodistal Space *</Text>
-                            <TextInput
-                              style={[styles.input, { borderColor: '#1565C0' }]}
-                              placeholder="e.g. 15"
-                              keyboardType="decimal-pad"
-                              maxLength={5}
-                              value={row.md || ''}
-                              onChangeText={(v) => setField('md', v)}
-                              data-testid={`md-space-${tooth}`}
-                            />
-                          </View>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
+                        );
+                      })}
+                    </View>
+                  );
+                })()
               ) : (
                 // Single-tooth (or nothing marked yet) — current fields unchanged
                 <>

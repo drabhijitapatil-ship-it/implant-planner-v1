@@ -30,8 +30,13 @@ const seqOf = (arch: Arch) => (arch === 'maxillary' ? MAX_SEQ : MAND_SEQ);
 /**
  * Group teeth into consecutive missing runs within each arch.
  * "Consecutive" = adjacent indices in the FDI sequence for the arch.
+ *
+ * Exported for use by the new-case form's Edentulous Site clustering UI:
+ *   • run.length === 1 → singleton (Scenario 1 — scattered missing tooth).
+ *   • run.length ≥ 2  → cluster (Scenario 2 — adjacent missing teeth share
+ *     a single mesiodistal span between the two bordering natural teeth).
  */
-function findMissingRuns(teeth: string[]): Array<{ arch: Arch; positions: string[] }> {
+export function findMissingRuns(teeth: string[]): Array<{ arch: Arch; positions: string[] }> {
   const runs: Array<{ arch: Arch; positions: string[] }> = [];
   for (const arch of ['maxillary', 'mandibular'] as Arch[]) {
     const seq = seqOf(arch);
@@ -176,3 +181,33 @@ export function describeCantileverCandidate(c: CantileverCandidate): string {
 
 export const BRIDGE_MATERIALS = ['Metal', 'Porcelain Fused to Metal', 'Zirconia'] as const;
 export type BridgeMaterial = typeof BRIDGE_MATERIALS[number];
+
+/**
+ * For a given tooth, return the sorted list of teeth in its run (cluster).
+ * Returns [] if the tooth isn't in the missing-teeth list.
+ *   • A run of length 1 means the tooth is a singleton (Scenario 1).
+ *   • A run of length ≥2 means the tooth is in a cluster (Scenario 2).
+ */
+export function clusterOfTooth(tooth: string, missingTeeth: string[]): string[] {
+  const runs = findMissingRuns(missingTeeth || []);
+  for (const r of runs) {
+    if (r.positions.includes(tooth)) {
+      // Sort by FDI sequence within its arch
+      const seq = seqOf(r.arch);
+      return [...r.positions].sort((a, b) => seq.indexOf(a) - seq.indexOf(b));
+    }
+  }
+  return [];
+}
+
+/**
+ * For a cluster, return the leader tooth (lowest FDI index in the arch
+ * sequence). The leader is the tooth that owns the shared mesiodistal
+ * value for the whole cluster. Returns null for empty input.
+ */
+export function clusterLeader(cluster: string[]): string | null {
+  if (!cluster || cluster.length === 0) return null;
+  if (cluster.length === 1) return cluster[0];
+  // cluster is already sorted by clusterOfTooth's seqOf order
+  return cluster[0];
+}

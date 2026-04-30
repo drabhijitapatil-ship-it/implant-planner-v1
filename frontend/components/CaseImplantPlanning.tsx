@@ -27,6 +27,7 @@ import {
   BRIDGE_MATERIALS,
   type BridgeMaterial,
   type BridgeCandidate,
+  clusterOfTooth,
 } from '../utils/implantValidation';
 
 // ── Drilling Protocol PDF helpers (A4, backend-rendered) ────────────────────
@@ -897,6 +898,10 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
         procedureType={procedureType}
         procedureId={procedureId}
         allowedTeeth={missingTeeth}
+        missingTeeth={missingTeeth}
+        edentulousSiteMeasurements={edentulousSiteMeasurements}
+        defaultOcclusocervical={defaultOcclusocervical}
+        defaultMesiodistal={defaultMesiodistal}
       />
 
       {/* ── Bridge nudge — fired after a save reveals an implant-supported pontic ── */}
@@ -987,7 +992,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
 }
 
 // ── Add/Edit Implant Modal Component ───────────────────────
-function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPositions, editItem, medicalAssessment, procedureType, procedureId, allowedTeeth, presetPosition, edentulousSiteMeasurements, defaultOcclusocervical, defaultMesiodistal }: {
+function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPositions, editItem, medicalAssessment, procedureType, procedureId, allowedTeeth, presetPosition, edentulousSiteMeasurements, defaultOcclusocervical, defaultMesiodistal, missingTeeth }: {
   visible: boolean; onClose: () => void; onSave: (item: ImplantPlanItem) => void;
   systems: ImplantSystem[]; toothRecs: Record<string,any>; usedPositions: string[];
   editItem?: ImplantPlanItem; medicalAssessment?: Record<string, string>;
@@ -1001,6 +1006,8 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
   /** Single-tooth fallback — used when only one tooth is marked in Phase 1. */
   defaultOcclusocervical?: string;
   defaultMesiodistal?: string;
+  /** Phase 1 missing teeth list — used to detect cluster status (Scenario 2). */
+  missingTeeth?: string[];
 }) {
   const [step, setStep] = useState(1);
   const [position, setPosition] = useState('');
@@ -1054,16 +1061,23 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
         resetForm();
         // Auto-prefill Bone Width (← mesiodistal space) and Bone Height (← occlusocervical
         // height) from Phase 1 Step 1 edentulous-site measurements for the preset tooth.
-        // This lets the student skip retyping measurements they already entered; they can
-        // still override below if CBCT differs.
+        // Cluster-awareness: when this tooth belongs to a multi-tooth cluster (Scenario 2),
+        // the cluster's md value is the TOTAL contiguous edentulous span — not the per-implant
+        // available bone width — so we skip boneWidth prefill and only carry boneHeight.
+        // The student then enters per-implant bone width manually from CBCT.
         const tooth = presetPosition;
         if (tooth) {
           setPosition(tooth);
+          const cluster = clusterOfTooth(tooth, missingTeeth || []);
+          const isInCluster = cluster.length >= 2;
           const perTooth = (edentulousSiteMeasurements || {})[tooth] || {};
-          const md = perTooth.md || defaultMesiodistal || '';
           const oc = perTooth.oc || defaultOcclusocervical || '';
-          if (md) setBoneWidth(String(md));
           if (oc) setBoneHeight(String(oc));
+          if (!isInCluster) {
+            // Singleton tooth (Scenario 1) — md is the per-implant available width.
+            const md = perTooth.md || defaultMesiodistal || '';
+            if (md) setBoneWidth(String(md));
+          }
         }
       }
     }
