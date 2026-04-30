@@ -89,6 +89,8 @@ export const CLINICAL_EXAM_GROUP = new Set([
   'Multiple Conventional Implants',
   'Implant Placement with Guided Bone Regeneration',
   'Guided Surgery',
+  'Immediate Implant',
+  'Partial Extraction Therapy',
 ]);
 
 // Procedure type groupings for conditional UI

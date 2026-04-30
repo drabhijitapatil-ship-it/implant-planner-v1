@@ -1088,9 +1088,9 @@ export default function NewProcedureScreen() {
                           </View>
                           <Text style={{ fontSize: 12, fontWeight: '700', color: '#37474F' }}>Measurements</Text>
                         </View>
-                        <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-end' }}>
                           <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 12, fontWeight: '600', color: '#1565C0', marginBottom: 4 }}>Occlusocervical Height (mm) *</Text>
+                            <Text style={{ fontSize: 12, fontWeight: '600', color: '#1565C0', marginBottom: 4, minHeight: 32 }} numberOfLines={2}>Occlusocervical Height (mm) *</Text>
                             <TextInput
                               style={[styles.input, { borderColor: '#1565C0' }]}
                               placeholder="e.g. 12"
@@ -1102,7 +1102,7 @@ export default function NewProcedureScreen() {
                             />
                           </View>
                           <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 12, fontWeight: '600', color: '#1565C0', marginBottom: 4 }}>Mesiodistal Space (mm) *</Text>
+                            <Text style={{ fontSize: 12, fontWeight: '600', color: '#1565C0', marginBottom: 4, minHeight: 32 }} numberOfLines={2}>Mesiodistal Space (mm) *</Text>
                             <TextInput
                               style={[styles.input, { borderColor: '#1565C0' }]}
                               placeholder="e.g. 15"
