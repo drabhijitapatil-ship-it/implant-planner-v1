@@ -241,6 +241,13 @@ class ProcedureCreate(BaseModel):
     chief_complaint: Optional[str] = Field("", max_length=1000)
     periodontal_status: Optional[str] = Field("", max_length=20)
     teeth_present: Optional[List[str]] = Field(default_factory=list)
+    # New: teeth marked RED on the FDI chart in Phase 1 Step 1.
+    # - Healed-edentulous procedures (Conventional Single/Multiple, GBR, Guided Surgery):
+    #   missing_teeth == teeth that will receive an implant on already-missing sites.
+    # - Extract-and-place procedures (Immediate Implant, PET):
+    #   missing_teeth == teeth present now but will be extracted in Phase 2.
+    # When present, `teeth_present` is auto-derived server-side (all 32 FDI codes minus missing_teeth).
+    missing_teeth: Optional[List[str]] = Field(default_factory=list)
     supervisor_id: str = Field(..., max_length=50)
     supervisor_name: str = Field(..., max_length=100)
     implant_incharge_id: str = Field(..., max_length=50)
@@ -266,6 +273,9 @@ class ProcedureCreate(BaseModel):
     edentulous_sites: Optional[List[str]] = None
     occlusocervical_height: Optional[str] = Field("", max_length=10)
     mesiodistal_space: Optional[str] = Field("", max_length=10)
+    # Per-tooth Edentulous-site measurements (keyed by FDI code) — used when 2+ teeth
+    # are marked missing. Structure: { "16": { "oc": 7.5, "md": 9.0 }, "17": {...} }.
+    edentulous_site_measurements: Optional[Dict[str, Dict[str, Any]]] = None
     arch_condition: Optional[str] = Field("", max_length=50)
     ridge_contour: Optional[str] = Field("", max_length=50)
     soft_tissue_thickness: Optional[str] = Field("", max_length=20)
@@ -327,6 +337,8 @@ class ProcedureUpdate(BaseModel):
     registration_number: Optional[str] = Field(None, max_length=50)
     chief_complaint: Optional[str] = Field(None, max_length=1000)
     teeth_present: Optional[List[str]] = None
+    missing_teeth: Optional[List[str]] = None
+    edentulous_site_measurements: Optional[Dict[str, Dict[str, Any]]] = None
     supervisor_id: Optional[str] = Field(None, max_length=50)
     supervisor_name: Optional[str] = Field(None, max_length=100)
     implant_incharge_id: Optional[str] = Field(None, max_length=50)
@@ -1324,6 +1336,51 @@ async def get_prosthetic_options(procedure_type: str = "", loading_type: str = "
 
 
 # Procedure Routes
+
+# FDI full-mouth set (32 permanent teeth). Used to derive `teeth_present`
+# from `missing_teeth` so existing reports/PDFs keep working unchanged.
+ALL_FDI_TEETH = [
+    "11","12","13","14","15","16","17","18",
+    "21","22","23","24","25","26","27","28",
+    "31","32","33","34","35","36","37","38",
+    "41","42","43","44","45","46","47","48",
+]
+
+# Procedure types that use the FDI chart. Full-arch types (All on 4/6/X) do not.
+_HEALED_EDENTULOUS = {
+    "Conventional Single Implant",
+    "Multiple Conventional Implants",
+    "Implant Placement with Guided Bone Regeneration",
+    "Guided Surgery",
+}
+_EXTRACT_AND_PLACE = {"Immediate Implant", "Partial Extraction Therapy"}
+
+
+def _validate_missing_teeth(proc_type: Optional[str], missing_teeth: Optional[List[str]]):
+    """Enforce teeth-count rules based on implant procedure type.
+    Single -> exactly 1. Multiple -> >=2. GBR/Guided/Immediate/PET -> >=1.
+    Full-arch (All on 4/6/X) types skip this check (no FDI chart used)."""
+    if not proc_type:
+        return
+    teeth = [t for t in (missing_teeth or []) if t in ALL_FDI_TEETH]
+    if proc_type == "Conventional Single Implant" and len(teeth) != 1:
+        raise HTTPException(status_code=400, detail="Conventional Single Implant requires exactly 1 missing tooth to be marked.")
+    if proc_type == "Multiple Conventional Implants" and len(teeth) < 2:
+        raise HTTPException(status_code=400, detail="Multiple Conventional Implants requires at least 2 missing teeth to be marked.")
+    if proc_type in (_HEALED_EDENTULOUS | _EXTRACT_AND_PLACE) and len(teeth) < 1:
+        raise HTTPException(status_code=400, detail=f"{proc_type} requires at least 1 tooth to be marked on the FDI chart.")
+
+
+def _apply_missing_teeth_derive(payload: Dict[str, Any]) -> None:
+    """When `missing_teeth` is provided, auto-compute `teeth_present` = all 32 − missing_teeth
+    so existing PDFs, queries, and reports keep working unchanged. Mutates in-place."""
+    mt = payload.get("missing_teeth")
+    if mt is not None and isinstance(mt, list):
+        clean = [t for t in mt if t in ALL_FDI_TEETH]
+        payload["missing_teeth"] = clean
+        payload["teeth_present"] = [t for t in ALL_FDI_TEETH if t not in clean]
+
+
 @api_router.post("/procedures")
 async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depends(get_current_user)):
     # Students, supervisors, and implant_incharge can create procedures
@@ -1456,6 +1513,11 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
             "created_by_name": current_user["name"],
         })
     
+    # FDI chart: when the new `missing_teeth` field is supplied, enforce the
+    # per-procedure-type count rules and derive `teeth_present` for back-compat.
+    _validate_missing_teeth(procedure.implant_procedure_type, procedure.missing_teeth)
+    _apply_missing_teeth_derive(procedure_dict)
+
     result = await db.procedures.insert_one(procedure_dict)
     procedure_id = str(result.inserted_id)
     
@@ -2231,6 +2293,14 @@ async def update_procedure(
     # implant_incharge can edit all
     
     update_data = {k: v for k, v in procedure_update.model_dump().items() if v is not None}
+
+    # If the FDI `missing_teeth` was edited, re-validate against the procedure type
+    # (use the payload's new type if provided, else the stored one) and re-derive
+    # `teeth_present` so back-compat fields stay in sync with reality.
+    if "missing_teeth" in update_data:
+        effective_proc_type = update_data.get("implant_procedure_type") or procedure.get("implant_procedure_type")
+        _validate_missing_teeth(effective_proc_type, update_data.get("missing_teeth"))
+        _apply_missing_teeth_derive(update_data)
     
     # Validate status transitions
     if "status" in update_data:
@@ -5159,8 +5229,11 @@ async def generate_case_report(
         add_field("Keratinized Mucosa", procedure.get("keratinized_mucosa"))
         add_field("Periodontal Status", procedure.get("periodontal_status"))
         teeth = procedure.get("teeth_present") or []
+        missing = procedure.get("missing_teeth") or []
         if teeth:
             add_field("Teeth Present", ", ".join(sorted(teeth, key=lambda x: int(x) if x.isdigit() else 0)))
+        if missing:
+            add_field("Missing Teeth", ", ".join(sorted(missing, key=lambda x: int(x) if x.isdigit() else 0)))
         pdf.ln(3)
 
     # ── Occlusal Analysis ────────────────────────────────────

@@ -2233,6 +2233,7 @@ export default function ProcedureDetailScreen() {
               patientName={procedure.patient_name}
               patientId={procedure.patient_id}
               procedureDate={procedure.procedure_date}
+              missingTeeth={procedure.missing_teeth}
             />
           </View>
         )}
@@ -2392,6 +2393,7 @@ export default function ProcedureDetailScreen() {
             patientName={procedure.patient_name}
             patientId={procedure.patient_id}
             procedureDate={procedure.procedure_date}
+            missingTeeth={procedure.missing_teeth}
           />
         )}
 
