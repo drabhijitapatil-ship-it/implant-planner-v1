@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, Image, Platform, Modal, Pressable, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -89,6 +89,34 @@ export default function ForumThreadScreen() {
   const [error, setError] = useState<string | null>(null);
   const [attachPreviewUrls, setAttachPreviewUrls] = useState<Record<string, string>>({});
   const [showAttachSheet, setShowAttachSheet] = useState(false);
+  // Jump-to-bottom pill state ─ tracks unread replies that arrived while the
+  // user was scrolled up from the bottom of the thread.
+  const scrollRef = useRef<ScrollView | null>(null);
+  const [newPostsCount, setNewPostsCount] = useState(0);
+  const prevPostCountRef = useRef(0);
+  const isAtBottomRef = useRef(true);
+
+  // Auto-scroll on first load + auto-follow when user is at bottom.
+  // When user scrolled up and a new post arrives, increment the pill count.
+  useEffect(() => {
+    const prev = prevPostCountRef.current;
+    if (posts.length > prev) {
+      if (isAtBottomRef.current) {
+        // User is reading at the bottom — keep them there.
+        setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
+      } else {
+        // User scrolled up — show pill with delta count
+        setNewPostsCount(c => c + (posts.length - prev));
+      }
+    }
+    prevPostCountRef.current = posts.length;
+  }, [posts.length]);
+
+  // Poll for new posts every 15 s while the screen is focused.
+  useFocusEffect(useCallback(() => {
+    const t = setInterval(() => { load(); }, 15000);
+    return () => clearInterval(t);
+  }, [load]));
 
   // ── Attachment helpers ─────────────────────────────────────────
   const uploadAsset = async (asset: { uri: string; name: string; mimeType?: string; size?: number }) => {
@@ -316,7 +344,20 @@ export default function ForumThreadScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        ref={scrollRef}
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: 20 }}
+        keyboardShouldPersistTaps="handled"
+        onScroll={(e) => {
+          const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+          const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+          const atBottom = distanceFromBottom < 80;
+          isAtBottomRef.current = atBottom;
+          if (atBottom && newPostsCount > 0) setNewPostsCount(0);
+        }}
+        scrollEventThrottle={120}
+      >
         {/* Case Summary */}
         <View style={s.summaryCard}>
           <View style={s.summaryHeader}>
@@ -445,6 +486,22 @@ export default function ForumThreadScreen() {
           ))}
         </View>
       </ScrollView>
+
+      {/* Jump-to-bottom pill — shown when user has scrolled up & new replies arrived */}
+      {newPostsCount > 0 && (
+        <TouchableOpacity
+          style={s.jumpPill}
+          onPress={() => {
+            scrollRef.current?.scrollToEnd({ animated: true });
+            setNewPostsCount(0);
+          }}
+          data-testid="forum-jump-to-bottom-btn"
+          activeOpacity={0.85}
+        >
+          <Ionicons name="arrow-down" size={14} color="#FFF" />
+          <Text style={s.jumpPillTxt}>{newPostsCount} new {newPostsCount === 1 ? 'reply' : 'replies'}</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Composer */}
       {isOpen && user?.role !== 'nurse' && (
@@ -610,6 +667,8 @@ const s = StyleSheet.create({
   verifyBtnOn: { backgroundColor: '#C8E6C9' },
   verifyBtnTxt: { fontSize: 11, fontWeight: '700', color: '#78909C' },
   composer: { backgroundColor: '#FFF', padding: 10, borderTopWidth: 1, borderTopColor: '#ECEFF1' },
+  jumpPill: { position: 'absolute', alignSelf: 'center', bottom: 110, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: '#1565C0', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.18, shadowRadius: 4, elevation: 4, zIndex: 50 },
+  jumpPillTxt: { color: '#FFF', fontSize: 13, fontWeight: '700' },
   attachedRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 8 },
   attachedChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#E3F2FD', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, maxWidth: 200 },
   attachedTxt: { fontSize: 11, color: '#1565C0', flex: 1 },
