@@ -194,6 +194,13 @@ interface Props {
   /** Phase 1 FDI chart red-marked teeth — when provided, ONLY these teeth are
    *  selectable in the Implant Planning modal's tooth picker. Others are locked. */
   missingTeeth?: string[];
+  /** Per-tooth Phase 1 edentulous-site measurements keyed by FDI code.
+   *  When the student taps a pending tooth, the modal auto-fills Bone Width
+   *  (from mesiodistal space) and Bone Height (from occlusocervical height). */
+  edentulousSiteMeasurements?: Record<string, { oc?: string; md?: string }>;
+  /** Flat single-tooth fallback from Phase 1 Step 1 when only 1 tooth is marked. */
+  defaultOcclusocervical?: string;
+  defaultMesiodistal?: string;
   /** Fired when the student confirms a 3-unit bridge on a candidate. Parent persists
    *  these on the procedure document (default prosthesis + bridge material). */
   onBridgeConfirmed?: (info: { design: string; material: BridgeMaterial; pontics: string[]; implants: string[] }) => void;
@@ -554,7 +561,7 @@ function generateDrillingProtocol(brand: string, system: string, diameter: numbe
   return protocol;
 }
 
-export default function CaseImplantPlanning({ procedureId, isOwner, userRole, torqueValues, procedureStatus, procedureType, medicalAssessment, patientName, patientId, procedureDate, teethPresent, missingTeeth, onBridgeConfirmed }: Props) {
+export default function CaseImplantPlanning({ procedureId, isOwner, userRole, torqueValues, procedureStatus, procedureType, medicalAssessment, patientName, patientId, procedureDate, teethPresent, missingTeeth, edentulousSiteMeasurements, defaultOcclusocervical, defaultMesiodistal, onBridgeConfirmed }: Props) {
   const [plans, setPlans] = useState<ImplantPlanItem[]>([]);
   const [systems, setSystems] = useState<ImplantSystem[]>([]);
   const [toothRecs, setToothRecs] = useState<Record<string,any>>({});
@@ -980,7 +987,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
 }
 
 // ── Add/Edit Implant Modal Component ───────────────────────
-function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPositions, editItem, medicalAssessment, procedureType, procedureId, allowedTeeth, presetPosition }: {
+function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPositions, editItem, medicalAssessment, procedureType, procedureId, allowedTeeth, presetPosition, edentulousSiteMeasurements, defaultOcclusocervical, defaultMesiodistal }: {
   visible: boolean; onClose: () => void; onSave: (item: ImplantPlanItem) => void;
   systems: ImplantSystem[]; toothRecs: Record<string,any>; usedPositions: string[];
   editItem?: ImplantPlanItem; medicalAssessment?: Record<string, string>;
@@ -989,6 +996,11 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
   allowedTeeth?: string[];
   /** Optional tooth to pre-select when opening the modal (from Phase 1 Step 1 missing-teeth quick-click). */
   presetPosition?: string;
+  /** Per-tooth Phase 1 edentulous-site measurements (oc + md). */
+  edentulousSiteMeasurements?: Record<string, { oc?: string; md?: string }>;
+  /** Single-tooth fallback — used when only one tooth is marked in Phase 1. */
+  defaultOcclusocervical?: string;
+  defaultMesiodistal?: string;
 }) {
   const [step, setStep] = useState(1);
   const [position, setPosition] = useState('');
@@ -1040,6 +1052,19 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
         setStep(2); // Start at system selection so user can change system/dimensions
       } else {
         resetForm();
+        // Auto-prefill Bone Width (← mesiodistal space) and Bone Height (← occlusocervical
+        // height) from Phase 1 Step 1 edentulous-site measurements for the preset tooth.
+        // This lets the student skip retyping measurements they already entered; they can
+        // still override below if CBCT differs.
+        const tooth = presetPosition;
+        if (tooth) {
+          setPosition(tooth);
+          const perTooth = (edentulousSiteMeasurements || {})[tooth] || {};
+          const md = perTooth.md || defaultMesiodistal || '';
+          const oc = perTooth.oc || defaultOcclusocervical || '';
+          if (md) setBoneWidth(String(md));
+          if (oc) setBoneHeight(String(oc));
+        }
       }
     }
   }, [visible, editItem]);
