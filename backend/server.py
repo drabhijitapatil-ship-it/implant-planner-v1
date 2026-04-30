@@ -10975,21 +10975,43 @@ async def forum_toggle_watch(thread_id: str, current_user: dict = Depends(get_cu
 async def forum_unread_summary(current_user: dict = Depends(get_current_user)):
     """Returns count of forum threads with new activity since the user last
     visited the forum list. Drives the red-dot indicator on the hamburger /
-    drawer 'Discussion Forum' entry. Nurses always get 0."""
+    drawer 'Discussion Forum' entry. Nurses always get 0.
+
+    Scoped to threads the user is engaged with:
+      • sharer of the thread, OR
+      • bookmarked it, OR
+      • posted/replied in it (i.e. is in participants).
+    This prevents pinging faculty about every new student case while still
+    surfacing activity on cases they actually care about. In-Charges and
+    administrators additionally see all open threads (so moderators don't
+    miss new cases needing review)."""
     if not _forum_can_access(current_user):
         return {"unread_threads": 0, "has_unread": False}
     uid = str(current_user.get("_id") or current_user.get("id"))
     last_seen = current_user.get("forum_last_seen_at")
     if not isinstance(last_seen, datetime):
-        # Never visited — show dot if any open thread exists
         last_seen = datetime(1970, 1, 1, tzinfo=timezone.utc)
     elif last_seen.tzinfo is None:
         last_seen = last_seen.replace(tzinfo=timezone.utc)
     role = current_user.get("role")
+    engagement_or = [
+        {"shared_by_id": uid},
+        {"bookmarks": uid},
+        {"participants": uid},
+    ]
+    is_mod = role in ("implant_incharge", "administrator")
+    if is_mod:
+        # Mods also see all *new* threads (so they catch unreviewed cases)
+        engagement_or.append({"status": "open"})
     query: Dict[str, Any] = {
-        "status": {"$in": ["open", "closed"]} if role not in ("implant_incharge", "administrator") else {"$ne": None},
-        "last_activity_at": {"$gt": last_seen},
+        "$and": [
+            {"$or": engagement_or},
+            {"last_activity_at": {"$gt": last_seen}},
+            {"status": {"$ne": "removed"}} if not is_mod else {},
+        ],
     }
+    # Drop the empty {} for non-mod path won't break Mongo — but be tidy:
+    query["$and"] = [c for c in query["$and"] if c]
     count = await db.forum_threads.count_documents(query)
     return {"unread_threads": count, "has_unread": count > 0}
 
