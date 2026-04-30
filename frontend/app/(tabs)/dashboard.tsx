@@ -553,10 +553,81 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
 }
 
 // ── Student Performance Section (interactive + Show More) ─────────────
+// ── Leaderboard helpers (shared by Student + Supervisor sections) ────
+type LbBadge = { kind: 'top' | 'hot' | 'risk'; label: string; color: string; bg: string; border: string; icon: string };
+const TOP_BADGE: LbBadge = { kind: 'top', label: 'Top Performer', color: '#B7791F', bg: '#FFF8E1', border: '#FFD54F', icon: 'trophy' };
+const HOT_BADGE: LbBadge = { kind: 'hot', label: 'Hot Streak', color: '#D84315', bg: '#FBE9E7', border: '#FF8A65', icon: 'flame' };
+const RISK_BADGE: LbBadge = { kind: 'risk', label: 'Needs Attention', color: '#5D4037', bg: '#EFEBE9', border: '#A1887F', icon: 'time-outline' };
+
+function pickLeaderboardBadges<T extends Record<string, any>>(
+  rows: T[],
+  primaryKey: string,
+  hotKey: string,
+  riskKey: string,
+): { topId: string | null; hotId: string | null; riskId: string | null } {
+  if (rows.length === 0) return { topId: null, hotId: null, riskId: null };
+  const idOf = (r: T) => r.student_id || r.supervisor_id || r._id || r.id;
+  const top = [...rows].sort((a, b) => (b[primaryKey] || 0) - (a[primaryKey] || 0))[0];
+  const hot = [...rows]
+    .filter(r => (r.total || 0) >= 3)
+    .sort((a, b) => ((b[hotKey] || 0) / Math.max(1, b.total)) - ((a[hotKey] || 0) / Math.max(1, a.total)))[0];
+  const risk = [...rows].sort((a, b) => (b[riskKey] || 0) - (a[riskKey] || 0))[0];
+  return {
+    topId: top ? idOf(top) : null,
+    hotId: hot && idOf(hot) !== (top && idOf(top)) ? idOf(hot) : null,
+    riskId: risk && (risk[riskKey] || 0) > 0 && idOf(risk) !== (top && idOf(top)) && idOf(risk) !== (hot && idOf(hot)) ? idOf(risk) : null,
+  };
+}
+
+function LeaderboardToggle({ value, onChange, accent, testID }: { value: boolean; onChange: (v: boolean) => void; accent: string; testID: string }) {
+  return (
+    <TouchableOpacity
+      style={[s.lbToggleBtn, value && { backgroundColor: accent, borderColor: accent }]}
+      onPress={() => onChange(!value)}
+      data-testid={testID}
+      activeOpacity={0.85}
+    >
+      <Ionicons name={value ? 'trophy' : 'trophy-outline'} size={12} color={value ? '#FFF' : accent} />
+      <Text style={[s.lbToggleText, { color: value ? '#FFF' : accent }]}>{value ? 'Leaderboard ON' : 'Leaderboard'}</Text>
+    </TouchableOpacity>
+  );
+}
+
+function RankCircle({ idx, badge }: { idx: number; badge?: LbBadge | null }) {
+  if (badge) {
+    return (
+      <View style={[s.perfRank, { backgroundColor: badge.bg, borderWidth: 1.5, borderColor: badge.border }]}>
+        <Ionicons name={badge.icon as any} size={14} color={badge.color} />
+      </View>
+    );
+  }
+  return (
+    <View style={s.perfRank}><Text style={s.perfRankText}>#{idx + 1}</Text></View>
+  );
+}
+
+// ── Student Performance Section (interactive + Show More + Leaderboard) ───
 function StudentPerformanceSection({ rows, router }: { rows: any[]; router: any }) {
   const [visible, setVisible] = useState(5);
-  const shown = rows.slice(0, visible);
-  const remaining = Math.max(0, rows.length - visible);
+  const [leaderboard, setLeaderboard] = useState(false);
+  // Student leaderboard: top by completed; hot by completed/total ratio; risk by active count
+  const lb = useMemo(() => pickLeaderboardBadges(rows, 'completed', 'completed', 'active'), [rows]);
+  const sortedRows = useMemo(() => {
+    if (!leaderboard) return rows;
+    const ordered: any[] = [];
+    const used = new Set<string>();
+    const pickById = (id: string | null) => {
+      if (!id) return null;
+      const r = rows.find((x: any) => x.student_id === id);
+      if (r && !used.has(id)) { used.add(id); ordered.push(r); }
+      return r;
+    };
+    pickById(lb.topId); pickById(lb.hotId); pickById(lb.riskId);
+    rows.forEach((r: any) => { if (!used.has(r.student_id)) { used.add(r.student_id); ordered.push(r); } });
+    return ordered;
+  }, [rows, leaderboard, lb]);
+  const shown = sortedRows.slice(0, visible);
+  const remaining = Math.max(0, sortedRows.length - visible);
   const hasMore = remaining > 0;
   const showLess = visible > 5;
   return (
@@ -564,22 +635,33 @@ function StudentPerformanceSection({ rows, router }: { rows: any[]; router: any 
       <View style={s.sectionHeader}>
         <Ionicons name="school-outline" size={18} color="#1565C0" />
         <Text style={[s.sectionTitle, { color: '#1565C0' }]}>Student Performance</Text>
+        <View style={{ flex: 1 }} />
+        <LeaderboardToggle value={leaderboard} onChange={setLeaderboard} accent="#1A73E8" testID="student-leaderboard-toggle" />
       </View>
+      {leaderboard && <LeaderboardLegend />}
       {shown.map((st: any, idx: number) => {
         const sid = st.student_id;
         const onPress = sid ? () => router.push(`/admin/student/${sid}`) : undefined;
+        const badge = leaderboard ? (sid === lb.topId ? TOP_BADGE : sid === lb.hotId ? HOT_BADGE : sid === lb.riskId ? RISK_BADGE : null) : null;
         return (
           <TouchableOpacity
             key={`perf-${idx}`}
-            style={s.perfCard}
+            style={[s.perfCard, badge && { borderColor: badge.border, borderWidth: 1.5 }]}
             activeOpacity={onPress ? 0.7 : 1}
             onPress={onPress}
             data-testid={`student-perf-${idx}`}
             accessibilityRole="button"
           >
-            <View style={s.perfRank}><Text style={s.perfRankText}>#{idx + 1}</Text></View>
+            <RankCircle idx={idx} badge={badge} />
             <View style={{ flex: 1 }}>
-              <Text style={s.perfName}>{st.student_name}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <Text style={s.perfName}>{st.student_name}</Text>
+                {badge && (
+                  <View style={[s.lbBadgePill, { backgroundColor: badge.bg, borderColor: badge.border }]}>
+                    <Text style={[s.lbBadgeText, { color: badge.color }]}>{badge.label}</Text>
+                  </View>
+                )}
+              </View>
               <View style={s.perfStats}>
                 <View style={s.perfChip}><Text style={[s.perfChipText, { color: '#1A73E8' }]}>{st.total} total</Text></View>
                 <View style={s.perfChip}><Text style={[s.perfChipText, { color: '#4CAF50' }]}>{st.completed} done</Text></View>
@@ -618,13 +700,43 @@ function StudentPerformanceSection({ rows, router }: { rows: any[]; router: any 
   );
 }
 
+function LeaderboardLegend() {
+  return (
+    <View style={s.lbLegendRow} data-testid="leaderboard-legend">
+      {[TOP_BADGE, HOT_BADGE, RISK_BADGE].map((b) => (
+        <View key={b.kind} style={[s.lbLegendItem, { backgroundColor: b.bg, borderColor: b.border }]}>
+          <Ionicons name={b.icon as any} size={11} color={b.color} />
+          <Text style={[s.lbLegendText, { color: b.color }]}>{b.label}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
 
 
-// ── Supervisor Performance Section (interactive + Show More) ─────────
+
+// ── Supervisor Performance Section (interactive + Show More + Leaderboard) ───
 function SupervisorPerformanceSection({ rows, router }: { rows: any[]; router: any }) {
   const [visible, setVisible] = useState(5);
-  const shown = rows.slice(0, visible);
-  const remaining = Math.max(0, rows.length - visible);
+  const [leaderboard, setLeaderboard] = useState(false);
+  // Supervisor leaderboard: top by approved; hot by approved/total ratio (efficient reviewer); risk by pending count (backlog)
+  const lb = useMemo(() => pickLeaderboardBadges(rows, 'approved', 'approved', 'pending'), [rows]);
+  const sortedRows = useMemo(() => {
+    if (!leaderboard) return rows;
+    const ordered: any[] = [];
+    const used = new Set<string>();
+    const pickById = (id: string | null) => {
+      if (!id) return null;
+      const r = rows.find((x: any) => x.supervisor_id === id);
+      if (r && !used.has(id)) { used.add(id); ordered.push(r); }
+      return r;
+    };
+    pickById(lb.topId); pickById(lb.hotId); pickById(lb.riskId);
+    rows.forEach((r: any) => { if (!used.has(r.supervisor_id)) { used.add(r.supervisor_id); ordered.push(r); } });
+    return ordered;
+  }, [rows, leaderboard, lb]);
+  const shown = sortedRows.slice(0, visible);
+  const remaining = Math.max(0, sortedRows.length - visible);
   const hasMore = remaining > 0;
   const showLess = visible > 5;
   return (
@@ -632,26 +744,41 @@ function SupervisorPerformanceSection({ rows, router }: { rows: any[]; router: a
       <View style={s.sectionHeader}>
         <Ionicons name="ribbon-outline" size={18} color="#6A1B9A" />
         <Text style={[s.sectionTitle, { color: '#6A1B9A' }]}>Supervisor Performance</Text>
+        <View style={{ flex: 1 }} />
+        <LeaderboardToggle value={leaderboard} onChange={setLeaderboard} accent="#6A1B9A" testID="supervisor-leaderboard-toggle" />
       </View>
+      {leaderboard && <LeaderboardLegend />}
       {shown.map((sp: any, idx: number) => {
         const sid = sp.supervisor_id;
         const onPress = sid ? () => router.push(`/admin/supervisor/${sid}`) : undefined;
         const decided = (sp.approved || 0) + (sp.rejected || 0);
         const approvalRate = decided > 0 ? Math.round(((sp.approved || 0) / decided) * 100) : null;
+        const badge = leaderboard ? (sid === lb.topId ? TOP_BADGE : sid === lb.hotId ? HOT_BADGE : sid === lb.riskId ? RISK_BADGE : null) : null;
         return (
           <TouchableOpacity
             key={`sup-perf-${idx}`}
-            style={s.perfCard}
+            style={[s.perfCard, badge && { borderColor: badge.border, borderWidth: 1.5 }]}
             activeOpacity={onPress ? 0.7 : 1}
             onPress={onPress}
             data-testid={`supervisor-perf-${idx}`}
             accessibilityRole="button"
           >
-            <View style={[s.perfRank, { backgroundColor: '#F3E5F5' }]}>
-              <Text style={[s.perfRankText, { color: '#6A1B9A' }]}>#{idx + 1}</Text>
-            </View>
+            {badge ? (
+              <RankCircle idx={idx} badge={badge} />
+            ) : (
+              <View style={[s.perfRank, { backgroundColor: '#F3E5F5' }]}>
+                <Text style={[s.perfRankText, { color: '#6A1B9A' }]}>#{idx + 1}</Text>
+              </View>
+            )}
             <View style={{ flex: 1 }}>
-              <Text style={s.perfName}>{sp.supervisor_name}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <Text style={s.perfName}>{sp.supervisor_name}</Text>
+                {badge && (
+                  <View style={[s.lbBadgePill, { backgroundColor: badge.bg, borderColor: badge.border }]}>
+                    <Text style={[s.lbBadgeText, { color: badge.color }]}>{badge.label}</Text>
+                  </View>
+                )}
+              </View>
               <View style={s.perfStats}>
                 <View style={s.perfChip}><Text style={[s.perfChipText, { color: '#1A73E8' }]}>{sp.total} cases</Text></View>
                 <View style={s.perfChip}><Text style={[s.perfChipText, { color: '#4CAF50' }]}>{sp.approved} approved</Text></View>
@@ -883,6 +1010,26 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: '#BBDEFB',
   },
   showMoreText: { fontSize: 12, fontWeight: '700', color: '#1A73E8', letterSpacing: 0.2 },
+
+  // Leaderboard mode — toggle, badge pills, legend
+  lbToggleBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: 999, borderWidth: 1, borderColor: '#CFD8DC', backgroundColor: '#FFF',
+  },
+  lbToggleText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.3 },
+  lbBadgePill: {
+    paddingHorizontal: 8, paddingVertical: 2,
+    borderRadius: 999, borderWidth: 1,
+  },
+  lbBadgeText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.4, textTransform: 'uppercase' },
+  lbLegendRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
+  lbLegendItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 8, paddingVertical: 4,
+    borderRadius: 999, borderWidth: 1,
+  },
+  lbLegendText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.2 },
 
   // Quick Actions (InCharge)
   quickActions: { flexDirection: 'row', gap: 10 },
