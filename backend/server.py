@@ -1543,6 +1543,7 @@ async def get_procedures(
     status: Optional[str] = None,
     phase: Optional[str] = None,
     date: Optional[str] = None,
+    student_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
     query = {}
@@ -1565,6 +1566,11 @@ async def get_procedures(
         # Nurses can only see fully approved/completed procedures
         query["status"] = {"$in": ["phase1_approved", "phase2_approved", "approved", "stage2_surgical_approved", "completed"]}
     # administrator and implant_incharge can see all
+
+    # Optional student_id filter — only honoured for In-Charge / Administrator
+    # (used by the per-student drill-down screen). For other roles it's ignored.
+    if student_id and current_user["role"] in ("implant_incharge", "administrator"):
+        query["student_id"] = student_id
     
     if phase and current_user["role"] != "nurse":
         phase_status_map = {
@@ -1615,17 +1621,28 @@ async def get_archived_procedures(current_user: dict = Depends(get_current_user)
 
 
 @api_router.get("/procedures/recent-activity")
-async def get_recent_activity(limit: int = 10, current_user: dict = Depends(get_current_user)):
+async def get_recent_activity(
+    limit: int = 10,
+    skip: int = 0,
+    student_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
     """Return the most recent edit_log entries across all procedures accessible to the user.
     Only Supervisors, Implant In-Charges, and Administrators can view this feed.
+    Optional `skip` for pagination (e.g. Show More on the dashboard widget).
+    Optional `student_id` filter (in-charge / admin only) for the per-student drill-down.
     """
     role = current_user.get("role")
     if role not in ("supervisor", "implant_incharge", "administrator"):
         raise HTTPException(status_code=403, detail="Only Supervisors and Implant In-Charges can view recent activity")
-    
+
     limit = max(1, min(int(limit or 10), 50))
+    skip = max(0, int(skip or 0))
+    match_stage: Dict[str, Any] = {"edit_log": {"$exists": True, "$ne": []}}
+    if student_id and role in ("implant_incharge", "administrator"):
+        match_stage["student_id"] = student_id
     pipeline = [
-        {"$match": {"edit_log": {"$exists": True, "$ne": []}}},
+        {"$match": match_stage},
         {"$project": {
             "_id": 0,
             "procedure_id": {"$toString": "$_id"},
@@ -1638,6 +1655,7 @@ async def get_recent_activity(limit: int = 10, current_user: dict = Depends(get_
         }},
         {"$unwind": "$edit_log"},
         {"$sort": {"edit_log.edited_at": -1}},
+        {"$skip": skip},
         {"$limit": limit},
         {"$project": {
             "procedure_id": 1,
@@ -1655,7 +1673,110 @@ async def get_recent_activity(limit: int = 10, current_user: dict = Depends(get_
         }},
     ]
     entries = await db.procedures.aggregate(pipeline).to_list(length=limit)
-    return {"activities": entries}
+    return {"activities": entries, "skip": skip, "limit": limit}
+
+
+# ── In-Charge / Admin: per-student summary for the drill-down screen ──
+@api_router.get("/admin/students/{student_id}/summary")
+async def get_student_summary(student_id: str, current_user: dict = Depends(get_current_user)):
+    """Return profile + aggregated KPIs + phase pipeline + monthly throughput
+    for a single student. Visible only to Implant In-Charge / Administrator.
+    """
+    if current_user.get("role") not in ("implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Only Implant In-Charge / Administrator can view student summaries")
+
+    # Profile (best-effort — students may also exist purely via their procedures)
+    profile = None
+    try:
+        u = await db.users.find_one({"_id": ObjectId(student_id)})
+    except Exception:
+        u = None
+    if not u:
+        u = await db.users.find_one({"_id": student_id})
+    if u:
+        profile = {
+            "id": str(u.get("_id")),
+            "name": u.get("name"),
+            "email": u.get("email"),
+            "role": u.get("role"),
+            "username": u.get("username"),
+        }
+
+    # Aggregations across this student's procedures
+    base_match: Dict[str, Any] = {"student_id": student_id, "archived": {"$ne": True}}
+
+    # KPI counts
+    kpi_pipeline = [
+        {"$match": base_match},
+        {"$group": {
+            "_id": None,
+            "total": {"$sum": 1},
+            "completed": {"$sum": {"$cond": [{"$eq": ["$status", "completed"]}, 1, 0]}},
+            "rejected": {"$sum": {"$cond": [{"$in": ["$status", ["rejected", "permanently_rejected", "stage2_surgical_rejected", "stage2_prosthetic_rejected"]]}, 1, 0]}},
+            "active": {"$sum": {"$cond": [{"$not": {"$in": ["$status", ["completed", "rejected", "permanently_rejected"]]}}, 1, 0]}},
+            "pending_approval": {"$sum": {"$cond": [{"$in": ["$status", ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic"]]}, 1, 0]}},
+        }},
+    ]
+    kpi_doc = None
+    async for d in db.procedures.aggregate(kpi_pipeline):
+        kpi_doc = d
+        break
+    if not kpi_doc:
+        kpi_doc = {"total": 0, "completed": 0, "rejected": 0, "active": 0, "pending_approval": 0}
+    kpis = {
+        "total": kpi_doc.get("total", 0),
+        "completed": kpi_doc.get("completed", 0),
+        "rejected": kpi_doc.get("rejected", 0),
+        "active": kpi_doc.get("active", 0),
+        "pending_approval": kpi_doc.get("pending_approval", 0),
+    }
+    decided = kpis["completed"] + kpis["rejected"]
+    kpis["approval_rate"] = round((kpis["completed"] / decided) * 100, 1) if decided > 0 else None
+
+    # Phase pipeline counts (mirrors the dashboard's main pipeline groups)
+    phase_groups = {
+        "phase1": ["draft", "pending_phase1"],
+        "phase2": ["phase1_approved", "pending_phase2"],
+        "phase3": ["phase2_approved", "pending_stage2_surgical"],
+        "phase4": ["stage2_surgical_approved", "pending_stage2_prosthetic", "stage2_prosthetic_step1_approved", "pending_final_delivery"],
+        "complete": ["completed"],
+    }
+    phase_pipeline = {k: 0 for k in phase_groups}
+    async for proc in db.procedures.find(base_match, {"status": 1}):
+        st = proc.get("status")
+        for k, v in phase_groups.items():
+            if st in v:
+                phase_pipeline[k] += 1
+                break
+
+    # Monthly throughput — completed cases per month for the last 6 calendar months
+    now = datetime.now(timezone.utc)
+    monthly: List[Dict[str, Any]] = []
+    for offset in range(5, -1, -1):
+        # Compute month start
+        y = now.year
+        m = now.month - offset
+        while m <= 0:
+            m += 12
+            y -= 1
+        start = datetime(y, m, 1, tzinfo=timezone.utc)
+        if m == 12:
+            end = datetime(y + 1, 1, 1, tzinfo=timezone.utc)
+        else:
+            end = datetime(y, m + 1, 1, tzinfo=timezone.utc)
+        cnt = await db.procedures.count_documents({
+            **base_match,
+            "status": "completed",
+            "treatment_completed_at": {"$gte": start, "$lt": end},
+        })
+        monthly.append({"label": start.strftime("%b %Y"), "count": cnt})
+
+    return {
+        "profile": profile,
+        "kpis": kpis,
+        "phase_pipeline": phase_pipeline,
+        "monthly_throughput": monthly,
+    }
 
 
 @api_router.get("/procedures/{procedure_id}")
@@ -6597,6 +6718,7 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
             student_stats = []
             async for doc in db.procedures.aggregate(student_pipeline):
                 student_stats.append({
+                    "student_id": doc.get("_id"),
                     "student_name": doc.get("student_name", "Unknown"),
                     "total": doc["total"],
                     "completed": doc["completed"],
