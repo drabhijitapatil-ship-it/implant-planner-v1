@@ -300,7 +300,7 @@ export default function ForumThreadScreen() {
   const isOpen = thread.status === 'open';
 
   return (
-    <SafeAreaView style={s.screen} edges={['top']}>
+    <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
