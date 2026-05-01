@@ -1,5 +1,13 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 121 (Feb 2026) — Unread-Aware Success Haptic
+
+Added a small `useEffect` inside `DrawerMenu` that fires `Haptics.NotificationFeedbackType.Success` ~220 ms after the popover opens **only when** the user has unread Forum activity or unseen What's-New entries. The 220 ms delay lets it sit just after the open-tick (`Light` impact) so the two haptics don't blur together — the second one feels like a gentle nudge toward the red-dotted tile.
+
+- Web is no-op (`Platform.OS === 'web'` guard).
+- Effect cleans up its timer on unmount/close so a quick open-close sequence cannot stack haptics.
+- testIDs unchanged → iter-118's E2E suite still applies.
+
 ## Iteration 120 (Feb 2026) — Tile Menu Haptic Feedback
 
 Wired `expo-haptics` (already installed at v15) into the tile menu's 3 interaction points:
