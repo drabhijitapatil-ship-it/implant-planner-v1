@@ -32,6 +32,22 @@ export default function CreateGroupScreen() {
     });
   };
 
+  /**
+   * Bulk-select helpers for the quick-filter chip row.
+   * `addAllByRole` merges users of a given role into the current selection
+   * (idempotent — re-tapping is a no-op). `clearAll` wipes every picked user.
+   */
+  const addAllByRole = (role: string) => {
+    setSelected(prev => {
+      const next = { ...prev };
+      for (const u of users) {
+        if (u.role === role) next[u.id] = u;
+      }
+      return next;
+    });
+  };
+  const clearAll = () => setSelected({});
+
   const create = async () => {
     if (!name.trim()) { Alert.alert('Group name required'); return; }
     setBusy(true);
@@ -118,6 +134,49 @@ export default function CreateGroupScreen() {
             <Ionicons name="search" size={18} color="#90A4AE" />
             <TextInput style={{ flex: 1, fontSize: 14, outlineWidth: 0 as any }} placeholder="Search users..." value={pickerQ} onChangeText={setPickerQ} />
           </View>
+          {/* Quick-filter chip row: one tap to select every user of a given role.
+              Counts reflect the fetched user list (respects current search query). */}
+          <View style={s.chipRow}>
+            {(() => {
+              const c = users.reduce<Record<string, number>>((acc, u) => { acc[u.role] = (acc[u.role] || 0) + 1; return acc; }, {});
+              const chips: { key: string; label: string; role?: string; count?: number }[] = [];
+              if (c.supervisor) chips.push({ key: 'sup', label: 'All Supervisors', role: 'supervisor', count: c.supervisor });
+              if (c.student) chips.push({ key: 'stu', label: 'All Students', role: 'student', count: c.student });
+              if (c.implant_incharge) chips.push({ key: 'inc', label: 'All In-Charges', role: 'implant_incharge', count: c.implant_incharge });
+              return (
+                <>
+                  {chips.map(ch => (
+                    <TouchableOpacity
+                      key={ch.key}
+                      style={s.chip}
+                      onPress={() => addAllByRole(ch.role!)}
+                      testID={`quickfilter-${ch.role}`}
+                      accessibilityLabel={`quickfilter-${ch.role}`}
+                      // @ts-ignore
+                      data-testid={`quickfilter-${ch.role}`}
+                    >
+                      <Ionicons name="people" size={14} color="#1565C0" />
+                      <Text style={s.chipTxt}>{ch.label}</Text>
+                      <View style={s.chipCount}><Text style={s.chipCountTxt}>{ch.count}</Text></View>
+                    </TouchableOpacity>
+                  ))}
+                  {Object.keys(selected).length > 0 && (
+                    <TouchableOpacity
+                      style={[s.chip, s.chipClear]}
+                      onPress={clearAll}
+                      testID="quickfilter-clear"
+                      accessibilityLabel="quickfilter-clear"
+                      // @ts-ignore
+                      data-testid="quickfilter-clear"
+                    >
+                      <Ionicons name="close-circle" size={14} color="#B71C1C" />
+                      <Text style={s.chipClearTxt}>Clear all</Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              );
+            })()}
+          </View>
           <FlatList
             data={users}
             keyExtractor={(u) => u.id}
@@ -166,6 +225,13 @@ const s = StyleSheet.create({
   createBtn: { backgroundColor: '#1565C0', paddingVertical: 14, borderRadius: 10, alignItems: 'center' },
   createBtnTxt: { fontSize: 16, fontWeight: '700', color: '#FFF' },
   searchBar: { flexDirection: 'row', alignItems: 'center', gap: 8, margin: 12, backgroundColor: '#F5F5F5', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 12, paddingBottom: 10 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#E3F2FD', borderWidth: 1, borderColor: '#BBDEFB', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16 },
+  chipTxt: { fontSize: 12, fontWeight: '700', color: '#1565C0' },
+  chipCount: { backgroundColor: '#1565C0', minWidth: 20, paddingHorizontal: 5, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  chipCountTxt: { fontSize: 10, color: '#FFF', fontWeight: '700' },
+  chipClear: { backgroundColor: '#FFEBEE', borderColor: '#FFCDD2' },
+  chipClearTxt: { fontSize: 12, fontWeight: '700', color: '#B71C1C' },
   userRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
   userAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1565C0', alignItems: 'center', justifyContent: 'center' },
   userAvatarTxt: { fontSize: 14, fontWeight: '700', color: '#FFF' },
