@@ -44,6 +44,9 @@ function DrawerMenu({
   hasUnreadForum: boolean;
 }) {
   const insets = useSafeAreaInsets();
+  // Gate forum item on a hydrated, non-nurse role — if role is not yet known,
+  // hide it (prevents flashing Discussion Forum to a nurse before auth bootstrap completes).
+  const forumAllowed = !!userRole && !isNurse;
 
   const menuItems = [
     ...(isAdmin
@@ -55,9 +58,10 @@ function DrawerMenu({
       ? []
       : [{ key: 'archived', icon: 'archive-outline' as const, label: 'Archived Cases', route: '/archived' }]),
     // Discussion Forum — educational collaboration space. Nurses excluded.
-    ...(isNurse
-      ? []
-      : [{ key: 'forum', icon: 'chatbubbles-outline' as const, label: 'Discussion Forum', route: '/forum' }]),
+    // Hidden when role is not yet hydrated (prevents flashing to nurses pre-auth-bootstrap).
+    ...(forumAllowed
+      ? [{ key: 'forum', icon: 'chatbubbles-outline' as const, label: 'Discussion Forum', route: '/forum' }]
+      : []),
   ];
 
   return (
