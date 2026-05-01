@@ -1,5 +1,14 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 120 (Feb 2026) — Tile Menu Haptic Feedback
+
+Wired `expo-haptics` (already installed at v15) into the tile menu's 3 interaction points:
+- **Open**: header grid icon → `Haptics.ImpactFeedbackStyle.Light` (a quick tick when the popover springs in).
+- **Navigate**: each tile tap → `Light` impact.
+- **Logout**: pill tap → `Medium` impact (slightly heavier to mark a destructive action — matches iOS HIG).
+
+Web is a no-op (`Platform.OS === 'web'` guard) so RNW renders identically and iter-118's E2E test suite still applies. testIDs unchanged.
+
 ## Iteration 119 (Feb 2026) — Tile-Menu Staggered Scale-In Animation
 
 Added `react-native-reanimated` v4 layout-animation entries to the tile-grid menu:
