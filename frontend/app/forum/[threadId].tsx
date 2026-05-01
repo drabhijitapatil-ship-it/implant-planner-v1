@@ -114,12 +114,6 @@ export default function ForumThreadScreen() {
     prevPostCountRef.current = posts.length;
   }, [posts.length]);
 
-  // Poll for new posts every 15 s while the screen is focused.
-  useFocusEffect(useCallback(() => {
-    const t = setInterval(() => { load(); }, 15000);
-    return () => clearInterval(t);
-  }, [load]));
-
   // ── Attachment helpers ─────────────────────────────────────────
   /**
    * Resize images to max 1600 px on the longer side and re-encode at 80 % JPEG.
