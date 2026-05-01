@@ -12,6 +12,7 @@ import {
   Image,
 } from 'react-native';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePushNotifications } from '../../utils/usePushNotifications';
@@ -19,6 +20,18 @@ import ImplantIcon from '../../components/ImplantIcon';
 import api from '../../utils/api';
 
 // ── Tile-Grid Menu ──────────────────────────────────────────
+// Tactile-feedback helper: silent on web (Haptics is a no-op), light tap on
+// iOS/Android. We swallow errors because some devices (older Androids,
+// reduced-motion accessibility setting) reject the call.
+const tapLight = () => {
+  if (Platform.OS === 'web') return;
+  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+};
+const tapMedium = () => {
+  if (Platform.OS === 'web') return;
+  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+};
+
 // Replaces the legacy side-drawer hamburger. Triggered by the 4-tile grid
 // icon in the header — opens a top-half popover with a 2-column grid of
 // pastel-blue tiles (one per menu destination), the user identity in the
@@ -151,7 +164,7 @@ function DrawerMenu({
               >
                 <TouchableOpacity
                   style={[t.tile, { backgroundColor: item.bg }]}
-                  onPress={() => { onClose(); onNavigate(item.route); }}
+                  onPress={() => { tapLight(); onClose(); onNavigate(item.route); }}
                   activeOpacity={0.75}
                   testID={`tile-${item.key}`}
                   accessibilityLabel={`tile-${item.key}`}
@@ -176,7 +189,7 @@ function DrawerMenu({
           >
             <TouchableOpacity
               style={t.logoutPill}
-              onPress={() => { onClose(); onLogout(); }}
+              onPress={() => { tapMedium(); onClose(); onLogout(); }}
               activeOpacity={0.8}
               testID="tile-menu-logout"
               accessibilityLabel="tile-menu-logout"
@@ -385,7 +398,7 @@ export default function TabsLayout() {
   // What's-new entries (cleared on ack via GET /whatsnew returning empty).
   const HeaderLeft = () => (
     <TouchableOpacity
-      onPress={() => setDrawerOpen(true)}
+      onPress={() => { tapLight(); setDrawerOpen(true); }}
       style={{ marginLeft: 14 }}
       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       testID="hamburger-btn"
