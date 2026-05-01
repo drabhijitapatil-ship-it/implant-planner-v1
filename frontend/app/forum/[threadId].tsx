@@ -135,8 +135,15 @@ export default function ForumThreadScreen() {
     setAttachments(prev => [...prev, up.data]);
   };
 
+  // Attachment sheet must close BEFORE launching the OS picker — iOS only
+  // allows one modal at a time, and our Modal sitting on top would silently
+  // prevent the system picker from appearing. 300 ms matches the Modal's
+  // fade animation so the close feels seamless.
+  const waitForSheetClose = () => new Promise<void>(resolve => setTimeout(resolve, 300));
+
   const pickFromCamera = async () => {
     setShowAttachSheet(false);
+    await waitForSheetClose();
     try {
       if (Platform.OS !== 'web') {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
@@ -156,12 +163,14 @@ export default function ForumThreadScreen() {
       const filename = a.fileName || `photo_${Date.now()}.jpg`;
       await uploadAsset({ uri: a.uri, name: filename, mimeType: a.mimeType || 'image/jpeg', size: a.fileSize });
     } catch (e: any) {
+      console.error('[forum] camera pick failed:', e);
       Alert.alert('Camera failed', e?.response?.data?.detail || e?.message || 'Unknown error');
     }
   };
 
   const pickFromLibrary = async () => {
     setShowAttachSheet(false);
+    await waitForSheetClose();
     try {
       if (Platform.OS !== 'web') {
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -181,12 +190,14 @@ export default function ForumThreadScreen() {
       const filename = a.fileName || `image_${Date.now()}.jpg`;
       await uploadAsset({ uri: a.uri, name: filename, mimeType: a.mimeType || 'image/jpeg', size: a.fileSize });
     } catch (e: any) {
+      console.error('[forum] library pick failed:', e);
       Alert.alert('Library access failed', e?.response?.data?.detail || e?.message || 'Unknown error');
     }
   };
 
   const pickFromFiles = async () => {
     setShowAttachSheet(false);
+    await waitForSheetClose();
     try {
       const res = await DocumentPicker.getDocumentAsync({
         type: ['application/pdf', 'image/*'],
@@ -198,6 +209,7 @@ export default function ForumThreadScreen() {
       if (!a) return;
       await uploadAsset({ uri: a.uri, name: a.name || 'file', mimeType: a.mimeType, size: a.size });
     } catch (e: any) {
+      console.error('[forum] document pick failed:', e);
       Alert.alert('File pick failed', e?.response?.data?.detail || e?.message || 'Unknown error');
     }
   };
