@@ -180,11 +180,11 @@ export default function ForumListScreen() {
       {/* Forum / Chat segmented pill */}
       <View style={s.segmentRow}>
         <View style={s.segment}>
-          <TouchableOpacity style={[s.segmentBtn, s.segmentBtnActive]} disabled data-testid="segment-forum">
+          <TouchableOpacity style={[s.segmentBtn, s.segmentBtnActive]} disabled testID="segment-forum" accessibilityLabel="segment-forum" /* @ts-ignore */ data-testid="segment-forum">
             <Ionicons name="chatbubbles" size={14} color="#FFF" />
             <Text style={s.segmentTxtActive}>Forum</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={s.segmentBtn} onPress={() => router.push('/forum/chat' as any)} data-testid="segment-chat">
+          <TouchableOpacity style={s.segmentBtn} onPress={() => router.push('/forum/chat' as any)} testID="segment-chat" accessibilityLabel="segment-chat" /* @ts-ignore */ data-testid="segment-chat">
             <Ionicons name="chatbox-ellipses-outline" size={14} color="#1565C0" />
             <Text style={s.segmentTxt}>Chat</Text>
           </TouchableOpacity>

@@ -67,7 +67,7 @@ export default function ChatListScreen() {
         <Ionicons name="search" size={18} color="#90A4AE" />
         <TextInput style={s.searchInput} placeholder="Search groups..." value={q} onChangeText={setQ} returnKeyType="search" onSubmitEditing={load} />
       </View>
-      <TouchableOpacity style={s.newGroupBtn} onPress={() => router.push('/forum/chat/create' as any)} data-testid="new-group-btn">
+      <TouchableOpacity style={s.newGroupBtn} onPress={() => router.push('/forum/chat/create' as any)} testID="new-group-btn" accessibilityLabel="new-group-btn" /* @ts-ignore */ data-testid="new-group-btn">
         <View style={s.newGroupIcon}><Ionicons name="people" size={20} color="#FFF" /></View>
         <Text style={s.newGroupTxt}>Start New Group Chat</Text>
         <Ionicons name="add" size={22} color="#FFF" />
@@ -79,7 +79,7 @@ export default function ChatListScreen() {
           contentContainerStyle={{ padding: 12, paddingBottom: 40 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
           renderItem={({ item }) => (
-            <TouchableOpacity style={s.row} onPress={() => router.push(`/forum/chat/${item.id}` as any)} data-testid={`chat-group-${item.id}`}>
+            <TouchableOpacity style={s.row} onPress={() => router.push(`/forum/chat/${item.id}` as any)} testID={`chat-group-${item.id}`} accessibilityLabel={`chat-group-${item.id}`} /* @ts-ignore */ data-testid={`chat-group-${item.id}`}>
               <View style={s.avatar}>
                 {item.kind === 'all_staff' ? <Ionicons name="business" size={22} color="#FFF" /> : item.kind === 'dm' ? <Ionicons name="person" size={22} color="#FFF" /> : <Ionicons name="people" size={22} color="#FFF" />}
               </View>
