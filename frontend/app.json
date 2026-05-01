@@ -8,7 +8,7 @@
     "scheme": "dental-phase-app",
     "userInterfaceStyle": "automatic",
     "runtimeVersion": {
-      "policy": "sdkVersion"
+      "policy": "appVersion"
     },
     "updates": {
       "enabled": true,
