@@ -175,23 +175,25 @@ export default function CreateGroupScreen() {
 
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
         <View style={s.photoRow}>
-          <TouchableOpacity
-            style={s.photoCircle}
-            onPress={() => setShowPhotoSheet(true)}
-            disabled={photoUploading}
-            testID="group-photo-btn"
-            accessibilityLabel="group-photo-btn"
-            // @ts-ignore
-            data-testid="group-photo-btn"
-          >
-            {photoUploading ? (
-              <ActivityIndicator size="small" color="#1565C0" />
-            ) : photoPreview ? (
-              <Image source={{ uri: photoPreview }} style={s.photoImage} />
-            ) : (
-              <Ionicons name="camera" size={28} color="#78909C" />
-            )}
-          </TouchableOpacity>
+          <View testID="group-photo-wrap" /* @ts-ignore */ data-testid="group-photo-wrap">
+            <TouchableOpacity
+              style={s.photoCircle}
+              onPress={() => setShowPhotoSheet(true)}
+              disabled={photoUploading}
+              testID="group-photo-btn"
+              accessibilityLabel="group-photo-btn"
+              // @ts-ignore
+              data-testid="group-photo-btn"
+            >
+              {photoUploading ? (
+                <ActivityIndicator size="small" color="#1565C0" />
+              ) : photoPreview ? (
+                <Image source={{ uri: photoPreview }} style={s.photoImage} />
+              ) : (
+                <Ionicons name="camera" size={28} color="#78909C" />
+              )}
+            </TouchableOpacity>
+          </View>
           <Text style={s.photoHelp}>{photoPreview ? 'Tap to change photo' : 'Add group photo (optional)'}</Text>
         </View>
 
