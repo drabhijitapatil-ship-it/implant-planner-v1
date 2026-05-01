@@ -9,6 +9,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { useAuth } from '../../../contexts/AuthContext';
 import api, { getToken } from '../../../utils/api';
 import { BACKEND_URL } from '../../../utils/config';
+import { safeDocumentPick, safeLaunchCamera, safeLaunchLibrary } from '../../../utils/safePicker';
 
 interface Message {
   id: string; author_id: string; author_name: string; author_role: string;
@@ -100,7 +101,7 @@ export default function ChatRoomScreen() {
 
   const pickImage = async (source: 'camera' | 'library') => {
     if (pickingInProgressRef.current) {
-      Alert.alert('Please wait', 'A previous file picker is still finishing. Try again in a moment.');
+      console.log('[chat] picker re-entry blocked');
       return;
     }
     pickingInProgressRef.current = true;
@@ -111,7 +112,7 @@ export default function ChatRoomScreen() {
         const perm = source === 'camera' ? await ImagePicker.requestCameraPermissionsAsync() : await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!perm.granted) { Alert.alert('Permission needed'); return; }
       }
-      const res = source === 'camera' ? await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 }) : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 });
+      const res = source === 'camera' ? await safeLaunchCamera({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 }) : await safeLaunchLibrary({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 });
       if (res.canceled) return;
       const a = res.assets?.[0]; if (!a) return;
       setAttaching(true);
@@ -122,14 +123,14 @@ export default function ChatRoomScreen() {
 
   const pickFile = async () => {
     if (pickingInProgressRef.current) {
-      Alert.alert('Please wait', 'A previous file picker is still finishing. Try again in a moment.');
+      console.log('[chat] picker re-entry blocked');
       return;
     }
     pickingInProgressRef.current = true;
     setShowAttachSheet(false);
     await waitForSheetClose();
     try {
-      const res = await DocumentPicker.getDocumentAsync({ type: ['application/pdf', 'image/*'], multiple: false, copyToCacheDirectory: true });
+      const res = await safeDocumentPick({ type: ['application/pdf', 'image/*'], multiple: false, copyToCacheDirectory: true });
       if (res.canceled) return;
       const a = res.assets?.[0]; if (!a) return;
       setAttaching(true);
@@ -139,8 +140,8 @@ export default function ChatRoomScreen() {
     } catch (e: any) {
       console.error(e);
       const raw = e?.message || '';
-      const friendly = raw.includes('Different document picking')
-        ? 'A previous picker is still releasing. Please tap again in a moment.'
+      const friendly = /Different document picking|already in progress/i.test(raw)
+        ? 'The iOS file picker is unresponsive. Please close & reopen the app to reset it, then try again.'
         : (raw || 'Unknown error');
       Alert.alert('File pick failed', friendly);
     } finally { setAttaching(false); pickingInProgressRef.current = false; }

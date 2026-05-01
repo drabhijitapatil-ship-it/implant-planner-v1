@@ -8,6 +8,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import api, { getToken } from '../../../utils/api';
 import { BACKEND_URL } from '../../../utils/config';
+import { safeDocumentPick, safeLaunchCamera, safeLaunchLibrary } from '../../../utils/safePicker';
 
 interface UserItem { id: string; name: string; role: string; profile_photo?: string; }
 
@@ -98,7 +99,7 @@ export default function CreateGroupScreen() {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
         if (!perm.granted) { Alert.alert('Camera permission needed'); return; }
       }
-      const res = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85, allowsEditing: true, aspect: [1, 1] });
+      const res = await safeLaunchCamera({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85, allowsEditing: true, aspect: [1, 1] });
       if (res.canceled) return;
       const a = res.assets?.[0]; if (!a) return;
       await uploadPhoto(a.uri, a.fileName || `photo_${Date.now()}.jpg`, 'image/jpeg');
@@ -117,7 +118,7 @@ export default function CreateGroupScreen() {
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!perm.granted) { Alert.alert('Permission needed'); return; }
       }
-      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85, allowsEditing: true, aspect: [1, 1] });
+      const res = await safeLaunchLibrary({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85, allowsEditing: true, aspect: [1, 1] });
       if (res.canceled) return;
       const a = res.assets?.[0]; if (!a) return;
       await uploadPhoto(a.uri, a.fileName || `photo_${Date.now()}.jpg`, 'image/jpeg');
@@ -132,15 +133,15 @@ export default function CreateGroupScreen() {
     setShowPhotoSheet(false);
     await waitForSheetClose();
     try {
-      const res = await DocumentPicker.getDocumentAsync({ type: ['image/*'], multiple: false, copyToCacheDirectory: true });
+      const res = await safeDocumentPick({ type: ['image/*'], multiple: false, copyToCacheDirectory: true });
       if (res.canceled) return;
       const a = res.assets?.[0]; if (!a) return;
       await uploadPhoto(a.uri, a.name || `photo_${Date.now()}.jpg`, 'image/jpeg');
     } catch (e: any) {
       console.error(e);
       const raw = e?.message || '';
-      const friendly = raw.includes('Different document picking')
-        ? 'A previous picker is still releasing. Please tap again in a moment.'
+      const friendly = /Different document picking|already in progress/i.test(raw)
+        ? 'The iOS file picker is unresponsive. Please close & reopen the app to reset it, then try again.'
         : (raw || 'Unknown error');
       Alert.alert('File pick failed', friendly);
     } finally { pickingInProgressRef.current = false; }

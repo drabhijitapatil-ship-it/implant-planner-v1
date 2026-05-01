@@ -9,6 +9,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { useAuth } from '../../contexts/AuthContext';
 import api, { getToken } from '../../utils/api';
 import { BACKEND_URL } from '../../utils/config';
+import { safeDocumentPick, safeLaunchCamera, safeLaunchLibrary } from '../../utils/safePicker';
 
 interface Thread {
   id: string;
@@ -164,7 +165,8 @@ export default function ForumThreadScreen() {
 
   const pickFromCamera = async () => {
     if (pickingInProgressRef.current) {
-      Alert.alert('Please wait', 'A previous file picker is still finishing. Try again in a moment.');
+      // Silently ignore double-taps — safePicker handles state internally.
+      console.log('[forum] picker re-entry blocked');
       return;
     }
     pickingInProgressRef.current = true;
@@ -178,7 +180,7 @@ export default function ForumThreadScreen() {
           return;
         }
       }
-      const res = await ImagePicker.launchCameraAsync({
+      const res = await safeLaunchCamera({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.85,
         allowsEditing: false,
@@ -201,7 +203,8 @@ export default function ForumThreadScreen() {
 
   const pickFromLibrary = async () => {
     if (pickingInProgressRef.current) {
-      Alert.alert('Please wait', 'A previous file picker is still finishing. Try again in a moment.');
+      // Silently ignore double-taps — safePicker handles state internally.
+      console.log('[forum] picker re-entry blocked');
       return;
     }
     pickingInProgressRef.current = true;
@@ -215,7 +218,7 @@ export default function ForumThreadScreen() {
           return;
         }
       }
-      const res = await ImagePicker.launchImageLibraryAsync({
+      const res = await safeLaunchLibrary({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.85,
         allowsEditing: false,
@@ -238,14 +241,15 @@ export default function ForumThreadScreen() {
 
   const pickFromFiles = async () => {
     if (pickingInProgressRef.current) {
-      Alert.alert('Please wait', 'A previous file picker is still finishing. Try again in a moment.');
+      // Silently ignore double-taps — safePicker handles state internally.
+      console.log('[forum] picker re-entry blocked');
       return;
     }
     pickingInProgressRef.current = true;
     setShowAttachSheet(false);
     await waitForSheetClose();
     try {
-      const res = await DocumentPicker.getDocumentAsync({
+      const res = await safeDocumentPick({
         type: ['application/pdf', 'image/*'],
         multiple: false,
         copyToCacheDirectory: true,
@@ -261,12 +265,12 @@ export default function ForumThreadScreen() {
       await uploadAsset({ uri, name, mimeType: mime, size: a.size });
     } catch (e: any) {
       console.error('[forum] document pick failed:', e);
-      // Native iOS sometimes returns "Different document picking in progress"
-      // even after the previous picker has dismissed. Surface a friendlier
-      // message so the user knows a retry will succeed.
       const raw = e?.message || '';
-      const friendly = raw.includes('Different document picking')
-        ? 'A previous picker is still releasing. Please tap again in a moment.'
+      // safePicker has already auto-retried once. If we are still here, the
+      // native iOS DocumentPicker module is permanently stuck — the only
+      // reliable recovery is for the user to close & reopen the app.
+      const friendly = /Different document picking|already in progress/i.test(raw)
+        ? 'The iOS file picker is unresponsive. Please close & reopen the app to reset it, then try again.'
         : (e?.response?.data?.detail || raw || 'Unknown error');
       Alert.alert('File pick failed', friendly);
     } finally {

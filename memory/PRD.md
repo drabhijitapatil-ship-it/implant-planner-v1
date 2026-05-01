@@ -1,5 +1,16 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 117 (Feb 2026) — iOS Picker State-Stuck Auto-Retry
+
+**Problem**: User reported the *same* "Different document picking in progress. Await other document picking first" error from `expo-document-picker` on iOS, even after iter-116's `pickingInProgressRef` guard. Root cause: the iOS native module retains stuck state across screens / sessions, so the very first call in a session can fail. The previous in-app guard didn't help because the stuck state was *already* set when the user opened the screen.
+
+**Fix**: Created a shared `/app/frontend/utils/safePicker.ts` helper that wraps `DocumentPicker.getDocumentAsync`, `ImagePicker.launchCameraAsync`, and `ImagePicker.launchImageLibraryAsync` with a one-shot 1500 ms auto-retry on the iOS state-stuck error. Users typically never see the error in the UI because the retry succeeds after the native state has had time to release. Wired it into all 3 picker call sites:
+- `forum/[threadId].tsx` (Discussion Forum composer)
+- `forum/chat/[groupId].tsx` (Chat room composer)
+- `forum/chat/create.tsx` (Create Group photo picker)
+
+Silenced the duplicate-tap "Please wait" Alerts (now `console.log` only) since they were redundant once safePicker handles state internally. The final catch block now gives an actionable message ("Close & reopen the app to reset it") if both attempts fail — the only reliable recovery path for a permanently-stuck iOS native picker module.
+
 ## Iteration 116 (Feb 2026) — Forum/Chat UX Polish + Drawer Icon Color
 - **Discussion Forum picker resilience**: Added `pickingInProgressRef` global guard in `forum/[threadId].tsx` to prevent re-entry into camera/library/files picker while one is still active (root cause of the "Different document picking in progress" iOS error). Increased `waitForSheetClose` from 300→500ms to give the iOS modal more time to release before the system picker opens. Friendlier alert message when the native error still surfaces.
 - **Chat composer attach pattern unified**: `forum/chat/[groupId].tsx` swapped the 3 inline icon buttons (camera/image/attach) for a single paperclip button → 3-option action sheet (Take Photo / Photo Library / PDF or Document) — same UX pattern as Discussion Forum. Same `pickingInProgressRef` guard applied. New testIDs: `chat-attach-btn`, `chat-attach-camera-btn`, `chat-attach-library-btn`, `chat-attach-files-btn`.
