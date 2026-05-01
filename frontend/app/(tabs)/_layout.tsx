@@ -11,6 +11,7 @@ import {
   Platform,
   Image,
 } from 'react-native';
+import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePushNotifications } from '../../utils/usePushNotifications';
@@ -104,8 +105,13 @@ function DrawerMenu({
           // @ts-ignore
           data-testid="tile-menu-sheet"
         >
-          {/* Top row — user identity (left) + close (right) */}
-          <View style={t.identityRow}>
+          {/* Top row — user identity (left) + close (right). Drops in
+              gracefully from the top so the eye lands on the user before the
+              tiles cascade. */}
+          <Animated.View
+            entering={FadeInDown.duration(260).springify().damping(14)}
+            style={t.identityRow}
+          >
             <View style={t.identityLeft}>
               {profilePhoto ? (
                 <Image source={{ uri: profilePhoto }} style={t.avatarImage} />
@@ -129,35 +135,45 @@ function DrawerMenu({
             >
               <Ionicons name="close" size={22} color="#546E7A" />
             </TouchableOpacity>
-          </View>
+          </Animated.View>
 
           <View style={t.divider} />
 
-          {/* Tile grid — 2 per row, equal width via flexBasis */}
+          {/* Tile grid — 2 per row, equal width via flexBasis. Each tile
+              scales-in with a 60-ms stagger so the grid feels alive instead
+              of dropping in as one block. */}
           <View style={t.grid}>
-            {allItems.map((item) => (
-              <TouchableOpacity
+            {allItems.map((item, idx) => (
+              <Animated.View
                 key={item.key}
-                style={[t.tile, { backgroundColor: item.bg }]}
-                onPress={() => { onClose(); onNavigate(item.route); }}
-                activeOpacity={0.75}
-                testID={`tile-${item.key}`}
-                accessibilityLabel={`tile-${item.key}`}
-                // @ts-ignore
-                data-testid={`tile-${item.key}`}
+                entering={ZoomIn.delay(120 + idx * 60).duration(280).springify().damping(13)}
+                style={{ flexBasis: '48%', flexGrow: 1, aspectRatio: 1.3 }}
               >
-                <View style={[t.tileChip, { backgroundColor: item.chip }]}>
-                  <Ionicons name={item.icon} size={26} color={item.iconColor} />
-                  {item.badge && <View style={t.tileBadge} />}
-                </View>
-                <Text style={t.tileLabel}>{item.label}</Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[t.tile, { backgroundColor: item.bg }]}
+                  onPress={() => { onClose(); onNavigate(item.route); }}
+                  activeOpacity={0.75}
+                  testID={`tile-${item.key}`}
+                  accessibilityLabel={`tile-${item.key}`}
+                  // @ts-ignore
+                  data-testid={`tile-${item.key}`}
+                >
+                  <View style={[t.tileChip, { backgroundColor: item.chip }]}>
+                    <Ionicons name={item.icon} size={26} color={item.iconColor} />
+                    {item.badge && <View style={t.tileBadge} />}
+                  </View>
+                  <Text style={t.tileLabel}>{item.label}</Text>
+                </TouchableOpacity>
+              </Animated.View>
             ))}
           </View>
 
-          {/* Logout — separate visual section so it never collides with
-              navigation tiles. Pill button in soft red brand-coordinated. */}
-          <View style={t.logoutWrap}>
+          {/* Logout — separate visual section, animates last so the eye
+              naturally finishes there. */}
+          <Animated.View
+            entering={FadeInDown.delay(120 + allItems.length * 60 + 80).duration(260)}
+            style={t.logoutWrap}
+          >
             <TouchableOpacity
               style={t.logoutPill}
               onPress={() => { onClose(); onLogout(); }}
@@ -170,7 +186,7 @@ function DrawerMenu({
               <Ionicons name="log-out-outline" size={18} color="#C62828" />
               <Text style={t.logoutTxt}>Logout</Text>
             </TouchableOpacity>
-          </View>
+          </Animated.View>
         </Pressable>
       </Pressable>
     </Modal>
@@ -233,10 +249,10 @@ const t = StyleSheet.create({
     gap: 12,
   },
   tile: {
-    // Two columns with the 12-px gap accounted for via 48% basis.
-    flexBasis: '48%',
-    flexGrow: 1,
-    aspectRatio: 1.3,
+    // Sizing handled by the surrounding Animated.View wrapper (flexBasis 48%
+    // + aspectRatio 1.3). The TouchableOpacity stretches to fill that box.
+    width: '100%',
+    height: '100%',
     borderRadius: 18,
     paddingVertical: 16,
     paddingHorizontal: 14,
