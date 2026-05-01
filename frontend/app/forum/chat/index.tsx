@@ -9,6 +9,7 @@ import api from '../../../utils/api';
 interface Group {
   id: string; kind: string; name: string; type: string; photo_url?: string;
   members: string[]; last_message_preview?: string; last_message_at?: string; locked?: boolean;
+  unread_count?: number;
 }
 
 function fmtRel(iso?: string): string {
@@ -85,13 +86,20 @@ export default function ChatListScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <View style={s.rowTop}>
-                  <Text style={s.rowName} numberOfLines={1}>{item.name}</Text>
+                  <Text style={[s.rowName, (item.unread_count || 0) > 0 && s.rowNameUnread]} numberOfLines={1}>{item.name}</Text>
                   {item.type === 'private' && item.kind !== 'dm' && <Ionicons name="lock-closed" size={11} color="#78909C" />}
                   {item.locked && <Ionicons name="shield-checkmark" size={11} color="#2E7D32" />}
                 </View>
-                <Text style={s.rowPreview} numberOfLines={1}>{item.last_message_preview || 'No messages yet — say hi 👋'}</Text>
+                <Text style={[s.rowPreview, (item.unread_count || 0) > 0 && s.rowPreviewUnread]} numberOfLines={1}>{item.last_message_preview || 'No messages yet — say hi 👋'}</Text>
               </View>
-              <Text style={s.rowTime}>{fmtRel(item.last_message_at)}</Text>
+              <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                <Text style={s.rowTime}>{fmtRel(item.last_message_at)}</Text>
+                {(item.unread_count || 0) > 0 && (
+                  <View style={s.unreadBadge} testID={`chat-unread-${item.id}`} /* @ts-ignore */ data-testid={`chat-unread-${item.id}`}>
+                    <Text style={s.unreadBadgeTxt}>{(item.unread_count || 0) > 99 ? '99+' : item.unread_count}</Text>
+                  </View>
+                )}
+              </View>
             </TouchableOpacity>
           )}
           ListEmptyComponent={<View style={s.empty}><Ionicons name="chatbox-ellipses-outline" size={48} color="#B0BEC5" /><Text style={s.emptyTxt}>No groups yet.</Text><Text style={s.emptySub}>Tap "Start New Group Chat" to begin.</Text></View>}
@@ -120,8 +128,12 @@ const s = StyleSheet.create({
   avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#1565C0', alignItems: 'center', justifyContent: 'center' },
   rowTop: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   rowName: { fontSize: 15, fontWeight: '700', color: '#37474F', flexShrink: 1 },
+  rowNameUnread: { color: '#0D47A1' },
   rowPreview: { fontSize: 13, color: '#78909C', marginTop: 2 },
+  rowPreviewUnread: { color: '#37474F', fontWeight: '600' },
   rowTime: { fontSize: 11, color: '#90A4AE' },
+  unreadBadge: { minWidth: 20, height: 20, paddingHorizontal: 6, borderRadius: 10, backgroundColor: '#1565C0', alignItems: 'center', justifyContent: 'center' },
+  unreadBadgeTxt: { fontSize: 11, fontWeight: '700', color: '#FFF' },
   empty: { alignItems: 'center', padding: 40 },
   emptyTxt: { fontSize: 15, color: '#546E7A', marginTop: 12, fontWeight: '600' },
   emptySub: { fontSize: 13, color: '#90A4AE', marginTop: 6 },

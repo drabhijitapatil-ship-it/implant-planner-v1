@@ -11132,6 +11132,44 @@ def _serialize_group(g: dict, viewer_id: Optional[str] = None) -> dict:
     }
 
 
+async def _chat_unread_count(group_id: str, uid: str, last_activity_at: Optional[datetime]) -> int:
+    """Count messages in `group_id` authored by someone else that were created
+    after the viewer's last_read_at for that group. Returns 0 when the group is
+    silent (no last_activity_at) to avoid a pointless query."""
+    if not last_activity_at:
+        return 0
+    read = await db.chat_group_reads.find_one({"user_id": uid, "group_id": group_id}, {"_id": 0, "last_read_at": 1})
+    lr = (read or {}).get("last_read_at")
+    if lr and lr >= last_activity_at:
+        return 0
+    q: Dict[str, Any] = {"group_id": group_id, "author_id": {"$ne": uid}}
+    if lr:
+        q["created_at"] = {"$gt": lr}
+    # Cap at 99 for badge display — no one reads 100+ unread chat messages.
+    return min(await db.chat_messages.count_documents(q), 99)
+
+
+async def _chat_typing_users(group_id: str, viewer_id: str) -> List[Dict[str, str]]:
+    """Return the list of users currently typing in `group_id`, excluding the
+    viewer. Entries with `expires_at` in the past are filtered out (lazy GC)."""
+    g = await db.chat_groups.find_one({"id": group_id}, {"_id": 0, "typing": 1})
+    typing = (g or {}).get("typing") or {}
+    now = datetime.now(timezone.utc)
+    out: List[Dict[str, str]] = []
+    for tid, t in (typing.items() if isinstance(typing, dict) else []):
+        if tid == viewer_id:
+            continue
+        exp = t.get("expires_at") if isinstance(t, dict) else None
+        if not exp:
+            continue
+        # MongoDB roundtrips can strip tzinfo; coerce to UTC.
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        if exp > now:
+            out.append({"user_id": tid, "name": t.get("name") or "Someone"})
+    return out
+
+
 def _serialize_message(m: dict, viewer_id: Optional[str] = None) -> dict:
     reactions = m.get("reactions") or {}
     return {
@@ -11203,7 +11241,11 @@ async def chat_list_groups(q: Optional[str] = None, current_user: dict = Depends
     if q and q.strip():
         query["name"] = {"$regex": q.strip(), "$options": "i"}
     cursor = db.chat_groups.find(query, {"_id": 0}).sort("last_activity_at", -1)
-    items = [_serialize_group(g, viewer_id=uid) async for g in cursor]
+    items = []
+    async for g in cursor:
+        s = _serialize_group(g, viewer_id=uid)
+        s["unread_count"] = await _chat_unread_count(g.get("id"), uid, g.get("last_activity_at"))
+        items.append(s)
     # For DMs, resolve other-user display name
     for it in items:
         if it.get("kind") == "dm":
@@ -11214,7 +11256,8 @@ async def chat_list_groups(q: Optional[str] = None, current_user: dict = Depends
                     it["name"] = u.get("name")
                     it["photo_url"] = u.get("profile_photo")
                     it["other_user_id"] = other
-    return {"items": items}
+    total_unread = sum(i.get("unread_count", 0) for i in items)
+    return {"items": items, "total_unread": total_unread}
 
 
 @api_router.post("/chat/dm/{other_user_id}")
@@ -11278,7 +11321,45 @@ async def chat_get_group(group_id: str, current_user: dict = Depends(get_current
     out = _serialize_group(g, viewer_id=uid)
     out["member_details"] = member_objs
     out["is_admin"] = uid in (g.get("admins") or [])
+    out["typing_users"] = await _chat_typing_users(group_id, uid)
+    out["unread_count"] = await _chat_unread_count(group_id, uid, g.get("last_activity_at"))
     return out
+
+
+@api_router.post("/chat/groups/{group_id}/mark-read")
+async def chat_mark_read(group_id: str, current_user: dict = Depends(get_current_user)):
+    """Mark this group as read up to now for the current user. Called by the
+    chat room on mount and after every send/load so the unread-count badge
+    clears on the group list. Idempotent."""
+    if not _chat_can_access(current_user):
+        raise HTTPException(status_code=403, detail="Nurses cannot use chat.")
+    uid = _uid(current_user)
+    await _require_member(group_id, uid)
+    now = datetime.now(timezone.utc)
+    await db.chat_group_reads.update_one(
+        {"user_id": uid, "group_id": group_id},
+        {"$set": {"user_id": uid, "group_id": group_id, "last_read_at": now}},
+        upsert=True,
+    )
+    return {"ok": True, "last_read_at": now.isoformat()}
+
+
+@api_router.post("/chat/groups/{group_id}/typing")
+async def chat_set_typing(group_id: str, current_user: dict = Depends(get_current_user)):
+    """Stamp the current user as typing in `group_id` for ~5 seconds. The
+    frontend debounce-fires this every ~3s while the composer has non-empty
+    text; the server auto-expires entries via `_chat_typing_users()`."""
+    if not _chat_can_access(current_user):
+        raise HTTPException(status_code=403, detail="Nurses cannot use chat.")
+    uid = _uid(current_user)
+    await _require_member(group_id, uid)
+    now = datetime.now(timezone.utc)
+    expires = now + timedelta(seconds=5)
+    await db.chat_groups.update_one(
+        {"id": group_id},
+        {"$set": {f"typing.{uid}": {"name": current_user.get("name") or "Someone", "expires_at": expires}}},
+    )
+    return {"ok": True}
 
 
 @api_router.patch("/chat/groups/{group_id}")
@@ -11382,7 +11463,18 @@ async def chat_send_message(group_id: str, payload: ChatMessageCreate, current_u
         "created_at": now,
     })
     preview = payload.body[:80] if payload.body else ("📎 Attachment" if atts else "")
-    await db.chat_groups.update_one({"id": group_id}, {"$set": {"last_activity_at": now, "last_message_preview": preview, "last_message_at": now}})
+    # Clear this user's typing marker + bump last_activity_at + preview.
+    await db.chat_groups.update_one(
+        {"id": group_id},
+        {"$set": {"last_activity_at": now, "last_message_preview": preview, "last_message_at": now},
+         "$unset": {f"typing.{uid}": ""}},
+    )
+    # Mark sender as read up to now (their own message doesn't contribute to unread).
+    await db.chat_group_reads.update_one(
+        {"user_id": uid, "group_id": group_id},
+        {"$set": {"user_id": uid, "group_id": group_id, "last_read_at": now}},
+        upsert=True,
+    )
     # Notify other members
     other_members = [m for m in (g.get("members") or []) if m != uid]
     if other_members:
