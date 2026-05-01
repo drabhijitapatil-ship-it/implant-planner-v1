@@ -1,5 +1,22 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 118 (Feb 2026) — Tile-Grid Menu (replaces hamburger drawer)
+
+**User feedback**: Hamburger felt utilitarian; wanted a more elegant 4-tile grid that feels native to the app's blue brand.
+
+**Implementation**:
+- Header opener changed from `Ionicons "menu"` (dark grey) → `Ionicons "grid"` (#1565C0) — instantly signals a 4-tile menu.
+- Side-drawer modal replaced with a top-anchored popover sheet:
+  - Translucent `rgba(15,25,40,0.45)` backdrop
+  - White-ish `#FAFCFF` sheet with rounded `28-px` bottom corners + soft shadow
+  - User identity row (avatar + name + role) on the **left**, circular close button on the **right**
+  - Divider, then a 2-column tile grid with `flexBasis: 48%` + 12-px gap
+  - Each tile uses a different pastel-blue tint from the brand palette: Users `#E3F2FD/#BBDEFB/#1565C0`, Profile `#E0F7FA/#B2EBF2/#00838F`, Archived `#E8EAF6/#C5CAE9/#3949AB`, Forum `#E1F5FE/#B3E5FC/#0277BD`. Each has an icon-chip (rounded square) inside, and a red dot in the top-right when there's unread activity.
+  - Logout is a separate red-tinted **pill** (`#FDECEA` bg, `#C62828` text) at the bottom — visually distinct from navigation tiles.
+- Role-aware: Admin sees 4 tiles, Student sees 3 (no Users), Nurse sees only Profile.
+- testIDs preserved for backward compatibility: `hamburger-btn` (header), `tile-menu-sheet`, `tile-menu-overlay`, `tile-{key}` per tile, `tile-menu-close`, `tile-menu-logout`.
+- **Tested**: 100% pass — all 11 verified bullets across all 3 role variants (testing_agent_v3_fork, iteration_118.json).
+
 ## Iteration 117 (Feb 2026) — iOS Picker State-Stuck Auto-Retry
 
 **Problem**: User reported the *same* "Different document picking in progress. Await other document picking first" error from `expo-document-picker` on iOS, even after iter-116's `pickingInProgressRef` guard. Root cause: the iOS native module retains stuck state across screens / sessions, so the very first call in a session can fail. The previous in-app guard didn't help because the stuck state was *already* set when the user opened the screen.
