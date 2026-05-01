@@ -17,7 +17,11 @@ import { usePushNotifications } from '../../utils/usePushNotifications';
 import ImplantIcon from '../../components/ImplantIcon';
 import api from '../../utils/api';
 
-// ── Side Drawer Menu ───────────────────────────────────────
+// ── Tile-Grid Menu ──────────────────────────────────────────
+// Replaces the legacy side-drawer hamburger. Triggered by the 4-tile grid
+// icon in the header — opens a top-half popover with a 2-column grid of
+// pastel-blue tiles (one per menu destination), the user identity in the
+// top-left, and a dedicated red logout pill at the bottom for clarity.
 function DrawerMenu({
   visible,
   onClose,
@@ -44,23 +48,43 @@ function DrawerMenu({
   hasUnreadForum: boolean;
 }) {
   const insets = useSafeAreaInsets();
-  // Gate forum item on a hydrated, non-nurse role — if role is not yet known,
-  // hide it (prevents flashing Discussion Forum to a nurse before auth bootstrap completes).
   const forumAllowed = !!userRole && !isNurse;
 
-  const menuItems = [
+  // Each tile carries its own pastel-blue tint plus a slightly deeper accent
+  // for the icon chip — keeps the grid colourful without leaving the brand
+  // palette. Order is tuned so the most-used items land in the first row.
+  type TileItem = {
+    key: string;
+    icon: keyof typeof Ionicons.glyphMap;
+    label: string;
+    route: string;
+    bg: string;       // tile background (lightest)
+    chip: string;     // icon-chip background (mid)
+    iconColor: string; // icon stroke color (deepest)
+    badge?: boolean;
+  };
+  const allItems: TileItem[] = [
     ...(isAdmin
-      ? [{ key: 'users', icon: 'people-outline' as const, label: 'Users', route: '/user-management' }]
+      ? [{
+          key: 'users', icon: 'people' as const, label: 'Users', route: '/user-management',
+          bg: '#E3F2FD', chip: '#BBDEFB', iconColor: '#1565C0',
+        }]
       : []),
-    { key: 'profile', icon: 'person-circle-outline' as const, label: 'My Profile', route: '/profile' },
-    // Nurses do not need the Archived Cases view (they never archive cases).
+    {
+      key: 'profile', icon: 'person-circle' as const, label: 'My Profile', route: '/profile',
+      bg: '#E0F7FA', chip: '#B2EBF2', iconColor: '#00838F', badge: hasUnseenWhatsNew,
+    },
     ...(isNurse
       ? []
-      : [{ key: 'archived', icon: 'archive-outline' as const, label: 'Archived Cases', route: '/archived' }]),
-    // Discussion Forum — educational collaboration space. Nurses excluded.
-    // Hidden when role is not yet hydrated (prevents flashing to nurses pre-auth-bootstrap).
+      : [{
+          key: 'archived', icon: 'archive' as const, label: 'Archived', route: '/archived',
+          bg: '#E8EAF6', chip: '#C5CAE9', iconColor: '#3949AB',
+        }]),
     ...(forumAllowed
-      ? [{ key: 'forum', icon: 'chatbubbles-outline' as const, label: 'Discussion Forum', route: '/forum' }]
+      ? [{
+          key: 'forum', icon: 'chatbubbles' as const, label: 'Forum', route: '/forum',
+          bg: '#E1F5FE', chip: '#B3E5FC', iconColor: '#0277BD', badge: hasUnreadForum,
+        }]
       : []),
   ];
 
@@ -70,135 +94,206 @@ function DrawerMenu({
       animationType="fade"
       transparent
       onRequestClose={onClose}
-      statusBarTranslucent={Platform.OS === 'android'}
+      statusBarTranslucent
     >
-      <Pressable style={d.overlay} onPress={onClose}>
+      <Pressable style={t.overlay} onPress={onClose} testID="tile-menu-overlay">
         <Pressable
-          style={[d.drawer, { paddingTop: insets.top + 16 }]}
+          style={[t.sheet, { paddingTop: insets.top + 14 }]}
           onPress={(e) => e.stopPropagation()}
+          testID="tile-menu-sheet"
+          // @ts-ignore
+          data-testid="tile-menu-sheet"
         >
-          {/* User Info Header */}
-          <View style={d.header}>
-            {profilePhoto ? (
-              <Image source={{ uri: profilePhoto }} style={d.avatarImage} />
-            ) : (
-              <View style={d.avatar}>
-                <Ionicons name="person" size={28} color="#FFF" />
+          {/* Top row — user identity (left) + close (right) */}
+          <View style={t.identityRow}>
+            <View style={t.identityLeft}>
+              {profilePhoto ? (
+                <Image source={{ uri: profilePhoto }} style={t.avatarImage} />
+              ) : (
+                <View style={t.avatar}>
+                  <Ionicons name="person" size={22} color="#FFF" />
+                </View>
+              )}
+              <View style={{ marginLeft: 10, flexShrink: 1 }}>
+                <Text style={t.userName} numberOfLines={1}>{userName}</Text>
+                <Text style={t.userRole} numberOfLines={1}>{userRole}</Text>
               </View>
-            )}
-            <View style={d.headerInfo}>
-              <Text style={d.userName}>{userName}</Text>
-              <Text style={d.userRole}>{userRole}</Text>
             </View>
-            <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-              <Ionicons name="close" size={24} color="#90A4AE" />
+            <TouchableOpacity
+              onPress={onClose}
+              style={t.closeBtn}
+              hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+              testID="tile-menu-close"
+              // @ts-ignore
+              data-testid="tile-menu-close"
+            >
+              <Ionicons name="close" size={22} color="#546E7A" />
             </TouchableOpacity>
           </View>
 
-          <View style={d.divider} />
+          <View style={t.divider} />
 
-          {/* Menu Items */}
-          {menuItems.map((item) => (
+          {/* Tile grid — 2 per row, equal width via flexBasis */}
+          <View style={t.grid}>
+            {allItems.map((item) => (
+              <TouchableOpacity
+                key={item.key}
+                style={[t.tile, { backgroundColor: item.bg }]}
+                onPress={() => { onClose(); onNavigate(item.route); }}
+                activeOpacity={0.75}
+                testID={`tile-${item.key}`}
+                accessibilityLabel={`tile-${item.key}`}
+                // @ts-ignore
+                data-testid={`tile-${item.key}`}
+              >
+                <View style={[t.tileChip, { backgroundColor: item.chip }]}>
+                  <Ionicons name={item.icon} size={26} color={item.iconColor} />
+                  {item.badge && <View style={t.tileBadge} />}
+                </View>
+                <Text style={t.tileLabel}>{item.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Logout — separate visual section so it never collides with
+              navigation tiles. Pill button in soft red brand-coordinated. */}
+          <View style={t.logoutWrap}>
             <TouchableOpacity
-              key={item.key}
-              style={d.menuItem}
-              onPress={() => {
-                onClose();
-                onNavigate(item.route);
-              }}
-              activeOpacity={0.6}
-              testID={`drawer-${item.key}`}
-              accessibilityLabel={`drawer-${item.key}`}
+              style={t.logoutPill}
+              onPress={() => { onClose(); onLogout(); }}
+              activeOpacity={0.8}
+              testID="tile-menu-logout"
+              accessibilityLabel="tile-menu-logout"
               // @ts-ignore
-              data-testid={`drawer-${item.key}`}
+              data-testid="tile-menu-logout"
             >
-              <Ionicons name={item.icon} size={22} color="#1565C0" />
-              <Text style={d.menuLabel}>{item.label}</Text>
-              {item.key === 'profile' && hasUnseenWhatsNew && (
-                <View style={badgeStyles.reddotInline} testID="drawer-profile-reddot" />
-              )}
-              {item.key === 'forum' && hasUnreadForum && (
-                <View style={badgeStyles.reddotInline} testID="drawer-forum-reddot" />
-              )}
-              <Ionicons name="chevron-forward" size={18} color="#B0BEC5" />
+              <Ionicons name="log-out-outline" size={18} color="#C62828" />
+              <Text style={t.logoutTxt}>Logout</Text>
             </TouchableOpacity>
-          ))}
-
-          <View style={d.divider} />
-
-          {/* Logout */}
-          <TouchableOpacity
-            style={d.menuItem}
-            onPress={() => {
-              onClose();
-              onLogout();
-            }}
-            activeOpacity={0.6}
-            data-testid="drawer-logout"
-          >
-            <Ionicons name="log-out-outline" size={22} color="#D32F2F" />
-            <Text style={[d.menuLabel, { color: '#D32F2F' }]}>Logout</Text>
-          </TouchableOpacity>
-
-          <View style={{ flex: 1 }} />
-
-          <Text style={d.appName}>My Implant Planner</Text>
+          </View>
         </Pressable>
       </Pressable>
     </Modal>
   );
 }
 
-const d = StyleSheet.create({
+const t = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    flexDirection: 'row',
+    backgroundColor: 'rgba(15, 25, 40, 0.45)',
   },
-  drawer: {
-    width: '75%',
-    maxWidth: 300,
-    backgroundColor: '#FFF',
-    paddingHorizontal: 20,
-    paddingBottom: 30,
+  sheet: {
+    backgroundColor: '#FAFCFF',
+    paddingHorizontal: 18,
+    paddingBottom: 20,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
     shadowColor: '#000',
-    shadowOffset: { width: 4, height: 0 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 14,
   },
-  header: {
+  identityRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 20,
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+  },
+  identityLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    paddingRight: 8,
   },
   avatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 44, height: 44, borderRadius: 22,
     backgroundColor: '#1E88E5',
-    justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'center', justifyContent: 'center',
   },
   avatarImage: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    borderWidth: 2,
-    borderColor: '#1E88E5',
+    width: 44, height: 44, borderRadius: 22,
+    borderWidth: 2, borderColor: '#1E88E5',
   },
+  userName: { fontSize: 15, fontWeight: '700', color: '#1A2332' },
+  userRole: { fontSize: 12, color: '#78909C', marginTop: 2, textTransform: 'capitalize' },
+  closeBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#F0F4F8',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#ECEFF1',
+    marginVertical: 14,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  tile: {
+    // Two columns with the 12-px gap accounted for via 48% basis.
+    flexBasis: '48%',
+    flexGrow: 1,
+    aspectRatio: 1.3,
+    borderRadius: 18,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    justifyContent: 'space-between',
+    overflow: 'hidden',
+  },
+  tileChip: {
+    width: 48, height: 48, borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  tileBadge: {
+    position: 'absolute',
+    top: 4, right: 4,
+    width: 9, height: 9, borderRadius: 5,
+    backgroundColor: '#E53935',
+    borderWidth: 1.5, borderColor: '#FFF',
+  },
+  tileLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1A2332',
+    letterSpacing: 0.2,
+  },
+  logoutWrap: {
+    marginTop: 18,
+    alignItems: 'center',
+  },
+  logoutPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FDECEA',
+    paddingHorizontal: 22,
+    paddingVertical: 11,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#F8C9C2',
+  },
+  logoutTxt: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#C62828',
+    letterSpacing: 0.3,
+  },
+});
+
+const d = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', flexDirection: 'row' },
+  drawer: { width: '75%', maxWidth: 300, backgroundColor: '#FFF', paddingHorizontal: 20, paddingBottom: 30 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
+  avatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#1E88E5', justifyContent: 'center', alignItems: 'center' },
+  avatarImage: { width: 46, height: 46, borderRadius: 23, borderWidth: 2, borderColor: '#1E88E5' },
   headerInfo: { flex: 1 },
   userName: { fontSize: 16, fontWeight: '700', color: '#263238' },
   userRole: { fontSize: 12, color: '#78909C', marginTop: 2, textTransform: 'capitalize' },
   divider: { height: 1, backgroundColor: '#ECEFF1', marginVertical: 12 },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 4,
-  },
+  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, paddingHorizontal: 4 },
   menuLabel: { flex: 1, fontSize: 15, fontWeight: '500', color: '#37474F' },
   appName: { fontSize: 11, color: '#B0BEC5', textAlign: 'center' },
 });
@@ -283,7 +378,7 @@ export default function TabsLayout() {
       data-testid="hamburger-btn"
     >
       <View>
-        <Ionicons name="menu" size={26} color="#263238" />
+        <Ionicons name="grid" size={24} color="#1565C0" />
         {(hasUnseenWhatsNew || hasUnreadForum) && (
           <View style={badgeStyles.reddot} data-testid="profile-whatsnew-reddot" />
         )}
