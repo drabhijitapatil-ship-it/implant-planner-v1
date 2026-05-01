@@ -103,6 +103,9 @@ function DrawerMenu({
                 onNavigate(item.route);
               }}
               activeOpacity={0.6}
+              testID={`drawer-${item.key}`}
+              accessibilityLabel={`drawer-${item.key}`}
+              // @ts-ignore
               data-testid={`drawer-${item.key}`}
             >
               <Ionicons name={item.icon} size={22} color="#37474F" />

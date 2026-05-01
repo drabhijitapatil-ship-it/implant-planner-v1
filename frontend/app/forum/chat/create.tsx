@@ -67,7 +67,7 @@ export default function CreateGroupScreen() {
         </View>
 
         <Text style={s.label}>Group Name *</Text>
-        <TextInput style={s.input} value={name} onChangeText={setName} placeholder="Enter group name" maxLength={80} data-testid="group-name-input" />
+        <TextInput style={s.input} value={name} onChangeText={setName} placeholder="Enter group name" maxLength={80} testID="group-name-input" accessibilityLabel="group-name-input" /* @ts-ignore */ data-testid="group-name-input" />
 
         <View style={s.toggleRow}>
           <View style={{ flex: 1 }}>
@@ -80,7 +80,7 @@ export default function CreateGroupScreen() {
         <Text style={s.label}>Group Description</Text>
         <TextInput style={[s.input, { minHeight: 80, textAlignVertical: 'top' }]} value={desc} onChangeText={setDesc} placeholder="What's this group about?" maxLength={300} multiline />
 
-        <TouchableOpacity style={s.addMembersBtn} onPress={() => setShowPicker(true)} data-testid="add-members-btn">
+        <TouchableOpacity style={s.addMembersBtn} onPress={() => setShowPicker(true)} testID="add-members-btn" accessibilityLabel="add-members-btn" /* @ts-ignore */ data-testid="add-members-btn">
           <Ionicons name="person-add" size={18} color="#1565C0" />
           <Text style={s.addMembersTxt}>Add Members {Object.keys(selected).length > 0 ? `(${Object.keys(selected).length})` : ''}</Text>
           <Ionicons name="chevron-forward" size={18} color="#90A4AE" />
@@ -98,7 +98,7 @@ export default function CreateGroupScreen() {
       </ScrollView>
 
       <View style={s.footerWrap}>
-        <TouchableOpacity style={[s.createBtn, (!name.trim() || busy) && { opacity: 0.5 }]} onPress={create} disabled={!name.trim() || busy} data-testid="create-group-submit">
+        <TouchableOpacity style={[s.createBtn, (!name.trim() || busy) && { opacity: 0.5 }]} onPress={create} disabled={!name.trim() || busy} testID="create-group-submit" accessibilityLabel="create-group-submit" /* @ts-ignore */ data-testid="create-group-submit">
           {busy ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={s.createBtnTxt}>Create Group</Text>}
         </TouchableOpacity>
       </View>

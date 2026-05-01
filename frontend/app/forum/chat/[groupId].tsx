@@ -145,7 +145,7 @@ export default function ChatRoomScreen() {
             <Text style={s.headerSub}>{(group.members || []).length} members{group.locked ? ' • locked' : ''}</Text>
           </View>
           {!group.locked && (
-            <TouchableOpacity onPress={leaveGroup} hitSlop={{top:12,bottom:12,left:12,right:12}} data-testid="leave-group-btn">
+            <TouchableOpacity onPress={leaveGroup} hitSlop={{top:12,bottom:12,left:12,right:12}} testID="leave-group-btn" accessibilityLabel="leave-group-btn" /* @ts-ignore */ data-testid="leave-group-btn">
               <Ionicons name="exit-outline" size={22} color="#C62828" />
             </TouchableOpacity>
           )}
@@ -215,8 +215,8 @@ export default function ChatRoomScreen() {
             <TouchableOpacity onPress={() => pickImage('camera')} disabled={attaching} style={s.iconBtn}><Ionicons name="camera" size={22} color="#1565C0" /></TouchableOpacity>
             <TouchableOpacity onPress={() => pickImage('library')} disabled={attaching} style={s.iconBtn}><Ionicons name="image" size={22} color="#1565C0" /></TouchableOpacity>
             <TouchableOpacity onPress={pickFile} disabled={attaching} style={s.iconBtn}><Ionicons name="attach" size={22} color="#1565C0" /></TouchableOpacity>
-            <TextInput style={s.input} placeholder="Type a message..." value={composer} onChangeText={setComposer} multiline data-testid="chat-input" />
-            <TouchableOpacity onPress={send} disabled={sending || (!composer.trim() && attachments.length === 0)} style={[s.sendBtn, (sending || (!composer.trim() && attachments.length === 0)) && { opacity: 0.4 }]} data-testid="chat-send-btn">
+            <TextInput style={s.input} placeholder="Type a message..." value={composer} onChangeText={setComposer} multiline testID="chat-input" accessibilityLabel="chat-input" /* @ts-ignore */ data-testid="chat-input" />
+            <TouchableOpacity onPress={send} disabled={sending || (!composer.trim() && attachments.length === 0)} style={[s.sendBtn, (sending || (!composer.trim() && attachments.length === 0)) && { opacity: 0.4 }]} testID="chat-send-btn" accessibilityLabel="chat-send-btn" /* @ts-ignore */ data-testid="chat-send-btn">
               {sending ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="send" size={18} color="#FFF" />}
             </TouchableOpacity>
           </View>
