@@ -1,5 +1,14 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 119 (Feb 2026) — Tile-Menu Staggered Scale-In Animation
+
+Added `react-native-reanimated` v4 layout-animation entries to the tile-grid menu:
+- **Identity row**: `FadeInDown` 260 ms with spring damping — drops in gracefully so the eye lands on the user first.
+- **Tiles**: `ZoomIn` with **60-ms stagger** (`delay = 120 + idx * 60`), 280 ms duration, springified. The grid feels alive instead of dropping in as one block.
+- **Logout pill**: `FadeInDown` after the last tile lands — the eye naturally finishes on the destructive action.
+- Refactored tile sizing: outer `Animated.View` owns flex layout (`flexBasis: 48%, aspectRatio: 1.3`); inner `TouchableOpacity` fills via `width/height: '100%'`. Keeps the spring transform clean (no layout flicker mid-animation).
+- testIDs unchanged — iter-118's E2E test suite remains valid.
+
 ## Iteration 118 (Feb 2026) — Tile-Grid Menu (replaces hamburger drawer)
 
 **User feedback**: Hamburger felt utilitarian; wanted a more elegant 4-tile grid that feels native to the app's blue brand.
