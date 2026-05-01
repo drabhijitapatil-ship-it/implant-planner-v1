@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Image, Platform, KeyboardAvoidingView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Image, Platform, KeyboardAvoidingView, Modal, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -32,6 +32,9 @@ export default function ChatRoomScreen() {
   const [attachments, setAttachments] = useState<any[]>([]);
   const [sending, setSending] = useState(false);
   const [attaching, setAttaching] = useState(false);
+  const [showAttachSheet, setShowAttachSheet] = useState(false);
+  const pickingInProgressRef = useRef(false);
+  const waitForSheetClose = () => new Promise<void>(resolve => setTimeout(resolve, 500));
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
   const scrollRef = useRef<ScrollView | null>(null);
   const prevCountRef = useRef(0);
@@ -96,6 +99,13 @@ export default function ChatRoomScreen() {
   };
 
   const pickImage = async (source: 'camera' | 'library') => {
+    if (pickingInProgressRef.current) {
+      Alert.alert('Please wait', 'A previous file picker is still finishing. Try again in a moment.');
+      return;
+    }
+    pickingInProgressRef.current = true;
+    setShowAttachSheet(false);
+    await waitForSheetClose();
     try {
       if (Platform.OS !== 'web') {
         const perm = source === 'camera' ? await ImagePicker.requestCameraPermissionsAsync() : await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -107,19 +117,33 @@ export default function ChatRoomScreen() {
       setAttaching(true);
       const compressed = await compressImg(a.uri);
       await upload(compressed, a.fileName || `img_${Date.now()}.jpg`, 'image/jpeg', a.fileSize);
-    } catch (e: any) { console.error(e); Alert.alert('Failed', e?.message); } finally { setAttaching(false); }
+    } catch (e: any) { console.error(e); Alert.alert('Failed', e?.message); } finally { setAttaching(false); pickingInProgressRef.current = false; }
   };
 
   const pickFile = async () => {
+    if (pickingInProgressRef.current) {
+      Alert.alert('Please wait', 'A previous file picker is still finishing. Try again in a moment.');
+      return;
+    }
+    pickingInProgressRef.current = true;
+    setShowAttachSheet(false);
+    await waitForSheetClose();
     try {
-      const res = await DocumentPicker.getDocumentAsync({ type: ['application/pdf', 'image/*'] });
+      const res = await DocumentPicker.getDocumentAsync({ type: ['application/pdf', 'image/*'], multiple: false, copyToCacheDirectory: true });
       if (res.canceled) return;
       const a = res.assets?.[0]; if (!a) return;
       setAttaching(true);
       const isImg = (a.mimeType || '').startsWith('image/');
       const uri = isImg ? await compressImg(a.uri) : a.uri;
       await upload(uri, a.name || 'file', isImg ? 'image/jpeg' : (a.mimeType || 'application/octet-stream'), a.size);
-    } catch (e: any) { console.error(e); Alert.alert('Failed', e?.message); } finally { setAttaching(false); }
+    } catch (e: any) {
+      console.error(e);
+      const raw = e?.message || '';
+      const friendly = raw.includes('Different document picking')
+        ? 'A previous picker is still releasing. Please tap again in a moment.'
+        : (raw || 'Unknown error');
+      Alert.alert('File pick failed', friendly);
+    } finally { setAttaching(false); pickingInProgressRef.current = false; }
   };
 
   const send = async () => {
@@ -246,9 +270,7 @@ export default function ChatRoomScreen() {
             </View>
           )}
           <View style={s.composerRow}>
-            <TouchableOpacity onPress={() => pickImage('camera')} disabled={attaching} style={s.iconBtn}><Ionicons name="camera" size={22} color="#1565C0" /></TouchableOpacity>
-            <TouchableOpacity onPress={() => pickImage('library')} disabled={attaching} style={s.iconBtn}><Ionicons name="image" size={22} color="#1565C0" /></TouchableOpacity>
-            <TouchableOpacity onPress={pickFile} disabled={attaching} style={s.iconBtn}><Ionicons name="attach" size={22} color="#1565C0" /></TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowAttachSheet(true)} disabled={attaching} style={[s.iconBtn, attaching && { opacity: 0.4 }]} testID="chat-attach-btn" accessibilityLabel="chat-attach-btn" /* @ts-ignore */ data-testid="chat-attach-btn"><Ionicons name="attach" size={24} color="#1565C0" /></TouchableOpacity>
             <TextInput style={s.input} placeholder="Type a message..." value={composer} onChangeText={onComposerChange} multiline testID="chat-input" accessibilityLabel="chat-input" /* @ts-ignore */ data-testid="chat-input" />
             <TouchableOpacity onPress={send} disabled={sending || (!composer.trim() && attachments.length === 0)} style={[s.sendBtn, (sending || (!composer.trim() && attachments.length === 0)) && { opacity: 0.4 }]} testID="chat-send-btn" accessibilityLabel="chat-send-btn" /* @ts-ignore */ data-testid="chat-send-btn">
               {sending ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="send" size={18} color="#FFF" />}
@@ -256,6 +278,30 @@ export default function ChatRoomScreen() {
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Attach action sheet — matches Discussion Forum's 3-option pattern */}
+      <Modal visible={showAttachSheet} transparent animationType="fade" onRequestClose={() => setShowAttachSheet(false)}>
+        <Pressable style={s.sheetOverlay} onPress={() => setShowAttachSheet(false)}>
+          <Pressable style={s.sheet} onPress={(e) => e.stopPropagation()}>
+            <Text style={s.sheetTitle}>Add attachment</Text>
+            <TouchableOpacity style={s.sheetOption} onPress={() => pickImage('camera')} testID="chat-attach-camera-btn" /* @ts-ignore */ data-testid="chat-attach-camera-btn">
+              <Ionicons name="camera" size={22} color="#1565C0" />
+              <Text style={s.sheetOptionTxt}>Take Photo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.sheetOption} onPress={() => pickImage('library')} testID="chat-attach-library-btn" /* @ts-ignore */ data-testid="chat-attach-library-btn">
+              <Ionicons name="images" size={22} color="#1565C0" />
+              <Text style={s.sheetOptionTxt}>Photo Library</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.sheetOption} onPress={pickFile} testID="chat-attach-files-btn" /* @ts-ignore */ data-testid="chat-attach-files-btn">
+              <Ionicons name="document-attach" size={22} color="#1565C0" />
+              <Text style={s.sheetOptionTxt}>PDF or Document</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.sheetCancel} onPress={() => setShowAttachSheet(false)}>
+              <Text style={s.sheetCancelTxt}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -297,4 +343,11 @@ const s = StyleSheet.create({
   input: { flex: 1, maxHeight: 100, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#F5F7FA', borderRadius: 18, fontSize: 14, color: '#37474F', outlineWidth: 0 as any },
   sendBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1565C0', alignItems: 'center', justifyContent: 'center' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
+  sheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: '#FFF', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 24, borderTopLeftRadius: 16, borderTopRightRadius: 16 },
+  sheetTitle: { fontSize: 13, fontWeight: '700', color: '#78909C', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12, paddingHorizontal: 4 },
+  sheetOption: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, paddingHorizontal: 6, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
+  sheetOptionTxt: { fontSize: 16, color: '#37474F', fontWeight: '500' },
+  sheetCancel: { paddingVertical: 14, alignItems: 'center', marginTop: 6 },
+  sheetCancelTxt: { fontSize: 15, color: '#78909C', fontWeight: '600' },
 });

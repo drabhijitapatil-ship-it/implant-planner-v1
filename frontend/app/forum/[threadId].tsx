@@ -91,6 +91,10 @@ export default function ForumThreadScreen() {
   const [attachPreviewUrls, setAttachPreviewUrls] = useState<Record<string, string>>({});
   const [showAttachSheet, setShowAttachSheet] = useState(false);
   const [attaching, setAttaching] = useState(false);
+  // Guard against the iOS "Different document picking in progress" error when
+  // the previous picker hasn't fully released native state. Set true while a
+  // picker (camera / library / document) is active, cleared in finally.
+  const pickingInProgressRef = useRef(false);
   // Jump-to-bottom pill state ─ tracks unread replies that arrived while the
   // user was scrolled up from the bottom of the thread.
   const scrollRef = useRef<ScrollView | null>(null);
@@ -156,9 +160,14 @@ export default function ForumThreadScreen() {
   // allows one modal at a time, and our Modal sitting on top would silently
   // prevent the system picker from appearing. 300 ms matches the Modal's
   // fade animation so the close feels seamless.
-  const waitForSheetClose = () => new Promise<void>(resolve => setTimeout(resolve, 300));
+  const waitForSheetClose = () => new Promise<void>(resolve => setTimeout(resolve, 500));
 
   const pickFromCamera = async () => {
+    if (pickingInProgressRef.current) {
+      Alert.alert('Please wait', 'A previous file picker is still finishing. Try again in a moment.');
+      return;
+    }
+    pickingInProgressRef.current = true;
     setShowAttachSheet(false);
     await waitForSheetClose();
     try {
@@ -186,10 +195,16 @@ export default function ForumThreadScreen() {
       Alert.alert('Camera failed', e?.response?.data?.detail || e?.message || 'Unknown error');
     } finally {
       setAttaching(false);
+      pickingInProgressRef.current = false;
     }
   };
 
   const pickFromLibrary = async () => {
+    if (pickingInProgressRef.current) {
+      Alert.alert('Please wait', 'A previous file picker is still finishing. Try again in a moment.');
+      return;
+    }
+    pickingInProgressRef.current = true;
     setShowAttachSheet(false);
     await waitForSheetClose();
     try {
@@ -217,10 +232,16 @@ export default function ForumThreadScreen() {
       Alert.alert('Library access failed', e?.response?.data?.detail || e?.message || 'Unknown error');
     } finally {
       setAttaching(false);
+      pickingInProgressRef.current = false;
     }
   };
 
   const pickFromFiles = async () => {
+    if (pickingInProgressRef.current) {
+      Alert.alert('Please wait', 'A previous file picker is still finishing. Try again in a moment.');
+      return;
+    }
+    pickingInProgressRef.current = true;
     setShowAttachSheet(false);
     await waitForSheetClose();
     try {
@@ -240,9 +261,17 @@ export default function ForumThreadScreen() {
       await uploadAsset({ uri, name, mimeType: mime, size: a.size });
     } catch (e: any) {
       console.error('[forum] document pick failed:', e);
-      Alert.alert('File pick failed', e?.response?.data?.detail || e?.message || 'Unknown error');
+      // Native iOS sometimes returns "Different document picking in progress"
+      // even after the previous picker has dismissed. Surface a friendlier
+      // message so the user knows a retry will succeed.
+      const raw = e?.message || '';
+      const friendly = raw.includes('Different document picking')
+        ? 'A previous picker is still releasing. Please tap again in a moment.'
+        : (e?.response?.data?.detail || raw || 'Unknown error');
+      Alert.alert('File pick failed', friendly);
     } finally {
       setAttaching(false);
+      pickingInProgressRef.current = false;
     }
   };
 
