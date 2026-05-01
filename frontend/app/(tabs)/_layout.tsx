@@ -11,7 +11,7 @@ import {
   Platform,
   Image,
 } from 'react-native';
-import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
@@ -136,7 +136,7 @@ function DrawerMenu({
               gracefully from the top so the eye lands on the user before the
               tiles cascade. */}
           <Animated.View
-            entering={FadeInDown.duration(260).springify().damping(14)}
+            entering={FadeInDown.duration(220)}
             style={t.identityRow}
           >
             <View style={t.identityLeft}>
@@ -166,14 +166,17 @@ function DrawerMenu({
 
           <View style={t.divider} />
 
-          {/* Tile grid — 2 per row, equal width via flexBasis. Each tile
-              scales-in with a 60-ms stagger so the grid feels alive instead
-              of dropping in as one block. */}
+          {/* Tile grid — 2 per row, equal width via flexBasis. Tiles fade
+              in with a soft 6-px slide-up (no stagger, no zoom) — reads as
+              "information being placed" rather than a playful bounce. */}
           <View style={t.grid}>
-            {allItems.map((item, idx) => (
+            {allItems.map((item) => (
               <Animated.View
                 key={item.key}
-                entering={ZoomIn.delay(120 + idx * 60).duration(280).springify().damping(13)}
+                entering={FadeIn.duration(220).withInitialValues({
+                  opacity: 0,
+                  transform: [{ translateY: 6 }],
+                })}
                 style={{ flexBasis: '48%', flexGrow: 1, aspectRatio: 1.3 }}
               >
                 <TouchableOpacity
@@ -195,10 +198,13 @@ function DrawerMenu({
             ))}
           </View>
 
-          {/* Logout — separate visual section, animates last so the eye
-              naturally finishes there. */}
+          {/* Logout — separate visual section; same soft reveal as tiles so
+              the whole sheet lands with one coherent motion. */}
           <Animated.View
-            entering={FadeInDown.delay(120 + allItems.length * 60 + 80).duration(260)}
+            entering={FadeIn.duration(220).withInitialValues({
+              opacity: 0,
+              transform: [{ translateY: 6 }],
+            })}
             style={t.logoutWrap}
           >
             <TouchableOpacity
