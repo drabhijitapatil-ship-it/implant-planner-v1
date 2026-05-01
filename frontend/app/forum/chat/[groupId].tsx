@@ -16,7 +16,7 @@ interface Message {
   reactions_summary: Record<string, number>; reactions_mine: Record<string, boolean>;
   system?: boolean;
 }
-interface Group { id: string; name: string; kind: string; description?: string; members: string[]; admins: string[]; is_admin?: boolean; locked?: boolean; member_details?: any[]; }
+interface Group { id: string; name: string; kind: string; description?: string; members: string[]; admins: string[]; is_admin?: boolean; locked?: boolean; member_details?: any[]; typing_users?: { user_id: string; name: string }[]; }
 
 const REACTIONS = [{ k: 'thumbs', i: '👍' }, { k: 'heart', i: '❤️' }, { k: 'think', i: '🤔' }, { k: 'check', i: '✅' }];
 
@@ -35,6 +35,7 @@ export default function ChatRoomScreen() {
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
   const scrollRef = useRef<ScrollView | null>(null);
   const prevCountRef = useRef(0);
+  const lastTypingSentRef = useRef<number>(0);
 
   const load = useCallback(async () => {
     if (!groupId) return;
@@ -48,6 +49,25 @@ export default function ChatRoomScreen() {
   }, [groupId]);
 
   useFocusEffect(useCallback(() => { load(); const t = setInterval(load, 5000); return () => clearInterval(t); }, [load]));
+
+  // Mark this group as read on mount + whenever messages change — clears the
+  // unread badge on the group list next time it re-fetches.
+  useEffect(() => {
+    if (!groupId || loading) return;
+    api.post(`/chat/groups/${groupId}/mark-read`).catch(() => {});
+  }, [groupId, loading, messages.length]);
+
+  // Debounced typing ping: fires at most every 3 s while user has non-empty
+  // composer text. The server entry auto-expires after 5 s so it naturally
+  // clears when the user stops typing.
+  const onComposerChange = (text: string) => {
+    setComposer(text);
+    if (!groupId || !text.trim()) return;
+    const now = Date.now();
+    if (now - lastTypingSentRef.current < 3000) return;
+    lastTypingSentRef.current = now;
+    api.post(`/chat/groups/${groupId}/typing`).catch(() => {});
+  };
 
   useEffect(() => {
     if (messages.length > prevCountRef.current) setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
@@ -199,6 +219,20 @@ export default function ChatRoomScreen() {
         </ScrollView>
 
         <View style={s.composer}>
+          {(group.typing_users || []).length > 0 && (
+            <View style={s.typingRow} testID="chat-typing-indicator" /* @ts-ignore */ data-testid="chat-typing-indicator">
+              <View style={s.typingDots}>
+                <View style={[s.typingDot, { opacity: 0.4 }]} />
+                <View style={[s.typingDot, { opacity: 0.7 }]} />
+                <View style={s.typingDot} />
+              </View>
+              <Text style={s.typingTxt} numberOfLines={1}>
+                {(group.typing_users || []).length === 1
+                  ? `${(group.typing_users || [])[0].name} is typing…`
+                  : `${(group.typing_users || []).length} people are typing…`}
+              </Text>
+            </View>
+          )}
           {(attachments.length > 0 || attaching) && (
             <View style={s.attRow}>
               {attachments.map((a, i) => (
@@ -215,7 +249,7 @@ export default function ChatRoomScreen() {
             <TouchableOpacity onPress={() => pickImage('camera')} disabled={attaching} style={s.iconBtn}><Ionicons name="camera" size={22} color="#1565C0" /></TouchableOpacity>
             <TouchableOpacity onPress={() => pickImage('library')} disabled={attaching} style={s.iconBtn}><Ionicons name="image" size={22} color="#1565C0" /></TouchableOpacity>
             <TouchableOpacity onPress={pickFile} disabled={attaching} style={s.iconBtn}><Ionicons name="attach" size={22} color="#1565C0" /></TouchableOpacity>
-            <TextInput style={s.input} placeholder="Type a message..." value={composer} onChangeText={setComposer} multiline testID="chat-input" accessibilityLabel="chat-input" /* @ts-ignore */ data-testid="chat-input" />
+            <TextInput style={s.input} placeholder="Type a message..." value={composer} onChangeText={onComposerChange} multiline testID="chat-input" accessibilityLabel="chat-input" /* @ts-ignore */ data-testid="chat-input" />
             <TouchableOpacity onPress={send} disabled={sending || (!composer.trim() && attachments.length === 0)} style={[s.sendBtn, (sending || (!composer.trim() && attachments.length === 0)) && { opacity: 0.4 }]} testID="chat-send-btn" accessibilityLabel="chat-send-btn" /* @ts-ignore */ data-testid="chat-send-btn">
               {sending ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="send" size={18} color="#FFF" />}
             </TouchableOpacity>
@@ -251,6 +285,10 @@ const s = StyleSheet.create({
   rxChipOn: { backgroundColor: '#E3F2FD' },
   rxCount: { fontSize: 10, color: '#546E7A' },
   composer: { backgroundColor: '#FFF', padding: 8, borderTopWidth: 1, borderTopColor: '#ECEFF1' },
+  typingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 6, paddingVertical: 4, marginBottom: 4 },
+  typingDots: { flexDirection: 'row', gap: 3 },
+  typingDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: '#1565C0' },
+  typingTxt: { fontSize: 12, color: '#546E7A', fontStyle: 'italic', flex: 1 },
   attRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 6 },
   attChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#E3F2FD', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10 },
   attChipTxt: { fontSize: 11, color: '#1565C0', maxWidth: 120 },
