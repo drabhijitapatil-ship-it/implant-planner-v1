@@ -90,6 +90,7 @@ export default function ForumThreadScreen() {
   const [error, setError] = useState<string | null>(null);
   const [attachPreviewUrls, setAttachPreviewUrls] = useState<Record<string, string>>({});
   const [showAttachSheet, setShowAttachSheet] = useState(false);
+  const [attaching, setAttaching] = useState(false);
   // Jump-to-bottom pill state ─ tracks unread replies that arrived while the
   // user was scrolled up from the bottom of the thread.
   const scrollRef = useRef<ScrollView | null>(null);
@@ -182,12 +183,15 @@ export default function ForumThreadScreen() {
       if (res.canceled) return;
       const a = res.assets?.[0];
       if (!a) return;
+      setAttaching(true);
       const filename = a.fileName || `photo_${Date.now()}.jpg`;
       const compressed = await compressImageIfPossible(a.uri);
       await uploadAsset({ uri: compressed.uri, name: filename, mimeType: 'image/jpeg', size: a.fileSize });
     } catch (e: any) {
       console.error('[forum] camera pick failed:', e);
       Alert.alert('Camera failed', e?.response?.data?.detail || e?.message || 'Unknown error');
+    } finally {
+      setAttaching(false);
     }
   };
 
@@ -210,12 +214,15 @@ export default function ForumThreadScreen() {
       if (res.canceled) return;
       const a = res.assets?.[0];
       if (!a) return;
+      setAttaching(true);
       const filename = a.fileName || `image_${Date.now()}.jpg`;
       const compressed = await compressImageIfPossible(a.uri);
       await uploadAsset({ uri: compressed.uri, name: filename, mimeType: 'image/jpeg', size: a.fileSize });
     } catch (e: any) {
       console.error('[forum] library pick failed:', e);
       Alert.alert('Library access failed', e?.response?.data?.detail || e?.message || 'Unknown error');
+    } finally {
+      setAttaching(false);
     }
   };
 
@@ -231,6 +238,7 @@ export default function ForumThreadScreen() {
       if (res.canceled) return;
       const a = res.assets?.[0];
       if (!a) return;
+      setAttaching(true);
       const isImage = (a.mimeType || '').startsWith('image/');
       const uri = isImage ? (await compressImageIfPossible(a.uri)).uri : a.uri;
       const name = isImage ? (a.name || `image_${Date.now()}.jpg`) : (a.name || 'file');
@@ -239,6 +247,8 @@ export default function ForumThreadScreen() {
     } catch (e: any) {
       console.error('[forum] document pick failed:', e);
       Alert.alert('File pick failed', e?.response?.data?.detail || e?.message || 'Unknown error');
+    } finally {
+      setAttaching(false);
     }
   };
 
@@ -546,7 +556,7 @@ export default function ForumThreadScreen() {
       {/* Composer */}
       {isOpen && user?.role !== 'nurse' && (
         <View style={s.composer}>
-          {attachments.length > 0 && (
+          {(attachments.length > 0 || attaching) && (
             <View style={s.attachedRow}>
               {attachments.map((a, idx) => (
                 <View key={idx} style={s.attachedChip}>
@@ -557,10 +567,16 @@ export default function ForumThreadScreen() {
                   </TouchableOpacity>
                 </View>
               ))}
+              {attaching && (
+                <View style={[s.attachedChip, { backgroundColor: '#FFF8E1', borderColor: '#FFE082', borderWidth: 1 }]} data-testid="forum-attaching-spinner">
+                  <ActivityIndicator size="small" color="#FF8F00" />
+                  <Text style={[s.attachedTxt, { color: '#E65100', fontStyle: 'italic' }]}>Attaching…</Text>
+                </View>
+              )}
             </View>
           )}
           <View style={s.composerRow}>
-            <TouchableOpacity onPress={pickAttachment} style={s.attachBtn} data-testid="forum-attach-btn">
+            <TouchableOpacity onPress={pickAttachment} disabled={attaching} style={[s.attachBtn, attaching && { opacity: 0.4 }]} data-testid="forum-attach-btn">
               <Ionicons name="attach" size={22} color="#1565C0" />
             </TouchableOpacity>
             <TextInput
