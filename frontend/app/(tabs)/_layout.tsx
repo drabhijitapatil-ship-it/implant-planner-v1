@@ -270,7 +270,10 @@ export default function TabsLayout() {
       onPress={() => setDrawerOpen(true)}
       style={{ marginLeft: 14 }}
       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-      data-testid="menu-hamburger"
+      testID="hamburger-btn"
+      accessibilityLabel="hamburger-btn"
+      // @ts-ignore - RNW passes through
+      data-testid="hamburger-btn"
     >
       <View>
         <Ionicons name="menu" size={26} color="#263238" />
