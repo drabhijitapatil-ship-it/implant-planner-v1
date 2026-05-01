@@ -1,0 +1,168 @@
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Switch, ActivityIndicator, Alert, Modal, Pressable, FlatList } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import api from '../../../utils/api';
+
+interface UserItem { id: string; name: string; role: string; profile_photo?: string; }
+
+export default function CreateGroupScreen() {
+  const [name, setName] = useState('');
+  const [desc, setDesc] = useState('');
+  const [isPublic, setIsPublic] = useState(false);
+  const [users, setUsers] = useState<UserItem[]>([]);
+  const [selected, setSelected] = useState<Record<string, UserItem>>({});
+  const [showPicker, setShowPicker] = useState(false);
+  const [pickerQ, setPickerQ] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try { const r = await api.get('/chat/users', { params: pickerQ ? { q: pickerQ } : {} }); setUsers(r.data?.items || []); } catch {}
+    })();
+  }, [pickerQ]);
+
+  const toggle = (u: UserItem) => {
+    setSelected(prev => {
+      const next = { ...prev };
+      if (next[u.id]) delete next[u.id];
+      else next[u.id] = u;
+      return next;
+    });
+  };
+
+  const create = async () => {
+    if (!name.trim()) { Alert.alert('Group name required'); return; }
+    setBusy(true);
+    try {
+      const res = await api.post('/chat/groups', {
+        name: name.trim(), description: desc.trim() || null,
+        type: isPublic ? 'public' : 'private',
+        member_ids: Object.keys(selected),
+      });
+      const gid = res.data?.id;
+      if (gid) router.replace(`/forum/chat/${gid}` as any);
+    } catch (e: any) {
+      Alert.alert('Failed to create group', e?.response?.data?.detail || e?.message || 'Unknown error');
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={{top:12,bottom:12,left:12,right:12}}>
+          <Ionicons name="close" size={26} color="#37474F" />
+        </TouchableOpacity>
+        <Text style={s.headerTitle}>Create Group</Text>
+        <View style={{ width: 26 }} />
+      </View>
+
+      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
+        <View style={s.photoRow}>
+          <TouchableOpacity style={s.photoCircle}>
+            <Ionicons name="camera" size={28} color="#78909C" />
+          </TouchableOpacity>
+          <Text style={s.photoHelp}>Add group photo (optional)</Text>
+        </View>
+
+        <Text style={s.label}>Group Name *</Text>
+        <TextInput style={s.input} value={name} onChangeText={setName} placeholder="Enter group name" maxLength={80} data-testid="group-name-input" />
+
+        <View style={s.toggleRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={s.toggleLabel}>Group Type: {isPublic ? 'Public' : 'Private'}</Text>
+            <Text style={s.toggleHelp}>{isPublic ? 'Anyone can find and join this group' : 'Only invited members can join'}</Text>
+          </View>
+          <Switch value={isPublic} onValueChange={setIsPublic} trackColor={{ false: '#CFD8DC', true: '#90CAF9' }} thumbColor={isPublic ? '#1565C0' : '#ECEFF1'} />
+        </View>
+
+        <Text style={s.label}>Group Description</Text>
+        <TextInput style={[s.input, { minHeight: 80, textAlignVertical: 'top' }]} value={desc} onChangeText={setDesc} placeholder="What's this group about?" maxLength={300} multiline />
+
+        <TouchableOpacity style={s.addMembersBtn} onPress={() => setShowPicker(true)} data-testid="add-members-btn">
+          <Ionicons name="person-add" size={18} color="#1565C0" />
+          <Text style={s.addMembersTxt}>Add Members {Object.keys(selected).length > 0 ? `(${Object.keys(selected).length})` : ''}</Text>
+          <Ionicons name="chevron-forward" size={18} color="#90A4AE" />
+        </TouchableOpacity>
+        {Object.values(selected).length > 0 && (
+          <View style={s.selectedRow}>
+            {Object.values(selected).map(u => (
+              <View key={u.id} style={s.selChip}>
+                <Text style={s.selChipTxt}>{u.name}</Text>
+                <TouchableOpacity onPress={() => toggle(u)}><Ionicons name="close" size={14} color="#546E7A" /></TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
+      </ScrollView>
+
+      <View style={s.footerWrap}>
+        <TouchableOpacity style={[s.createBtn, (!name.trim() || busy) && { opacity: 0.5 }]} onPress={create} disabled={!name.trim() || busy} data-testid="create-group-submit">
+          {busy ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={s.createBtnTxt}>Create Group</Text>}
+        </TouchableOpacity>
+      </View>
+
+      <Modal visible={showPicker} animationType="slide" onRequestClose={() => setShowPicker(false)}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#FFF' }}>
+          <View style={s.header}>
+            <TouchableOpacity onPress={() => setShowPicker(false)}><Ionicons name="close" size={26} color="#37474F" /></TouchableOpacity>
+            <Text style={s.headerTitle}>Add Members</Text>
+            <TouchableOpacity onPress={() => setShowPicker(false)}><Text style={{ color: '#1565C0', fontWeight: '700' }}>Done</Text></TouchableOpacity>
+          </View>
+          <View style={s.searchBar}>
+            <Ionicons name="search" size={18} color="#90A4AE" />
+            <TextInput style={{ flex: 1, fontSize: 14, outlineWidth: 0 as any }} placeholder="Search users..." value={pickerQ} onChangeText={setPickerQ} />
+          </View>
+          <FlatList
+            data={users}
+            keyExtractor={(u) => u.id}
+            renderItem={({ item }) => {
+              const on = !!selected[item.id];
+              return (
+                <TouchableOpacity style={s.userRow} onPress={() => toggle(item)}>
+                  <View style={s.userAvatar}><Text style={s.userAvatarTxt}>{item.name?.[0]?.toUpperCase() || '?'}</Text></View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.userName}>{item.name}</Text>
+                    <Text style={s.userRole}>{item.role}</Text>
+                  </View>
+                  <View style={[s.checkBox, on && s.checkBoxOn]}>{on && <Ionicons name="checkmark" size={16} color="#FFF" />}</View>
+                </TouchableOpacity>
+              );
+            }}
+          />
+        </SafeAreaView>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+const s = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: '#F5F7FA' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#ECEFF1' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: '#37474F' },
+  photoRow: { alignItems: 'center', marginBottom: 20 },
+  photoCircle: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#ECEFF1', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#CFD8DC', borderStyle: 'dashed' },
+  photoHelp: { fontSize: 12, color: '#78909C', marginTop: 8 },
+  label: { fontSize: 13, fontWeight: '700', color: '#37474F', marginBottom: 6, marginTop: 4 },
+  input: { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, color: '#37474F', marginBottom: 14, outlineWidth: 0 as any },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFF', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#CFD8DC', marginBottom: 14 },
+  toggleLabel: { fontSize: 14, fontWeight: '700', color: '#37474F' },
+  toggleHelp: { fontSize: 12, color: '#78909C', marginTop: 2 },
+  addMembersBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#E3F2FD', padding: 14, borderRadius: 10, marginTop: 6 },
+  addMembersTxt: { flex: 1, fontSize: 14, fontWeight: '700', color: '#1565C0' },
+  selectedRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
+  selChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#ECEFF1', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 },
+  selChipTxt: { fontSize: 12, color: '#37474F' },
+  footerWrap: { padding: 14, backgroundColor: '#FFF', borderTopWidth: 1, borderTopColor: '#ECEFF1' },
+  createBtn: { backgroundColor: '#1565C0', paddingVertical: 14, borderRadius: 10, alignItems: 'center' },
+  createBtnTxt: { fontSize: 16, fontWeight: '700', color: '#FFF' },
+  searchBar: { flexDirection: 'row', alignItems: 'center', gap: 8, margin: 12, backgroundColor: '#F5F5F5', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
+  userRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
+  userAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1565C0', alignItems: 'center', justifyContent: 'center' },
+  userAvatarTxt: { fontSize: 14, fontWeight: '700', color: '#FFF' },
+  userName: { fontSize: 14, fontWeight: '600', color: '#37474F' },
+  userRole: { fontSize: 12, color: '#78909C' },
+  checkBox: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: '#B0BEC5', alignItems: 'center', justifyContent: 'center' },
+  checkBoxOn: { backgroundColor: '#1565C0', borderColor: '#1565C0' },
+});

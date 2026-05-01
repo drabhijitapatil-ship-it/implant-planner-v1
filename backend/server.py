@@ -11066,6 +11066,431 @@ async def serve_forum_upload(filename: str, token: Optional[str] = Query(None), 
     return FileResponse(str(path))
 
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# GROUP CHAT (iteration 131) — chat_groups + chat_messages
+# ═══════════════════════════════════════════════════════════════════════════
+CHAT_ATTACH_DIR = UPLOADS_DIR / 'chat'
+CHAT_ATTACH_DIR.mkdir(parents=True, exist_ok=True)
+CHAT_ALLOWED_EXT = {'.png', '.jpg', '.jpeg', '.pdf', '.heic', '.heif', '.webp'}
+CHAT_MAX_BYTES = 10 * 1024 * 1024
+CHAT_EDIT_WINDOW = timedelta(minutes=15)
+CHAT_REACTIONS = {"thumbs", "heart", "think", "check"}
+
+
+async def _ensure_chat_indexes():
+    try:
+        await db.chat_groups.create_index([("members", 1)])
+        await db.chat_groups.create_index([("last_activity_at", -1)])
+        await db.chat_messages.create_index([("group_id", 1), ("created_at", 1)])
+    except Exception as e:
+        logging.error(f"[chat] index failed: {e}")
+
+
+async def _seed_all_staff_group():
+    """Auto-create the 'All Staff' group if missing and enrol all non-nurse users."""
+    try:
+        existing = await db.chat_groups.find_one({"kind": "all_staff"}, {"_id": 0, "id": 1})
+        member_ids = []
+        cursor = db.users.find({"role": {"$ne": "nurse"}}, {"_id": 1})
+        async for u in cursor:
+            member_ids.append(str(u["_id"]))
+        now = datetime.now(timezone.utc)
+        if existing:
+            await db.chat_groups.update_one({"id": existing["id"]}, {"$set": {"members": member_ids, "admins": member_ids[:1]}})
+            return
+        gid = str(uuid.uuid4())
+        await db.chat_groups.insert_one({
+            "id": gid, "kind": "all_staff", "name": "All Staff", "description": "College-wide announcements. You cannot leave this group.",
+            "type": "public", "photo_url": None, "members": member_ids, "admins": member_ids[:1],
+            "created_by_id": member_ids[0] if member_ids else None, "created_at": now,
+            "last_activity_at": now, "locked": True,
+        })
+    except Exception as e:
+        logging.error(f"[chat] all-staff seed failed: {e}")
+
+
+def _chat_can_access(user: dict) -> bool:
+    return (user or {}).get("role") != "nurse"
+
+
+def _uid(user: dict) -> str:
+    return str(user.get("_id") or user.get("id"))
+
+
+def _serialize_group(g: dict, viewer_id: Optional[str] = None) -> dict:
+    return {
+        "id": g.get("id"), "kind": g.get("kind", "group"), "name": g.get("name"),
+        "description": g.get("description"), "type": g.get("type", "private"),
+        "photo_url": g.get("photo_url"), "members": g.get("members", []), "admins": g.get("admins", []),
+        "created_by_id": g.get("created_by_id"), "created_at": g.get("created_at").isoformat() if g.get("created_at") else None,
+        "last_activity_at": g.get("last_activity_at").isoformat() if g.get("last_activity_at") else None,
+        "last_message_preview": g.get("last_message_preview"),
+        "last_message_at": g.get("last_message_at").isoformat() if g.get("last_message_at") else None,
+        "locked": g.get("locked", False), "other_user_id": g.get("other_user_id"),
+        "unread_count": 0,
+    }
+
+
+def _serialize_message(m: dict, viewer_id: Optional[str] = None) -> dict:
+    reactions = m.get("reactions") or {}
+    return {
+        "id": m.get("id"), "group_id": m.get("group_id"),
+        "author_id": m.get("author_id"), "author_name": m.get("author_name"), "author_role": m.get("author_role"),
+        "body": m.get("body") if not m.get("deleted_at") else "[deleted]",
+        "attachments": m.get("attachments") or [],
+        "created_at": m.get("created_at").isoformat() if m.get("created_at") else None,
+        "edited_at": m.get("edited_at").isoformat() if m.get("edited_at") else None,
+        "deleted_at": m.get("deleted_at").isoformat() if m.get("deleted_at") else None,
+        "reactions_summary": {k: len(v or []) for k, v in reactions.items()},
+        "reactions_mine": {k: (viewer_id in (v or [])) for k, v in reactions.items()} if viewer_id else {},
+        "mentions": m.get("mentions") or [],
+        "system": m.get("system", False),
+    }
+
+
+class ChatGroupCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=80)
+    description: Optional[str] = Field(None, max_length=300)
+    type: str = Field("private", pattern="^(private|public)$")
+    member_ids: List[str] = Field(default_factory=list)
+    photo_url: Optional[str] = None
+
+
+class ChatMessageCreate(BaseModel):
+    body: str = Field(..., min_length=1, max_length=4000)
+    attachments: Optional[List[Dict[str, Any]]] = None
+
+
+class ChatGroupUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    type: Optional[str] = None
+    photo_url: Optional[str] = None
+
+
+@api_router.post("/chat/groups")
+async def chat_create_group(payload: ChatGroupCreate, request: Request, current_user: dict = Depends(get_current_user)):
+    if not _chat_can_access(current_user):
+        raise HTTPException(status_code=403, detail="Nurses cannot use group chat.")
+    uid = _uid(current_user)
+    member_ids = list({uid, *payload.member_ids})
+    # Validate members aren't nurses
+    if member_ids:
+        nurse_count = await db.users.count_documents({"_id": {"$in": [ObjectId(m) for m in member_ids if ObjectId.is_valid(m)]}, "role": "nurse"})
+        if nurse_count:
+            raise HTTPException(status_code=400, detail="Cannot add nurses to chat groups.")
+    now = datetime.now(timezone.utc)
+    gid = str(uuid.uuid4())
+    await db.chat_groups.insert_one({
+        "id": gid, "kind": "group", "name": payload.name, "description": payload.description,
+        "type": payload.type, "photo_url": payload.photo_url,
+        "members": member_ids, "admins": [uid],
+        "created_by_id": uid, "created_at": now, "last_activity_at": now,
+    })
+    await log_access(action="chat_group_create", outcome="success", user=current_user, request=request,
+                     resource_type="chat_group", resource_id=gid)
+    g = await db.chat_groups.find_one({"id": gid}, {"_id": 0})
+    return _serialize_group(g, viewer_id=uid)
+
+
+@api_router.get("/chat/groups")
+async def chat_list_groups(q: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    if not _chat_can_access(current_user):
+        raise HTTPException(status_code=403, detail="Nurses cannot use group chat.")
+    uid = _uid(current_user)
+    query: Dict[str, Any] = {"members": uid}
+    if q and q.strip():
+        query["name"] = {"$regex": q.strip(), "$options": "i"}
+    cursor = db.chat_groups.find(query, {"_id": 0}).sort("last_activity_at", -1)
+    items = [_serialize_group(g, viewer_id=uid) async for g in cursor]
+    # For DMs, resolve other-user display name
+    for it in items:
+        if it.get("kind") == "dm":
+            other = next((m for m in it.get("members", []) if m != uid), None)
+            if other and ObjectId.is_valid(other):
+                u = await db.users.find_one({"_id": ObjectId(other)}, {"_id": 0, "name": 1, "role": 1, "profile_photo": 1})
+                if u:
+                    it["name"] = u.get("name")
+                    it["photo_url"] = u.get("profile_photo")
+                    it["other_user_id"] = other
+    return {"items": items}
+
+
+@api_router.post("/chat/dm/{other_user_id}")
+async def chat_start_dm(other_user_id: str, current_user: dict = Depends(get_current_user)):
+    if not _chat_can_access(current_user):
+        raise HTTPException(status_code=403, detail="Nurses cannot use chat.")
+    if not ObjectId.is_valid(other_user_id):
+        raise HTTPException(status_code=400, detail="Invalid user id.")
+    other = await db.users.find_one({"_id": ObjectId(other_user_id)}, {"_id": 0, "role": 1, "name": 1})
+    if not other:
+        raise HTTPException(status_code=404, detail="User not found.")
+    if other.get("role") == "nurse":
+        raise HTTPException(status_code=400, detail="Cannot DM a nurse.")
+    uid = _uid(current_user)
+    if uid == other_user_id:
+        raise HTTPException(status_code=400, detail="Cannot DM yourself.")
+    # Idempotent: find existing DM
+    existing = await db.chat_groups.find_one({"kind": "dm", "members": {"$all": [uid, other_user_id], "$size": 2}}, {"_id": 0})
+    if existing:
+        g = _serialize_group(existing, viewer_id=uid)
+        g["name"] = other.get("name")
+        g["other_user_id"] = other_user_id
+        return g
+    now = datetime.now(timezone.utc)
+    gid = str(uuid.uuid4())
+    await db.chat_groups.insert_one({
+        "id": gid, "kind": "dm", "name": other.get("name"), "type": "private",
+        "members": [uid, other_user_id], "admins": [uid, other_user_id],
+        "created_by_id": uid, "created_at": now, "last_activity_at": now,
+    })
+    g = await db.chat_groups.find_one({"id": gid}, {"_id": 0})
+    out = _serialize_group(g, viewer_id=uid)
+    out["name"] = other.get("name")
+    out["other_user_id"] = other_user_id
+    return out
+
+
+async def _require_member(group_id: str, uid: str) -> dict:
+    g = await db.chat_groups.find_one({"id": group_id}, {"_id": 0})
+    if not g:
+        raise HTTPException(status_code=404, detail="Group not found.")
+    if uid not in (g.get("members") or []):
+        raise HTTPException(status_code=403, detail="You are not a member of this group.")
+    return g
+
+
+@api_router.get("/chat/groups/{group_id}")
+async def chat_get_group(group_id: str, current_user: dict = Depends(get_current_user)):
+    if not _chat_can_access(current_user):
+        raise HTTPException(status_code=403, detail="Nurses cannot use chat.")
+    uid = _uid(current_user)
+    g = await _require_member(group_id, uid)
+    # Hydrate member details
+    member_objs = []
+    for mid in g.get("members", []):
+        if not ObjectId.is_valid(mid):
+            continue
+        u = await db.users.find_one({"_id": ObjectId(mid)}, {"_id": 1, "name": 1, "role": 1, "profile_photo": 1})
+        if u:
+            member_objs.append({"id": str(u["_id"]), "name": u.get("name"), "role": u.get("role"), "profile_photo": u.get("profile_photo")})
+    out = _serialize_group(g, viewer_id=uid)
+    out["member_details"] = member_objs
+    out["is_admin"] = uid in (g.get("admins") or [])
+    return out
+
+
+@api_router.patch("/chat/groups/{group_id}")
+async def chat_update_group(group_id: str, payload: ChatGroupUpdate, current_user: dict = Depends(get_current_user)):
+    uid = _uid(current_user)
+    g = await _require_member(group_id, uid)
+    if uid not in (g.get("admins") or []):
+        raise HTTPException(status_code=403, detail="Only admins can edit the group.")
+    update = {k: v for k, v in payload.model_dump(exclude_none=True).items()}
+    if update:
+        await db.chat_groups.update_one({"id": group_id}, {"$set": update})
+    return {"ok": True}
+
+
+@api_router.post("/chat/groups/{group_id}/members")
+async def chat_add_members(group_id: str, body: Dict[str, List[str]], current_user: dict = Depends(get_current_user)):
+    uid = _uid(current_user)
+    g = await _require_member(group_id, uid)
+    if uid not in (g.get("admins") or []):
+        raise HTTPException(status_code=403, detail="Only admins can add members.")
+    new_ids = body.get("member_ids") or []
+    if not new_ids:
+        return {"ok": True}
+    # Validate
+    nurse_count = await db.users.count_documents({"_id": {"$in": [ObjectId(m) for m in new_ids if ObjectId.is_valid(m)]}, "role": "nurse"})
+    if nurse_count:
+        raise HTTPException(status_code=400, detail="Cannot add nurses.")
+    await db.chat_groups.update_one({"id": group_id}, {"$addToSet": {"members": {"$each": new_ids}}})
+    # System message
+    now = datetime.now(timezone.utc)
+    names = []
+    for mid in new_ids:
+        if ObjectId.is_valid(mid):
+            u = await db.users.find_one({"_id": ObjectId(mid)}, {"_id": 0, "name": 1})
+            if u:
+                names.append(u.get("name"))
+    await db.chat_messages.insert_one({
+        "id": str(uuid.uuid4()), "group_id": group_id, "author_id": "system", "author_name": "System",
+        "author_role": "system", "body": f"{', '.join(names)} has been added to the group",
+        "created_at": now, "system": True, "reactions": {},
+    })
+    await db.chat_groups.update_one({"id": group_id}, {"$set": {"last_activity_at": now, "last_message_preview": f"{', '.join(names)} added", "last_message_at": now}})
+    return {"ok": True}
+
+
+@api_router.delete("/chat/groups/{group_id}/members/{member_id}")
+async def chat_remove_member(group_id: str, member_id: str, current_user: dict = Depends(get_current_user)):
+    uid = _uid(current_user)
+    g = await _require_member(group_id, uid)
+    if g.get("locked"):
+        raise HTTPException(status_code=400, detail="This group cannot be left.")
+    is_self = member_id == uid
+    is_admin = uid in (g.get("admins") or [])
+    if not (is_self or is_admin):
+        raise HTTPException(status_code=403, detail="Only admins or the member themselves can remove.")
+    await db.chat_groups.update_one({"id": group_id}, {"$pull": {"members": member_id, "admins": member_id}})
+    # System message
+    u = await db.users.find_one({"_id": ObjectId(member_id)}, {"_id": 0, "name": 1}) if ObjectId.is_valid(member_id) else None
+    name = u.get("name") if u else "A member"
+    now = datetime.now(timezone.utc)
+    txt = f"{name} left the group" if is_self else f"{name} was removed from the group"
+    await db.chat_messages.insert_one({
+        "id": str(uuid.uuid4()), "group_id": group_id, "author_id": "system", "author_name": "System",
+        "author_role": "system", "body": txt, "created_at": now, "system": True, "reactions": {},
+    })
+    await db.chat_groups.update_one({"id": group_id}, {"$set": {"last_activity_at": now, "last_message_preview": txt, "last_message_at": now}})
+    return {"ok": True}
+
+
+@api_router.get("/chat/groups/{group_id}/messages")
+async def chat_list_messages(group_id: str, skip: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=100), current_user: dict = Depends(get_current_user)):
+    uid = _uid(current_user)
+    await _require_member(group_id, uid)
+    cursor = db.chat_messages.find({"group_id": group_id}, {"_id": 0}).sort("created_at", 1).skip(skip).limit(limit)
+    items = [_serialize_message(m, viewer_id=uid) async for m in cursor]
+    total = await db.chat_messages.count_documents({"group_id": group_id})
+    return {"items": items, "total": total, "skip": skip, "limit": limit}
+
+
+@api_router.post("/chat/groups/{group_id}/messages")
+async def chat_send_message(group_id: str, payload: ChatMessageCreate, current_user: dict = Depends(get_current_user)):
+    uid = _uid(current_user)
+    g = await _require_member(group_id, uid)
+    now = datetime.now(timezone.utc)
+    mid = str(uuid.uuid4())
+    atts = []
+    for a in (payload.attachments or [])[:6]:
+        url = str(a.get("url") or "")
+        if "/uploads/chat/" not in url and "/uploads/forum/" not in url:
+            continue
+        atts.append({"url": url, "filename": str(a.get("filename") or "")[:120], "type": str(a.get("type") or "image")[:20], "size": int(a.get("size") or 0)})
+    mentions_ids: List[str] = []
+    mention_names = list({m.group(1) for m in re.finditer(r"@([a-zA-Z0-9_.\-]{2,40})", payload.body or "")})[:10]
+    if mention_names:
+        async for u in db.users.find({"$or": [{"username": {"$in": mention_names}}, {"name": {"$in": mention_names}}]}, {"_id": 1}):
+            mentions_ids.append(str(u["_id"]))
+    await db.chat_messages.insert_one({
+        "id": mid, "group_id": group_id, "author_id": uid,
+        "author_name": current_user.get("name"), "author_role": current_user.get("role"),
+        "body": payload.body, "attachments": atts, "reactions": {}, "mentions": mentions_ids,
+        "created_at": now,
+    })
+    preview = payload.body[:80] if payload.body else ("📎 Attachment" if atts else "")
+    await db.chat_groups.update_one({"id": group_id}, {"$set": {"last_activity_at": now, "last_message_preview": preview, "last_message_at": now}})
+    # Notify other members
+    other_members = [m for m in (g.get("members") or []) if m != uid]
+    if other_members:
+        try:
+            await send_expo_push_notifications(other_members, g.get("name") or "New message", f"{current_user.get('name')}: {preview}", {"type": "chat", "group_id": group_id})
+        except Exception:
+            pass
+    msg = await db.chat_messages.find_one({"id": mid}, {"_id": 0})
+    return _serialize_message(msg, viewer_id=uid)
+
+
+@api_router.post("/chat/messages/{message_id}/reactions")
+async def chat_toggle_reaction(message_id: str, body: Dict[str, str], current_user: dict = Depends(get_current_user)):
+    reaction = body.get("reaction")
+    if reaction not in CHAT_REACTIONS:
+        raise HTTPException(status_code=400, detail="Invalid reaction.")
+    m = await db.chat_messages.find_one({"id": message_id}, {"_id": 0})
+    if not m:
+        raise HTTPException(status_code=404, detail="Message not found.")
+    uid = _uid(current_user)
+    await _require_member(m["group_id"], uid)
+    reactions = m.get("reactions") or {}
+    lst = list(reactions.get(reaction) or [])
+    if uid in lst:
+        lst.remove(uid)
+    else:
+        lst.append(uid)
+    await db.chat_messages.update_one({"id": message_id}, {"$set": {f"reactions.{reaction}": lst}})
+    updated = await db.chat_messages.find_one({"id": message_id}, {"_id": 0})
+    return _serialize_message(updated, viewer_id=uid)
+
+
+@api_router.delete("/chat/messages/{message_id}")
+async def chat_delete_message(message_id: str, current_user: dict = Depends(get_current_user)):
+    m = await db.chat_messages.find_one({"id": message_id}, {"_id": 0})
+    if not m:
+        raise HTTPException(status_code=404, detail="Message not found.")
+    uid = _uid(current_user)
+    role = current_user.get("role")
+    if m.get("author_id") != uid and role not in ("implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Not allowed.")
+    now = datetime.now(timezone.utc)
+    await db.chat_messages.update_one({"id": message_id}, {"$set": {"deleted_at": now, "deleted_by_id": uid}})
+    return {"ok": True}
+
+
+@api_router.post("/chat/upload")
+async def chat_upload(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    if not _chat_can_access(current_user):
+        raise HTTPException(status_code=403, detail="Nurses cannot upload.")
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in CHAT_ALLOWED_EXT:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type.")
+    content = await file.read()
+    if len(content) > CHAT_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="File exceeds 10 MB.")
+    unique = f"chat_{uuid.uuid4().hex}{ext}"
+    path = CHAT_ATTACH_DIR / unique
+    with open(path, "wb") as f:
+        f.write(content)
+    url = f"/api/uploads/chat/{unique}"
+    return {"url": url, "filename": file.filename or unique, "size": len(content), "type": "pdf" if ext == ".pdf" else "image"}
+
+
+@api_router.get("/uploads/chat/{filename}")
+async def serve_chat_upload(filename: str, token: Optional[str] = Query(None), current_user: dict = Depends(get_current_user_optional)):
+    if not current_user and token:
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            u = payload.get("sub")
+            if u:
+                current_user = await db.users.find_one({"_id": ObjectId(u)} if ObjectId.is_valid(u) else {"id": u}, {"_id": 0, "password": 0})
+        except Exception:
+            pass
+    if not current_user or current_user.get("role") == "nurse":
+        raise HTTPException(status_code=403, detail="Access denied.")
+    safe = filename.replace("..", "").lstrip("/")
+    path = CHAT_ATTACH_DIR / safe
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="File not found.")
+    return FileResponse(str(path))
+
+
+@api_router.get("/chat/users")
+async def chat_list_users(q: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """Used by the Add Members / DM picker. Returns non-nurse users."""
+    if not _chat_can_access(current_user):
+        raise HTTPException(status_code=403, detail="Nurses cannot use chat.")
+    uid = _uid(current_user)
+    query: Dict[str, Any] = {"role": {"$ne": "nurse"}}
+    if q and q.strip():
+        query["$or"] = [{"name": {"$regex": q.strip(), "$options": "i"}}, {"username": {"$regex": q.strip(), "$options": "i"}}]
+    cursor = db.users.find(query, {"_id": 1, "name": 1, "role": 1, "profile_photo": 1}).limit(50)
+    items = []
+    async for u in cursor:
+        s = str(u["_id"])
+        if s == uid:
+            continue
+        items.append({"id": s, "name": u.get("name"), "role": u.get("role"), "profile_photo": u.get("profile_photo")})
+    return {"items": items}
+
+
+@app.on_event("startup")
+async def ensure_chat_indexes_on_start():
+    await _ensure_chat_indexes()
+    await _seed_all_staff_group()
+
+
 app.include_router(api_router)
 
 app.add_middleware(
