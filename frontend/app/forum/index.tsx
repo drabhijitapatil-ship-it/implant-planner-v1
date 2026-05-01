@@ -177,6 +177,19 @@ export default function ForumListScreen() {
         <Text style={s.headerTitle}>Discussion Forum</Text>
         <View style={{ width: 24 }} />
       </View>
+      {/* Forum / Chat segmented pill */}
+      <View style={s.segmentRow}>
+        <View style={s.segment}>
+          <TouchableOpacity style={[s.segmentBtn, s.segmentBtnActive]} disabled data-testid="segment-forum">
+            <Ionicons name="chatbubbles" size={14} color="#FFF" />
+            <Text style={s.segmentTxtActive}>Forum</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.segmentBtn} onPress={() => router.push('/forum/chat' as any)} data-testid="segment-chat">
+            <Ionicons name="chatbox-ellipses-outline" size={14} color="#1565C0" />
+            <Text style={s.segmentTxt}>Chat</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
       <View style={s.searchBar}>
         <Ionicons name="search" size={18} color="#90A4AE" />
@@ -252,6 +265,12 @@ const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#F5F7FA' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#ECEFF1' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#37474F' },
+  segmentRow: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4, alignItems: 'center' },
+  segment: { flexDirection: 'row', backgroundColor: '#ECEFF1', borderRadius: 22, padding: 3, gap: 2 },
+  segmentBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 22, paddingVertical: 7, borderRadius: 18 },
+  segmentBtnActive: { backgroundColor: '#1565C0' },
+  segmentTxt: { fontSize: 13, fontWeight: '700', color: '#1565C0' },
+  segmentTxtActive: { fontSize: 13, fontWeight: '700', color: '#FFF' },
   searchBar: { flexDirection: 'row', alignItems: 'center', gap: 8, margin: 12, backgroundColor: '#FFF', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#E0E0E0' },
   searchInput: { flex: 1, fontSize: 14, color: '#37474F', outlineWidth: 0 as any },
   filters: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, marginBottom: 8, flexWrap: 'wrap' },
