@@ -64,6 +64,20 @@ function DrawerMenu({
   const insets = useSafeAreaInsets();
   const forumAllowed = !!userRole && !isNurse;
 
+  // When the popover opens AND the user has unread badges, fire a soft
+  // "success" notification haptic (~80 ms after the open-tick from the header
+  // tap) — feels like a gentle nudge toward the red-dotted tile without any
+  // extra visual UI.
+  useEffect(() => {
+    if (!visible) return;
+    if (!(hasUnseenWhatsNew || hasUnreadForum)) return;
+    if (Platform.OS === 'web') return;
+    const timer = setTimeout(() => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    }, 220);
+    return () => clearTimeout(timer);
+  }, [visible, hasUnseenWhatsNew, hasUnreadForum]);
+
   // Each tile carries its own pastel-blue tint plus a slightly deeper accent
   // for the icon chip — keeps the grid colourful without leaving the brand
   // palette. Order is tuned so the most-used items land in the first row.
