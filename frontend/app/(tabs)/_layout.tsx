@@ -112,7 +112,7 @@ function DrawerMenu({
               // @ts-ignore
               data-testid={`drawer-${item.key}`}
             >
-              <Ionicons name={item.icon} size={22} color="#37474F" />
+              <Ionicons name={item.icon} size={22} color="#1565C0" />
               <Text style={d.menuLabel}>{item.label}</Text>
               {item.key === 'profile' && hasUnseenWhatsNew && (
                 <View style={badgeStyles.reddotInline} testID="drawer-profile-reddot" />

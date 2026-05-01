@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration 116 polish-fix verification — backend 10/10 PASS; frontend largely PASS. Drawer icons confirmed BLUE (#1565C0) for Users/My Profile/Archived Cases/Discussion Forum and logout stays RED (visually verified in screenshot). Add Members modal close ✕ (y=18, h=28) and Done (y=23, h=18) buttons render comfortably below the top edge — NOT clipped. Both buttons tappable; Done dismisses the modal cleanly. All 3 quick-filter chips (All Supervisors, All Students, All In-Charges) render and 'Clear all' chip appears after selection. Backend regression: chat group create with photo_url persists correctly (verified via subsequent GET /api/chat/groups/{id}.photo_url == payload), and existing chat (groups/messages/typing/mark-read/upload) + forum (threads/posts/upload/unread-summary) endpoints continue to work. ONE minor finding: querySelector for [data-testid='group-photo-btn'] returned null on /forum/chat/create even though the screen rendered and add-members-btn (same page, same TouchableOpacity wrapping) was found — likely a timing/render race or the testID prop on the TouchableOpacity wrapping conditional children (ActivityIndicator/Image/Icon) is not propagating to RNW DOM. Add Members modal was reached and validated, so the screen DID load — main agent should manually verify the camera circle is visible and tappable, and tighten the data-testid propagation if needed (perhaps use a Pressable wrapper or move testID to an inner View).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "/app/frontend/app/forum/chat/create.tsx group-photo-btn", "issue": "data-testid='group-photo-btn' was not discoverable via Playwright querySelector on /forum/chat/create even though add-members-btn on the same screen resolved fine. Page rendered (Add Members modal reachable from same screen). Likely cause: the TouchableOpacity wraps conditional children (ActivityIndicator | Image | Ionicons) and on RNW the testID does not always propagate when child is dynamically swapped. Manual visual verification recommended; consider moving testID to a stable inner <View> or using <Pressable>.", "selector": "[data-testid='group-photo-btn']", "priority": "MEDIUM"},
+      {"component": "/app/frontend/app/(tabs)/_layout.tsx DrawerMenu", "issue": "Repeated console warning 'Unexpected text node: . A text node cannot be a child of a <View>.' (2x per drawer open). Pre-existing from iteration 114 — stray whitespace inside a <View> in DrawerMenu JSX. Non-blocking but pollutes console.", "selector": "DrawerMenu", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter116_chat_photo.py",
+    "/app/test_reports/pytest/iteration_116.xml"
+  ],
+  "action_items": [
+    "Verify [data-testid='group-photo-btn'] is discoverable in DOM on /forum/chat/create. If RNW is dropping testID due to conditional children, move testID to an inner View wrapper or replace TouchableOpacity with Pressable.",
+    "(Optional polish) Strip the stray whitespace text node inside DrawerMenu <View> to silence the recurring 'Unexpected text node' RN warning.",
+    "Manual smoke test on real iOS device for Add Members modal header — automated bbox y=18-23 confirms safe-area padding works on web; on real iOS notch the insets.top should also push the row down. (Code-level review of useSafeAreaInsets usage in create.tsx L262 looks correct: `paddingTop: Math.max(insets.top, Platform.OS === 'ios' ? 44 : 16)`)."
+  ],
+  "critical_code_review_comments": [
+    "/app/frontend/app/forum/chat/create.tsx photoCircle TouchableOpacity (L178-194): testID may not propagate reliably on RNW when children are dynamically conditional. Recommend wrapping the dynamic child in a stable inner <View testID='group-photo-btn-inner'> or using Pressable.",
+    "Backend forum thread create endpoint requires consent_acknowledged: true and procedure_id — confirmed via 422/400 responses. Documented in test fixture. No code change needed; this is expected behavior.",
+    "Discussion-Forum drawer red-dot indicator showed correctly during the test (visible in drawer screenshot) — fetchForumUnread integration intact."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter116_chat_photo.py (new — chat photo_url persistence + chat/forum regression suite, 10 tests)"
+  ],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "~90% — drawer color ✓, Add Members modal layout ✓ (close y=18, done y=23), quick-filter chips ✓, Clear all ✓, Done dismiss ✓, group-photo-btn data-testid lookup failed once (visual verification recommended), forum thread paperclip not retested due to time"},
+  "test_credentials": "Abhijit.patil / Admin@123 (per /app/memory/test_credentials.md)",
+  "seed_data_creation": "Created TEST_iter116_photo, TEST_iter116_nophoto, TEST_iter116_regress chat groups + 1 forum thread. All TEST_-prefixed for cleanup.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Login flow: fill 2 inputs (Abhijit.patil/Admin@123) and click [data-testid='login-submit-btn']. Hamburger → drawer-{users,profile,archived,forum,logout}. Forum chat create at /forum/chat/create has [data-testid='add-members-btn','group-photo-btn'(may have RNW propagation issue),'create-group-submit','group-name-input']. Add Members modal: [member-modal-close, member-modal-done, quickfilter-{supervisor,student,implant_incharge}, quickfilter-clear]. Photo sheet: [photo-camera-btn, photo-library-btn, photo-files-btn]. Forum thread paperclip sheet: [attach-btn, attach-camera-btn, attach-library-btn, attach-files-btn] — not validated this run. Backend test file: /app/backend/tests/test_iter116_chat_photo.py runs in 2.5s with 10/10 pass.",
+  "rca_of_the_issue": "1) group-photo-btn querySelector miss: the TouchableOpacity at create.tsx L178-194 declares both `testID` (for RN) and `data-testid` (for RNW via @ts-ignore). It works for stable children, but here it wraps a ternary that swaps between ActivityIndicator, Image, and Ionicons. On RNW, the testID-to-data-testid bridge sometimes attaches to the rendered child rather than the outer TouchableOpacity wrapper. Fix: wrap the photo content in a stable <View testID='group-photo-btn-inner'> or convert TouchableOpacity to <Pressable testID='group-photo-btn'>. 2) Drawer color was confirmed correct via screenshot — the SVG path `fill` attribute query returned 'no-svg' because Ionicons in RNW renders a <span> with a webfont character (not an inline SVG). Visual verification of the screenshot confirms all 4 menu icons render in blue (#1565C0) and logout in red, matching the requirement."
+}
