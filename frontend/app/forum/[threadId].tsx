@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { useAuth } from '../../contexts/AuthContext';
 import api, { getToken } from '../../utils/api';
 import { BACKEND_URL } from '../../utils/config';
@@ -119,6 +120,27 @@ export default function ForumThreadScreen() {
   }, [load]));
 
   // ── Attachment helpers ─────────────────────────────────────────
+  /**
+   * Resize images to max 1600 px on the longer side and re-encode at 80 % JPEG.
+   * A 4-megapixel iPhone photo (~3-4 MB) compresses to ~400-700 KB — about
+   * 5× smaller, which makes threads load faster and keeps attachments well
+   * under the 10 MB upload cap. Non-image files are returned unchanged.
+   */
+  const compressImageIfPossible = async (uri: string): Promise<{ uri: string; size?: number }> => {
+    try {
+      const result = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: 1600 } }],
+        { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+      );
+      return { uri: result.uri };
+    } catch (e) {
+      // Manipulator may fail on web for some formats; fall back to original.
+      console.warn('[forum] image compression skipped:', e);
+      return { uri };
+    }
+  };
+
   const uploadAsset = async (asset: { uri: string; name: string; mimeType?: string; size?: number }) => {
     if ((asset.size || 0) > 10 * 1024 * 1024) {
       Alert.alert('Too large', 'Attachment must be 10 MB or smaller.');
@@ -161,7 +183,8 @@ export default function ForumThreadScreen() {
       const a = res.assets?.[0];
       if (!a) return;
       const filename = a.fileName || `photo_${Date.now()}.jpg`;
-      await uploadAsset({ uri: a.uri, name: filename, mimeType: a.mimeType || 'image/jpeg', size: a.fileSize });
+      const compressed = await compressImageIfPossible(a.uri);
+      await uploadAsset({ uri: compressed.uri, name: filename, mimeType: 'image/jpeg', size: a.fileSize });
     } catch (e: any) {
       console.error('[forum] camera pick failed:', e);
       Alert.alert('Camera failed', e?.response?.data?.detail || e?.message || 'Unknown error');
@@ -188,7 +211,8 @@ export default function ForumThreadScreen() {
       const a = res.assets?.[0];
       if (!a) return;
       const filename = a.fileName || `image_${Date.now()}.jpg`;
-      await uploadAsset({ uri: a.uri, name: filename, mimeType: a.mimeType || 'image/jpeg', size: a.fileSize });
+      const compressed = await compressImageIfPossible(a.uri);
+      await uploadAsset({ uri: compressed.uri, name: filename, mimeType: 'image/jpeg', size: a.fileSize });
     } catch (e: any) {
       console.error('[forum] library pick failed:', e);
       Alert.alert('Library access failed', e?.response?.data?.detail || e?.message || 'Unknown error');
@@ -207,7 +231,11 @@ export default function ForumThreadScreen() {
       if (res.canceled) return;
       const a = res.assets?.[0];
       if (!a) return;
-      await uploadAsset({ uri: a.uri, name: a.name || 'file', mimeType: a.mimeType, size: a.size });
+      const isImage = (a.mimeType || '').startsWith('image/');
+      const uri = isImage ? (await compressImageIfPossible(a.uri)).uri : a.uri;
+      const name = isImage ? (a.name || `image_${Date.now()}.jpg`) : (a.name || 'file');
+      const mime = isImage ? 'image/jpeg' : a.mimeType;
+      await uploadAsset({ uri, name, mimeType: mime, size: a.size });
     } catch (e: any) {
       console.error('[forum] document pick failed:', e);
       Alert.alert('File pick failed', e?.response?.data?.detail || e?.message || 'Unknown error');
