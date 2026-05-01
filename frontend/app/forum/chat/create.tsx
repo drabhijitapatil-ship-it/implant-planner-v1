@@ -103,12 +103,16 @@ export default function CreateGroupScreen() {
         </TouchableOpacity>
       </View>
 
-      <Modal visible={showPicker} animationType="slide" onRequestClose={() => setShowPicker(false)}>
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#FFF' }}>
-          <View style={s.header}>
-            <TouchableOpacity onPress={() => setShowPicker(false)}><Ionicons name="close" size={26} color="#37474F" /></TouchableOpacity>
+      <Modal visible={showPicker} animationType="slide" presentationStyle="fullScreen" statusBarTranslucent={false} onRequestClose={() => setShowPicker(false)}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#FFF' }} edges={['top', 'bottom']}>
+          <View style={s.pickerHeader}>
+            <TouchableOpacity onPress={() => setShowPicker(false)} hitSlop={{top:16,bottom:16,left:16,right:16}} testID="member-modal-close" accessibilityLabel="member-modal-close" /* @ts-ignore */ data-testid="member-modal-close">
+              <Ionicons name="close" size={26} color="#37474F" />
+            </TouchableOpacity>
             <Text style={s.headerTitle}>Add Members</Text>
-            <TouchableOpacity onPress={() => setShowPicker(false)}><Text style={{ color: '#1565C0', fontWeight: '700' }}>Done</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowPicker(false)} hitSlop={{top:16,bottom:16,left:16,right:16}} testID="member-modal-done" accessibilityLabel="member-modal-done" /* @ts-ignore */ data-testid="member-modal-done">
+              <Text style={{ color: '#1565C0', fontWeight: '700', fontSize: 16 }}>Done</Text>
+            </TouchableOpacity>
           </View>
           <View style={s.searchBar}>
             <Ionicons name="search" size={18} color="#90A4AE" />
@@ -140,6 +144,10 @@ export default function CreateGroupScreen() {
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#F5F7FA' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#ECEFF1' },
+  // Picker modal header — extra top padding so the close/Done row sits visibly
+  // below the device status bar / notch on iOS and avoids the compressed look
+  // that made the ✕ unreachable on some devices.
+  pickerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 18, paddingBottom: 14, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#ECEFF1', minHeight: 56 },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#37474F' },
   photoRow: { alignItems: 'center', marginBottom: 20 },
   photoCircle: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#ECEFF1', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#CFD8DC', borderStyle: 'dashed' },
