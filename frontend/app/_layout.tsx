@@ -53,6 +53,9 @@ export default function RootLayout() {
               <Stack.Screen name="admin/supervisor/[id]" options={{ headerShown: false }} />
               <Stack.Screen name="forum/index" options={{ headerShown: false }} />
               <Stack.Screen name="forum/[threadId]" options={{ headerShown: false }} />
+              <Stack.Screen name="forum/chat/index" options={{ headerShown: false }} />
+              <Stack.Screen name="forum/chat/create" options={{ headerShown: false }} />
+              <Stack.Screen name="forum/chat/[groupId]" options={{ headerShown: false }} />
             </Stack>
           </ActivityTracker>
         </TabletFrame>
