@@ -1,0 +1,59 @@
+{
+  "summary": "Frontend-only verification of iter-118 tile-grid menu replacing the legacy hamburger drawer. Tested all 3 role variants (Admin/Implant-Incharge, Student, Nurse) at viewport 390x844 against the deployed preview URL. All key behaviors verified end-to-end: header grid icon, popover open/close, identity row, role-based tile visibility, navigation routing, backdrop close, close-btn close, tap-inside-no-close, and logout flow.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Tile-Menu sheet (/(tabs)/_layout.tsx style block 't')",
+        "issues": [
+          "Console warning: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' — sheet style uses shadowColor/shadowOffset/shadowOpacity/shadowRadius which are deprecated on react-native-web. Migrate to boxShadow to silence the warning (cosmetic only, not breaking)."
+        ]
+      },
+      {
+        "screen": "Discussion Forum (/forum) — pre-existing, unrelated to iter-118",
+        "issues": [
+          "Console error observed when navigating to Forum: 'Unexpected text node: . A text node cannot be a child of a <View>.' (twice). Not introduced by this iteration but worth flagging."
+        ]
+      }
+    ]
+  },
+  "verified_behaviors": {
+    "header_grid_icon": "PASS — Ionicons 'grid' icon (24px, color #1565C0) rendered with testID 'hamburger-btn' (legacy testID retained as documented).",
+    "popover_open": "PASS — Tap opens tile-menu-sheet with translucent dark backdrop (rgba(15,25,40,0.45)). Sheet is top-anchored and auto-sized to its content (does NOT cover full screen).",
+    "identity_row": "PASS — Avatar (placeholder blue with person icon when no profile_photo, Image when present), bold name, capitalized role; close button on top-right ('tile-menu-close').",
+    "tiles_admin": "PASS — Abhijit.patil sees 4 tiles: tile-users, tile-profile, tile-archived, tile-forum.",
+    "tiles_student": "PASS — Gaurav.pandey sees 3 tiles: tile-profile, tile-archived, tile-forum (no tile-users).",
+    "tiles_nurse": "PASS — nurse.1@dental.edu sees only tile-profile; tile-users/tile-archived/tile-forum hidden as expected. Identity shows 'Nurse 1' / 'Nurse'.",
+    "navigation": "PASS — Admin: all 4 tiles navigate correctly (tile-users→/user-management, tile-profile→/profile, tile-archived→/archived, tile-forum→/forum). Student: tile-profile→/profile, tile-archived→/archived verified. Nurse: tile-profile→/profile verified. Sheet closes cleanly after every nav.",
+    "backdrop_close": "PASS — Tap on dark overlay (testID tile-menu-overlay) closes the sheet.",
+    "close_btn": "PASS — Tap tile-menu-close closes the sheet.",
+    "tap_inside_no_close": "PASS — Tap inside the sheet body (non-button area) does NOT close the popover (Pressable.stopPropagation on inner Pressable works).",
+    "logout": "PASS — tile-menu-logout closes popover, calls logout(), and returns user to login screen for all 3 roles.",
+    "red_dot_header": "PARTIAL — Could not observe header red-dot in this run because Nurse 'What's-new' was dismissed and Admin/Student had no unseen entries at test time. Code path confirmed: header reddot renders when (hasUnseenWhatsNew || hasUnreadForum) and uses testID 'profile-whatsnew-reddot'.",
+    "tile_badge": "PASS — Student popover screenshot shows the small red dot on the top-right of the Forum tile's icon chip (hasUnreadForum=true). Profile tile receives the same treatment when hasUnseenWhatsNew=true (code verified)."
+  },
+  "test_report_links": [],
+  "action_items": [
+    "(Cosmetic, non-blocking) Replace deprecated shadow* style props on `t.sheet` with `boxShadow` to silence react-native-web deprecation warning.",
+    "(Pre-existing, unrelated to iter-118) Investigate the Forum-page console error 'Unexpected text node: . A text node cannot be a child of a <View>.' — likely a stray whitespace/string child in /app/frontend/app/forum/* JSX."
+  ],
+  "critical_code_review_comments": [
+    "Legacy style block `d` in _layout.tsx is now dead code (kept intentionally per the iteration note). Recommend a follow-up cleanup PR to remove it once stable to keep the file lean (~556 lines is fine, but `d` is unreferenced).",
+    "DrawerMenu component name still says 'Drawer' although it now renders a tile grid; rename to TileMenu for clarity in a future cleanup.",
+    "Tile sheet does not implement focus trap / keyboard dismiss handling — fine for mobile, but worth noting for web a11y if/when desktop support is added.",
+    "`onNavigate` uses setTimeout(..., 100) before router.push to allow modal-close animation to settle. This works, but a cleaner pattern would be to await the modal's onModalHide callback (RN's Modal does fire onDismiss on iOS only). Acceptable for now."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100% (all 11 review-list bullets pass; 1 partial due to lack of unseen-whatsnew test data, code path verified)"},
+  "test_credentials": "Used /app/memory/test_credentials.md + nurse.1@dental.edu/Nurse@123. All worked.",
+  "seed_data_creation": "None.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter-118 tile menu is fully functional. Next agent should NOT re-test the tile-menu UI unless changed. Note: When testing other flows that involve the menu, dismiss the 'What's new' modal first (click 'Got it — take me to my dashboard') for users with unseen entries — this happens for first-time login of nurse.1@dental.edu and may also surface for other users when admin pushes new whatsnew entries. Use force=True on Playwright clicks against react-native-web modal/tabs because absolutely-positioned tab-bar overlays sometimes intercept pointer events under strict-stable mode.",
+  "rca of the issue": "N/A — no bugs reproduced in iter-118 scope."
+}
