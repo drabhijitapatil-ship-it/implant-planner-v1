@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import api from '../../utils/api';
+import BackButton from '../../components/BackButton';
 
 interface Thread {
   id: string;
@@ -170,14 +171,13 @@ export default function ForumListScreen() {
 
   return (
     <SafeAreaView style={s.screen} edges={['top']}>
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} data-testid="forum-back-btn">
-          <Ionicons name="arrow-back" size={24} color="#37474F" />
-        </TouchableOpacity>
-        <Text style={s.headerTitle}>Discussion Forum</Text>
-        <View style={{ width: 24 }} />
+      {/* Floating circular BackButton (no in-flow header anymore — the
+          Discussion Forum title was redundant with the Forum/Chat toggle). */}
+      <View style={s.backBtnWrap}>
+        <BackButton testID="forum-back-btn" />
       </View>
-      {/* Forum / Chat segmented pill */}
+      {/* Forum / Chat segmented pill — shifted up to the top now that the
+          "Discussion Forum" title above it is gone. */}
       <View style={s.segmentRow}>
         <View style={s.segment}>
           <TouchableOpacity style={[s.segmentBtn, s.segmentBtnActive]} disabled testID="segment-forum" accessibilityLabel="segment-forum" /* @ts-ignore */ data-testid="segment-forum">
@@ -263,9 +263,12 @@ export default function ForumListScreen() {
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#F5F7FA' },
+  // Wrapper for the floating BackButton — positions it at the top-left with
+  // generous inset so it floats cleanly above the segment row content.
+  backBtnWrap: { paddingHorizontal: 12, paddingTop: 6, paddingBottom: 0, alignItems: 'flex-start' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#ECEFF1' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#37474F' },
-  segmentRow: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4, alignItems: 'center' },
+  segmentRow: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 6, alignItems: 'center' },
   segment: { flexDirection: 'row', backgroundColor: '#ECEFF1', borderRadius: 22, padding: 3, gap: 2 },
   segmentBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 22, paddingVertical: 7, borderRadius: 18 },
   segmentBtnActive: { backgroundColor: '#1565C0' },

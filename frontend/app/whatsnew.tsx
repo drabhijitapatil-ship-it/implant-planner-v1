@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import BackButton from '../components/BackButton';
 import api from '../utils/api';
 
 type Entry = { version: string; date?: string; title: string; items: string[] };
@@ -62,9 +63,7 @@ export default function WhatsNewScreen() {
     <SafeAreaView style={styles.safe} testID="whatsnew-screen">
       <View style={styles.header}>
         {isHistory && (
-          <TouchableOpacity onPress={close} style={styles.backBtn} testID="whatsnew-close-btn">
-            <Ionicons name="arrow-back" size={22} color="#0D47A1" />
-          </TouchableOpacity>
+          <BackButton onPress={close} testID="whatsnew-close-btn" />
         )}
         <Text style={styles.headerTitle}>What's new</Text>
         <View style={{ width: 40 }} />
