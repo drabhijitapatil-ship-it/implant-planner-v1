@@ -1,5 +1,27 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 123 (Feb 2026) — Global Circular BackButton + Forum Header Cleanup
+
+**User request**: Replace every "← Back" / arrow-with-Back label at top-left with a single elegant circular floating back chip (per uploaded reference). Remove the redundant "Discussion Forum" title sitting above the Forum/Chat toggle and shift the toggle up.
+
+### Implementation
+- New shared `/app/frontend/components/BackButton.tsx`:
+  - 44 × 44 circle, `#FFFFFF` fill, iOS-style soft halo `shadowOpacity: 0.12, shadowRadius: 10`, Android `elevation: 4`.
+  - `Ionicons name="chevron-back"` size 24, color `#1A2332` (near-black per user pick 1a).
+  - `Haptics.ImpactFeedbackStyle.Light` on press (web no-op).
+  - Props: `onPress?` (defaults to `router.back()`), `style?`, `color?`, `testID?`.
+- Wired into 11 screens + 1 shared component:
+  - `forum/index.tsx`, `forum/chat/index.tsx`, `forum/[threadId].tsx`, `forum/chat/[groupId].tsx`
+  - `help-workflow.tsx`, `whatsnew.tsx`
+  - `implantlens/index.tsx`, `implantlens/[caseId].tsx`
+  - `admin/student/[id].tsx`, `admin/supervisor/[id].tsx`
+  - `components/DrillingProtocol.tsx`, `components/PhaseHeader.tsx` (Phase 1-4 shared)
+- **Forum header cleanup**:
+  - Removed standalone "Discussion Forum" title from `/forum` and `/forum/chat`.
+  - Shifted segmented Forum/Chat toggle up (`paddingTop: 8 → 4`, and the BackButton sits in its own minimal `backBtnWrap` row above).
+- testIDs preserved: `forum-back-btn`, `chat-back-btn`, `workflow-close-btn`, `whatsnew-close-btn`, `student-drilldown-back`, `supervisor-drilldown-back`, `protocol-back-btn`.
+- **100% PASS** on testing_agent_v3_fork iter-123 (4 live-tested screens + 7 code-reviewed).
+
 ## Iteration 122 (Feb 2026) — Formal Motion Pass (subtler tile animation)
 
 User feedback: the springy zoom/stagger felt "informal" for a clinical tool. Replaced with a uniform **soft fade + 6 px slide-up**, 220 ms, no stagger, no spring bounce — reads as "information being placed" rather than bouncing in.
