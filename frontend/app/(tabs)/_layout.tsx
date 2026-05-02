@@ -100,7 +100,7 @@ function DrawerMenu({
       : []),
     {
       key: 'profile', icon: 'person-circle' as const, label: 'My Profile', route: '/profile',
-      bg: '#E0F7FA', chip: '#B2EBF2', iconColor: '#00838F', badge: hasUnseenWhatsNew,
+      bg: '#E0F7FA', chip: '#B2EBF2', iconColor: '#00838F',
     },
     ...(isNurse
       ? []
@@ -112,6 +112,16 @@ function DrawerMenu({
       ? [{
           key: 'forum', icon: 'chatbubbles' as const, label: 'Forum', route: '/forum',
           bg: '#E1F5FE', chip: '#B3E5FC', iconColor: '#0277BD', badge: hasUnreadForum,
+        }]
+      : []),
+    // 4th tile for Supervisors & Students — balances the 4-up grid (admins
+    // already have 4 tiles via the Users entry; nurses get a single-tile
+    // menu). The What's-New unseen-badge is attached here instead of the
+    // Profile tile so the indicator lives on a semantically correct surface.
+    ...(!isAdmin && !isNurse
+      ? [{
+          key: 'whatsnew', icon: 'sparkles' as const, label: "What's New", route: '/whatsnew',
+          bg: '#FFF3E0', chip: '#FFE0B2', iconColor: '#EF6C00', badge: hasUnseenWhatsNew,
         }]
       : []),
   ];
