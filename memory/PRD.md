@@ -1,6 +1,34 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
-## Iteration 132 (Feb 2026) — BackButton global sweep + What's New fix + Unified Attach Picker
+## Iteration 133 (Feb 2026) — Attach Picker Centered Dialog (fix for iter-132 bottom-sheet that users rejected)
+
+**User feedback driving this iteration:**
+- "None of the attachment pickers is working now through the app, not even the CBCT attachment in Phase 1."
+- "The attachment pop-up, in iOS-native style with a blue-coloured border icon for each file type, should open in the middle of the screen for all attachment types for all types of users across the app."
+- "CBCT uploaded in Phase 1 and Post Surgical Radiograph - IOPA by the student are not visible to Supervisor or Implant In-Charge once it's uploaded."
+
+**What changed in `/app/frontend/components/AttachPickerModal.tsx`:**
+- Replaced the React Native `<Modal>` with a plain absolutely-positioned `<View>` overlay. iOS enforces a single-modal-at-a-time rule, so a RN Modal mid-dismiss silently aborts any native DocumentPicker/ImagePicker launched from it. A plain View overlay has no such constraint.
+- Dialog is now CENTERED horizontally + vertically (`alignItems: center; justifyContent: center`). Card `width: 86%, maxWidth: 360, borderRadius: 18`.
+- Header: title "Add attachment" + subtitle "Choose where your file is coming from".
+- Three `IconTile` rows — each with its Ionicon rendered inside a **blue-bordered** rounded-square frame (`borderWidth: 1.5, borderColor: #1565C0, bg: #F5FAFF`):
+  - Photo Library (`images-outline`)
+  - Take Photo or Video (`camera-outline`, `mediaTypes: ['images','videos']`)
+  - Choose Files (`folder-outline`)
+- Added a Cancel row at the bottom (`data-testid='attach-cancel-btn'`).
+- Backdrop: `Pressable` filling the overlay with `rgba(0,0,0,0.42)` — tap-outside dismiss.
+
+**CBCT / IOPA visibility to supervisor — ROOT CAUSE (documented):**
+Direct DB probe via `GET /api/procedures` as Paresh.gandhi (Supervisor) confirmed ALL 16 supervisor-visible procedures have `cbct_files=None` and `phase2_data.iopa_files=None`. The rendering code at `/app/frontend/app/procedures/[id].tsx` lines 1425-1478 (CBCT) and 1574-1609 (IOPA) has NO role gate — both render for supervisor whenever data is present. The real root cause is that students were NEVER successfully uploading files because the picker was broken. Fixing the picker (iter-133) transitively fixes visibility for all future uploads.
+
+**Bundle cache quirk documented:**
+Initial post-deploy test (iteration_125.json first run) reported the rewrite was NOT live. Main agent wiped `/app/frontend/.metro-cache`, `/app/frontend/.expo`, `/tmp/metro-*` and restarted Expo to force a cold rebuild (`Web Bundled 32534ms ... 2263 modules`). Subsequent re-test (iteration_125.json second run) confirmed the rewrite IS live with centerY=450 exact, all spec items PASS. Future cache-busting commands are documented in `/app/memory/BACKLOG.md`.
+
+**Known minor items (low priority, non-blocking):**
+- `iconFrame.borderWidth: 1.5` rounds to 1px on RN-Web sub-pixel. Visual impact: invisible. Can bump to 2 if pixel-perfect matters.
+- Several interactive RN components across the codebase ship `data-testid={...}` as a raw prop instead of `testID={...}`. RN-Web does NOT forward raw `data-testid` on TouchableOpacity/TextInput/Pressable to the underlying DOM element. The picker itself correctly sets both. Main user-flow functionality is unaffected; only Playwright-based automated DOM queries are affected for those buttons.
+
+## Iteration 132 (Feb 2026) — BackButton global sweep + What's New fix + Unified Attach Picker (superseded by iter-133)
 
 ### Task 1 — iOS Default `<BackButton />` everywhere (full app sweep)
 - `app/_layout.tsx`: stripped the native stack header (`headerShown:true, headerBackTitle:'Back'`) from `procedures/[id]`, `legal/privacy-policy`, `legal/terms`, `admin/audit-log`. All four now render the circular floating BackButton inline.

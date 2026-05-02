@@ -4,6 +4,19 @@ Use this as the running holding-tank for non-urgent enhancements the user wants 
 
 ---
 
+## Cache-busting for Metro bundler (stale bundle recovery)
+**When to use**: Tester reports the live preview still shows OLD behaviour even though the source file on disk has been updated, and `sudo supervisorctl restart expo` alone doesn't help.
+
+```bash
+rm -rf /app/frontend/.metro-cache /app/frontend/.expo /tmp/metro-*
+sudo supervisorctl restart expo
+sleep 30   # cold rebuild takes ~30s in CI mode (2263+ modules)
+curl -s -o /dev/null http://localhost:3000   # trigger first request to kick bundler
+tail -n 5 /var/log/supervisor/expo.out.log   # expect `Web Bundled ... (2263 modules)`
+```
+
+---
+
 ## Enhancement: First-Run Coach-Mark Tour for New Gesture Vocabulary
 **Saved**: Feb 2026 (Iteration 131)
 **Priority**: P2 (nice-to-have polish, not blocking any workflow)
