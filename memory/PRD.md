@@ -1,5 +1,45 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 136 (Feb 2026) — Pre-Op Augmentation Checklist
+
+**Goal**: Convert the per-site clinical correlations surfaced by iter-135's AI into structured, ticked-off-able checklist items the supervisor signs off during Phase 1 approval. Deterministic rule engine (no AI cost, no hallucination, instant generation).
+
+### Backend
+- **`/app/backend/augmentation_checklist.py` (new)**: `generate_augmentation_checklist(proc)` — pure function, takes a procedure dict, emits a list of items keyed to each cluster-leader tooth (or `"<arch> arch"` fallback for full-arch / single-tooth flows). Triggers:
+  - Inadequate keratinized mucosa (<2mm / minimal / absent) → free gingival graft / apically-positioned flap item
+  - Thin biotype (≤1mm) → connective-tissue graft item
+  - Thick biotype (>2mm) → favourable note recommending zirconia abutment
+  - Knife-edge / atrophied / Type B/C/D ridge → ridge augmentation (GBR / ridge-split) + narrower-platform implant items
+- **`/app/backend/server.py`**:
+  - Auto-generate on `POST /procedures` (line ~1521) — checklist seeded into the new procedure doc.
+  - Auto-regenerate on `PATCH /procedures/{id}/edit-fields` (line ~2410) when `clinical_exam_per_site` / legacy ridge / soft-tissue / keratinized / arch / missing-teeth fields are touched. Preserves completed-state on items whose title still matches (so a benign edit doesn't lose supervisor sign-offs).
+  - Three new endpoints (line ~2470):
+    - `GET    /procedures/{id}/augmentation-checklist` — list items (case stakeholders only).
+    - `POST   /procedures/{id}/augmentation-checklist/regenerate` — force rebuild (case stakeholders).
+    - `PATCH  /procedures/{id}/augmentation-checklist/{item_id}` — toggle completed (Supervisor / Implant In-Charge / Admin only). Captures `completed_by_id`, `completed_by_name`, `completed_at`, `completed_notes`.
+
+### Frontend
+- **`/app/frontend/components/AugmentationChecklist.tsx` (new)**: Rendered at the top of `/procedures/[id]` ScrollView (just below the page header). Self-hides when no items. Supervisors / In-Charge see tappable cards with checkbox + sign-off line; students see read-only cards. Items are colour-coded by category (keratinized = orange, biotype = purple, ridge = deep-orange, soft-tissue = orange, general = grey) with Ionicon, blue site chip ("Site 16"), title, and rationale. "Regenerate" button (top-right of section) reruns the rule engine on demand.
+
+### Behaviour example (live curl-tested)
+For a procedure with `clinical_exam_per_site = { "16": { ridge: "Type B Knife Edge Ridge", soft_tissue: "Thin (≤1mm)", keratinized: "Inadequate (<2mm)" } }`, the engine emits 4 items at site 16:
+1. Plan free gingival graft / apically-positioned flap (keratinized)
+2. Plan connective-tissue graft to thicken biotype (biotype)
+3. Plan ridge augmentation (GBR / ridge-split) (ridge)
+4. Consider narrower-platform implant (ridge)
+
+Each with a one-line clinical rationale referencing the actual finding value.
+
+### Regression tests (`/app/backend/tests/test_augmentation_checklist_iteration136.py`)
+**7/7 PASS in 4.18s** (combined with iter-135's 4 tests: **11/11 PASS in 22.67s**):
+1. Rule engine emits keratinized item for inadequate KM
+2. Rule engine emits full set (keratinized + biotype + ridge) for deficient site
+3. Rule engine returns [] when no findings
+4. Rule engine falls back to legacy fields when `clinical_exam_per_site` is empty
+5. GET endpoint returns items list
+6. Regenerate produces consistent items after seeding deficient findings
+7. Toggle 403's for student, 200/403/404 for supervisor (stakeholder-aware)
+
 ## Iteration 135 (Feb 2026) — AI Per-Site Clinical Correlation
 
 **Goal**: Now that Phase 1 Step 1 captures distinct intraoral findings per edentulous site (iter-134), surface those findings to the AI "Explain Recommendation" so the rationale is per-site instead of globally averaged.

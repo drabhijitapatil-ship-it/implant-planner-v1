@@ -38,6 +38,7 @@ import CaseImplantPlanning from '../../components/CaseImplantPlanning';
 import CaseCompletionBadge from '../../components/CaseCompletionBadge';
 import ExportPrintMenu from '../../components/ExportPrintMenu';
 import Phase2EditModal from '../../components/Phase2EditModal';
+import AugmentationChecklist from '../../components/AugmentationChecklist';
 import * as Linking from 'expo-linking';
 
 // Edit mode context for passing edit state to InfoRow
@@ -543,6 +544,12 @@ export default function ProcedureDetailScreen() {
         <View style={{ width: 44 }} />
       </View>
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Pre-Op Augmentation Checklist (iter-136) — auto-derived rule-based
+            augmentation/grafting plan items. Self-hides when no findings. */}
+        <AugmentationChecklist
+          procedureId={String(id)}
+          canSignOff={['supervisor', 'implant_incharge', 'administrator'].includes(user?.role || '')}
+        />
         {/* Edit Mode Banner */}
         {isEditMode && (
           <View style={{ backgroundColor: '#E3F2FD', borderBottomWidth: 2, borderBottomColor: '#1565C0', paddingHorizontal: 16, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 10 }} data-testid="edit-mode-banner">
