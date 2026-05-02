@@ -33,8 +33,6 @@
 6. Numeric (int + float) values for angulation / cuff_height preserved as-sent.
 
 ### Iter-139 Extension — Downstream Read-only Display + PDF + AI Context
-
-**Case detail view — `/app/frontend/app/procedures/[id].tsx`** (~L1573):
 Blue-themed read-only card (`data-testid="mua-readonly-section"`) under the Phase 2 summary rendering `Multi-unit Abutment Placed: Yes/No` plus per-tooth rows (`data-testid="mua-readonly-row-<idx>"`) with Tooth pill + Angulation + Cuff Height (em-dash for empty values).
 
 **Case Report PDF — `/app/backend/server.py`** (~L5621):
@@ -49,6 +47,30 @@ After the Healing Abutment Cuff Height line the PDF now renders `Multi-unit Abut
 3. Non-MUA single-implant → zero MUA substrings in PDF (no leak).
 4. `_build_case_context` unit test — emits MUA lines for yes, "No" line only for no, nothing when absent.
 5. Delayed Loading + numeric (int) MUA values → PDF renders correctly (stringification robust).
+
+
+## Iteration 140 (Feb 2026) — Copy MUA from Phase 2 to Phase 4 Step 1 Notes
+
+**Goal**: One-tap affordance in Phase 4 Step 1 (Prosthetic Planning) that copies the Phase 2 Multi-unit Abutment placement data into the free-text Notes field, so the restorative team doesn't have to re-type angulation + cuff-height per tooth.
+
+**UI — `/app/frontend/app/procedures/submit-stage2-prosthetic/[id].tsx`**:
+- A blue pill button **"Copy MUA from Phase 2 (N)"** (`data-testid="copy-mua-to-notes-btn"`) appears inside the Notes section **only when** `procedure.phase2_data.multi_unit_abutment_placed === 'yes'` AND `multi_unit_abutment_details.length > 0`.
+- On tap, appends a pre-formatted block to the existing Notes (never overwrites):
+  ```
+  Multi-unit Abutments (from Phase 2):
+  - Tooth 11: Angulation 15°, Cuff Height 3 mm
+  - Tooth 13: Angulation 20°, Cuff Height 4 mm
+  ...
+  ```
+- Idempotent: if the block is already present (checks for the `Multi-unit Abutments (from Phase 2):` header), shows an "Already copied" alert instead of duplicating.
+- Editable: the pasted text can be modified freely — notes remain a plain string on submit.
+- Empty entries render as `—` for the value.
+
+**Styles (blue theme matches Phase 2 MUA card)**:
+- `copyMuaBtn`: pill, `#E1F5FE` bg / `#B3E5FC` border / `#0277BD` text, left-aligned, above the textarea.
+- `copyMuaText`: 12px, weight 700, `#0277BD`.
+
+**No backend changes** — pure client-side UX enhancement reading `procedure.phase2_data` already loaded via GET `/procedures/{id}`.
 
 
 
