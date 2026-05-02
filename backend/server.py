@@ -4269,6 +4269,28 @@ def _build_case_context(proc: dict) -> str:
         parts.append(f"Soft Tissue Thickness: {proc.get('soft_tissue_thickness')}")
     if proc.get('keratinized_mucosa'):
         parts.append(f"Keratinized Mucosa: {proc.get('keratinized_mucosa')}")
+    # Per-site intraoral findings (iter-135) — keyed by cluster-leader tooth so
+    # adjacent missing teeth share one site, non-adjacent gaps each have their
+    # own. Emitted as a structured block so the LLM can correlate each implant
+    # plan to its specific edentulous site.
+    per_site = proc.get('clinical_exam_per_site') or {}
+    if isinstance(per_site, dict) and per_site:
+        site_lines = []
+        for leader, findings in per_site.items():
+            if not isinstance(findings, dict):
+                continue
+            bits = []
+            if findings.get('ridge_contour'):
+                bits.append(f"ridge {findings['ridge_contour']}")
+            if findings.get('soft_tissue_thickness'):
+                bits.append(f"soft tissue {findings['soft_tissue_thickness']}")
+            if findings.get('keratinized_mucosa'):
+                bits.append(f"keratinized {findings['keratinized_mucosa']}")
+            if bits:
+                site_lines.append(f"  - Site {leader}: {', '.join(bits)}")
+        if site_lines:
+            parts.append("Per-Site Intraoral Findings:")
+            parts.extend(site_lines)
     if proc.get('smile_line'):
         parts.append(f"Smile Line: {proc.get('smile_line')}")
     if proc.get('gingival_biotype'):
@@ -4402,13 +4424,53 @@ async def ai_explain_recommendation(request: Request, current_user: dict = Depen
         if inst.get("indications"): inst_block += f"\nInstitutional Indications: {inst['indications']}"
         if inst.get("features"):    inst_block += f"\nInstitutional Features: {inst['features']}"
 
-    prompt = f"""You are an expert implantologist. Based on the following clinical case data, explain in 3-4 concise sentences why the selected implant is appropriate for this case. Use clinical reasoning grounded in established scientific literature — reference bone-to-implant safety margins, anatomical considerations, bone density classification, and implant design rationale specific to the bone type and site. When institutional Indications/Features are provided below, anchor your reasoning in those system-specific properties (e.g. tapered body for soft bone, conical connection for crestal preservation) rather than generic platitudes. Do NOT cite or name any specific guidelines, organizations, or textbooks.
+    # ── Pick the per-site findings that apply to THIS implant (iter-135) ──
+    # The clinical_exam_per_site map is keyed by the cluster-leader tooth, but
+    # the implant plan's tooth_number may be any tooth in that adjacent run.
+    # We resolve the right site by walking missing_teeth runs ordered by
+    # adjacency and picking the run that contains the implant tooth.
+    site_focus_block = ""
+    plan_tooth = str(plan.get('tooth_number') or plan.get('position') or '').strip()
+    per_site = proc.get('clinical_exam_per_site') or {}
+    if plan_tooth and isinstance(per_site, dict) and per_site:
+        # Build adjacency runs from missing_teeth (FDI-aware: same quadrant +
+        # consecutive position numbers). Mirrors frontend findMissingRuns().
+        missing = [str(t) for t in (proc.get('missing_teeth') or []) if str(t).isdigit()]
+        runs: list[list[str]] = []
+        for t in sorted(missing, key=lambda x: (x[0], int(x))):
+            if runs and runs[-1] and t[0] == runs[-1][-1][0] and int(t) == int(runs[-1][-1]) + 1:
+                runs[-1].append(t)
+            else:
+                runs.append([t])
+        chosen_leader = None
+        for run in runs:
+            if plan_tooth in run:
+                # Leader = highest tooth number in the run (clusterLeader rule).
+                chosen_leader = max(run, key=lambda x: int(x))
+                break
+        # Fall back: maybe map keys directly contain the implant tooth.
+        if not chosen_leader and plan_tooth in per_site:
+            chosen_leader = plan_tooth
+        if chosen_leader and isinstance(per_site.get(chosen_leader), dict):
+            f = per_site[chosen_leader]
+            bits = []
+            if f.get('ridge_contour'):           bits.append(f"Ridge Contour: {f['ridge_contour']}")
+            if f.get('soft_tissue_thickness'):   bits.append(f"Soft Tissue Thickness: {f['soft_tissue_thickness']}")
+            if f.get('keratinized_mucosa'):      bits.append(f"Keratinized Mucosa: {f['keratinized_mucosa']}")
+            if bits:
+                site_focus_block = f"\nSite-Specific Findings (tooth {plan_tooth}, leader {chosen_leader}): {' | '.join(bits)}"
+
+    prompt = f"""You are an expert implantologist. Based on the following clinical case data, explain in 4-5 concise sentences why the selected implant is appropriate for this case AND surface any per-site soft-tissue / ridge-contour considerations that affect surgical or prosthetic planning.
+
+Use clinical reasoning grounded in established scientific literature — reference bone-to-implant safety margins, anatomical considerations, bone density classification, and implant design rationale specific to the bone type and site. When institutional Indications/Features are provided below, anchor your reasoning in those system-specific properties (e.g. tapered body for soft bone, conical connection for crestal preservation) rather than generic platitudes.
+
+If Site-Specific Findings are provided, weight them explicitly: a thin soft-tissue biotype (≤1mm) warrants soft-tissue augmentation or a wider emergence profile and may favour a zirconia abutment for thick biotypes; minimal/inadequate keratinized mucosa (<2mm) warrants a free gingival graft or apically-positioned flap; a knife-edge or atrophied ridge warrants ridge-split, GBR, or a narrower-platform implant. Mention the clinical correlation explicitly — do NOT say "consider per-site findings" generically. Do NOT cite or name any specific guidelines, organizations, or textbooks.
 
 Case Data:
 {context}
 
 Selected Implant: {plan.get('brand','')} {plan.get('system','')} {plan.get('diameter','')}×{plan.get('length','')}mm at site {plan.get('tooth_number','')}
-Bone Type: {plan.get('bone_type','N/A')}{inst_block}
+Bone Type: {plan.get('bone_type','N/A')}{site_focus_block}{inst_block}
 
 Provide a clinical explanation in professional scientific language. Do not mention any guideline names or references. Write as a professional clinical note."""
 
@@ -4445,6 +4507,12 @@ async def ai_explain_standalone(request: Request, current_user: dict = Depends(g
     risk_score = body.get("risk_score", "")
     procedures = body.get("procedures", [])
     tooth_region = body.get("tooth_region", "")
+    # Optional per-site intraoral findings sent from the Home implant tool
+    # (iter-135). These let the standalone AI explanation correlate to the
+    # specific edentulous site even outside a saved procedure context.
+    ridge_contour = body.get("ridge_contour", "")
+    soft_tissue_thickness = body.get("soft_tissue_thickness", "")
+    keratinized_mucosa = body.get("keratinized_mucosa", "")
 
     context_parts = [f"Tooth: {tooth} ({tooth_region})" if tooth_region else f"Tooth: {tooth}"]
     context_parts.append(f"Implant: {brand} {system}, Diameter: {diameter}mm, Length: {length}mm")
@@ -4455,6 +4523,12 @@ async def ai_explain_standalone(request: Request, current_user: dict = Depends(g
         context_parts.append(f"Risk Level: {risk_level} (Score: {risk_score})")
     if procedures:
         context_parts.append(f"Procedures: {', '.join(procedures) if isinstance(procedures, list) else procedures}")
+    site_bits = []
+    if ridge_contour:           site_bits.append(f"Ridge Contour: {ridge_contour}")
+    if soft_tissue_thickness:   site_bits.append(f"Soft Tissue Thickness: {soft_tissue_thickness}")
+    if keratinized_mucosa:      site_bits.append(f"Keratinized Mucosa: {keratinized_mucosa}")
+    if site_bits:
+        context_parts.append(f"Site-Specific Findings: {' | '.join(site_bits)}")
     context = "\n".join(context_parts)
 
     # ── Inject institutional Indications & Features so the LLM grounds its
@@ -4468,7 +4542,11 @@ async def ai_explain_standalone(request: Request, current_user: dict = Depends(g
         if inst.get("features"):
             inst_block += f"\nInstitutional Features: {inst['features']}"
 
-    prompt = f"""You are an expert implantologist. Based on the following clinical data, explain in 3-4 concise sentences why the selected implant is appropriate for this case. Use clinical reasoning grounded in established scientific literature — reference bone-to-implant safety margins, anatomical considerations, and implant design rationale. When institutional Indications/Features are provided below, anchor your reasoning in those system-specific properties (e.g. tapered body for soft bone, conical connection for crestal preservation) rather than generic platitudes. Do NOT cite or name any specific guidelines, organizations, or textbooks.
+    prompt = f"""You are an expert implantologist. Based on the following clinical data, explain in 4-5 concise sentences why the selected implant is appropriate for this case AND surface any per-site soft-tissue / ridge-contour considerations that affect surgical or prosthetic planning.
+
+Use clinical reasoning grounded in established scientific literature — reference bone-to-implant safety margins, anatomical considerations, and implant design rationale. When institutional Indications/Features are provided below, anchor your reasoning in those system-specific properties (e.g. tapered body for soft bone, conical connection for crestal preservation) rather than generic platitudes.
+
+If Site-Specific Findings are provided, weight them explicitly: a thin soft-tissue biotype (≤1mm) warrants soft-tissue augmentation or a wider emergence profile and may favour a zirconia abutment for thick biotypes; minimal/inadequate keratinized mucosa (<2mm) warrants a free gingival graft or apically-positioned flap; a knife-edge or atrophied ridge warrants ridge-split, GBR, or a narrower-platform implant. Mention the clinical correlation explicitly — do NOT say "consider per-site findings" generically. Do NOT cite or name any specific guidelines, organizations, or textbooks.
 
 Clinical Data:
 {context}{inst_block}

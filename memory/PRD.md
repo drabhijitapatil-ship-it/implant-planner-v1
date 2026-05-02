@@ -1,5 +1,26 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 135 (Feb 2026) — AI Per-Site Clinical Correlation
+
+**Goal**: Now that Phase 1 Step 1 captures distinct intraoral findings per edentulous site (iter-134), surface those findings to the AI "Explain Recommendation" so the rationale is per-site instead of globally averaged.
+
+**Backend changes in `/app/backend/server.py`:**
+- `_build_case_context()` (line ~4266): emits a structured **"Per-Site Intraoral Findings:"** block listing each cluster-leader tooth with its Ridge Contour / Soft Tissue Thickness / Keratinized Mucosa values (only when `clinical_exam_per_site` is non-empty). All 4 procedure-bound AI endpoints (`/ai/explain-recommendation`, `/ai/case-summary`, `/ai/surgical-notes`, `/ai/chat`) inherit this automatically.
+- `/ai/explain-recommendation` (line ~4404): resolves the cluster-leader for the SELECTED implant's tooth (replicates frontend `findMissingRuns` adjacency rule + `clusterLeader` highest-tooth-in-run), then injects a focused `Site-Specific Findings (tooth X, leader Y): ...` line just above `inst_block` so the AI can correlate the implant directly to its specific edentulous site. Prompt instructions extended to weight thin biotypes, knife-edge ridges, and inadequate keratinized mucosa with explicit clinical correlations (CTG / FGG / ridge-split / GBR / narrower platform).
+- `/ai/explain-standalone` (line ~4494): now accepts optional `ridge_contour`, `soft_tissue_thickness`, `keratinized_mucosa` body fields — the Home implant tool can pass them in. Same per-site weighting added to its prompt.
+
+**Verified live** with curl probe (Tooth 36, NobelActive 4.3×10mm, Type II bone, **Knife-Edge Ridge + Thin (≤1mm) + Inadequate KM (<2mm)**) — AI response correctly mentioned:
+- "ridge-split and/or contour-augmentation GBR... narrower platform"
+- "biologic width is more likely to consume crestal bone unless tissue thickness is increased"
+- "free gingival graft or apically positioned flap"
+- Connective-tissue graft for biotype thickening
+
+**Regression test**: `/app/backend/tests/test_ai_per_site_iteration135.py` — 4 tests, all PASS (21.58s):
+1. `_build_case_context` includes per-site block when populated
+2. `_build_case_context` omits the block when `clinical_exam_per_site={}`
+3. `/ai/explain-standalone` with thin biotype + inadequate KM + knife-edge ridge correctly surfaces soft-tissue augmentation AND ridge-split/GBR/narrower-platform terms
+4. `/ai/explain-standalone` with NO per-site fields does NOT echo `site-specific findings` (no hallucination)
+
 ## Iteration 134 (Feb 2026) — Phase 1 Step 1 Restructure (Prosthetic Plan reorder + Overdenture full-arch override + per-cluster Intraoral findings)
 
 **Scope**: Applies to student / supervisor / implant-incharge users (NOT nurse, who never sees this form).
