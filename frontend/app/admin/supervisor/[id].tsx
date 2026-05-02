@@ -128,9 +128,19 @@ export default function SupervisorDrillDown() {
     <SafeAreaView style={s.safe}>
       <View style={s.header}>
         <BackButton testID="supervisor-drilldown-back" />
-        <View style={{ flex: 1 }}>
-          <Text style={s.headerTitle} numberOfLines={1}>{supervisorName}</Text>
-          <Text style={s.headerSubtitle} numberOfLines={1}>{profile?.email || profile?.username || 'Supervisor performance'}</Text>
+        {/* Purple-tinted identity chip — mirrors the student drilldown's
+            blue chip but uses the supervisor-purple accent so admins can
+            instantly tell which drilldown they're on. */}
+        <View style={s.identityChip}>
+          <View style={s.identityAvatar}>
+            <Text style={s.identityAvatarTxt}>
+              {(supervisorName?.[0] || '?').toUpperCase()}
+            </Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.headerTitle} numberOfLines={1}>{supervisorName}</Text>
+            <Text style={s.headerSubtitle} numberOfLines={1}>{profile?.email || profile?.username || 'Supervisor performance'}</Text>
+          </View>
         </View>
         <TouchableOpacity onPress={() => setNudgeOpen(true)} style={s.nudgeBtn} data-testid="open-supervisor-nudge-btn" activeOpacity={0.85}>
           <Ionicons name="megaphone-outline" size={14} color="#FFF" />
@@ -404,8 +414,27 @@ const s = StyleSheet.create({
     backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E0E0E0',
   },
   backBtn: { padding: 6 },
-  headerTitle: { fontSize: 18, fontWeight: '800', color: '#4A148C' },
-  headerSubtitle: { fontSize: 12, color: '#78909C', marginTop: 2 },
+  // Purple-tinted identity chip for supervisor drilldown — uses the same
+  // pattern as the student drilldown (#E3F2FD/#1565C0) but swapped to the
+  // supervisor purple accent so admins can spot the context at a glance.
+  identityChip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#F3E5F5',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+  },
+  identityAvatar: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#6A1B9A',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  identityAvatarTxt: { fontSize: 15, fontWeight: '800', color: '#FFF' },
+  headerTitle: { fontSize: 16, fontWeight: '800', color: '#4A148C' },
+  headerSubtitle: { fontSize: 12, color: '#6A1B9A', marginTop: 2 },
   nudgeBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999,

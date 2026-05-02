@@ -1,5 +1,5 @@
-import React from 'react';
-import { TouchableOpacity, StyleSheet, Platform, ViewStyle } from 'react-native';
+import React, { useRef } from 'react';
+import { Animated, Pressable, StyleSheet, Platform, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -8,6 +8,9 @@ import * as Haptics from 'expo-haptics';
  * Global floating back-button. Soft-halo circular chip used site-wide for a
  * consistent aesthetic. Black chevron-left icon on white fill with a gentle
  * blurred shadow that reads as "floating" above the background.
+ *
+ * Micro-interaction: press-in spring scale to 0.92 and back on release — gives
+ * every back-tap a tactile squish alongside the Haptics Light impulse.
  *
  * Usage:
  *   <BackButton />                         // defaults to router.back()
@@ -27,6 +30,28 @@ export default function BackButton({
   color = '#1A2332',
   testID = 'back-button',
 }: BackButtonProps) {
+  // Animated scale shared across press-in / press-out. Spring config tuned
+  // for a short, quiet squish (not bouncy) so it reads as tactile, not toy-like.
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scale, {
+      toValue: 0.92,
+      useNativeDriver: true,
+      speed: 40,
+      bounciness: 0,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scale, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 30,
+      bounciness: 4,
+    }).start();
+  };
+
   const handlePress = () => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -36,27 +61,30 @@ export default function BackButton({
   };
 
   return (
-    <TouchableOpacity
-      onPress={handlePress}
-      style={[s.btn, style]}
-      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-      activeOpacity={0.7}
-      testID={testID}
-      accessibilityLabel="back-button"
-      accessibilityRole="button"
-      // @ts-ignore RN-Web mapping
-      data-testid={testID}
-    >
-      <Ionicons name="chevron-back" size={24} color={color} />
-    </TouchableOpacity>
+    <Animated.View style={[{ transform: [{ scale }] }, style]}>
+      <Pressable
+        onPress={handlePress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        style={s.btn}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        testID={testID}
+        accessibilityLabel="back-button"
+        accessibilityRole="button"
+        // @ts-ignore RN-Web mapping
+        data-testid={testID}
+      >
+        <Ionicons name="chevron-back" size={24} color={color} />
+      </Pressable>
+    </Animated.View>
   );
 }
 
 const s = StyleSheet.create({
   btn: {
-    // Circular floating chip — matches the user's reference image: white fill,
-    // soft halo-style shadow so the button reads as elevated from the grey
-    // background even on pure-white screens.
+    // Circular floating chip — white fill with soft halo-style shadow so the
+    // button reads as elevated from the grey background even on pure-white
+    // screens.
     width: 44,
     height: 44,
     borderRadius: 22,
