@@ -1,5 +1,25 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 137 (Feb 2026) — Guided Surgery Prosthetic Plan + Type of Attachment Sub-Dropdown
+
+### Change 1 — Guided Surgery gets a Prosthetic Plan
+- `MULTIPLE_GROUP` in `/app/frontend/constants/checklist.ts` now includes `'Guided Surgery'`. Since `getProstheticOptions()` returns `BRIDGE_OPTIONS` for any procedure type in `MULTIPLE_GROUP`, Guided Surgery cases now get the full list (Cement Retained Bridge – Zirconia / PFM, Screw Retained Bridge – Zirconia / PFM, Hybrid Bridge, Overdenture with Attachment, Other) in Phase 1 Step 1.
+- Guided Surgery remains in `NON_FULL_ARCH_TYPES` + `CLINICAL_EXAM_GROUP` as before.
+
+### Change 2 — Type of Attachment sub-dropdown
+- New catalogue `PHASE1_ATTACHMENT_TYPE_OPTIONS` in `/app/frontend/constants/checklist.ts` with the 9 user-specified options: Stud and Ball Attachment · Locator – Zest Dental Solutions · Locator R-Tx – Zest Dental Solutions · Rheine 83 – OT Equator · Novaloc – Straumann · TiSi Snap – Bredent · Bar Attachment · Locator Bar · Other.
+- `/app/frontend/app/(tabs)/new-procedure.tsx`:
+  - New formData fields `attachment_type` + `attachment_type_other` (persisted on draft load/reset/save).
+  - Dropdown (testID `attachment-type-dropdown`) appears inside the Prosthetic Treatment Plan section immediately below the Prosthetic Plan dropdown, ONLY when Prosthetic Plan = "Overdenture with Attachment". Required on save.
+  - Free-text input (data-testid `attachment-type-other-input`) appears when user picks "Other". Required on save.
+  - Switching Prosthetic Plan AWAY from Overdenture-with-Attachment clears both attachment-type fields.
+  - Save payload: `attachment_type` value is sent as-is, or `"Other: <custom>"` when "Other" was picked. Cleared to `''` otherwise.
+- Step 1 validation: blocks submit with clear Alert if `attachment_type` is missing when plan is Overdenture-with-Attachment, or if "Other" is picked without a custom value.
+
+### Verification
+- Bundle compiled cleanly (no Metro errors). App boots without regressions. Smoke-tested as student: dashboard, drafts, and Phase 1 form all render correctly.
+- Backend has no schema changes — `procedures` accepts arbitrary extra fields, so `attachment_type` is stored and round-trips via the existing GET `/procedures/{id}` endpoint.
+
 ## Iteration 136 (Feb 2026) — Pre-Op Augmentation Checklist
 
 **Goal**: Convert the per-site clinical correlations surfaced by iter-135's AI into structured, ticked-off-able checklist items the supervisor signs off during Phase 1 approval. Deterministic rule engine (no AI cost, no hallucination, instant generation).

@@ -34,6 +34,7 @@ import {
   MEDICAL_RISK_FACTORS,
   calculateMedicalRisk,
   getProstheticOptions,
+  PHASE1_ATTACHMENT_TYPE_OPTIONS,
 } from '../../constants/checklist';
 
 import { BACKEND_URL } from '../../utils/config';
@@ -284,6 +285,10 @@ export default function NewProcedureScreen() {
     loading_type: [] as string[],
     prosthetic_plan: '',
     prosthetic_plan_other: '',
+    // iter-137: Type of Attachment — shown when Prosthetic Plan is
+    // "Overdenture with Attachment". "Other" opens the free-text field below.
+    attachment_type: '',
+    attachment_type_other: '',
     bone_graft_specifications: '',
     // Clinical Examination
     occlusocervical_height: '',
@@ -378,6 +383,8 @@ export default function NewProcedureScreen() {
                 loading_type: Array.isArray(proc.loading_type) ? proc.loading_type : [],
                 prosthetic_plan: proc.prosthetic_plan || '',
                 prosthetic_plan_other: proc.prosthetic_plan_other || '',
+                attachment_type: proc.attachment_type || '',
+                attachment_type_other: proc.attachment_type_other || '',
                 bone_graft_specifications: proc.bone_graft_specifications || '',
                 // Clinical Examination
                 occlusocervical_height: proc.occlusocervical_height || '',
@@ -428,7 +435,7 @@ export default function NewProcedureScreen() {
           implant_incharge_name: user?.role === 'implant_incharge' ? (user?.name || '') : '',
           receipt_number: '', amount_paid: '', procedure_date: '', procedure_time: '',
           implant_procedure_type: '', teeth_present: [] as string[], arch: '', loading_type: [] as string[],
-          prosthetic_plan: '', prosthetic_plan_other: '', bone_graft_specifications: '',
+          prosthetic_plan: '', prosthetic_plan_other: '', attachment_type: '', attachment_type_other: '', bone_graft_specifications: '',
           edentulous_sites: [] as string[], occlusocervical_height: '', mesiodistal_space: '',
           arch_condition: '', ridge_contour: '',
           soft_tissue_thickness: '', keratinized_mucosa: '', periodontal_status: '', occlusal_scheme: '',
@@ -655,6 +662,17 @@ export default function NewProcedureScreen() {
       Alert.alert('Missing Field', 'Please upload both mandatory CBCT Reports before continuing.');
       return;
     }
+    // iter-137: Type of Attachment is required when Prosthetic Plan is Overdenture-with-Attachment.
+    if (sanitized.prosthetic_plan === 'Overdenture with Attachment') {
+      if (!sanitized.attachment_type) {
+        Alert.alert('Missing Field', 'Please select the Type of Attachment for the Overdenture.');
+        return;
+      }
+      if (sanitized.attachment_type === 'Other' && !sanitized.attachment_type_other?.trim()) {
+        Alert.alert('Missing Field', 'Please specify the custom Attachment Type.');
+        return;
+      }
+    }
 
     setLoading(true);
     try {
@@ -701,6 +719,13 @@ export default function NewProcedureScreen() {
         prosthetic_plan: sanitized.prosthetic_plan === 'Other'
           ? `Other: ${sanitizeString(sanitized.prosthetic_plan_other)}`
           : sanitized.prosthetic_plan,
+        // Preserve the Type of Attachment selection on the payload so the
+        // backend stores it alongside the plan (iter-137).
+        attachment_type: sanitized.prosthetic_plan === 'Overdenture with Attachment'
+          ? (sanitized.attachment_type === 'Other'
+              ? `Other: ${sanitizeString(sanitized.attachment_type_other)}`
+              : sanitized.attachment_type)
+          : '',
         ...(cbctFiles.filter(f => f !== null).length > 0 ? {
           cbct_files: cbctFiles.filter(f => f !== null).map(f => ({
             filename: f!.filename,
@@ -1042,6 +1067,11 @@ export default function NewProcedureScreen() {
                 updateForm('edentulous_site_measurements', {});
                 updateForm('clinical_exam_per_site', {});
               }
+              // Leaving Overdenture → clear the attachment-type sub-selection.
+              if (v !== 'Overdenture with Attachment') {
+                updateForm('attachment_type', '');
+                updateForm('attachment_type_other', '');
+              }
             }} />
           {formData.prosthetic_plan === 'Other' && (
             <View style={styles.fieldContainer}>
@@ -1050,6 +1080,36 @@ export default function NewProcedureScreen() {
                 onChangeText={v => updateForm('prosthetic_plan_other', v)}
                 placeholder="Enter custom prosthetic plan" multiline />
             </View>
+          )}
+          {/* Type of Attachment (iter-137) — sub-question that appears only
+              when Overdenture-with-Attachment is the chosen plan. Free-text
+              input appears when "Other" is picked. */}
+          {formData.prosthetic_plan === 'Overdenture with Attachment' && (
+            <>
+              <Dropdown
+                label="Type of Attachment"
+                value={formData.attachment_type}
+                options={PHASE1_ATTACHMENT_TYPE_OPTIONS}
+                onChange={v => {
+                  updateForm('attachment_type', v);
+                  if (v !== 'Other') updateForm('attachment_type_other', '');
+                }}
+                required
+                testID="attachment-type-dropdown"
+              />
+              {formData.attachment_type === 'Other' && (
+                <View style={styles.fieldContainer}>
+                  <Text style={styles.label}>Specify Attachment Type<Text style={{ color: '#DC3545' }}> *</Text></Text>
+                  <TextInput
+                    style={styles.input}
+                    value={formData.attachment_type_other}
+                    onChangeText={v => updateForm('attachment_type_other', v)}
+                    placeholder="Enter custom attachment type"
+                    data-testid="attachment-type-other-input"
+                  />
+                </View>
+              )}
+            </>
           )}
         </View>
       )}
