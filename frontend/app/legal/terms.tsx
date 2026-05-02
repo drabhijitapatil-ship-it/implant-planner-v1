@@ -1,14 +1,19 @@
 import React from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import BackButton from '../../components/BackButton';
 
 export default function TermsScreen() {
   const router = useRouter();
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
-      <Stack.Screen options={{ headerShown: true, title: 'Terms of Service', headerBackTitle: 'Back' }} />
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <View style={styles.pageHeader}>
+        <BackButton testID="terms-back-btn" />
+        <Text style={styles.pageHeaderTitle} numberOfLines={1}>Terms of Service</Text>
+        <View style={{ width: 44 }} />
+      </View>
       <ScrollView contentContainerStyle={styles.content} data-testid="terms-screen">
         <Text style={styles.h1}>Terms of Service</Text>
         <Text style={styles.updated}>Last updated: February 2026</Text>
@@ -93,6 +98,14 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
+  pageHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#FFF',
+    borderBottomWidth: 1, borderBottomColor: '#ECEFF1',
+  },
+  pageHeaderTitle: {
+    flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '800', color: '#0D47A1',
+  },
   content: { padding: 20, paddingBottom: 40 },
   h1: { fontSize: 24, fontWeight: '800', color: '#0D47A1', marginBottom: 4 },
   updated: { fontSize: 12, color: '#78909C', marginBottom: 20 },

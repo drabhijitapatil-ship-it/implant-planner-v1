@@ -20,6 +20,7 @@ import api, { getAuthFileUrl, getToken } from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { showUploadPicker } from '../../utils/uploadPicker';
 import { downloadConsentTemplate, printConsentTemplate } from '../../utils/consentPdf';
+import BackButton from '../../components/BackButton';
 import {
   STATUS_COLORS, STATUS_LABELS, CHECKLIST_DATA,
   PROCEDURE_TYPES, LOADING_TYPES,
@@ -535,7 +536,12 @@ export default function ProcedureDetailScreen() {
 
   return (
     <EditContext.Provider value={canEditField() ? { isEditMode, editingField, editValues, saving, procedure, startEdit, saveField, cancelEdit, setEditValues } : null}>
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <View style={styles.pageHeader} data-testid="case-detail-header">
+        <BackButton testID="case-detail-back-btn" />
+        <Text style={styles.pageHeaderTitle} numberOfLines={1}>Case Details</Text>
+        <View style={{ width: 44 }} />
+      </View>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Edit Mode Banner */}
         {isEditMode && (
@@ -2920,6 +2926,23 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F0F4F8',
+  },
+  pageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#FFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#ECEFF1',
+  },
+  pageHeaderTitle: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0D47A1',
   },
   scrollContent: {
     paddingBottom: 20,

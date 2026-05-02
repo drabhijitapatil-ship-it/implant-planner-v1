@@ -120,7 +120,7 @@ function DrawerMenu({
     // Profile tile so the indicator lives on a semantically correct surface.
     ...(!isAdmin && !isNurse
       ? [{
-          key: 'whatsnew', icon: 'sparkles' as const, label: "What's New", route: '/whatsnew',
+          key: 'whatsnew', icon: 'sparkles' as const, label: "What's New", route: '/whatsnew?mode=history',
           bg: '#FFF3E0', chip: '#FFE0B2', iconColor: '#EF6C00', badge: hasUnseenWhatsNew,
         }]
       : []),

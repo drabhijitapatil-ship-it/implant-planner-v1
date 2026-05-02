@@ -1648,10 +1648,7 @@ function ModalContent(props: any) {
                     </Text>
                   </View>
                   <View style={ms.navRow}>
-                    <TouchableOpacity style={ms.backBtn} onPress={() => setStep(2)}>
-                      <Ionicons name="arrow-back" size={20} color="#666" />
-                      <Text style={ms.backBtnText}>Back</Text>
-                    </TouchableOpacity>
+                    <BackButton onPress={() => setStep(2)} />
                   </View>
                 </View>
               ) : (
@@ -1846,10 +1843,7 @@ function ModalContent(props: any) {
               )}
 
               <View style={ms.navRow}>
-                <TouchableOpacity style={ms.backBtn} onPress={() => setStep(2)}>
-                  <Ionicons name="arrow-back" size={20} color="#666" />
-                  <Text style={ms.backBtnText}>Back</Text>
-                </TouchableOpacity>
+                <BackButton onPress={() => setStep(2)} />
                 <TouchableOpacity
                   style={[ms.nextBtn, ms.nextBtnFlex, !selectedImplant && ms.btnDisabled]}
                   disabled={!selectedImplant}
@@ -1973,10 +1967,7 @@ function ModalContent(props: any) {
               )}
 
               <View style={ms.navRow}>
-                <TouchableOpacity style={ms.backBtn} onPress={() => setStep(3)}>
-                  <Ionicons name="arrow-back" size={20} color="#666" />
-                  <Text style={ms.backBtnText}>Back</Text>
-                </TouchableOpacity>
+                <BackButton onPress={() => setStep(3)} />
                 <TouchableOpacity style={[ms.confirmBtn, ms.nextBtnFlex]} onPress={handleConfirm} data-testid="confirm-implant-btn">
                   <Ionicons name="checkmark-circle" size={20} color="#FFF" />
                   <Text style={ms.confirmBtnText}>{editItem ? 'Update' : 'Add'} Implant</Text>

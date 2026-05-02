@@ -10,6 +10,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import api, { getToken } from '../../utils/api';
 import { BACKEND_URL } from '../../utils/config';
 import { safeDocumentPick, safeLaunchCamera, safeLaunchLibrary } from '../../utils/safePicker';
+import { showUploadPicker } from '../../utils/uploadPicker';
 import BackButton from '../../components/BackButton';
 
 interface Thread {
@@ -91,7 +92,6 @@ export default function ForumThreadScreen() {
   const [closeNote, setCloseNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [attachPreviewUrls, setAttachPreviewUrls] = useState<Record<string, string>>({});
-  const [showAttachSheet, setShowAttachSheet] = useState(false);
   const [attaching, setAttaching] = useState(false);
   // Guard against the iOS "Different document picking in progress" error when
   // the previous picker hasn't fully released native state. Set true while a
@@ -158,127 +158,9 @@ export default function ForumThreadScreen() {
     setAttachments(prev => [...prev, up.data]);
   };
 
-  // Attachment sheet must close BEFORE launching the OS picker — iOS only
-  // allows one modal at a time, and our Modal sitting on top would silently
-  // prevent the system picker from appearing. 300 ms matches the Modal's
-  // fade animation so the close feels seamless.
-  const waitForSheetClose = () => new Promise<void>(resolve => setTimeout(resolve, 500));
-
-  const pickFromCamera = async () => {
-    if (pickingInProgressRef.current) {
-      // Silently ignore double-taps — safePicker handles state internally.
-      console.log('[forum] picker re-entry blocked');
-      return;
-    }
-    pickingInProgressRef.current = true;
-    setShowAttachSheet(false);
-    await waitForSheetClose();
-    try {
-      if (Platform.OS !== 'web') {
-        const perm = await ImagePicker.requestCameraPermissionsAsync();
-        if (!perm.granted) {
-          Alert.alert('Camera permission needed', 'Enable camera access to capture clinical photos.');
-          return;
-        }
-      }
-      const res = await safeLaunchCamera({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.85,
-        allowsEditing: false,
-      });
-      if (res.canceled) return;
-      const a = res.assets?.[0];
-      if (!a) return;
-      setAttaching(true);
-      const filename = a.fileName || `photo_${Date.now()}.jpg`;
-      const compressed = await compressImageIfPossible(a.uri);
-      await uploadAsset({ uri: compressed.uri, name: filename, mimeType: 'image/jpeg', size: a.fileSize });
-    } catch (e: any) {
-      console.error('[forum] camera pick failed:', e);
-      Alert.alert('Camera failed', e?.response?.data?.detail || e?.message || 'Unknown error');
-    } finally {
-      setAttaching(false);
-      pickingInProgressRef.current = false;
-    }
-  };
-
-  const pickFromLibrary = async () => {
-    if (pickingInProgressRef.current) {
-      // Silently ignore double-taps — safePicker handles state internally.
-      console.log('[forum] picker re-entry blocked');
-      return;
-    }
-    pickingInProgressRef.current = true;
-    setShowAttachSheet(false);
-    await waitForSheetClose();
-    try {
-      if (Platform.OS !== 'web') {
-        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!perm.granted) {
-          Alert.alert('Permission needed', 'Enable photo library access to attach images.');
-          return;
-        }
-      }
-      const res = await safeLaunchLibrary({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.85,
-        allowsEditing: false,
-      });
-      if (res.canceled) return;
-      const a = res.assets?.[0];
-      if (!a) return;
-      setAttaching(true);
-      const filename = a.fileName || `image_${Date.now()}.jpg`;
-      const compressed = await compressImageIfPossible(a.uri);
-      await uploadAsset({ uri: compressed.uri, name: filename, mimeType: 'image/jpeg', size: a.fileSize });
-    } catch (e: any) {
-      console.error('[forum] library pick failed:', e);
-      Alert.alert('Library access failed', e?.response?.data?.detail || e?.message || 'Unknown error');
-    } finally {
-      setAttaching(false);
-      pickingInProgressRef.current = false;
-    }
-  };
-
-  const pickFromFiles = async () => {
-    if (pickingInProgressRef.current) {
-      // Silently ignore double-taps — safePicker handles state internally.
-      console.log('[forum] picker re-entry blocked');
-      return;
-    }
-    pickingInProgressRef.current = true;
-    setShowAttachSheet(false);
-    await waitForSheetClose();
-    try {
-      const res = await safeDocumentPick({
-        type: ['application/pdf', 'image/*'],
-        multiple: false,
-        copyToCacheDirectory: true,
-      });
-      if (res.canceled) return;
-      const a = res.assets?.[0];
-      if (!a) return;
-      setAttaching(true);
-      const isImage = (a.mimeType || '').startsWith('image/');
-      const uri = isImage ? (await compressImageIfPossible(a.uri)).uri : a.uri;
-      const name = isImage ? (a.name || `image_${Date.now()}.jpg`) : (a.name || 'file');
-      const mime = isImage ? 'image/jpeg' : a.mimeType;
-      await uploadAsset({ uri, name, mimeType: mime, size: a.size });
-    } catch (e: any) {
-      console.error('[forum] document pick failed:', e);
-      const raw = e?.message || '';
-      // safePicker has already auto-retried once. If we are still here, the
-      // native iOS DocumentPicker module is permanently stuck — the only
-      // reliable recovery is for the user to close & reopen the app.
-      const friendly = /Different document picking|already in progress/i.test(raw)
-        ? 'The iOS file picker is unresponsive. Please close & reopen the app to reset it, then try again.'
-        : (e?.response?.data?.detail || raw || 'Unknown error');
-      Alert.alert('File pick failed', friendly);
-    } finally {
-      setAttaching(false);
-      pickingInProgressRef.current = false;
-    }
-  };
+  // NOTE: attach source picking (camera / library / files) is now handled
+  // globally by <AttachPickerModalRoot />. pickAttachment() above awaits
+  // showUploadPicker() and uploads the returned file in one pass.
 
   const load = useCallback(async () => {
     if (!threadId) return;
@@ -314,7 +196,29 @@ export default function ForumThreadScreen() {
     })();
   }, [posts]);
 
-  const pickAttachment = () => setShowAttachSheet(true);
+  // Unified attach flow — delegates to the global <AttachPickerModalRoot />.
+  // Ensures consistent iOS-safe picker UX (no double-modal conflicts) and
+  // identical blue-outlined UI across Forum, Chat, and Phase 1-4 uploads.
+  const pickAttachment = async () => {
+    if (pickingInProgressRef.current) return;
+    pickingInProgressRef.current = true;
+    try {
+      const picked = await showUploadPicker(['application/pdf', 'image/*']);
+      if (!picked) return;
+      setAttaching(true);
+      const isImage = (picked.type || '').startsWith('image/');
+      const uri = isImage ? (await compressImageIfPossible(picked.uri)).uri : picked.uri;
+      const mime = isImage ? 'image/jpeg' : (picked.type || 'application/octet-stream');
+      const name = isImage ? (picked.name || `image_${Date.now()}.jpg`) : (picked.name || 'file');
+      await uploadAsset({ uri, name, mimeType: mime });
+    } catch (e: any) {
+      console.error('[forum] attach upload failed:', e);
+      Alert.alert('Attach failed', e?.response?.data?.detail || e?.message || 'Unknown error');
+    } finally {
+      setAttaching(false);
+      pickingInProgressRef.current = false;
+    }
+  };
 
   const submitPost = async () => {
     const body = composer.trim();
@@ -656,48 +560,9 @@ export default function ForumThreadScreen() {
         </Pressable>
       </Modal>
 
-      {/* Attachment-source action sheet */}
-      <Modal visible={showAttachSheet} transparent animationType="fade" onRequestClose={() => setShowAttachSheet(false)}>
-        <Pressable style={s.overlay} onPress={() => setShowAttachSheet(false)}>
-          <Pressable style={s.sheetCard} onPress={(e) => e.stopPropagation()}>
-            <Text style={s.sheetTitle}>Attach to your reply</Text>
-            <Text style={s.sheetSub}>Max 10 MB per file. Images and PDFs only.</Text>
-            <TouchableOpacity style={s.sheetOption} onPress={pickFromCamera} data-testid="attach-camera-btn">
-              <View style={[s.sheetIcon, { backgroundColor: '#E3F2FD' }]}>
-                <Ionicons name="camera" size={22} color="#1565C0" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.sheetLabel}>Take Photo</Text>
-                <Text style={s.sheetHelp}>Use your camera (e.g. clinical photograph)</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color="#B0BEC5" />
-            </TouchableOpacity>
-            <TouchableOpacity style={s.sheetOption} onPress={pickFromLibrary} data-testid="attach-library-btn">
-              <View style={[s.sheetIcon, { backgroundColor: '#F3E5F5' }]}>
-                <Ionicons name="images" size={22} color="#7B1FA2" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.sheetLabel}>Photo Library</Text>
-                <Text style={s.sheetHelp}>Choose an image from your gallery</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color="#B0BEC5" />
-            </TouchableOpacity>
-            <TouchableOpacity style={s.sheetOption} onPress={pickFromFiles} data-testid="attach-files-btn">
-              <View style={[s.sheetIcon, { backgroundColor: '#FFF3E0' }]}>
-                <Ionicons name="document-attach" size={22} color="#E65100" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.sheetLabel}>PDF or Document</Text>
-                <Text style={s.sheetHelp}>Choose a PDF or image from Files / cloud storage</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color="#B0BEC5" />
-            </TouchableOpacity>
-            <TouchableOpacity style={s.sheetCancel} onPress={() => setShowAttachSheet(false)}>
-              <Text style={s.sheetCancelTxt}>Cancel</Text>
-            </TouchableOpacity>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      {/* Attachment-source action sheet is now provided globally by
+          <AttachPickerModalRoot /> in app/_layout.tsx. pickAttachment() above
+          awaits showUploadPicker() and processes the returned file directly. */}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

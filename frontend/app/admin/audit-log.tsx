@@ -10,6 +10,7 @@ import * as Sharing from 'expo-sharing';
 import api, { getToken } from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { router } from 'expo-router';
+import BackButton from '../../components/BackButton';
 
 /**
  * HIPAA compliance review screen — Implant In-Charge + Administrator only.
@@ -223,8 +224,9 @@ export default function AuditLogScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.root} edges={['bottom']}>
+    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <View style={styles.header}>
+        <BackButton testID="audit-back-btn" style={{ marginRight: 8 }} />
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Audit Log</Text>
           <Text style={styles.subtitle}>
