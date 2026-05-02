@@ -70,7 +70,9 @@ export default function Phase2SubmissionScreen() {
   const [openCuffPicker, setOpenCuffPicker] = useState<number | null>(null);
   // iter-139: Phase-1 loading_type so Phase 2 can show the Multi-unit Abutment
   // flow only for full-arch Immediate Loading cases.
-  const [loadingType, setLoadingType] = useState('');
+  // Phase-1 stores loading_type as a multi-select string[] (e.g. ['Immediate Loading']).
+  // We keep the state as an array and gate the MUA UI via Array.includes below.
+  const [loadingType, setLoadingType] = useState<string[]>([]);
   // '' = not yet chosen (forces explicit pick), 'yes' | 'no' once user picks.
   const [multiUnitPlaced, setMultiUnitPlaced] = useState<'' | 'yes' | 'no'>('');
   // Per-implant angulation (°) and cuff-height (mm) — same length as
@@ -117,7 +119,7 @@ export default function Phase2SubmissionScreen() {
       // Load the Phase-1 attachment choice so the cuff-height field below can
       // render a catalogue-constrained dropdown instead of free text.
       setAttachmentType(procRes.data.attachment_type || '');
-      setLoadingType(procRes.data.loading_type || '');
+      setLoadingType(Array.isArray(procRes.data.loading_type) ? procRes.data.loading_type : (procRes.data.loading_type ? [procRes.data.loading_type] : []));
       // teeth_present drives the Group A (single) vs Group B (multiple) split
       // for Prosthesis Type options when one of the 4 overlapping procedure
       // types (Immediate Implant, PET, GBR, Guided Surgery) is chosen.
@@ -295,13 +297,13 @@ export default function Phase2SubmissionScreen() {
         multi_unit_abutment_placed:
           (prostheticComponent === 'Immediate Loading Done'
             && ['All on 4','All on 6','All on X'].includes(procedureType)
-            && loadingType === 'Immediate Loading')
+            && (Array.isArray(loadingType) ? loadingType.includes('Immediate Loading') : loadingType === 'Immediate Loading'))
             ? (multiUnitPlaced || null)
             : null,
         multi_unit_abutment_details:
           (prostheticComponent === 'Immediate Loading Done'
             && ['All on 4','All on 6','All on X'].includes(procedureType)
-            && loadingType === 'Immediate Loading'
+            && (Array.isArray(loadingType) ? loadingType.includes('Immediate Loading') : loadingType === 'Immediate Loading')
             && multiUnitPlaced === 'yes')
             ? implantPositions.map((pos, idx) => ({
                 tooth: pos,
@@ -555,7 +557,7 @@ export default function Phase2SubmissionScreen() {
                 inputs. Prosthesis Type below renders after this section. */}
             {prostheticComponent === 'Immediate Loading Done'
              && (['All on 4','All on 6','All on X'].includes(procedureType))
-             && loadingType === 'Immediate Loading' && (
+             && (Array.isArray(loadingType) ? loadingType.includes('Immediate Loading') : loadingType === 'Immediate Loading') && (
               <View style={s.muaSection}>
                 <Text style={s.muaTitle}>Multi-unit Abutment Placed</Text>
                 <View style={s.muaPillRow}>
