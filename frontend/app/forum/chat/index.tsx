@@ -46,23 +46,22 @@ export default function ChatListScreen() {
 
   return (
     <SafeAreaView style={s.screen} edges={['top']}>
-      {/* Floating circular BackButton — the redundant "Discussion Forum"
-          title is gone; the segmented pill below doubles as the screen's
-          identity. */}
-      <View style={s.backBtnWrap}>
+      {/* Single top row — BackButton + segmented Forum/Chat pill aligned. */}
+      <View style={s.topRow}>
         <BackButton testID="chat-back-btn" />
-      </View>
-      <View style={s.segmentRow}>
-        <View style={s.segment}>
-          <TouchableOpacity style={s.segmentBtn} onPress={() => router.replace('/forum' as any)}>
-            <Ionicons name="chatbubbles-outline" size={14} color="#1565C0" />
-            <Text style={s.segmentTxt}>Forum</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[s.segmentBtn, s.segmentBtnActive]} disabled>
-            <Ionicons name="chatbox-ellipses" size={14} color="#FFF" />
-            <Text style={s.segmentTxtActive}>Chat</Text>
-          </TouchableOpacity>
+        <View style={s.segmentWrap}>
+          <View style={s.segment}>
+            <TouchableOpacity style={s.segmentBtn} onPress={() => router.replace('/forum' as any)}>
+              <Ionicons name="chatbubbles-outline" size={14} color="#1565C0" />
+              <Text style={s.segmentTxt}>Forum</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.segmentBtn, s.segmentBtnActive]} disabled>
+              <Ionicons name="chatbox-ellipses" size={14} color="#FFF" />
+              <Text style={s.segmentTxtActive}>Chat</Text>
+            </TouchableOpacity>
+          </View>
         </View>
+        <View style={{ width: 44 }} />
       </View>
       <View style={s.searchBar}>
         <Ionicons name="search" size={18} color="#90A4AE" />
@@ -111,6 +110,16 @@ export default function ChatListScreen() {
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#F5F7FA' },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingTop: 6,
+    paddingBottom: 6,
+    gap: 10,
+  },
+  segmentWrap: { flex: 1, alignItems: 'center' },
   backBtnWrap: { paddingHorizontal: 12, paddingTop: 6, paddingBottom: 0, alignItems: 'flex-start' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#ECEFF1' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#37474F' },
