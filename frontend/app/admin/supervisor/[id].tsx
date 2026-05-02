@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
-  TextInput, RefreshControl,
+  TextInput, RefreshControl, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -14,7 +14,7 @@ import { STATUS_COLORS, STATUS_LABELS } from '../../../constants/checklist';
 import { NudgeBottomSheet } from '../../../components/NudgeBottomSheet';
 
 type Summary = {
-  profile: { id?: string; name?: string; email?: string; role?: string; username?: string } | null;
+  profile: { id?: string; name?: string; email?: string; role?: string; username?: string; profile_photo?: string } | null;
   kpis: {
     total: number; approved: number; rejected: number; pending: number; completed: number;
     stale_count: number; avg_review_hours: number | null;
@@ -132,11 +132,15 @@ export default function SupervisorDrillDown() {
             blue chip but uses the supervisor-purple accent so admins can
             instantly tell which drilldown they're on. */}
         <View style={s.identityChip}>
-          <View style={s.identityAvatar}>
-            <Text style={s.identityAvatarTxt}>
-              {(supervisorName?.[0] || '?').toUpperCase()}
-            </Text>
-          </View>
+          {profile?.profile_photo ? (
+            <Image source={{ uri: profile.profile_photo }} style={s.identityAvatarImg} />
+          ) : (
+            <View style={s.identityAvatar}>
+              <Text style={s.identityAvatarTxt}>
+                {(supervisorName?.[0] || '?').toUpperCase()}
+              </Text>
+            </View>
+          )}
           <View style={{ flex: 1 }}>
             <Text style={s.headerTitle} numberOfLines={1}>{supervisorName}</Text>
             <Text style={s.headerSubtitle} numberOfLines={1}>{profile?.email || profile?.username || 'Supervisor performance'}</Text>
@@ -431,6 +435,10 @@ const s = StyleSheet.create({
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: '#6A1B9A',
     alignItems: 'center', justifyContent: 'center',
+  },
+  identityAvatarImg: {
+    width: 36, height: 36, borderRadius: 18,
+    borderWidth: 2, borderColor: '#6A1B9A',
   },
   identityAvatarTxt: { fontSize: 15, fontWeight: '800', color: '#FFF' },
   headerTitle: { fontSize: 16, fontWeight: '800', color: '#4A148C' },

@@ -1769,6 +1769,7 @@ async def get_student_summary(student_id: str, current_user: dict = Depends(get_
             "email": u.get("email"),
             "role": u.get("role"),
             "username": u.get("username"),
+            "profile_photo": u.get("profile_photo"),
         }
 
     # Aggregations across this student's procedures
@@ -1882,6 +1883,7 @@ async def get_supervisor_summary(supervisor_id: str, current_user: dict = Depend
             "email": u.get("email"),
             "role": u.get("role"),
             "username": u.get("username"),
+            "profile_photo": u.get("profile_photo"),
         }
 
     base_match: Dict[str, Any] = {"supervisor_id": supervisor_id, "archived": {"$ne": True}}

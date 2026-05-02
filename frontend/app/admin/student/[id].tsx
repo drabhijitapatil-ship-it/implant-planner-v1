@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
-  TextInput, RefreshControl,
+  TextInput, RefreshControl, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -15,7 +15,7 @@ import { RecentActivityWidget } from '../../../components/RecentActivityWidget';
 import { NudgeBottomSheet } from '../../../components/NudgeBottomSheet';
 
 type Summary = {
-  profile: { id?: string; name?: string; email?: string; role?: string; username?: string } | null;
+  profile: { id?: string; name?: string; email?: string; role?: string; username?: string; profile_photo?: string } | null;
   kpis: {
     total: number; completed: number; rejected: number; active: number;
     pending_approval: number; approval_rate: number | null;
@@ -123,11 +123,15 @@ export default function StudentDrillDown() {
             tile-menu aesthetic so the drilldown header feels connected to
             the rest of the app. */}
         <View style={s.identityChip}>
-          <View style={s.identityAvatar}>
-            <Text style={s.identityAvatarTxt}>
-              {(studentName?.[0] || '?').toUpperCase()}
-            </Text>
-          </View>
+          {profile?.profile_photo ? (
+            <Image source={{ uri: profile.profile_photo }} style={s.identityAvatarImg} />
+          ) : (
+            <View style={s.identityAvatar}>
+              <Text style={s.identityAvatarTxt}>
+                {(studentName?.[0] || '?').toUpperCase()}
+              </Text>
+            </View>
+          )}
           <View style={{ flex: 1 }}>
             <Text style={s.headerTitle} numberOfLines={1}>{studentName}</Text>
             <Text style={s.headerSubtitle} numberOfLines={1}>
@@ -332,6 +336,10 @@ const s = StyleSheet.create({
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: '#1565C0',
     alignItems: 'center', justifyContent: 'center',
+  },
+  identityAvatarImg: {
+    width: 36, height: 36, borderRadius: 18,
+    borderWidth: 2, borderColor: '#1565C0',
   },
   identityAvatarTxt: { fontSize: 15, fontWeight: '800', color: '#FFF' },
   headerTitle: { fontSize: 16, fontWeight: '800', color: '#0D47A1' },

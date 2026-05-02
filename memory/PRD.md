@@ -1,5 +1,14 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 126 (Feb 2026) — Drilldown Chip Real Profile Photos
+
+- **Backend**: Both `/api/admin/students/{id}/summary` and `/api/admin/supervisors/{id}/summary` now include `profile_photo` in the returned `profile` dict (base64 data URL when the user has uploaded one, else None).
+- **Frontend** (student + supervisor drilldown):
+  - `Summary.profile` type widened with optional `profile_photo?: string`.
+  - Chip avatar renders an `<Image>` thumbnail (36 × 36 circle, 2 px blue/purple border matching the role accent) when the photo exists; falls back to the initial-on-colored-circle otherwise.
+  - New `identityAvatarImg` style alongside the existing `identityAvatar`.
+- Zero test-ID changes; iter-123's E2E suite remains valid.
+
 ## Iteration 125 (Feb 2026) — Admin Drilldown Identity Chips
 
 Added pastel identity chips to the Admin/Supervisor drilldown headers so it's instantly clear whose stats are being viewed:
