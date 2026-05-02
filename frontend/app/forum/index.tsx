@@ -171,24 +171,24 @@ export default function ForumListScreen() {
 
   return (
     <SafeAreaView style={s.screen} edges={['top']}>
-      {/* Floating circular BackButton (no in-flow header anymore — the
-          Discussion Forum title was redundant with the Forum/Chat toggle). */}
-      <View style={s.backBtnWrap}>
+      {/* Single top row — floating BackButton on the left, Forum/Chat
+          segmented pill in the remaining space (visually centered). */}
+      <View style={s.topRow}>
         <BackButton testID="forum-back-btn" />
-      </View>
-      {/* Forum / Chat segmented pill — shifted up to the top now that the
-          "Discussion Forum" title above it is gone. */}
-      <View style={s.segmentRow}>
-        <View style={s.segment}>
-          <TouchableOpacity style={[s.segmentBtn, s.segmentBtnActive]} disabled testID="segment-forum" accessibilityLabel="segment-forum" /* @ts-ignore */ data-testid="segment-forum">
-            <Ionicons name="chatbubbles" size={14} color="#FFF" />
-            <Text style={s.segmentTxtActive}>Forum</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={s.segmentBtn} onPress={() => router.push('/forum/chat' as any)} testID="segment-chat" accessibilityLabel="segment-chat" /* @ts-ignore */ data-testid="segment-chat">
-            <Ionicons name="chatbox-ellipses-outline" size={14} color="#1565C0" />
-            <Text style={s.segmentTxt}>Chat</Text>
-          </TouchableOpacity>
+        <View style={s.segmentWrap}>
+          <View style={s.segment}>
+            <TouchableOpacity style={[s.segmentBtn, s.segmentBtnActive]} disabled testID="segment-forum" accessibilityLabel="segment-forum" /* @ts-ignore */ data-testid="segment-forum">
+              <Ionicons name="chatbubbles" size={14} color="#FFF" />
+              <Text style={s.segmentTxtActive}>Forum</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.segmentBtn} onPress={() => router.push('/forum/chat' as any)} testID="segment-chat" accessibilityLabel="segment-chat" /* @ts-ignore */ data-testid="segment-chat">
+              <Ionicons name="chatbox-ellipses-outline" size={14} color="#1565C0" />
+              <Text style={s.segmentTxt}>Chat</Text>
+            </TouchableOpacity>
+          </View>
         </View>
+        {/* Spacer mirroring BackButton width keeps the pill optically centered */}
+        <View style={{ width: 44 }} />
       </View>
 
       <View style={s.searchBar}>
@@ -263,8 +263,19 @@ export default function ForumListScreen() {
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#F5F7FA' },
-  // Wrapper for the floating BackButton — positions it at the top-left with
-  // generous inset so it floats cleanly above the segment row content.
+  // Single header row containing the floating BackButton + segmented Forum/
+  // Chat pill on the same line — keeps the screen-top compact and aligned.
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingTop: 6,
+    paddingBottom: 6,
+    gap: 10,
+  },
+  segmentWrap: { flex: 1, alignItems: 'center' },
+  // Legacy styles retained for any indirect references; not rendered now.
   backBtnWrap: { paddingHorizontal: 12, paddingTop: 6, paddingBottom: 0, alignItems: 'flex-start' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#ECEFF1' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#37474F' },

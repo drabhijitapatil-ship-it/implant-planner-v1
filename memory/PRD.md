@@ -1,5 +1,11 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 129 (Feb 2026) — BackButton iOS-Default + Forum/Chat Inline Header
+
+- **BackButton**: reverted `chevron-back-outline` → **`chevron-back`** (filled iOS-default), size 30 → **34 px** for proper proportion in the 44 px halo, `marginLeft: -2` to optically center.
+- **Forum + Chat single-row header**: both `/forum` and `/forum/chat` now place the floating BackButton + the segmented Forum/Chat pill on ONE row (`s.topRow`). Layout: `BackButton ↔ flex:1 wrapper that centers the segment ↔ 44 px spacer` → pill stays optically centered, screen-top compact.
+- Legacy `backBtnWrap` / `segmentRow` styles retained as no-ops for safety.
+
 ## Iteration 126 (Feb 2026) — Drilldown Chip Real Profile Photos
 
 - **Backend**: Both `/api/admin/students/{id}/summary` and `/api/admin/supervisors/{id}/summary` now include `profile_photo` in the returned `profile` dict (base64 data URL when the user has uploaded one, else None).

@@ -74,7 +74,7 @@ export default function BackButton({
         // @ts-ignore RN-Web mapping
         data-testid={testID}
       >
-        <Ionicons name="chevron-back-outline" size={30} color={color} />
+        <Ionicons name="chevron-back" size={34} color={color} style={{ marginLeft: -2 }} />
       </Pressable>
     </Animated.View>
   );
