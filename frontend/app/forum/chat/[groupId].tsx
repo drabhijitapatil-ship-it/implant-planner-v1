@@ -10,6 +10,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import api, { getToken } from '../../../utils/api';
 import { BACKEND_URL } from '../../../utils/config';
 import { safeDocumentPick, safeLaunchCamera, safeLaunchLibrary } from '../../../utils/safePicker';
+import { showUploadPicker } from '../../../utils/uploadPicker';
 import BackButton from '../../../components/BackButton';
 
 interface Message {
@@ -34,9 +35,7 @@ export default function ChatRoomScreen() {
   const [attachments, setAttachments] = useState<any[]>([]);
   const [sending, setSending] = useState(false);
   const [attaching, setAttaching] = useState(false);
-  const [showAttachSheet, setShowAttachSheet] = useState(false);
   const pickingInProgressRef = useRef(false);
-  const waitForSheetClose = () => new Promise<void>(resolve => setTimeout(resolve, 500));
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
   const scrollRef = useRef<ScrollView | null>(null);
   const prevCountRef = useRef(0);
@@ -100,52 +99,23 @@ export default function ChatRoomScreen() {
     setAttachments(prev => [...prev, up.data]);
   };
 
-  const pickImage = async (source: 'camera' | 'library') => {
-    if (pickingInProgressRef.current) {
-      console.log('[chat] picker re-entry blocked');
-      return;
-    }
+  const pickAttachment = async () => {
+    if (pickingInProgressRef.current) return;
     pickingInProgressRef.current = true;
-    setShowAttachSheet(false);
-    await waitForSheetClose();
     try {
-      if (Platform.OS !== 'web') {
-        const perm = source === 'camera' ? await ImagePicker.requestCameraPermissionsAsync() : await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!perm.granted) { Alert.alert('Permission needed'); return; }
-      }
-      const res = source === 'camera' ? await safeLaunchCamera({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 }) : await safeLaunchLibrary({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 });
-      if (res.canceled) return;
-      const a = res.assets?.[0]; if (!a) return;
+      const picked = await showUploadPicker(['application/pdf', 'image/*']);
+      if (!picked) return;
       setAttaching(true);
-      const compressed = await compressImg(a.uri);
-      await upload(compressed, a.fileName || `img_${Date.now()}.jpg`, 'image/jpeg', a.fileSize);
-    } catch (e: any) { console.error(e); Alert.alert('Failed', e?.message); } finally { setAttaching(false); pickingInProgressRef.current = false; }
-  };
-
-  const pickFile = async () => {
-    if (pickingInProgressRef.current) {
-      console.log('[chat] picker re-entry blocked');
-      return;
-    }
-    pickingInProgressRef.current = true;
-    setShowAttachSheet(false);
-    await waitForSheetClose();
-    try {
-      const res = await safeDocumentPick({ type: ['application/pdf', 'image/*'], multiple: false, copyToCacheDirectory: true });
-      if (res.canceled) return;
-      const a = res.assets?.[0]; if (!a) return;
-      setAttaching(true);
-      const isImg = (a.mimeType || '').startsWith('image/');
-      const uri = isImg ? await compressImg(a.uri) : a.uri;
-      await upload(uri, a.name || 'file', isImg ? 'image/jpeg' : (a.mimeType || 'application/octet-stream'), a.size);
+      const isImg = (picked.type || '').startsWith('image/');
+      const uri = isImg ? await compressImg(picked.uri) : picked.uri;
+      await upload(uri, picked.name, isImg ? 'image/jpeg' : (picked.type || 'application/octet-stream'));
     } catch (e: any) {
-      console.error(e);
-      const raw = e?.message || '';
-      const friendly = /Different document picking|already in progress/i.test(raw)
-        ? 'The iOS file picker is unresponsive. Please close & reopen the app to reset it, then try again.'
-        : (raw || 'Unknown error');
-      Alert.alert('File pick failed', friendly);
-    } finally { setAttaching(false); pickingInProgressRef.current = false; }
+      console.error('[chat] attach upload failed:', e);
+      Alert.alert('Attach failed', e?.response?.data?.detail || e?.message || 'Unknown error');
+    } finally {
+      setAttaching(false);
+      pickingInProgressRef.current = false;
+    }
   };
 
   const send = async () => {
@@ -270,7 +240,7 @@ export default function ChatRoomScreen() {
             </View>
           )}
           <View style={s.composerRow}>
-            <TouchableOpacity onPress={() => setShowAttachSheet(true)} disabled={attaching} style={[s.iconBtn, attaching && { opacity: 0.4 }]} testID="chat-attach-btn" accessibilityLabel="chat-attach-btn" /* @ts-ignore */ data-testid="chat-attach-btn"><Ionicons name="attach" size={24} color="#1565C0" /></TouchableOpacity>
+            <TouchableOpacity onPress={pickAttachment} disabled={attaching} style={[s.iconBtn, attaching && { opacity: 0.4 }]} testID="chat-attach-btn" accessibilityLabel="chat-attach-btn" /* @ts-ignore */ data-testid="chat-attach-btn"><Ionicons name="attach" size={24} color="#1565C0" /></TouchableOpacity>
             <TextInput style={s.input} placeholder="Type a message..." value={composer} onChangeText={onComposerChange} multiline testID="chat-input" accessibilityLabel="chat-input" /* @ts-ignore */ data-testid="chat-input" />
             <TouchableOpacity onPress={send} disabled={sending || (!composer.trim() && attachments.length === 0)} style={[s.sendBtn, (sending || (!composer.trim() && attachments.length === 0)) && { opacity: 0.4 }]} testID="chat-send-btn" accessibilityLabel="chat-send-btn" /* @ts-ignore */ data-testid="chat-send-btn">
               {sending ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="send" size={18} color="#FFF" />}
@@ -279,29 +249,9 @@ export default function ChatRoomScreen() {
         </View>
       </KeyboardAvoidingView>
 
-      {/* Attach action sheet — matches Discussion Forum's 3-option pattern */}
-      <Modal visible={showAttachSheet} transparent animationType="fade" onRequestClose={() => setShowAttachSheet(false)}>
-        <Pressable style={s.sheetOverlay} onPress={() => setShowAttachSheet(false)}>
-          <Pressable style={s.sheet} onPress={(e) => e.stopPropagation()}>
-            <Text style={s.sheetTitle}>Add attachment</Text>
-            <TouchableOpacity style={s.sheetOption} onPress={() => pickImage('camera')} testID="chat-attach-camera-btn" /* @ts-ignore */ data-testid="chat-attach-camera-btn">
-              <Ionicons name="camera" size={22} color="#1565C0" />
-              <Text style={s.sheetOptionTxt}>Take Photo</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.sheetOption} onPress={() => pickImage('library')} testID="chat-attach-library-btn" /* @ts-ignore */ data-testid="chat-attach-library-btn">
-              <Ionicons name="images" size={22} color="#1565C0" />
-              <Text style={s.sheetOptionTxt}>Photo Library</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.sheetOption} onPress={pickFile} testID="chat-attach-files-btn" /* @ts-ignore */ data-testid="chat-attach-files-btn">
-              <Ionicons name="document-attach" size={22} color="#1565C0" />
-              <Text style={s.sheetOptionTxt}>PDF or Document</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.sheetCancel} onPress={() => setShowAttachSheet(false)}>
-              <Text style={s.sheetCancelTxt}>Cancel</Text>
-            </TouchableOpacity>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      {/* Attach picker is now provided globally by <AttachPickerModalRoot />
+          in app/_layout.tsx. pickAttachment() above awaits showUploadPicker()
+          and processes the returned file directly. */}
     </SafeAreaView>
   );
 }

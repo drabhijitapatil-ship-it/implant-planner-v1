@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { TabletFrame } from '../components/TabletFrame';
 import { useScreenCaptureProtection } from '../hooks/useScreenCaptureProtection';
+import AttachPickerModalRoot from '../components/AttachPickerModal';
 
 /**
  * ActivityTracker wraps the Stack and captures any touch anywhere in the app to
@@ -38,17 +39,17 @@ export default function RootLayout() {
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="implantlens/index" />
               <Stack.Screen name="implantlens/[caseId]" />
-              <Stack.Screen name="procedures/[id]" options={{ headerShown: true, title: 'Case Details', headerBackTitle: 'Back' }} />
+              <Stack.Screen name="procedures/[id]" options={{ headerShown: false }} />
               <Stack.Screen name="procedures/submit-phase2/[id]" options={{ headerShown: false }} />
               <Stack.Screen name="procedures/submit-stage2-surgical/[id]" options={{ headerShown: false }} />
               <Stack.Screen name="procedures/submit-stage2-prosthetic/[id]" options={{ headerShown: false }} />
               <Stack.Screen name="procedures/submit-phase4-step2/[id]" options={{ headerShown: false }} />
-              <Stack.Screen name="legal/privacy-policy" options={{ headerShown: true, title: 'Privacy Policy', headerBackTitle: 'Back' }} />
-              <Stack.Screen name="legal/terms" options={{ headerShown: true, title: 'Terms of Service', headerBackTitle: 'Back' }} />
+              <Stack.Screen name="legal/privacy-policy" options={{ headerShown: false }} />
+              <Stack.Screen name="legal/terms" options={{ headerShown: false }} />
               <Stack.Screen name="onboarding" />
               <Stack.Screen name="help-workflow" />
               <Stack.Screen name="whatsnew" />
-              <Stack.Screen name="admin/audit-log" options={{ headerShown: true, title: 'Audit Log', headerBackTitle: 'Back' }} />
+              <Stack.Screen name="admin/audit-log" options={{ headerShown: false }} />
               <Stack.Screen name="admin/student/[id]" options={{ headerShown: false }} />
               <Stack.Screen name="admin/supervisor/[id]" options={{ headerShown: false }} />
               <Stack.Screen name="forum/index" options={{ headerShown: false }} />
@@ -57,6 +58,7 @@ export default function RootLayout() {
               <Stack.Screen name="forum/chat/create" options={{ headerShown: false }} />
               <Stack.Screen name="forum/chat/[groupId]" options={{ headerShown: false }} />
             </Stack>
+            <AttachPickerModalRoot />
           </ActivityTracker>
         </TabletFrame>
       </AuthProvider>
