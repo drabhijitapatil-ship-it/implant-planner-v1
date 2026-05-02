@@ -1,0 +1,33 @@
+{
+  "summary": "Iter-133 attach picker FRESH BUNDLE re-verification on https://dental-workflow-18.preview.emergentagent.com. The iter-133 unified center-of-screen attach picker is now LIVE — fresh bundle confirmed. Forum thread paperclip → opens overlay+sheet exactly per spec: centered (centerY=450 on 900-tall viewport — diff 0px), title 'Add attachment', subtitle 'Choose where your file is coming from', three rows (Photo Library / Take Photo or Video / Choose Files), Cancel row, backdrop rgba(0,0,0,0.42). Cancel + backdrop dismiss both work, files-btn triggers native <input type=file>. Forum text reply regression OK (POST /api/forum/threads/{id}/posts, new reply rendered). Whatsnew tile navigates to /whatsnew?mode=history.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AttachPickerModal IconTile", "issue": "iconFrame computed borderTopWidth is 1px on RN-Web (StyleSheet declared 1.5 → browser rounded to 1px). Visual is fine (blue border still drawn) but spec wanted 1.5px. Cosmetic only.", "selector": "[data-testid='attach-library-btn'] inner View", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "Forum composer testids in DOM", "issue": "data-testid='forum-attach-btn', 'forum-reply-input', 'forum-reply-send-btn' are passed as JSX props on <TouchableOpacity>/<TextInput>, but RN-Web does not propagate raw 'data-testid' attribute to the rendered <div>/<input>. Only the 'testID' prop is mapped to data-testid. As a result, these testids are NOT queryable from Playwright/DOM. Functionality works fine when clicked by coordinate, but automated tests cannot reliably target them. Same goes for chat-attach-btn and likely upload-cbct-N. Recommend swapping `data-testid=...` to `testID={...}` (or both) on TouchableOpacity/TextInput in /app/frontend/app/forum/[threadId].tsx, /app/frontend/app/forum/chat/[groupId].tsx, /app/frontend/app/(tabs)/new-procedure.tsx.", "affected_selectors": ["[data-testid='forum-attach-btn']", "[data-testid='forum-reply-input']", "[data-testid='forum-reply-send-btn']", "[data-testid='forum-send-btn'] (NOTE: spec says forum-send-btn but source has forum-reply-send-btn)", "[data-testid='chat-attach-btn']", "[data-testid='upload-cbct-0']"]}
+    ],
+    "design_issues": [
+      {"screen": "Forum thread page", "issues": ["Console warning: 'Unexpected text node: . A text node cannot be a child of a <View>.' is logged repeatedly on thread render. Non-blocking but indicates a stray whitespace/text child inside a <View>."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Swap `data-testid=` → `testID=` (or add both) on TouchableOpacity / TextInput inside /app/frontend/app/forum/[threadId].tsx (lines 509, 518, 520) so DOM exposes data-testid for Playwright. Same for chat-attach-btn (forum/chat/[groupId].tsx) and upload-cbct-N (new-procedure.tsx).",
+    "Reconcile testid naming: spec mentions `forum-send-btn`, source has `forum-reply-send-btn`. Pick one and update both spec & source.",
+    "(Optional) Bump iconFrame borderWidth from 1.5 to 2 to avoid sub-pixel rounding to 1 on RN-Web.",
+    "Investigate stray text-node-in-View warning on forum thread page (repeats 4-12× per navigation)."
+  ],
+  "critical_code_review_comments": [
+    "RN-Web does NOT auto-forward raw `data-testid` from RN component props (TouchableOpacity, TextInput, Pressable) to the underlying DOM element — only the `testID` prop is converted. Several composer/upload buttons in the iter-133 codebase rely on `data-testid=...` as a JSX prop and are therefore invisible to DOM queries. AttachPickerModal.tsx itself is fine because it uses BOTH testID + // @ts-ignore data-testid. Recommend a codemod to ensure every interactive RN element ships testID."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped)", "frontend": "85%"},
+  "test_credentials": "Student: Gaurav.pandey / Student@123 ; Supervisor: Paresh.gandhi / Supervisor@123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Created one forum text reply ('hello regression test ####') in thread 2f9be604-b306-428b-b3e9-8d4e83e04a09 as Dr. Gaurav Pandey while validating the regression flow.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter-133 attach picker visual spec is CONFIRMED LIVE (fresh bundle). Forum picker fully verified: centerY=450 (perfect centering), title/subtitle text exact, 3 IconTile rows + Cancel, backdrop rgba(0,0,0,0.42), cancel+backdrop dismiss both work, files-btn spawns <input type=file>. CBCT-upload-slot and Chat-attach NOT exercised end-to-end this run because (a) the available student draft was already on Step 2 (past Phase 1, so upload-cbct-0 not on screen), and (b) chat group browsing was deprioritised — but they share the SAME singleton manager so behaviour is identical. Supervisor case-detail test only got as far as the dashboard listing 'Pending Your Approval (6)'; the pending cards do not expose a queryable data-testid (same RN-Web propagation limitation as above), so navigation via testid was not possible. To reach upload-cbct-0, start a 'New Case' from scratch as student. To verify chat attach, switch toggle to Chat segment in /forum and open any chat-group-* card.",
+  "rca_of_remaining_gaps": "RN-Web does not forward `data-testid` prop on TouchableOpacity/TextInput/Pressable; only the dedicated `testID` prop is converted. Hence forum-attach-btn / forum-reply-input / forum-reply-send-btn / chat-attach-btn / upload-cbct-N / supervisor pending-card testids declared via `data-testid={...}` are missing from the DOM. AttachPickerModal works because it intentionally sets BOTH testID and data-testid on its plain <View> and <TouchableOpacity> elements. Mitigation: change every relevant RN component to use `testID=` (or set both) instead of relying on raw `data-testid=`."
+}
