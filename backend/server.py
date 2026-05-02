@@ -22,6 +22,7 @@ from passlib.context import CryptContext
 import jwt
 from bson import ObjectId
 import httpx
+from augmentation_checklist import generate_augmentation_checklist
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -1518,6 +1519,14 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
     _validate_missing_teeth(procedure.implant_procedure_type, procedure.missing_teeth)
     _apply_missing_teeth_derive(procedure_dict)
 
+    # Pre-Op Augmentation Checklist (iter-136) — deterministic, AI-free items
+    # derived from per-site clinical findings. Stored alongside the procedure
+    # so supervisors see it on /procedures/[id] and can tick items during
+    # Phase 1 approval.
+    procedure_dict["augmentation_checklist"] = generate_augmentation_checklist(procedure_dict)
+    procedure_dict["augmentation_checklist_generated_at"] = datetime.now(timezone.utc).isoformat()
+    procedure_dict["augmentation_checklist_generated_by"] = current_user.get("id") or current_user.get("_id") or ""
+
     result = await db.procedures.insert_one(procedure_dict)
     procedure_id = str(result.inserted_id)
     
@@ -2392,7 +2401,26 @@ async def edit_procedure_fields(procedure_id: str, request: Request, current_use
     fields["updated_at"] = now_iso
     fields["last_edited_by"] = editor_name
     fields["last_edited_at"] = now_iso
-    
+
+    # If any clinical-finding field was touched, regenerate the augmentation
+    # checklist while PRESERVING completed-state on items whose title still
+    # matches (so a supervisor's ticked items aren't lost on a benign edit).
+    finding_keys = {"clinical_exam_per_site", "ridge_contour", "soft_tissue_thickness", "keratinized_mucosa", "arch", "missing_teeth"}
+    if finding_keys & set(fields.keys()):
+        merged_proc = {**proc, **fields}
+        new_items = generate_augmentation_checklist(merged_proc)
+        old_state = {it.get("title"): it for it in (proc.get("augmentation_checklist") or []) if isinstance(it, dict)}
+        for ni in new_items:
+            prev = old_state.get(ni["title"])
+            if prev and prev.get("completed"):
+                ni["completed"] = True
+                ni["completed_by_id"] = prev.get("completed_by_id")
+                ni["completed_by_name"] = prev.get("completed_by_name")
+                ni["completed_at"] = prev.get("completed_at")
+                ni["completed_notes"] = prev.get("completed_notes", "")
+        fields["augmentation_checklist"] = new_items
+        fields["augmentation_checklist_generated_at"] = now_iso
+
     update_op: dict = {"$set": fields}
     if log_entries:
         update_op["$push"] = {"edit_log": {"$each": log_entries}}
@@ -2438,6 +2466,101 @@ async def edit_procedure_fields(procedure_id: str, request: Request, current_use
     
     updated = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0})
     return updated
+
+
+
+# ───────────────────────────────────────────────────────────────────
+# Pre-Op Augmentation Checklist (iter-136)
+#  - GET    /procedures/{id}/augmentation-checklist               → list items
+#  - POST   /procedures/{id}/augmentation-checklist/regenerate    → rebuild
+#  - PATCH  /procedures/{id}/augmentation-checklist/{item_id}     → toggle
+# Authorization:
+#  - GET: any case stakeholder (student/supervisor/in-charge/admin/nurse).
+#  - REGENERATE: case stakeholders (preserves completed-state where titles match).
+#  - TOGGLE: only Supervisor / Implant In-Charge / Admin (sign-off authority).
+# ───────────────────────────────────────────────────────────────────
+
+def _is_case_stakeholder(proc: dict, user: dict) -> bool:
+    uid = user.get("_id")
+    if not uid:
+        return False
+    if user.get("role") in ("administrator", "implant_incharge"):
+        return True
+    return uid in (proc.get("student_id"), proc.get("supervisor_id"), proc.get("implant_incharge_id"))
+
+
+@api_router.get("/procedures/{procedure_id}/augmentation-checklist")
+async def get_augmentation_checklist(procedure_id: str, current_user: dict = Depends(get_current_user)):
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Case not found")
+    if not _is_case_stakeholder(proc, current_user):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    return {
+        "items": proc.get("augmentation_checklist") or [],
+        "generated_at": proc.get("augmentation_checklist_generated_at") or "",
+        "generated_by": proc.get("augmentation_checklist_generated_by") or "",
+    }
+
+
+@api_router.post("/procedures/{procedure_id}/augmentation-checklist/regenerate")
+async def regenerate_augmentation_checklist(procedure_id: str, current_user: dict = Depends(get_current_user)):
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Case not found")
+    if not _is_case_stakeholder(proc, current_user):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    new_items = generate_augmentation_checklist(proc)
+    # Preserve completed-state on items whose title still matches.
+    old_state = {it.get("title"): it for it in (proc.get("augmentation_checklist") or []) if isinstance(it, dict)}
+    for ni in new_items:
+        prev = old_state.get(ni["title"])
+        if prev and prev.get("completed"):
+            ni.update({k: prev.get(k) for k in ("completed", "completed_by_id", "completed_by_name", "completed_at", "completed_notes")})
+    now_iso = datetime.now(timezone.utc).isoformat()
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {
+            "augmentation_checklist": new_items,
+            "augmentation_checklist_generated_at": now_iso,
+            "augmentation_checklist_generated_by": current_user.get("_id") or "",
+        }},
+    )
+    return {"items": new_items, "generated_at": now_iso}
+
+
+@api_router.patch("/procedures/{procedure_id}/augmentation-checklist/{item_id}")
+async def toggle_augmentation_checklist_item(
+    procedure_id: str,
+    item_id: str,
+    body: dict = Body(...),
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user.get("role") not in ("supervisor", "implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Only Supervisors and Implant In-Charge can sign off augmentation items")
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Case not found")
+    items = list(proc.get("augmentation_checklist") or [])
+    target_idx = next((i for i, it in enumerate(items) if isinstance(it, dict) and it.get("id") == item_id), -1)
+    if target_idx < 0:
+        raise HTTPException(status_code=404, detail="Checklist item not found")
+    completed = bool(body.get("completed", True))
+    notes = sanitize_input(str(body.get("notes") or ""))[:500]
+    now_iso = datetime.now(timezone.utc).isoformat()
+    items[target_idx] = {
+        **items[target_idx],
+        "completed": completed,
+        "completed_by_id": current_user.get("_id") if completed else None,
+        "completed_by_name": current_user.get("name") if completed else None,
+        "completed_at": now_iso if completed else None,
+        "completed_notes": notes,
+    }
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"augmentation_checklist": items}},
+    )
+    return {"item": items[target_idx], "items": items}
 
 
 
