@@ -2,7 +2,7 @@
 
 ## Iteration 139 (Feb 2026) — Phase 2 Multi-Unit Abutment (MUA) Capture
 
-**Goal**: For full-arch Immediate Loading cases, capture per-implant Multi-unit Abutment data (Angulation + Cuff Height) directly in the Phase 2 surgical form.
+**Goal**: For full-arch Immediate Loading cases, capture per-implant Multi-unit Abutment data (Angulation + Cuff Height) directly in the Phase 2 surgical form, surface it on the case-detail view, and persist it in the Case Report PDF + AI context.
 
 **Gate conditions (all three must be true for the section to render)**:
 1. Phase 1 `procedure_type` ∈ {`All on 4`, `All on 6`, `All on X`}
@@ -31,6 +31,24 @@
 4. Non-blocking server semantics: invalid / partial / None / non-numeric values accepted with 200 OK.
 5. Single Conventional Implant regression — no MUA fields → unchanged behaviour.
 6. Numeric (int + float) values for angulation / cuff_height preserved as-sent.
+
+### Iter-139 Extension — Downstream Read-only Display + PDF + AI Context
+
+**Case detail view — `/app/frontend/app/procedures/[id].tsx`** (~L1573):
+Blue-themed read-only card (`data-testid="mua-readonly-section"`) under the Phase 2 summary rendering `Multi-unit Abutment Placed: Yes/No` plus per-tooth rows (`data-testid="mua-readonly-row-<idx>"`) with Tooth pill + Angulation + Cuff Height (em-dash for empty values).
+
+**Case Report PDF — `/app/backend/server.py`** (~L5621):
+After the Healing Abutment Cuff Height line the PDF now renders `Multi-unit Abutment Placed: Yes/No` and a `Multi-unit Abutment Details` block (one `Tooth {n}: Angulation {x}° Cuff Height {y} mm` row per implant) when MUA=Yes.
+
+**AI case context — `/app/backend/server.py`** (~L4475):
+`_build_case_context` now emits `Multi-unit Abutment Placed: Yes/No` and a `MUA Details: Tooth <pos>: <ang>° / <cuff>mm; ...` line so the GPT explain-recommendation and surgical-notes AI both see the captured data.
+
+**Downstream tests** — `/app/backend/tests/test_mua_pdf_export_iteration139.py` — **5/5 PASS** (iteration 129):
+1. Full-arch Immediate Loading MUA=Yes → PDF contains MUA header, details block, tooth rows, numeric values + legacy sections.
+2. MUA=No → PDF contains header but NOT details block (correctly gated).
+3. Non-MUA single-implant → zero MUA substrings in PDF (no leak).
+4. `_build_case_context` unit test — emits MUA lines for yes, "No" line only for no, nothing when absent.
+5. Delayed Loading + numeric (int) MUA values → PDF renders correctly (stringification robust).
 
 
 
