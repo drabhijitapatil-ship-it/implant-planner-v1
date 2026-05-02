@@ -103,6 +103,11 @@ export const MULTIPLE_GROUP = new Set([
   'Immediate Implant',
   'Partial Extraction Therapy',
   'Implant Placement with Guided Bone Regeneration',
+  // Guided Surgery is a non-full-arch procedure typically used for multi-
+  // implant cases. It qualifies for the same Bridge / Overdenture-with-
+  // Attachment prosthetic plans, so we fold it into the Multiple group here
+  // (iter-137). Single-tooth guided surgery remains uncommon in this program.
+  'Guided Surgery',
 ]);
 
 export const FULL_ARCH_GROUP = new Set([
@@ -361,6 +366,22 @@ export const OVERDENTURE_ATTACHMENT_OPTIONS = [
   'Rheine 83 Equator Attachment',
   'Locator Attachment',
   'Sonator Attachment',
+  'Other',
+];
+
+// ─── Phase 1: Type of Attachment (iter-137) ───────────
+// Shown below the Prosthetic Plan dropdown when the plan is
+// "Overdenture with Attachment". Brand-specific catalogue distinct from the
+// Phase 4 generic OVERDENTURE_ATTACHMENT_OPTIONS above.
+export const PHASE1_ATTACHMENT_TYPE_OPTIONS = [
+  'Stud and Ball Attachment',
+  'Locator - Zest Dental Solutions',
+  'Locator R-Tx - Zest Dental Solutions',
+  'Rheine 83 - OT Equator',
+  'Novaloc - Straumann',
+  'TiSi Snap - Bredent',
+  'Bar Attachment',
+  'Locator Bar',
   'Other',
 ];
 
