@@ -1,5 +1,28 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 138 (Feb 2026) — Phase 2 Cuff-Height Catalogue (wired to Phase-1 Attachment Type)
+
+**Goal**: Close the loop between iter-137's Phase-1 `attachment_type` field and the Phase-2 Healing-Abutment-Placed flow. Students no longer type a free numeric cuff height — they pick from a dropdown constrained to the manufacturer's real SKU range for the exact attachment brand they chose in Phase 1.
+
+**Data — new module `/app/frontend/constants/attachmentCuffCatalogue.ts`:**
+- `ATTACHMENT_CUFF_CATALOGUE` — hardcoded catalogue map (vendor → string[] of mm values). Sourced from published product ranges:
+  - Locator (Zest): 1, 2, 3, 4, 5 mm
+  - Locator R-Tx (Zest): 1, 2, 3, 4, 5, 6 mm
+  - Rheine 83 / OT Equator: 0.5, 1, 2, 3, 4, 5, 6, 7 mm
+  - Novaloc (Straumann): 0.5, 1.5, 2.5, 3.5, 4.5, 5.5 mm
+  - TiSi Snap (Bredent): 0.5, 1, 2, 3, 4, 5 mm
+  - Stud and Ball: 1, 2, 3, 4 mm
+- `getCuffHeightsFor(value)` — returns `null` for bar-type attachments (custom-milled, no SKU catalogue) and for `"Other"` / `"Other: <custom>"` wrappers, which keeps the legacy free-text numeric input available as a fallback for bespoke cases.
+
+**UI — `/app/frontend/app/procedures/submit-phase2/[id].tsx`:**
+- Loads `procedure.attachment_type` into state on mount.
+- When `prostheticComponent === 'Healing Abutment Placed'`:
+  - If `getCuffHeightsFor(attachmentType)` returns a list → renders a per-implant **dropdown picker** with data-testid `healing-abutment-cuff-picker-<idx>` and option testids `healing-abutment-cuff-<idx>-option-<mm>`. A subheader reads `Catalogue: <brand> · N SKUs` so the student/supervisor sees exactly which vendor list is active.
+  - If it returns `null` (bar, Other, empty) → falls back to the original free-text decimal-pad TextInput (`healing-abutment-cuff-<idx>`).
+
+**Tests** — `/app/frontend/tests/attachmentCuffCatalogue.test.ts` exec-style (dependency-free, runs via `npx tsx`):
+- **32/32 assertions PASS**. Covers every vendor catalogue, null-return semantics, `"Other: <custom>"` wrapper stripping, and catalogue-integrity checks (unique, non-empty, numeric-string entries per vendor).
+
 ## Iteration 137 (Feb 2026) — Guided Surgery Prosthetic Plan + Type of Attachment Sub-Dropdown
 
 ### Change 1 — Guided Surgery gets a Prosthetic Plan
