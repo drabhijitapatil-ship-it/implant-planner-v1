@@ -76,15 +76,28 @@ function MultiSelectDropdown({ label, values, options, onChange, placeholder, re
 }
 
 // ─── Reusable Dropdown ─────────────────────────────────
-function Dropdown({ label, value, options, onChange, placeholder, required }: {
+function Dropdown({ label, value, options, onChange, placeholder, required, testID, ...rest }: {
   label: string; value: string; options: string[]; onChange: (v: string) => void;
-  placeholder?: string; required?: boolean;
+  placeholder?: string; required?: boolean; testID?: string;
+  // Allow callers to pass a raw `data-testid` (e.g. from JSX literal in maps).
+  // Either takes precedence over the auto-generated label-based one.
+  [key: string]: any;
 }) {
   const [open, setOpen] = useState(false);
+  const customTestId = testID || rest['data-testid'];
+  const triggerTestId = customTestId || `dropdown-${label.toLowerCase().replace(/\s+/g, '-')}`;
   return (
     <View style={styles.fieldContainer}>
       <Text style={styles.label}>{label}{required && <Text style={{ color: '#DC3545' }}> *</Text>}</Text>
-      <TouchableOpacity style={styles.dropdown} onPress={() => setOpen(!open)} data-testid={`dropdown-${label.toLowerCase().replace(/\s+/g, '-')}`}>
+      <TouchableOpacity
+        style={styles.dropdown}
+        onPress={() => setOpen(!open)}
+        testID={triggerTestId}
+        // RN-Web only converts `testID` → `data-testid`. Set both so Playwright
+        // queries that use either selector form succeed.
+        // @ts-ignore RN-Web mapping
+        data-testid={triggerTestId}
+      >
         <Text style={[styles.dropdownText, !value && { color: '#999' }]}>
           {value || placeholder || `Select ${label}`}
         </Text>
@@ -93,8 +106,14 @@ function Dropdown({ label, value, options, onChange, placeholder, required }: {
       {open && (
         <ScrollView style={styles.dropdownList} nestedScrollEnabled={true}>
           {options.map(opt => (
-            <TouchableOpacity key={opt} style={[styles.dropdownItem, value === opt && styles.dropdownItemActive]}
-              onPress={() => { onChange(opt); setOpen(false); }}>
+            <TouchableOpacity
+              key={opt}
+              style={[styles.dropdownItem, value === opt && styles.dropdownItemActive]}
+              onPress={() => { onChange(opt); setOpen(false); }}
+              testID={`${triggerTestId}-option-${opt.toLowerCase().replace(/\s+/g, '-')}`}
+              // @ts-ignore
+              data-testid={`${triggerTestId}-option-${opt.toLowerCase().replace(/\s+/g, '-')}`}
+            >
               <Text style={[styles.dropdownItemText, value === opt && styles.dropdownItemTextActive]}>{opt}</Text>
             </TouchableOpacity>
           ))}
@@ -1068,6 +1087,7 @@ export default function NewProcedureScreen() {
                 alignItems: 'center', justifyContent: 'center', marginHorizontal: 1,
               }}
               data-testid={`fdi-${t}`}
+              testID={`fdi-${t}`}
             >
               <Text style={{ fontWeight: '700', fontSize: 9, color: '#FFF' }}>{t}</Text>
             </TouchableOpacity>
