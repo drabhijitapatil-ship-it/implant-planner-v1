@@ -4,17 +4,27 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import api from './api';
 
+// Notifications.Subscription is deprecated in favor of EventSubscription
+// (re-exported by expo-notifications from expo-modules-core in SDK 54+).
+type NotifSubscription = Notifications.EventSubscription;
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
+    // SDK 54+: shouldShowAlert is deprecated. The new shape splits the alert into
+    // banner (transient heads-up) + list (notification center entry). We keep
+    // shouldShowAlert for back-compat with older runtimes that haven't shipped
+    // the rename yet.
     shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
   }),
 });
 
 export function usePushNotifications() {
-  const notificationListener = useRef<Notifications.Subscription>();
-  const responseListener = useRef<Notifications.Subscription>();
+  const notificationListener = useRef<NotifSubscription>();
+  const responseListener = useRef<NotifSubscription>();
 
   useEffect(() => {
     registerForPushNotifications();
