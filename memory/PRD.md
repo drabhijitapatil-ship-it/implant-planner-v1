@@ -1,5 +1,39 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 134 (Feb 2026) — Phase 1 Step 1 Restructure (Prosthetic Plan reorder + Overdenture full-arch override + per-cluster Intraoral findings)
+
+**Scope**: Applies to student / supervisor / implant-incharge users (NOT nurse, who never sees this form).
+
+### Change 1 — Reorder
+Moved **Prosthetic Treatment Plan** from below Loading Type to its own section immediately AFTER Procedure Information. New flow: Patient Info → Procedure Information → **Prosthetic Treatment Plan** → FDI Chart (if applicable) → Clinical Examination → Loading Type → CBCT.
+- Verified y-positions in DOM: Procedure Info=64, Prosthetic Plan=231, Missing Teeth=398, Clinical Exam=640.
+
+### Change 2 — Overdenture-with-Attachment Override
+When `procedure_type ∈ NON_FULL_ARCH_TYPES` AND `prosthetic_plan === 'Overdenture with Attachment'`:
+- FDI Chart / 'Select missing tooth/teeth' is HIDDEN.
+- Clinical Examination renders the FULL-ARCH layout (Arch dropdown `data-testid="overdenture-arch-dropdown"` + Arch Condition + single Ridge Contour + Soft Tissue + Keratinized).
+- Switching INTO Overdenture-with-Attachment auto-clears `missing_teeth`, `edentulous_site_measurements`, `clinical_exam_per_site` so the FDI chart returns empty when toggled back.
+
+### Change 3 — Per-Cluster Intraoral Dropdowns
+When `procedure_type ∈ CLINICAL_EXAM_GROUP \ {Single Conventional Implant}` AND `missing_teeth.length ≥ 2` AND `prosthetic_plan ≠ 'Overdenture with Attachment'`:
+- Inside each missing-run card (singleton or cluster), the existing OC/MD measurements are followed by 3 per-site dropdowns: `ridge-contour-<leader>`, `soft-tissue-<leader>`, `keratinized-<leader>`.
+- Adjacent missing teeth in the same arch share ONE set of dropdowns (continuous edentulous span = one site).
+- Non-adjacent gaps each get their own card with their own set.
+- The 3 single dropdowns at the bottom of the Intraoral block are HIDDEN in this mode.
+
+### Back-compat (Change 4 — automatic)
+On save, if per-cluster mode is active, the FIRST cluster's per-site values are copied into the legacy `ridge_contour`, `soft_tissue_thickness`, `keratinized_mucosa` strings so existing case-detail and PDF renderers keep working without modification. The new canonical map is `clinical_exam_per_site: { '<leaderTooth>': { ridge_contour, soft_tissue_thickness, keratinized_mucosa } }`.
+
+### Testability fixes (post-iter-126 follow-up)
+- **Local `<Dropdown>` component**: now accepts `testID` and raw `data-testid` props and forwards them onto the trigger TouchableOpacity, taking precedence over the auto-generated `dropdown-<labelKebab>`. Option items now emit `<triggerTestId>-option-<valueKebab>`.
+- **FDI tooth `<TouchableOpacity>`**: now sets BOTH `testID={`fdi-${t}`}` AND `data-testid={`fdi-${t}`}` for RN-Web safety.
+
+### Verification (`iteration_127.json`)
+- 5 of 5 priority testid scenarios verified end-to-end in live DOM.
+- 3 of 3 behavioural changes (reorder, overdenture override, auto-clear) verified visually + via DOM state assertions.
+- Marking adjacent cluster (16/17) + singleton (26) produces EXACTLY 2 sets × 3 dropdowns = 6 dropdown trigger testids in DOM (NOT 3 sets — adjacent teeth share one site as designed).
+- `retest_needed: false`, `main_agent_can_self_test: true`.
+
 ## Iteration 133 (Feb 2026) — Attach Picker Centered Dialog (fix for iter-132 bottom-sheet that users rejected)
 
 **User feedback driving this iteration:**
