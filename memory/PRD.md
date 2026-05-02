@@ -48,6 +48,24 @@ After the Healing Abutment Cuff Height line the PDF now renders `Multi-unit Abut
 4. `_build_case_context` unit test — emits MUA lines for yes, "No" line only for no, nothing when absent.
 5. Delayed Loading + numeric (int) MUA values → PDF renders correctly (stringification robust).
 
+### Iter-141 (Feb 2026) — Critical Fix: MUA Section Wasn't Rendering
+
+**Bug**: User reported "Multi-unit protocol in Phase 2 for full arch procedure type is not implemented". Root cause was a **type mismatch**: Phase 1 stores `loading_type` as a multi-select `string[]` array (e.g. `['Immediate Loading']`) but the Phase 2 form was comparing it as a string (`loadingType === 'Immediate Loading'`) — the gate was always false → MUA section never rendered for ANY case.
+
+**Fix in `/app/frontend/app/procedures/submit-phase2/[id].tsx`**:
+- Changed `loadingType` state from `string` → `string[]` (with comment explaining the multi-select shape).
+- Loader now coerces both shapes: `Array.isArray(x) ? x : (x ? [x] : [])`.
+- Render gate + submit-payload gates now use `Array.isArray(loadingType) ? loadingType.includes('Immediate Loading') : loadingType === 'Immediate Loading'`.
+
+**Bonus fix — pre-existing crash blocking SPA navigation**:
+`utils/usePushNotifications.ts` was calling `Notifications.removeNotificationSubscription(...)` which has been removed in newer expo-notifications SDKs. The cleanup function threw on every unmount (including SPA route changes), surfacing a red error overlay that masked the MUA section. Migrated to the new API: `subscription.remove()` with a back-compat fallback to the old function.
+
+**Self-test (UI smoke)** — verified on case `69f640120ae04a75cf8d0cb6` (All-on-4 + `loading_type: ['Immediate Loading']`):
+- All 4 torque rows render with tooth labels (#11, #12, #21, #22).
+- After selecting "Immediate Loading Done" prosthetic component, the blue MUA card renders with Yes/No pills (`mua-placed-yes/no`).
+- After tapping Yes, 4 per-tooth rows render with `mua-angulation-{0..3}` + `mua-cuff-{0..3}` inputs and inline red `Required` warnings (8 total inputs detected).
+
+
 
 ## Iteration 140 (Feb 2026) — Copy MUA from Phase 2 to Phase 4 Step 1 Notes
 

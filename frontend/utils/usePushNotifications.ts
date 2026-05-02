@@ -29,12 +29,22 @@ export function usePushNotifications() {
     });
 
     return () => {
-      if (notificationListener.current) {
-        Notifications.removeNotificationSubscription(notificationListener.current);
-      }
-      if (responseListener.current) {
-        Notifications.removeNotificationSubscription(responseListener.current);
-      }
+      // expo-notifications dropped removeNotificationSubscription in newer SDKs.
+      // Subscription objects expose `.remove()` directly. Guard for both APIs.
+      try {
+        const n: any = notificationListener.current;
+        if (n) {
+          if (typeof n.remove === 'function') n.remove();
+          else if (typeof (Notifications as any).removeNotificationSubscription === 'function') (Notifications as any).removeNotificationSubscription(n);
+        }
+      } catch {}
+      try {
+        const r: any = responseListener.current;
+        if (r) {
+          if (typeof r.remove === 'function') r.remove();
+          else if (typeof (Notifications as any).removeNotificationSubscription === 'function') (Notifications as any).removeNotificationSubscription(r);
+        }
+      } catch {}
     };
   }, []);
 }
