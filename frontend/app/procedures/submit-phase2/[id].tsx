@@ -588,46 +588,34 @@ export default function Phase2SubmissionScreen() {
                     <Text style={s.muaSubTitle}>Multi-unit Abutment Details</Text>
                     {implantPositions.map((pos, idx) => (
                       <View key={idx} style={s.muaToothCard}>
-                        <Text style={s.muaToothHeader}>Tooth #{pos}</Text>
+                        <Text style={s.muaToothHeader}>Implant {idx + 1} (#{pos})</Text>
                         <View style={s.muaParamRow}>
-                          <Text style={s.muaParamLabel}>Angulation</Text>
-                          <Text style={s.muaParamDash}>-</Text>
-                          <View style={s.muaInputWrap}>
-                            <TextInput
-                              style={s.muaInput}
-                              value={muaAngulation[idx] || ''}
-                              onChangeText={v => { const u = [...muaAngulation]; u[idx] = v; setMuaAngulation(u); }}
-                              keyboardType="decimal-pad" placeholder="0" maxLength={2}
-                              testID={`mua-angulation-${idx}`}
-                              /* @ts-ignore */ data-testid={`mua-angulation-${idx}`}
-                            />
+                          <View style={s.muaParamLabelPill}>
+                            <Text style={s.muaParamLabelText}>Angulation</Text>
                           </View>
+                          <TextInput
+                            style={s.muaInput}
+                            value={muaAngulation[idx] || ''}
+                            onChangeText={v => { const u = [...muaAngulation]; u[idx] = v; setMuaAngulation(u); }}
+                            keyboardType="decimal-pad" placeholder="°" maxLength={2}
+                            testID={`mua-angulation-${idx}`}
+                            /* @ts-ignore */ data-testid={`mua-angulation-${idx}`}
+                          />
                           <Text style={s.muaUnit}>°</Text>
-                          {!!muaAngleError(muaAngulation[idx] || '') && (
-                            <Text style={s.muaErrorTextInline} testID={`mua-angulation-err-${idx}`}>
-                              {muaAngleError(muaAngulation[idx] || '')}
-                            </Text>
-                          )}
                         </View>
                         <View style={s.muaParamRow}>
-                          <Text style={s.muaParamLabel}>Cuff Height</Text>
-                          <Text style={s.muaParamDash}>-</Text>
-                          <View style={s.muaInputWrap}>
-                            <TextInput
-                              style={s.muaInput}
-                              value={muaCuffHeight[idx] || ''}
-                              onChangeText={v => { const u = [...muaCuffHeight]; u[idx] = v; setMuaCuffHeight(u); }}
-                              keyboardType="decimal-pad" placeholder="0" maxLength={2}
-                              testID={`mua-cuff-${idx}`}
-                              /* @ts-ignore */ data-testid={`mua-cuff-${idx}`}
-                            />
+                          <View style={s.muaParamLabelPill}>
+                            <Text style={s.muaParamLabelText}>Cuff Height</Text>
                           </View>
+                          <TextInput
+                            style={s.muaInput}
+                            value={muaCuffHeight[idx] || ''}
+                            onChangeText={v => { const u = [...muaCuffHeight]; u[idx] = v; setMuaCuffHeight(u); }}
+                            keyboardType="decimal-pad" placeholder="mm" maxLength={2}
+                            testID={`mua-cuff-${idx}`}
+                            /* @ts-ignore */ data-testid={`mua-cuff-${idx}`}
+                          />
                           <Text style={s.muaUnit}>mm</Text>
-                          {!!muaCuffError(muaCuffHeight[idx] || '') && (
-                            <Text style={s.muaErrorTextInline} testID={`mua-cuff-err-${idx}`}>
-                              {muaCuffError(muaCuffHeight[idx] || '')}
-                            </Text>
-                          )}
                         </View>
                       </View>
                     ))}
@@ -1012,14 +1000,13 @@ const s = StyleSheet.create({
   muaPillActive: { borderColor: '#0277BD', backgroundColor: '#0277BD' },
   muaPillText: { fontSize: 14, fontWeight: '700', color: '#0277BD', letterSpacing: 0.3 },
   muaPillTextActive: { color: '#FFF' },
-  // Per-tooth card: white card holding header + 2 stacked param rows
+  // Per-tooth card: white card holding "Implant N (#pos)" header + 2 stacked
+  // param rows. Mirrors the Torque section structure (label-pill left, input right).
   muaToothCard: { backgroundColor: '#FFF', borderColor: '#B3E5FC', borderWidth: 1, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 10 },
   muaToothHeader: { fontSize: 14, fontWeight: '700', color: '#01579B', marginBottom: 8, letterSpacing: 0.3 },
-  muaParamRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4 },
-  muaParamLabel: { width: 100, fontSize: 13, color: '#0277BD', fontWeight: '600' },
-  muaParamDash: { width: 14, fontSize: 13, color: '#0277BD', fontWeight: '600', textAlign: 'center' },
-  muaInputWrap: { width: 64, height: 36, borderWidth: 1.5, borderColor: '#81D4FA', borderRadius: 8, backgroundColor: '#F5FBFF', justifyContent: 'center', overflow: 'hidden' },
-  muaInput: { width: '100%', height: '100%', paddingVertical: 0, paddingHorizontal: 6, fontSize: 14, fontWeight: '700', color: '#01579B', textAlign: 'center' },
-  muaUnit: { fontSize: 13, fontWeight: '700', color: '#0277BD', marginLeft: 6, minWidth: 22 },
-  muaErrorTextInline: { fontSize: 11, color: '#D32F2F', fontWeight: '600', marginLeft: 10 },
+  muaParamRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
+  muaParamLabelPill: { flex: 1, backgroundColor: '#E1F5FE', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10 },
+  muaParamLabelText: { fontSize: 13, fontWeight: '600', color: '#01579B' },
+  muaInput: { width: 80, borderWidth: 2, borderColor: '#0277BD', borderRadius: 12, padding: 10, fontSize: 18, fontWeight: '700', textAlign: 'center', backgroundColor: '#FFF', color: '#01579B' },
+  muaUnit: { fontSize: 13, fontWeight: '600', color: '#888', minWidth: 30 },
 });
