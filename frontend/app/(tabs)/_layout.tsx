@@ -177,7 +177,7 @@ function DrawerMenu({
                   opacity: 0,
                   transform: [{ translateY: 6 }],
                 })}
-                style={{ flexBasis: '48%', flexGrow: 1, aspectRatio: 1.3 }}
+                style={{ flexBasis: '48%', flexGrow: 0, aspectRatio: 1.3 }}
               >
                 <TouchableOpacity
                   style={[t.tile, { backgroundColor: item.bg }]}
@@ -280,6 +280,7 @@ const t = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
+    justifyContent: 'center',
   },
   tile: {
     // Sizing handled by the surrounding Animated.View wrapper (flexBasis 48%
