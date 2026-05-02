@@ -1,5 +1,13 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 131 (Feb 2026) — Phase 1 BackButton Verification
+
+Post-handoff verification of the iter-123 global `<BackButton />` rollout in Phase 1 screens that were left untested when the prior agent ran out of context:
+- Verified `app/(tabs)/new-procedure.tsx` — `<BackButton />` imports (line 12) + usage at Step 1 header (line 803, default `router.back()`) + Step 2 header (line 680, custom onPress that flips step back to 'details').
+- Verified `components/CaseImplantPlanning.tsx` — `<BackButton />` import (line 19) + usage in the Implant Plan modal's step-2 nav row (line 1476, custom onPress flips modal step back to 1).
+- Smoke test screenshot confirmed Phase 1 header renders cleanly: circular white halo chip with chevron-back, sits to the left of the "Phase 1 - Diagnosis and Treatment Planning" title.
+- Metro bundle healthy, no new console errors. No testID regressions.
+
 ## Iteration 129 (Feb 2026) — BackButton iOS-Default + Forum/Chat Inline Header
 
 - **BackButton**: reverted `chevron-back-outline` → **`chevron-back`** (filled iOS-default), size 30 → **34 px** for proper proportion in the 44 px halo, `marginLeft: -2` to optically center.
