@@ -16,6 +16,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import api from '../utils/api';
 import ExportPrintMenu from './ExportPrintMenu';
+import BackButton from './BackButton';
 import { getImplantDetails } from '../constants/implantIndications';
 import { evaluateImplantSafety, shortSafetyChip, type SafetyVerdict } from '../utils/implantSafety';
 import {
@@ -1472,10 +1473,7 @@ function ModalContent(props: any) {
               )}
 
               <View style={ms.navRow}>
-                <TouchableOpacity style={ms.backBtn} onPress={() => setStep(1)}>
-                  <Ionicons name="arrow-back" size={20} color="#666" />
-                  <Text style={ms.backBtnText}>Back</Text>
-                </TouchableOpacity>
+                <BackButton onPress={() => setStep(1)} />
                 <TouchableOpacity
                   style={[ms.nextBtn, ms.nextBtnFlex,
                     (mode === 'choose' ? (!selectedSystem || !boneWidth || !boneHeight) : (!sProcedures.length || !boneType || !boneWidth || !boneHeight)) && ms.btnDisabled]}

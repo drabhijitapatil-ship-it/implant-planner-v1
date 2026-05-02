@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import api, { getAuthFileUrl, getToken } from '../../utils/api';
 import { showUploadPicker } from '../../utils/uploadPicker';
 import { useAuth } from '../../contexts/AuthContext';
+import BackButton from '../../components/BackButton';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';
 import { validateImplantSelection, findMissingRuns, clusterLeader } from '../../utils/implantValidation';
 import {
@@ -676,9 +677,7 @@ export default function NewProcedureScreen() {
     return (
       <View style={{ flex: 1, backgroundColor: '#F5F7FA' }} data-testid="step2-implant-selection-view">
         <View style={styles.stepHeader}>
-          <TouchableOpacity onPress={() => { setStep('details'); setIsDraftResume(false); }} style={styles.backBtn} data-testid="step2-back-btn">
-            <Ionicons name="arrow-back" size={22} color="#1A73E8" />
-          </TouchableOpacity>
+          <BackButton onPress={() => { setStep('details'); setIsDraftResume(false); }} testID="step2-back-btn" />
           <Text style={styles.stepTitle}>Step 2: Implant Selection</Text>
           <TouchableOpacity
             style={{ marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFEBEE', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, gap: 4 }}
@@ -801,9 +800,7 @@ export default function NewProcedureScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 100 }}>
       <View style={styles.headerBar}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={22} color="#1A73E8" />
-        </TouchableOpacity>
+        <BackButton />
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>
             Phase 1 - Diagnosis and Treatment Planning
