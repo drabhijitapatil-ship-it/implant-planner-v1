@@ -427,6 +427,10 @@ class Phase2Submit(BaseModel):
     prosthesis_type: Optional[str] = Field(None, max_length=200)
     prosthesis_type_other: Optional[str] = Field(None, max_length=500)
     healing_abutment_cuff_height: Optional[Any] = None  # str or list of str (per implant)
+    access_channel_openings: Optional[List[str]] = None  # per-implant access-channel observations (Immediate Loading Done)
+    # iter-139: Multi-unit Abutment capture for full-arch Immediate Loading cases.
+    multi_unit_abutment_placed: Optional[str] = Field(None, max_length=10)  # 'yes' | 'no' | None
+    multi_unit_abutment_details: Optional[List[Dict[str, Any]]] = None  # [{tooth, angulation, cuff_height}]
     sutures_placed: Optional[bool] = True
     hemostasis_achieved: Optional[bool] = True
     # Post-surgical radiograph uploads
@@ -6589,6 +6593,10 @@ async def submit_phase2(
         "iopa_files": phase2_data.iopa_files or [],
         "opg_file": phase2_data.opg_file,
         "post_op_checklist": phase2_data.post_op_checklist or {},
+        # iter-139: persist MUA capture + per-implant access-channel openings.
+        "access_channel_openings": phase2_data.access_channel_openings,
+        "multi_unit_abutment_placed": phase2_data.multi_unit_abutment_placed,
+        "multi_unit_abutment_details": phase2_data.multi_unit_abutment_details,
     }
     
     # Merge surgical checklist if provided (legacy support)
