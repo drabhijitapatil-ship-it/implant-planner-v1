@@ -68,6 +68,15 @@ export default function Phase2SubmissionScreen() {
   // the manufacturer-recommended cuff-height variants instead of free text.
   const [attachmentType, setAttachmentType] = useState('');
   const [openCuffPicker, setOpenCuffPicker] = useState<number | null>(null);
+  // iter-139: Phase-1 loading_type so Phase 2 can show the Multi-unit Abutment
+  // flow only for full-arch Immediate Loading cases.
+  const [loadingType, setLoadingType] = useState('');
+  // '' = not yet chosen (forces explicit pick), 'yes' | 'no' once user picks.
+  const [multiUnitPlaced, setMultiUnitPlaced] = useState<'' | 'yes' | 'no'>('');
+  // Per-implant angulation (°) and cuff-height (mm) — same length as
+  // implantPositions. Populated only when multiUnitPlaced === 'yes'.
+  const [muaAngulation, setMuaAngulation] = useState<string[]>([]);
+  const [muaCuffHeight, setMuaCuffHeight] = useState<string[]>([]);
   const [iopaFiles, setIopaFiles] = useState<(null | { filename: string; original_name: string; tooth_label: string })[]>([]);
   const [opgFile, setOpgFile] = useState<null | { filename: string; original_name: string }>(null);
   const [extraIopaCount, setExtraIopaCount] = useState(0);
@@ -99,12 +108,16 @@ export default function Phase2SubmissionScreen() {
       setTorqueValues(new Array(count).fill(''));
       setHealingAbutmentCuffHeight(new Array(count).fill(''));
       setAccessChannelOpenings(new Array(count).fill(''));
+      // iter-139: seed MUA arrays to match implant count. Resets on every load.
+      setMuaAngulation(new Array(count).fill(''));
+      setMuaCuffHeight(new Array(count).fill(''));
 
       const pType = procRes.data.implant_procedure_type || '';
       setProcedureType(pType);
       // Load the Phase-1 attachment choice so the cuff-height field below can
       // render a catalogue-constrained dropdown instead of free text.
       setAttachmentType(procRes.data.attachment_type || '');
+      setLoadingType(procRes.data.loading_type || '');
       // teeth_present drives the Group A (single) vs Group B (multiple) split
       // for Prosthesis Type options when one of the 4 overlapping procedure
       // types (Immediate Implant, PET, GBR, Guided Surgery) is chosen.
@@ -497,6 +510,83 @@ export default function Phase2SubmissionScreen() {
                 ))}
               </View>
             );})()}
+
+            {/* ─── iter-139: Multi-unit Abutment question + details ───────
+                Only for full-arch + Immediate Loading Phase-1 cases, when
+                Prosthetic Component = Immediate Loading Done. Yes/No is unset
+                by default (user must pick) and, when Yes, renders a blue-themed
+                per-implant details section with Angulation (°) + Cuff Ht (mm)
+                inputs. Prosthesis Type below renders after this section. */}
+            {prostheticComponent === 'Immediate Loading Done'
+             && (['All on 4','All on 6','All on X'].includes(procedureType))
+             && loadingType === 'Immediate Loading' && (
+              <View style={s.muaSection}>
+                <Text style={s.muaTitle}>Multi-unit Abutment Placed</Text>
+                <View style={s.muaPillRow}>
+                  <TouchableOpacity
+                    style={[s.muaPill, multiUnitPlaced === 'yes' && s.muaPillActive]}
+                    onPress={() => setMultiUnitPlaced('yes')}
+                    testID="mua-placed-yes"
+                    /* @ts-ignore */ data-testid="mua-placed-yes"
+                  >
+                    <Text style={[s.muaPillText, multiUnitPlaced === 'yes' && s.muaPillTextActive]}>Yes</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[s.muaPill, multiUnitPlaced === 'no' && s.muaPillActive]}
+                    onPress={() => {
+                      setMultiUnitPlaced('no');
+                      // clear any data the user entered before flipping to No
+                      setMuaAngulation(new Array(implantPositions.length || 1).fill(''));
+                      setMuaCuffHeight(new Array(implantPositions.length || 1).fill(''));
+                    }}
+                    testID="mua-placed-no"
+                    /* @ts-ignore */ data-testid="mua-placed-no"
+                  >
+                    <Text style={[s.muaPillText, multiUnitPlaced === 'no' && s.muaPillTextActive]}>No</Text>
+                  </TouchableOpacity>
+                </View>
+                {multiUnitPlaced === 'yes' && (
+                  <View style={{ marginTop: 12 }}>
+                    <Text style={s.muaSubTitle}>Multi-unit Abutment Details</Text>
+                    {implantPositions.map((pos, idx) => (
+                      <View key={idx} style={s.muaDetailRow}>
+                        <View style={s.muaLabel}>
+                          <Text style={s.muaLabelText}>Tooth #{pos}</Text>
+                        </View>
+                        <View style={s.muaField}>
+                          <Text style={s.muaFieldLabel}>Angulation</Text>
+                          <View style={s.muaInputWrap}>
+                            <TextInput
+                              style={s.muaInput}
+                              value={muaAngulation[idx] || ''}
+                              onChangeText={v => { const u = [...muaAngulation]; u[idx] = v; setMuaAngulation(u); }}
+                              keyboardType="decimal-pad" placeholder="0" maxLength={4}
+                              testID={`mua-angulation-${idx}`}
+                              /* @ts-ignore */ data-testid={`mua-angulation-${idx}`}
+                            />
+                            <Text style={s.muaUnit}>°</Text>
+                          </View>
+                        </View>
+                        <View style={s.muaField}>
+                          <Text style={s.muaFieldLabel}>Cuff Height</Text>
+                          <View style={s.muaInputWrap}>
+                            <TextInput
+                              style={s.muaInput}
+                              value={muaCuffHeight[idx] || ''}
+                              onChangeText={v => { const u = [...muaCuffHeight]; u[idx] = v; setMuaCuffHeight(u); }}
+                              keyboardType="decimal-pad" placeholder="0" maxLength={5}
+                              testID={`mua-cuff-${idx}`}
+                              /* @ts-ignore */ data-testid={`mua-cuff-${idx}`}
+                            />
+                            <Text style={s.muaUnit}>mm</Text>
+                          </View>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
 
             {/* Prosthesis Type — only when Prosthetic Component === Immediate Loading Done.
                 Options depend on Phase 1 procedure_type + teeth count per product spec. */}
