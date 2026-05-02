@@ -10,6 +10,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import api, { getToken } from '../../utils/api';
 import { BACKEND_URL } from '../../utils/config';
 import { safeDocumentPick, safeLaunchCamera, safeLaunchLibrary } from '../../utils/safePicker';
+import BackButton from '../../components/BackButton';
 
 interface Thread {
   id: string;
@@ -412,9 +413,7 @@ export default function ForumThreadScreen() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
       <View style={s.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <Ionicons name="arrow-back" size={24} color="#37474F" />
-        </TouchableOpacity>
+        <BackButton />
         <Text style={s.headerTitle} numberOfLines={1}>{thread.patient_name_display}</Text>
         <TouchableOpacity onPress={toggleBookmark} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} data-testid="forum-bookmark-btn">
           <Ionicons name={thread.bookmarked ? 'bookmark' : 'bookmark-outline'} size={22} color={thread.bookmarked ? '#F9A825' : '#37474F'} />

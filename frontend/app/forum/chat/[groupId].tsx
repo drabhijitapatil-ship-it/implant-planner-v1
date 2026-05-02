@@ -10,6 +10,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import api, { getToken } from '../../../utils/api';
 import { BACKEND_URL } from '../../../utils/config';
 import { safeDocumentPick, safeLaunchCamera, safeLaunchLibrary } from '../../../utils/safePicker';
+import BackButton from '../../../components/BackButton';
 
 interface Message {
   id: string; author_id: string; author_name: string; author_role: string;
@@ -182,9 +183,7 @@ export default function ChatRoomScreen() {
     <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={s.header}>
-          <TouchableOpacity onPress={() => router.back()} hitSlop={{top:12,bottom:12,left:12,right:12}}>
-            <Ionicons name="arrow-back" size={24} color="#37474F" />
-          </TouchableOpacity>
+          <BackButton />
           <View style={{ flex: 1, marginLeft: 10 }}>
             <Text style={s.headerName} numberOfLines={1}>{group.name}</Text>
             <Text style={s.headerSub}>{(group.members || []).length} members{group.locked ? ' • locked' : ''}</Text>

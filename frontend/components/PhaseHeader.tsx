@@ -5,9 +5,8 @@
  * truncation (wraps to a second line on narrow devices).
  */
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { View, Text, StyleSheet } from 'react-native';
+import BackButton from './BackButton';
 
 export function PhaseHeader({
   title,
@@ -22,13 +21,7 @@ export function PhaseHeader({
 }) {
   return (
     <View style={styles.headerBar} testID={testID}>
-      <TouchableOpacity
-        onPress={() => (onBack ? onBack() : router.back())}
-        style={styles.backBtn}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-      >
-        <Ionicons name="arrow-back" size={22} color="#1A73E8" />
-      </TouchableOpacity>
+      <BackButton onPress={onBack} />
       <View style={{ flex: 1 }}>
         <Text style={styles.title}>{title}</Text>
         {!!subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}

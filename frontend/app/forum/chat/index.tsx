@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../../contexts/AuthContext';
 import api from '../../../utils/api';
+import BackButton from '../../../components/BackButton';
 
 interface Group {
   id: string; kind: string; name: string; type: string; photo_url?: string;
@@ -45,12 +46,11 @@ export default function ChatListScreen() {
 
   return (
     <SafeAreaView style={s.screen} edges={['top']}>
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={{top:12,bottom:12,left:12,right:12}}>
-          <Ionicons name="arrow-back" size={24} color="#37474F" />
-        </TouchableOpacity>
-        <Text style={s.headerTitle}>Discussion Forum</Text>
-        <View style={{ width: 24 }} />
+      {/* Floating circular BackButton — the redundant "Discussion Forum"
+          title is gone; the segmented pill below doubles as the screen's
+          identity. */}
+      <View style={s.backBtnWrap}>
+        <BackButton testID="chat-back-btn" />
       </View>
       <View style={s.segmentRow}>
         <View style={s.segment}>
@@ -111,9 +111,10 @@ export default function ChatListScreen() {
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#F5F7FA' },
+  backBtnWrap: { paddingHorizontal: 12, paddingTop: 6, paddingBottom: 0, alignItems: 'flex-start' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#ECEFF1' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#37474F' },
-  segmentRow: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4, alignItems: 'center', backgroundColor: '#F5F7FA' },
+  segmentRow: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 6, alignItems: 'center', backgroundColor: '#F5F7FA' },
   segment: { flexDirection: 'row', backgroundColor: '#ECEFF1', borderRadius: 22, padding: 3, gap: 2 },
   segmentBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 22, paddingVertical: 7, borderRadius: 18 },
   segmentBtnActive: { backgroundColor: '#1565C0' },

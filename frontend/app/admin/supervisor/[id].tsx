@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import BackButton from '../../../components/BackButton';
 import { format } from 'date-fns';
 import api from '../../../utils/api';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -126,9 +127,7 @@ export default function SupervisorDrillDown() {
   return (
     <SafeAreaView style={s.safe}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} data-testid="supervisor-drilldown-back">
-          <Ionicons name="arrow-back" size={22} color="#6A1B9A" />
-        </TouchableOpacity>
+        <BackButton testID="supervisor-drilldown-back" />
         <View style={{ flex: 1 }}>
           <Text style={s.headerTitle} numberOfLines={1}>{supervisorName}</Text>
           <Text style={s.headerSubtitle} numberOfLines={1}>{profile?.email || profile?.username || 'Supervisor performance'}</Text>

@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import BackButton from '../../components/BackButton';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../utils/api';
 
@@ -138,9 +139,7 @@ export default function ImplantLensCaseAlbum() {
     <View style={[st.container, { paddingTop: insets.top }]} data-testid="implantlens-screen">
       {/* Header */}
       <View style={st.header}>
-        <TouchableOpacity onPress={() => router.back()} style={st.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
+        <BackButton />
         <View style={{ flex: 1 }}>
           <Text style={st.title}>ImplantLens</Text>
           <Text style={st.subtitle}>Clinical Case Album</Text>

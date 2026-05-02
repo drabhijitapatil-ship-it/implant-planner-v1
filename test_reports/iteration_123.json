@@ -1,0 +1,64 @@
+{
+  "summary": "Frontend-only verification of the unified circular floating BackButton refactor (iter-123). Tested the most-visible screens — /forum, /forum/chat, /whatsnew?mode=history, /help-workflow?mode=review — at 390x844 (iPhone 13 Pro) on the deployed preview URL, plus a code review of the remaining screens that import BackButton. All key requirements PASS: no 'Discussion Forum' title, floating circular BackButton with 44x44 white fill, 22px radius, iOS-style halo shadow (boxShadow: rgba(0,0,0,0.12) 0px 2px 10px 0px), segmented Forum/Chat toggle shifted up to the top, back navigation working.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Console (all RNW screens)",
+        "issues": [
+          "Deprecation warning: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' — emitted from BackButton.tsx shadow* props. Known RN-Web issue explicitly flagged in review request as safe-to-ignore. Cosmetic only; boxShadow is already correctly produced by RN-Web mapper at runtime."
+        ]
+      },
+      {
+        "screen": "Forum list (/forum) — pre-existing, also present in iter-118",
+        "issues": [
+          "Console error still present: 'Unexpected text node: . A text node cannot be a child of a <View>.' (fires twice on /forum). Not introduced by iter-123 (same error was flagged in iteration_118.json). Likely a stray whitespace/string child in the tags/filters JSX — cosmetic warning only, does not break any functionality."
+        ]
+      }
+    ]
+  },
+  "verified_behaviors": {
+    "forum_back_btn": "PASS — testID 'forum-back-btn' renders: width=44px, height=44px, borderRadius=22px, backgroundColor=rgb(255,255,255), boxShadow=rgba(0,0,0,0.12) 0px 2px 10px 0px, absolutely positioned at (12, 6) top-left. Chevron-left icon color matches #1A2332 (verified in BackButton.tsx).",
+    "forum_no_title": "PASS — 'Discussion Forum' string is ABSENT from forum list screen body text.",
+    "forum_toggle_shifted_up": "PASS — Forum/Chat segmented pill Y-position = 57px (sits right below the 44px BackButton + padding). Previously it was below a header title row — now correctly at the top.",
+    "chat_back_btn": "PASS — testID 'chat-back-btn' renders with identical 44x44 / 22r / white / halo-shadow styling. Tap navigates away from /forum/chat back to /forum.",
+    "chat_no_title": "PASS — 'Discussion Forum' string is ABSENT from chat list screen.",
+    "whatsnew_close_btn": "PASS — testID 'whatsnew-close-btn' renders with identical BackButton styling on /whatsnew?mode=history.",
+    "workflow_close_btn": "PASS — testID 'workflow-close-btn' renders with identical BackButton styling on /help-workflow?mode=review. (Note: when mode is NOT 'review', `isFirstRun=true` and the BackButton is intentionally hidden — by design, per code comment; first-run welcome flow uses the 'Got it' primary button instead.)",
+    "shared_component_consistency": "PASS — All four verified instances produced byte-identical computed styles (44x44, 22r, rgb(255,255,255), boxShadow rgba(0,0,0,0.12) 0px 2px 10px 0px) confirming the single shared BackButton component is being used everywhere.",
+    "no_back_text_visible": "PASS — No '← Back' string rendered on any of the tested screens.",
+    "tile_menu_regression": "PASS — Hamburger → tile-forum tile still opens /forum correctly (same tile-grid menu from iter-118)."
+  },
+  "not_deeply_tested_but_code_reviewed": {
+    "forum_thread_detail": "Code in /app/frontend/app/forum/[threadId].tsx imports BackButton (verified via grep). Live test skipped because the test session only had a draft thread accessible — but the shared BackButton component is the same object, so styling consistency is guaranteed.",
+    "forum_chat_room": "Code in /app/frontend/app/forum/chat/[groupId].tsx imports BackButton.",
+    "admin_student_drilldown": "Code in /app/frontend/app/admin/student/[id].tsx uses BackButton with testID 'student-drilldown-back'.",
+    "admin_supervisor_drilldown": "Code in /app/frontend/app/admin/supervisor/[id].tsx uses BackButton with testID 'supervisor-drilldown-back'.",
+    "implantlens": "Code in /app/frontend/app/implantlens/index.tsx and [caseId].tsx use BackButton. Live nav attempt got redirected to login (session cookie was lost during a prior full page reload) — not a functional bug, just a test-harness quirk.",
+    "drilling_protocol_modal": "Code in /app/frontend/components/DrillingProtocol.tsx uses BackButton with testID 'protocol-back-btn' and onPress=onClose.",
+    "phase_header": "Code in /app/frontend/components/PhaseHeader.tsx uses BackButton internally."
+  },
+  "test_report_links": [],
+  "action_items": [
+    "(Optional / cosmetic) Migrate BackButton shadow* props to `boxShadow: '0px 2px 10px rgba(0,0,0,0.12)'` on web to silence the RN-Web deprecation warning (visual output is already correct).",
+    "(Pre-existing, unrelated to iter-123) Fix the 'Unexpected text node' console error on /forum — carried over from iter-118. Likely a stray space/string child in the `tagsFilter` or `filters` JSX in /app/frontend/app/forum/index.tsx."
+  ],
+  "critical_code_review_comments": [
+    "BackButton component is clean, well-documented, and correctly abstracts haptics + router.back + style. +1.",
+    "Good use of hitSlop={10} for accessibility — 44px target + 10px slop exceeds Apple HIG and WCAG 2.5.5.",
+    "Minor: BackButton uses Ionicons 'chevron-back' but the review request mentions a 'thin black chevron-left'. Ionicons chevron-back weight is regular, not thin. If the reference image had an explicitly thin weight, consider Ionicons 'chevron-back-outline' or a custom SVG. Current rendering matches the uploaded reference well enough — no blocker.",
+    "forum/index.tsx: obsolete `header`, `headerTitle`, `backBtn`, `backTxt` StyleSheet entries are now dead code since the in-flow header was removed — safe to clean up in a follow-up.",
+    "forum/chat/index.tsx: same dead `header`/`headerTitle` style entries — safe to clean up later.",
+    "help-workflow.tsx: BackButton is conditional on `!isFirstRun` (line 131). This is correct by design but means /help-workflow without ?mode=review intentionally has NO back button. Document this in QA scripts so testers don't flag it as a regression."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100% (all 4 live-tested screens + code review of remaining 7 screens pass)"},
+  "test_credentials": "Used /app/memory/test_credentials.md — Abhijit.patil / Admin@123 (Admin / Implant In-Charge). No credential issues.",
+  "seed_data_creation": "None.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter-123 visual refactor is PASS. When navigating to /help-workflow for testing, always append ?mode=review otherwise the BackButton is intentionally hidden (isFirstRun branch). When testing via page.goto to protected routes directly, login first and avoid full-page reloads that drop the session — use router navigation within the same page context instead. The 'Unexpected text node' console error on /forum and the 'shadow*' deprecation warning are pre-existing known issues and should NOT be flagged as iter-123 regressions.",
+  "rca of the issue": "N/A — no functional bugs found in iter-123 scope."
+}

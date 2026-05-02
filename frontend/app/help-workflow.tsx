@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import BackButton from '../components/BackButton';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../utils/api';
 
@@ -128,9 +129,7 @@ export default function HelpWorkflowScreen() {
     <SafeAreaView style={styles.safe} testID="help-workflow-screen">
       <View style={styles.header}>
         {!isFirstRun && (
-          <TouchableOpacity onPress={close} style={styles.backBtn} testID="workflow-close-btn">
-            <Ionicons name="arrow-back" size={22} color="#0D47A1" />
-          </TouchableOpacity>
+          <BackButton onPress={close} testID="workflow-close-btn" />
         )}
         <Text style={styles.headerTitle}>How it works</Text>
         <View style={{ width: 40 }} />

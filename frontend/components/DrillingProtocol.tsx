@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import BackButton from './BackButton';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import api from '../utils/api';
@@ -286,10 +287,7 @@ export default function DrillingProtocolScreen({
       <ScrollView contentContainerStyle={p.scroll} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={p.headerRow}>
-          <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            data-testid="protocol-back-btn">
-            <Ionicons name="arrow-back" size={24} color="#263238" />
-          </TouchableOpacity>
+          <BackButton onPress={onClose} testID="protocol-back-btn" />
           <Text style={p.headerTitle}>Drilling Protocol</Text>
           <View style={{ width: 24 }} />
         </View>
