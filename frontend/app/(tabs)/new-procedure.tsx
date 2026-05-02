@@ -273,6 +273,12 @@ export default function NewProcedureScreen() {
     ridge_contour: '',
     soft_tissue_thickness: '',
     keratinized_mucosa: '',
+    // Per-cluster intraoral findings (non-full-arch, ≥2 missing teeth, ≠ Single
+    // Conventional Implant). Keyed by the leader-tooth of each missing run so
+    // an adjacent cluster shares one set of values, while non-adjacent gaps
+    // each get their own card. Falls back to the legacy single fields above
+    // for older cases / single-tooth flows.
+    clinical_exam_per_site: {} as Record<string, { ridge_contour?: string; soft_tissue_thickness?: string; keratinized_mucosa?: string }>,
     periodontal_status: '',
     // Occlusal Analysis (non-full-arch)
     occlusal_scheme: '',
@@ -301,6 +307,11 @@ export default function NewProcedureScreen() {
   const isNonFullArch = NON_FULL_ARCH_TYPES.has(formData.implant_procedure_type);
   const isClinicalExamGroup = CLINICAL_EXAM_GROUP.has(formData.implant_procedure_type);
   const prostheticOptions = getProstheticOptions(formData.implant_procedure_type, formData.loading_type);
+  // When a non-full-arch procedure is paired with an Overdenture-with-Attachment
+  // prosthetic plan, the case is biomechanically full-arch (the attachment
+  // splints the entire arch). We therefore SKIP the FDI missing-teeth chart and
+  // render the Clinical Examination as a full-arch layout.
+  const isOverdentureNonFullArch = isNonFullArch && formData.prosthetic_plan === 'Overdenture with Attachment';
 
   const FORM_STORAGE_KEY = `new_procedure_form_${user?.id || 'anon'}`;
   const appState = useRef(AppState.currentState);
@@ -356,6 +367,7 @@ export default function NewProcedureScreen() {
                 ridge_contour: proc.ridge_contour || '',
                 soft_tissue_thickness: proc.soft_tissue_thickness || '',
                 keratinized_mucosa: proc.keratinized_mucosa || '',
+                clinical_exam_per_site: (proc.clinical_exam_per_site && typeof proc.clinical_exam_per_site === 'object') ? proc.clinical_exam_per_site : {},
                 periodontal_status: proc.periodontal_status || '',
                 // Occlusal Analysis (non-full-arch)
                 occlusal_scheme: proc.occlusal_scheme || '',
@@ -627,8 +639,31 @@ export default function NewProcedureScreen() {
 
     setLoading(true);
     try {
+      // Per-cluster intraoral findings → flatten the FIRST run's values into the
+      // legacy single fields so the existing case-detail / PDF renderers keep
+      // working without changes. Only fires when we actually rendered the
+      // per-cluster cards (≥2 missing teeth, non-Single Conventional Implant,
+      // not Overdenture-with-Attachment).
+      const usingPerSite =
+        (sanitized.missing_teeth || []).length >= 2 &&
+        sanitized.implant_procedure_type !== 'Single Conventional Implant' &&
+        !(NON_FULL_ARCH_TYPES.has(sanitized.implant_procedure_type) && sanitized.prosthetic_plan === 'Overdenture with Attachment');
+      let legacyRidge = sanitized.ridge_contour;
+      let legacySoft = sanitized.soft_tissue_thickness;
+      let legacyKera = sanitized.keratinized_mucosa;
+      if (usingPerSite) {
+        const runs = findMissingRuns(sanitized.missing_teeth || []);
+        const firstLeader = runs.length > 0 ? (clusterLeader(runs[0].positions) || runs[0].positions[0]) : '';
+        const firstSite = (sanitized.clinical_exam_per_site || {})[firstLeader] || {};
+        legacyRidge = firstSite.ridge_contour || '';
+        legacySoft = firstSite.soft_tissue_thickness || '';
+        legacyKera = firstSite.keratinized_mucosa || '';
+      }
       const payload = {
         ...sanitized,
+        ridge_contour: legacyRidge,
+        soft_tissue_thickness: legacySoft,
+        keratinized_mucosa: legacyKera,
         patient_name: sanitizeString(sanitized.patient_name),
         registration_number: sanitizeString(sanitized.registration_number),
         receipt_number: sanitizeString(sanitized.receipt_number),
@@ -972,8 +1007,36 @@ export default function NewProcedureScreen() {
         )}
       </View>
 
+      {/* ─── Prosthetic Treatment Plan ─── (moved here per iter-134; now appears
+            BEFORE the FDI chart so that an Overdenture-with-Attachment choice
+            can flip the case into a full-arch protocol and skip teeth selection.) */}
+      {prostheticOptions.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Prosthetic Treatment Plan</Text>
+          <Dropdown label="Prosthetic Plan" value={formData.prosthetic_plan}
+            options={prostheticOptions} onChange={v => {
+              updateForm('prosthetic_plan', v);
+              // Flip into Overdenture-with-Attachment full-arch protocol → wipe
+              // any previously-chosen missing teeth (FDI chart will be hidden).
+              if (v === 'Overdenture with Attachment' && isNonFullArch) {
+                updateForm('missing_teeth', []);
+                updateForm('edentulous_site_measurements', {});
+                updateForm('clinical_exam_per_site', {});
+              }
+            }} />
+          {formData.prosthetic_plan === 'Other' && (
+            <View style={styles.fieldContainer}>
+              <Text style={styles.label}>Specify Prosthetic Plan</Text>
+              <TextInput style={styles.input} value={formData.prosthetic_plan_other}
+                onChangeText={v => updateForm('prosthetic_plan_other', v)}
+                placeholder="Enter custom prosthetic plan" multiline />
+            </View>
+          )}
+        </View>
+      )}
+
       {/* ─── FDI Chart (Non-Full-Arch Only) — Missing Teeth selector ─── */}
-      {formData.implant_procedure_type && !isFullArch && (() => {
+      {formData.implant_procedure_type && !isFullArch && !isOverdentureNonFullArch && (() => {
         const ptype = formData.implant_procedure_type;
         const EXTRACT_SET = new Set(['Immediate Implant', 'Partial Extraction Therapy']);
         const isExtractFlow = EXTRACT_SET.has(ptype);
@@ -1061,8 +1124,10 @@ export default function NewProcedureScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Clinical Examination</Text>
 
-          {/* Intraoral Examination – Non-Full-Arch (Single, Multiple, GBR, Guided Surgery) */}
-          {isClinicalExamGroup && (
+          {/* Intraoral Examination – Non-Full-Arch (Single, Multiple, GBR, Guided Surgery)
+              Skipped when Overdenture-with-Attachment is selected — that case
+              uses the full-arch block below. */}
+          {isClinicalExamGroup && !isOverdentureNonFullArch && (
             <>
               <Text style={styles.subSectionTitle}>Intraoral Examination</Text>
               <Text style={[styles.subSectionTitle, { fontSize: 14, color: '#1565C0', marginTop: 4 }]}>Edentulous Site</Text>
@@ -1082,6 +1147,13 @@ export default function NewProcedureScreen() {
                     const next = { ...(formData.edentulous_site_measurements || {}) };
                     next[tooth] = { ...(next[tooth] || {}), md: v };
                     updateForm('edentulous_site_measurements', next);
+                  };
+                  // Per-cluster intraoral findings setter — keyed by the leader
+                  // tooth of each missing run so adjacent teeth share one set.
+                  const setSite = (key: string, field: 'ridge_contour' | 'soft_tissue_thickness' | 'keratinized_mucosa', v: string) => {
+                    const next = { ...(formData.clinical_exam_per_site || {}) };
+                    next[key] = { ...(next[key] || {}), [field]: v };
+                    updateForm('clinical_exam_per_site', next);
                   };
                   return (
                     <View style={{ marginBottom: 8 }}>
@@ -1132,6 +1204,20 @@ export default function NewProcedureScreen() {
                                   />
                                 </View>
                               </View>
+                              {/* Per-site intraoral findings (this isolated tooth = its own site) */}
+                              {formData.implant_procedure_type !== 'Single Conventional Implant' && (() => {
+                                const site = (formData.clinical_exam_per_site || {})[tooth] || {};
+                                return (
+                                  <View style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#ECEFF1' }}>
+                                    <Dropdown label="Ridge Contour" value={site.ridge_contour || ''}
+                                      options={RIDGE_CONTOUR_OPTIONS} onChange={(v) => setSite(tooth, 'ridge_contour', v)} data-testid={`ridge-contour-${tooth}`} />
+                                    <Dropdown label="Soft Tissue Thickness" value={site.soft_tissue_thickness || ''}
+                                      options={SOFT_TISSUE_OPTIONS} onChange={(v) => setSite(tooth, 'soft_tissue_thickness', v)} data-testid={`soft-tissue-${tooth}`} />
+                                    <Dropdown label="Keratinized Mucosa" value={site.keratinized_mucosa || ''}
+                                      options={KERATINIZED_MUCOSA_OPTIONS} onChange={(v) => setSite(tooth, 'keratinized_mucosa', v)} data-testid={`keratinized-${tooth}`} />
+                                  </View>
+                                );
+                              })()}
                             </View>
                           );
                         }
@@ -1181,6 +1267,23 @@ export default function NewProcedureScreen() {
                                 </View>
                               );
                             })}
+                            {/* Per-cluster intraoral findings — adjacent missing
+                                teeth share ONE set of dropdowns (continuous
+                                edentulous span = one site). Singletons render
+                                their own set above. */}
+                            {(() => {
+                              const site = (formData.clinical_exam_per_site || {})[leader] || {};
+                              return (
+                                <View style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#ECEFF1' }}>
+                                  <Dropdown label="Ridge Contour" value={site.ridge_contour || ''}
+                                    options={RIDGE_CONTOUR_OPTIONS} onChange={(v) => setSite(leader, 'ridge_contour', v)} data-testid={`ridge-contour-${leader}`} />
+                                  <Dropdown label="Soft Tissue Thickness" value={site.soft_tissue_thickness || ''}
+                                    options={SOFT_TISSUE_OPTIONS} onChange={(v) => setSite(leader, 'soft_tissue_thickness', v)} data-testid={`soft-tissue-${leader}`} />
+                                  <Dropdown label="Keratinized Mucosa" value={site.keratinized_mucosa || ''}
+                                    options={KERATINIZED_MUCOSA_OPTIONS} onChange={(v) => setSite(leader, 'keratinized_mucosa', v)} data-testid={`keratinized-${leader}`} />
+                                </View>
+                              );
+                            })()}
                           </View>
                         );
                       })}
@@ -1216,19 +1319,34 @@ export default function NewProcedureScreen() {
                   </View>
                 </>
               )}
-              <Dropdown label="Ridge Contour" value={formData.ridge_contour}
-                options={RIDGE_CONTOUR_OPTIONS} onChange={v => updateForm('ridge_contour', v)} />
-              <Dropdown label="Soft Tissue Thickness" value={formData.soft_tissue_thickness}
-                options={SOFT_TISSUE_OPTIONS} onChange={v => updateForm('soft_tissue_thickness', v)} />
-              <Dropdown label="Keratinized Mucosa" value={formData.keratinized_mucosa}
-                options={KERATINIZED_MUCOSA_OPTIONS} onChange={v => updateForm('keratinized_mucosa', v)} />
+              {/* Single-site (or empty) dropdowns. When ≥2 missing teeth are
+                  selected and the procedure is NOT Single Conventional Implant,
+                  we instead render Ridge Contour / Soft Tissue / Keratinized
+                  per-cluster INSIDE each cluster card above. */}
+              {((formData.missing_teeth || []).length < 2 || formData.implant_procedure_type === 'Single Conventional Implant') && (
+                <>
+                  <Dropdown label="Ridge Contour" value={formData.ridge_contour}
+                    options={RIDGE_CONTOUR_OPTIONS} onChange={v => updateForm('ridge_contour', v)} />
+                  <Dropdown label="Soft Tissue Thickness" value={formData.soft_tissue_thickness}
+                    options={SOFT_TISSUE_OPTIONS} onChange={v => updateForm('soft_tissue_thickness', v)} />
+                  <Dropdown label="Keratinized Mucosa" value={formData.keratinized_mucosa}
+                    options={KERATINIZED_MUCOSA_OPTIONS} onChange={v => updateForm('keratinized_mucosa', v)} />
+                </>
+              )}
             </>
           )}
 
-          {/* Intraoral Examination – Full-Arch (All on 4/6/X) */}
-          {isFullArch && (
+          {/* Intraoral Examination – Full-Arch (All on 4/6/X) OR
+              Non-Full-Arch + Overdenture-with-Attachment (treated as full-arch) */}
+          {(isFullArch || isOverdentureNonFullArch) && (
             <>
               <Text style={styles.subSectionTitle}>Intraoral Examination</Text>
+              {/* Non-full-arch + Overdenture flow doesn't otherwise collect Arch
+                  in Procedure Information, so surface it here. */}
+              {isOverdentureNonFullArch && (
+                <Dropdown label="Arch" value={formData.arch}
+                  options={['Maxillary', 'Mandibular']} onChange={v => updateForm('arch', v)} required data-testid="overdenture-arch-dropdown" />
+              )}
               <Dropdown label={formData.arch === 'Maxillary' ? 'Maxillary Arch Condition' : formData.arch === 'Mandibular' ? 'Mandibular Arch Condition' : 'Arch Condition'}
                 value={formData.arch_condition}
                 options={ARCH_CONDITION_OPTIONS} onChange={v => updateForm('arch_condition', v)} />
@@ -1404,22 +1522,8 @@ export default function NewProcedureScreen() {
         </View>
       </View>
 
-      {/* ─── Prosthetic Treatment Plan ─── */}
-      {prostheticOptions.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Prosthetic Treatment Plan</Text>
-          <Dropdown label="Prosthetic Plan" value={formData.prosthetic_plan}
-            options={prostheticOptions} onChange={v => updateForm('prosthetic_plan', v)} />
-          {formData.prosthetic_plan === 'Other' && (
-            <View style={styles.fieldContainer}>
-              <Text style={styles.label}>Specify Prosthetic Plan</Text>
-              <TextInput style={styles.input} value={formData.prosthetic_plan_other}
-                onChangeText={v => updateForm('prosthetic_plan_other', v)}
-                placeholder="Enter custom prosthetic plan" multiline />
-            </View>
-          )}
-        </View>
-      )}
+      {/* Prosthetic Treatment Plan was moved up to immediately follow Procedure
+          Information (iter-134). Empty placeholder retained intentionally. */}
 
       {/* ─── CBCT Report Upload (Mandatory: 2 minimum) ─── */}
       <View style={styles.section}>
