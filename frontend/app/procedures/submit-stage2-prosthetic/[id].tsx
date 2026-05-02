@@ -337,6 +337,45 @@ export default function Phase4Step1Screen() {
               <Ionicons name="document-text-outline" size={20} color="#00695C" />
               <Text style={s.sectionTitle}>Notes</Text>
             </View>
+            {/* iter-140: one-tap Copy MUA from Phase 2 — only surfaces when
+                Phase 2 captured Yes + per-tooth details. Non-destructive:
+                appends to existing notes with a separator, never overwrites. */}
+            {(() => {
+              const mua = procedure?.phase2_data?.multi_unit_abutment_placed;
+              const details = procedure?.phase2_data?.multi_unit_abutment_details;
+              const hasMua = mua === 'yes' && Array.isArray(details) && details.length > 0;
+              if (!hasMua) return null;
+              const copyMuaToNotes = () => {
+                const lines = details.map((r: any) => {
+                  const t = r?.tooth ?? '—';
+                  const a = (r?.angulation ?? '').toString().trim();
+                  const c = (r?.cuff_height ?? '').toString().trim();
+                  const aStr = a ? `${a}°` : '—';
+                  const cStr = c ? `${c} mm` : '—';
+                  return `- Tooth ${t}: Angulation ${aStr}, Cuff Height ${cStr}`;
+                }).join('\n');
+                const block = `Multi-unit Abutments (from Phase 2):\n${lines}`;
+                const existing = (studentNotes || '').trim();
+                if (existing.includes('Multi-unit Abutments (from Phase 2):')) {
+                  Alert.alert('Already copied', 'MUA details are already in the notes. Edit freely below.');
+                  return;
+                }
+                const next = existing ? `${existing}\n\n${block}` : block;
+                setStudentNotes(next);
+                Alert.alert('Copied', `Multi-unit Abutment details (${details.length} ${details.length === 1 ? 'tooth' : 'teeth'}) added to ${notesLabel}. You can still edit them below.`);
+              };
+              return (
+                <TouchableOpacity
+                  style={s.copyMuaBtn}
+                  onPress={copyMuaToNotes}
+                  testID="copy-mua-to-notes-btn"
+                  /* @ts-ignore */ data-testid="copy-mua-to-notes-btn"
+                >
+                  <Ionicons name="copy-outline" size={16} color="#0277BD" />
+                  <Text style={s.copyMuaText}>Copy MUA from Phase 2 ({details.length})</Text>
+                </TouchableOpacity>
+              );
+            })()}
             <View style={s.field}>
               <Text style={s.label}>{notesLabel}</Text>
               <TextInput style={[s.input, s.textArea]} value={studentNotes} onChangeText={setStudentNotes}
@@ -387,4 +426,7 @@ const s = StyleSheet.create({
   impressionLabel: { flex: 1, fontSize: 14, color: '#555' },
   submitBtn: { flexDirection: 'row', backgroundColor: '#6A1B9A', borderRadius: 12, padding: 16, alignItems: 'center', justifyContent: 'center', gap: 8 },
   submitText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  // iter-140: Copy MUA from Phase 2 affordance (blue theme matches Phase 2 MUA card)
+  copyMuaBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: '#E1F5FE', borderColor: '#B3E5FC', borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 10 },
+  copyMuaText: { fontSize: 12, fontWeight: '700', color: '#0277BD', letterSpacing: 0.2 },
 });
