@@ -17,6 +17,7 @@ import {
   DRILLING_TYPE_OPTIONS,
   PROSTHETIC_COMPONENT_OPTIONS,
 } from '../../../constants/checklist';
+import { getCuffHeightsFor } from '../../../constants/attachmentCuffCatalogue';
 
 export default function Phase2SubmissionScreen() {
   const { id } = useLocalSearchParams();
@@ -63,6 +64,10 @@ export default function Phase2SubmissionScreen() {
 
   // Post Surgical Radiograph uploads
   const [procedureType, setProcedureType] = useState('');
+  // iter-138: Phase-1 "Type of Attachment" (if any) so Phase 2 can auto-suggest
+  // the manufacturer-recommended cuff-height variants instead of free text.
+  const [attachmentType, setAttachmentType] = useState('');
+  const [openCuffPicker, setOpenCuffPicker] = useState<number | null>(null);
   const [iopaFiles, setIopaFiles] = useState<(null | { filename: string; original_name: string; tooth_label: string })[]>([]);
   const [opgFile, setOpgFile] = useState<null | { filename: string; original_name: string }>(null);
   const [extraIopaCount, setExtraIopaCount] = useState(0);
@@ -97,6 +102,9 @@ export default function Phase2SubmissionScreen() {
 
       const pType = procRes.data.implant_procedure_type || '';
       setProcedureType(pType);
+      // Load the Phase-1 attachment choice so the cuff-height field below can
+      // render a catalogue-constrained dropdown instead of free text.
+      setAttachmentType(procRes.data.attachment_type || '');
       // teeth_present drives the Group A (single) vs Group B (multiple) split
       // for Prosthesis Type options when one of the 4 overlapping procedure
       // types (Immediate Implant, PET, GBR, Guided Surgery) is chosen.
@@ -423,26 +431,72 @@ export default function Phase2SubmissionScreen() {
             {renderDropdown('Prosthetic Component', prostheticComponent, PROSTHETIC_COMPONENT_OPTIONS,
               prostheticOpen, setProstheticOpen, setProstheticComponent)}
 
-            {/* Healing Abutment Cuff Height - per implant */}
-            {prostheticComponent === 'Healing Abutment Placed' && (
+            {/* Healing Abutment Cuff Height - per implant
+                iter-138: when the Phase-1 attachment has a known manufacturer
+                catalogue (e.g. Locator R-Tx ships 1-6 mm), we swap the free
+                TextInput for a dropdown constrained to stocked SKUs. When no
+                catalogue applies (bar-type, Other, missing), we fall back to
+                the legacy numeric TextInput so bespoke cases still work. */}
+            {prostheticComponent === 'Healing Abutment Placed' && (() => {
+              const catalogue = getCuffHeightsFor(attachmentType);
+              return (
               <View style={s.torqueSection}>
                 <Text style={s.torqueTitle}>Healing Abutment Cuff Height (mm)</Text>
+                {catalogue && (
+                  <Text style={[s.torqueTitle, { fontSize: 11, fontWeight: '600', color: '#1565C0', marginTop: -4, marginBottom: 8 }]}>
+                    Catalogue: {attachmentType} · {catalogue.length} SKU{catalogue.length === 1 ? '' : 's'}
+                  </Text>
+                )}
                 {healingAbutmentCuffHeight.map((val, idx) => (
-                  <View key={idx} style={s.torqueRow}>
+                  <View key={idx} style={[s.torqueRow, { flexWrap: 'wrap' }]}>
                     <View style={s.torqueLabel}>
                       <Text style={s.torqueLabelText}>
                         Implant {idx + 1}{implantPositions[idx] ? ` (#${implantPositions[idx]})` : ''}
                       </Text>
                     </View>
-                    <TextInput style={s.torqueInput} value={val}
-                      onChangeText={v => { const u = [...healingAbutmentCuffHeight]; u[idx] = v; setHealingAbutmentCuffHeight(u); }}
-                      keyboardType="decimal-pad" placeholder="mm" maxLength={5}
-                      data-testid={`healing-abutment-cuff-${idx}`} />
+                    {catalogue ? (
+                      <View style={{ flex: 1, minWidth: 160 }}>
+                        <TouchableOpacity
+                          style={[s.torqueInput, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10 }]}
+                          onPress={() => setOpenCuffPicker(openCuffPicker === idx ? null : idx)}
+                          testID={`healing-abutment-cuff-picker-${idx}`}
+                          /* @ts-ignore */ data-testid={`healing-abutment-cuff-picker-${idx}`}
+                        >
+                          <Text style={{ color: val ? '#1A2332' : '#999' }}>{val || 'Select mm'}</Text>
+                          <Ionicons name={openCuffPicker === idx ? 'chevron-up' : 'chevron-down'} size={16} color="#666" />
+                        </TouchableOpacity>
+                        {openCuffPicker === idx && (
+                          <View style={{ borderWidth: 1, borderColor: '#B3D4FC', borderRadius: 6, marginTop: 4, backgroundColor: '#FFF', maxHeight: 220 }}>
+                            <ScrollView nestedScrollEnabled>
+                              {catalogue.map(opt => (
+                                <TouchableOpacity
+                                  key={opt}
+                                  style={{ paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#ECEFF1', backgroundColor: val === opt ? '#E3F2FD' : '#FFF' }}
+                                  onPress={() => {
+                                    const u = [...healingAbutmentCuffHeight]; u[idx] = opt; setHealingAbutmentCuffHeight(u);
+                                    setOpenCuffPicker(null);
+                                  }}
+                                  testID={`healing-abutment-cuff-${idx}-option-${opt}`}
+                                  /* @ts-ignore */ data-testid={`healing-abutment-cuff-${idx}-option-${opt}`}
+                                >
+                                  <Text style={{ fontWeight: val === opt ? '700' : '500', color: '#1A2332' }}>{opt} mm</Text>
+                                </TouchableOpacity>
+                              ))}
+                            </ScrollView>
+                          </View>
+                        )}
+                      </View>
+                    ) : (
+                      <TextInput style={s.torqueInput} value={val}
+                        onChangeText={v => { const u = [...healingAbutmentCuffHeight]; u[idx] = v; setHealingAbutmentCuffHeight(u); }}
+                        keyboardType="decimal-pad" placeholder="mm" maxLength={5}
+                        data-testid={`healing-abutment-cuff-${idx}`} />
+                    )}
                     <Text style={s.torqueUnit}>mm</Text>
                   </View>
                 ))}
               </View>
-            )}
+            );})()}
 
             {/* Prosthesis Type — only when Prosthetic Component === Immediate Loading Done.
                 Options depend on Phase 1 procedure_type + teeth count per product spec. */}
