@@ -587,44 +587,44 @@ export default function Phase2SubmissionScreen() {
                   <View style={{ marginTop: 12 }}>
                     <Text style={s.muaSubTitle}>Multi-unit Abutment Details</Text>
                     {implantPositions.map((pos, idx) => (
-                      <View key={idx} style={s.muaDetailRow}>
-                        <View style={s.muaLabel}>
-                          <Text style={s.muaLabelText}>Tooth #{pos}</Text>
-                        </View>
-                        <View style={s.muaField}>
-                          <Text style={s.muaFieldLabel}>Angulation</Text>
+                      <View key={idx} style={s.muaToothCard}>
+                        <Text style={s.muaToothHeader}>Tooth #{pos}</Text>
+                        <View style={s.muaParamRow}>
+                          <Text style={s.muaParamLabel}>Angulation</Text>
+                          <Text style={s.muaParamDash}>-</Text>
                           <View style={s.muaInputWrap}>
                             <TextInput
                               style={s.muaInput}
                               value={muaAngulation[idx] || ''}
                               onChangeText={v => { const u = [...muaAngulation]; u[idx] = v; setMuaAngulation(u); }}
-                              keyboardType="decimal-pad" placeholder="0" maxLength={4}
+                              keyboardType="decimal-pad" placeholder="0" maxLength={2}
                               testID={`mua-angulation-${idx}`}
                               /* @ts-ignore */ data-testid={`mua-angulation-${idx}`}
                             />
-                            <Text style={s.muaUnit}>°</Text>
                           </View>
+                          <Text style={s.muaUnit}>°</Text>
                           {!!muaAngleError(muaAngulation[idx] || '') && (
-                            <Text style={s.muaErrorText} testID={`mua-angulation-err-${idx}`}>
+                            <Text style={s.muaErrorTextInline} testID={`mua-angulation-err-${idx}`}>
                               {muaAngleError(muaAngulation[idx] || '')}
                             </Text>
                           )}
                         </View>
-                        <View style={s.muaField}>
-                          <Text style={s.muaFieldLabel}>Cuff Height</Text>
+                        <View style={s.muaParamRow}>
+                          <Text style={s.muaParamLabel}>Cuff Height</Text>
+                          <Text style={s.muaParamDash}>-</Text>
                           <View style={s.muaInputWrap}>
                             <TextInput
                               style={s.muaInput}
                               value={muaCuffHeight[idx] || ''}
                               onChangeText={v => { const u = [...muaCuffHeight]; u[idx] = v; setMuaCuffHeight(u); }}
-                              keyboardType="decimal-pad" placeholder="0" maxLength={5}
+                              keyboardType="decimal-pad" placeholder="0" maxLength={2}
                               testID={`mua-cuff-${idx}`}
                               /* @ts-ignore */ data-testid={`mua-cuff-${idx}`}
                             />
-                            <Text style={s.muaUnit}>mm</Text>
                           </View>
+                          <Text style={s.muaUnit}>mm</Text>
                           {!!muaCuffError(muaCuffHeight[idx] || '') && (
-                            <Text style={s.muaErrorText} testID={`mua-cuff-err-${idx}`}>
+                            <Text style={s.muaErrorTextInline} testID={`mua-cuff-err-${idx}`}>
                               {muaCuffError(muaCuffHeight[idx] || '')}
                             </Text>
                           )}
@@ -1003,7 +1003,7 @@ const s = StyleSheet.create({
   ynNo: { borderColor: '#F44336', backgroundColor: '#F44336' },
   ynText: { fontSize: 13, color: '#666', fontWeight: '600' },
   ynTextActive: { color: '#FFF' },
-  // iter-139: Multi-unit Abutment (blue theme — matches uploadSection family)
+  // iter-141: Multi-unit Abutment (blue theme — redesigned for clean alignment)
   muaSection: { backgroundColor: '#E1F5FE', borderColor: '#B3E5FC', borderWidth: 1.5, borderRadius: 14, padding: 16, marginBottom: 14, shadowColor: '#0277BD', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2 },
   muaTitle: { fontSize: 15, fontWeight: '700', color: '#0277BD', marginBottom: 12, letterSpacing: 0.3 },
   muaSubTitle: { fontSize: 13, fontWeight: '700', color: '#01579B', marginBottom: 10, letterSpacing: 0.2 },
@@ -1012,13 +1012,14 @@ const s = StyleSheet.create({
   muaPillActive: { borderColor: '#0277BD', backgroundColor: '#0277BD' },
   muaPillText: { fontSize: 14, fontWeight: '700', color: '#0277BD', letterSpacing: 0.3 },
   muaPillTextActive: { color: '#FFF' },
-  muaDetailRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 12, flexWrap: 'wrap' },
-  muaLabel: { backgroundColor: '#B3E5FC', paddingHorizontal: 10, paddingVertical: 10, borderRadius: 10, minWidth: 80, alignItems: 'center', justifyContent: 'center' },
-  muaLabelText: { fontSize: 13, fontWeight: '700', color: '#01579B' },
-  muaField: { flex: 1, minWidth: 120 },
-  muaFieldLabel: { fontSize: 11, fontWeight: '600', color: '#0277BD', marginBottom: 4, letterSpacing: 0.2 },
-  muaInputWrap: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#81D4FA', borderRadius: 10, backgroundColor: '#FFF', paddingHorizontal: 8 },
-  muaInput: { flex: 1, paddingVertical: 10, fontSize: 15, fontWeight: '600', color: '#01579B' },
-  muaUnit: { fontSize: 13, fontWeight: '600', color: '#0277BD', paddingLeft: 4 },
-  muaErrorText: { fontSize: 11, color: '#D32F2F', marginTop: 4, fontWeight: '600' },
+  // Per-tooth card: white card holding header + 2 stacked param rows
+  muaToothCard: { backgroundColor: '#FFF', borderColor: '#B3E5FC', borderWidth: 1, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 10 },
+  muaToothHeader: { fontSize: 14, fontWeight: '700', color: '#01579B', marginBottom: 8, letterSpacing: 0.3 },
+  muaParamRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4 },
+  muaParamLabel: { width: 100, fontSize: 13, color: '#0277BD', fontWeight: '600' },
+  muaParamDash: { width: 14, fontSize: 13, color: '#0277BD', fontWeight: '600', textAlign: 'center' },
+  muaInputWrap: { width: 64, height: 36, borderWidth: 1.5, borderColor: '#81D4FA', borderRadius: 8, backgroundColor: '#F5FBFF', justifyContent: 'center', overflow: 'hidden' },
+  muaInput: { width: '100%', height: '100%', paddingVertical: 0, paddingHorizontal: 6, fontSize: 14, fontWeight: '700', color: '#01579B', textAlign: 'center' },
+  muaUnit: { fontSize: 13, fontWeight: '700', color: '#0277BD', marginLeft: 6, minWidth: 22 },
+  muaErrorTextInline: { fontSize: 11, color: '#D32F2F', fontWeight: '600', marginLeft: 10 },
 });
