@@ -1,0 +1,26 @@
+{
+  "summary": "Iter-139 backend testing — Phase 2 Multi-Unit Abutment (MUA) + access_channel_openings persistence: 6/6 pytest tests PASSED against live backend (https://dental-workflow-18.preview.emergentagent.com). Verified Phase2Submit Pydantic model accepts the new fields and they round-trip correctly through MongoDB phase2_data. Coverage: (1) MUA='yes' with 4 implant rows persists tooth/angulation/cuff_height as-sent; access_channel_openings list is now persisted (regression-fix confirmed); legacy fields torque_values/prosthetic_component/prosthesis_type still saved. (2) MUA='no' with details=null saves successfully. (3) MUA fields fully omitted (gate condition not met / Delayed Loading) saves successfully. (4) Non-blocking validation: invalid/partial values (angulation='60' OOR, cuff_height='', non-numeric 'abc', None) accepted by server with 200 OK and persisted as-sent — server does not reject. (5) Single-implant Phase 2 regression — submission without MUA fields still works unchanged. (6) Numeric-typed values (int + float) for angulation/cuff_height also accepted.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_mua_phase2_iteration139.py",
+    "/app/test_reports/pytest/iteration_139.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "GOOD: Phase2Submit model (server.py L410-433) correctly types MUA fields as Optional — multi_unit_abutment_placed: Optional[str] (max_length=10) and multi_unit_abutment_details: Optional[List[Dict[str, Any]]]. The Dict[str, Any] keeps validation deliberately loose so partial/invalid client data (empty strings, non-numeric, None) flows through without rejection — aligns with the non-blocking validation requirement.",
+    "GOOD: submit-phase2 save dict (L6597-6599) writes access_channel_openings, multi_unit_abutment_placed, multi_unit_abutment_details into phase2_data. Verified the previously dropped access_channel_openings is now persisted end-to-end.",
+    "MINOR (informational, not a bug): Because multi_unit_abutment_details items are typed as Dict[str, Any], any extra unexpected client keys would silently round-trip into Mongo. Acceptable for current scope but consider tightening to a Pydantic submodel (tooth: str, angulation: Optional[str/float], cuff_height: Optional[str/float]) if you ever want server-side coercion or schema enforcement; right now numeric vs string types are preserved as-sent (e.g., test_06 sends int/float and they come back unchanged).",
+    "MINOR (informational): Phase 2 submission requires patient_consent_form to exist (server.py L6565). Tests upload a fake consent PDF first via /api/procedures/{id}/upload-consent. Not in scope for this iter, but worth noting — the 'Patient Consent Form is required' gate is enforced unconditionally regardless of MUA fields."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_mua_phase2_iteration139.py (NEW — 6 pytest cases, ~370 LOC, includes module-scope cleanup that deletes all created TEST_MUA_* procedures)"
+  ],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "n/a (skipped per request)"},
+  "test_credentials": "Used Gaurav.pandey@student.dental.edu / Student@123 (student), Paresh.gandhi@dental.edu / Supervisor@123 (supervisor), Abhijit.patil@dental.edu / Admin@123 (incharge). All from /app/memory/test_credentials.md.",
+  "seed_data_creation": "Created 6 ephemeral procedures (4 All-on-4 with Immediate Loading, 1 All-on-4 with Delayed Loading, 1 Single Conventional Implant) named TEST_MUA_<uuid>. All deleted in module-scope cleanup fixture.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend MUA + access_channel_openings persistence is fully verified. If frontend testing for the new MUA pill toggle UI is added later: gate conditions are full-arch (All on 4 / All on 6 / All on X) + Phase 1 loading_type='Immediate Loading' + Phase 2 prosthetic_component='Immediate Loading Done'. UI lives in /app/frontend/app/procedures/submit-phase2/[id].tsx (state L75-113, render L514-590, styles L910-995). Test approach should: pick a created TEST_MUA_* full-arch case, navigate Phase 2 form, toggle MUA Yes, fill per-tooth angulation+cuff_height, submit, and validate phase2_data via GET. Note: Phase 2 also requires patient_consent_form upload upstream — the test helper _upload_consent in test_mua_phase2_iteration139.py shows the pattern.",
+  "rca_of_the_issue": "N/A — no bugs found. Initial test run hit pre-existing gate 'Patient Consent Form is required before starting Phase 2' (server.py L6565). Resolved in test fixture by uploading a fake consent PDF via POST /api/procedures/{id}/upload-consent before invoking submit-phase2. After this fix all 6 cases pass."
+}
