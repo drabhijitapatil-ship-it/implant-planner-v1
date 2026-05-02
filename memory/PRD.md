@@ -1,5 +1,39 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 139 (Feb 2026) — Phase 2 Multi-Unit Abutment (MUA) Capture
+
+**Goal**: For full-arch Immediate Loading cases, capture per-implant Multi-unit Abutment data (Angulation + Cuff Height) directly in the Phase 2 surgical form.
+
+**Gate conditions (all three must be true for the section to render)**:
+1. Phase 1 `procedure_type` ∈ {`All on 4`, `All on 6`, `All on X`}
+2. Phase 1 `loading_type` = `Immediate Loading`
+3. Phase 2 `prosthetic_component` = `Immediate Loading Done`
+
+**UI — `/app/frontend/app/procedures/submit-phase2/[id].tsx`**:
+- Blue-themed section `muaSection` (matches iOS `uploadSection` family: `#E1F5FE` bg / `#0277BD` accents).
+- Yes/No pill buttons (`mua-placed-yes` / `mua-placed-no`). Unset by default (user must explicitly pick). Picking "No" clears any previously entered per-implant rows.
+- When **Yes**: per-implant rows (one per `implantPositions[]`) with `Tooth #<pos>` label + two numeric inputs:
+  - Angulation (`°`, decimal-pad, `mua-angulation-<idx>`). Valid range 0–45° (**range hidden from user**).
+  - Cuff Height (`mm`, decimal-pad, `mua-cuff-<idx>`). Valid range 0–10 mm (**range hidden from user**).
+- **Non-blocking validation**: empty / out-of-range values display inline red `Required` or `Invalid` text via `muaErrorText` but do NOT prevent submit. Helpers: `muaAngleError` / `muaCuffError`.
+
+**Backend — `/app/backend/server.py`**:
+- `Phase2Submit` (~L410) gains:
+  - `multi_unit_abutment_placed: Optional[str]` (`'yes'` / `'no'` / `None`)
+  - `multi_unit_abutment_details: Optional[List[Dict[str, Any]]]` — each row `{tooth, angulation, cuff_height}`
+  - `access_channel_openings: Optional[List[str]]` (was previously sent by the client but silently dropped — now persisted)
+- Save dict in `POST /api/procedures/{id}/submit-phase2` writes all three fields into `phase2_data`.
+
+**Tests** — `/app/backend/tests/test_mua_phase2_iteration139.py` — **6/6 PASS**:
+1. Full-arch All-on-4 + Immediate Loading → MUA='yes' with 4-row details persists as-sent (plus access_channel_openings round-trip).
+2. MUA='no' with `details=null` → saves successfully.
+3. MUA fields omitted entirely (Delayed Loading gate not met) → saves successfully.
+4. Non-blocking server semantics: invalid / partial / None / non-numeric values accepted with 200 OK.
+5. Single Conventional Implant regression — no MUA fields → unchanged behaviour.
+6. Numeric (int + float) values for angulation / cuff_height preserved as-sent.
+
+
+
 ## Iteration 138 (Feb 2026) — Phase 2 Cuff-Height Catalogue (wired to Phase-1 Attachment Type)
 
 **Goal**: Close the loop between iter-137's Phase-1 `attachment_type` field and the Phase-2 Healing-Abutment-Placed flow. Students no longer type a free numeric cuff height — they pick from a dropdown constrained to the manufacturer's real SKU range for the exact attachment brand they chose in Phase 1.
