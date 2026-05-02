@@ -1,5 +1,23 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 125 (Feb 2026) — Admin Drilldown Identity Chips
+
+Added pastel identity chips to the Admin/Supervisor drilldown headers so it's instantly clear whose stats are being viewed:
+- **Student drilldown** (`/admin/student/[id]`): blue-tinted chip (`#E3F2FD` bg) + circular avatar with student's initial on `#1565C0` fill + their name + email inside the chip.
+- **Supervisor drilldown** (`/admin/supervisor/[id]`): purple-tinted chip (`#F3E5F5` bg) + circular avatar on `#6A1B9A` fill — same pattern, different accent so admins can tell supervisor vs student context at a glance.
+- Chips sit between the floating BackButton and the Nudge pill, taking `flex: 1`. Layout unchanged, testIDs preserved.
+- Zero backend changes. Bundle reloaded clean.
+
+## Iteration 124 (Feb 2026) — BackButton Press-In Scale Effect
+
+Added a subtle tactile squish to the shared `BackButton` component:
+- `Pressable` with `onPressIn` / `onPressOut` drives an `Animated.Value` scale via `Animated.spring` (`useNativeDriver: true`).
+- Press-in: scale 1 → 0.92, `bounciness: 0` (clean squish, no toy bounce).
+- Press-out: scale 0.92 → 1, `bounciness: 4` (gentle release).
+- Wrapped in `Animated.View` so the halo shadow scales with the chip — looks like the whole floating button breathes.
+- Zero impact on the 11 call-sites (props interface unchanged).
+- testID + accessibility props preserved → iter-123's 100% E2E suite remains valid.
+
 ## Iteration 123 (Feb 2026) — Global Circular BackButton + Forum Header Cleanup
 
 **User request**: Replace every "← Back" / arrow-with-Back label at top-left with a single elegant circular floating back chip (per uploaded reference). Remove the redundant "Discussion Forum" title sitting above the Forum/Chat toggle and shift the toggle up.

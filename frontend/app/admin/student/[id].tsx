@@ -118,11 +118,22 @@ export default function StudentDrillDown() {
     <SafeAreaView style={s.safe}>
       <View style={s.header}>
         <BackButton testID="student-drilldown-back" />
-        <View style={{ flex: 1 }}>
-          <Text style={s.headerTitle} numberOfLines={1}>{studentName}</Text>
-          <Text style={s.headerSubtitle} numberOfLines={1}>
-            {profile?.email || profile?.username || 'Student performance'}
-          </Text>
+        {/* Pastel-blue identity chip — avatar with the student's initial +
+            their name & email in a soft-blue rounded pill, mirroring the
+            tile-menu aesthetic so the drilldown header feels connected to
+            the rest of the app. */}
+        <View style={s.identityChip}>
+          <View style={s.identityAvatar}>
+            <Text style={s.identityAvatarTxt}>
+              {(studentName?.[0] || '?').toUpperCase()}
+            </Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.headerTitle} numberOfLines={1}>{studentName}</Text>
+            <Text style={s.headerSubtitle} numberOfLines={1}>
+              {profile?.email || profile?.username || 'Student performance'}
+            </Text>
+          </View>
         </View>
         {user && ['implant_incharge', 'administrator', 'supervisor'].includes(user.role) && (
           <TouchableOpacity
@@ -304,8 +315,27 @@ const s = StyleSheet.create({
     backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E0E0E0',
   },
   backBtn: { padding: 6 },
-  headerTitle: { fontSize: 18, fontWeight: '800', color: '#0D47A1' },
-  headerSubtitle: { fontSize: 12, color: '#78909C', marginTop: 2 },
+  // Pastel-blue identity chip — light tint container pairing a circular
+  // avatar (student's initial in white-on-blue) with name + email. Mirrors
+  // the tile-menu aesthetic so the drilldown feels part of the same system.
+  identityChip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#E3F2FD',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+  },
+  identityAvatar: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#1565C0',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  identityAvatarTxt: { fontSize: 15, fontWeight: '800', color: '#FFF' },
+  headerTitle: { fontSize: 16, fontWeight: '800', color: '#0D47A1' },
+  headerSubtitle: { fontSize: 12, color: '#546E7A', marginTop: 2 },
   nudgeBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999,
