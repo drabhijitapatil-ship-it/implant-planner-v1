@@ -1,5 +1,32 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 132 (Feb 2026) — BackButton global sweep + What's New fix + Unified Attach Picker
+
+### Task 1 — iOS Default `<BackButton />` everywhere (full app sweep)
+- `app/_layout.tsx`: stripped the native stack header (`headerShown:true, headerBackTitle:'Back'`) from `procedures/[id]`, `legal/privacy-policy`, `legal/terms`, `admin/audit-log`. All four now render the circular floating BackButton inline.
+- `procedures/[id].tsx`: added a custom `pageHeader` row above `ScrollView` with `<BackButton testID='case-detail-back-btn' />` + centered "Case Details" title. SafeArea extended with `top` edge.
+- `legal/privacy-policy.tsx` & `legal/terms.tsx`: same in-page header row pattern.
+- `admin/audit-log.tsx`: added BackButton at start of the existing header.
+- `components/CaseImplantPlanning.tsx`: replaced the 3 remaining `ms.backBtn` TouchableOpacity+Text "Back" patterns (lines ~1645, 1845, 1972) with `<BackButton onPress={() => setStep(...)} />`.
+
+### Task 2 — What's New tile route fix
+- `app/(tabs)/_layout.tsx`: tile route changed from `/whatsnew` → `/whatsnew?mode=history`. Previously, `/whatsnew` auto-redirected to `/dashboard` once users had acked all entries. `mode=history` shows the full role-matched release changelog regardless.
+
+### Task 3+4 — Unified Attach Picker (replaces old ActionSheetIOS + Forum/Chat inline sheets)
+- NEW `components/AttachPickerModal.tsx` — a globally-mounted bottom-sheet with exactly 3 rows matching the user-provided reference image:
+  - **Photo Library** — `images-outline` (blue `#1565C0`)
+  - **Take Photo or Video** — `camera-outline` (blue) — now accepts images AND videos via `mediaTypes: ['images','videos']`
+  - **Choose Files** — `folder-outline` (blue)
+  - No Cancel row (tap-outside dismisses). Rounded top, soft shadow, iOS-safe bottom inset.
+- NEW `utils/attachPickerManager.ts` — singleton bridge between imperative `showUploadPicker()` calls and the mounted modal. Guarantees ONE modal instance exists → solves the iOS single-modal constraint that previously broke Forum/Chat attach flows.
+- `utils/uploadPicker.ts` — rewritten (now 15 lines). `showUploadPicker(allowedDocTypes?)` simply delegates to `openAttachPicker()` from the manager.
+- `app/_layout.tsx` — mounts `<AttachPickerModalRoot />` once inside `<ActivityTracker>`.
+- `app/forum/[threadId].tsx` — removed old `showAttachSheet` state, `pickFromCamera`/`pickFromLibrary`/`pickFromFiles`, `waitForSheetClose` helper, and the 40-line inline `<Modal>` sheet. Replaced with a single `pickAttachment()` function that awaits `showUploadPicker(['application/pdf','image/*'])` then uploads via the existing `uploadAsset()` helper.
+- `app/forum/chat/[groupId].tsx` — same migration. `chat-attach-btn` now opens the singleton.
+
+### Verification (iter-124 test report)
+- `/app/test_reports/iteration_124.json` — `retest_needed: false`, `main_agent_can_self_test: true`. 5/7 primary flows live-verified via Playwright, 5/5 code-review-verified. No critical bugs; pre-existing cosmetic warnings unchanged.
+
 ## Iteration 131 (Feb 2026) — Phase 1 BackButton Verification
 
 Post-handoff verification of the iter-123 global `<BackButton />` rollout in Phase 1 screens that were left untested when the prior agent ran out of context:
