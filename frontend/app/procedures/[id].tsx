@@ -1571,6 +1571,40 @@ export default function ProcedureDetailScreen() {
                   ))
                   : <InfoRow icon="resize" label="Healing Abutment Cuff Height" value={`${procedure.phase2_data.healing_abutment_cuff_height} mm`} />
               )}
+              {/* iter-139: Multi-unit Abutment read-only summary (full-arch Immediate Loading) */}
+              {(procedure.phase2_data.multi_unit_abutment_placed === 'yes' ||
+                procedure.phase2_data.multi_unit_abutment_placed === 'no') && (
+                <View style={{ marginTop: 10, marginBottom: 10, backgroundColor: '#E1F5FE', borderColor: '#B3E5FC', borderWidth: 1.5, borderRadius: 12, padding: 12 }} data-testid="mua-readonly-section">
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#0277BD', marginBottom: 6, letterSpacing: 0.3 }}>
+                    Multi-unit Abutment Placed: {procedure.phase2_data.multi_unit_abutment_placed === 'yes' ? 'Yes' : 'No'}
+                  </Text>
+                  {procedure.phase2_data.multi_unit_abutment_placed === 'yes'
+                   && Array.isArray(procedure.phase2_data.multi_unit_abutment_details)
+                   && procedure.phase2_data.multi_unit_abutment_details.length > 0 && (
+                    <View style={{ marginTop: 4 }}>
+                      {procedure.phase2_data.multi_unit_abutment_details.map((row: any, idx: number) => (
+                        <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderBottomWidth: idx < procedure.phase2_data.multi_unit_abutment_details.length - 1 ? 1 : 0, borderBottomColor: '#B3E5FC' }} data-testid={`mua-readonly-row-${idx}`}>
+                          <View style={{ backgroundColor: '#B3E5FC', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, minWidth: 70, alignItems: 'center' }}>
+                            <Text style={{ fontSize: 12, fontWeight: '700', color: '#01579B' }}>
+                              Tooth #{row?.tooth ?? '—'}
+                            </Text>
+                          </View>
+                          <View style={{ flex: 1, flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+                            <Text style={{ fontSize: 13, color: '#01579B' }}>
+                              <Text style={{ fontWeight: '600' }}>Angulation: </Text>
+                              {(row?.angulation || '').toString().trim() !== '' ? `${row.angulation}°` : '—'}
+                            </Text>
+                            <Text style={{ fontSize: 13, color: '#01579B' }}>
+                              <Text style={{ fontWeight: '600' }}>Cuff Height: </Text>
+                              {(row?.cuff_height || '').toString().trim() !== '' ? `${row.cuff_height} mm` : '—'}
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              )}
               {procedure.phase2_data.sutures_placed !== undefined && (
                 <InfoRow icon="bandage" label="Sutures Placed" value={procedure.phase2_data.sutures_placed ? 'Yes' : 'No'} fieldKey="phase2_data.sutures_placed" />
               )}

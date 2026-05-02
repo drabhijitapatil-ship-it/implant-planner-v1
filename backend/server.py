@@ -4472,6 +4472,22 @@ def _build_case_context(proc: dict) -> str:
         aco = p2.get('access_channel_openings') or []
         if aco and any(a for a in aco):
             parts.append(f"Access Channel Openings: {', '.join([a for a in aco if a])}")
+        # iter-139: surface MUA context for AI explanations
+        mua_placed = p2.get('multi_unit_abutment_placed')
+        if mua_placed in ('yes', 'no'):
+            parts.append(f"Multi-unit Abutment Placed: {'Yes' if mua_placed == 'yes' else 'No'}")
+            mua_details = p2.get('multi_unit_abutment_details') or []
+            if mua_placed == 'yes' and isinstance(mua_details, list) and mua_details:
+                rows = []
+                for r in mua_details:
+                    if not isinstance(r, dict):
+                        continue
+                    t = r.get('tooth', '')
+                    a = r.get('angulation', '')
+                    c = r.get('cuff_height', '')
+                    rows.append(f"Tooth {t}: {a}° / {c}mm")
+                if rows:
+                    parts.append(f"MUA Details: {'; '.join(rows)}")
 
     # Phase 3 - Second Stage Surgical
     p3 = proc.get('phase3_data') or {}
@@ -5602,6 +5618,25 @@ async def generate_case_report(
                 add_field("Healing Abutment Cuff Height", ", ".join([f"{v} mm" for v in hch if v]))
             else:
                 add_field("Healing Abutment Cuff Height", f"{hch} mm")
+        # iter-139: Multi-unit Abutment (full-arch Immediate Loading cases)
+        mua_placed = p2.get("multi_unit_abutment_placed")
+        if mua_placed in ("yes", "no"):
+            add_field("Multi-unit Abutment Placed", "Yes" if mua_placed == "yes" else "No")
+            mua_details = p2.get("multi_unit_abutment_details") or []
+            if mua_placed == "yes" and isinstance(mua_details, list) and mua_details:
+                pdf.set_font("Helvetica", "BI", 11)
+                pdf.cell(0, 8, safe("Multi-unit Abutment Details"), ln=True)
+                pdf.set_font("Helvetica", "", 9)
+                for row in mua_details:
+                    if not isinstance(row, dict):
+                        continue
+                    tooth = row.get("tooth", "")
+                    ang = row.get("angulation", "")
+                    cuff = row.get("cuff_height", "")
+                    ang_s = f"{ang}°" if str(ang).strip() != "" else "—"
+                    cuff_s = f"{cuff} mm" if str(cuff).strip() != "" else "—"
+                    pdf.cell(0, 6, safe(f"  Tooth {tooth}:  Angulation {ang_s}   Cuff Height {cuff_s}"), ln=True)
+                pdf.ln(2)
         if p2.get("sutures_placed") is not None:
             add_field("Sutures Placed", "Yes" if p2["sutures_placed"] else "No")
         if p2.get("hemostasis_achieved") is not None:
