@@ -68,7 +68,30 @@ After the Healing Abutment Cuff Height line the PDF now renders `Multi-unit Abut
 
 
 
-## Iteration 144 (Feb 2026) — Catalog Batch 2: +21 curated systems
+## Iteration 145 (Feb 2026) — B&B Dental + Cowell Medi + Family Grouping UI
+
+**Catalog batch 3** — seeded from 2 new PDFs:
+- **B&B Dental (Italy)** Conexa family (+5): EV Line, 3P, 3P Long, Wide Line, Dura-Vit Slim.
+- **Cowell Medi** INNO series (+3 — new brand): INNO SLA-SH (11° Tapered Hex 2.5), INNO Internal (Octa 3.1 / Hex 2.4), INNO External (Hex 2.7 / 3.4).
+
+**Catalog state**: 41 systems / **36 populated** / 5 stubs remaining.
+
+**Family + variant collapsed UI** (`/app/frontend/app/admin/implant-catalog.tsx`):
+- Records now group under a computed `familyRoot` (regex strips trailing `NP|RP|WP`, ` Acqua`, ` NeoPoros/Neoporous`, `(Acqua)`, `(NeoPoros)`, ` Long`, ` Line`).
+- Single-variant families render as plain rows (existing UX).
+- Multi-variant families render as a parent row showing `N variants · N comp total`, with a chevron + children revealed as **inline pills** when expanded.
+- Variants inherit the standard/stub visual treatment (active = filled blue pill, stub = amber-bordered).
+- Selecting a variant auto-expands its family; detail pane updates instantly.
+- Backend keys unchanged — purely a client-side visual regrouping.
+
+Example groupings:
+- Neodent: `Drive GM` / `Helix GM` / `Titamax GM` each collapse `{Acqua, NeoPoros}` (6 rows → 3 families).
+- Nobel Biocare: `NobelActive` / `NobelParallel CC` each collapse `{NP, RP, WP}` (6 rows → 2 families).
+- B&B Dental: `3P` collapses `{3P, 3P Long}`.
+
+**Visible row count** dropped from 36 → ~27 rows in "With data" filter (9-row reduction) without hiding any information.
+
+
 
 User uploaded 5 more PDFs. Extracted, normalised, and seeded into `implant_catalog`:
 

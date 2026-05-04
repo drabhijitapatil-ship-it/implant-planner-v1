@@ -75,7 +75,29 @@ export default function ImplantCatalogAdmin() {
 
   useEffect(() => { load(); }, [load]);
 
-  const filtered = useMemo(() => {
+  // iter-145: compute a "family root" name for each record so related variants
+  // (NP/RP/WP platforms, Acqua/NeoPoros surface finishes, Long suffix, etc.)
+  // collapse under a shared parent in the list.
+  const familyRoot = (brand: string, name: string): string => {
+    let n = name.trim();
+    // Strip trailing platform-size suffix "( NP | RP | WP )"
+    n = n.replace(/\s+(NP|RP|WP)$/i, '');
+    // Strip trailing surface-finish suffix
+    n = n.replace(/\s+(Acqua|NeoPoros|Neoporous|Hydrophilic)$/i, '');
+    // Strip "(Acqua)" / "(NeoPoros)" parentheticals
+    n = n.replace(/\s*\((Acqua|NeoPoros|Neoporous)\)$/i, '');
+    // Strip trailing length qualifier "Long" (e.g. "3P Long" → "3P")
+    n = n.replace(/\s+Long$/i, '');
+    // Strip trailing generic " Line" qualifier ("3P Line" → "3P", pairs with above)
+    n = n.replace(/\s+Line$/i, '');
+    return n.trim() || name;
+  };
+
+  const [expandedFamilies, setExpandedFamilies] = useState<Record<string, boolean>>({});
+  const toggleFamily = (fk: string) => setExpandedFamilies(prev => ({ ...prev, [fk]: !prev[fk] }));
+
+  // Group filtered records by "Brand|familyRoot"; preserve insertion order.
+  const { families, totalFiltered } = useMemo(() => {
     let list = systems;
     if (filter === 'populated') list = list.filter(s => !s.is_stub);
     else if (filter === 'pending') list = list.filter(s => s.is_stub);
@@ -83,8 +105,26 @@ export default function ImplantCatalogAdmin() {
       const q = search.toLowerCase();
       list = list.filter(s => s.brand.toLowerCase().includes(q) || s.name.toLowerCase().includes(q));
     }
-    return list;
+    const groups: { brand: string; familyName: string; familyKey: string; variants: CatalogRecord[] }[] = [];
+    const idx: Record<string, number> = {};
+    for (const rec of list) {
+      const fname = familyRoot(rec.brand, rec.name);
+      const fkey = `${rec.brand}|${fname}`;
+      if (idx[fkey] == null) {
+        idx[fkey] = groups.length;
+        groups.push({ brand: rec.brand, familyName: fname, familyKey: fkey, variants: [] });
+      }
+      groups[idx[fkey]].variants.push(rec);
+    }
+    return { families: groups, totalFiltered: list.length };
   }, [systems, search, filter]);
+
+  // Ensure the family containing the currently-selected record is auto-expanded.
+  useEffect(() => {
+    if (!selected) return;
+    const fkey = `${selected.brand}|${familyRoot(selected.brand, selected.name)}`;
+    setExpandedFamilies(prev => prev[fkey] ? prev : { ...prev, [fkey]: true });
+  }, [selected]);
 
   const ask = useCallback(async () => {
     if (!question.trim()) return;
@@ -149,28 +189,90 @@ export default function ImplantCatalogAdmin() {
             ))}
           </View>
           <FlatList
-            data={filtered}
-            keyExtractor={(item) => item.key}
+            data={families}
+            keyExtractor={(item) => item.familyKey}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[s.systemRow, selected?.key === item.key && s.systemRowActive]}
-                onPress={() => { setSelected(item); setAiAnswer(null); }}
-                data-testid={`catalog-row-${item.key}`}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={s.systemBrand}>{item.brand}</Text>
-                  <Text style={s.systemName}>{item.name}</Text>
+            renderItem={({ item: fam }) => {
+              const isGroup = fam.variants.length > 1;
+              const expanded = !!expandedFamilies[fam.familyKey];
+              const populatedCount = fam.variants.filter(v => !v.is_stub).length;
+              const totalComps = fam.variants.reduce((sum, v) => sum + (v.components?.length || 0), 0);
+
+              // Single-variant family — render flat row as before.
+              if (!isGroup) {
+                const v = fam.variants[0];
+                return (
+                  <TouchableOpacity
+                    style={[s.systemRow, selected?.key === v.key && s.systemRowActive]}
+                    onPress={() => { setSelected(v); setAiAnswer(null); }}
+                    data-testid={`catalog-row-${v.key}`}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.systemBrand}>{v.brand}</Text>
+                      <Text style={s.systemName}>{v.name}</Text>
+                    </View>
+                    {v.is_stub
+                      ? <View style={s.pendingBadge}><Text style={s.pendingBadgeText}>Pending</Text></View>
+                      : <View style={s.dataBadge}><Text style={s.dataBadgeText}>{v.components?.length || 0} comp</Text></View>
+                    }
+                  </TouchableOpacity>
+                );
+              }
+
+              // Multi-variant family — parent row + inline variant pills when expanded.
+              return (
+                <View>
+                  <TouchableOpacity
+                    style={[s.familyRow, expanded && s.familyRowOpen]}
+                    onPress={() => toggleFamily(fam.familyKey)}
+                    data-testid={`catalog-family-${fam.familyKey}`}
+                  >
+                    <Ionicons
+                      name={expanded ? 'chevron-down' : 'chevron-forward'}
+                      size={16} color="#0277BD" style={{ marginRight: 6 }}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.systemBrand}>{fam.brand}</Text>
+                      <Text style={s.systemName}>{fam.familyName}</Text>
+                    </View>
+                    <View style={s.familyMetaCol}>
+                      <Text style={s.familyCount}>{fam.variants.length} variants</Text>
+                      {populatedCount > 0 && (
+                        <Text style={s.familyComps}>{totalComps} comp total</Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                  {expanded && (
+                    <View style={s.variantWrap}>
+                      {fam.variants.map(v => {
+                        // Compute short variant label: everything in v.name beyond familyName.
+                        let variantLabel = v.name.replace(fam.familyName, '').trim();
+                        if (!variantLabel) variantLabel = v.name;
+                        variantLabel = variantLabel.replace(/^\(|\)$/g, '').trim();
+                        const active = selected?.key === v.key;
+                        return (
+                          <TouchableOpacity
+                            key={v.key}
+                            style={[s.variantPill, active && s.variantPillActive, v.is_stub && s.variantPillStub]}
+                            onPress={() => { setSelected(v); setAiAnswer(null); }}
+                            data-testid={`catalog-variant-${v.key}`}
+                          >
+                            <Text style={[s.variantPillText, active && s.variantPillTextActive, v.is_stub && s.variantPillTextStub]}>
+                              {variantLabel}
+                            </Text>
+                            {!v.is_stub && (
+                              <Text style={[s.variantPillCount, active && s.variantPillCountActive]}>
+                                · {v.components?.length || 0}
+                              </Text>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
                 </View>
-                {item.is_stub ? (
-                  <View style={s.pendingBadge}><Text style={s.pendingBadgeText}>Pending</Text></View>
-                ) : (
-                  <View style={s.dataBadge}>
-                    <Text style={s.dataBadgeText}>{item.components?.length || 0} comp</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            )}
+              );
+            }}
             ListEmptyComponent={<Text style={s.emptyText}>No systems match.</Text>}
           />
         </View>
@@ -325,6 +427,21 @@ const s = StyleSheet.create({
   filterChipTextActive: { color: '#FFF' },
   systemRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F0F4F8' },
   systemRowActive: { backgroundColor: '#E1F5FE' },
+  // iter-145: Family + variant group styles
+  familyRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F0F4F8', backgroundColor: '#FAFCFE' },
+  familyRowOpen: { backgroundColor: '#F0F9FF', borderBottomColor: '#E1F5FE' },
+  familyMetaCol: { alignItems: 'flex-end' },
+  familyCount: { fontSize: 11, fontWeight: '700', color: '#0277BD' },
+  familyComps: { fontSize: 10, color: '#607D8B', marginTop: 2 },
+  variantWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#FAFCFE', borderBottomWidth: 1, borderBottomColor: '#F0F4F8' },
+  variantPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, borderWidth: 1, borderColor: '#81D4FA', backgroundColor: '#FFF' },
+  variantPillActive: { backgroundColor: '#0277BD', borderColor: '#0277BD' },
+  variantPillStub: { borderColor: '#FFB74D', backgroundColor: '#FFF8E1' },
+  variantPillText: { fontSize: 12, fontWeight: '700', color: '#0277BD' },
+  variantPillTextActive: { color: '#FFF' },
+  variantPillTextStub: { color: '#E65100' },
+  variantPillCount: { fontSize: 11, color: '#607D8B' },
+  variantPillCountActive: { color: '#E1F5FE' },
   systemBrand: { fontSize: 11, fontWeight: '600', color: '#607D8B', textTransform: 'uppercase', letterSpacing: 0.4 },
   systemName: { fontSize: 14, fontWeight: '700', color: '#01579B', marginTop: 1 },
   pendingBadge: { backgroundColor: '#FFF3E0', borderColor: '#FFB74D', borderWidth: 1, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
