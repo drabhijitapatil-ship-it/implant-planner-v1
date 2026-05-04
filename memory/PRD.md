@@ -68,7 +68,20 @@ After the Healing Abutment Cuff Height line the PDF now renders `Multi-unit Abut
 
 
 
-## Iteration 146 (Feb 2026) — Floating Ask Implanr AI Catalog-Aware + Catalog UI Redesign
+## Iteration 147 (Feb 2026) — Multi-Brand Catalog Awareness for the Floating AI
+
+The floating Ask Implanr AI bubble (`/api/ai/chat`) now injects catalog blocks for **every distinct (brand, system)** in the case, not just the first. Up to 4 systems per case are appended to the prompt, delimited by `===` headers, with the same do-not-invent guardrail.
+
+**Why**: Mixed-brand restorations (e.g. Ankylos at the anterior + Osstem in the posterior) couldn't get grounded comparison answers before — the AI only saw one brand's catalog. Now clinicians can ask:
+- "Compare the multi-unit angulations of the systems in this case."
+- "List healing-abutment GH for each system used."
+- "Which system in this case supports zirconia abutments?"
+
+**Verified curl tests** (case `69f640120ae04a75cf8d0cb6` patched with #11/#12 Ankylos C/X + #21/#22 Osstem TS III):
+- Q1 "Compare multi-unit angulations" → AI correctly stated Osstem lists 0°/17°/30° while Ankylos has no multi-unit entry — explicit honesty, no fabrication. ✓
+- Q2 "Healing GH per implant position" → mapped #11 → Ankylos GH 0.75/1.5/3.0/4.5 mm and #21 → Osstem GH 2/3/4/5/6/7 mm exactly. ✓
+
+
 
 **1. Floating Ask Implanr AI bubble** (inside `procedures/[id].tsx`, calls `/api/ai/chat`):
 - `/ai/chat` now injects the catalog block scoped to the case's `implant_plans[0].brand|system` when that key resolves to a non-stub catalog record.
