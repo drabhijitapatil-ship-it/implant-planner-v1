@@ -6,7 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import api from '../../utils/api';
-import BackButton from '../../components/BackButton';
+import CenteredHeader from '../../components/CenteredHeader';
 
 const TYPE_LABELS: Record<string, string> = {
   cover_screw: 'Cover Screw',
