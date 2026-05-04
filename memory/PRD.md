@@ -1,5 +1,36 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 158 (Feb 2026) — Auth-gated catalog fetch, CenteredHeader rollout, administrator role restored
+
+### 1. Fixed `403 Forbidden` spam on `GET /api/implant-catalog`
+- Root cause: `ask-implanr.tsx` and `admin/implant-catalog.tsx` fired their `useEffect` fetch on mount before `AuthContext` had hydrated the user, resulting in a request with no `Authorization` header. FastAPI's `HTTPBearer` default returns 403 for missing headers, polluting the backend logs and briefly flashing an error Alert on cold start.
+- Fix: Both screens now consume `useAuth()` and gate the fetch with `if (!user) return;` in the effect, re-running once the user is populated.
+- Verified: `/api/implant-catalog` returns 200 with a valid token, 403 without (correct behavior preserved); no more spurious 403 log entries after login.
+
+### 2. Applied `CenteredHeader` to remaining screens
+- `/app/frontend/app/whatsnew.tsx` — history mode now uses `CenteredHeader`; onboarding mode keeps a simple title-only bar (no back button by design).
+- `/app/frontend/app/forum/[threadId].tsx` — patient name centered with a right-side bookmark `rightAction`.
+- `/app/frontend/app/forum/chat/[groupId].tsx` — group name + "N members • locked?" as subtitle, leave-group icon as `rightAction`.
+- `/app/frontend/app/admin/implant-compare.tsx` — removed leftover undefined `BackButton` reference (TS error), replaced with `CenteredHeader title="Brand Comparison" subtitle="Side-by-side specs across N systems"`.
+- Intentionally skipped: `forum/index.tsx` and `forum/chat/index.tsx` (segmented Forum/Chat pill), `forum/chat/create.tsx` (iOS-style close-modal `X`).
+
+### 3. Administrator role restored (per user decision)
+- Per the user's directive, `Dr. Abhijit Patil` (`Abhijit.patil@dental.edu`) is the sole administrator going forward.
+- DB fix: `users.updateOne({username:'Abhijit.patil'}, {$set:{role:'administrator'}})`.
+- `/app/memory/test_credentials.md` updated to reflect the new role.
+- Verified: `/auth/me` returns `role=administrator`; `/admin/access-logs` (administrator-gated endpoint) returns 200.
+
+### Files touched
+- `/app/frontend/app/ask-implanr.tsx` — `useAuth()` + auth-gated fetch.
+- `/app/frontend/app/admin/implant-catalog.tsx` — auth-gated `load()`.
+- `/app/frontend/app/whatsnew.tsx` — CenteredHeader for history mode.
+- `/app/frontend/app/forum/[threadId].tsx` — CenteredHeader with bookmark action.
+- `/app/frontend/app/forum/chat/[groupId].tsx` — CenteredHeader with leave-group action.
+- `/app/frontend/app/admin/implant-compare.tsx` — CenteredHeader, removed stale `BackButton` ref.
+- `/app/memory/test_credentials.md` — administrator credentials.
+
+---
+
 ## Iteration 152 (Feb 2026) — Brand Comparison View + Ankylos & B&B Detailed Catalogs
 
 ### 1. Brand Comparison view (new)
