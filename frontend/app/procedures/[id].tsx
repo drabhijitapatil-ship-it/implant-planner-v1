@@ -1,4 +1,4 @@
-import React, { useState, useEffect, createContext, useContext as useReactContext } from 'react';
+import React, { useState, useEffect, createContext, useContext as useReactContext, useRef } from 'react';
 import {
   View,
   Text,
@@ -163,6 +163,7 @@ export default function ProcedureDetailScreen() {
   const [aiChatHistory, setAiChatHistory] = useState<any[]>([]);
   const [aiChatInput, setAiChatInput] = useState('');
   const [aiChatSending, setAiChatSending] = useState(false);
+  const aiChatScrollRef = useRef<ScrollView | null>(null);
   
   // Edit mode state
   const isEditMode = edit === 'true' && (user?.role === 'implant_incharge' || user?.role === 'supervisor');
@@ -2720,7 +2721,8 @@ export default function ProcedureDetailScreen() {
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={{ maxHeight: '80%', minHeight: '50%', backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' }}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+            style={{ maxHeight: '85%', minHeight: '60%', backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' }}
           >
             {/* Chat Header */}
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#0D47A1' }}>
@@ -2734,7 +2736,13 @@ export default function ProcedureDetailScreen() {
             </View>
 
             {/* Chat Messages */}
-            <ScrollView style={{ flex: 1, paddingHorizontal: 16, paddingTop: 12 }} contentContainerStyle={{ paddingBottom: 12, flexGrow: 1 }}>
+            <ScrollView
+              ref={aiChatScrollRef}
+              style={{ flex: 1, paddingHorizontal: 16, paddingTop: 12 }}
+              contentContainerStyle={{ paddingBottom: 24, flexGrow: 1 }}
+              keyboardShouldPersistTaps="handled"
+              onContentSizeChange={() => aiChatScrollRef.current?.scrollToEnd({ animated: true })}
+            >
               {aiChatHistory.length === 0 && (
                 <View style={{ alignItems: 'center', paddingVertical: 30 }}>
                   <Ionicons name="chatbubble-ellipses-outline" size={40} color="#B0BEC5" />

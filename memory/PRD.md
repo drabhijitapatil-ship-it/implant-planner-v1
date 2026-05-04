@@ -1,5 +1,54 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 149 (Feb 2026) — AI Quality + Catalog Save Bug + Implant Database Tile + PDF Component Extraction
+
+**User-reported issues fixed:**
+
+1. **Save bug — admin edits being wiped on backend reload** (P0)
+   - Root cause: Startup seed `_seed_implant_catalog()` re-upserted curated records on every `WatchFiles` reload, overwriting Implant In-Charge edits.
+   - Fix: Seed now checks `updated_by` field — if it is a real user (not "seed"), the record is preserved. New records still seed normally; admin-edited records are now permanent across reloads. (`/app/backend/server.py` `_seed_implant_catalog`).
+
+2. **AI answers were vague, contained markdown asterisks, used "catalog/database/uploaded data" wording** (P0)
+   - Rewrote prompts in `POST /api/ai/ask-implanr` and `POST /api/ai/chat`.
+   - New rules: plain text only (no `**bold**`); banned words: catalog, catalogue, database, uploaded, provided data, records, JSON; component questions emit a fixed structured block (Specification of X — Brand, Diameter (mm):, Gingival height (mm):, Angulation (deg):, Material:, Retention:, Indication:); missing data → exactly "Information is not available."; comparative questions use 2–4 numbered points.
+   - Verified: Bredent Blue Sky temporary cylinders return 3 structured spec blocks with exact dimensions; "What surgical drills?" returns "Information is not available." when not on file.
+
+3. **Keyboard overlapping AI answer** (P0)
+   - `/app/frontend/app/ask-implanr.tsx`: added `keyboardVerticalOffset`, `paddingBottom: 24`, `keyboardDismissMode: on-drag`.
+   - `/app/frontend/app/procedures/[id].tsx`: ScrollView ref + `onContentSizeChange → scrollToEnd`, expanded modal max height to 85%, ensured KeyboardAvoidingView fits the modal sheet.
+
+4. **"Implant Catalog (Implanr AI)" rename + relocation** (P1)
+   - Renamed to **"Implant Database"** in catalog screen header and removed entry from Profile → Compliance section.
+   - Added new **Implant Database tile** in the Tile-Grid menu (`(tabs)/_layout.tsx`), amber palette `#FFF8E1 / #FFE082 / #E65100`, library icon, visible to ALL roles. Read-only enforcement remains on the catalog screen via existing `canEdit` guard (admin + implant_incharge only).
+
+5. **Catalog data completeness — Tapered Pro Conical RBT + Bredent SKY family** (P0)
+   - Extracted ALL prosthodontic components (excluding surgical drills/drivers/ratchets per user) from the two user-uploaded PDFs.
+   - **BioHorizons Tapered Pro Conical RBT** — 14 detailed components: Cover Screw, Regular Healing Cap (Ø 3.0/3.8 mm, GH 2/4/6), Wide (Ø 4.8/5.3, GH 4/6), Extra-Wide (Ø 5.8, GH 4/6), Engaging + Non-engaging Temporary Cylinders (GH 1.5/3.0/4.0, 20 Ncm), Multi-unit (0/17/30°), Ti-base, Scanbody, Impression Coping (open + closed tray), Analog, Locator, Castable, Zirconia Esthetic. Platforms: Narrow + Regular.
+   - **Bredent Blue Sky / Sky Classic (RP)** — 29 components incl. SKY esthetic gingiva former S/M/L (GH 2-6), SKY temp S/M/L (POM, 18 Ncm), SKY esthetic 0°/15°/15°R, SKY titanium 0°/15°/25°/25°R, SKY uni.cone 0°, SKY fast & fixed 17.5°/35°/0° multi-unit, BioHPP elegance S/M/L 0°/15°, Ti-base CEREC, intraoral + extraoral PEEK scanbodies, Locator 1-6 mm + 17.5°/35°, TiSi.snap, analog.
+   - **Bredent Narrow Sky (NP)** — 9 components incl. SKY esthetic S 0°/15°, NP cast-on (PMMA + Au-Pd-Pt-Ir alloy), SKY uni.fit CAD Ø 2.9/3.2, BioHPP elegance S 0°/15°, narrow analog.
+   - **Bredent copaSKY** — 6 components incl. gingiva former M 4mm/6mm F15, BioHPP elegance, uni.cone, CEREC ti-base.
+   - **Bredent miniSKY** — 7 components incl. MD-Abutment Ti + BioXS, uni.fit, Ti-base, analog.
+   - **Improved `build_ai_context`** (`implant_catalog_seed.py`): now also emits per-component `diameters_mm`, `heights_mm`, `platforms`, `torque_ncm`. AI answers now show full spec lines.
+
+**Test results (verified end-to-end via curl)**:
+- `GET /implant-catalog/by-key?key=Bredent|Blue Sky` → 29 detailed components.
+- `GET /implant-catalog/by-key?key=BioHorizons|Tapered Pro Conical RBT` → 14 detailed components.
+- AI for "Wide healing cap" returns: `Diameter (mm): 4.8, 5.3 / GH (mm): 4.0, 6.0 / Material: titanium_alloy / torque 10-15 (hand-tighten) Ncm`.
+- AI for "Surgical drills?" → "Information is not available."
+- AI for "Temporary cylinders?" → 3 structured Specification blocks (S/M/L).
+- Frontend tile menu: "Implant Database" tile (amber, library icon) renders for admin role; testID `tile-implant-database` confirmed present.
+
+**Files touched**:
+- `/app/backend/server.py` — seed-respect-edits, AI prompt rewrites for `/ai/ask-implanr` + `/ai/chat`.
+- `/app/backend/implant_catalog_seed.py` — replaced BioHorizons + Bredent component arrays with detailed PDF-extracted prosthetic data; added per-component dimension/torque/platform fields to `build_ai_context`.
+- `/app/frontend/app/ask-implanr.tsx` — keyboard offset + drag-dismiss.
+- `/app/frontend/app/procedures/[id].tsx` — chat scroll ref, auto-scroll on new message, modal sheet 85% height.
+- `/app/frontend/app/(tabs)/profile.tsx` — removed "Implant Catalog (Implanr AI)" link.
+- `/app/frontend/app/(tabs)/_layout.tsx` — added Implant Database tile (amber).
+- `/app/frontend/app/admin/implant-catalog.tsx` — header renamed to "Implant Database"; Ask AI + Add System pills (from iter-148).
+
+
+
 ## Iteration 148 (Feb 2026) — Standalone "Ask Implanr AI" Tab + Catalog CRUD Editor + Header Entry
 
 **Goal**: Make the Implanr AI catalog conversationally queryable WITHOUT opening a case, and let `implant_incharge` / `administrator` add or edit implant systems through a UI form (no API tooling needed).

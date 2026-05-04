@@ -210,7 +210,7 @@ export default function ImplantCatalogAdmin() {
       <View style={s.headerBar}>
         <BackButton />
         <View style={{ flex: 1 }}>
-          <Text style={s.headerTitle}>Implant Catalog</Text>
+          <Text style={s.headerTitle}>Implant Database</Text>
           <Text style={s.headerSub}>Implanr AI knowledge base · {systems.length} systems available</Text>
         </View>
         <TouchableOpacity
