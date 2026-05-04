@@ -2,10 +2,11 @@
 
 ## Login Credentials (use `identifier` field for login)
 
-### Admin / Implant In-Charge
+### Admin / Administrator
 - **Identifier**: `Abhijit.patil` (or `Abhijit.patil@dental.edu`)
 - **Password**: `Admin@123`
-- **Role**: `implant_incharge`
+- **Role**: `administrator`
+- **Name**: Dr. Abhijit Patil (the only administrator — per user decision 2026-02)
 
 ### Student
 - **Identifier**: `Gaurav.pandey` (or `Gaurav.pandey@student.dental.edu`)
