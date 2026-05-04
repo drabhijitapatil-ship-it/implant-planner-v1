@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import api from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
 import BackButton from '../../components/BackButton';
+import { router } from 'expo-router';
 
 /**
  * iter-146: Implant Catalog browser — stacked vertical layout with cascading
@@ -64,7 +65,7 @@ const variantLabel = (familyName: string, fullName: string): string => {
 export default function ImplantCatalogAdmin() {
   const { user } = useAuth();
   const _canEdit = user?.role === 'administrator' || user?.role === 'implant_incharge';
-  void _canEdit;
+  const canEdit = _canEdit;
 
   const [systems, setSystems] = useState<CatalogRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -212,6 +213,16 @@ export default function ImplantCatalogAdmin() {
           <Text style={s.headerTitle}>Implant Catalog</Text>
           <Text style={s.headerSub}>Implanr AI knowledge base · {systems.length} systems available</Text>
         </View>
+        {canEdit && (
+          <TouchableOpacity
+            style={s.addNewBtn}
+            onPress={() => router.push('/admin/implant-catalog-edit')}
+            data-testid="catalog-add-new"
+          >
+            <Ionicons name="add-circle" size={18} color="#FFF" />
+            <Text style={s.addNewBtnText}>Add System</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView
@@ -270,8 +281,22 @@ export default function ImplantCatalogAdmin() {
         {/* ── Detail card (full width) ── */}
         {selected ? (
           <View style={s.detailCard} data-testid="catalog-detail-card">
-            <Text style={s.detailBrand}>{selected.brand}</Text>
-            <Text style={s.detailName}>{selected.name}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.detailBrand}>{selected.brand}</Text>
+                <Text style={s.detailName}>{selected.name}</Text>
+              </View>
+              {canEdit && (
+                <TouchableOpacity
+                  style={s.editBtn}
+                  onPress={() => router.push({ pathname: '/admin/implant-catalog-edit', params: { key: selected.key } })}
+                  data-testid="catalog-edit-btn"
+                >
+                  <Ionicons name="create-outline" size={16} color="#0277BD" />
+                  <Text style={s.editBtnText}>Edit</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
             {!!selected.connection && (
               <SectionBlock title="Connection">
