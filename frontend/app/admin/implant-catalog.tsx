@@ -210,9 +210,11 @@ export default function ImplantCatalogAdmin() {
       <View style={s.headerBar}>
         <View style={s.headerTopRow}>
           <BackButton />
+          <View style={s.headerTitleBlock}>
+            <Text style={s.headerTitle}>Implant Database</Text>
+            <Text style={s.headerSub}>Implanr AI Knowledge Base</Text>
+          </View>
         </View>
-        <Text style={s.headerTitle}>Implant Database</Text>
-        <Text style={s.headerSub}>Implanr AI Knowledge Base</Text>
 
         <View style={s.tabRow}>
           <TouchableOpacity
@@ -545,16 +547,17 @@ const ComponentCard: React.FC<{ c: Component }> = ({ c }) => {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F7FA' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  headerBar: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 14, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#ECEFF1', alignItems: 'center' },
-  headerTopRow: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center' },
-  headerTitle: { fontSize: 22, fontWeight: '800', color: '#01579B', textAlign: 'center', marginTop: 2 },
-  headerSub: { fontSize: 13, color: '#607D8B', textAlign: 'center', marginTop: 4 },
-  tabRow: { flexDirection: 'row', alignSelf: 'stretch', gap: 10, marginTop: 14, justifyContent: 'center', flexWrap: 'wrap' },
-  tabAskAi: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999, borderWidth: 1.5, borderColor: '#0277BD', backgroundColor: '#E1F5FE', flex: 1, minWidth: 160, maxWidth: 260 },
+  headerBar: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 14, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#ECEFF1' },
+  headerTopRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44 },
+  headerTitleBlock: { flex: 1, justifyContent: 'center' },
+  headerTitle: { fontSize: 20, fontWeight: '800', color: '#01579B', lineHeight: 24 },
+  headerSub: { fontSize: 12, color: '#607D8B', marginTop: 1, lineHeight: 14 },
+  tabRow: { flexDirection: 'row', gap: 10, marginTop: 12, flexWrap: 'wrap' },
+  tabAskAi: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999, borderWidth: 1.5, borderColor: '#0277BD', backgroundColor: '#E1F5FE', flex: 1, minWidth: 140, maxWidth: 240 },
   tabAskAiText: { color: '#0277BD', fontSize: 14, fontWeight: '700' },
   tabCompare: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999, borderWidth: 1.5, borderColor: '#00695C', backgroundColor: '#E0F2F1', flex: 2, minWidth: 220, maxWidth: 360 },
   tabCompareText: { color: '#00695C', fontSize: 14, fontWeight: '700' },
-  addNewBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#0277BD', paddingHorizontal: 22, paddingVertical: 10, borderRadius: 999, marginTop: 10, alignSelf: 'center' },
+  addNewBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#0277BD', paddingHorizontal: 22, paddingVertical: 10, borderRadius: 999, marginTop: 10, alignSelf: 'flex-start' },
   addNewBtnText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
   askAiBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, borderWidth: 1.5, borderColor: '#0277BD', backgroundColor: '#E1F5FE' },
   askAiBtnText: { color: '#0277BD', fontSize: 12, fontWeight: '700' },
