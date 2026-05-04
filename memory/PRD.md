@@ -1,5 +1,31 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 162 (Feb 2026) — Cowellmedi / MIS LANCE+ / Osstem rich prosthetic catalogs (restart-safe)
+
+### Goal
+Add detailed, restart-resilient prosthetic component catalogs for Cowellmedi (INNO Submerged, INNO Submerged Narrow, INNO Internal, INNO External, Mini Plus), MIS LANCE+, and the Osstem family (TS III, TS IV, SS III, MS, ETIII NH).
+
+### Implementation
+1. New module `/app/backend/iter162_catalog.py` holds:
+   - Component arrays — `COWELL_COMPONENTS` (31), `OSSTEM_INTERNAL_HEX_COMPONENTS` (24), `OSSTEM_OCTA_COMPONENTS` (9), `OSSTEM_MS_COMPONENTS` (3), `MIS_LANCE_COMPONENTS` (55).
+   - Pre-built curated records `COWELL_NEW_RECORDS` for the three new Cowell keys (Submerged / Submerged Narrow / Mini Plus).
+   - `apply_iter162_overrides(...)` that mutates the existing curated records to upgrade their `components` / `features` / `compatibility_notes` / `implant` fields.
+2. `/app/backend/implant_catalog_seed.py` now calls `apply_iter162_overrides(...)` immediately after defining the base curated dicts, then extends `CATALOG_EXTRA` with `*COWELL_NEW_RECORDS`. The startup seeder picks the rich data up automatically on every restart — admin manual edits remain protected via `updated_by != "seed"` short-circuit.
+3. `/app/backend/_seed_iter162.py` was rewritten to a thin pointer that re-uses the canonical seed pipeline (kept only as an emergency one-shot).
+
+### Verified
+- Module-level dicts now report rich counts: TS III=24, TS IV=24, SS III=9, MS=3, ETIII NH=24, MIS|LANCE+=55 with 6 features, and Cowell INNO Internal/External/Submerged/Submerged Narrow=31, Mini Plus=6.
+- DB confirmed via direct `pymongo` query and via API (`GET /api/implant-catalog/by-key?key=...`) for Mini Plus, MIS|LANCE+, TS IV.
+- Backend full restart (`supervisorctl restart backend`) → all 11 records re-seeded with `updated_by="seed"`, no regressions on Nobel/Neodent/BioHorizons/Ankylos.
+
+### Files touched
+- `/app/backend/iter162_catalog.py` (NEW)
+- `/app/backend/implant_catalog_seed.py` — imports + applies overrides + extends `CATALOG_EXTRA`.
+- `/app/backend/_seed_iter162.py` — replaced with deprecated thin pointer.
+
+---
+
+
 ## Iteration 161 (Feb 2026) — Catalog editor: refresh on save + lossless component round-trip + missing edit button styles
 
 ### Bug: "Save is clicked, the changed data is not reflected"
