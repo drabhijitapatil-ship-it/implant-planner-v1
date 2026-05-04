@@ -4734,6 +4734,54 @@ async def list_implant_catalog(current_user: dict = Depends(get_current_user)):
     return {"systems": docs}
 
 
+@api_router.get("/implant-catalog/compare")
+async def compare_implant_catalog(component_type: str, current_user: dict = Depends(get_current_user)):
+    """
+    iter-152 — Brand Comparison view.
+    Returns all catalog systems that contain the given component_type, with the
+    component rows side-by-sided so the UI can render a comparison table.
+    component_type examples: 'healing_abutment', 'multi_unit_abutment',
+    'final_abutment', 'ti_base', 'cover_screw', 'scanbody', 'overdenture_attachment',
+    'temporary_cylinder', 'analog', 'impression_coping', 'esthetic_abutment',
+    'locator', 'prosthetic_screw', 'castable_abutment', 'gingiva_former'.
+    Stub systems (is_stub=True) are excluded so the comparison only shows
+    fully detailed catalogs.
+    """
+    cursor = db.implant_catalog.find(
+        {"is_stub": {"$ne": True}, "components.type": component_type},
+        {"_id": 0, "key": 1, "brand": 1, "name": 1, "connection": 1,
+         "platform_switching": 1, "components": 1},
+    ).sort("brand", 1)
+    docs = await cursor.to_list(length=200)
+    rows = []
+    for d in docs:
+        matches = [c for c in (d.get("components") or []) if c.get("type") == component_type]
+        if not matches:
+            continue
+        rows.append({
+            "key": d.get("key"),
+            "brand": d.get("brand"),
+            "name": d.get("name"),
+            "connection": (d.get("connection") or {}).get("type"),
+            "platform_switching": d.get("platform_switching"),
+            "components": matches,
+        })
+    return {"component_type": component_type, "systems": rows, "total_systems": len(rows)}
+
+
+@api_router.get("/implant-catalog/component-types")
+async def list_component_types(current_user: dict = Depends(get_current_user)):
+    """Return distinct component types present across non-stub catalog systems."""
+    pipeline = [
+        {"$match": {"is_stub": {"$ne": True}}},
+        {"$unwind": "$components"},
+        {"$group": {"_id": "$components.type", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+    ]
+    rows = await db.implant_catalog.aggregate(pipeline).to_list(length=100)
+    return {"types": [{"type": r["_id"], "count": r["count"]} for r in rows if r.get("_id")]}
+
+
 @api_router.get("/implant-catalog/by-key")
 async def get_implant_catalog_one(key: str, current_user: dict = Depends(get_current_user)):
     """Get a single catalog record by 'Brand|System' key."""

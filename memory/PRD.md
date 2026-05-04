@@ -1,5 +1,50 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 152 (Feb 2026) — Brand Comparison View + Ankylos & B&B Detailed Catalogs
+
+### 1. Brand Comparison view (new)
+**Backend** (`/app/backend/server.py`):
+- `GET /api/implant-catalog/compare?component_type=<type>` returns all non-stub systems containing the requested component, sorted by brand.
+- `GET /api/implant-catalog/component-types` returns distinct types across non-stub systems with counts.
+
+**Frontend** (`/app/frontend/app/admin/implant-compare.tsx`):
+- New screen with horizontal chip-bar of component types (sorted by frequency).
+- Per-system cards with brand · system · connection header and one row per matching component sub-entry showing Diameter / GH / Height / Angulation / Material / Retention / Torque in a wrap-grid.
+- Reachable from the new teal "Compare" pill (testID `catalog-open-compare`) in the Implant Database header.
+
+### 2. Ankylos C/X — full prosthetic catalog (44 components)
+Cover screws (Standard + Membrane), Healing abutments × 6 (Regular, Standard, Balance Anterior/Posterior, Ø 4.2, Sulcus 0.0), Temporary cylinders × 2, Final abutments × 9 (Regular C/+/X full 0-37.5° set, Balance Anterior/Posterior, Standard, Balance Base, SynCone, Acuris Conometric), Cercon Balance zirconia abutment, Ti-bases C/+/X + ScanBase C/+/X, Impression copings × 6, Lab analogs × 4, Snap + Locator + 7 nylon males, Bar attachment, Prosthetic screws × 4, Standard wax-up copings × 2.
+
+### 3. B&B Dental Conexa family — full catalog (30 shared components × 5 lines)
+Cover screws, healing screws, PEEK + Ti temporary abutments, straight Ti abutments (Ø 4/5/6, H 1-9), angled Ti abutments 15°/25°/40°, UCLA Cr-Co, castable Cr-Co, Ti-base CEREC + Ti-Link 3P/EV/Wide, long + short scanbodies, closed-tray transfer + impression cap, 3D conical + flat analog, FLAT abutment for full-arch immediate load, ball abutment, MUA straight + 17°/30° + 40° angled, Mini Cone 5°, Conical Ø 3.75 in 4 angulation variants, Premilled bases.
+
+### Verification (curl)
+- Ankylos C/X → 44 components persisted, `updated_by: seed`.
+- B&B Dental|3P → 30 components, `updated_by: seed`.
+- `/component-types` → 14 distinct types (final_abutment 112, healing_abutment 53, multi_unit_abutment 46, ti_base 41…).
+- `/compare?component_type=healing_abutment` → 37 systems comparable.
+- AI scoped to Ankylos/Cercon → exact Ø 5.5/7.0, GH 6.0/6.5, 0/15°, zirconium_oxide_ceramic.
+- AI scoped to B&B/EV Line angled MUA → 17°/30° + 40° structured spec blocks with exact dimensions.
+
+### Files touched
+- `/app/backend/server.py` — added `/implant-catalog/compare` + `/implant-catalog/component-types` endpoints.
+- `/app/backend/implant_catalog_seed.py` — replaced Ankylos C/X components (44); added `_BB_CONEXA_PROSTHETICS` shared array (30) reused by all 5 B&B Conexa lines.
+- `/app/frontend/app/admin/implant-compare.tsx` — NEW Brand Comparison screen.
+- `/app/frontend/app/_layout.tsx` — registered `admin/implant-compare` route.
+- `/app/frontend/app/admin/implant-catalog.tsx` — added teal Compare pill in header.
+
+### Catalog detail status
+| System | Components |
+|---|---|
+| BioHorizons Tapered Pro Conical RBT | 44 |
+| Ankylos C/X | 44 |
+| CONELOG Progressive-Line | 40 |
+| B&B Conexa (EV, 3P, 3P Long, Wide each) | 30 |
+| Bredent Blue Sky / Sky Classic | 29 |
+| Bredent Narrow Sky | 9 |
+| Bredent miniSKY | 7 |
+| Bredent copaSKY | 6 |
+
 ## Iteration 150 (Feb 2026) — BioHorizons Tapered Pro Conical Comprehensive Component Database
 
 User uploaded the official Tapered Pro Conical Surgical & Manual catalog PDF. Full prosthetic component extraction completed (surgical drills/drivers/ratchets excluded per user).
