@@ -45,6 +45,17 @@ type SystemRow = {
 const fmt = (arr?: (number | string)[]) =>
   arr && arr.length ? arr.join(', ') : '—';
 
+const titleCase = (s: string) =>
+  String(s || '')
+    .replace(/_/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map(w => (w.length <= 3 && w === w.toUpperCase() ? w : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()))
+    .join(' ');
+
+const prettyArr = (arr?: string[]) =>
+  arr && arr.length ? arr.map(titleCase).join(', ') : '—';
+
 export default function ImplantCompare() {
   const [types, setTypes] = useState<CompType[]>([]);
   const [picked, setPicked] = useState<string>('healing_abutment');
@@ -124,7 +135,7 @@ export default function ImplantCompare() {
               {r.components.map((c, i) => (
                 <View key={i} style={s.compRow}>
                   <Text style={s.compTitle}>
-                    {c.subtype || (TYPE_LABELS[c.type] || c.type)}
+                    {c.subtype ? titleCase(c.subtype) : (TYPE_LABELS[c.type] || titleCase(c.type))}
                   </Text>
                   <View style={s.specGrid}>
                     {c.platforms?.length ? (
@@ -143,10 +154,10 @@ export default function ImplantCompare() {
                       <Spec label="Angulation (°)" value={fmt(c.angulations_deg)} />
                     ) : null}
                     {c.material?.length ? (
-                      <Spec label="Material" value={fmt(c.material)} />
+                      <Spec label="Material" value={prettyArr(c.material)} />
                     ) : null}
                     {c.retention?.length ? (
-                      <Spec label="Retention" value={fmt(c.retention)} />
+                      <Spec label="Retention" value={prettyArr(c.retention)} />
                     ) : null}
                     {c.torque_ncm ? (
                       <Spec label="Torque (Ncm)" value={String(c.torque_ncm)} />
