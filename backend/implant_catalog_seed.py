@@ -682,6 +682,128 @@ BREDENT_SKY_CLASSIC = _bredent(
     "Ideal for flapless implant placement on narrow and uneven ridges."
 )
 
+# --- iter-145: B&B Dental (Italy) Conexa family + Dura-Vit Slim + Mini ---
+def _bb_conexa(key, name, diams, lens, bone, features, notes):
+    return _mk(
+        key, "B&B Dental", name,
+        connection={"type": "Conexa", "subtype": "internal"},
+        platform_switching=True,
+        features=features,
+        implant={"diameters_mm": diams, "lengths_mm": lens, "bone_types": bone,
+                 "healing_modes": ["submerged", "non_submerged"]},
+        components=[
+            {"type": "cover_screw"}, {"type": "healing_abutment"},
+            {"type": "final_abutment", "retention": ["cement", "occlusal_screw"]},
+            {"type": "ti_base", "cad_cam": True},
+            {"type": "impression_coping"}, {"type": "analog"},
+        ],
+        notes=notes,
+    )
+
+BB_EV_LINE = _bb_conexa(
+    "B&B Dental|EV Line", "EV Line",
+    [4.0, 4.5, 5.0], [8, 10, 11.5, 13, 15],
+    ["D3", "D4"],
+    ["Aggressive thread", "Designed for spongy bone (D3-D4)",
+     "Maximum primary stability", "Reverse taper collar with annular micro-splining",
+     "Self-tapping double-thread spiral"],
+    "Conexa connection — prosthetic components interchangeable with 3P, Wide, Pterygo lines."
+)
+BB_3P = _bb_conexa(
+    "B&B Dental|3P", "3P Line",
+    [3.5, 4.0, 4.5, 5.0], [8, 10, 11.5, 13, 15],
+    ["D1", "D2"],
+    ["Gentle thread", "Suitable for compact bone (D1-D2)",
+     "Suitable for sites adjacent to maxillary sinus",
+     "Triple-thread spiral", "Excellent primary stability"],
+    "Conexa connection — cross-compatible with EV, Wide, Pterygo lines."
+)
+BB_3P_LONG = _bb_conexa(
+    "B&B Dental|3P Long", "3P Long",
+    [3.5, 4.0], [18, 20, 22, 24],
+    ["D1", "D2", "D3", "D4"],
+    ["Increased length", "Ideal for canine and pterygoid area",
+     "Three-principle thread", "Angled tip"],
+    "Conexa family — shares prosthetic components with EV, 3P, Wide, Pterygo lines."
+)
+BB_WIDE = _bb_conexa(
+    "B&B Dental|Wide Line", "Wide Line",
+    [5.5, 6.0], [8, 10, 11.5, 13],
+    ["post_extraction"],
+    ["Larger diameter", "Designed for post-extraction sites",
+     "Reverse taper collar with annular micro-splining",
+     "Triple-thread spiral", "Bone-friendly tip"],
+    "Conexa — cross-compatible with 3P, EV, Pterygo lines."
+)
+BB_DURAVIT_SLIM = _mk(
+    "B&B Dental|Dura-Vit Slim", "B&B Dental", "Dura-Vit Slim",
+    connection={"type": "taper_hexagonal", "subtype": None},
+    platform_switching=False,
+    features=["Taper-hexagonal connection (no morse taper)",
+              "Precision positioning of prosthetic components",
+              "Increased implant-abutment contact area",
+              "Collar micro-threading", "Self-tapping double-thread spiral"],
+    implant={"diameters_mm": [3.0, 3.4], "lengths_mm": [10, 11.5, 13, 15],
+             "bone_types": ["D1", "D2", "D3", "D4"],
+             "healing_modes": ["submerged", "non_submerged"]},
+    components=[
+        {"type": "cover_screw"}, {"type": "healing_abutment"},
+        {"type": "final_abutment", "retention": ["cement", "occlusal_screw"]},
+        {"type": "impression_coping"}, {"type": "analog"},
+    ],
+    notes="Secondary components + analogues are DIFFERENT from EV/3P/Wide/Pterygo Conexa family — not interchangeable."
+)
+
+# --- iter-145: Cowell Medi INNO line ---
+def _cowell(key, name, connection_label, diams, lens, bone, features, comps_list, notes):
+    return _mk(
+        key, "Cowell Medi", name,
+        connection={"type": connection_label},
+        platform_switching="Octa" in connection_label or "Internal" in name.lower(),
+        features=features,
+        implant={"diameters_mm": diams, "lengths_mm": lens, "bone_types": bone,
+                 "healing_modes": ["submerged", "non_submerged"]},
+        components=[{"type": c} for c in comps_list],
+        notes=notes,
+    )
+
+COWELL_INNO_SLA_SH = _cowell(
+    "Cowell Medi|INNO SLA-SH", "INNO SLA-SH",
+    "11° Tapered Hex 2.5",
+    [3.5, 4.0, 4.5, 5.0, 6.0], [7, 8, 10, 12, 14, 16, 18],
+    ["normal_bone", "hard_bone"],
+    ["11° tapered with 2.5 hex connection", "Wide and deep upper thread",
+     "Double tapered thread", "Open thread geometry",
+     "4 spiral round cutting edges", "Apex thread with sharp cutting edge"],
+    ["cover_screw", "healing_abutment", "final_abutment",
+     "impression_coping", "analog", "fixture_mount", "transfer_post", "guide_pin"],
+    "Interchangeable with hexagonal morse-tapered fixture (Hex 2.5). Includes submerged (standard / short / narrow) and internal/external prosthetic variants."
+)
+COWELL_INNO_INTERNAL = _cowell(
+    "Cowell Medi|INNO Internal", "INNO Internal",
+    "Internal Octa 3.1 (8° taper) / Hex 2.4",
+    [3.5, 4.0, 4.5, 5.0, 6.0], [7, 8, 10, 12, 14],
+    ["normal_bone", "hard_bone"],
+    ["Interchangeable with one-stage internal fixture",
+     "Internal Octa connection (8° taper / Octa 3.1)",
+     "No-Mount type", "Platform Ø4.8 / Ø5.9"],
+    ["cover_screw", "healing_abutment", "abutment_cap", "positioning_cylinder",
+     "plastic_coping", "impression_coping", "analog", "solid_abutment"],
+    "No-Mount type — octagonal internal connection designed for single-stage internal protocols."
+)
+COWELL_INNO_EXTERNAL = _cowell(
+    "Cowell Medi|INNO External", "INNO External",
+    "External Hex 2.7 / 3.4",
+    [3.5, 4.0, 4.5, 5.0, 6.0], [7, 8, 10, 12, 14],
+    ["normal_bone", "soft_bone"],
+    ["Interchangeable with external hexagonal fixture",
+     "External hex connection (Hex 2.7 / 3.4)",
+     "Platform Ø4.1 / 5.1", "Angled line for precise predictable surgery"],
+    ["cover_screw", "healing_abutment", "final_abutment", "impression_coping",
+     "transfer_post", "analog", "cemented_abutment", "angulated_abutment"],
+    "Classic external hex prosthetic family — compatible across Hex 2.7 and 3.4 platforms."
+)
+
 # --- Full list of extra curated catalog records for the seed hook. ---
 CATALOG_EXTRA: List[Dict[str, Any]] = [
     OSSTEM_TSIV, OSSTEM_SSIII, OSSTEM_MS, OSSTEM_ETIII_NH,
@@ -692,6 +814,9 @@ CATALOG_EXTRA: List[Dict[str, Any]] = [
     NEODENT_TITAMAX_GM_ACQUA, NEODENT_TITAMAX_GM_NEOPOROUS,
     BREDENT_BLUE_SKY, BREDENT_MINI_2_SKY, BREDENT_COPA_SKY,
     BREDENT_NARROW_SKY, BREDENT_SKY_CLASSIC,
+    # iter-145
+    BB_EV_LINE, BB_3P, BB_3P_LONG, BB_WIDE, BB_DURAVIT_SLIM,
+    COWELL_INNO_SLA_SH, COWELL_INNO_INTERNAL, COWELL_INNO_EXTERNAL,
 ]
 
 # ── Stub records for the other registered systems ──────────────────────────
@@ -736,6 +861,10 @@ STUB_KEYS: List[str] = [
     # iter-143 — newly registered brands (full catalogs below).
     "MIS|LANCE+",
     "Alpha-Bio Tec|SPI",
+    # iter-145 — Cowell Medi (new brand) registered via seed.
+    "Cowell Medi|INNO SLA-SH",
+    "Cowell Medi|INNO Internal",
+    "Cowell Medi|INNO External",
 ]
 
 
