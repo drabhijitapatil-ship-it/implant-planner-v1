@@ -214,6 +214,9 @@ export default function ImplantCatalogAdmin() {
             <Text style={s.headerTitle}>Implant Database</Text>
             <Text style={s.headerSub}>Implanr AI Knowledge Base</Text>
           </View>
+          {/* Invisible spacer balances the 44 px back button so the title
+              block stays centered on the screen. */}
+          <View style={{ width: 44, height: 44 }} />
         </View>
 
         <View style={s.tabRow}>
@@ -549,9 +552,9 @@ const s = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   headerBar: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 14, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#ECEFF1' },
   headerTopRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44 },
-  headerTitleBlock: { flex: 1, justifyContent: 'center' },
-  headerTitle: { fontSize: 20, fontWeight: '800', color: '#01579B', lineHeight: 24 },
-  headerSub: { fontSize: 12, color: '#607D8B', marginTop: 1, lineHeight: 14 },
+  headerTitleBlock: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  headerTitle: { fontSize: 20, fontWeight: '800', color: '#01579B', lineHeight: 24, textAlign: 'center' },
+  headerSub: { fontSize: 12, color: '#607D8B', marginTop: 1, lineHeight: 14, textAlign: 'center' },
   tabRow: { flexDirection: 'row', gap: 10, marginTop: 12, flexWrap: 'wrap' },
   tabAskAi: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999, borderWidth: 1.5, borderColor: '#0277BD', backgroundColor: '#E1F5FE', flex: 1, minWidth: 140, maxWidth: 240 },
   tabAskAiText: { color: '#0277BD', fontSize: 14, fontWeight: '700' },
