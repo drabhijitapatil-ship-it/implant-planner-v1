@@ -68,7 +68,22 @@ After the Healing Abutment Cuff Height line the PDF now renders `Multi-unit Abut
 
 
 
-## Iteration 142 (Feb 2026) — Implanr AI Component Catalog
+## Iteration 143 (Feb 2026) — Catalog Expansion: 5 New Curated Systems
+
+User uploaded 5 PDF catalogs; all extracted, normalised to the iter-142 schema, and seeded into `implant_catalog`:
+- **MIS LANCE+** — *new brand*: Internal Hex, 4 Ø × 5 L, 14 component categories (cover screw, healing caps × 3 profiles, multi-unit straight + 17°/30° angled across NP/SP/WP, cementable abutments + concave variants, EZ-Base + Ti-Base anti/free rotation + incisor esthetic, OT-Equator overdenture, ball attachments straight + 15°/25° angled, LOCKIT system, CPK abutments H1-H4, Titanium blanks).
+- **Alpha-Bio Tec SPI** — *new brand*: Internal Hex 0.050, single platform across 5 Ø × 5 L, 9 component categories.
+- **BioHorizons Tapered Pro**: Internal Hex Conical, Laser-Lok + RBT surface, 4 Ø × 5 L, 8 component categories.
+- **BioHorizons Tapered Pro Conical (RBT)**: Conical 6-cam single-platform CONELOG family, 5 Ø × 5 L, 11 component categories incl. surgical drills + color-coded drivers.
+- **Camlog CONELOG Progressive-Line**: Conical internal w/ Promote® surface, 4 Ø × 5 L, 10 component categories incl. healing caps × 3 profiles (cylindrical/wide-body/bottleneck) and Flex Surgery set.
+
+Total catalog state: **38 systems, 7 populated, 31 stubs**. All seeded via `_seed_implant_catalog()` startup hook (idempotent — admin edits to stubs preserved).
+
+**Self-test (curl, GPT-5.2)** — 2 grounded Q&A:
+- "Conelog healing abutments?" → quoted exact GH [2/4/6 mm] for cylindrical, [4/6 mm] for wide-body + bottleneck, retention "screwed", material "titanium_alloy". ✓
+- "MIS LANCE+ multi-unit angled?" → quoted 17°/30° angled (GH 1-2 mm) and 0° straight (GH 1-5 mm) across NP/SP/WP. ✓
+
+
 
 **Goal**: Implanr AI answers "Do we have angled abutments for Ankylos? What angulations?" / "Does Osstem TS III support multi-unit?" with grounded, catalog-quoted answers — no hallucination. Ground truth is a per-system component catalog editable by Administrators.
 
