@@ -68,7 +68,26 @@ After the Healing Abutment Cuff Height line the PDF now renders `Multi-unit Abut
 
 
 
-## Iteration 145 (Feb 2026) — B&B Dental + Cowell Medi + Family Grouping UI
+## Iteration 146 (Feb 2026) — Floating Ask Implanr AI Catalog-Aware + Catalog UI Redesign
+
+**1. Floating Ask Implanr AI bubble** (inside `procedures/[id].tsx`, calls `/api/ai/chat`):
+- `/ai/chat` now injects the catalog block scoped to the case's `implant_plans[0].brand|system` when that key resolves to a non-stub catalog record.
+- System prompt tightened with a do-not-invent guardrail: "When answering component / SKU / angulation / gingival-height / retention questions, quote ONLY values that appear in the Implant System Catalog block above; if a value is not listed, say so explicitly."
+- Fallback directive when the case has no system in the catalog: AI replies "The implant system chosen for this case is not yet in the Implanr catalog…" — never fabricates SKUs or angulations.
+- **Verified curl test**: case patched to `Dentsply Sirona|Ankylos C/X`, AI asked "What angulations are available for the final abutment in this case's implant system?" → correctly quoted 0°/7.5°/15°/22.5°/30°/37.5°. ✓
+
+**2. Catalog admin page UI redesign** (`/app/frontend/app/admin/implant-catalog.tsx`):
+- Replaced two-pane split (which squeezed the right detail pane on narrow widths) with a stacked vertical layout.
+- Cascading dropdowns: `Implant Company` → `Family` (only when ≥1 family in brand) → `Variant` (only when family has >1 variant).
+- Picker uses bottom-sheet modal with searchable list, active-row highlight, and option-count subtitles.
+- Auto-pick logic: when a brand is chosen and its first family has only 1 variant, that variant auto-loads. Multi-variant families wait for explicit user selection so they see all options.
+- Full-width detail card renders below the dropdowns — no more cut-off content.
+- Collapsible "Browse all 36 systems visually" grid below for non-technical staff who prefer card-based navigation.
+- Stub (Pending) systems excluded from dropdowns + grid per user choice (editable via API).
+
+**Verified visually**: Initial state shows only the Brand dropdown; selecting Neodent reveals the Family dropdown auto-filled with Drive GM (first alphabetical); switching to Helix GM reveals the Variant dropdown with placeholder; picking Acqua loads the full-width detail card with Connection / Implant / Features / Components (8) cards rendering cleanly. Ask Implanr AI panel scoped to Neodent Helix GM (Acqua) appears below.
+
+
 
 **Catalog batch 3** — seeded from 2 new PDFs:
 - **B&B Dental (Italy)** Conexa family (+5): EV Line, 3P, 3P Long, Wide Line, Dura-Vit Slim.
