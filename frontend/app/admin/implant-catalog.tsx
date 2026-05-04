@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import api from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
 import BackButton from '../../components/BackButton';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 
 /**
  * iter-146: Implant Catalog browser — stacked vertical layout with cascading
@@ -96,7 +96,7 @@ export default function ImplantCatalogAdmin() {
     }
   }, []);
 
-  // iter-158: Guard against firing the fetch before AuthContext has restored
+  // iter-160: Guard against firing the fetch before AuthContext has restored
   // the session — otherwise the request goes out without a Bearer token and
   // hits /api/implant-catalog with a 403 (FastAPI's HTTPBearer default), which
   // pollutes the server logs and briefly flashes an error Alert on cold start.
@@ -104,6 +104,13 @@ export default function ImplantCatalogAdmin() {
     if (!user) return;
     load();
   }, [user, load]);
+
+  // iter-160: Refetch when this screen regains focus (e.g. after the editor
+  // saves and navigates back) so the user immediately sees their changes.
+  useFocusEffect(useCallback(() => {
+    if (!user) return;
+    load();
+  }, [user, load]));
 
   // Derived: brand list, family list (per brand), variants (per brand+family).
   const brands = useMemo(() => {
@@ -578,6 +585,8 @@ const s = StyleSheet.create({
   tabPillCompare: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999, borderWidth: 1.5, borderColor: '#00695C', backgroundColor: '#E0F2F1', flex: 1, maxWidth: 180 },
   tabPillTextCompare: { color: '#00695C', fontSize: 14, fontWeight: '700' },
   addCircleBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#0277BD', alignItems: 'center', justifyContent: 'center' },
+  editBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: '#0277BD', backgroundColor: '#E1F5FE' },
+  editBtnText: { color: '#0277BD', fontSize: 13, fontWeight: '700' },
   askAiBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, borderWidth: 1.5, borderColor: '#0277BD', backgroundColor: '#E1F5FE' },
   askAiBtnText: { color: '#0277BD', fontSize: 12, fontWeight: '700' },
   // Dropdowns

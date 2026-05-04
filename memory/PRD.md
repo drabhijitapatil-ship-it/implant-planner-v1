@@ -1,5 +1,32 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 161 (Feb 2026) — Catalog editor: refresh on save + lossless component round-trip + missing edit button styles
+
+### Bug: "Save is clicked, the changed data is not reflected"
+Root cause was three-fold:
+1. **Stale list cache** — after the editor saved and `router.back()` returned to the catalog browser, the browser's data was still the cached state from first mount; no refetch happened.
+2. **Lossless field stripping** — the editor only renders 8 fields per component (type, subtype, gingival_heights, angulations, retention, material, indication, notes). When it serialized state back to PUT, every other field on the component (`platforms_mm`, `torque_ncm`, `cad_cam`, `lengths_mm`, `platforms_diam_mm`, ...) was dropped because the editor rebuilt each component from local form state. Backend used `$set: body` which replaced the whole `components` array — so seeded rich data was wiped on every save.
+3. **Missing styles** — `editBtn` / `editBtnText` were referenced in JSX but the StyleSheet entries had been lost in a prior refactor (TS2339 errors).
+
+### Fixes
+1. `implant-catalog.tsx` — added `useFocusEffect(load)` so the browser refetches whenever the screen regains focus (e.g. after editor save → back).
+2. `implant-catalog-edit.tsx` — `Component` type gained an `__original` field that stashes the raw component dict on load. Save merges form changes onto the original via `{ ...c.__original, ...overlay }`, preserving `platforms_mm`, `torque_ncm`, `cad_cam`, `lengths_mm`, `platforms_diam_mm`, and any other fields the editor doesn't render.
+3. `implant-catalog.tsx` — added missing `editBtn` and `editBtnText` styles (light blue pill).
+
+### RBAC clarification (asked by user)
+Edits made by Implant In-Charge / Administrator write to the shared `implant_catalog` MongoDB collection with `updated_by: <user_name>`. **All users (Students, Supervisors, Nurses, In-Charges, Administrator) see the same data on next fetch — there is no per-user copy.** Future re-seeds skip records whose `updated_by != "seed"`, so manual edits are protected from being overwritten.
+
+### Verified
+- Backend PUT round-trip via curl → 200 OK, `compatibility_notes` updated, `updated_by` set to `Dr. Abhijit Patil`, `is_stub` correctly remained `false`.
+- Drive GM Acqua restored from seed (60 components) after the test PUT was reverted.
+- `useFocusEffect` triggers a fresh `GET /implant-catalog` on every screen focus → user immediately sees their changes.
+
+### Files touched
+- `/app/frontend/app/admin/implant-catalog.tsx` — useFocusEffect + missing edit-button styles.
+- `/app/frontend/app/admin/implant-catalog-edit.tsx` — `__original` stash, lossless save merge.
+
+---
+
 ## Iteration 160 (Feb 2026) — Nobel Biocare + Neodent full prosthetic catalogs
 
 ### Nobel Biocare — 47 components × 6 systems
