@@ -11,6 +11,7 @@ import api, { getToken } from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { router } from 'expo-router';
 import BackButton from '../../components/BackButton';
+import CenteredHeader from '../../components/CenteredHeader';
 
 /**
  * HIPAA compliance review screen — Implant In-Charge + Administrator only.
@@ -225,33 +226,32 @@ export default function AuditLogScreen() {
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
-      <View style={styles.header}>
-        <BackButton testID="audit-back-btn" style={{ marginRight: 8 }} />
-        <View style={{ flex: 1 }}>
-          <Text style={styles.title}>Audit Log</Text>
-          <Text style={styles.subtitle}>
-            {loading ? 'Loading…' : `${total.toLocaleString()} records · retained 180 days`}
-          </Text>
-        </View>
-        <TouchableOpacity
-          style={styles.iconBtn}
-          onPress={() => setFilterOpen(true)}
-          testID="audit-filter-btn"
-        >
-          <Ionicons name="options-outline" size={22} color="#1565C0" />
-          {activeFilterCount > 0 && (
-            <View style={styles.badge}><Text style={styles.badgeText}>{activeFilterCount}</Text></View>
-          )}
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.iconBtn, { marginLeft: 8 }]}
-          onPress={exportCsv}
-          disabled={exportBusy}
-          testID="audit-export-btn"
-        >
-          {exportBusy ? <ActivityIndicator color="#1565C0" /> : <Ionicons name="cloud-download-outline" size={22} color="#1565C0" />}
-        </TouchableOpacity>
-      </View>
+      <CenteredHeader
+        title="Audit Log"
+        subtitle={loading ? 'Loading…' : `${total.toLocaleString()} records · retained 180 days`}
+        rightAction={
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity
+              style={styles.iconBtn}
+              onPress={() => setFilterOpen(true)}
+              testID="audit-filter-btn"
+            >
+              <Ionicons name="options-outline" size={22} color="#1565C0" />
+              {activeFilterCount > 0 && (
+                <View style={styles.badge}><Text style={styles.badgeText}>{activeFilterCount}</Text></View>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.iconBtn}
+              onPress={exportCsv}
+              disabled={exportBusy}
+              testID="audit-export-btn"
+            >
+              {exportBusy ? <ActivityIndicator color="#1565C0" /> : <Ionicons name="cloud-download-outline" size={22} color="#1565C0" />}
+            </TouchableOpacity>
+          </View>
+        }
+      />
 
       {activeFilterCount > 0 && (
         <View style={styles.activeFiltersBar}>
