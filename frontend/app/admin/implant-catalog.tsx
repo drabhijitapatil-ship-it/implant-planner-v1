@@ -208,20 +208,32 @@ export default function ImplantCatalogAdmin() {
   return (
     <SafeAreaView style={s.container}>
       <View style={s.headerBar}>
-        <BackButton />
-        <View style={{ flex: 1 }}>
-          <Text style={s.headerTitle}>Implant Database</Text>
-          <Text style={s.headerSub}>Implanr AI knowledge base · {systems.length} systems available</Text>
+        <View style={s.headerTopRow}>
+          <BackButton />
         </View>
-        <TouchableOpacity
-          style={s.askAiBtn}
-          onPress={() => router.push('/ask-implanr')}
-          testID="catalog-open-ask-ai"
-          data-testid="catalog-open-ask-ai"
-        >
-          <Ionicons name="sparkles" size={16} color="#0277BD" />
-          <Text style={s.askAiBtnText}>Ask AI</Text>
-        </TouchableOpacity>
+        <Text style={s.headerTitle}>Implant Database</Text>
+        <Text style={s.headerSub}>Implanr AI Knowledge Base</Text>
+
+        <View style={s.tabRow}>
+          <TouchableOpacity
+            style={s.tabAskAi}
+            onPress={() => router.push('/ask-implanr')}
+            testID="catalog-open-ask-ai"
+            data-testid="catalog-open-ask-ai"
+          >
+            <Ionicons name="sparkles" size={16} color="#0277BD" />
+            <Text style={s.tabAskAiText}>Ask Implanr AI</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={s.tabCompare}
+            onPress={() => router.push('/admin/implant-compare')}
+            testID="catalog-open-compare"
+            data-testid="catalog-open-compare"
+          >
+            <Ionicons name="git-compare-outline" size={16} color="#00695C" />
+            <Text style={s.tabCompareText}>Compare Across Implant Systems</Text>
+          </TouchableOpacity>
+        </View>
         {canEdit && (
           <TouchableOpacity
             style={s.addNewBtn}
@@ -230,7 +242,7 @@ export default function ImplantCatalogAdmin() {
             data-testid="catalog-add-new"
           >
             <Ionicons name="add-circle" size={16} color="#FFF" />
-            <Text style={s.addNewBtnText}>Add System</Text>
+            <Text style={s.addNewBtnText}>Add Implant System</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -239,19 +251,6 @@ export default function ImplantCatalogAdmin() {
         contentContainerStyle={{ padding: 16, paddingBottom: 48 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
       >
-        {/* iter-153: Compare entry-point — inline link, kept out of the
-            header to preserve the original Implant Database title outline. */}
-        <TouchableOpacity
-          style={s.compareLink}
-          onPress={() => router.push('/admin/implant-compare')}
-          testID="catalog-open-compare"
-          data-testid="catalog-open-compare"
-        >
-          <Ionicons name="git-compare-outline" size={15} color="#00695C" />
-          <Text style={s.compareLinkText}>Compare components across brands</Text>
-          <Ionicons name="arrow-forward" size={14} color="#00695C" />
-        </TouchableOpacity>
-
         {/* ── Cascading dropdowns ── */}
         <View style={s.dropdownGroup}>
           <Text style={s.dropdownLabel}>Implant Company</Text>
@@ -269,14 +268,14 @@ export default function ImplantCatalogAdmin() {
 
         {showFamilyDropdown && (
           <View style={s.dropdownGroup}>
-            <Text style={s.dropdownLabel}>Family</Text>
+            <Text style={s.dropdownLabel}>Implant System</Text>
             <TouchableOpacity
               style={s.dropdown}
               onPress={() => setPickerKind('family')}
               data-testid="catalog-family-dropdown"
             >
               <Text style={[s.dropdownValue, !selectedFamily && s.dropdownPlaceholder]}>
-                {selectedFamily || 'Select a family'}
+                {selectedFamily || 'Select an implant system'}
               </Text>
               <Ionicons name="chevron-down" size={18} color="#0277BD" />
             </TouchableOpacity>
@@ -513,15 +512,28 @@ const DetailRow: React.FC<{ label: string; value: string }> = ({ label, value })
   </View>
 );
 
+const titleCase = (s: string) =>
+  String(s || '')
+    .replace(/_/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map(w => (w.length <= 3 && w === w.toUpperCase() ? w : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()))
+    .join(' ');
+
+const prettyList = (arr?: string[], sep: string = ' / ') =>
+  (arr || []).map(titleCase).join(sep);
+
 const ComponentCard: React.FC<{ c: Component }> = ({ c }) => {
-  const title = c.subtype ? `${c.type} / ${c.subtype}` : c.type;
+  const type = titleCase(c.type);
+  const subtype = c.subtype ? titleCase(c.subtype) : '';
+  const title = subtype ? `${type} / ${subtype}` : type;
   return (
     <View style={s.compCard}>
-      <Text style={s.compTitle}>{title.replace(/_/g, ' ')}</Text>
+      <Text style={s.compTitle}>{title}</Text>
       {!!c.gingival_heights_mm?.length && <DetailRow label="Gingival Heights" value={`${c.gingival_heights_mm.join(', ')} mm`} />}
       {!!c.angulations_deg?.length && <DetailRow label="Angulations" value={`${c.angulations_deg.join(', ')}°`} />}
-      {!!c.retention?.length && <DetailRow label="Retention" value={c.retention.join(' / ')} />}
-      {!!c.material?.length && <DetailRow label="Material" value={c.material.join(' / ')} />}
+      {!!c.retention?.length && <DetailRow label="Retention" value={prettyList(c.retention)} />}
+      {!!c.material?.length && <DetailRow label="Material" value={prettyList(c.material)} />}
       {!!c.indication && <DetailRow label="Indication" value={c.indication} />}
       {!!c.driver && <DetailRow label="Driver" value={c.driver} />}
       {c.cad_cam && <DetailRow label="CAD/CAM" value="Yes" />}
@@ -533,20 +545,19 @@ const ComponentCard: React.FC<{ c: Component }> = ({ c }) => {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F7FA' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  headerBar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 12, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#ECEFF1' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#01579B' },
-  headerSub: { fontSize: 12, color: '#607D8B', marginTop: 2 },
-  compareLink: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12,
-    borderRadius: 8, backgroundColor: '#E0F2F1', borderWidth: 1, borderColor: '#B2DFDB',
-  },
-  compareLinkText: { color: '#00695C', fontSize: 13, fontWeight: '600' },
+  headerBar: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 14, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#ECEFF1', alignItems: 'center' },
+  headerTopRow: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center' },
+  headerTitle: { fontSize: 22, fontWeight: '800', color: '#01579B', textAlign: 'center', marginTop: 2 },
+  headerSub: { fontSize: 13, color: '#607D8B', textAlign: 'center', marginTop: 4 },
+  tabRow: { flexDirection: 'row', alignSelf: 'stretch', gap: 10, marginTop: 14, justifyContent: 'center', flexWrap: 'wrap' },
+  tabAskAi: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999, borderWidth: 1.5, borderColor: '#0277BD', backgroundColor: '#E1F5FE', flex: 1, minWidth: 160, maxWidth: 260 },
+  tabAskAiText: { color: '#0277BD', fontSize: 14, fontWeight: '700' },
+  tabCompare: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999, borderWidth: 1.5, borderColor: '#00695C', backgroundColor: '#E0F2F1', flex: 2, minWidth: 220, maxWidth: 360 },
+  tabCompareText: { color: '#00695C', fontSize: 14, fontWeight: '700' },
+  addNewBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#0277BD', paddingHorizontal: 22, paddingVertical: 10, borderRadius: 999, marginTop: 10, alignSelf: 'center' },
+  addNewBtnText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
   askAiBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, borderWidth: 1.5, borderColor: '#0277BD', backgroundColor: '#E1F5FE' },
   askAiBtnText: { color: '#0277BD', fontSize: 12, fontWeight: '700' },
-  addNewBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#0277BD', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
-  addNewBtnText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
   // Dropdowns
   dropdownGroup: { marginBottom: 12 },
   dropdownLabel: { fontSize: 12, fontWeight: '700', color: '#0277BD', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
