@@ -213,13 +213,21 @@ export default function ImplantCatalogAdmin() {
           <Text style={s.headerTitle}>Implant Catalog</Text>
           <Text style={s.headerSub}>Implanr AI knowledge base · {systems.length} systems available</Text>
         </View>
+        <TouchableOpacity
+          style={s.askAiBtn}
+          onPress={() => router.push('/ask-implanr')}
+          data-testid="catalog-open-ask-ai"
+        >
+          <Ionicons name="sparkles" size={16} color="#0277BD" />
+          <Text style={s.askAiBtnText}>Ask AI</Text>
+        </TouchableOpacity>
         {canEdit && (
           <TouchableOpacity
             style={s.addNewBtn}
             onPress={() => router.push('/admin/implant-catalog-edit')}
             data-testid="catalog-add-new"
           >
-            <Ionicons name="add-circle" size={18} color="#FFF" />
+            <Ionicons name="add-circle" size={16} color="#FFF" />
             <Text style={s.addNewBtnText}>Add System</Text>
           </TouchableOpacity>
         )}
@@ -513,6 +521,10 @@ const s = StyleSheet.create({
   headerBar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 12, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#ECEFF1' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#01579B' },
   headerSub: { fontSize: 12, color: '#607D8B', marginTop: 2 },
+  askAiBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, borderWidth: 1.5, borderColor: '#0277BD', backgroundColor: '#E1F5FE' },
+  askAiBtnText: { color: '#0277BD', fontSize: 12, fontWeight: '700' },
+  addNewBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#0277BD', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
+  addNewBtnText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
   // Dropdowns
   dropdownGroup: { marginBottom: 12 },
   dropdownLabel: { fontSize: 12, fontWeight: '700', color: '#0277BD', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
