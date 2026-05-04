@@ -1,6 +1,35 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
-## Iteration 149 (Feb 2026) — AI Quality + Catalog Save Bug + Implant Database Tile + PDF Component Extraction
+## Iteration 150 (Feb 2026) — BioHorizons Tapered Pro Conical Comprehensive Component Database
+
+User uploaded the official Tapered Pro Conical Surgical & Manual catalog PDF. Full prosthetic component extraction completed (surgical drills/drivers/ratchets excluded per user).
+
+**Components seeded** (44 entries; up from 14 in iter-149):
+- Cover screws (1) — CNCC, CRCC; .050" hex driver; 10-15 Ncm
+- Healing abutments (4) — Regular Ø 3.0/3.8 mm × GH 2/4/6; Wide Ø 4.8/5.3 × GH 4/6; Extra-Wide Ø 5.8 × GH 4/6; SmartShape anatomic GH 3.25/3.5/5.25/5.5
+- Impression copings (8) — Open-tray + closed-tray Conical Posts (Narrow + Regular + Wide); Impression Caps (POM); Bite Registration Caps (POM); Multi-unit Direct Pick-up + Indirect Transfer + Cover Cap + PEEK Contoured Cover Cap
+- Analogs (3) — Conical Implant Lab Analog (single + 25-pack); Multi-unit Protection Analog; Multi-unit Abutment Replica
+- Temporary cylinders (2) — Engaging (H 11.0 mm) + Non-engaging (H 11.2 mm); 20 Ncm
+- Final abutments (4) — Gold-Plastic (H 11.7); Straight Esthetic GH 1.5/2.0/3.0; 15° Angled GH 1.5/3.0; 20° Angled GH 1.5/3.0
+- Ti-bases (5) — Engaging Short Post (GH 4.7); Engaging Tall Post (GH 6.5); Non-Engaging (GH 4.6); CEREC-compatible; CAD/CAM Ti Blank Type IAC
+- Scanbodies (3) — Conical Scanbody (CNTSB/CRTSB); CEREC Scan Post; Multi-unit Titanium Scanbody
+- Overdenture attachments (2) — OD Secure (TiN coated, GH 1/2/3/4); Locator GH 1/2/3/4/5/6 (30 Ncm; nylon males)
+- Multi-unit abutments (4) — Straight 0° GH 2/3/4; 17° angled GH 2/3/4; 30° angled GH 2/3/4; Try-in
+- Prosthetic screws (4) — Multi-unit prosthetic (Reg/Long/Short); Angled MU screw; CAD/CAM bar screw; Direct-to-MU (zirconia/PMMA/3D-printed)
+- Copings (4) — Titanium (Reg + Short); Gold castable; Plastic castable; Passive-fit (all H 7.5)
+
+**Verification (curl)**:
+- Total: 44 components persisted; `updated_by: seed`.
+- AI for "multi-unit angled abutments" → 2 structured spec blocks (17° + 30°) with exact GH 2.0/3.0/4.0.
+- AI for "SmartShape healer" → exact GH 3.25/3.5/5.25/5.5; platforms Narrow/Regular.
+- AI for "OD Secure overdenture" → GH 1/2/3/4; titanium_alloy_TiN material; abutment_screw retention.
+
+**Files touched**:
+- `/app/backend/implant_catalog_seed.py` — replaced BioHorizons component array with 44-entry detailed list.
+
+
+
+ AI Quality + Catalog Save Bug + Implant Database Tile + PDF Component Extraction
 
 **User-reported issues fixed:**
 
