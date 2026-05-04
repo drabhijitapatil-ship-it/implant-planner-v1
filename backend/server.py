@@ -4829,14 +4829,22 @@ async def _seed_implant_catalog():
     """Idempotent seed for the implant_catalog collection (called on startup)."""
     try:
         from implant_catalog_seed import (
-            ANKYLOS_CX, OSSTEM_TSIII, STUB_KEYS, _stub
+            ANKYLOS_CX, OSSTEM_TSIII, MIS_LANCE_PLUS,
+            BIOHORIZONS_TAPERED_PRO, BIOHORIZONS_TAPERED_PRO_CONICAL,
+            CONELOG_PROGRESSIVE, ALPHABIO_SPI,
+            STUB_KEYS, _stub
         )
     except Exception as e:
         logging.warning(f"implant_catalog seed skipped: {e}")
         return
 
     now = datetime.now(timezone.utc).isoformat()
-    for rec in (ANKYLOS_CX, OSSTEM_TSIII):
+    curated = (
+        ANKYLOS_CX, OSSTEM_TSIII, MIS_LANCE_PLUS,
+        BIOHORIZONS_TAPERED_PRO, BIOHORIZONS_TAPERED_PRO_CONICAL,
+        CONELOG_PROGRESSIVE, ALPHABIO_SPI,
+    )
+    for rec in curated:
         rec_with_meta = {**rec, "is_stub": False, "updated_at": now, "updated_by": "seed"}
         await db.implant_catalog.update_one(
             {"key": rec["key"]}, {"$set": rec_with_meta}, upsert=True
