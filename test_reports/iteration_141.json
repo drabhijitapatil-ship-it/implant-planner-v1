@@ -1,0 +1,40 @@
+{
+  "summary": "Tested Implant Catalog CRUD + Ask Implanr AI (iter-141). Backend 9/9 passed (list, get-by-key, RBAC upsert, AI scoped + global, AI grounding verifies catalog angulations 0/7.5/15/22.5/30/37.5°). Frontend: After restarting expo (initial bundle was STALE — did not contain the new buttons), the new Ask AI pill button renders in the catalog header and navigates to /ask-implanr; the standalone screen renders title, scope selector, suggested-questions, and input correctly. However, data-testid attributes are NOT being propagated to the DOM for TouchableOpacity components — only `testID` works on react-native-web. This blocks all data-testid-based selectors. Also, on direct-route navigation (page.goto) the in-memory auth token is dropped, so the user role context loads empty and canEdit=false — that is why Add System button could not be observed in this test (functional behavior is likely correct, but unverifiable until canEdit-related selectors are accessible).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "implant-catalog header", "issue": "Initial test failed because Metro served a STALE bundle missing the Ask AI button. Required `supervisorctl restart expo` to pick up the new code. Main agent's edit was not hot-reloaded.", "selector": "data-testid=catalog-open-ask-ai", "priority": "MEDIUM"},
+      {"component": "TouchableOpacity (catalog + ask-implanr + catalog-edit)", "issue": "data-testid prop is not propagated to the rendered DOM by react-native-web — only `testID` is. Affected: catalog-open-ask-ai, catalog-add-new, ai-scope-selector, ai-input, ai-send, ai-suggestion-0..4, cat-brand, cat-name, cat-conn-type, cat-features, cat-diam, cat-len, cat-add-component, catalog-save. Buttons render visually but cannot be queried by data-testid. Fix: add `testID=\"...\"` alongside the existing `data-testid=\"...\"` (mirror the pattern used in login.tsx and BackButton.tsx).", "selector": "all newly added testids", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Ask AI navigation", "issue": "VERIFIED WORKING: tap on the visible 'Ask AI' pill (text-matched) navigates to /ask-implanr; screen renders title 'Ask Implanr AI', 'Catalog-grounded clinical assistant', Scope: All systems chip, ≥5 suggested-question chips, and the bottom input + send icon. AI response could not be programmatically asserted because suggestion buttons are not selectable via data-testid (see UI bug above).", "affected_selectors": ["[data-testid=ai-suggestion-0]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_implant_catalog_ai_iteration141.py",
+    "/app/test_reports/pytest/iteration_141.xml"
+  ],
+  "action_items": [
+    "Add `testID=\"<id>\"` alongside `data-testid=\"<id>\"` on all TouchableOpacity / TextInput / Pressable wrappers added for this feature. RN web only forwards `testID` to the DOM (as data-testid). Pattern: see /app/frontend/app/auth/login.tsx line 176-177 and /app/frontend/components/BackButton.tsx line 71+75.",
+    "Investigate why expo Metro did NOT hot-reload the new code in /app/frontend/app/admin/implant-catalog.tsx — testers had to manually restart expo to see the new Ask AI button. Possibly add a watch path or invalidate cache.",
+    "(Self-test) After applying testID fix, verify: (a) Add System button visible to admin/implant_incharge role and clicking opens /admin/implant-catalog-edit form with all fields, (b) suggestion click on /ask-implanr triggers POST /api/ai/ask-implanr and renders an answer bubble, (c) Student role sees Ask AI but NOT Add System."
+  ],
+  "critical_code_review_comments": [
+    "RN-web testID/data-testid mismatch: the entire feature uses `data-testid` JSX prop on TouchableOpacity which is stripped by react-native-web. Use `testID` (or both) to make the elements queryable.",
+    "Auth context hydration on direct route load: when token isn't yet in storage, the catalog screen calls /implant-catalog and gets 403, then falls back to systems=[] and `canEdit=false` (because user is null). UX-wise the page should re-fetch on auth ready or redirect to /auth/login when 401/403."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_implant_catalog_ai_iteration141.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "60% (Ask AI button + screen rendering verified; deeper interaction blocked by testID/data-testid issue)"},
+  "test_credentials": "Abhijit.patil/Admin@123 (implant_incharge); Gaurav.pandey/Student@123 (student); Paresh.gandhi/Supervisor@123",
+  "seed_data_creation": "Backend test created an upsert row with key 'TEST_Brand|TEST_System' in implant_catalog collection (idempotent, prefix-namespaced).",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend is 100% passing — re-run /app/backend/tests/test_implant_catalog_ai_iteration141.py for regression. For frontend, the Ask AI pill renders correctly post-expo-restart. The blocker for full E2E selector-based testing is that data-testid props aren't reaching the DOM. After main agent adds `testID=...` props, retry the same Playwright flow: login at /auth/login (input[0]=identifier, input[1]=password, click data-testid=login-submit-btn) → goto /admin/implant-catalog → click [data-testid=catalog-open-ask-ai] → verify scope selector and suggestions → click suggestion-0 → wait ~30s for AI bubble. Note: page.goto drops in-memory auth, so prefer navigating via in-app router push, or accept the role/auth re-hydration delay (wait 5–7s after login before goto, and re-login if redirected).",
+  "rca of the issue": "Two compounding problems found: (1) Stale Metro bundle — the served JS did not include the newly added strings catalog-open-ask-ai/askAiBtn until expo was restarted; main agent's hot-reload didn't trigger a recompile. Mitigation: `sudo supervisorctl restart expo` and wait ~30–60s for re-bundle. (2) `data-testid` JSX prop is not forwarded to the DOM by react-native-web on TouchableOpacity; only `testID` is converted to `data-testid` on the underlying button/div. All new TouchableOpacity components in this feature use only `data-testid` (no `testID`), so the IDs are stripped at render time. Mitigation: add `testID=\"<same-id>\"` alongside every `data-testid` prop (pattern is already established in login.tsx and BackButton.tsx)."
+}
