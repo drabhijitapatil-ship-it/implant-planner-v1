@@ -1,5 +1,57 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 160 (Feb 2026) — Nobel Biocare + Neodent full prosthetic catalogs
+
+### Nobel Biocare — 47 components × 6 systems
+All six Nobel systems share the **Internal Conical Connection (CC)** prosthetic ecosystem. Defined a single shared `_nobel_components(platforms_supported)` builder that emits per-platform component records, then applied to:
+
+- `NobelActive NP` (Ø 3.0–3.5)
+- `NobelActive RP` (Ø 4.3–5.0)
+- `NobelActive WP` (Ø 5.5)
+- `NobelParallel CC NP` (Ø 3.75)
+- `NobelParallel CC RP` (Ø 4.3–5.0)
+- `NobelParallel CC WP` (Ø 5.5)
+
+Component categories:
+- Cover screw, healing abutments (×5: Standard, Slim, Bridge, On1 Healing Cap, On1 IOS)
+- Temporary cylinders (×6: Standard, Slim, Immediate, QuickTemp Conical, Snap, On1)
+- Multi-Unit Abutments (×7: Straight, Plus snap-in, 17°, 30°, NobelZygoma 0°/45°/60°)
+- Final / esthetic abutments (×7: Esthetic, Procera Esthetic, Snappy 4.0/5.5, Universal Base, GoldAdapt, Narrow Profile)
+- **ASC (Angulated Screw Channel)** — 0–25° angulation for cement-free screw-retained crowns
+- Ti-Base / On1 Base, scanbodies, impression copings (closed/open/low-profile/plastic/On1 IOS)
+- Lab analogs, prosthetic screws, Locator® and Ball overdenture attachments
+
+### Neodent — 60 components × 6 systems
+All six Neodent GM systems share the **Grand Morse single prosthetic platform**. Defined `_neodent_gm_components()` and applied to:
+
+- `Drive GM Acqua` / `Drive GM (NeoPoros)`
+- `Helix GM Acqua` / `Helix GM (NeoPoros)`
+- `Titamax GM Acqua` / `Titamax GM (NeoPoros)`
+
+Component categories:
+- GM Cover Screw (10 Ncm)
+- Healing abutments (Standard + Customizable)
+- Mini Conical Abutments + Click Anatomic family (Straight + 17°/30°/45° tilted)
+- Universal Abutments (cement-retained, Straight + 17°/30°)
+- Anatomic Abutments (anterior + Narrow + 17°)
+- Specialty: Micro, CoCr, Pro PEEK, Temporary
+- Ti-Bases × 7 variants (Crown, Bridge non-engaging, AS angled, C, Exact, Burn-out, Block)
+- Scanbodies × 5, Impression copings × 7, Lab analogs × 6 (incl. Hybrid Repositionable)
+- Provisional copings (Crown / Bridge), Esthetic Try-In family
+- Overdenture: GM Equator, Novaloc Straight + Angled
+- **Neodent NeoArch** — Immediate Fixed Full-Arch solution
+- **Neo Abutment Protection Cylinder** — digital workflow
+
+### Files touched
+- `/app/backend/implant_catalog_seed.py` — replaced placeholder `_nobel()` and `_neodent()` helpers with full component builders. Re-seeded all 12 records.
+
+### Verified
+- `/api/implant-catalog/by-key?key=Nobel Biocare|NobelActive RP` → 47 components across 11 distinct types.
+- `/api/implant-catalog/by-key?key=Neodent|Helix GM Acqua` → 60 components across 13 distinct types.
+- All MOP / acetal_resin material strings normalised to "Polyoxymethylene (Acetal Resin)".
+
+---
+
 ## Iteration 159 (Feb 2026) — Implant Database UX overhaul + BioHorizons Tapered Pro full catalog + MOP rename
 
 ### 1. Implant Database header & navigation overhaul
