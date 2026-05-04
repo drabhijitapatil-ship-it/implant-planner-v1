@@ -417,6 +417,283 @@ ALPHABIO_SPI: Dict[str, Any] = {
     ),
 }
 
+
+# ── iter-144 — Extended catalogs from second PDF batch (Ankylos update +
+# Osstem TS IV/SS III/MS/ETIII NH + Nobel NP/RP/WP + Neodent Drive/Helix/Titamax
+# + Bredent blueSKY/miniSKY/copaSKY/Narrow/Classic). Defined as compact dicts
+# and fed through a shared CATALOG_EXTRA list into the startup seeder. ───────
+def _mk(key: str, brand: str, name: str, connection=None, features=None, implant=None,
+        components=None, notes="", platform_switching=None) -> Dict[str, Any]:
+    return {
+        "key": key, "brand": brand, "name": name,
+        "connection": connection, "platform_switching": platform_switching,
+        "features": features or [], "implant": implant or {},
+        "components": components or [], "compatibility_notes": notes,
+    }
+
+# --- Osstem additional systems ---
+OSSTEM_TSIV = _mk(
+    "Osstem|TS IV", "Osstem", "TS IV",
+    connection={"type": "internal_hex", "subtype": "morse_taper_conical_seal"},
+    platform_switching=True,
+    features=["3-tier taper body for soft-bone and sinus surgery", "Small thread + corkscrew thread + helix cutting edges",
+              "Aggressive apex design", "SA + CA surface options"],
+    implant={"diameters_mm": [4.0, 4.5, 5.0, 6.0, 7.0], "lengths_mm": [7, 8.5, 10, 11.5, 13],
+             "bone_types": ["D3", "D4"], "healing_modes": ["submerged"]},
+    components=[
+        {"type": "healing_abutment", "notes": "Shared GM-style prosthetic family with TS III"},
+        {"type": "multi_unit_abutment", "angulations_deg": [0, 17, 30]},
+        {"type": "final_abutment", "retention": ["cement", "occlusal_screw"]},
+        {"type": "ti_base", "cad_cam": True},
+        {"type": "scanbody"}, {"type": "cover_screw"}, {"type": "analog"},
+    ],
+    notes="Shares prosthetic platform with TS III within matching diameter."
+)
+
+OSSTEM_SSIII = _mk(
+    "Osstem|SS III", "Osstem", "SS III",
+    connection={"type": "internal_octa", "subtype": "morse_taper_conical_seal"},
+    platform_switching=False,
+    features=["One-time surgery with wide crown margin", "Taper body + corkscrew thread + helix cutting edges",
+              "SA surface", "Internal Octa prosthetic indexing"],
+    implant={"diameters_mm": [3.5, 4.0, 4.5, 5.0, 6.0, 7.0], "lengths_mm": [6, 7, 8.5, 10, 11.5, 13],
+             "bone_types": ["D1", "D2", "D3", "D4"], "healing_modes": ["non_submerged"]},
+    components=[
+        {"type": "final_abutment", "subtype": "Solid / ExcellentSolid / ComOcta family",
+         "angulations_deg": [0, 15, 25], "retention": ["cement", "occlusal_screw"]},
+        {"type": "ti_base", "cad_cam": True, "subtype": "ComOcta Milling"},
+        {"type": "healing_abutment"}, {"type": "scanbody"}, {"type": "analog"},
+    ],
+    notes="Tissue-level one-time surgery system; NOT interchangeable with bone-level TS family."
+)
+
+OSSTEM_MS = _mk(
+    "Osstem|MS", "Osstem", "MS",
+    connection={"type": "ball_head", "subtype": "O-Ring neck connection"},
+    platform_switching=False,
+    features=["Narrow-ridge + denture stabilisation", "Corkscrew thread",
+              "Taper design in cortical area", "Flexible crown margin"],
+    implant={"diameters_mm": [2.0, 2.5, 3.0, 3.5], "lengths_mm": [8.5, 10, 11.5, 13],
+             "bone_types": ["narrow_ridge"], "healing_modes": ["non_submerged"]},
+    components=[
+        {"type": "overdenture", "subtype": "ball_attachment",
+         "indication": "Denture retention in edentulous arches"},
+        {"type": "final_abutment", "notes": "One-piece ball head — no separate abutment."},
+    ],
+    notes="Mini-implant system — ball-head abutment integral to the implant body."
+)
+
+OSSTEM_ETIII_NH = _mk(
+    "Osstem|ETIII NH", "Osstem", "ETIII NH",
+    connection={"type": "internal_hex", "subtype": "11° morse_taper"},
+    platform_switching=True,
+    features=["Super-hydrophilic SA surface coated with nano-hydroxyapatite",
+              "Bone-level with 11° morse taper internal hex",
+              "Taper body with corkscrew thread, narrow threads",
+              "Recommended placement torque ≤40 Ncm"],
+    implant={"diameters_mm": [3.2, 3.5, 4.0, 4.5, 5.0, 6.0, 7.0],
+             "lengths_mm": [6, 7, 8.5, 10, 11.5, 13, 15],
+             "bone_types": ["soft_bone", "narrow_ridge", "ultra_wide"],
+             "healing_modes": ["submerged"]},
+    components=[
+        {"type": "cover_screw"}, {"type": "healing_abutment"},
+        {"type": "final_abutment", "retention": ["cement", "occlusal_screw"]},
+        {"type": "analog"},
+    ],
+    notes="Compatible with Mini platform components except cover screw / mount / lab analog."
+)
+
+# --- Nobel Biocare platforms (NP / RP / WP) ---
+def _nobel(key, name, diams, lens, notes):
+    return _mk(
+        key, "Nobel Biocare", name,
+        connection={"type": "internal_conical"},
+        platform_switching=True,
+        features=["Strong internal conical connection",
+                  "Engineered for Immediate Function",
+                  "Platform switching for tissue preservation",
+                  "TiUnite surface on implant body"],
+        implant={"diameters_mm": diams, "lengths_mm": lens,
+                 "bone_types": ["Type I", "Type II", "Type III", "Type IV"],
+                 "healing_modes": ["immediate", "submerged"]},
+        components=[
+            {"type": "cover_screw"}, {"type": "healing_abutment", "subtype": "standard + slim"},
+            {"type": "final_abutment", "subtype": "conical abutment family",
+             "retention": ["cement", "occlusal_screw"]},
+            {"type": "multi_unit_abutment", "angulations_deg": [0, 17, 30]},
+            {"type": "ti_base", "cad_cam": True}, {"type": "scanbody"},
+            {"type": "impression_coping"}, {"type": "analog"},
+        ],
+        notes=notes,
+    )
+
+NOBEL_ACTIVE_NP = _nobel(
+    "Nobel Biocare|NobelActive NP", "NobelActive NP",
+    [3.0, 3.5], [7.0, 8.5, 10.0, 11.5, 13.0, 15.0, 16.5, 17.5],
+    "NobelActive 3.0 is indicated only for single-unit maxillary lateral and mandibular lateral/central incisors. NobelActive NP is not recommended for posterior use."
+)
+NOBEL_ACTIVE_RP = _nobel(
+    "Nobel Biocare|NobelActive RP", "NobelActive RP",
+    [4.3, 5.0], [7.0, 8.5, 10.0, 11.5, 13.0, 15.0, 16.5, 17.5],
+    "Primary workhorse platform — universal indication."
+)
+NOBEL_ACTIVE_WP = _nobel(
+    "Nobel Biocare|NobelActive WP", "NobelActive WP",
+    [5.5], [7.0, 8.5, 10.0, 11.5, 13.0, 15.0],
+    "Wide platform — molar region and wide edentulous ridges."
+)
+NOBEL_PARALLEL_NP = _nobel(
+    "Nobel Biocare|NobelParallel NP", "NobelParallel CC NP",
+    [3.75], [6.5, 8.0, 9.5, 11.0, 12.5, 14.5, 17.5],
+    "Parallel-walled implant for universal use; cover screw included."
+)
+NOBEL_PARALLEL_RP = _nobel(
+    "Nobel Biocare|NobelParallel RP", "NobelParallel CC RP",
+    [4.3, 5.0], [6.5, 8.0, 9.5, 11.0, 12.5, 14.5, 17.5],
+    "Universal use across anterior + posterior indications."
+)
+NOBEL_PARALLEL_WP = _nobel(
+    "Nobel Biocare|NobelParallel WP", "NobelParallel CC WP",
+    [5.5], [6.5, 8.0, 9.5, 11.0, 12.5, 14.5],
+    "Wide-platform variant — larger edentulous ridges."
+)
+
+# --- Neodent Grand Morse family ---
+def _neodent(key, name, geom, diams, lens, bone, notes):
+    return _mk(
+        key, "Neodent", name,
+        connection={"type": "Grand Morse", "subtype": "conical"},
+        platform_switching=True,
+        features=geom,
+        implant={"diameters_mm": diams, "lengths_mm": lens,
+                 "bone_types": bone,
+                 "healing_modes": ["submerged", "non_submerged", "immediate"],
+                 "surface_options": ["Acqua", "NeoPoros"]},
+        components=[
+            {"type": "cover_screw", "subtype": "GM Cover Screw"},
+            {"type": "healing_abutment", "subtype": "GM Healing + GM Customizable"},
+            {"type": "ti_base", "subtype": "GM Exact Titanium Base", "cad_cam": True,
+             "notes": "Also available as GM Titanium Base Burn-out Coping."},
+            {"type": "final_abutment", "retention": ["cement", "occlusal_screw"]},
+            {"type": "multi_unit_abutment"},
+            {"type": "scanbody"}, {"type": "impression_coping"}, {"type": "analog"},
+        ],
+        notes=notes,
+    )
+
+NEODENT_DRIVE_GM_ACQUA = _neodent(
+    "Neodent|Drive GM Acqua", "Drive GM (Acqua)",
+    ["Tapered implant", "Square-shape threads", "Double threaded", "Reverse cutting chambers", "Rounded apex with sharp edge"],
+    [2.0, 2.8, 3.0, 3.5, 4.3, 5.0], [8.0, 10.0, 11.5, 13.0, 16.0, 18.0],
+    ["III", "IV"], "Hydrophilic Acqua surface — faster osseointegration; immediate placement post-extraction."
+)
+NEODENT_DRIVE_GM_NEOPOROUS = _neodent(
+    "Neodent|Drive GM Neoporous", "Drive GM (NeoPoros)",
+    ["Tapered implant", "Square-shape threads", "Double threaded", "Reverse cutting chambers", "Rounded apex with sharp edge"],
+    [2.0, 2.8, 3.0, 3.5, 4.3, 5.0], [8.0, 10.0, 11.5, 13.0, 16.0, 18.0],
+    ["III", "IV"], "NeoPoros micro-textured surface. Prosthetic components shared with Drive GM Acqua."
+)
+NEODENT_HELIX_GM_ACQUA = _neodent(
+    "Neodent|Helix GM Acqua", "Helix GM (Acqua)",
+    ["Full dual-tapered", "Hybrid contour", "Active apex + helicoidal flutes",
+     "Dynamic progressive thread", "Double threaded"],
+    [2.35, 3.5, 3.75, 4.0, 4.3, 5.0, 6.0],
+    [8.0, 10.0, 11.5, 13.0, 16.0, 18.0, 20.0, 22.5, 25.0],
+    ["I", "II", "III", "IV"],
+    "All-bone workhorse; Acqua surface. Compatible with the Neo Screwdriver."
+)
+NEODENT_HELIX_GM_NEOPOROUS = _neodent(
+    "Neodent|Helix GM Neoporous", "Helix GM (NeoPoros)",
+    ["Full dual-tapered", "Hybrid contour", "Active apex + helicoidal flutes",
+     "Dynamic progressive thread", "Double threaded"],
+    [2.35, 3.5, 3.75, 4.0, 4.3, 5.0, 6.0],
+    [8.0, 10.0, 11.5, 13.0, 16.0, 18.0, 20.0, 22.5, 25.0],
+    ["I", "II", "III", "IV"], "NeoPoros surface. Prosthetic components shared with Helix GM Acqua."
+)
+NEODENT_TITAMAX_GM_ACQUA = _neodent(
+    "Neodent|Titamax GM Acqua", "Titamax GM (Acqua)",
+    ["Cylindrical (parallel walls)", "V-shape threads", "Double threaded", "Self-tapping apex"],
+    [3.5, 3.75, 4.0, 5.0], [7.0, 8.0, 9.0, 11.0, 13.0, 15.0, 17.0],
+    ["I", "II", "grafted_areas"], "Acqua surface. Cylindrical geometry for dense bone and grafted sites."
+)
+NEODENT_TITAMAX_GM_NEOPOROUS = _neodent(
+    "Neodent|Titamax GM Neoporous", "Titamax GM (NeoPoros)",
+    ["Cylindrical (parallel walls)", "V-shape threads", "Double threaded", "Self-tapping apex"],
+    [3.5, 3.75, 4.0, 5.0], [7.0, 8.0, 9.0, 11.0, 13.0, 15.0, 17.0],
+    ["I", "II", "grafted_areas"], "NeoPoros surface. Prosthetic components shared with Titamax GM Acqua."
+)
+
+# --- Bredent SKY family ---
+def _bredent(key, name, connection_type, diams, lens, bone, healing, features, notes):
+    return _mk(
+        key, "Bredent", name,
+        connection={"type": connection_type, "subtype": None},
+        platform_switching="RP" in connection_type or "Regular" in connection_type,
+        features=features,
+        implant={"diameters_mm": diams, "lengths_mm": lens,
+                 "bone_types": bone, "healing_modes": healing},
+        components=[
+            {"type": "cover_screw"}, {"type": "healing_abutment"},
+            {"type": "final_abutment", "retention": ["cement", "occlusal_screw"]},
+            {"type": "multi_unit_abutment"},
+            {"type": "ti_base", "cad_cam": True}, {"type": "scanbody"},
+            {"type": "overdenture"}, {"type": "impression_coping"}, {"type": "analog"},
+        ],
+        notes=notes,
+    )
+
+BREDENT_BLUE_SKY = _bredent(
+    "Bredent|Blue Sky", "blueSKY", "RP (Regular platform, platform-switched)",
+    [4.0, 4.5, 5.5], [8, 10, 12, 14, 16],
+    ["all"], ["iso_crestal", "supracrestal"],
+    ["Platform switch", "Osseo-connect surface (OCS)", "Conical-cylindrical shape",
+     "Double thread", "Self-cutting compression thread", "Bone-preserving"],
+    "Workhorse of the SKY line. Compatible with SKY esthetic line, SKY elegance, SKY fast & fixed, SKY uni.cone."
+)
+BREDENT_MINI_2_SKY = _bredent(
+    "Bredent|Mini 2 Sky", "miniSKY", "NP (Narrow platform)",
+    [2.8, 3.2], [6, 8, 10, 12, 14],
+    ["all"], ["tissue_level"],
+    ["Osseo-connect surface (OCS)", "Rotation-locked conical abutment connection",
+     "Three-stage functional design", "Cortical relief", "Central stabilisation"],
+    "Prosthesis fixation + narrow single-tooth gap restoration."
+)
+BREDENT_COPA_SKY = _bredent(
+    "Bredent|Copa Sky", "copaSKY", "Conical-parallel",
+    [4.0, 5.0, 6.0], [5.2],
+    ["wide_low_height_ridge"], ["bone_level"],
+    ["Ultra-short implant", "Single connection geometry", "Torx® as gold standard",
+     "Stable reversible implant-abutment connection", "Osseo-connect surface (OCS)"],
+    "Ideal for challenging implant-length vs. abutment-height ratios."
+)
+BREDENT_NARROW_SKY = _bredent(
+    "Bredent|Narrow Sky", "Narrow Sky", "NP (Narrow platform)",
+    [3.5], [8, 10, 12, 14, 16],
+    ["all"], ["tissue_level"],
+    ["Narrow platform", "Osseo-connect surface (OCS)", "Designed for narrow gaps"],
+    "Narrow-diameter variant of blueSKY for narrow gaps and grafted ridges."
+)
+BREDENT_SKY_CLASSIC = _bredent(
+    "Bredent|Sky Classic", "Sky Classic", "RP (Regular platform)",
+    [4.0, 4.5], [8, 10, 12, 14, 16],
+    ["all"], ["supracrestal", "iso_crestal"],
+    ["Platform switch (4.0-4.5)", "Long machined neck",
+     "Semi-transgingival position", "Osseo-connect surface (OCS)"],
+    "Ideal for flapless implant placement on narrow and uneven ridges."
+)
+
+# --- Full list of extra curated catalog records for the seed hook. ---
+CATALOG_EXTRA: List[Dict[str, Any]] = [
+    OSSTEM_TSIV, OSSTEM_SSIII, OSSTEM_MS, OSSTEM_ETIII_NH,
+    NOBEL_ACTIVE_NP, NOBEL_ACTIVE_RP, NOBEL_ACTIVE_WP,
+    NOBEL_PARALLEL_NP, NOBEL_PARALLEL_RP, NOBEL_PARALLEL_WP,
+    NEODENT_DRIVE_GM_ACQUA, NEODENT_DRIVE_GM_NEOPOROUS,
+    NEODENT_HELIX_GM_ACQUA, NEODENT_HELIX_GM_NEOPOROUS,
+    NEODENT_TITAMAX_GM_ACQUA, NEODENT_TITAMAX_GM_NEOPOROUS,
+    BREDENT_BLUE_SKY, BREDENT_MINI_2_SKY, BREDENT_COPA_SKY,
+    BREDENT_NARROW_SKY, BREDENT_SKY_CLASSIC,
+]
+
 # ── Stub records for the other registered systems ──────────────────────────
 # These match the keys used in `IMPLANT_SYSTEM_INDICATIONS` so the admin can
 # fill them in via the Component Browser UI. Empty components[] surfaces a

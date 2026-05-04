@@ -4831,7 +4831,7 @@ async def _seed_implant_catalog():
         from implant_catalog_seed import (
             ANKYLOS_CX, OSSTEM_TSIII, MIS_LANCE_PLUS,
             BIOHORIZONS_TAPERED_PRO, BIOHORIZONS_TAPERED_PRO_CONICAL,
-            CONELOG_PROGRESSIVE, ALPHABIO_SPI,
+            CONELOG_PROGRESSIVE, ALPHABIO_SPI, CATALOG_EXTRA,
             STUB_KEYS, _stub
         )
     except Exception as e:
@@ -4843,6 +4843,7 @@ async def _seed_implant_catalog():
         ANKYLOS_CX, OSSTEM_TSIII, MIS_LANCE_PLUS,
         BIOHORIZONS_TAPERED_PRO, BIOHORIZONS_TAPERED_PRO_CONICAL,
         CONELOG_PROGRESSIVE, ALPHABIO_SPI,
+        *CATALOG_EXTRA,
     )
     for rec in curated:
         rec_with_meta = {**rec, "is_stub": False, "updated_at": now, "updated_by": "seed"}

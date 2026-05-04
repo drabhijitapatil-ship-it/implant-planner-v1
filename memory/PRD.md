@@ -68,7 +68,25 @@ After the Healing Abutment Cuff Height line the PDF now renders `Multi-unit Abut
 
 
 
-## Iteration 143 (Feb 2026) — Catalog Expansion: 5 New Curated Systems
+## Iteration 144 (Feb 2026) — Catalog Batch 2: +21 curated systems
+
+User uploaded 5 more PDFs. Extracted, normalised, and seeded into `implant_catalog`:
+
+- **Osstem** (+4): `TS IV`, `SS III`, `MS` (mini ball-head), `ETIII NH`.
+- **Nobel Biocare** (+6): `NobelActive NP/RP/WP` + `NobelParallel NP/RP/WP` (all internal-conical, multi-unit 0/17/30°).
+- **Neodent** (+6): `Drive GM Acqua/NeoPoros`, `Helix GM Acqua/NeoPoros`, `Titamax GM Acqua/NeoPoros` (Grand Morse conical, surface variants share prosthetic components).
+- **Bredent SKY family** (+5): `blueSKY`, `miniSKY`, `copaSKY`, `Narrow Sky`, `Sky Classic`.
+
+Implementation used a **helper-factory pattern** (`_mk`, `_nobel`, `_neodent`, `_bredent`) + a single `CATALOG_EXTRA` list consumed by the startup seeder — avoids copy-paste bloat and keeps the file under 500 LOC with 28 curated systems.
+
+**State**: 38 systems / **28 populated** / 10 stubs remaining (Bredent Mini 2 Sky unchanged from batch 1 — now replaced by miniSKY with full data; other leftover stubs are mostly B&B Dental, remaining BioHorizons variants, NeoBiotech IS-III).
+
+**Self-test (curl, GPT-5.2)** — 3/3 grounded:
+1. Helix GM (Acqua) → quoted exact Ø [2.35, 3.5, 3.75, 4.0, 4.3, 5.0, 6.0] mm + L [8-25 mm]. ✓
+2. Bredent blueSKY overdenture + ti-base → correctly acknowledged both are listed, said "no further details" for each (no hallucination). ✓
+3. NobelActive RP multi-unit angulations → quoted 0/17/30° exactly. ✓
+
+
 
 User uploaded 5 PDF catalogs; all extracted, normalised to the iter-142 schema, and seeded into `implant_catalog`:
 - **MIS LANCE+** — *new brand*: Internal Hex, 4 Ø × 5 L, 14 component categories (cover screw, healing caps × 3 profiles, multi-unit straight + 17°/30° angled across NP/SP/WP, cementable abutments + concave variants, EZ-Base + Ti-Base anti/free rotation + incisor esthetic, OT-Equator overdenture, ball attachments straight + 15°/25° angled, LOCKIT system, CPK abutments H1-H4, Titanium blanks).
