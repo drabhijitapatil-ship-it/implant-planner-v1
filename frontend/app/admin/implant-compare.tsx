@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import api from '../../services/api';
+import api from '../../utils/api';
 import BackButton from '../../components/BackButton';
 
 const TYPE_LABELS: Record<string, string> = {
