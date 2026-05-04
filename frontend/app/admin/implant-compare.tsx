@@ -85,8 +85,8 @@ export default function ImplantCompare() {
   return (
     <SafeAreaView style={s.safe}>
       <CenteredHeader
-        title="Brand Comparison"
-        subtitle={`Side-by-side specs across ${rows.length} systems`}
+        title="Implant Systems Comparison"
+        subtitle="Compare components across different Implant Systems"
         fallback="/admin/implant-catalog"
       />
 
