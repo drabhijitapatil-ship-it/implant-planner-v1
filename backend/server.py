@@ -5080,15 +5080,46 @@ async def ai_chat(body: AIChatMessage, current_user: dict = Depends(get_current_
         raise HTTPException(status_code=404, detail="Procedure not found")
     
     context = _build_case_context(proc)
-    
+
+    # iter-146: Implant Catalog awareness for the floating Ask Implanr AI bubble.
+    # If the case has a chosen implant system (Phase 1 done), inject the catalog
+    # block so the AI can answer component-availability questions accurately. If
+    # not, instruct the AI to say "Please select an implant system in Phase 1 first."
+    catalog_block = ""
+    case_has_system = False
+    plans = proc.get("implant_plans") or []
+    if plans:
+        p0 = plans[0]
+        cat_key = f"{p0.get('brand','')}|{p0.get('system','')}".strip("|")
+        if cat_key:
+            cat_doc = await db.implant_catalog.find_one({"key": cat_key, "is_stub": {"$ne": True}}, {"_id": 0})
+            if cat_doc:
+                from implant_catalog_seed import build_ai_context as _build_cat_ctx
+                cat_summary = _build_cat_ctx(cat_doc)
+                if cat_summary:
+                    catalog_block = (
+                        f"\n\nImplant System Catalog (authoritative — answer questions "
+                        f"about components / SKUs / angulations / GH / retention from this "
+                        f"block ONLY; never invent values that are not listed):\n\n{cat_summary}"
+                    )
+                    case_has_system = True
+    no_system_directive = "" if case_has_system else (
+        "\n\nNote: This case does not have a recognised implant system in the catalog. "
+        "If the user asks about specific component availability (angulations, gingival heights, "
+        "multi-unit abutment SKUs, retention modes, etc.), reply: \"The implant system chosen "
+        "for this case is not yet in the Implanr catalog. Please pick a catalog-supported system "
+        "in Phase 1, or ask an administrator to add this brand's data via the Implant Catalog "
+        "admin page.\" Do NOT fabricate component values."
+    )
+
     # Retrieve chat history
     chat_history = proc.get("ai_chat_history") or []
     
     system = f"""You are Implanr AI, an expert implant dentistry clinical assistant. You have access to the following patient case data:
 
-{context}
+{context}{catalog_block}
 
-Answer questions about this specific case using evidence-based implant dentistry knowledge. Be concise (2-4 sentences per answer). If asked about something outside your clinical expertise, say so clearly. Never fabricate clinical data — only reference what's in the case."""
+Answer questions about this specific case using evidence-based implant dentistry knowledge. Be concise (2-4 sentences per answer). If asked about something outside your clinical expertise, say so clearly. Never fabricate clinical data — only reference what's in the case. When answering component / SKU / angulation / gingival-height / retention questions, quote ONLY values that appear in the Implant System Catalog block above; if a value is not listed, say so explicitly.{no_system_directive}"""
 
     # Build history context for the prompt
     history_context = ""
