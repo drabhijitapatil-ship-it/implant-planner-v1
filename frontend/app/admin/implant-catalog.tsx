@@ -216,6 +216,7 @@ export default function ImplantCatalogAdmin() {
         <TouchableOpacity
           style={s.askAiBtn}
           onPress={() => router.push('/ask-implanr')}
+          testID="catalog-open-ask-ai"
           data-testid="catalog-open-ask-ai"
         >
           <Ionicons name="sparkles" size={16} color="#0277BD" />
@@ -225,6 +226,7 @@ export default function ImplantCatalogAdmin() {
           <TouchableOpacity
             style={s.addNewBtn}
             onPress={() => router.push('/admin/implant-catalog-edit')}
+            testID="catalog-add-new"
             data-testid="catalog-add-new"
           >
             <Ionicons name="add-circle" size={16} color="#FFF" />

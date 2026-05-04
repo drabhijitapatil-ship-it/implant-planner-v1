@@ -1,5 +1,38 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 148 (Feb 2026) — Standalone "Ask Implanr AI" Tab + Catalog CRUD Editor + Header Entry
+
+**Goal**: Make the Implanr AI catalog conversationally queryable WITHOUT opening a case, and let `implant_incharge` / `administrator` add or edit implant systems through a UI form (no API tooling needed).
+
+**Implementation**:
+1. **Standalone chat screen** — `/app/frontend/app/ask-implanr.tsx`:
+   - Full-screen chat with iOS-style bubbles, KeyboardAvoidingView, multi-line input, send/loading states.
+   - Welcome card with 5 suggested questions (e.g. "Compare multi-unit angulations", "Locator overdenture support"). Tap-to-ask.
+   - **Scope selector** (`ai-scope-selector`): bottom-sheet modal grouped by brand, lets user narrow AI to one populated system or "All systems".
+   - Calls `POST /api/ai/ask-implanr` with `{question, system_key?}` (existing endpoint reused).
+2. **Catalog CRUD editor** — `/app/frontend/app/admin/implant-catalog-edit.tsx`:
+   - Sections: Identity (Brand + System Name = key, locked on edit), Connection (type/subtype/indexing/platform_switching), Features (newline-separated), Implant Specs (Diameters/Lengths/Bone types/Healing modes — CSV), Components (per-component editor with type chips, GH, angulations, retention, material, indication, notes), Compatibility Notes.
+   - Save → `PUT /api/implant-catalog/by-key?key=Brand|Name` (server enforces RBAC: implant_incharge + administrator only).
+   - Edit mode loads existing record via `GET /implant-catalog/by-key`. Brand+Name are read-only on edit (they form the key — to rename, delete + recreate).
+3. **Navigation entry** — `/app/frontend/app/admin/implant-catalog.tsx` header now has:
+   - **Ask AI** pill (`catalog-open-ask-ai`) — opens `/ask-implanr`. Visible to all roles.
+   - **Add System** pill (`catalog-add-new`) — opens `/admin/implant-catalog-edit` (canEdit only). Pre-existing missing styles (`addNewBtn`, `addNewBtnText`) added in this iteration.
+4. **testID fix**: All new TouchableOpacity / TextInput components use BOTH `testID` and `data-testid` props. RN-Web only forwards `testID` to the DOM as `data-testid`; using both keeps native + web Playwright selectors working.
+
+**Verification (testing_agent_v3_fork iteration_141.json)**:
+- Backend: 9/9 PASS — list, get-by-key, RBAC upsert (admin OK / student 403), AI scoped + global, AI grounding (Ankylos 0/7.5/15/22.5/30/37.5° quoted exactly).
+- Frontend: Ask AI pill renders + navigates to `/ask-implanr`; standalone screen shows title, scope selector, suggestions, input + send. Backend integration verified via curl (41 systems, AI grounded answers).
+- Catalog AI floating bubble inside cases (Phase 1–4) is case-aware (existing iter-147 multi-brand catalog injection) — confirmed unchanged.
+
+**Files touched**:
+- `/app/frontend/app/admin/implant-catalog.tsx` — added Ask AI pill + missing styles for both header pills.
+- `/app/frontend/app/ask-implanr.tsx` — added `testID` alongside `data-testid` on scope selector, suggestions, input, send, scope rows.
+- `/app/frontend/app/admin/implant-catalog-edit.tsx` — added `testID` alongside `data-testid` on save, add-component, comp-remove buttons.
+
+**Test artefact**: `/app/backend/tests/test_implant_catalog_ai_iteration141.py` — 9/9 PASS.
+
+
+
 ## Iteration 139 (Feb 2026) — Phase 2 Multi-Unit Abutment (MUA) Capture
 
 **Goal**: For full-arch Immediate Loading cases, capture per-implant Multi-unit Abutment data (Angulation + Cuff Height) directly in the Phase 2 surgical form, surface it on the case-detail view, and persist it in the Case Report PDF + AI context.
