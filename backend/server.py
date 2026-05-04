@@ -5081,28 +5081,42 @@ async def ai_chat(body: AIChatMessage, current_user: dict = Depends(get_current_
     
     context = _build_case_context(proc)
 
-    # iter-146: Implant Catalog awareness for the floating Ask Implanr AI bubble.
-    # If the case has a chosen implant system (Phase 1 done), inject the catalog
-    # block so the AI can answer component-availability questions accurately. If
-    # not, instruct the AI to say "Please select an implant system in Phase 1 first."
+    # iter-147: Implant Catalog awareness for the floating Ask Implanr AI bubble.
+    # Inject catalog blocks for EVERY distinct (brand, system) used in the case
+    # so mixed-brand restorations can be reasoned about side-by-side. Falls back
+    # to the no-system directive when no plan resolves to a populated catalog
+    # entry.
     catalog_block = ""
     case_has_system = False
     plans = proc.get("implant_plans") or []
     if plans:
-        p0 = plans[0]
-        cat_key = f"{p0.get('brand','')}|{p0.get('system','')}".strip("|")
-        if cat_key:
-            cat_doc = await db.implant_catalog.find_one({"key": cat_key, "is_stub": {"$ne": True}}, {"_id": 0})
+        seen_keys: list = []
+        for plan in plans:
+            cat_key = f"{plan.get('brand','')}|{plan.get('system','')}".strip("|")
+            if cat_key and cat_key not in seen_keys:
+                seen_keys.append(cat_key)
+        # Cap at 4 distinct systems to keep the prompt within budget.
+        seen_keys = seen_keys[:4]
+        cat_summaries = []
+        from implant_catalog_seed import build_ai_context as _build_cat_ctx
+        for cat_key in seen_keys:
+            cat_doc = await db.implant_catalog.find_one(
+                {"key": cat_key, "is_stub": {"$ne": True}}, {"_id": 0}
+            )
             if cat_doc:
-                from implant_catalog_seed import build_ai_context as _build_cat_ctx
-                cat_summary = _build_cat_ctx(cat_doc)
-                if cat_summary:
-                    catalog_block = (
-                        f"\n\nImplant System Catalog (authoritative — answer questions "
-                        f"about components / SKUs / angulations / GH / retention from this "
-                        f"block ONLY; never invent values that are not listed):\n\n{cat_summary}"
-                    )
+                summary = _build_cat_ctx(cat_doc)
+                if summary:
+                    cat_summaries.append(summary)
                     case_has_system = True
+        if cat_summaries:
+            joined = "\n\n".join(cat_summaries)
+            catalog_block = (
+                f"\n\nImplant System Catalog (authoritative — answer questions about "
+                f"components / SKUs / angulations / GH / retention from this block ONLY; "
+                f"never invent values that are not listed). The case uses "
+                f"{len(cat_summaries)} system(s); each is delimited by '===' headers:\n\n"
+                f"{joined}"
+            )
     no_system_directive = "" if case_has_system else (
         "\n\nNote: This case does not have a recognised implant system in the catalog. "
         "If the user asks about specific component availability (angulations, gingival heights, "
