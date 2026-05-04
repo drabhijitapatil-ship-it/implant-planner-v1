@@ -1575,80 +1575,474 @@ OSSTEM_ETIII_NH = _mk(
 )
 
 # --- Nobel Biocare platforms (NP / RP / WP) ---
-def _nobel(key, name, diams, lens, notes):
+# All 6 Nobel systems (NobelActive NP/RP/WP + NobelParallel CC NP/RP/WP) share
+# the Internal Conical Connection (CC) prosthetic ecosystem. Components defined
+# once and shared via `_nobel_components()` keyed by platform.
+def _nobel_components(platforms_supported):  # type: ignore[override]
+    p = platforms_supported
+    return [
+        # Cover Screw
+        {"type": "cover_screw", "subtype": "Cover Screw",
+         "platforms": p, "material": ["titanium_alloy"], "retention": ["screw"],
+         "indication": "Submerged surgical healing — included with each implant."},
+
+        # Healing abutments
+        {"type": "healing_abutment", "subtype": "Healing Abutment",
+         "platforms": p, "gingival_heights_mm": [3, 5, 7],
+         "material": ["titanium_alloy", "PEEK"], "retention": ["screw"],
+         "indication": "Soft tissue healing. Anatomic PEEK option for emergence shaping."},
+        {"type": "healing_abutment", "subtype": "Slim Healing Abutment",
+         "platforms": p, "gingival_heights_mm": [5, 7],
+         "material": ["titanium_alloy"], "retention": ["screw"],
+         "indication": "Maximizes space for soft-tissue grafting."},
+        {"type": "healing_abutment", "subtype": "Healing Abutment Bridge",
+         "platforms": p, "gingival_heights_mm": [3, 5, 7],
+         "material": ["titanium_alloy"], "retention": ["screw"],
+         "indication": "Multiple-unit restorations with NobelProcera Implant Bridge."},
+        {"type": "healing_abutment", "subtype": "On1™ Healing Cap",
+         "platforms": p, "gingival_heights_mm": [1.5, 2.5],
+         "material": ["titanium_alloy"], "retention": ["screw"],
+         "indication": "Tissue-level healing on the On1™ Base."},
+        {"type": "healing_abutment", "subtype": "On1™ IOS Healing Cap",
+         "platforms": p, "gingival_heights_mm": [4, 4.5, 5, 6],
+         "material": ["titanium_alloy"], "retention": ["screw"],
+         "indication": "Intraoral-scan workflow on the On1™ Base."},
+
+        # Temporary abutments
+        {"type": "temporary_cylinder", "subtype": "Temporary Abutment",
+         "platforms": p, "gingival_heights_mm": [3, 5, 7],
+         "material": ["titanium_alloy", "PEEK"], "retention": ["screw", "cement"],
+         "indication": "Temporary single/multi-unit restorations."},
+        {"type": "temporary_cylinder", "subtype": "Slim Temporary Abutment",
+         "platforms": p, "gingival_heights_mm": [5, 7],
+         "material": ["titanium_alloy"], "retention": ["screw"],
+         "indication": "Increased space for mucosa with temporary crown."},
+        {"type": "temporary_cylinder", "subtype": "Immediate Temporary Abutment",
+         "platforms": p, "gingival_heights_mm": [1.5, 3.0],
+         "material": ["titanium_alloy", "plastic"], "retention": ["cement", "screw"],
+         "indication": "Cement-retained temporary single units; immediate temporization."},
+        {"type": "temporary_cylinder", "subtype": "QuickTemp™ Abutment Conical (non-engaging)",
+         "platforms": p, "gingival_heights_mm": [1.5, 3.0],
+         "material": ["titanium_alloy", "plastic"], "retention": ["cement", "screw"],
+         "indication": "Cement-retained multi-unit temporaries with divergent implants."},
+        {"type": "temporary_cylinder", "subtype": "Temporary Snap Abutment (Engaging / Non-Engaging)",
+         "platforms": p, "gingival_heights_mm": [1.5, 3],
+         "material": ["titanium_alloy", "plastic"], "retention": ["screw"],
+         "indication": "Simplified temporization workflow."},
+        {"type": "temporary_cylinder", "subtype": "On1™ Temporary Abutment (Engaging / Non-Engaging)",
+         "platforms": p, "material": ["titanium_alloy"], "retention": ["screw"],
+         "indication": "Temporary restorations on the On1™ Base."},
+
+        # Multi-Unit Abutments
+        {"type": "multi_unit_abutment", "subtype": "Multi-unit Abutment — Straight",
+         "platforms": p, "gingival_heights_mm": [1, 2, 3, 4, 5],
+         "material": ["titanium_alloy"], "retention": ["screw"], "torque_ncm": [35],
+         "indication": "Edentulous and partially edentulous arches; All-on-4® workhorse."},
+        {"type": "multi_unit_abutment", "subtype": "Multi-unit Abutment Plus — Straight (snap-in)",
+         "platforms": p, "gingival_heights_mm": [1.5, 2.5, 3.5, 4.5],
+         "material": ["titanium_alloy"], "retention": ["screw"], "torque_ncm": [35],
+         "indication": "Snap functionality for try-in and adjustment."},
+        {"type": "multi_unit_abutment", "subtype": "Multi-unit Abutment 17°",
+         "platforms": p, "gingival_heights_mm": [2.5, 3.5],
+         "angulation_deg": [17], "material": ["titanium_alloy"], "retention": ["screw"], "torque_ncm": [15]},
+        {"type": "multi_unit_abutment", "subtype": "Multi-unit Abutment 30°",
+         "platforms": p, "gingival_heights_mm": [3.5, 4.5],
+         "angulation_deg": [30], "material": ["titanium_alloy"], "retention": ["screw"], "torque_ncm": [15]},
+        {"type": "multi_unit_abutment", "subtype": "NobelZygoma 0° MUA",
+         "platforms": ["RP"], "gingival_heights_mm": [6, 8, 10],
+         "material": ["titanium_alloy"], "retention": ["screw"],
+         "indication": "Zygomatic implant prosthetic interface (axial)."},
+        {"type": "multi_unit_abutment", "subtype": "NobelZygoma 45° MUA",
+         "platforms": ["RP"], "gingival_heights_mm": [6, 8, 10],
+         "angulation_deg": [45], "material": ["titanium_alloy"], "retention": ["screw"]},
+        {"type": "multi_unit_abutment", "subtype": "NobelZygoma 60° MUA",
+         "platforms": ["RP"], "gingival_heights_mm": [6, 8],
+         "angulation_deg": [60], "material": ["titanium_alloy"], "retention": ["screw"]},
+
+        # Final / Esthetic abutments
+        {"type": "final_abutment", "subtype": "Esthetic Abutment (Straight low/high, Angled low/high)",
+         "platforms": p, "gingival_heights_mm": [0.3, 0.5, 1, 1.5, 2, 3, 4.5, 6, 7],
+         "material": ["titanium_alloy", "zirconia"], "retention": ["screw"],
+         "indication": "Scalloped margin; optional temporary coping for immediate temporization."},
+        {"type": "final_abutment", "subtype": "Procera® / NobelProcera® Esthetic Abutment (custom)",
+         "platforms": p, "material": ["zirconia", "titanium_alloy"], "retention": ["screw"],
+         "cad_cam": True,
+         "indication": "Comprehensive shapes/heights/margins/angulations; CAD/CAM."},
+        {"type": "final_abutment", "subtype": "Snappy™ Abutment 4.0 / 5.5",
+         "platforms": p, "gingival_heights_mm": [0.5, 0.75, 1, 1.5, 2, 3],
+         "material": ["titanium_alloy"], "retention": ["snap", "screw"],
+         "indication": "Posterior cement-retained crowns; package includes screw, coping, healing & temp coping."},
+        {"type": "final_abutment", "subtype": "Universal Base",
+         "platforms": p, "gingival_heights_mm": [1.5, 3.0],
+         "material": ["titanium_alloy"], "retention": ["press_on", "cement", "screw"],
+         "cad_cam": True,
+         "indication": "Press-on, wax-up, and CAD/CAM restorations; two margin heights."},
+        {"type": "final_abutment", "subtype": "GoldAdapt™ (Engaging / Non-Engaging)",
+         "platforms": p, "material": ["gold_alloy"], "retention": ["castable"],
+         "indication": "Lost-wax casting technique for single (engaging) and multi-unit (non-engaging) restorations."},
+        {"type": "final_abutment", "subtype": "Narrow Profile Abutment",
+         "platforms": p, "gingival_heights_mm": [7, 9],
+         "material": ["titanium_alloy"], "retention": ["screw"],
+         "indication": "Limited interdental space."},
+
+        # On1™ system (tissue-level extension)
+        {"type": "ti_base", "subtype": "On1™ Base",
+         "platforms": p, "gingival_heights_mm": [1.75, 2.5],
+         "material": ["titanium_alloy"], "retention": ["screw"],
+         "cad_cam": True,
+         "indication": "Tissue-level prosthetic platform on any Nobel CC implant."},
+
+        # ASC — Angulated Screw Channel
+        {"type": "final_abutment", "subtype": "ASC Abutment (Angulated Screw Channel)",
+         "platforms": p, "angulation_deg": [0, 5, 10, 15, 20, 25],
+         "material": ["zirconia", "titanium_alloy"], "retention": ["screw"],
+         "indication": "Cement-free screw-retained crowns with up to 25° channel angulation; available for NobelActive, NobelParallel, NobelReplace CC."},
+
+        # Ti-Bases / scanbody / impression
+        {"type": "ti_base", "subtype": "NobelProcera® Ti-Base / Universal Base",
+         "platforms": p, "material": ["titanium_alloy"], "retention": ["screw"],
+         "cad_cam": True,
+         "indication": "CAD/CAM crowns and bridges over CC platform."},
+        {"type": "scanbody", "subtype": "IOS Scan Body (Implant level)",
+         "platforms": p, "material": ["titanium_alloy"],
+         "indication": "Direct-to-implant intraoral scan."},
+        {"type": "scanbody", "subtype": "On1™ IOS Position Locator",
+         "platforms": p, "material": ["titanium_alloy"],
+         "indication": "Tissue-level intraoral scan on the On1™ Base."},
+
+        # Impression copings
+        {"type": "impression_coping", "subtype": "Impression Coping — Closed Tray",
+         "platforms": p, "material": ["titanium_alloy", "plastic"],
+         "indication": "Snap-on conventional impression."},
+        {"type": "impression_coping", "subtype": "Impression Coping — Open Tray",
+         "platforms": p, "material": ["titanium_alloy"],
+         "indication": "Pick-up conventional impression for multi-unit accuracy."},
+        {"type": "impression_coping", "subtype": "Impression Coping — Closed Tray Low Profile",
+         "platforms": p, "material": ["titanium_alloy"],
+         "indication": "Limited interocclusal / interdental space."},
+        {"type": "impression_coping", "subtype": "Impression Coping — Closed Tray Plastic (sterile, radio-opaque)",
+         "platforms": p, "material": ["plastic"]},
+        {"type": "impression_coping", "subtype": "On1™ IOS Impression Coping (Closed / Open Tray)",
+         "platforms": p, "material": ["titanium_alloy"]},
+
+        # Lab analogs
+        {"type": "analog", "subtype": "Implant Analog",
+         "platforms": p, "material": ["stainless_steel"],
+         "indication": "Lab model fabrication."},
+        {"type": "analog", "subtype": "On1™ Base Replica",
+         "platforms": p, "material": ["stainless_steel"],
+         "indication": "Lab-side On1™ tissue-level analog."},
+        {"type": "analog", "subtype": "Locator® Female Analog",
+         "platforms": p, "material": ["titanium_alloy"],
+         "indication": "Locator® overdenture processing."},
+
+        # Prosthetic screws
+        {"type": "prosthetic_screw", "subtype": "Clinical Prosthetic Screw",
+         "platforms": p, "material": ["titanium_alloy"], "torque_ncm": [35]},
+        {"type": "prosthetic_screw", "subtype": "On1™ Clinical Screw",
+         "platforms": p, "material": ["titanium_alloy"], "torque_ncm": [15]},
+        {"type": "prosthetic_screw", "subtype": "Lab Screw — Multi-unit",
+         "platforms": p, "material": ["titanium_alloy"]},
+        {"type": "prosthetic_screw", "subtype": "Lab Screw — Multi-unit Angled",
+         "platforms": p, "material": ["titanium_alloy"]},
+        {"type": "prosthetic_screw", "subtype": "Abutment Screw — Multi-unit Angled",
+         "platforms": p, "material": ["titanium_alloy"]},
+
+        # Overdenture attachments
+        {"type": "overdenture_attachment", "subtype": "Locator® Abutment",
+         "platforms": p, "gingival_heights_mm": [0, 0.73, 1, 1.1, 2, 3, 4, 5, 6],
+         "material": ["titanium_alloy"], "retention": ["nylon_male"],
+         "indication": "Up to 40° divergence; color-coded nylon males for retention."},
+        {"type": "overdenture_attachment", "subtype": "Locator® Black Process Replacement Male",
+         "platforms": p, "material": ["PEEK"], "retention": ["male"]},
+        {"type": "overdenture_attachment", "subtype": "Ball Abutment — Titanium",
+         "platforms": p, "gingival_heights_mm": [1, 2, 3, 5],
+         "material": ["titanium_alloy"], "retention": ["o_ring"],
+         "indication": "Up to 30° implant divergence; gold cap retention adjustable."},
+        {"type": "overdenture_attachment", "subtype": "Gold Cap (Ball Abutment retainer)",
+         "platforms": p, "material": ["gold_alloy"], "retention": ["o_ring"]},
+    ]
+
+
+def _nobel(key, name, diams, lens, notes, platforms=None):
+    pl = platforms or ["NP", "RP", "WP"]
     return _mk(
         key, "Nobel Biocare", name,
-        connection={"type": "internal_conical"},
+        connection={"type": "internal_conical", "subtype": "Conical Connection (CC)"},
         platform_switching=True,
-        features=["Strong internal conical connection",
-                  "Engineered for Immediate Function",
-                  "Platform switching for tissue preservation",
-                  "TiUnite surface on implant body"],
+        features=[
+            "Strong internal conical connection (CC)",
+            "Engineered for Immediate Function",
+            "Platform switching for soft-tissue preservation",
+            "TiUnite® surface on implant body",
+            "Compatible with the On1™ tissue-level prosthetic concept",
+            "ASC (Angulated Screw Channel) compatible — up to 25°",
+        ],
         implant={"diameters_mm": diams, "lengths_mm": lens,
                  "bone_types": ["Type I", "Type II", "Type III", "Type IV"],
-                 "healing_modes": ["immediate", "submerged"]},
-        components=[
-            {"type": "cover_screw"}, {"type": "healing_abutment", "subtype": "standard + slim"},
-            {"type": "final_abutment", "subtype": "conical abutment family",
-             "retention": ["cement", "occlusal_screw"]},
-            {"type": "multi_unit_abutment", "angulations_deg": [0, 17, 30]},
-            {"type": "ti_base", "cad_cam": True}, {"type": "scanbody"},
-            {"type": "impression_coping"}, {"type": "analog"},
-        ],
+                 "healing_modes": ["immediate", "submerged", "non_submerged"]},
+        components=_nobel_components(pl),
         notes=notes,
     )
 
 NOBEL_ACTIVE_NP = _nobel(
     "Nobel Biocare|NobelActive NP", "NobelActive NP",
     [3.0, 3.5], [7.0, 8.5, 10.0, 11.5, 13.0, 15.0, 16.5, 17.5],
-    "NobelActive 3.0 is indicated only for single-unit maxillary lateral and mandibular lateral/central incisors. NobelActive NP is not recommended for posterior use."
+    "NobelActive 3.0 is indicated only for single-unit maxillary lateral and mandibular lateral/central incisors. NobelActive NP is not recommended for posterior use.",
+    platforms=["NP"]
 )
 NOBEL_ACTIVE_RP = _nobel(
     "Nobel Biocare|NobelActive RP", "NobelActive RP",
     [4.3, 5.0], [7.0, 8.5, 10.0, 11.5, 13.0, 15.0, 16.5, 17.5],
-    "Primary workhorse platform — universal indication."
+    "Primary workhorse platform — universal indication.",
+    platforms=["RP"]
 )
 NOBEL_ACTIVE_WP = _nobel(
     "Nobel Biocare|NobelActive WP", "NobelActive WP",
     [5.5], [7.0, 8.5, 10.0, 11.5, 13.0, 15.0],
-    "Wide platform — molar region and wide edentulous ridges."
+    "Wide platform — molar region and wide edentulous ridges.",
+    platforms=["WP"]
 )
 NOBEL_PARALLEL_NP = _nobel(
     "Nobel Biocare|NobelParallel NP", "NobelParallel CC NP",
     [3.75], [6.5, 8.0, 9.5, 11.0, 12.5, 14.5, 17.5],
-    "Parallel-walled implant for universal use; cover screw included."
+    "Parallel-walled implant for universal use; cover screw included.",
+    platforms=["NP"]
 )
 NOBEL_PARALLEL_RP = _nobel(
     "Nobel Biocare|NobelParallel RP", "NobelParallel CC RP",
     [4.3, 5.0], [6.5, 8.0, 9.5, 11.0, 12.5, 14.5, 17.5],
-    "Universal use across anterior + posterior indications."
+    "Universal use across anterior + posterior indications.",
+    platforms=["RP"]
 )
 NOBEL_PARALLEL_WP = _nobel(
     "Nobel Biocare|NobelParallel WP", "NobelParallel CC WP",
     [5.5], [6.5, 8.0, 9.5, 11.0, 12.5, 14.5],
-    "Wide-platform variant — larger edentulous ridges."
+    "Wide-platform variant — larger edentulous ridges.",
+    platforms=["WP"]
 )
 
-# --- Neodent Grand Morse family ---
+# --- Neodent Grand Morse (GM) family ---
+# All 6 Neodent GM systems share the Grand Morse single prosthetic platform.
+# Components defined once and shared via `_neodent_gm_components()`.
+def _neodent_gm_components():
+    return [
+        # Cover Screw
+        {"type": "cover_screw", "subtype": "GM Cover Screw",
+         "gingival_heights_mm": [0, 2], "material": ["titanium_alloy"],
+         "retention": ["screw"], "torque_ncm": [10],
+         "indication": "Submerged surgical healing. Tighten with Neo Screwdriver — do not exceed 10 Ncm."},
+
+        # Healing abutments
+        {"type": "healing_abutment", "subtype": "GM Healing Abutment",
+         "gingival_heights_mm": [0.8, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5],
+         "platforms_diam_mm": [3.3, 3.5, 3.75, 4.3, 4.5, 5.0, 5.5, 6.0, 7.0],
+         "material": ["titanium_alloy"], "retention": ["screw"],
+         "indication": "Profile-specific heights for each implant diameter."},
+        {"type": "healing_abutment", "subtype": "GM Customizable Healing Abutment",
+         "gingival_heights_mm": [1.5, 2.5, 3.5, 4.5, 5.5, 6.5],
+         "platforms_diam_mm": [3.3, 4.5, 5.5, 7.0],
+         "material": ["titanium_alloy"], "retention": ["screw"], "torque_ncm": [10],
+         "indication": "Chairside-customizable for emergence shaping."},
+
+        # Mini Conical Abutments (MCA / MUA equivalent)
+        {"type": "multi_unit_abutment", "subtype": "GM Mini Conical Abutment — Straight",
+         "gingival_heights_mm": [0.8, 1.5, 2.5, 3.5, 4.5, 5.5],
+         "material": ["titanium_alloy"], "retention": ["screw"], "torque_ncm": [20],
+         "indication": "Multi-unit screw-retained prostheses; min 4.5 mm interocclusal space."},
+        {"type": "multi_unit_abutment", "subtype": "GM Exact Mini Conical Abutment 17°",
+         "gingival_heights_mm": [0.8, 1.5, 2.5, 3.5, 4.5, 5.5],
+         "angulation_deg": [17], "material": ["titanium_alloy"],
+         "retention": ["screw"], "torque_ncm": [20]},
+        {"type": "multi_unit_abutment", "subtype": "GM Exact Mini Conical Abutment 30°",
+         "gingival_heights_mm": [0.8, 1.5, 2.5, 3.5, 4.5, 5.5],
+         "angulation_deg": [30], "material": ["titanium_alloy"],
+         "retention": ["screw"], "torque_ncm": [20]},
+        {"type": "multi_unit_abutment", "subtype": "GM Exact Mini Conical Abutment 45°",
+         "gingival_heights_mm": [0.8, 1.5, 2.5, 3.5, 4.5, 5.5],
+         "angulation_deg": [45], "material": ["titanium_alloy"],
+         "retention": ["screw"], "torque_ncm": [20],
+         "indication": "Indicated only for Helix GM® Long and Zygoma GM™."},
+
+        # Click MUA Anatomic family
+        {"type": "multi_unit_abutment", "subtype": "GM Exact Click Anatomic Abutment",
+         "gingival_heights_mm": [1.5, 2.5, 3.5],
+         "material": ["titanium_alloy"], "retention": ["click", "screw"], "torque_ncm": [20]},
+        {"type": "multi_unit_abutment", "subtype": "GM Exact Click Narrow Anatomic Abutment",
+         "gingival_heights_mm": [1.5, 2.5, 3.5],
+         "material": ["titanium_alloy"], "retention": ["click", "screw"], "torque_ncm": [20]},
+        {"type": "multi_unit_abutment", "subtype": "GM Exact Click Anatomic Abutment 17°",
+         "gingival_heights_mm": [1.5, 2.5, 3.5],
+         "angulation_deg": [17], "material": ["titanium_alloy"],
+         "retention": ["click", "screw"], "torque_ncm": [20]},
+        {"type": "multi_unit_abutment", "subtype": "GM Exact Click Narrow Anatomic Abutment 17°",
+         "gingival_heights_mm": [1.5, 2.5, 3.5],
+         "angulation_deg": [17], "material": ["titanium_alloy"],
+         "retention": ["click", "screw"], "torque_ncm": [20]},
+
+        # Universal Abutment (cement-retained)
+        {"type": "final_abutment", "subtype": "GM Universal Abutment — Straight",
+         "gingival_heights_mm": [4, 6], "material": ["titanium_alloy"],
+         "retention": ["cement", "click"], "torque_ncm": [20],
+         "indication": "Single-unit cement-retained. Exact + unlocking feature."},
+        {"type": "final_abutment", "subtype": "GM Exact Universal Abutment",
+         "gingival_heights_mm": [0.8, 1.5, 2.5, 3.5, 4.5, 5.5],
+         "material": ["titanium_alloy"], "retention": ["cement"], "torque_ncm": [20]},
+        {"type": "final_abutment", "subtype": "GM Universal Abutment 17°",
+         "gingival_heights_mm": [4, 6], "angulation_deg": [17],
+         "material": ["titanium_alloy"], "retention": ["cement"]},
+        {"type": "final_abutment", "subtype": "GM Universal Abutment 30°",
+         "gingival_heights_mm": [4, 6], "angulation_deg": [30],
+         "material": ["titanium_alloy"], "retention": ["cement"]},
+
+        # Anatomic Abutment (anterior, gingival color)
+        {"type": "final_abutment", "subtype": "GM Anatomic Abutment",
+         "material": ["titanium_alloy"], "retention": ["cement"],
+         "indication": "Recommended for anterior region. Gingival color for esthetic outcomes. Click retention for provisional copings. Min 4.9 mm interocclusal space."},
+        {"type": "final_abutment", "subtype": "GM Anatomic Abutment 17°",
+         "angulation_deg": [17], "material": ["titanium_alloy"], "retention": ["cement"]},
+        {"type": "final_abutment", "subtype": "GM Narrow Anatomic Abutment 17°",
+         "angulation_deg": [17], "material": ["titanium_alloy"], "retention": ["cement"]},
+
+        # Micro Abutment / CoCr / Specialty
+        {"type": "final_abutment", "subtype": "GM Micro Abutment",
+         "material": ["titanium_alloy"], "retention": ["cement"],
+         "indication": "Limited spaces and narrow inter-dental areas. Min 3.5 mm interocclusal space."},
+        {"type": "final_abutment", "subtype": "GM CoCr Abutment",
+         "material": ["CoCr"], "retention": ["cement"],
+         "indication": "Cobalt-chromium for porcelain veneering. Min 4.9 mm interocclusal space."},
+        {"type": "final_abutment", "subtype": "GM Pro Peek Abutment",
+         "material": ["PEEK"], "retention": ["cement"],
+         "indication": "Biocompatible PEEK. Customizable up to 5 mm. Interocclusal height 9.2 mm."},
+        {"type": "final_abutment", "subtype": "GM Temporary Abutment (customizable)",
+         "material": ["titanium_alloy"], "retention": ["cement"],
+         "indication": "Customizable up to 4 mm. Retentive grooves for acrylic. Interocclusal height 10 mm."},
+
+        # Ti-Bases / Exact Bases (CAD/CAM)
+        {"type": "ti_base", "subtype": "GM Titanium Base for Crown",
+         "material": ["titanium_alloy"], "retention": ["screw"], "cad_cam": True,
+         "indication": "Customizable up to 4 mm. Cementable area 6.0 or 4.0 mm. Min 4.9 mm interocclusal space."},
+        {"type": "ti_base", "subtype": "GM Titanium Base for Bridge (Non-engaging)",
+         "material": ["titanium_alloy"], "retention": ["screw"], "cad_cam": True,
+         "indication": "Cementable area: 4.0 mm (Ø3.5) or 4.5 mm (Ø4.5/5.5)."},
+        {"type": "ti_base", "subtype": "GM Titanium Base Angled Solution (AS)",
+         "material": ["titanium_alloy"], "retention": ["screw"], "cad_cam": True,
+         "torque_ncm": [20]},
+        {"type": "ti_base", "subtype": "GM Titanium Base C",
+         "material": ["titanium_alloy"], "retention": ["screw"], "cad_cam": True,
+         "indication": "Cementable area: 4.7 mm."},
+        {"type": "ti_base", "subtype": "GM Exact Titanium Base",
+         "gingival_heights_mm": [4, 6], "platforms_diam_mm": [5.5, 6.5],
+         "material": ["titanium_alloy"], "retention": ["screw"], "cad_cam": True,
+         "torque_ncm": [20]},
+        {"type": "ti_base", "subtype": "GM Titanium Base Burn-out Coping",
+         "gingival_heights_mm": [4, 6], "platforms_diam_mm": [5.5],
+         "material": ["burn_out_acrylic", "titanium_alloy"],
+         "retention": ["screw"], "cad_cam": True,
+         "indication": "Lost-wax coping with titanium interface."},
+        {"type": "ti_base", "subtype": "GM Titanium Block (MEDENTiKA / AG holders)",
+         "material": ["titanium_alloy"], "retention": ["screw"], "cad_cam": True,
+         "indication": "Pre-form milling block. 14.2 mm customizable height."},
+
+        # Scan bodies
+        {"type": "scanbody", "subtype": "GM Abutment Scanbody (intraoral / model)",
+         "material": ["titanium_alloy"]},
+        {"type": "scanbody", "subtype": "GM Mini Conical Abutment Scanbody",
+         "material": ["titanium_alloy"]},
+        {"type": "scanbody", "subtype": "GM Micro Abutment Scanbody",
+         "material": ["titanium_alloy"]},
+        {"type": "scanbody", "subtype": "GM Exact Implant Intraoral Scanbody",
+         "material": ["titanium_alloy"]},
+        {"type": "scanbody", "subtype": "GM Exact Implant Model Scanbody",
+         "material": ["titanium_alloy"]},
+
+        # Impression copings
+        {"type": "impression_coping", "subtype": "GM Abutment Impression Coping — Closed Tray",
+         "gingival_heights_mm": [0.8, 1.5, 2.5, 3.5, 4.5, 5.5],
+         "material": ["titanium_alloy"]},
+        {"type": "impression_coping", "subtype": "GM Implant Impression Coping — Open Tray",
+         "material": ["titanium_alloy"]},
+        {"type": "impression_coping", "subtype": "GM Implant Exact Impression Coping — Closed Tray (Regular / Long)",
+         "material": ["titanium_alloy"]},
+        {"type": "impression_coping", "subtype": "GM Implant Exact Impression Coping — Open Tray (Regular / Long)",
+         "material": ["titanium_alloy"]},
+        {"type": "impression_coping", "subtype": "Slim Mini Conical Abutment — Open Tray Coping",
+         "material": ["titanium_alloy"]},
+        {"type": "impression_coping", "subtype": "GM Micro Abutment Impression Coping — Closed Tray (single-unit)",
+         "material": ["titanium_alloy"]},
+        {"type": "impression_coping", "subtype": "GM Micro Abutment Impression Coping — Open Tray Slim (multi-unit)",
+         "material": ["titanium_alloy"]},
+
+        # Lab analogs
+        {"type": "analog", "subtype": "GM Implant Analog (Hybrid Repositionable)",
+         "material": ["titanium_alloy"],
+         "indication": "Compatible with 3D-printed and conventional plaster models."},
+        {"type": "analog", "subtype": "GM Implant Analog (Conventional)",
+         "material": ["titanium_alloy"]},
+        {"type": "analog", "subtype": "GM Abutment Analog",
+         "material": ["titanium_alloy"]},
+        {"type": "analog", "subtype": "GM Mini Conical Abutment Analog",
+         "material": ["titanium_alloy"]},
+        {"type": "analog", "subtype": "GM Universal Abutment Analog",
+         "material": ["titanium_alloy"]},
+        {"type": "analog", "subtype": "GM Exact Implant Analog (Hybrid Repositionable / Conventional)",
+         "material": ["titanium_alloy"]},
+
+        # Prosthetic screws
+        {"type": "prosthetic_screw", "subtype": "GM Replacement Coping Screw",
+         "material": ["titanium_alloy"], "retention": ["screw"]},
+        {"type": "prosthetic_screw", "subtype": "GM Replacement Sterile Screw — Neotorque®",
+         "material": ["titanium_alloy"], "retention": ["screw"]},
+        {"type": "prosthetic_screw", "subtype": "GM Replacement Sterile Screw — Titanium",
+         "material": ["titanium_alloy"], "retention": ["screw"]},
+
+        # Provisional copings
+        {"type": "temporary_cylinder", "subtype": "GM Temporary Abutment for Crown",
+         "gingival_heights_mm": [0.8, 1.5, 2.5, 3.5, 4.5],
+         "material": ["titanium_alloy"], "retention": ["cement"]},
+        {"type": "temporary_cylinder", "subtype": "GM Temporary Abutment for Bridge",
+         "gingival_heights_mm": [0.8, 1.5, 2.5, 3.5, 4.5],
+         "material": ["titanium_alloy"], "retention": ["cement"]},
+
+        # Esthetic try-in
+        {"type": "esthetic_abutment", "subtype": "GM Lateral Anatomic Abutment Try-In (1.5 / 2.5 / 3.5 mm)",
+         "gingival_heights_mm": [1.5, 2.5, 3.5],
+         "material": ["titanium_alloy"],
+         "indication": "Try-in for esthetic planning."},
+        {"type": "esthetic_abutment", "subtype": "GM Anatomic Abutment Try-In (1.5 / 2.5 / 3.5 mm)",
+         "gingival_heights_mm": [1.5, 2.5, 3.5], "material": ["titanium_alloy"]},
+        {"type": "esthetic_abutment", "subtype": "GM Narrow Anatomic Abutment Try-In (1.5 / 2.5 / 3.5 mm)",
+         "gingival_heights_mm": [1.5, 2.5, 3.5], "material": ["titanium_alloy"]},
+
+        # Overdenture / Locator
+        {"type": "overdenture_attachment", "subtype": "GM Equator (overdenture attachment)",
+         "material": ["titanium_alloy"], "retention": ["equator_male"],
+         "indication": "Low-profile overdenture retention; up to 40° divergence tolerance."},
+        {"type": "overdenture_attachment", "subtype": "Novaloc — Straight",
+         "material": ["titanium_alloy"], "retention": ["nylon_male"],
+         "indication": "Premium polymer-retained overdenture system."},
+        {"type": "overdenture_attachment", "subtype": "Novaloc — Angled (with removable screw)",
+         "material": ["titanium_alloy"], "retention": ["nylon_male"]},
+
+        # Full-arch / specialty
+        {"type": "full_arch_solution", "subtype": "Neodent NeoArch — Immediate Fixed Full-Arch",
+         "indication": "Full-arch immediate fixed restoration; recommended for atrophic maxilla and anatomical deficiencies."},
+        {"type": "full_arch_solution", "subtype": "Neo Abutment Protection Cylinder (digital workflow)",
+         "indication": "Protects abutment during digital scanning workflow."},
+    ]
+
+
 def _neodent(key, name, geom, diams, lens, bone, notes):
     return _mk(
         key, "Neodent", name,
-        connection={"type": "Grand Morse", "subtype": "conical"},
+        connection={"type": "Grand Morse", "subtype": "conical_morse_taper"},
         platform_switching=True,
         features=geom,
         implant={"diameters_mm": diams, "lengths_mm": lens,
                  "bone_types": bone,
                  "healing_modes": ["submerged", "non_submerged", "immediate"],
                  "surface_options": ["Acqua", "NeoPoros"]},
-        components=[
-            {"type": "cover_screw", "subtype": "GM Cover Screw"},
-            {"type": "healing_abutment", "subtype": "GM Healing + GM Customizable"},
-            {"type": "ti_base", "subtype": "GM Exact Titanium Base", "cad_cam": True,
-             "notes": "Also available as GM Titanium Base Burn-out Coping."},
-            {"type": "final_abutment", "retention": ["cement", "occlusal_screw"]},
-            {"type": "multi_unit_abutment"},
-            {"type": "scanbody"}, {"type": "impression_coping"}, {"type": "analog"},
-        ],
+        components=_neodent_gm_components(),
         notes=notes,
     )
 
