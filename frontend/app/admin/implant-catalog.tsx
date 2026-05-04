@@ -214,15 +214,6 @@ export default function ImplantCatalogAdmin() {
           <Text style={s.headerSub}>Implanr AI knowledge base · {systems.length} systems available</Text>
         </View>
         <TouchableOpacity
-          style={s.compareBtn}
-          onPress={() => router.push('/admin/implant-compare')}
-          testID="catalog-open-compare"
-          data-testid="catalog-open-compare"
-        >
-          <Ionicons name="git-compare" size={16} color="#00695C" />
-          <Text style={s.compareBtnText}>Compare</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
           style={s.askAiBtn}
           onPress={() => router.push('/ask-implanr')}
           testID="catalog-open-ask-ai"
@@ -248,6 +239,19 @@ export default function ImplantCatalogAdmin() {
         contentContainerStyle={{ padding: 16, paddingBottom: 48 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
       >
+        {/* iter-153: Compare entry-point — inline link, kept out of the
+            header to preserve the original Implant Database title outline. */}
+        <TouchableOpacity
+          style={s.compareLink}
+          onPress={() => router.push('/admin/implant-compare')}
+          testID="catalog-open-compare"
+          data-testid="catalog-open-compare"
+        >
+          <Ionicons name="git-compare-outline" size={15} color="#00695C" />
+          <Text style={s.compareLinkText}>Compare components across brands</Text>
+          <Ionicons name="arrow-forward" size={14} color="#00695C" />
+        </TouchableOpacity>
+
         {/* ── Cascading dropdowns ── */}
         <View style={s.dropdownGroup}>
           <Text style={s.dropdownLabel}>Implant Company</Text>
@@ -532,8 +536,13 @@ const s = StyleSheet.create({
   headerBar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 12, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#ECEFF1' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#01579B' },
   headerSub: { fontSize: 12, color: '#607D8B', marginTop: 2 },
-  compareBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, borderWidth: 1.5, borderColor: '#00695C', backgroundColor: '#E0F2F1' },
-  compareBtnText: { color: '#00695C', fontSize: 12, fontWeight: '700' },
+  compareLink: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12,
+    borderRadius: 8, backgroundColor: '#E0F2F1', borderWidth: 1, borderColor: '#B2DFDB',
+  },
+  compareLinkText: { color: '#00695C', fontSize: 13, fontWeight: '600' },
   askAiBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, borderWidth: 1.5, borderColor: '#0277BD', backgroundColor: '#E1F5FE' },
   askAiBtnText: { color: '#0277BD', fontSize: 12, fontWeight: '700' },
   addNewBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#0277BD', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
