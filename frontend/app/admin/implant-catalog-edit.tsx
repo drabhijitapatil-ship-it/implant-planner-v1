@@ -24,6 +24,10 @@ type Component = {
   material?: string;
   indication?: string;
   notes?: string;
+  // iter-160: preserves all original fields not rendered by the editor
+  // (platforms_mm, torque_ncm, cad_cam, lengths_mm, platforms_diam_mm, ...)
+  // so save round-trips don't strip rich seeded data.
+  __original?: Record<string, any>;
 };
 
 const COMPONENT_TYPES = [
@@ -85,6 +89,7 @@ export default function CatalogEditor() {
           retention: (c.retention || []).join(', '),
           material: (c.material || []).join(', '),
           indication: c.indication || '', notes: c.notes || '',
+          __original: c,  // iter-160: preserve un-rendered fields (platforms_mm, torque_ncm, cad_cam, lengths_mm, ...)
         })));
         setCompatibilityNotes(d.compatibility_notes || '');
       } catch (e: any) {
@@ -120,16 +125,28 @@ export default function CatalogEditor() {
         bone_types: parseCSVStr(boneTypes) || [],
         healing_modes: parseCSVStr(healingModes) || [],
       },
-      components: components.map(c => ({
-        type: c.type,
-        subtype: c.subtype || undefined,
-        gingival_heights_mm: parseCSVNum(c.gingival_heights_mm),
-        angulations_deg: parseCSVNum(c.angulations_deg),
-        retention: parseCSVStr(c.retention),
-        material: parseCSVStr(c.material),
-        indication: c.indication || undefined,
-        notes: c.notes || undefined,
-      })),
+      components: components.map(c => {
+        // iter-160: start from the original (preserves platforms_mm, torque_ncm,
+        // cad_cam, lengths_mm, etc.) and overlay only the fields the editor renders.
+        const base = { ...(c.__original || {}) };
+        base.type = c.type;
+        if (c.subtype !== undefined) base.subtype = c.subtype || undefined;
+        const gh = parseCSVNum(c.gingival_heights_mm);
+        if (gh !== undefined) base.gingival_heights_mm = gh;
+        else if (c.gingival_heights_mm === '') delete base.gingival_heights_mm;
+        const ang = parseCSVNum(c.angulations_deg);
+        if (ang !== undefined) base.angulations_deg = ang;
+        else if (c.angulations_deg === '') delete base.angulations_deg;
+        const ret = parseCSVStr(c.retention);
+        if (ret !== undefined) base.retention = ret;
+        else if (c.retention === '') delete base.retention;
+        const mat = parseCSVStr(c.material);
+        if (mat !== undefined) base.material = mat;
+        else if (c.material === '') delete base.material;
+        if (c.indication !== undefined) base.indication = c.indication || undefined;
+        if (c.notes !== undefined) base.notes = c.notes || undefined;
+        return base;
+      }),
       compatibility_notes: compatibilityNotes.trim(),
     };
     setSaving(true);
