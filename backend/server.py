@@ -4567,6 +4567,19 @@ async def ai_explain_recommendation(request: Request, current_user: dict = Depen
         if inst.get("indications"): inst_block += f"\nInstitutional Indications: {inst['indications']}"
         if inst.get("features"):    inst_block += f"\nInstitutional Features: {inst['features']}"
 
+    # ── iter-142: inject Implant Catalog (components/SKUs) for the chosen system ──
+    catalog_block = ""
+    try:
+        cat_key = f"{plan.get('brand','')}|{plan.get('system','')}"
+        cat_doc = await db.implant_catalog.find_one({"key": cat_key}, {"_id": 0})
+        if cat_doc:
+            from implant_catalog_seed import build_ai_context as _build_cat_ctx
+            cat_summary = _build_cat_ctx(cat_doc)
+            if cat_summary:
+                catalog_block = f"\n\nSystem Catalog (available components / SKUs):\n{cat_summary}"
+    except Exception as _e:
+        logging.debug(f"catalog injection skipped: {_e}")
+
     # ── Pick the per-site findings that apply to THIS implant (iter-135) ──
     # The clinical_exam_per_site map is keyed by the cluster-leader tooth, but
     # the implant plan's tooth_number may be any tooth in that adjacent run.
@@ -4613,7 +4626,9 @@ Case Data:
 {context}
 
 Selected Implant: {plan.get('brand','')} {plan.get('system','')} {plan.get('diameter','')}×{plan.get('length','')}mm at site {plan.get('tooth_number','')}
-Bone Type: {plan.get('bone_type','N/A')}{site_focus_block}{inst_block}
+Bone Type: {plan.get('bone_type','N/A')}{site_focus_block}{inst_block}{catalog_block}
+
+If the System Catalog is provided, you may briefly cite which prosthetic / surgical components are available for the chosen system when relevant (e.g. healing-abutment heights, available abutment angulations, retention modes, multi-unit-abutment SKUs). Only mention what is actually present in the catalog — do NOT invent SKUs, angulations, gingival heights, or retention modes that are not listed.
 
 Provide a clinical explanation in professional scientific language. Do not mention any guideline names or references. Write as a professional clinical note."""
 
@@ -4705,6 +4720,136 @@ Provide a clinical explanation in professional scientific language. Do not menti
     response = await chat.send_message(UserMessage(text=prompt))
 
     return {"explanation": response}
+
+
+# ────────────────────────────────────────────────────────────────────────
+# iter-142: Implant System Catalog — Implanr AI knowledge base + admin CRUD.
+# ────────────────────────────────────────────────────────────────────────
+
+@api_router.get("/implant-catalog")
+async def list_implant_catalog(current_user: dict = Depends(get_current_user)):
+    """Return all catalog records (read by all authenticated users)."""
+    cursor = db.implant_catalog.find({}, {"_id": 0}).sort("brand", 1)
+    docs = await cursor.to_list(length=200)
+    return {"systems": docs}
+
+
+@api_router.get("/implant-catalog/by-key")
+async def get_implant_catalog_one(key: str, current_user: dict = Depends(get_current_user)):
+    """Get a single catalog record by 'Brand|System' key."""
+    doc = await db.implant_catalog.find_one({"key": key}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"Catalog entry '{key}' not found")
+    return doc
+
+
+@api_router.put("/implant-catalog/by-key")
+async def upsert_implant_catalog(request: Request, key: str, current_user: dict = Depends(get_current_user)):
+    """Admin / In-Charge: upsert a catalog record."""
+    if current_user.get("role") not in ("administrator", "implant_incharge"):
+        raise HTTPException(status_code=403, detail="Only Administrator or Implant In-Charge can edit the catalog.")
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="Body must be a JSON object")
+    try:
+        brand_in, name_in = key.split("|", 1)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Key must be 'Brand|System' format")
+    body["key"] = key
+    body["brand"] = body.get("brand") or brand_in
+    body["name"] = body.get("name") or name_in
+    body["is_stub"] = bool(not (body.get("components") or body.get("connection") or body.get("features")))
+    body["updated_at"] = datetime.now(timezone.utc).isoformat()
+    body["updated_by"] = current_user.get("name") or current_user.get("email")
+    await db.implant_catalog.update_one({"key": key}, {"$set": body}, upsert=True)
+    doc = await db.implant_catalog.find_one({"key": key}, {"_id": 0})
+    return doc
+
+
+@api_router.post("/ai/ask-implanr")
+async def ai_ask_implanr(request: Request, current_user: dict = Depends(get_current_user)):
+    """Free-form Implanr AI Q&A scoped to the implant catalog. Auto-scopes to
+    a case's chosen system when procedure_id is provided."""
+    from implant_catalog_seed import build_ai_context as _build_cat_ctx
+    body = await request.json()
+    question = (body.get("question") or "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="question is required")
+    procedure_id = body.get("procedure_id")
+    system_key = (body.get("system_key") or "").strip()
+
+    case_system = None
+    if procedure_id and not system_key:
+        try:
+            proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0, "implant_plans": 1})
+            if proc and proc.get("implant_plans"):
+                p0 = proc["implant_plans"][0]
+                case_system = f"{p0.get('brand','')}|{p0.get('system','')}".strip("|")
+        except Exception:
+            pass
+    target_key = system_key or case_system or ""
+
+    cat_block = ""
+    if target_key:
+        doc = await db.implant_catalog.find_one({"key": target_key}, {"_id": 0})
+        if doc:
+            cat_block = _build_cat_ctx(doc)
+    if not cat_block:
+        cursor = db.implant_catalog.find({"is_stub": {"$ne": True}}, {"_id": 0}).limit(8)
+        docs = await cursor.to_list(length=8)
+        cat_block = "\n\n".join(_build_cat_ctx(d) for d in docs if _build_cat_ctx(d))
+
+    if not cat_block:
+        return {"answer": "The implant catalog has not been populated yet. Please ask an administrator to add component data via the Implant Catalog admin page.", "scoped_system": None}
+
+    scope_line = f"Active system in this case: {target_key}\n\n" if target_key else ""
+    prompt = (
+        f"You are Implanr AI — a clinical assistant who answers questions about implant systems "
+        f"and their available prosthetic / surgical components.\n\n"
+        f"{scope_line}"
+        f"Catalog (authoritative — do not invent components, angulations, gingival heights, "
+        f"retention modes, or SKUs that are not listed here):\n\n{cat_block}\n\n"
+        f"User question: {question}\n\n"
+        f"Answer in 2-5 sentences. Quote exact values from the catalog (angulations, GH, retention, "
+        f"materials). If the catalog has no entry or no data for the asked component, say so clearly "
+        f"and suggest the closest available alternative. Never invent SKUs."
+    )
+
+    chat = LlmChat(
+        api_key=_get_llm_key(),
+        session_id=f"implanr-{current_user.get('id','')}-{uuid.uuid4().hex[:8]}",
+        system_message="You are Implanr AI, a precise implant-component knowledge assistant. Answer ONLY from the provided catalog."
+    ).with_model("openai", "gpt-5.2")
+
+    response = await chat.send_message(UserMessage(text=prompt))
+    return {"answer": response, "scoped_system": target_key or None}
+
+
+async def _seed_implant_catalog():
+    """Idempotent seed for the implant_catalog collection (called on startup)."""
+    try:
+        from implant_catalog_seed import (
+            ANKYLOS_CX, OSSTEM_TSIII, STUB_KEYS, _stub
+        )
+    except Exception as e:
+        logging.warning(f"implant_catalog seed skipped: {e}")
+        return
+
+    now = datetime.now(timezone.utc).isoformat()
+    for rec in (ANKYLOS_CX, OSSTEM_TSIII):
+        rec_with_meta = {**rec, "is_stub": False, "updated_at": now, "updated_by": "seed"}
+        await db.implant_catalog.update_one(
+            {"key": rec["key"]}, {"$set": rec_with_meta}, upsert=True
+        )
+    existing = {d["key"] async for d in db.implant_catalog.find({}, {"key": 1, "_id": 0})}
+    for k in STUB_KEYS:
+        if k not in existing:
+            stub = _stub(k)
+            stub["updated_at"] = now
+            stub["updated_by"] = "seed"
+            await db.implant_catalog.insert_one(stub)
+    logging.info("implant_catalog seeded (Ankylos C/X + Osstem TS III curated; stubs ensured).")
+
 
 
 def _detect_case_phase(proc: dict) -> int:
@@ -11888,6 +12033,12 @@ async def ensure_access_log_indexes_on_start():
 async def ensure_forum_indexes_on_start():
     """Forum: ensure thread/post indexes for listing + full-text search."""
     await _ensure_forum_indexes()
+
+@app.on_event("startup")
+async def seed_implant_catalog_on_start():
+    """iter-142: ensure the implant_catalog collection has the curated data
+    for Ankylos C/X + Osstem TS III, plus stub records for every other system."""
+    await _seed_implant_catalog()
 
 @app.on_event("startup")
 async def seed_on_startup():

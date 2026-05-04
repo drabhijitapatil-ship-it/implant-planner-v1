@@ -251,6 +251,16 @@ export default function ProfileScreen() {
               <Text style={styles.legalRowText}>Audit log</Text>
               <Ionicons name="chevron-forward" size={18} color="#999" />
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.legalRow}
+              onPress={() => router.push('/admin/implant-catalog')}
+              data-testid="link-implant-catalog"
+              testID="link-implant-catalog"
+            >
+              <Ionicons name="library-outline" size={22} color="#1565C0" />
+              <Text style={styles.legalRowText}>Implant Catalog (Implanr AI)</Text>
+              <Ionicons name="chevron-forward" size={18} color="#999" />
+            </TouchableOpacity>
           </View>
         )}
 

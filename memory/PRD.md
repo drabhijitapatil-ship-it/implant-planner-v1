@@ -67,6 +67,43 @@ After the Healing Abutment Cuff Height line the PDF now renders `Multi-unit Abut
 
 
 
+
+## Iteration 142 (Feb 2026) — Implanr AI Component Catalog
+
+**Goal**: Implanr AI answers "Do we have angled abutments for Ankylos? What angulations?" / "Does Osstem TS III support multi-unit?" with grounded, catalog-quoted answers — no hallucination. Ground truth is a per-system component catalog editable by Administrators.
+
+**Backend** (`implant_catalog_seed.py`, `server.py`):
+- New `implant_catalog` MongoDB collection. Schema includes connection, platform switching, features, implant Ø/L/bone-types, components[] (type/subtype/gingival_heights_mm/angulations_deg/retention/material/indication/notes), compatibility_notes, is_stub, updated_at/by.
+- Seeded **Ankylos C/X** (9 components) + **Osstem TS III** (7 components) from the user blueprint. 34 other registered systems get stub records → "Pending" badges in admin UI.
+- Idempotent startup seed: flagship systems re-upserted from code each boot (source-of-truth = code); stubs inserted only when missing — admin edits never overwritten.
+- Endpoints (`/api`-prefixed):
+  - `GET /implant-catalog` — list all (auth required).
+  - `GET /implant-catalog/by-key?key=Brand|System` — get one.
+  - `PUT /implant-catalog/by-key?key=...` — upsert (Administrator + Implant In-Charge).
+  - `POST /ai/ask-implanr` — `{question, procedure_id?, system_key?}` → GPT-5.2. Auto-scopes to a case's implant system; falls back to compact summary of populated systems if no scope.
+- AI prompt has a do-not-invent guardrail: GPT must only quote values present in the catalog block; says "no entry" when absent.
+- Existing `POST /ai/explain-recommendation` now injects the same catalog summary so per-implant explanations cite real components.
+
+**Frontend admin browser** (`/app/frontend/app/admin/implant-catalog.tsx`, route registered in `_layout.tsx`, link added to Profile → Compliance):
+- Two-pane: left = filterable list (All / With data / Pending), right = detail card.
+- List rows: brand label + system name + green `N comp` or amber `Pending` badge.
+- Detail: Connection / Implant specs / Features bullets / per-Component cards / Compatibility Notes.
+- **Ask Implanr AI** panel embedded at bottom — pre-scoped to selected system, input + Ask button, answer card.
+
+**Self-test (curl, GPT-5.2)** — 3/3 PASS:
+1. Ankylos angulations → quoted 0/7.5/15/22.5/30/37.5° + GH + retention. ✓
+2. Osstem TS III multi-unit → quoted 0/17/30° + indication. ✓
+3. Stub system (BioHorizons Tapered Pro healing GH) → "no entry" + suggested Ankylos/Osstem alternatives, no fabrication. ✓
+
+**Self-test (UI)** — Catalog browser at `/admin/implant-catalog`: 36 systems list, "With data" filter shows the 2 populated systems, detail panes render correctly, Ask AI panel renders scoped to selection.
+
+**Deferred to next session**:
+- Full CRUD **editor forms** in the admin UI (add/edit/delete components inline). Current write path = API only.
+- Standalone **"Ask Implanr AI" persistent chat tab** in main navigation (currently embedded inside catalog detail).
+- Bulk catalog **CSV import**.
+
+
+
 ## Iteration 140 (Feb 2026) — Copy MUA from Phase 2 to Phase 4 Step 1 Notes
 
 **Goal**: One-tap affordance in Phase 4 Step 1 (Prosthetic Planning) that copies the Phase 2 Multi-unit Abutment placement data into the free-text Notes field, so the restorative team doesn't have to re-type angulation + cuff-height per tooth.
