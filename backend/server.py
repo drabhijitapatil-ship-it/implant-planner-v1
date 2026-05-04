@@ -4804,21 +4804,41 @@ async def ai_ask_implanr(request: Request, current_user: dict = Depends(get_curr
 
     scope_line = f"Active system in this case: {target_key}\n\n" if target_key else ""
     prompt = (
-        f"You are Implanr AI — a clinical assistant who answers questions about implant systems "
-        f"and their available prosthetic / surgical components.\n\n"
+        f"You are Implanr AI, a precise clinical assistant for prosthodontists.\n\n"
         f"{scope_line}"
-        f"Catalog (authoritative — do not invent components, angulations, gingival heights, "
-        f"retention modes, or SKUs that are not listed here):\n\n{cat_block}\n\n"
-        f"User question: {question}\n\n"
-        f"Answer in 2-5 sentences. Quote exact values from the catalog (angulations, GH, retention, "
-        f"materials). If the catalog has no entry or no data for the asked component, say so clearly "
-        f"and suggest the closest available alternative. Never invent SKUs."
+        f"Component database (verified specifications — only quote values that appear here):\n\n{cat_block}\n\n"
+        f"Clinician question: {question}\n\n"
+        f"OUTPUT RULES (strict — must follow):\n"
+        f"1. Reply in plain text. NEVER use markdown asterisks (no **bold**, no *italics*), no hashes, no backticks.\n"
+        f"2. NEVER use the words 'catalog', 'catalogue', 'database', 'uploaded', 'provided data', 'records', or 'JSON'. "
+        f"Speak as a clinician, not as a data engineer.\n"
+        f"3. When the question is about a component (e.g. healing abutment, cover screw, multi-unit, ti-base, "
+        f"temporary cylinder, final abutment), answer in this structured plain-text format:\n\n"
+        f"   Specification of <Component> — <Brand> <System>\n"
+        f"   Diameter (mm): <values>\n"
+        f"   Gingival height (mm): <values>\n"
+        f"   Angulation (deg): <values>\n"
+        f"   Material: <values>\n"
+        f"   Retention: <values>\n"
+        f"   Indication: <text>\n\n"
+        f"   Omit any line whose data is not available. Use exact numeric values, not ranges, when listed.\n"
+        f"4. For comparative or general questions (e.g. 'compare angulations', 'which systems support zirconia'), "
+        f"reply in 2–4 short numbered points, one system per line, with exact figures.\n"
+        f"5. If a specific value is not present for the asked system or component, reply with exactly this sentence "
+        f"and nothing else:\n\n   Information is not available.\n\n"
+        f"6. NEVER fabricate diameters, heights, angulations, materials, or SKUs. Clinical interpretation is "
+        f"acceptable when grounded in the specifications above and standard prosthodontic literature "
+        f"(Misch, ITI consensus, Branemark protocol), but specifications themselves must be exact."
     )
 
     chat = LlmChat(
         api_key=_get_llm_key(),
         session_id=f"implanr-{current_user.get('id','')}-{uuid.uuid4().hex[:8]}",
-        system_message="You are Implanr AI, a precise implant-component knowledge assistant. Answer ONLY from the provided catalog."
+        system_message=(
+            "You are Implanr AI, a precise prosthodontic assistant. Output plain text only — never markdown. "
+            "Quote exact specification values from the supplied component database. "
+            "If a value is missing, reply only with 'Information is not available.' Never fabricate."
+        )
     ).with_model("openai", "gpt-5.2")
 
     response = await chat.send_message(UserMessage(text=prompt))
@@ -4847,6 +4867,15 @@ async def _seed_implant_catalog():
     )
     for rec in curated:
         rec_with_meta = {**rec, "is_stub": False, "updated_at": now, "updated_by": "seed"}
+        # iter-149: respect admin edits — only seed-overwrite when the record
+        # has not been touched by a user. If updated_by != "seed" (i.e. an
+        # Implant In-Charge or Administrator saved their own values), keep
+        # those values intact across backend reloads.
+        existing_doc = await db.implant_catalog.find_one(
+            {"key": rec["key"]}, {"updated_by": 1, "_id": 0}
+        )
+        if existing_doc and existing_doc.get("updated_by") not in (None, "", "seed"):
+            continue  # admin-edited — never overwrite
         await db.implant_catalog.update_one(
             {"key": rec["key"]}, {"$set": rec_with_meta}, upsert=True
         )
@@ -5111,29 +5140,45 @@ async def ai_chat(body: AIChatMessage, current_user: dict = Depends(get_current_
         if cat_summaries:
             joined = "\n\n".join(cat_summaries)
             catalog_block = (
-                f"\n\nImplant System Catalog (authoritative — answer questions about "
-                f"components / SKUs / angulations / GH / retention from this block ONLY; "
-                f"never invent values that are not listed). The case uses "
-                f"{len(cat_summaries)} system(s); each is delimited by '===' headers:\n\n"
-                f"{joined}"
+                f"\n\nVerified component specifications for the implant system(s) used in this case "
+                f"(quote only values listed below; never invent SKUs, diameters, gingival heights, "
+                f"angulations, materials, or retention modes). {len(cat_summaries)} system(s); each "
+                f"is delimited by '===' headers:\n\n{joined}"
             )
     no_system_directive = "" if case_has_system else (
-        "\n\nNote: This case does not have a recognised implant system in the catalog. "
-        "If the user asks about specific component availability (angulations, gingival heights, "
-        "multi-unit abutment SKUs, retention modes, etc.), reply: \"The implant system chosen "
-        "for this case is not yet in the Implanr catalog. Please pick a catalog-supported system "
-        "in Phase 1, or ask an administrator to add this brand's data via the Implant Catalog "
-        "admin page.\" Do NOT fabricate component values."
+        "\n\nNote: The implant system chosen for this case does not yet have verified component "
+        "specifications on file. If the user asks about specific component availability "
+        "(angulations, gingival heights, multi-unit abutment options, retention modes, etc.), "
+        "reply with exactly: \"Information is not available.\" Do NOT fabricate values."
     )
 
     # Retrieve chat history
     chat_history = proc.get("ai_chat_history") or []
     
-    system = f"""You are Implanr AI, an expert implant dentistry clinical assistant. You have access to the following patient case data:
+    system = f"""You are Implanr AI, a precise prosthodontic clinical assistant. You have access to the following patient case data:
 
 {context}{catalog_block}
 
-Answer questions about this specific case using evidence-based implant dentistry knowledge. Be concise (2-4 sentences per answer). If asked about something outside your clinical expertise, say so clearly. Never fabricate clinical data — only reference what's in the case. When answering component / SKU / angulation / gingival-height / retention questions, quote ONLY values that appear in the Implant System Catalog block above; if a value is not listed, say so explicitly.{no_system_directive}"""
+OUTPUT RULES (strict):
+1. Reply in plain text. NEVER use markdown asterisks (no **bold**, no *italics*), no hashes, no backticks.
+2. NEVER use the words 'catalog', 'catalogue', 'database', 'uploaded', 'provided data', 'records', or 'JSON'. Speak as a clinician.
+3. When asked about a specific component (healing abutment, cover screw, multi-unit abutment, ti-base, temporary cylinder, final abutment), output structured plain-text:
+
+   Specification of <Component> — <Brand> <System>
+   Diameter (mm): <values>
+   Gingival height (mm): <values>
+   Angulation (deg): <values>
+   Material: <values>
+   Retention: <values>
+   Indication: <text>
+
+   Omit any line whose value is not on file. Use exact values, not ranges.
+4. For comparative questions, reply in 2–4 short numbered points, one system per line, with exact figures.
+5. If a specific value is not on file for the asked system or component, reply with exactly this sentence and nothing else:
+
+   Information is not available.
+
+6. Be concise (2–4 sentences for non-component questions). Reference standard prosthodontic literature (Misch, ITI consensus, Branemark protocol) for clinical interpretation, but specifications must be exact.{no_system_directive}"""
 
     # Build history context for the prompt
     history_context = ""

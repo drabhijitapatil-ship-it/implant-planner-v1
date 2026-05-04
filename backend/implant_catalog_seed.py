@@ -296,25 +296,100 @@ BIOHORIZONS_TAPERED_PRO_CONICAL: Dict[str, Any] = {
         "healing_modes": ["two_stage", "single_stage"],
     },
     "components": [
-        {"type": "cover_screw", "subtype": "narrow + regular conical",
-         "indication": "Submerged healing"},
+        {"type": "cover_screw",
+         "subtype": "Conical Cover Screw",
+         "platforms": ["Narrow", "Regular"],
+         "material": ["titanium_alloy"],
+         "torque_ncm": "10-15 (hand-tighten)",
+         "indication": "Two-stage submerged protocol",
+         "notes": "Uses .050\" (1.25 mm) Hex Driver"},
+
         {"type": "healing_abutment",
-         "subtype": "regular / wide / extra-wide",
-         "indication": "Narrow + Regular platforms (Extra-Wide on Regular only)"},
-        {"type": "final_abutment", "indication": "Restorative components — refer to platform-specific catalog"},
+         "subtype": "Regular Healing Cap",
+         "platforms": ["Narrow", "Regular"],
+         "diameters_mm": [3.0, 3.8],
+         "gingival_heights_mm": [2.0, 4.0, 6.0],
+         "material": ["titanium_alloy"],
+         "torque_ncm": "10-15 (hand-tighten)",
+         "indication": "Single-stage protocol; color-coded by prosthetic platform"},
+
+        {"type": "healing_abutment",
+         "subtype": "Wide Healing Cap",
+         "platforms": ["Narrow", "Regular"],
+         "diameters_mm": [4.8, 5.3],
+         "gingival_heights_mm": [4.0, 6.0],
+         "material": ["titanium_alloy"],
+         "torque_ncm": "10-15 (hand-tighten)",
+         "indication": "Wider emergence profile; color-coded by platform"},
+
+        {"type": "healing_abutment",
+         "subtype": "Extra-Wide Healing Cap",
+         "platforms": ["Regular"],
+         "diameters_mm": [5.8],
+         "gingival_heights_mm": [4.0, 6.0],
+         "material": ["titanium_alloy"],
+         "torque_ncm": "10-15 (hand-tighten)",
+         "indication": "Wide emergence; Regular platform only"},
+
+        {"type": "temporary_cylinder",
+         "subtype": "Conical Temporary Abutment - Engaging",
+         "platforms": ["Narrow", "Regular"],
+         "gingival_heights_mm": [1.5, 3.0, 4.0],
+         "material": ["titanium_alloy"],
+         "retention": ["abutment_screw"],
+         "torque_ncm": 20,
+         "indication": "Single-unit temporary restoration; preparable; abutment screw included"},
+
+        {"type": "temporary_cylinder",
+         "subtype": "Conical Temporary Abutment - Non-engaging",
+         "platforms": ["Narrow", "Regular"],
+         "gingival_heights_mm": [1.5, 3.0, 4.0],
+         "material": ["titanium_alloy"],
+         "retention": ["abutment_screw"],
+         "torque_ncm": 20,
+         "indication": "Multi-unit / bridge temporary restoration; preparable; abutment screw included"},
+
         {"type": "multi_unit_abutment",
-         "indication": "Multi-unit prosthetic support; single platform simplifies full-arch cases"},
-        {"type": "ti_base", "cad_cam": True},
-        {"type": "scanbody"},
-        {"type": "overdenture", "indication": "Compatible with overdenture restorations (page 18 of catalog)"},
-        {"type": "impression_coping"},
-        {"type": "analog"},
-        {"type": "surgical_drill",
-         "subtype": "pilot / soft-bone / dense-bone / crestal-bone",
-         "notes": "Pro Freehand and Pro Guided Surgical Kits"},
-        {"type": "implant_driver",
-         "subtype": "color-coded conical driver",
-         "notes": "Black = Narrow, Yellow = Regular prosthetic connection"},
+         "platforms": ["Narrow", "Regular"],
+         "angulations_deg": [0, 17, 30],
+         "indication": "Full-arch and multi-unit restorations"},
+
+        {"type": "ti_base",
+         "platforms": ["Narrow", "Regular"],
+         "material": ["titanium"],
+         "cad_cam": True,
+         "indication": "CAD/CAM single-unit and bridge restorations"},
+
+        {"type": "scanbody",
+         "platforms": ["Narrow", "Regular"],
+         "indication": "Digital impression workflow"},
+
+        {"type": "impression_coping",
+         "subtype": "open-tray and closed-tray",
+         "platforms": ["Narrow", "Regular"],
+         "material": ["titanium_alloy"],
+         "indication": "Conventional impression; color-coded by platform"},
+
+        {"type": "analog",
+         "platforms": ["Narrow", "Regular"],
+         "material": ["titanium_alloy"],
+         "indication": "Laboratory model fabrication"},
+
+        {"type": "overdenture_attachment",
+         "subtype": "Locator",
+         "platforms": ["Narrow", "Regular"],
+         "indication": "Overdenture retention"},
+
+        {"type": "castable_abutment",
+         "platforms": ["Narrow", "Regular"],
+         "material": ["castable_alloy"],
+         "indication": "Custom abutment fabrication via lost-wax casting"},
+
+        {"type": "esthetic_abutment",
+         "subtype": "Zirconia",
+         "platforms": ["Narrow", "Regular"],
+         "material": ["zirconia"],
+         "indication": "Anterior esthetic zone restorations"},
     ],
     "compatibility_notes": (
         "Member of the CONELOG connection family (established 2011) — conical 6-cam internal "
@@ -624,7 +699,15 @@ NEODENT_TITAMAX_GM_NEOPOROUS = _neodent(
 )
 
 # --- Bredent SKY family ---
-def _bredent(key, name, connection_type, diams, lens, bone, healing, features, notes):
+def _bredent(key, name, connection_type, diams, lens, bone, healing, features, notes,
+             components=None):
+    default_components = [
+        {"type": "cover_screw"}, {"type": "healing_abutment"},
+        {"type": "final_abutment", "retention": ["cement", "occlusal_screw"]},
+        {"type": "multi_unit_abutment"},
+        {"type": "ti_base", "cad_cam": True}, {"type": "scanbody"},
+        {"type": "overdenture"}, {"type": "impression_coping"}, {"type": "analog"},
+    ]
     return _mk(
         key, "Bredent", name,
         connection={"type": connection_type, "subtype": None},
@@ -632,15 +715,248 @@ def _bredent(key, name, connection_type, diams, lens, bone, healing, features, n
         features=features,
         implant={"diameters_mm": diams, "lengths_mm": lens,
                  "bone_types": bone, "healing_modes": healing},
-        components=[
-            {"type": "cover_screw"}, {"type": "healing_abutment"},
-            {"type": "final_abutment", "retention": ["cement", "occlusal_screw"]},
-            {"type": "multi_unit_abutment"},
-            {"type": "ti_base", "cad_cam": True}, {"type": "scanbody"},
-            {"type": "overdenture"}, {"type": "impression_coping"}, {"type": "analog"},
-        ],
+        components=components if components is not None else default_components,
         notes=notes,
     )
+
+# iter-149: Detailed prosthetic components extracted from official Bredent SKY
+# manual (PDF). Surgical drills/ratchets/drivers excluded per user request —
+# only restorative components.
+_SKY_RP_PROSTHETICS = [
+    # Cover screw — auto-supplied with implant.
+    {"type": "cover_screw", "material": ["titanium_alloy"],
+     "indication": "Two-stage submerged healing; included with implant"},
+    # Healing abutments / SKY esthetic gingiva former S/M/L.
+    {"type": "healing_abutment", "subtype": "SKY esthetic gingiva former M",
+     "platforms": ["regular"], "diameters_mm": [4.45, 4.97, 5.5],
+     "gingival_heights_mm": [2.0, 3.0, 4.0, 6.0], "angulations_deg": [0],
+     "material": ["titanium_grade4"], "torque_ncm": 10,
+     "indication": "Regular platform — blueSKY / SKY classic"},
+    {"type": "healing_abutment", "subtype": "SKY esthetic gingiva former L",
+     "platforms": ["regular"], "diameters_mm": [6.26, 6.95, 7.0],
+     "gingival_heights_mm": [2.0, 3.0, 4.0], "angulations_deg": [0],
+     "material": ["titanium_grade4"], "torque_ncm": 10,
+     "indication": "Wide emergence — Regular platform"},
+    # Temporary abutments — POM, 18 Ncm, max 6 months in mouth.
+    {"type": "temporary_cylinder", "subtype": "SKY temp S abutment",
+     "platforms": ["regular"], "diameters_mm": [4.1],
+     "gingival_heights_mm": [2.0], "heights_mm": [9.0], "angulations_deg": [0],
+     "material": ["POM"], "torque_ncm": 18,
+     "indication": "Temporary restoration up to 6 months"},
+    {"type": "temporary_cylinder", "subtype": "SKY temp M abutment",
+     "platforms": ["regular"], "diameters_mm": [5.5],
+     "gingival_heights_mm": [3.0], "heights_mm": [9.0], "angulations_deg": [0],
+     "material": ["POM"], "torque_ncm": 18,
+     "indication": "Temporary restoration up to 6 months"},
+    {"type": "temporary_cylinder", "subtype": "SKY temp L abutment",
+     "platforms": ["regular"], "diameters_mm": [7.0],
+     "gingival_heights_mm": [3.75], "heights_mm": [9.0], "angulations_deg": [0],
+     "material": ["POM"], "torque_ncm": 18,
+     "indication": "Temporary restoration up to 6 months"},
+    # SKY esthetic final abutments — 0° / 15° / 15°R, Ti grade 4, 25 Ncm.
+    {"type": "final_abutment", "subtype": "SKY esthetic abutment S 0°",
+     "platforms": ["regular"], "diameters_mm": [4.5],
+     "gingival_heights_mm": [3.0], "heights_mm": [9.0], "angulations_deg": [0],
+     "material": ["titanium_grade4"], "retention": ["occlusal_screw"], "torque_ncm": 25,
+     "indication": "Anterior single-unit"},
+    {"type": "final_abutment", "subtype": "SKY esthetic abutment M 0°",
+     "platforms": ["regular"], "diameters_mm": [5.5],
+     "gingival_heights_mm": [3.0], "heights_mm": [9.0], "angulations_deg": [0],
+     "material": ["titanium_grade4"], "retention": ["occlusal_screw"], "torque_ncm": 25,
+     "indication": "Premolar single-unit"},
+    {"type": "final_abutment", "subtype": "SKY esthetic abutment L 0°",
+     "platforms": ["regular"], "diameters_mm": [7.0],
+     "gingival_heights_mm": [3.0], "heights_mm": [9.0], "angulations_deg": [0],
+     "material": ["titanium_grade4"], "retention": ["occlusal_screw"], "torque_ncm": 25,
+     "indication": "Molar single-unit"},
+    {"type": "final_abutment", "subtype": "SKY esthetic abutment S 15°",
+     "platforms": ["regular"], "diameters_mm": [4.5],
+     "gingival_heights_mm": [3.0], "heights_mm": [9.0], "angulations_deg": [15],
+     "material": ["titanium_grade4"], "retention": ["occlusal_screw"], "torque_ncm": 25,
+     "indication": "Anterior with axis correction"},
+    {"type": "final_abutment", "subtype": "SKY esthetic abutment M 15°",
+     "platforms": ["regular"], "diameters_mm": [5.5],
+     "gingival_heights_mm": [3.0], "heights_mm": [9.0], "angulations_deg": [15],
+     "material": ["titanium_grade4"], "retention": ["occlusal_screw"], "torque_ncm": 25,
+     "indication": "Premolar with axis correction"},
+    # SKY standard line titanium NP 0°/15°/15°R/25°/25°R.
+    {"type": "final_abutment", "subtype": "SKY titanium abutment NP 0°",
+     "platforms": ["regular"], "diameters_mm": [4.5],
+     "gingival_heights_mm": [1.4], "heights_mm": [10.0], "angulations_deg": [0],
+     "material": ["titanium_grade4"], "retention": ["occlusal_screw"], "torque_ncm": 25,
+     "indication": "Standard prosthetic abutment"},
+    {"type": "final_abutment", "subtype": "SKY titanium abutment NP 15°",
+     "platforms": ["regular"], "diameters_mm": [4.5],
+     "gingival_heights_mm": [0.5], "heights_mm": [10.0], "angulations_deg": [15],
+     "material": ["titanium_grade4"], "retention": ["occlusal_screw"], "torque_ncm": 25,
+     "indication": "Standard with 15° axis correction"},
+    {"type": "final_abutment", "subtype": "SKY titanium abutment NP 25°",
+     "platforms": ["regular"], "diameters_mm": [4.5],
+     "gingival_heights_mm": [0.5], "heights_mm": [10.0], "angulations_deg": [25],
+     "material": ["titanium_grade4"], "retention": ["occlusal_screw"], "torque_ncm": 25,
+     "indication": "Standard with 25° axis correction"},
+    # SKY uni.cone (multi-unit) — full-arch fixed prostheses.
+    {"type": "multi_unit_abutment", "subtype": "SKY uni.cone abutment 0°",
+     "platforms": ["regular"], "diameters_mm": [4.5],
+     "gingival_heights_mm": [1.0, 2.0, 3.0], "heights_mm": [3.3], "angulations_deg": [0],
+     "material": ["titanium_grade4"], "torque_ncm": 25,
+     "indication": "Straight multi-unit; full-arch"},
+    # SKY fast & fixed angled multi-unit.
+    {"type": "multi_unit_abutment", "subtype": "SKY fast & fixed abutment 17.5°",
+     "platforms": ["regular"], "diameters_mm": [5.65],
+     "gingival_heights_mm": [2.15, 3.74], "heights_mm": [3.6], "angulations_deg": [17.5],
+     "material": ["titanium_grade4"], "torque_ncm": 25,
+     "indication": "Angled multi-unit for All-on-X mesial cant"},
+    {"type": "multi_unit_abutment", "subtype": "SKY fast & fixed abutment 35°",
+     "platforms": ["regular"], "diameters_mm": [5.65],
+     "gingival_heights_mm": [1.06, 1.88], "heights_mm": [3.6], "angulations_deg": [35],
+     "material": ["titanium_grade4"], "torque_ncm": 25,
+     "indication": "Steeply angled multi-unit for All-on-X distal cant"},
+    {"type": "multi_unit_abutment", "subtype": "SKY fast & fixed abutment 0°",
+     "platforms": ["regular"], "diameters_mm": [5.65],
+     "gingival_heights_mm": [1.0, 2.0, 4.0], "heights_mm": [3.6], "angulations_deg": [0],
+     "material": ["titanium_grade4"], "torque_ncm": 25,
+     "indication": "Straight multi-unit"},
+    # SKY elegance BioHPP esthetic abutments.
+    {"type": "esthetic_abutment", "subtype": "BioHPP SKY elegance S abutment 0°",
+     "platforms": ["regular"], "diameters_mm": [4.5],
+     "gingival_heights_mm": [3.4], "heights_mm": [9.0], "angulations_deg": [0],
+     "material": ["BioHPP", "titanium_grade4"], "retention": ["occlusal_screw"], "torque_ncm": 25,
+     "indication": "Anterior esthetic"},
+    {"type": "esthetic_abutment", "subtype": "BioHPP SKY elegance M abutment 0°",
+     "platforms": ["regular"], "diameters_mm": [5.5],
+     "gingival_heights_mm": [3.3], "heights_mm": [9.0], "angulations_deg": [0],
+     "material": ["BioHPP", "titanium_grade4"], "retention": ["occlusal_screw"], "torque_ncm": 25,
+     "indication": "Premolar esthetic"},
+    {"type": "esthetic_abutment", "subtype": "BioHPP SKY elegance L abutment 0°",
+     "platforms": ["regular"], "diameters_mm": [7.0],
+     "gingival_heights_mm": [3.4], "heights_mm": [9.0], "angulations_deg": [0],
+     "material": ["BioHPP", "titanium_grade4"], "retention": ["occlusal_screw"], "torque_ncm": 25,
+     "indication": "Molar esthetic"},
+    # Ti-bases + scanbodies (SKY uni.fit).
+    {"type": "ti_base", "subtype": "SKY uni.fit titanium base S for CEREC",
+     "platforms": ["regular"], "diameters_mm": [2.99],
+     "gingival_heights_mm": [0.3], "heights_mm": [5.0], "angulations_deg": [0],
+     "material": ["titanium_grade4"], "torque_ncm": 25, "cad_cam": True,
+     "indication": "CEREC chairside CAD/CAM"},
+    {"type": "scanbody", "subtype": "SKY uni.fit scan abutment Intraoral",
+     "platforms": ["regular"], "diameters_mm": [4.1], "heights_mm": [7.5],
+     "material": ["PEEK"], "torque_ncm": 10,
+     "indication": "Intraoral digital impression; exocad / 3shape / Dental Wings libraries"},
+    {"type": "scanbody", "subtype": "SKY uni.fit scan abutment Extraoral",
+     "platforms": ["regular"], "diameters_mm": [5.8], "heights_mm": [13.5],
+     "material": ["PEEK"], "torque_ncm": 10,
+     "indication": "Lab scan body"},
+    # Locator overdenture.
+    {"type": "overdenture_attachment", "subtype": "Locator abutment for SKY",
+     "platforms": ["regular"], "diameters_mm": [4.93, 5.65],
+     "gingival_heights_mm": [1, 2, 3, 4, 6], "angulations_deg": [0],
+     "material": ["titanium_grade4"], "torque_ncm": 25,
+     "indication": "Overdenture retention; retention elements 0°-10° and 10°-20°"},
+    {"type": "overdenture_attachment", "subtype": "Locator abutment 17.5°",
+     "platforms": ["regular"], "diameters_mm": [5.65],
+     "gingival_heights_mm": [1.7], "angulations_deg": [17.5],
+     "material": ["titanium_grade5", "TiNi"], "torque_ncm": 25,
+     "indication": "Angled overdenture; All-on-X bar conversion"},
+    {"type": "overdenture_attachment", "subtype": "Locator abutment 35°",
+     "platforms": ["regular"], "diameters_mm": [5.65],
+     "gingival_heights_mm": [0.7], "angulations_deg": [35],
+     "material": ["titanium_grade5", "TiNi"], "torque_ncm": 25,
+     "indication": "Steeply angled overdenture"},
+    {"type": "overdenture_attachment", "subtype": "TiSi.snap 3/1",
+     "platforms": ["regular"], "diameters_mm": [4.93],
+     "gingival_heights_mm": [1.34], "angulations_deg": [0],
+     "material": ["titanium_grade5"], "torque_ncm": 25,
+     "indication": "Stud attachment overdenture"},
+    {"type": "analog", "subtype": "SKY implant analog",
+     "diameters_mm": [4.0], "heights_mm": [14.0],
+     "material": ["titanium_grade4"], "indication": "Laboratory model"},
+]
+
+_SKY_NP_PROSTHETICS = [
+    {"type": "cover_screw", "material": ["titanium_alloy"],
+     "indication": "Two-stage submerged healing; included with implant"},
+    {"type": "healing_abutment", "subtype": "SKY esthetic gingiva former S",
+     "platforms": ["narrow"], "diameters_mm": [4.33, 4.5],
+     "gingival_heights_mm": [2.3, 3.0, 4.0, 6.0], "angulations_deg": [0],
+     "material": ["titanium_grade4"], "torque_ncm": 10,
+     "indication": "Narrow platform — narrowSKY"},
+    {"type": "final_abutment", "subtype": "SKY esthetic abutment S 0°",
+     "platforms": ["narrow"], "diameters_mm": [4.5],
+     "gingival_heights_mm": [3.0], "heights_mm": [9.0], "angulations_deg": [0],
+     "material": ["titanium_grade4"], "retention": ["occlusal_screw"], "torque_ncm": 25,
+     "indication": "Narrow single-unit"},
+    {"type": "final_abutment", "subtype": "SKY esthetic abutment S 15°",
+     "platforms": ["narrow"], "diameters_mm": [4.5],
+     "gingival_heights_mm": [3.0], "heights_mm": [9.0], "angulations_deg": [15],
+     "material": ["titanium_grade4"], "retention": ["occlusal_screw"], "torque_ncm": 25,
+     "indication": "Narrow with 15° axis correction"},
+    {"type": "final_abutment", "subtype": "SKY abutment NP cast-on",
+     "platforms": ["narrow"], "diameters_mm": [4.5],
+     "gingival_heights_mm": [3.5], "heights_mm": [9.5], "angulations_deg": [0],
+     "material": ["PMMA", "Au-Pd-Pt-Ir alloy"], "torque_ncm": 25,
+     "indication": "Castable for custom abutments; melting range 1400-1490°C"},
+    {"type": "ti_base", "subtype": "SKY uni.fit CAD abutment",
+     "platforms": ["narrow"], "diameters_mm": [2.9, 3.2], "heights_mm": [3.8],
+     "angulations_deg": [0], "material": ["titanium_grade4"], "torque_ncm": 25,
+     "cad_cam": True, "indication": "Narrow CAD/CAM CEREC / 3shape / exocad"},
+    {"type": "esthetic_abutment", "subtype": "BioHPP SKY elegance S abutment 0°",
+     "platforms": ["narrow"], "diameters_mm": [4.5],
+     "gingival_heights_mm": [3.4], "heights_mm": [9.0], "angulations_deg": [0],
+     "material": ["BioHPP", "titanium_grade4"], "retention": ["occlusal_screw"],
+     "torque_ncm": 25, "indication": "Narrow esthetic"},
+    {"type": "esthetic_abutment", "subtype": "BioHPP SKY elegance S abutment 15°",
+     "platforms": ["narrow"], "diameters_mm": [4.5],
+     "gingival_heights_mm": [3.4], "heights_mm": [9.0], "angulations_deg": [15],
+     "material": ["BioHPP", "titanium_grade4"], "retention": ["occlusal_screw"],
+     "torque_ncm": 25, "indication": "Narrow esthetic with 15° axis correction"},
+    {"type": "analog", "subtype": "SKY implant analog narrow",
+     "diameters_mm": [3.5], "heights_mm": [14.0],
+     "material": ["titanium_grade4"], "indication": "Laboratory model"},
+]
+
+_SKY_COPA_PROSTHETICS = [
+    {"type": "cover_screw", "material": ["titanium_alloy"],
+     "indication": "Two-stage submerged healing; included with implant"},
+    {"type": "healing_abutment", "subtype": "copaSKY gingiva former M 4 mm",
+     "gingival_heights_mm": [4.0], "material": ["titanium_grade4"], "torque_ncm": 10,
+     "indication": "Ultra-short implant gingiva former"},
+    {"type": "healing_abutment", "subtype": "copaSKY gingiva former M 6 mm F15",
+     "gingival_heights_mm": [6.0], "material": ["titanium_grade4"], "torque_ncm": 10,
+     "indication": "Longer cuff for thick gingiva"},
+    {"type": "esthetic_abutment", "subtype": "BioHPP copaSKY elegance M Abutment 0°",
+     "angulations_deg": [0], "material": ["BioHPP", "titanium_grade4"],
+     "retention": ["occlusal_screw"],
+     "indication": "Esthetic restoration on ultra-short implant"},
+    {"type": "final_abutment", "subtype": "copaSKY uni.cone abutment",
+     "gingival_heights_mm": [1, 2, 3], "material": ["titanium_grade4"],
+     "torque_ncm": 25, "indication": "Multi-unit support on ultra-short copaSKY"},
+    {"type": "ti_base", "subtype": "copaSKY titanium base for CEREC",
+     "material": ["titanium_grade4"], "cad_cam": True,
+     "indication": "CEREC chairside on copaSKY"},
+]
+
+_SKY_MINI_PROSTHETICS = [
+    {"type": "cover_screw", "material": ["titanium_alloy"],
+     "indication": "Two-stage; included with implant"},
+    {"type": "healing_abutment", "subtype": "miniSKY gingiva former",
+     "material": ["titanium_grade4"], "torque_ncm": 10,
+     "indication": "Narrow single-tooth gap restoration"},
+    {"type": "final_abutment", "subtype": "miniSKY MD-Abutment Titanium",
+     "material": ["titanium_grade4"], "retention": ["occlusal_screw"],
+     "indication": "Standard restoration of narrow single-tooth gaps"},
+    {"type": "final_abutment", "subtype": "miniSKY MD-Abutment BioXS",
+     "material": ["BioXS"], "retention": ["occlusal_screw"],
+     "indication": "Esthetic narrow restoration"},
+    {"type": "final_abutment", "subtype": "miniSKY uni.fit Abutment",
+     "material": ["titanium_grade4"], "retention": ["occlusal_screw"],
+     "indication": "Digital workflow on miniSKY"},
+    {"type": "ti_base", "subtype": "miniSKY titanium base",
+     "material": ["titanium_grade4"], "cad_cam": True,
+     "indication": "Digital CAD/CAM on miniSKY"},
+    {"type": "analog", "subtype": "miniSKY implant analog",
+     "material": ["titanium_grade4"], "indication": "Laboratory model"},
+]
 
 BREDENT_BLUE_SKY = _bredent(
     "Bredent|Blue Sky", "blueSKY", "RP (Regular platform, platform-switched)",
@@ -648,7 +964,8 @@ BREDENT_BLUE_SKY = _bredent(
     ["all"], ["iso_crestal", "supracrestal"],
     ["Platform switch", "Osseo-connect surface (OCS)", "Conical-cylindrical shape",
      "Double thread", "Self-cutting compression thread", "Bone-preserving"],
-    "Workhorse of the SKY line. Compatible with SKY esthetic line, SKY elegance, SKY fast & fixed, SKY uni.cone."
+    "Workhorse of the SKY line. Compatible with SKY esthetic line, SKY elegance, SKY fast & fixed, SKY uni.cone.",
+    components=_SKY_RP_PROSTHETICS,
 )
 BREDENT_MINI_2_SKY = _bredent(
     "Bredent|Mini 2 Sky", "miniSKY", "NP (Narrow platform)",
@@ -656,7 +973,8 @@ BREDENT_MINI_2_SKY = _bredent(
     ["all"], ["tissue_level"],
     ["Osseo-connect surface (OCS)", "Rotation-locked conical abutment connection",
      "Three-stage functional design", "Cortical relief", "Central stabilisation"],
-    "Prosthesis fixation + narrow single-tooth gap restoration."
+    "Prosthesis fixation + narrow single-tooth gap restoration.",
+    components=_SKY_MINI_PROSTHETICS,
 )
 BREDENT_COPA_SKY = _bredent(
     "Bredent|Copa Sky", "copaSKY", "Conical-parallel",
@@ -664,14 +982,16 @@ BREDENT_COPA_SKY = _bredent(
     ["wide_low_height_ridge"], ["bone_level"],
     ["Ultra-short implant", "Single connection geometry", "Torx® as gold standard",
      "Stable reversible implant-abutment connection", "Osseo-connect surface (OCS)"],
-    "Ideal for challenging implant-length vs. abutment-height ratios."
+    "Ideal for challenging implant-length vs. abutment-height ratios.",
+    components=_SKY_COPA_PROSTHETICS,
 )
 BREDENT_NARROW_SKY = _bredent(
     "Bredent|Narrow Sky", "Narrow Sky", "NP (Narrow platform)",
     [3.5], [8, 10, 12, 14, 16],
     ["all"], ["tissue_level"],
     ["Narrow platform", "Osseo-connect surface (OCS)", "Designed for narrow gaps"],
-    "Narrow-diameter variant of blueSKY for narrow gaps and grafted ridges."
+    "Narrow-diameter variant of blueSKY for narrow gaps and grafted ridges.",
+    components=_SKY_NP_PROSTHETICS,
 )
 BREDENT_SKY_CLASSIC = _bredent(
     "Bredent|Sky Classic", "Sky Classic", "RP (Regular platform)",
@@ -679,7 +999,8 @@ BREDENT_SKY_CLASSIC = _bredent(
     ["all"], ["supracrestal", "iso_crestal"],
     ["Platform switch (4.0-4.5)", "Long machined neck",
      "Semi-transgingival position", "Osseo-connect surface (OCS)"],
-    "Ideal for flapless implant placement on narrow and uneven ridges."
+    "Ideal for flapless implant placement on narrow and uneven ridges.",
+    components=_SKY_RP_PROSTHETICS,
 )
 
 # --- iter-145: B&B Dental (Italy) Conexa family + Dura-Vit Slim + Mini ---
@@ -922,14 +1243,22 @@ def build_ai_context(record: Dict[str, Any]) -> str:
         for c in comps:
             sub = f"/{c['subtype']}" if c.get("subtype") else ""
             extras = []
-            if c.get("angulations_deg"):
-                extras.append(f"angulations {c['angulations_deg']}°")
+            if c.get("platforms"):
+                extras.append("platforms " + "/".join(c["platforms"]))
+            if c.get("diameters_mm"):
+                extras.append(f"Ø {c['diameters_mm']} mm")
             if c.get("gingival_heights_mm"):
                 extras.append(f"GH {c['gingival_heights_mm']} mm")
+            if c.get("heights_mm"):
+                extras.append(f"H {c['heights_mm']} mm")
+            if c.get("angulations_deg"):
+                extras.append(f"angulations {c['angulations_deg']}°")
             if c.get("retention"):
                 extras.append("retention " + "/".join(c["retention"]))
             if c.get("material"):
-                extras.append("mat " + "/".join(c["material"]))
+                extras.append("material " + "/".join(c["material"]))
+            if c.get("torque_ncm"):
+                extras.append(f"torque {c['torque_ncm']} Ncm")
             if c.get("indication"):
                 extras.append(c["indication"])
             line = f"  - {c['type']}{sub}"

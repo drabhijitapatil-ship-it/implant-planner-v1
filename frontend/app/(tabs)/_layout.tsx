@@ -124,6 +124,14 @@ function DrawerMenu({
           bg: '#FFF3E0', chip: '#FFE0B2', iconColor: '#EF6C00', badge: hasUnseenWhatsNew,
         }]
       : []),
+    // iter-149: Implant Database tile — visible to ALL roles (read-only for
+    // students / supervisors / nurses; edit-enabled for implant_incharge +
+    // administrator at the catalog screen level via canEdit gate). Amber
+    // palette per user choice — distinct from the peach What's-New tile.
+    {
+      key: 'implant-database', icon: 'library' as const, label: 'Implant Database', route: '/admin/implant-catalog',
+      bg: '#FFF8E1', chip: '#FFE082', iconColor: '#E65100',
+    },
   ];
 
   return (

@@ -105,13 +105,15 @@ export default function AskImplanrAI() {
       </TouchableOpacity>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
         style={{ flex: 1 }}
       >
         <ScrollView
           ref={scrollRef}
-          contentContainerStyle={s.chatBody}
+          contentContainerStyle={[s.chatBody, { paddingBottom: 24 }]}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           {messages.length === 0 ? (
             <View style={s.welcomeCard}>
