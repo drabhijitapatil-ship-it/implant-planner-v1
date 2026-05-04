@@ -2730,6 +2730,26 @@ COWELL_INNO_EXTERNAL = _cowell(
 )
 
 # --- Full list of extra curated catalog records for the seed hook. ---
+# ── iter-162 — apply rich PDF-extracted prosthetic data for Cowellmedi
+# (INNO line + Mini Plus), MIS LANCE+, and the Osstem internal-hex / octa
+# shared suites. Defined in `iter162_catalog.py` and applied here so the
+# startup seeder picks up the rich data on every restart. ───────────────────
+from iter162_catalog import (
+    apply_iter162_overrides as _apply_iter162,
+    COWELL_NEW_RECORDS as _COWELL_NEW_RECORDS,
+)
+
+_apply_iter162(
+    osstem_tsiii=OSSTEM_TSIII,
+    osstem_tsiv=OSSTEM_TSIV,
+    osstem_ssiii=OSSTEM_SSIII,
+    osstem_ms=OSSTEM_MS,
+    osstem_etiii_nh=OSSTEM_ETIII_NH,
+    mis_lance_plus=MIS_LANCE_PLUS,
+    cowell_inno_internal=COWELL_INNO_INTERNAL,
+    cowell_inno_external=COWELL_INNO_EXTERNAL,
+)
+
 CATALOG_EXTRA: List[Dict[str, Any]] = [
     OSSTEM_TSIV, OSSTEM_SSIII, OSSTEM_MS, OSSTEM_ETIII_NH,
     NOBEL_ACTIVE_NP, NOBEL_ACTIVE_RP, NOBEL_ACTIVE_WP,
@@ -2742,6 +2762,8 @@ CATALOG_EXTRA: List[Dict[str, Any]] = [
     # iter-145
     BB_EV_LINE, BB_3P, BB_3P_LONG, BB_WIDE, BB_DURAVIT_SLIM,
     COWELL_INNO_SLA_SH, COWELL_INNO_INTERNAL, COWELL_INNO_EXTERNAL,
+    # iter-162 — new Cowell Medi keys (Submerged / Submerged Narrow / Mini Plus)
+    *_COWELL_NEW_RECORDS,
 ]
 
 # ── Stub records for the other registered systems ──────────────────────────
