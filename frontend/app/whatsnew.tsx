@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import BackButton from '../components/BackButton';
+import CenteredHeader from '../components/CenteredHeader';
 import api from '../utils/api';
 
 type Entry = { version: string; date?: string; title: string; items: string[] };
@@ -42,8 +42,6 @@ export default function WhatsNewScreen() {
     router.replace('/(tabs)/dashboard');
   };
 
-  const close = () => router.back();
-
   if (entries === null) {
     return (
       <SafeAreaView style={[styles.safe, styles.center]}>
@@ -61,13 +59,13 @@ export default function WhatsNewScreen() {
 
   return (
     <SafeAreaView style={styles.safe} testID="whatsnew-screen">
-      <View style={styles.header}>
-        {isHistory && (
-          <BackButton onPress={close} testID="whatsnew-close-btn" />
-        )}
-        <Text style={styles.headerTitle}>What's new</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      {isHistory ? (
+        <CenteredHeader title="What's new" subtitle="Release history" fallback="/(tabs)/profile" />
+      ) : (
+        <View style={styles.headerNoBack}>
+          <Text style={styles.headerTitle}>What's new</Text>
+        </View>
+      )}
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.heroRow}>
@@ -119,12 +117,11 @@ export default function WhatsNewScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#F5F7FA' },
   center: { alignItems: 'center', justifyContent: 'center' },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  headerNoBack: {
+    alignItems: 'center', justifyContent: 'center',
     paddingHorizontal: 12, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#ECEFF1', backgroundColor: '#FFF',
   },
-  backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 16, fontWeight: '800', color: '#0D47A1' },
+  headerTitle: { fontSize: 20, fontWeight: '800', color: '#01579B' },
   scroll: { padding: 20, paddingBottom: 40 },
   heroRow: { flexDirection: 'row', gap: 12, alignItems: 'center', marginBottom: 18 },
   heroIcon: {

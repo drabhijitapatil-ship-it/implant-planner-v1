@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../utils/api';
+import { useAuth } from '../contexts/AuthContext';
 import BackButton from '../components/BackButton';
 
 /**
@@ -25,6 +26,7 @@ const SUGGESTED = [
 ];
 
 export default function AskImplanrAI() {
+  const { user } = useAuth();
   const [systems, setSystems] = useState<{ key: string; brand: string; name: string }[]>([]);
   const [scopeKey, setScopeKey] = useState<string>('');  // '' = all populated systems
   const [scopeOpen, setScopeOpen] = useState(false);
@@ -35,6 +37,10 @@ export default function AskImplanrAI() {
   const scrollRef = useRef<ScrollView | null>(null);
 
   useEffect(() => {
+    // iter-158: Skip fetch until AuthContext has hydrated the user —
+    // otherwise the request goes out with no Bearer token and the server
+    // returns 403 (HTTPBearer default), spamming the logs.
+    if (!user) return;
     (async () => {
       try {
         const res = await api.get('/implant-catalog');
@@ -42,7 +48,7 @@ export default function AskImplanrAI() {
         setSystems(all.map((s: any) => ({ key: s.key, brand: s.brand, name: s.name })));
       } catch {}
     })();
-  }, []);
+  }, [user]);
 
   const scopeLabel = useMemo(() => {
     if (!scopeKey) return 'All systems';

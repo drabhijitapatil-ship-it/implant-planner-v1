@@ -11,7 +11,7 @@ import api, { getToken } from '../../../utils/api';
 import { BACKEND_URL } from '../../../utils/config';
 import { safeDocumentPick, safeLaunchCamera, safeLaunchLibrary } from '../../../utils/safePicker';
 import { showUploadPicker } from '../../../utils/uploadPicker';
-import BackButton from '../../../components/BackButton';
+import CenteredHeader from '../../../components/CenteredHeader';
 
 interface Message {
   id: string; author_id: string; author_name: string; author_role: string;
@@ -152,18 +152,16 @@ export default function ChatRoomScreen() {
   return (
     <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <View style={s.header}>
-          <BackButton />
-          <View style={{ flex: 1, marginLeft: 10 }}>
-            <Text style={s.headerName} numberOfLines={1}>{group.name}</Text>
-            <Text style={s.headerSub}>{(group.members || []).length} members{group.locked ? ' • locked' : ''}</Text>
-          </View>
-          {!group.locked && (
+        <CenteredHeader
+          title={group.name}
+          subtitle={`${(group.members || []).length} members${group.locked ? ' • locked' : ''}`}
+          fallback="/forum/chat"
+          rightAction={!group.locked ? (
             <TouchableOpacity onPress={leaveGroup} hitSlop={{top:12,bottom:12,left:12,right:12}} testID="leave-group-btn" accessibilityLabel="leave-group-btn" /* @ts-ignore */ data-testid="leave-group-btn">
               <Ionicons name="exit-outline" size={22} color="#C62828" />
             </TouchableOpacity>
-          )}
-        </View>
+          ) : undefined}
+        />
 
         <View style={s.phiBanner}>
           <Ionicons name="shield-checkmark" size={14} color="#2E7D32" />

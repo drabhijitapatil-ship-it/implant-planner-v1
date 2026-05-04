@@ -95,7 +95,14 @@ export default function ImplantCatalogAdmin() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  // iter-158: Guard against firing the fetch before AuthContext has restored
+  // the session — otherwise the request goes out without a Bearer token and
+  // hits /api/implant-catalog with a 403 (FastAPI's HTTPBearer default), which
+  // pollutes the server logs and briefly flashes an error Alert on cold start.
+  useEffect(() => {
+    if (!user) return;
+    load();
+  }, [user, load]);
 
   // Derived: brand list, family list (per brand), variants (per brand+family).
   const brands = useMemo(() => {
