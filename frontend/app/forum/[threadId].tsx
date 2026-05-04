@@ -11,7 +11,7 @@ import api, { getToken } from '../../utils/api';
 import { BACKEND_URL } from '../../utils/config';
 import { safeDocumentPick, safeLaunchCamera, safeLaunchLibrary } from '../../utils/safePicker';
 import { showUploadPicker } from '../../utils/uploadPicker';
-import BackButton from '../../components/BackButton';
+import CenteredHeader from '../../components/CenteredHeader';
 
 interface Thread {
   id: string;
@@ -316,12 +316,16 @@ export default function ForumThreadScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
-      <View style={s.header}>
-        <BackButton />
-        <Text style={s.headerTitle} numberOfLines={1}>{thread.patient_name_display}</Text>
-        <TouchableOpacity onPress={toggleBookmark} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} data-testid="forum-bookmark-btn">
-          <Ionicons name={thread.bookmarked ? 'bookmark' : 'bookmark-outline'} size={22} color={thread.bookmarked ? '#F9A825' : '#37474F'} />
-        </TouchableOpacity>
+      <View>
+        <CenteredHeader
+          title={thread.patient_name_display}
+          fallback="/forum"
+          rightAction={(
+            <TouchableOpacity onPress={toggleBookmark} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} data-testid="forum-bookmark-btn">
+              <Ionicons name={thread.bookmarked ? 'bookmark' : 'bookmark-outline'} size={22} color={thread.bookmarked ? '#F9A825' : '#37474F'} />
+            </TouchableOpacity>
+          )}
+        />
       </View>
 
       <ScrollView

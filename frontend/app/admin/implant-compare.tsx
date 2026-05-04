@@ -84,13 +84,11 @@ export default function ImplantCompare() {
 
   return (
     <SafeAreaView style={s.safe}>
-      <View style={s.headerBar}>
-        <BackButton fallback="/admin/implant-catalog" />
-        <View style={{ flex: 1, marginLeft: 8 }}>
-          <Text style={s.headerTitle}>Brand Comparison</Text>
-          <Text style={s.headerSub}>Side-by-side specs across {rows.length} systems</Text>
-        </View>
-      </View>
+      <CenteredHeader
+        title="Brand Comparison"
+        subtitle={`Side-by-side specs across ${rows.length} systems`}
+        fallback="/admin/implant-catalog"
+      />
 
       {/* Component-type chips */}
       <ScrollView
