@@ -96,6 +96,7 @@ export default function AskImplanrAI() {
       <TouchableOpacity
         style={s.scopeBar}
         onPress={() => setScopeOpen(true)}
+        testID="ai-scope-selector"
         data-testid="ai-scope-selector"
       >
         <Ionicons name="filter" size={14} color="#0277BD" />
@@ -125,6 +126,7 @@ export default function AskImplanrAI() {
                   key={i}
                   style={s.suggestedChip}
                   onPress={() => send(q)}
+                  testID={`ai-suggestion-${i}`}
                   data-testid={`ai-suggestion-${i}`}
                 >
                   <Ionicons name="bulb-outline" size={14} color="#0277BD" />
@@ -154,12 +156,14 @@ export default function AskImplanrAI() {
             placeholder="Ask about components, angulations, SKUs…"
             placeholderTextColor="#aaa"
             multiline
+            testID="ai-input"
             data-testid="ai-input"
           />
           <TouchableOpacity
             style={[s.sendBtn, (!input.trim() || loading) && { opacity: 0.5 }]}
             onPress={() => send()}
             disabled={!input.trim() || loading}
+            testID="ai-send"
             data-testid="ai-send"
           >
             <Ionicons name="send" size={18} color="#FFF" />
@@ -188,6 +192,7 @@ export default function AskImplanrAI() {
                       key={sys.key || 'all'}
                       style={[s.scopeRow, scopeKey === sys.key && s.scopeRowActive]}
                       onPress={() => { setScopeKey(sys.key); setScopeOpen(false); }}
+                      testID={`ai-scope-${sys.key || 'all'}`}
                       data-testid={`ai-scope-${sys.key || 'all'}`}
                     >
                       <Text style={[s.scopeRowText, scopeKey === sys.key && s.scopeRowTextActive]}>

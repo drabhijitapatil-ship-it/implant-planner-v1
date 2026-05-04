@@ -158,6 +158,7 @@ export default function CatalogEditor() {
         <TouchableOpacity
           style={[s.saveBtn, saving && { opacity: 0.5 }]}
           onPress={save} disabled={saving}
+          testID="catalog-save"
           data-testid="catalog-save"
         >
           {saving
@@ -205,7 +206,7 @@ export default function CatalogEditor() {
             <View key={i} style={s.compEditor}>
               <View style={s.compHeader}>
                 <Text style={s.compHeaderText}>Component #{i + 1}</Text>
-                <TouchableOpacity onPress={() => removeComponent(i)} data-testid={`cat-comp-remove-${i}`}>
+                <TouchableOpacity onPress={() => removeComponent(i)} testID={`cat-comp-remove-${i}`} data-testid={`cat-comp-remove-${i}`}>
                   <Ionicons name="trash" size={18} color="#D32F2F" />
                 </TouchableOpacity>
               </View>
@@ -232,7 +233,7 @@ export default function CatalogEditor() {
               <Field label="Notes" v={c.notes || ''} setV={(v) => updateComponent(i, { notes: v })} placeholder="optional clinical notes" />
             </View>
           ))}
-          <TouchableOpacity style={s.addBtn} onPress={addComponent} data-testid="cat-add-component">
+          <TouchableOpacity style={s.addBtn} onPress={addComponent} testID="cat-add-component" data-testid="cat-add-component">
             <Ionicons name="add-circle" size={18} color="#0277BD" />
             <Text style={s.addBtnText}>Add component</Text>
           </TouchableOpacity>
