@@ -1,5 +1,38 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 159 (Feb 2026) — Implant Database UX overhaul + BioHorizons Tapered Pro full catalog + MOP rename
+
+### 1. Implant Database header & navigation overhaul
+- **"Add Implant System" button** moved out of the body and into the header right slot as a circular blue **"+" button** (44 × 44 px), visible only to Implant In-Charge / Administrator. Frees vertical space and matches iOS conventions.
+- **"Compare Across Implant Systems" tab → "Compare"** — both pills are now equal-width (max 180 px), centered, with distinct colors (Ask Implanr AI = blue, Compare = teal). Both tabs visible to all roles (Student, Supervisor, In-Charge, Administrator).
+- **Brand Comparison page** title renamed: header now reads `Implant Systems Comparison` with subtitle `Compare components across different Implant Systems` (replaces the previous dynamic system-count subtitle).
+
+### 2. Picker / dropdown copy improvements
+- Brand picker modal title: `Select Brand` → `Implant Company`.
+- Family picker modal title: `Select Family — <brand>` → `Implant System — <brand>`.
+
+### 3. Keyboard handling for in-card AI input
+- Wrapped the catalog detail's `ScrollView` in a `KeyboardAvoidingView` (`padding` on iOS) with `keyboardShouldPersistTaps="handled"`. The "Ask Implanr AI" text input at the bottom of the detail card now stays visible above the on-screen keyboard.
+
+### 4. BioHorizons cleanup
+- Deleted 4 stub records (`Tapered Short Conical RBT`, `Tapered IM`, `Tapered Short`, `Narrow Diameter`) — per user, BioHorizons offers only **Tapered Pro Conical RBT** and **Tapered Pro**.
+- **BioHorizons|Tapered Pro** seed expanded from 8 to **47 components** (cover screw, SmartShape healers × 6 series, Laser-Lok healers × 3 emergence profiles, Standard healers × 4 emergence profiles, temporary cylinders, MUA straight + 17°/30°, Ti-Bases × 3 types, scanbodies, impression copings × 4, lab analogs × 2, castable UCLA, prosthetic screws × 3, LOCATOR R-Tx + OD Secure + Ball overdenture attachments × 3 collars). Connection: internal hex (3.0 / 3.5 / 4.5 / 5.7 mm platforms).
+
+### 5. Material rename: POM / acetal_resin → "Polyoxymethylene (Acetal Resin)"
+- Updated `implant_catalog_seed.py` everywhere "POM" or "acetal_resin" appeared (including the new BioHorizons castable UCLA entry and Bredent Sky castables).
+- DB sweep confirmed zero remaining `POM` / `acetal_resin` references in any catalog record.
+
+### Files touched
+- `/app/frontend/app/admin/implant-catalog.tsx` — header refactor (+ button, Compare pill, KeyboardAvoidingView, picker labels).
+- `/app/frontend/app/admin/implant-compare.tsx` — title + subtitle.
+- `/app/backend/implant_catalog_seed.py` — Tapered Pro full catalog, MOP/acetal_resin rename, removed BioHorizons stubs.
+
+### Outstanding from the user's iter-159 request
+- **Nobel Biocare** prosthetic catalog seeding from uploaded PDF — pending (needs separate seeding pass; PDF parsed but full structured seed deferred to next iteration to preserve context budget).
+- **Neodent** prosthetic catalog seeding from uploaded PDF — pending (same reason).
+
+---
+
 ## Iteration 158 (Feb 2026) — Auth-gated catalog fetch, CenteredHeader rollout, administrator role restored
 
 ### 1. Fixed `403 Forbidden` spam on `GET /api/implant-catalog`

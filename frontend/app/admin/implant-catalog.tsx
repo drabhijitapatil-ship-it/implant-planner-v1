@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
   RefreshControl, TextInput, Alert, Modal, FlatList,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -190,13 +191,13 @@ export default function ImplantCatalogAdmin() {
   let pickerItems: { value: string; label: string; sub?: string }[] = [];
   let pickerTitle = '';
   if (pickerKind === 'brand') {
-    pickerTitle = 'Select Brand';
+    pickerTitle = 'Implant Company';
     pickerItems = brands.map(b => {
       const count = systems.filter(s => s.brand === b).length;
       return { value: b, label: b, sub: `${count} system${count === 1 ? '' : 's'}` };
     });
   } else if (pickerKind === 'family') {
-    pickerTitle = `Select Family — ${selectedBrand}`;
+    pickerTitle = `Implant System — ${selectedBrand}`;
     pickerItems = familiesForBrand.map(f => ({
       value: f.family, label: f.family,
       sub: f.variants.length > 1 ? `${f.variants.length} variants` : undefined,
@@ -221,46 +222,54 @@ export default function ImplantCatalogAdmin() {
             <Text style={s.headerTitle}>Implant Database</Text>
             <Text style={s.headerSub}>Implanr AI Knowledge Base</Text>
           </View>
-          {/* Invisible spacer balances the 44 px back button so the title
-              block stays centered on the screen. */}
-          <View style={{ width: 44, height: 44 }} />
+          {/* iter-159: Right-slot "+" pill (Implant In-Charge / Administrator only)
+              replaces the previous full-width "Add Implant System" button below. */}
+          {canEdit ? (
+            <TouchableOpacity
+              style={s.addCircleBtn}
+              onPress={() => router.push('/admin/implant-catalog-edit')}
+              testID="catalog-add-new"
+              data-testid="catalog-add-new"
+              accessibilityLabel="Add Implant System"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="add" size={26} color="#FFF" />
+            </TouchableOpacity>
+          ) : (
+            <View style={{ width: 44, height: 44 }} />
+          )}
         </View>
 
         <View style={s.tabRow}>
           <TouchableOpacity
-            style={s.tabAskAi}
+            style={s.tabPill}
             onPress={() => router.push('/ask-implanr')}
             testID="catalog-open-ask-ai"
             data-testid="catalog-open-ask-ai"
           >
             <Ionicons name="sparkles" size={16} color="#0277BD" />
-            <Text style={s.tabAskAiText}>Ask Implanr AI</Text>
+            <Text style={s.tabPillTextAi}>Ask Implanr AI</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={s.tabCompare}
+            style={s.tabPillCompare}
             onPress={() => router.push('/admin/implant-compare')}
             testID="catalog-open-compare"
             data-testid="catalog-open-compare"
           >
             <Ionicons name="git-compare-outline" size={16} color="#00695C" />
-            <Text style={s.tabCompareText}>Compare Across Implant Systems</Text>
+            <Text style={s.tabPillTextCompare}>Compare</Text>
           </TouchableOpacity>
         </View>
-        {canEdit && (
-          <TouchableOpacity
-            style={s.addNewBtn}
-            onPress={() => router.push('/admin/implant-catalog-edit')}
-            testID="catalog-add-new"
-            data-testid="catalog-add-new"
-          >
-            <Ionicons name="add-circle" size={16} color="#FFF" />
-            <Text style={s.addNewBtnText}>Add Implant System</Text>
-          </TouchableOpacity>
-        )}
       </View>
 
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
       <ScrollView
         contentContainerStyle={{ padding: 16, paddingBottom: 48 }}
+        keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
       >
         {/* ── Cascading dropdowns ── */}
@@ -456,6 +465,7 @@ export default function ImplantCatalogAdmin() {
           </View>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* ── Picker modal ── */}
       <Modal
@@ -562,13 +572,12 @@ const s = StyleSheet.create({
   headerTitleBlock: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   headerTitle: { fontSize: 20, fontWeight: '800', color: '#01579B', lineHeight: 24, textAlign: 'center' },
   headerSub: { fontSize: 12, color: '#607D8B', marginTop: 1, lineHeight: 14, textAlign: 'center' },
-  tabRow: { flexDirection: 'row', gap: 10, marginTop: 12, flexWrap: 'wrap' },
-  tabAskAi: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999, borderWidth: 1.5, borderColor: '#0277BD', backgroundColor: '#E1F5FE', flex: 1, minWidth: 140, maxWidth: 240 },
-  tabAskAiText: { color: '#0277BD', fontSize: 14, fontWeight: '700' },
-  tabCompare: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999, borderWidth: 1.5, borderColor: '#00695C', backgroundColor: '#E0F2F1', flex: 2, minWidth: 220, maxWidth: 360 },
-  tabCompareText: { color: '#00695C', fontSize: 14, fontWeight: '700' },
-  addNewBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#0277BD', paddingHorizontal: 22, paddingVertical: 10, borderRadius: 999, marginTop: 10, alignSelf: 'flex-start' },
-  addNewBtnText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
+  tabRow: { flexDirection: 'row', gap: 10, marginTop: 12, justifyContent: 'center', alignItems: 'center' },
+  tabPill: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999, borderWidth: 1.5, borderColor: '#0277BD', backgroundColor: '#E1F5FE', flex: 1, maxWidth: 180 },
+  tabPillTextAi: { color: '#0277BD', fontSize: 14, fontWeight: '700' },
+  tabPillCompare: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999, borderWidth: 1.5, borderColor: '#00695C', backgroundColor: '#E0F2F1', flex: 1, maxWidth: 180 },
+  tabPillTextCompare: { color: '#00695C', fontSize: 14, fontWeight: '700' },
+  addCircleBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#0277BD', alignItems: 'center', justifyContent: 'center' },
   askAiBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, borderWidth: 1.5, borderColor: '#0277BD', backgroundColor: '#E1F5FE' },
   askAiBtnText: { color: '#0277BD', fontSize: 12, fontWeight: '700' },
   // Dropdowns
