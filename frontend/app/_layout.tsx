@@ -51,6 +51,8 @@ export default function RootLayout() {
               <Stack.Screen name="whatsnew" />
               <Stack.Screen name="admin/audit-log" options={{ headerShown: false }} />
               <Stack.Screen name="admin/implant-catalog" options={{ headerShown: false }} />
+              <Stack.Screen name="admin/implant-catalog-edit" options={{ headerShown: false }} />
+              <Stack.Screen name="ask-implanr" options={{ headerShown: false }} />
               <Stack.Screen name="admin/student/[id]" options={{ headerShown: false }} />
               <Stack.Screen name="admin/supervisor/[id]" options={{ headerShown: false }} />
               <Stack.Screen name="forum/index" options={{ headerShown: false }} />
