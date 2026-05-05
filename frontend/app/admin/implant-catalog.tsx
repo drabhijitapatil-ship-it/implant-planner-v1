@@ -219,6 +219,55 @@ export default function ImplantCatalogAdmin() {
     } finally { setAiLoading(false); }
   }, [question, selected]);
 
+  // iter-165: Delete the currently-selected system (variant). Permanent.
+  const deleteSelectedSystem = useCallback(() => {
+    if (!selected) return;
+    Alert.alert(
+      `Delete '${selected.name}'?`,
+      `This permanently removes the entire system from ${selected.brand}. Components, features, attachments and compatibility notes will be lost. This is logged in the audit trail.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete', style: 'destructive', onPress: async () => {
+            try {
+              await api.delete('/implant-catalog/by-key', { params: { key: selected.key } });
+              setSelectedKey('');
+              await load();
+            } catch (e: any) {
+              Alert.alert('Delete failed', e?.response?.data?.detail || String(e?.message || e));
+            }
+          },
+        },
+      ],
+    );
+  }, [selected, load]);
+
+  // iter-165: Delete the entire brand (company) and all its systems. Permanent.
+  const deleteBrand = useCallback((brand: string) => {
+    const sysCount = systems.filter(x => x.brand === brand).length;
+    Alert.alert(
+      `Delete '${brand}'?`,
+      `This permanently removes the entire company and all ${sysCount} system${sysCount === 1 ? '' : 's'} (with their attachments). This cannot be undone and is logged in the audit trail.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete', style: 'destructive', onPress: async () => {
+            try {
+              await api.delete('/implant-catalog/by-brand', { params: { brand } });
+              if (selectedBrand === brand) {
+                setSelectedBrand(''); setSelectedFamily(''); setSelectedKey('');
+              }
+              setPickerKind(null);
+              await load();
+            } catch (e: any) {
+              Alert.alert('Delete failed', e?.response?.data?.detail || String(e?.message || e));
+            }
+          },
+        },
+      ],
+    );
+  }, [systems, selectedBrand, load]);
+
   if (loading) {
     return (
       <SafeAreaView style={s.container}>
@@ -370,14 +419,24 @@ export default function ImplantCatalogAdmin() {
                 <Text style={s.detailName}>{selected.name}</Text>
               </View>
               {canEdit && (
-                <TouchableOpacity
-                  style={s.editBtn}
-                  onPress={() => router.push({ pathname: '/admin/implant-catalog-edit', params: { key: selected.key } })}
-                  data-testid="catalog-edit-btn"
-                >
-                  <Ionicons name="create-outline" size={16} color="#0277BD" />
-                  <Text style={s.editBtnText}>Edit</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <TouchableOpacity
+                    style={s.editBtn}
+                    onPress={() => router.push({ pathname: '/admin/implant-catalog-edit', params: { key: selected.key } })}
+                    data-testid="catalog-edit-btn"
+                  >
+                    <Ionicons name="create-outline" size={16} color="#0277BD" />
+                    <Text style={s.editBtnText}>Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={s.deleteSysBtn}
+                    onPress={() => deleteSelectedSystem()}
+                    data-testid="catalog-delete-system-btn"
+                  >
+                    <Ionicons name="trash-outline" size={16} color="#D32F2F" />
+                    <Text style={s.deleteSysBtnText}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
               )}
             </View>
 
@@ -531,23 +590,37 @@ export default function ImplantCatalogAdmin() {
                   (pickerKind === 'family' && item.value === selectedFamily) ||
                   (pickerKind === 'variant' && item.value === selectedKey);
                 return (
-                  <TouchableOpacity
-                    style={[s.pickerRow, active && s.pickerRowActive]}
-                    onPress={() => {
-                      if (pickerKind === 'brand') setSelectedBrand(item.value);
-                      else if (pickerKind === 'family') setSelectedFamily(item.value);
-                      else if (pickerKind === 'variant') setSelectedKey(item.value);
-                      setPickerKind(null);
-                      setAiAnswer(null);
-                    }}
-                    data-testid={`catalog-picker-${pickerKind}-${item.value}`}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[s.pickerLabel, active && s.pickerLabelActive]}>{item.label}</Text>
-                      {!!item.sub && <Text style={[s.pickerSub, active && s.pickerSubActive]}>{item.sub}</Text>}
-                    </View>
-                    {active && <Ionicons name="checkmark-circle" size={20} color="#0277BD" />}
-                  </TouchableOpacity>
+                  <View style={[s.pickerRow, active && s.pickerRowActive]}>
+                    <TouchableOpacity
+                      style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
+                      onPress={() => {
+                        if (pickerKind === 'brand') setSelectedBrand(item.value);
+                        else if (pickerKind === 'family') setSelectedFamily(item.value);
+                        else if (pickerKind === 'variant') setSelectedKey(item.value);
+                        setPickerKind(null);
+                        setAiAnswer(null);
+                      }}
+                      data-testid={`catalog-picker-${pickerKind}-${item.value}`}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={[s.pickerLabel, active && s.pickerLabelActive]}>{item.label}</Text>
+                        {!!item.sub && <Text style={[s.pickerSub, active && s.pickerSubActive]}>{item.sub}</Text>}
+                      </View>
+                      {active && <Ionicons name="checkmark-circle" size={20} color="#0277BD" />}
+                    </TouchableOpacity>
+                    {/* iter-165: brand-level delete (trash icon) — admin / in-charge only.
+                        Only shown in the brand picker; family/variant deletes happen
+                        from the detail card. */}
+                    {pickerKind === 'brand' && canEdit && (
+                      <TouchableOpacity
+                        onPress={() => deleteBrand(item.value)}
+                        style={s.pickerTrashBtn}
+                        data-testid={`catalog-picker-delete-brand-${item.value}`}
+                      >
+                        <Ionicons name="trash-outline" size={18} color="#D32F2F" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 );
               }}
               ItemSeparatorComponent={() => <View style={s.pickerSep} />}
@@ -620,6 +693,10 @@ const s = StyleSheet.create({
   addCircleBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#0277BD', alignItems: 'center', justifyContent: 'center' },
   editBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: '#0277BD', backgroundColor: '#E1F5FE' },
   editBtnText: { color: '#0277BD', fontSize: 13, fontWeight: '700' },
+  // iter-165
+  deleteSysBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: '#D32F2F', backgroundColor: '#FFEBEE' },
+  deleteSysBtnText: { color: '#D32F2F', fontSize: 13, fontWeight: '700' },
+  pickerTrashBtn: { width: 36, height: 36, borderRadius: 999, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFEBEE', marginLeft: 8 },
   askAiBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, borderWidth: 1.5, borderColor: '#0277BD', backgroundColor: '#E1F5FE' },
   askAiBtnText: { color: '#0277BD', fontSize: 12, fontWeight: '700' },
   // Dropdowns
