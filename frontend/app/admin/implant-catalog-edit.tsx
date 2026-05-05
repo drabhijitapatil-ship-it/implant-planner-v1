@@ -152,8 +152,17 @@ export default function CatalogEditor() {
     setSaving(true);
     try {
       await api.put('/implant-catalog/by-key', body, { params: { key } });
+      // iter-162: navigate via router.replace with a timestamp + focus key.
+      // `useFocusEffect` is unreliable after `router.back()` on iOS Expo Go
+      // (the focus event sometimes does not fire when an Alert is dismissed
+      // mid-navigation). Replacing with a fresh `refresh` param forces the
+      // catalog screen to re-fetch and re-select the just-edited record so
+      // the user sees their changes immediately.
       Alert.alert('Saved', `${brand} ${name} has been ${isEdit ? 'updated' : 'created'}.`);
-      router.back();
+      router.replace({
+        pathname: '/admin/implant-catalog',
+        params: { refresh: String(Date.now()), focusKey: key },
+      });
     } catch (e: any) {
       Alert.alert('Save failed', e?.response?.data?.detail || String(e?.message || e));
     } finally { setSaving(false); }

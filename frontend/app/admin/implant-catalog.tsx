@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
   RefreshControl, TextInput, Alert, Modal, FlatList,
@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import api from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
 import BackButton from '../../components/BackButton';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 
 /**
  * iter-146: Implant Catalog browser — stacked vertical layout with cascading
@@ -68,6 +68,11 @@ export default function ImplantCatalogAdmin() {
   const _canEdit = user?.role === 'administrator' || user?.role === 'implant_incharge';
   const canEdit = _canEdit;
 
+  // iter-162: editor passes `refresh` (timestamp) and `focusKey` after a save
+  // so this screen always re-fetches and re-selects the just-edited record.
+  const { refresh: refreshParam, focusKey: focusKeyParam } =
+    useLocalSearchParams<{ refresh?: string; focusKey?: string }>();
+
   const [systems, setSystems] = useState<CatalogRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -112,6 +117,32 @@ export default function ImplantCatalogAdmin() {
     load();
   }, [user, load]));
 
+  // iter-162: After a save the editor uses `router.replace` with a fresh
+  // `refresh` timestamp. That deterministically re-runs `load()` even when
+  // `useFocusEffect` is unreliable (iOS Expo Go after Alert dismissal).
+  useEffect(() => {
+    if (!user || !refreshParam) return;
+    load();
+  }, [refreshParam, user, load]);
+
+  // iter-162: After a save we also receive `focusKey` so we can restore the
+  // brand/family/variant selection on the just-edited record. We wait for
+  // the systems list to repopulate after `load()` before applying it.
+  // We use a ref counter to skip the next two auto-select effects (one for
+  // brand → family, one for family → variant) so they don't clobber the
+  // restored selection.
+  const skipAutoSelect = useRef(0);
+  useEffect(() => {
+    if (!focusKeyParam) return;
+    const sys = systems.find(s => s.key === focusKeyParam);
+    if (!sys) return;
+    skipAutoSelect.current = 2;
+    setSelectedBrand(sys.brand);
+    setSelectedFamily(familyRoot(sys.name));
+    setSelectedKey(sys.key);
+    setAiAnswer(null);
+  }, [focusKeyParam, systems]);
+
   // Derived: brand list, family list (per brand), variants (per brand+family).
   const brands = useMemo(() => {
     const set = new Set(systems.map(s => s.brand));
@@ -139,6 +170,7 @@ export default function ImplantCatalogAdmin() {
   // When brand changes, auto-select the first family. If the family has only
   // one variant, auto-pick that variant. Otherwise wait for user selection.
   useEffect(() => {
+    if (skipAutoSelect.current > 0) { skipAutoSelect.current -= 1; return; }
     if (!selectedBrand) {
       setSelectedFamily(''); setSelectedKey(''); return;
     }
@@ -157,6 +189,7 @@ export default function ImplantCatalogAdmin() {
 
   // When family changes (within same brand), auto-pick if single variant.
   useEffect(() => {
+    if (skipAutoSelect.current > 0) { skipAutoSelect.current -= 1; return; }
     if (!selectedFamily) { setSelectedKey(''); return; }
     if (variantsForFamily.length === 1) {
       setSelectedKey(variantsForFamily[0].key);

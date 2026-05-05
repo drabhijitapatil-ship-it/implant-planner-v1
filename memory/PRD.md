@@ -1,5 +1,34 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 163 (Feb 2026) — Fix: catalog edits not visible after Save on iOS Expo Go
+
+### Bug report
+Implant In-Charge tapped Edit on a Cowell record → changed a field → "Saved" alert shown → returned to catalog screen → field unchanged. Backend PUT was verified working via curl as `Abhijit.patil` (role `implant_incharge`) — value persisted with `updated_by="Dr. Abhijit Patil"` and was returned on a fresh GET. So the issue was purely frontend: the catalog screen did not refresh after `router.back()` from the editor.
+
+### Root cause
+The previous iter-160 fix relied on `useFocusEffect` to refetch when the catalog screen regained focus. On iOS Expo Go, the focus event is unreliable when an `Alert.alert(...)` is dismissed mid-navigation (the alert's UIKit modal dismissal can swallow the focus event from React Navigation), so `load()` was never re-fired. Web/curl always worked because focus events are deterministic there.
+
+### Fix (deterministic refresh + re-selection)
+1. `implant-catalog-edit.tsx#save()` — after a successful PUT, navigate via `router.replace({ pathname: '/admin/implant-catalog', params: { refresh: <ts>, focusKey: <key> } })` instead of `router.back()`. The new `refresh` timestamp param is unique per save → guaranteed to trigger a re-render of the catalog screen.
+2. `implant-catalog.tsx`:
+   - `useLocalSearchParams<{refresh?: string, focusKey?: string}>` — read the params.
+   - `useEffect([refreshParam, user, load])` — explicit `load()` whenever a fresh `refresh` arrives.
+   - `useEffect([focusKeyParam, systems])` — once the systems list is repopulated, re-apply the brand/family/variant selection on the just-edited record.
+   - `useRef<number>(0)` skip-counter so the existing brand→family and family→variant auto-select effects don't clobber the restored selection (they decrement and short-circuit twice).
+3. The original `useFocusEffect` is kept as a baseline for non-save navigations (e.g., user opens editor, hits Back without saving).
+
+### Verified
+- Backend round-trip via curl: PUT `/api/implant-catalog/by-key?key=MIS|LANCE+` updated `compatibility_notes`, `updated_by` flipped to `Dr. Abhijit Patil`, GET returned the new value, components count preserved (55).
+- Web preview: catalog screen renders with `+` button (canEdit gate) and 40 systems loaded for `implant_incharge` user. Lint passes on both files.
+- Action required from user: **reload the Expo Go app** to pick up the new JS bundle.
+
+### Files touched
+- `/app/frontend/app/admin/implant-catalog-edit.tsx` — replaced `router.back()` with `router.replace(... params)`.
+- `/app/frontend/app/admin/implant-catalog.tsx` — added `useRef`, `useLocalSearchParams`, `refresh`/`focusKey` effects + skip-counter on auto-select.
+
+---
+
+
 ## Iteration 162 (Feb 2026) — Cowellmedi / MIS LANCE+ / Osstem rich prosthetic catalogs (restart-safe)
 
 ### Goal
