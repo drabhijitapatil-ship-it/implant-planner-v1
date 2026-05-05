@@ -185,7 +185,7 @@ consultants {
 
 #### Lifecycle
 ```
-[CLINIC]                              [CONSULTANT]
+[CLINIC]                                     [CONSULTANT]
    |
    | 1. Create case in Clinic workspace
    |    Phase 1 (diagnosis + treatment plan + consent)
@@ -198,32 +198,96 @@ consultants {
    |
    | 4. Optional referral note + suggested
    |    procedure window
-   |   --[ Referral payload ]------------>  5. Notification + Inbox row
-   |                                        (Consultant Workspace)
+   |   --[ Referral payload, PII masked ]-->  5. Notification + Inbox row
+   |                                          (Consultant Workspace)
    |
-   |                                        6. Consultant accepts (or declines
-   |                                           with reason — clinic can re-route)
+   |                                          6. Consultant accepts (or declines
+   |                                             with reason — clinic can re-route)
    |
-   |                                        7. On accept: case visible in
-   |                                           consultant's case list,
-   |                                           Phase 1 read-only,
-   |                                           Phase 2 fully editable
+   |                                          7. On accept: case visible in
+   |                                             consultant's case list with a
+   |                                             "Review Phase 1" tab.
+   |                                             Phase 1 is FULLY EDITABLE by
+   |                                             consultant; every edit is
+   |                                             attributed (who/when/which field)
+   |                                             in `phase1_edit_history`.
    |
-   | 8. Clinic sees Phase 2 progress
-   |    in real-time (read-only)
+   |                                          7a. Either side may post case to
+   |                                              Discussion Forum (anonymised).
    |
-   |                                        9. Phases 2/3 by consultant
-   |                                            (surgery, healing)
+   | 8. Clinic sees Phase 1 edits + Phase 2/3
+   |    progress in real-time (read-only)
    |
-   |                                       10. Consultant marks Phase 3
-   |                                            "Complete & Hand Back"
+   |                                          9. Phases 2/3 by consultant
+   |                                             (surgery, healing)
    |
-   | 11. Phase 4 (prosthesis) by clinic
-   |     (read-only Phase 2/3 record)
+   |                                         10. At Phase 3 close, consultant
+   |                                             chooses one of:
+   |                                              (A) "Hand over to Clinic"
+   |                                                  → clinic owns Phase 4
+   |                                                    (consultant read-only)
+   |                                              (B) "Continue to Phase 4"
+   |                                                  → consultant owns Phase 4
+   |                                                    (clinic read-only).
+   |                                                  Consultant may still
+   |                                                  hand over MID-PHASE-4;
+   |                                                  on hand-over, Phase 4
+   |                                                  becomes read-only for
+   |                                                  consultant immediately.
    |
-   | 12. Case closed → both sides receive
-   |     final PDF; clinic rates consultant
+   | 11. Phase 4 by whichever side owns it.
+   |     Final-PDF download is gated:
+   |     ONLY the Dental Clinic can download
+   |     the final case PDF (consultant cannot,
+   |     regardless of who completed Phase 4).
+   |     Consultant retains read-only view of
+   |     all phases for their own records.
+   |
+   | 12. Case closed → clinic downloads PDF;
+   |     clinic rates consultant.
 ```
+
+### 6.1 Phase 1 "Review" Tab on Consultant Side *(new — per user request Feb 2026)*
+
+When a consultant accepts a referral, the case opens with a top-level **Review Phase 1** tab in addition to the standard Phase 2/3 tabs.
+
+- The tab renders Phase 1 in **full edit mode** (not read-only) — every section (chief complaint, medical history, intra-oral exam, radiographs, treatment plan, consent metadata, implant planning) is editable.
+- Each section header shows a small **"Originally filled by [Clinic Name] on [date]"** subtitle.
+- An "Edits" badge in the section header surfaces the count of consultant edits to that section.
+- A new collection `phase1_edit_history` (or a sub-array on the procedure document) records every field-level change:
+  ```
+  phase1_edit_history {
+    procedure_id, field_path, old_value, new_value,
+    edited_by_user_id, edited_by_tenant_id, edited_at, source: "clinic"|"consultant"
+  }
+  ```
+- Both sides see the diff inline (small "edited" pill next to changed fields with hover/long-press to reveal old vs new).
+- Audit log writes one entry per save burst (debounced) under `access_logs` with `action="phase1_edit"`.
+
+### 6.2 Phase 3 → Phase 4 Decision Point *(new — per user request Feb 2026)*
+
+On the consultant's Phase 3 completion screen, replace the single "Hand Back" CTA with a **two-button choice**:
+
+- **Hand over to Clinic** — sets `phase_owner_map.phase4 = origin_tenant_id`, status = `handed_back`. Consultant view becomes read-only on Phase 4.
+- **Continue to Phase 4** — sets `phase_owner_map.phase4 = consultant_tenant_id`, status = `accepted_phase4`. Consultant continues full edit access; clinic view becomes read-only on Phase 4.
+
+While a consultant is mid-Phase-4, a persistent **"Hand over to Clinic"** button stays in the Phase 4 header. Clicking it freezes consultant write access immediately and flips ownership to the clinic.
+
+### 6.3 Final-PDF Download Gating *(new — per user request Feb 2026)*
+
+Regardless of who completed Phase 4:
+- ✅ Dental Clinic — can download the final case PDF.
+- ❌ Consultant — cannot download the final PDF. They retain read-only access to view all phases for their own records.
+
+Backend enforces this in `GET /api/procedures/{id}/pdf` by checking `tenant_type == "clinic" AND tenant_id == origin_tenant_id`. Consultants attempting download get a clear error: *"Final case report is downloadable by the originating clinic only."*
+
+### 6.4 Discussion Forum Sharing *(new — per user request Feb 2026)*
+
+Once a referral reaches `accepted` status:
+- Both clinic and consultant get a **"Post to Discussion Forum"** action on the case detail screen.
+- Posting is anonymised by default (patient PII stripped — only chief complaint, radiographs, implant plan, and clinical context are shared).
+- A new field on the procedure: `forum_post_id` (nullable) prevents duplicate posts; either side can edit/delete the forum post they own.
+- Audit-logged on post and on edit.
 
 ### Data model
 
