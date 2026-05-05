@@ -1,5 +1,33 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 168 (Feb 2026) — Per-component pencil/Done in editor (Option A, level 2)
+
+### Goal
+Within the Components section of the catalog editor, each individual component (Cover Screw, Healing Abutment, Multi-Unit Abutment, etc.) becomes its own collapsible card with a pencil + trash. Pencil expands JUST that component into edit fields; Done collapses it back and silent-saves.
+
+### Implementation
+File: `/app/frontend/app/admin/implant-catalog-edit.tsx`
+- New state `editingCompIdx: Set<number>` — tracks which components are currently in edit mode. Multiple can be open simultaneously.
+- `addComponent()` now opens the new card in edit mode automatically (so the user can fill it in immediately).
+- `removeComponent(idx)` re-keys the editing-set indices to stay consistent.
+- Each component row in the Components section now renders:
+  - **Read-only mode (default)**: subtype-or-type name + "Cuff (GH): X, Y mm" subtitle on a second line. Pencil icon (blue) + trash icon (red) on the right.
+  - **Edit mode**: same fields as before (Type chips, Subtype, Cuff/GH, Angulations, Retention, Material, Indication, Notes) + green "Done" button replacing the pencil. Done calls `persist({silent: true})` then closes the card.
+- "Add component" button stays at the bottom of the section.
+- Section-level pencil retained per user request 1b (so on big systems like MIS LANCE+ with 55 components, you can still collapse the whole section).
+- New styles: `compSummarySub`, `compIconBtn`, `compDoneBtn`, `compDoneBtnText`. Header row uses `gap: 8` so pencil + trash sit cleanly to the right.
+
+### Verified
+- ESLint passes on the modified file.
+- File contents verified at expected lines (state hook at L136, render block at L426, new styles at L662).
+- Web preview's SSR layer is caching an older bundle (known Expo Router web-preview quirk), but iOS Expo Go uses Metro with hot reload and will pick up the change on the next refresh.
+
+### Files touched
+- `/app/frontend/app/admin/implant-catalog-edit.tsx` — per-component state + render + styles.
+
+---
+
+
 ## Iteration 166 (Feb 2026) — Brochure ingestion + permanent Cuff-Height (GH) convention
 
 ### Why
