@@ -1,5 +1,51 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 165 (Feb 2026) — Catalog: section-level edit/delete + attachments
+
+### Goals
+1. Add Edit/Delete UI for any implant company, system or variant — accessible to In-Charge / Administrator only, audit-logged.
+2. Convert the editor to a per-section pencil flow (Option A) so each box is read-only by default and admins enter edit mode per section with a "Done" button.
+3. Add a paperclip-style attachment uploader on the editor (PDFs + images, multi-file) backed by Emergent object storage.
+
+### Backend
+New file `/app/backend/object_storage.py` — thin wrapper on Emergent's `objstore/api/v1/storage` (lazy-init session storage_key, `put_object` / `get_object` with 403 retry).
+
+New endpoints in `server.py` (all admin/in-charge gated, audit-logged):
+- `DELETE /api/implant-catalog/by-key?key=...` → delete one system/variant; soft-deletes its attachments first.
+- `DELETE /api/implant-catalog/by-brand?brand=...` → cascade-delete an entire company and all its systems.
+- `POST   /api/implant-catalog/by-key/attachments?key=...` (multipart) → upload PDF/PNG/JPEG/WEBP/GIF up to 25 MB; appended to `implant_catalog.attachments`.
+- `DELETE /api/implant-catalog/by-key/attachments/{att_id}?key=...` → soft-delete an attachment ($pull from doc + flag in `catalog_attachments`).
+- `GET    /api/implant-catalog/attachments/{att_id}/download` → authenticated download; supports both `Authorization: Bearer` header and `?auth=<token>` query param so `<a href>` / `<img src>` can fetch without setting headers.
+
+Audit actions: `catalog.delete_system`, `catalog.delete_brand`, `catalog.attachment.upload`, `catalog.attachment.delete`, `catalog.attachment.download`.
+
+### Frontend
+`/app/frontend/app/admin/implant-catalog-edit.tsx` — full rewrite to Option A:
+- Each section (Identity, Connection, Features, Implant Specs, Components, Compatibility Notes) renders a read-only summary by default with a pencil button. Pencil → expand fields → Done → silent PUT → collapse.
+- Top header: Create button (new mode) OR red Delete System button (edit mode).
+- New Attachments section — paperclip "Attach" button calls `showUploadPicker(['application/pdf','image/*'])` and posts as multipart. Each attachment renders with file icon, name, size, uploader, and a trash icon for soft-delete.
+
+`/app/frontend/app/admin/implant-catalog.tsx`:
+- New `Delete` button (red trash) next to Edit on the detail card.
+- Brand picker rows now show a small trash icon (admin only) → company-level cascade delete with confirmation.
+- All deletions go through the new endpoints above and refresh the catalog after.
+
+### Verified (curl + screenshot)
+- DELETE by-key works, returns `{deleted:1, key}`. Non-admin → 403.
+- DELETE by-brand cascades 2 test systems, returns `{deleted:2, keys:[...]}`. Non-existent brand → 404.
+- Attachment upload (PDF) succeeds, doc receives `attachments[]` entry, download with header AND `?auth=` both return 200 and bytes match the source MD5. Soft-delete removes from doc + sets `is_deleted=true` in `catalog_attachments`.
+- Audit log entries created for every delete/upload/download.
+- Web preview renders the catalog screen with 38 systems (39 → 1 test brand cleanup) and no JS errors.
+
+### Files touched
+- `/app/backend/object_storage.py` (new)
+- `/app/backend/server.py` (5 new endpoints + helper)
+- `/app/frontend/app/admin/implant-catalog-edit.tsx` (rewrite)
+- `/app/frontend/app/admin/implant-catalog.tsx` (delete handlers + brand-picker trash + styles)
+
+---
+
+
 ## Iteration 164 (Feb 2026) — Catalog deduplication + obsolete record cleanup
 
 ### Audit

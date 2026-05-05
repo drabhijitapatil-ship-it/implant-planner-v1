@@ -4814,6 +4814,257 @@ async def upsert_implant_catalog(request: Request, key: str, current_user: dict 
     return doc
 
 
+# ─────────── iter-165: Catalog deletion + attachments ───────────
+def _require_catalog_admin(current_user: dict) -> None:
+    if current_user.get("role") not in ("administrator", "implant_incharge"):
+        raise HTTPException(status_code=403, detail="Only Administrator or Implant In-Charge can edit the catalog.")
+
+
+@api_router.delete("/implant-catalog/by-key")
+async def delete_implant_catalog_record(
+    request: Request,
+    key: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Admin / In-Charge: delete a single catalog record (variant/system).
+    Soft-deletes any attachments first, then removes the catalog doc.
+    Audit-logged."""
+    _require_catalog_admin(current_user)
+    doc = await db.implant_catalog.find_one({"key": key}, {"_id": 0, "key": 1, "brand": 1, "name": 1, "attachments": 1})
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"Catalog entry '{key}' not found")
+    # Soft-delete any attachment refs (storage has no delete API).
+    for att in (doc.get("attachments") or []):
+        path = att.get("storage_path")
+        if path:
+            await db.catalog_attachments.update_one(
+                {"storage_path": path},
+                {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc).isoformat()}},
+            )
+    res = await db.implant_catalog.delete_one({"key": key})
+    await log_access(
+        action="catalog.delete_system",
+        resource_type="implant_catalog",
+        resource_id=key,
+        user=current_user,
+        request=request,
+        outcome="success",
+        extra={"brand": doc.get("brand"), "name": doc.get("name"), "attachments_soft_deleted": len(doc.get("attachments") or [])},
+    )
+    return {"deleted": res.deleted_count, "key": key}
+
+
+@api_router.delete("/implant-catalog/by-brand")
+async def delete_implant_catalog_brand(
+    request: Request,
+    brand: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Admin / In-Charge: delete an entire implant company and all its
+    systems/variants. Cascades attachments soft-delete. Audit-logged."""
+    _require_catalog_admin(current_user)
+    if not brand or not brand.strip():
+        raise HTTPException(status_code=400, detail="brand is required")
+    docs = await db.implant_catalog.find({"brand": brand}, {"_id": 0, "key": 1, "attachments": 1}).to_list(2000)
+    if not docs:
+        raise HTTPException(status_code=404, detail=f"No systems found for brand '{brand}'")
+    keys = [d["key"] for d in docs]
+    soft_deleted_attachments = 0
+    for d in docs:
+        for att in (d.get("attachments") or []):
+            path = att.get("storage_path")
+            if path:
+                await db.catalog_attachments.update_one(
+                    {"storage_path": path},
+                    {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc).isoformat()}},
+                )
+                soft_deleted_attachments += 1
+    res = await db.implant_catalog.delete_many({"brand": brand})
+    await log_access(
+        action="catalog.delete_brand",
+        resource_type="implant_catalog_brand",
+        resource_id=brand,
+        user=current_user,
+        request=request,
+        outcome="success",
+        extra={"systems_deleted": res.deleted_count, "keys": keys, "attachments_soft_deleted": soft_deleted_attachments},
+    )
+    return {"deleted": res.deleted_count, "brand": brand, "keys": keys}
+
+
+# ── Catalog attachments ─────────────────────────────────────────────
+ALLOWED_ATTACHMENT_MIME = {
+    "application/pdf",
+    "image/png", "image/jpeg", "image/webp", "image/gif",
+}
+MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024  # 25 MB
+
+
+@api_router.post("/implant-catalog/by-key/attachments")
+async def upload_catalog_attachment(
+    request: Request,
+    key: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+):
+    """Upload an attachment (PDF brochure, lab manual, image) to a catalog
+    record. Stored in Emergent object storage; metadata appended to
+    `implant_catalog.attachments`. Admin / In-Charge only."""
+    _require_catalog_admin(current_user)
+    doc = await db.implant_catalog.find_one({"key": key}, {"_id": 0, "key": 1, "brand": 1})
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"Catalog entry '{key}' not found")
+    content_type = (file.content_type or "application/octet-stream").lower()
+    if content_type not in ALLOWED_ATTACHMENT_MIME:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type '{content_type}'. Allowed: PDF, PNG, JPEG, WEBP, GIF.",
+        )
+    data = await file.read()
+    if len(data) > MAX_ATTACHMENT_SIZE:
+        raise HTTPException(status_code=400, detail=f"File too large (max {MAX_ATTACHMENT_SIZE // (1024*1024)} MB)")
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    from object_storage import put_object as _put_object, APP_NAME as _APP_NAME
+    ext = (file.filename or "bin").rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else "bin"
+    att_id = str(uuid.uuid4())
+    safe_brand = re.sub(r"[^A-Za-z0-9_-]+", "_", (doc.get("brand") or "x"))[:40]
+    storage_path = f"{_APP_NAME}/catalog/{safe_brand}/{att_id}.{ext}"
+    try:
+        result = _put_object(storage_path, data, content_type)
+    except Exception as e:
+        await log_access(
+            action="catalog.attachment.upload",
+            resource_type="implant_catalog",
+            resource_id=key,
+            user=current_user, request=request, outcome="failure",
+            extra={"error": str(e)[:200]},
+        )
+        raise HTTPException(status_code=502, detail=f"Object storage upload failed: {e}")
+
+    record = {
+        "id": att_id,
+        "storage_path": result.get("path", storage_path),
+        "original_filename": file.filename or f"{att_id}.{ext}",
+        "content_type": content_type,
+        "size": int(result.get("size") or len(data)),
+        "uploaded_by": current_user.get("name") or current_user.get("email"),
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
+        "catalog_key": key,
+        "is_deleted": False,
+    }
+    await db.catalog_attachments.insert_one(dict(record))
+    # Strip _id (mutation-safe)
+    record.pop("_id", None)
+    await db.implant_catalog.update_one(
+        {"key": key},
+        {"$push": {"attachments": {
+            "id": record["id"],
+            "storage_path": record["storage_path"],
+            "original_filename": record["original_filename"],
+            "content_type": record["content_type"],
+            "size": record["size"],
+            "uploaded_by": record["uploaded_by"],
+            "uploaded_at": record["uploaded_at"],
+        }}, "$set": {"updated_at": record["uploaded_at"]}},
+    )
+    await log_access(
+        action="catalog.attachment.upload",
+        resource_type="implant_catalog",
+        resource_id=key,
+        user=current_user, request=request, outcome="success",
+        extra={"attachment_id": att_id, "filename": record["original_filename"], "size": record["size"]},
+    )
+    return record
+
+
+@api_router.delete("/implant-catalog/by-key/attachments/{att_id}")
+async def delete_catalog_attachment(
+    request: Request,
+    key: str,
+    att_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Soft-delete an attachment. Removes it from the catalog doc and marks
+    the underlying storage record `is_deleted=True` (storage has no delete API)."""
+    _require_catalog_admin(current_user)
+    doc = await db.implant_catalog.find_one({"key": key}, {"_id": 0, "attachments": 1})
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"Catalog entry '{key}' not found")
+    atts = doc.get("attachments") or []
+    target = next((a for a in atts if a.get("id") == att_id), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="Attachment not found on this record")
+    await db.implant_catalog.update_one(
+        {"key": key},
+        {"$pull": {"attachments": {"id": att_id}}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    if target.get("storage_path"):
+        await db.catalog_attachments.update_one(
+            {"storage_path": target["storage_path"]},
+            {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc).isoformat()}},
+        )
+    await log_access(
+        action="catalog.attachment.delete",
+        resource_type="implant_catalog",
+        resource_id=key,
+        user=current_user, request=request, outcome="success",
+        extra={"attachment_id": att_id, "filename": target.get("original_filename")},
+    )
+    return {"deleted": True, "id": att_id}
+
+
+@api_router.get("/implant-catalog/attachments/{att_id}/download")
+async def download_catalog_attachment(
+    request: Request,
+    att_id: str,
+    auth: Optional[str] = Query(None),
+):
+    """Authenticated download for catalog attachments. Supports query-param
+    auth so <img src> / <a href> can fetch without setting headers."""
+    auth_header = request.headers.get("authorization")
+    if not auth_header and auth:
+        auth_header = f"Bearer {auth}"
+    if not auth_header:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    token = auth_header.replace("Bearer ", "").strip()
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("user_id")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    try:
+        user = await db.users.find_one({"_id": ObjectId(user_id)}, {"password_hash": 0})
+    except Exception:
+        user = None
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    record = await db.catalog_attachments.find_one(
+        {"id": att_id, "is_deleted": {"$ne": True}},
+        {"_id": 0},
+    )
+    if not record:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    from object_storage import get_object as _get_object
+    try:
+        data, ctype = _get_object(record["storage_path"])
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Object storage fetch failed: {e}")
+
+    await log_access(
+        action="catalog.attachment.download",
+        resource_type="implant_catalog",
+        resource_id=record.get("catalog_key"),
+        user=user, request=request, outcome="success",
+        extra={"attachment_id": att_id, "filename": record.get("original_filename")},
+    )
+    headers = {"Content-Disposition": f'inline; filename="{record.get("original_filename") or att_id}"'}
+    return Response(content=data, media_type=record.get("content_type") or ctype, headers=headers)
+
+
 @api_router.post("/ai/ask-implanr")
 async def ai_ask_implanr(request: Request, current_user: dict = Depends(get_current_user)):
     """Free-form Implanr AI Q&A scoped to the implant catalog. Auto-scopes to
