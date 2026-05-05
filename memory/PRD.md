@@ -1,5 +1,36 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 169 (Feb 2026) — Refirm catalog seeded + auto-logout HIPAA fix
+
+### A. Refirm Implant System seeded (PDF-extracted)
+Brochure `Refirm Catalog V1.0.pdf` extracted via `extract_file_tool` and persisted as a curated record. 37 components covering: cover screws, healing abutments (5 GH), sub-crestal healing, straight + sub-crestal + 15°/25° angular final abutments, 4 ti-base variants (with-hex / without-hex / sleeved), scan bodies (single + multi-unit), 6 impression coping variants, 2 analogs, 5 prosthetic screws, 3 OD-Pro overdenture abutments (GH 2.2 / 3.0 / 4.0), and 6 multi-unit abutments at 0° / 17° / 30° / 45° / 52° / 60°. 12 manufacturer features captured (Grade-23 Ti, hybrid taper body, 11.5° conical platform-switched connection, etc.).
+
+GH values are CUFF / gingival-collar heights only — total component height was deliberately excluded per the iter-166 convention.
+
+Files: `/app/backend/refirm_catalog.py` (new); imported into `implant_catalog_seed.py` and appended to `CATALOG_EXTRA`. Restart-safe — verified across `supervisorctl reload`.
+
+### B. Auto-logout firing during active use — HIPAA fix
+**Root cause**: `_layout.tsx` ActivityTracker used `onStartShouldSetResponderCapture` / `onMoveShouldSetResponderCapture`. These hooks DO NOT fire when an inner `ScrollView` / `TextInput` / `Button` consumes the responder (which is most of the app). So when users were scrolling the Implant Catalog, typing in the editor, or interacting with most native components, the inactivity timer was never reset and the 15-minute idle countdown ran from the moment of login regardless of activity.
+
+**Fix (two layers)**:
+1. `utils/api.ts` — added `_onActivity` registry + a request interceptor that calls `_onActivity()` on every authenticated API call. Any backend interaction is irrefutable proof the user is active.
+2. `contexts/AuthContext.tsx` — registers the activity callback at mount: `setOnActivity(() => { lastActivityRef.current = Date.now(); })`.
+3. `app/_layout.tsx` — added `onTouchStart` (which DOES fire on every touch, even when the gesture is consumed downstream) alongside the existing responder hooks. Belt-and-suspenders.
+
+**HIPAA confirmation**: 45 CFR § 164.312(a)(2)(iii) requires an automatic logoff after a period of inactivity. Industry consensus (and the ONC's HIPAA security guidance) places this at 10–15 minutes for shared/clinical devices. Implanr's 15-minute idle policy is preserved — what changed is that "idle" is now correctly measured from the user's last interaction (touch OR backend call) rather than from login. After this fix:
+- Active use (scrolling, typing, opening a procedure) keeps the session alive indefinitely.
+- True 15-minute idle (phone screen off, app backgrounded but not killed, no API calls and no touches) → session ends, user is forced to re-authenticate.
+
+### Files touched
+- `/app/backend/refirm_catalog.py` (new)
+- `/app/backend/implant_catalog_seed.py` — Refirm import + appended to CATALOG_EXTRA.
+- `/app/frontend/utils/api.ts` — `setOnActivity` + request interceptor hook.
+- `/app/frontend/contexts/AuthContext.tsx` — register activity callback.
+- `/app/frontend/app/_layout.tsx` — `onTouchStart` belt-and-suspenders.
+
+---
+
+
 ## Iteration 168 (Feb 2026) — Per-component pencil/Done in editor (Option A, level 2)
 
 ### Goal
