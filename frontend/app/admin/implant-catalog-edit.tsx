@@ -418,7 +418,7 @@ export default function CatalogEditor() {
                 ))}
               </View>
               <Field label="Subtype" v={c.subtype || ''} setV={(v) => updateComponent(i, { subtype: v })} placeholder="optional" />
-              <Field label="Gingival Heights mm (CSV)" v={c.gingival_heights_mm || ''} setV={(v) => updateComponent(i, { gingival_heights_mm: v })} placeholder="0.75, 1.5, 3, 4.5" />
+              <Field label="Cuff height / GH (mm) — CSV" v={c.gingival_heights_mm || ''} setV={(v) => updateComponent(i, { gingival_heights_mm: v })} placeholder="0.75, 1.5, 3, 4.5 (gingival collar / GH only — NOT total component height)" />
               <Field label="Angulations ° (CSV)" v={c.angulations_deg || ''} setV={(v) => updateComponent(i, { angulations_deg: v })} placeholder="0, 7.5, 15, 30" />
               <Field label="Retention (CSV)" v={c.retention || ''} setV={(v) => updateComponent(i, { retention: v })} placeholder="cement, occlusal_screw, lateral_screw" />
               <Field label="Material (CSV)" v={c.material || ''} setV={(v) => updateComponent(i, { material: v })} placeholder="titanium, zirconia" />

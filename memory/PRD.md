@@ -1,5 +1,38 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 166 (Feb 2026) — Brochure ingestion + permanent Cuff-Height (GH) convention
+
+### Why
+User uploaded prosthetic-system PDFs (e.g., Cowell Mini Plus brochure) and wanted Ask Implanr to answer questions directly from those PDFs. Crucial clinical safety: many brochures list both "GH / cuff height" AND "total component height". Implanr must always treat **gingival_heights_mm = cuff height (GH) only**, never the total height.
+
+### Implementation
+1. New `/app/backend/implanr_conventions.py` — single source of truth. Exports `DATA_CONVENTIONS_BLOCK` describing:
+   - GH = cuff height = gingival collar height = transmucosal height (4 synonyms → one field)
+   - Explicit rule: total / overall / abutment height NEVER goes into `gingival_heights_mm`
+   - No-fabrication rule, diameter / length conventions
+2. Server `ai_ask_implanr` now prepends the conventions block to BOTH the system message and the user prompt, and renames the structured-output line `Gingival height (mm)` → `Cuff height / GH (mm)`.
+3. Server `upload_catalog_attachment` runs `PyPDF2.PdfReader` at upload time to extract searchable text (cap 60 pages, 60 KB chars), saves to `catalog_attachments.extracted_text`, and stamps `has_extracted_text` on the per-system attachment list.
+4. `ai_ask_implanr` pulls `extracted_text` for the scoped system (≤10 attachments, ≤12 KB total) and injects it as a "MANUFACTURER BROCHURE EXCERPTS" block, with a rule: prefer structured data, add "Brochure detail: …" for additional information.
+5. Frontend label updates: editor field → "Cuff height / GH (mm) — CSV" with hint "(gingival collar / GH only — NOT total component height)"; detail card row → "Cuff height (GH)".
+
+### End-to-end verified
+- Generated a real-text PDF with both `GH (Gingival Cuff Height): 0.5, 1.0, 2.0, 3.0, 4.0 mm` and a deliberately-misleading `Total component height (overall): 7.0 mm`.
+- Uploaded → `extracted_text` = 505 chars, contained both `GH` and the unique `UNIQUE_TEST_TOKEN_ZX9` marker.
+- Asked AI a brochure-only question → AI quoted the cutting-grooves detail directly from the brochure.
+- Asked AI for GH values → AI correctly used the 0.5–4.0 mm cuff range and explicitly labeled the 7 mm total as "informational only, not GH". Convention upheld.
+
+### Answer to user's launch-time question
+PDF text extraction is purely deterministic (PyPDF2, runs locally on the backend with no LLM, no network) — it works identically in production. New uploads after launch are auto-indexed the moment they reach the server. For scanned / image-based PDFs (where PyPDF2 returns no text), we can add OCR via a vision LLM later — but most manufacturer brochures are text-based and work today.
+
+### Files touched
+- `/app/backend/implanr_conventions.py` (new — single source of truth)
+- `/app/backend/server.py` — upload extracts text; AI prompt prepends conventions + injects brochure excerpts; "Cuff height / GH" label.
+- `/app/frontend/app/admin/implant-catalog-edit.tsx` — Cuff/GH label + hint.
+- `/app/frontend/app/admin/implant-catalog.tsx` — detail-card "Cuff height (GH)" row.
+
+---
+
+
 ## Iteration 165 (Feb 2026) — Catalog: section-level edit/delete + attachments
 
 ### Goals

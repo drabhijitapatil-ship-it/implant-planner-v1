@@ -4943,6 +4943,29 @@ async def upload_catalog_attachment(
         )
         raise HTTPException(status_code=502, detail=f"Object storage upload failed: {e}")
 
+    # iter-166: extract searchable text from PDFs at upload time so Ask Implanr
+    # can quote the manufacturer's own brochure when answering clinician
+    # questions. Best-effort — if extraction fails we keep the upload.
+    extracted_text: Optional[str] = None
+    if content_type == "application/pdf":
+        try:
+            from PyPDF2 import PdfReader
+            from io import BytesIO as _BytesIO
+            reader = PdfReader(_BytesIO(data))
+            chunks: List[str] = []
+            for p in reader.pages[:60]:  # cap at 60 pages
+                try:
+                    t = p.extract_text() or ""
+                    if t.strip():
+                        chunks.append(t.strip())
+                except Exception:
+                    continue
+            extracted_text = "\n".join(chunks)[:60_000]  # cap at 60k chars
+            if not extracted_text.strip():
+                extracted_text = None
+        except Exception as e:
+            logging.warning(f"[catalog] PDF text extraction failed for {att_id}: {e}")
+
     record = {
         "id": att_id,
         "storage_path": result.get("path", storage_path),
@@ -4953,9 +4976,9 @@ async def upload_catalog_attachment(
         "uploaded_at": datetime.now(timezone.utc).isoformat(),
         "catalog_key": key,
         "is_deleted": False,
+        "extracted_text": extracted_text,
     }
     await db.catalog_attachments.insert_one(dict(record))
-    # Strip _id (mutation-safe)
     record.pop("_id", None)
     await db.implant_catalog.update_one(
         {"key": key},
@@ -4967,6 +4990,7 @@ async def upload_catalog_attachment(
             "size": record["size"],
             "uploaded_by": record["uploaded_by"],
             "uploaded_at": record["uploaded_at"],
+            "has_extracted_text": bool(extracted_text),
         }}, "$set": {"updated_at": record["uploaded_at"]}},
     )
     await log_access(
@@ -4974,9 +4998,10 @@ async def upload_catalog_attachment(
         resource_type="implant_catalog",
         resource_id=key,
         user=current_user, request=request, outcome="success",
-        extra={"attachment_id": att_id, "filename": record["original_filename"], "size": record["size"]},
+        extra={"attachment_id": att_id, "filename": record["original_filename"], "size": record["size"], "extracted_text_len": len(extracted_text or "")},
     )
-    return record
+    # Don't return raw extracted_text in the API response (can be large).
+    return {k: v for k, v in record.items() if k != "extracted_text"}
 
 
 @api_router.delete("/implant-catalog/by-key/attachments/{att_id}")
@@ -5101,11 +5126,40 @@ async def ai_ask_implanr(request: Request, current_user: dict = Depends(get_curr
     if not cat_block:
         return {"answer": "The implant catalog has not been populated yet. Please ask an administrator to add component data via the Implant Catalog admin page.", "scoped_system": None}
 
+    # iter-166: pull text extracted from manufacturer-uploaded PDFs for the
+    # scoped system (and only that system) so the AI can quote the official
+    # brochure when answering. Cap total brochure context to keep the prompt
+    # well below the LLM input limit.
+    brochure_block = ""
+    if target_key:
+        atts = await db.catalog_attachments.find(
+            {"catalog_key": target_key, "is_deleted": {"$ne": True}, "extracted_text": {"$nin": [None, ""]}},
+            {"_id": 0, "original_filename": 1, "extracted_text": 1},
+        ).to_list(length=10)
+        if atts:
+            chunks = []
+            budget = 12_000
+            for a in atts:
+                txt = (a.get("extracted_text") or "").strip()
+                if not txt:
+                    continue
+                snippet = txt[: max(500, budget // max(1, len(atts)))]
+                chunks.append(f"--- Brochure: {a.get('original_filename')} ---\n{snippet}")
+                budget -= len(snippet)
+                if budget <= 0:
+                    break
+            if chunks:
+                brochure_block = "\n\nMANUFACTURER BROCHURE EXCERPTS (verbatim text from uploaded PDFs — quote conservatively, never invent):\n\n" + "\n\n".join(chunks)
+
+    from implanr_conventions import DATA_CONVENTIONS_BLOCK as _CONVENTIONS
+
     scope_line = f"Active system in this case: {target_key}\n\n" if target_key else ""
     prompt = (
         f"You are Implanr AI, a precise clinical assistant for prosthodontists.\n\n"
+        f"{_CONVENTIONS}\n\n"
         f"{scope_line}"
-        f"Component database (verified specifications — only quote values that appear here):\n\n{cat_block}\n\n"
+        f"Component database (verified specifications — only quote values that appear here):\n\n{cat_block}"
+        f"{brochure_block}\n\n"
         f"Clinician question: {question}\n\n"
         f"OUTPUT RULES (strict — must follow):\n"
         f"1. Reply in plain text. NEVER use markdown asterisks (no **bold**, no *italics*), no hashes, no backticks.\n"
@@ -5115,7 +5169,7 @@ async def ai_ask_implanr(request: Request, current_user: dict = Depends(get_curr
         f"temporary cylinder, final abutment), answer in this structured plain-text format:\n\n"
         f"   Specification of <Component> — <Brand> <System>\n"
         f"   Diameter (mm): <values>\n"
-        f"   Gingival height (mm): <values>\n"
+        f"   Cuff height / GH (mm): <values>\n"
         f"   Angulation (deg): <values>\n"
         f"   Material: <values>\n"
         f"   Retention: <values>\n"
@@ -5127,7 +5181,9 @@ async def ai_ask_implanr(request: Request, current_user: dict = Depends(get_curr
         f"and nothing else:\n\n   Information is not available.\n\n"
         f"6. NEVER fabricate diameters, heights, angulations, materials, or SKUs. Clinical interpretation is "
         f"acceptable when grounded in the specifications above and standard prosthodontic literature "
-        f"(Misch, ITI consensus, Branemark protocol), but specifications themselves must be exact."
+        f"(Misch, ITI consensus, Branemark protocol), but specifications themselves must be exact.\n"
+        f"7. When the brochure excerpts conflict with the structured component data, prefer the structured data and "
+        f"add 'Brochure detail: …' on a new line for the additional information."
     )
 
     chat = LlmChat(
@@ -5135,8 +5191,9 @@ async def ai_ask_implanr(request: Request, current_user: dict = Depends(get_curr
         session_id=f"implanr-{current_user.get('id','')}-{uuid.uuid4().hex[:8]}",
         system_message=(
             "You are Implanr AI, a precise prosthodontic assistant. Output plain text only — never markdown. "
-            "Quote exact specification values from the supplied component database. "
-            "If a value is missing, reply only with 'Information is not available.' Never fabricate."
+            f"{_CONVENTIONS} "
+            "Quote exact specification values from the supplied component database and uploaded manufacturer "
+            "brochure excerpts. If a value is missing, reply only with 'Information is not available.' Never fabricate."
         )
     ).with_model("openai", "gpt-5.2")
 
