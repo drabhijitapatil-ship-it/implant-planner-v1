@@ -1,5 +1,32 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 164 (Feb 2026) — Catalog deduplication + obsolete record cleanup
+
+### Audit
+Audited all 42 catalog records across 13 brands for true and visual duplicates (same brand + same `name` field, case-insensitive). Found:
+- **1 true duplicate**: `Bredent|Blue Sky` (29 comp, seed) and `Bredent|blueSKY` (2 comp, manual edit) — both display as `blueSKY` in the dropdown.
+- **1 obsolete generic placeholder**: `Cowell Medi|INNO SLA-SH` (8 comp) — superseded by the iter-162 PDF-extracted `INNO Submerged / Submerged Narrow / Internal / External / Mini Plus` records (31 comp each).
+- **1 leftover test artifact**: `TEST_Brand|TEST_System` (1 comp).
+
+BioHorizons `Tapered Pro` (47 comp) and `Tapered Pro Conical (RBT)` (44 comp) were investigated and confirmed as **distinct products**, not duplicates — no action taken there. Any 11-component "ghost" version reported by the user was not present in the live DB; likely a stale cached view that will resolve once the iter-163 router-replace fix lands on Expo Go.
+
+### Cleanup applied (per user confirmation)
+1. Deleted `Bredent|blueSKY` (kept `Bredent|Blue Sky`, the higher-comp record).
+2. Deleted `Cowell Medi|INNO SLA-SH`. Also removed `COWELL_INNO_SLA_SH` from the `_cowell()` definitions, `CATALOG_EXTRA`, and `STUB_KEYS` in `implant_catalog_seed.py` so it doesn't get recreated on restart.
+3. Deleted `TEST_Brand|TEST_System`.
+
+### Verified
+- Deletions persist across `supervisorctl restart backend` (no stub re-seeding).
+- Total catalog: 42 → **39 records**, 13 → **12 brands** (`TEST_Brand` removed).
+- Cowell Medi: 6 → **5 systems** (Internal, External, Submerged, Submerged Narrow, Mini Plus).
+- Bredent: 6 → **5 systems** (Blue Sky 29 comp, Sky Classic 29, Mini 2 Sky 7, Copa Sky 6, Narrow Sky 9).
+
+### Files touched
+- `/app/backend/implant_catalog_seed.py` — removed `COWELL_INNO_SLA_SH` definition + references.
+
+---
+
+
 ## Iteration 163 (Feb 2026) — Fix: catalog edits not visible after Save on iOS Expo Go
 
 ### Bug report
