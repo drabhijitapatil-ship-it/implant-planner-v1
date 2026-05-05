@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
-  RefreshControl, TextInput, Alert, Modal, FlatList,
+  RefreshControl, TextInput, Alert, Modal, FlatList, Pressable,
   KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -131,11 +131,18 @@ export default function ImplantCatalogAdmin() {
   // We use a ref counter to skip the next two auto-select effects (one for
   // brand → family, one for family → variant) so they don't clobber the
   // restored selection.
+  // iter-170: track which `focusKey` we have already applied so subsequent
+  // `systems` re-renders (e.g. user pulls to refresh, or another network
+  // refetch) don't snap the selection back to the previously-edited record
+  // — that was making the brand/family/variant dropdowns feel "unstable".
   const skipAutoSelect = useRef(0);
+  const appliedFocusKey = useRef<string | null>(null);
   useEffect(() => {
     if (!focusKeyParam) return;
+    if (appliedFocusKey.current === focusKeyParam) return;
     const sys = systems.find(s => s.key === focusKeyParam);
     if (!sys) return;
+    appliedFocusKey.current = focusKeyParam;
     skipAutoSelect.current = 2;
     setSelectedBrand(sys.brand);
     setSelectedFamily(familyRoot(sys.name));
@@ -579,8 +586,16 @@ export default function ImplantCatalogAdmin() {
         transparent
         onRequestClose={() => setPickerKind(null)}
       >
-        <TouchableOpacity style={s.modalBackdrop} activeOpacity={1} onPress={() => setPickerKind(null)}>
-          <View style={s.modalCard}>
+        {/* iter-170: backdrop is a separate absolute-filled Pressable BEHIND the
+            modal card. The card itself is a sibling View — taps on the card or
+            its FlatList rows no longer bubble up to dismiss the modal. */}
+        <View style={s.modalBackdrop}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setPickerKind(null)}
+            data-testid="catalog-picker-backdrop"
+          />
+          <View style={s.modalCard} onStartShouldSetResponder={() => true}>
             <View style={s.modalHeader}>
               <Text style={s.modalTitle}>{pickerTitle}</Text>
               <TouchableOpacity onPress={() => setPickerKind(null)} data-testid="catalog-picker-close">
@@ -632,7 +647,7 @@ export default function ImplantCatalogAdmin() {
               ItemSeparatorComponent={() => <View style={s.pickerSep} />}
             />
           </View>
-        </TouchableOpacity>
+        </View>
       </Modal>
     </SafeAreaView>
   );

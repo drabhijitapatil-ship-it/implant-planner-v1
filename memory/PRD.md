@@ -1,5 +1,27 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 170 (Feb 2026) — Catalog dropdown stability + Refirm visibility
+
+### Two issues, both frontend
+1. **Refirm not visible**: The DB had Refirm with 37 components, the API returned it correctly (verified via curl — 12 brands incl. Refirm). The user's iOS Expo Go bundle was simply stale; reloading would have shown it. No code change required.
+2. **Brand / family / variant dropdown felt unstable**: Two distinct bugs.
+
+### Bug A — Picker modal dismissed itself when tapping rows
+The picker `Modal` used `<TouchableOpacity activeOpacity={1} onPress={() => setPickerKind(null)}>` as the root container — meaning the entire modal (backdrop + card + FlatList rows) was a single tappable surface that closed the modal. Taps on the row's inner `TouchableOpacity` sometimes bubbled up to this outer one (especially on iOS Expo Go after the iter-165 nested-touchable change for the brand-delete trash icon), dismissing the picker before the row's `onPress` fired.
+
+**Fix**: split the backdrop and the card into siblings inside a non-tappable `View`. The backdrop is a `Pressable` filling the absolute area BEHIND the card. The card is a sibling `View` with `onStartShouldSetResponder={() => true}` so taps inside the card never bubble out.
+
+### Bug B — `focusKey` effect re-applied selection on every `systems` re-render
+The iter-162 effect that restores selection after a save had `[focusKeyParam, systems]` deps. Whenever `systems` re-rendered (pull-to-refresh, network refetch), the effect re-fired and snapped the brand/family/variant back to the just-edited record — cancelling the user's mid-flight dropdown choice.
+
+**Fix**: added `appliedFocusKey: useRef<string | null>(null)` — once a given `focusKeyParam` value is consumed, it's not re-applied unless the URL param itself changes.
+
+### Files touched
+- `/app/frontend/app/admin/implant-catalog.tsx` — Pressable backdrop + sibling card with responder gate; added `appliedFocusKey` ref to the focus-restore effect; added `Pressable` to imports.
+
+---
+
+
 ## Iteration 169 (Feb 2026) — Refirm catalog seeded + auto-logout HIPAA fix
 
 ### A. Refirm Implant System seeded (PDF-extracted)
