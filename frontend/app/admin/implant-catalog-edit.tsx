@@ -130,11 +130,38 @@ export default function CatalogEditor() {
     })();
   }, [editKey, isEdit]);
 
+  // iter-168: per-component edit state. Each component inside the Components
+  // section is independently editable — pencil opens the card, "Done" closes
+  // and silent-saves. Multiple cards can be open at once.
+  const [editingCompIdx, setEditingCompIdx] = useState<Set<number>>(new Set());
+  const toggleCompEdit = useCallback((idx: number, on: boolean) => {
+    setEditingCompIdx(prev => {
+      const next = new Set(prev);
+      if (on) next.add(idx); else next.delete(idx);
+      return next;
+    });
+  }, []);
+
   const updateComponent = (idx: number, patch: Partial<Component>) => {
     setComponents(prev => prev.map((c, i) => i === idx ? { ...c, ...patch } : c));
   };
-  const addComponent = () => setComponents(prev => [...prev, { type: 'healing_abutment' }]);
-  const removeComponent = (idx: number) => setComponents(prev => prev.filter((_, i) => i !== idx));
+  const addComponent = () => {
+    setComponents(prev => {
+      const newIdx = prev.length;
+      // Open the new component in edit mode immediately.
+      setEditingCompIdx(s => { const n = new Set(s); n.add(newIdx); return n; });
+      return [...prev, { type: 'healing_abutment' }];
+    });
+  };
+  const removeComponent = (idx: number) => {
+    setComponents(prev => prev.filter((_, i) => i !== idx));
+    setEditingCompIdx(prev => {
+      const next = new Set<number>();
+      // Re-key indices: every editing index > idx shifts down by 1.
+      prev.forEach(i => { if (i < idx) next.add(i); else if (i > idx) next.add(i - 1); });
+      return next;
+    });
+  };
 
   const buildBody = useCallback(() => {
     return {
@@ -395,37 +422,82 @@ export default function CatalogEditor() {
                 <Text key={i} style={s.bullet}>• {(c.subtype || c.type || 'component').replace(/_/g, ' ')}</Text>
               )}{components.length > 6 && <Text style={s.placeholder}>… and {components.length - 6} more</Text>}</View>}
         >
-          {components.map((c, i) => (
-            <View key={i} style={s.compEditor}>
-              <View style={s.compHeader}>
-                <Text style={s.compHeaderText}>Component #{i + 1}</Text>
-                <TouchableOpacity onPress={() => removeComponent(i)} testID={`cat-comp-remove-${i}`} data-testid={`cat-comp-remove-${i}`}>
-                  <Ionicons name="trash" size={18} color="#D32F2F" />
-                </TouchableOpacity>
-              </View>
-              <Text style={s.label}>Type</Text>
-              <View style={s.typeRow}>
-                {COMPONENT_TYPES.map(t => (
+          {components.map((c, i) => {
+            const editing = editingCompIdx.has(i);
+            const compName = (c.subtype || c.type || 'component').toString().replace(/_/g, ' ');
+            const ghSummary = c.gingival_heights_mm
+              ? `Cuff (GH): ${c.gingival_heights_mm} mm`
+              : null;
+            return (
+              <View key={i} style={s.compEditor}>
+                <View style={s.compHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.compHeaderText}>{compName}</Text>
+                    {!editing && ghSummary && (
+                      <Text style={s.compSummarySub}>{ghSummary}</Text>
+                    )}
+                  </View>
+                  {editing ? (
+                    <TouchableOpacity
+                      style={[s.compDoneBtn, saving && { opacity: 0.5 }]}
+                      onPress={async () => {
+                        const ok = await persist({ silent: true, navigateBack: false });
+                        if (ok) toggleCompEdit(i, false);
+                      }}
+                      disabled={saving}
+                      testID={`cat-comp-done-${i}`}
+                      data-testid={`cat-comp-done-${i}`}
+                    >
+                      {saving
+                        ? <ActivityIndicator size="small" color="#FFF" />
+                        : <><Ionicons name="checkmark" size={14} color="#FFF" /><Text style={s.compDoneBtnText}>Done</Text></>}
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      onPress={() => toggleCompEdit(i, true)}
+                      style={s.compIconBtn}
+                      testID={`cat-comp-edit-${i}`}
+                      data-testid={`cat-comp-edit-${i}`}
+                    >
+                      <Ionicons name="pencil" size={16} color="#0277BD" />
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity
-                    key={t}
-                    style={[s.typeChip, c.type === t && s.typeChipActive]}
-                    onPress={() => updateComponent(i, { type: t })}
+                    onPress={() => removeComponent(i)}
+                    style={s.compIconBtn}
+                    testID={`cat-comp-remove-${i}`} data-testid={`cat-comp-remove-${i}`}
                   >
-                    <Text style={[s.typeChipText, c.type === t && s.typeChipTextActive]}>
-                      {t.replace(/_/g, ' ')}
-                    </Text>
+                    <Ionicons name="trash" size={18} color="#D32F2F" />
                   </TouchableOpacity>
-                ))}
+                </View>
+                {editing && (
+                  <>
+                    <Text style={s.label}>Type</Text>
+                    <View style={s.typeRow}>
+                      {COMPONENT_TYPES.map(t => (
+                        <TouchableOpacity
+                          key={t}
+                          style={[s.typeChip, c.type === t && s.typeChipActive]}
+                          onPress={() => updateComponent(i, { type: t })}
+                        >
+                          <Text style={[s.typeChipText, c.type === t && s.typeChipTextActive]}>
+                            {t.replace(/_/g, ' ')}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    <Field label="Subtype" v={c.subtype || ''} setV={(v) => updateComponent(i, { subtype: v })} placeholder="optional" />
+                    <Field label="Cuff height / GH (mm) — CSV" v={c.gingival_heights_mm || ''} setV={(v) => updateComponent(i, { gingival_heights_mm: v })} placeholder="0.75, 1.5, 3, 4.5 (gingival collar / GH only — NOT total component height)" />
+                    <Field label="Angulations ° (CSV)" v={c.angulations_deg || ''} setV={(v) => updateComponent(i, { angulations_deg: v })} placeholder="0, 7.5, 15, 30" />
+                    <Field label="Retention (CSV)" v={c.retention || ''} setV={(v) => updateComponent(i, { retention: v })} placeholder="cement, occlusal_screw, lateral_screw" />
+                    <Field label="Material (CSV)" v={c.material || ''} setV={(v) => updateComponent(i, { material: v })} placeholder="titanium, zirconia" />
+                    <Field label="Indication" v={c.indication || ''} setV={(v) => updateComponent(i, { indication: v })} placeholder="Single + bridge, anterior" />
+                    <Field label="Notes" v={c.notes || ''} setV={(v) => updateComponent(i, { notes: v })} placeholder="optional clinical notes" />
+                  </>
+                )}
               </View>
-              <Field label="Subtype" v={c.subtype || ''} setV={(v) => updateComponent(i, { subtype: v })} placeholder="optional" />
-              <Field label="Cuff height / GH (mm) — CSV" v={c.gingival_heights_mm || ''} setV={(v) => updateComponent(i, { gingival_heights_mm: v })} placeholder="0.75, 1.5, 3, 4.5 (gingival collar / GH only — NOT total component height)" />
-              <Field label="Angulations ° (CSV)" v={c.angulations_deg || ''} setV={(v) => updateComponent(i, { angulations_deg: v })} placeholder="0, 7.5, 15, 30" />
-              <Field label="Retention (CSV)" v={c.retention || ''} setV={(v) => updateComponent(i, { retention: v })} placeholder="cement, occlusal_screw, lateral_screw" />
-              <Field label="Material (CSV)" v={c.material || ''} setV={(v) => updateComponent(i, { material: v })} placeholder="titanium, zirconia" />
-              <Field label="Indication" v={c.indication || ''} setV={(v) => updateComponent(i, { indication: v })} placeholder="Single + bridge, anterior" />
-              <Field label="Notes" v={c.notes || ''} setV={(v) => updateComponent(i, { notes: v })} placeholder="optional clinical notes" />
-            </View>
-          ))}
+            );
+          })}
           <TouchableOpacity style={s.addBtn} onPress={addComponent} testID="cat-add-component" data-testid="cat-add-component">
             <Ionicons name="add-circle" size={18} color="#0277BD" />
             <Text style={s.addBtnText}>Add component</Text>
@@ -585,8 +657,12 @@ const s = StyleSheet.create({
   summaryKey: { width: 130, fontSize: 12, color: '#607D8B', fontWeight: '600' },
   summaryVal: { flex: 1, fontSize: 13, color: '#263238' },
   compEditor: { backgroundColor: '#F5FBFF', borderColor: '#B3E5FC', borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 10 },
-  compHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  compHeaderText: { fontSize: 13, fontWeight: '700', color: '#01579B' },
+  compHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 },
+  compHeaderText: { fontSize: 13, fontWeight: '700', color: '#01579B', textTransform: 'capitalize' },
+  compSummarySub: { fontSize: 12, color: '#455A64', marginTop: 2 },
+  compIconBtn: { width: 30, height: 30, borderRadius: 999, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF' },
+  compDoneBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#43A047', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
+  compDoneBtnText: { color: '#FFF', fontSize: 11, fontWeight: '700' },
   typeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
   typeChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, borderWidth: 1, borderColor: '#B3E5FC', backgroundColor: '#FFF' },
   typeChipActive: { backgroundColor: '#0277BD', borderColor: '#0277BD' },
