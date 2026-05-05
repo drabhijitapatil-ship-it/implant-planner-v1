@@ -2692,18 +2692,6 @@ def _cowell(key, name, connection_label, diams, lens, bone, features, comps_list
         notes=notes,
     )
 
-COWELL_INNO_SLA_SH = _cowell(
-    "Cowell Medi|INNO SLA-SH", "INNO SLA-SH",
-    "11° Tapered Hex 2.5",
-    [3.5, 4.0, 4.5, 5.0, 6.0], [7, 8, 10, 12, 14, 16, 18],
-    ["normal_bone", "hard_bone"],
-    ["11° tapered with 2.5 hex connection", "Wide and deep upper thread",
-     "Double tapered thread", "Open thread geometry",
-     "4 spiral round cutting edges", "Apex thread with sharp cutting edge"],
-    ["cover_screw", "healing_abutment", "final_abutment",
-     "impression_coping", "analog", "fixture_mount", "transfer_post", "guide_pin"],
-    "Interchangeable with hexagonal morse-tapered fixture (Hex 2.5). Includes submerged (standard / short / narrow) and internal/external prosthetic variants."
-)
 COWELL_INNO_INTERNAL = _cowell(
     "Cowell Medi|INNO Internal", "INNO Internal",
     "Internal Octa 3.1 (8° taper) / Hex 2.4",
@@ -2761,7 +2749,7 @@ CATALOG_EXTRA: List[Dict[str, Any]] = [
     BREDENT_NARROW_SKY, BREDENT_SKY_CLASSIC,
     # iter-145
     BB_EV_LINE, BB_3P, BB_3P_LONG, BB_WIDE, BB_DURAVIT_SLIM,
-    COWELL_INNO_SLA_SH, COWELL_INNO_INTERNAL, COWELL_INNO_EXTERNAL,
+    COWELL_INNO_INTERNAL, COWELL_INNO_EXTERNAL,
     # iter-162 — new Cowell Medi keys (Submerged / Submerged Narrow / Mini Plus)
     *_COWELL_NEW_RECORDS,
 ]
@@ -2805,7 +2793,9 @@ STUB_KEYS: List[str] = [
     "MIS|LANCE+",
     "Alpha-Bio Tec|SPI",
     # iter-145 — Cowell Medi (new brand) registered via seed.
-    "Cowell Medi|INNO SLA-SH",
+    # iter-163 — "Cowell Medi|INNO SLA-SH" was a generic placeholder; deleted
+    # because the rich Submerged/Internal/External/Mini Plus records cover the
+    # SLA-SH line completely.
     "Cowell Medi|INNO Internal",
     "Cowell Medi|INNO External",
 ]
