@@ -37,6 +37,14 @@ export async function removeToken(key: string): Promise<void> {
 let _onAuthFailure: (() => void) | null = null;
 export function setOnAuthFailure(cb: () => void) { _onAuthFailure = cb; }
 
+// iter-169: Activity recorder — set by AuthContext so every authenticated API
+// call bumps the inactivity timer. This closes the HIPAA compliance gap where
+// ScrollView / TextInput consumed touch events before they reached the
+// top-level responder, so users were being logged out mid-session while
+// actively using the app.
+let _onActivity: (() => void) | null = null;
+export function setOnActivity(cb: () => void) { _onActivity = cb; }
+
 // Build authenticated URL for file viewing (appends token as query param)
 export async function getAuthFileUrl(filename: string): Promise<string> {
   const baseUrl = api.defaults.baseURL || '';
@@ -53,12 +61,14 @@ function onRefreshed(token: string) {
   refreshSubscribers = [];
 }
 
-// Attach access token to every request
+// Attach access token to every request + record activity.
 api.interceptors.request.use(async (config) => {
   const token = await getToken('access_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  // iter-169: HIPAA — any authenticated API call is evidence the user is active.
+  if (_onActivity) _onActivity();
   return config;
 });
 

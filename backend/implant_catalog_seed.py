@@ -2738,6 +2738,9 @@ _apply_iter162(
     cowell_inno_external=COWELL_INNO_EXTERNAL,
 )
 
+# ── iter-169 — Refirm full prosthetic catalog (PDF-extracted). ────────────
+from refirm_catalog import REFIRM_RECORD as _REFIRM_RECORD
+
 CATALOG_EXTRA: List[Dict[str, Any]] = [
     OSSTEM_TSIV, OSSTEM_SSIII, OSSTEM_MS, OSSTEM_ETIII_NH,
     NOBEL_ACTIVE_NP, NOBEL_ACTIVE_RP, NOBEL_ACTIVE_WP,
@@ -2752,6 +2755,8 @@ CATALOG_EXTRA: List[Dict[str, Any]] = [
     COWELL_INNO_INTERNAL, COWELL_INNO_EXTERNAL,
     # iter-162 — new Cowell Medi keys (Submerged / Submerged Narrow / Mini Plus)
     *_COWELL_NEW_RECORDS,
+    # iter-169 — Refirm Implant System (PDF-extracted, single-platform conical)
+    _REFIRM_RECORD,
 ]
 
 # ── Stub records for the other registered systems ──────────────────────────

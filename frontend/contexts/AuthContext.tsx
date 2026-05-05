@@ -1,6 +1,6 @@
 import React, { createContext, useState, useContext, useEffect, useRef, useCallback } from 'react';
 import { Alert } from 'react-native';
-import api, { getToken, setToken, removeToken, setOnAuthFailure } from '../utils/api';
+import api, { getToken, setToken, removeToken, setOnAuthFailure, setOnActivity } from '../utils/api';
 import { BACKEND_URL } from '../utils/config';
 
 interface User {
@@ -51,6 +51,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Register auth failure callback so interceptor can trigger logout safely
     setOnAuthFailure(() => {
       setUser(null);
+    });
+    // iter-169: Every authenticated API call records activity. Closes the HIPAA
+    // compliance gap where ScrollView / TextInput consumed touches before they
+    // reached the top-level responder, logging users out mid-session.
+    setOnActivity(() => {
+      lastActivityRef.current = Date.now();
     });
   }, []);
 
