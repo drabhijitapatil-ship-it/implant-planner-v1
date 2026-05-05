@@ -220,6 +220,8 @@ export default function ImplantCatalogAdmin() {
   }, [question, selected]);
 
   // iter-165: Delete the currently-selected system (variant). Permanent.
+  // iter-167: Embed the key in the URL directly so any RN/axios DELETE-with-params
+  // edge case is sidestepped (some RN versions drop `params` on DELETE).
   const deleteSelectedSystem = useCallback(() => {
     if (!selected) return;
     Alert.alert(
@@ -230,11 +232,13 @@ export default function ImplantCatalogAdmin() {
         {
           text: 'Delete', style: 'destructive', onPress: async () => {
             try {
-              await api.delete('/implant-catalog/by-key', { params: { key: selected.key } });
+              await api.delete(`/implant-catalog/by-key?key=${encodeURIComponent(selected.key)}`);
               setSelectedKey('');
               await load();
             } catch (e: any) {
-              Alert.alert('Delete failed', e?.response?.data?.detail || String(e?.message || e));
+              const status = e?.response?.status;
+              const detail = e?.response?.data?.detail || e?.message || String(e);
+              Alert.alert('Delete failed', `${detail}${status ? ` (HTTP ${status})` : ''}`);
             }
           },
         },
@@ -253,14 +257,16 @@ export default function ImplantCatalogAdmin() {
         {
           text: 'Delete', style: 'destructive', onPress: async () => {
             try {
-              await api.delete('/implant-catalog/by-brand', { params: { brand } });
+              await api.delete(`/implant-catalog/by-brand?brand=${encodeURIComponent(brand)}`);
               if (selectedBrand === brand) {
                 setSelectedBrand(''); setSelectedFamily(''); setSelectedKey('');
               }
               setPickerKind(null);
               await load();
             } catch (e: any) {
-              Alert.alert('Delete failed', e?.response?.data?.detail || String(e?.message || e));
+              const status = e?.response?.status;
+              const detail = e?.response?.data?.detail || e?.message || String(e);
+              Alert.alert('Delete failed', `${detail}${status ? ` (HTTP ${status})` : ''}`);
             }
           },
         },
