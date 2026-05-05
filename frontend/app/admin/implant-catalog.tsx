@@ -665,7 +665,7 @@ const ComponentCard: React.FC<{ c: Component }> = ({ c }) => {
   return (
     <View style={s.compCard}>
       <Text style={s.compTitle}>{title}</Text>
-      {!!c.gingival_heights_mm?.length && <DetailRow label="Gingival Heights" value={`${c.gingival_heights_mm.join(', ')} mm`} />}
+      {!!c.gingival_heights_mm?.length && <DetailRow label="Cuff height (GH)" value={`${c.gingival_heights_mm.join(', ')} mm`} />}
       {!!c.angulations_deg?.length && <DetailRow label="Angulations" value={`${c.angulations_deg.join(', ')}°`} />}
       {!!c.retention?.length && <DetailRow label="Retention" value={prettyList(c.retention)} />}
       {!!c.material?.length && <DetailRow label="Material" value={prettyList(c.material)} />}
