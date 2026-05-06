@@ -1,5 +1,52 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 171 (Feb 2026) — Legal docs & in-app legal screens
+
+### A. Comprehensive legal content drafted (markdown — for website + counsel review)
+Four documents saved at `/app/memory/legal/`:
+- **PRIVACY_POLICY.md** — 15 sections, India-first (DPDP Act 2023) + HIPAA-aligned + GDPR-ready. Covers data collected, lawful bases, sub-processors (Mongo, S3, Twilio/MSG91, Stripe, OpenAI/Anthropic via Emergent LLM, APNs/FCM, Sentry, Expo), AI-no-training clause, retention (10y clinical / 6y audit / 35d backups), Data Principal rights, children's privacy, cookies, contact + Grievance Officer.
+- **TERMS_OF_SERVICE.md** — 19 sections, B2B SaaS for India. Eligibility, 14-day free trial + 7-day grace, 0% GST on dental services / 18% GST on SaaS, acceptable use, Customer Content ownership, AI as decision-support only ("Not a medical device"), IP, sub-processors, 99.5% uptime target, suspension/termination with 30-day data retention, disclaimers, liability cap (12 months of fees), indemnification, force majeure, India arbitration (Pune/Mumbai seat).
+- **DPA.md** — Data Processing Addendum. Roles (Customer = Controller, Implanr = Processor for PHI), authorised sub-processors with 30-day notice + objection right, GDPR SCCs Module 2 + UK Addendum incorporated, security measures table mapped to HIPAA § 164.312 Technical Safeguards, 48-hour breach notification, 6-hour CERT-In reporting under IT Act 2000, audit rights, return/deletion on termination. Includes Annex A (TOMs), Annex B (Sub-processors), Annex C (SCCs).
+- **COOKIE_NOTICE.md** — 14 sections. Strictly necessary (session, CSRF, last_activity, fingerprint hash) + functional (theme, lang, tenant_pref) + opt-in performance & analytics. No advertising / retargeting / social trackers. iOS App Tracking Transparency compliance. GPC signal honoured.
+
+All files contain placeholders in `[BRACKETS]` for legal entity name, CIN, GSTIN, registered address, and email aliases (privacy@, grievance@, security@, legal@, support@) — must be filled in before publishing.
+
+**Disclaimer**: drafts authored by Implanr engineering as a strong starting point. Must be reviewed by qualified Indian legal counsel (and any foreign counsel for jurisdictions targeted) before publishing on website / App Store / Play Store.
+
+### B. In-app legal screens rewritten + new Cookie Notice screen
+- `/app/frontend/app/legal/privacy-policy.tsx` — replaced placeholder content with comprehensive 15-section version mirroring the markdown master. Now includes cross-links to Terms and Cookie Notice.
+- `/app/frontend/app/legal/terms.tsx` — replaced placeholder with 20-section version (acceptance, definitions, eligibility, free trial, acceptable use, Customer Content, AI features, privacy/DPA, IP, third-party services, SLAs, suspension, disclaimers, liability cap, indemnification, force majeure, governing law, changes, miscellaneous, contact). Cross-links to Privacy and Cookie Notice.
+- `/app/frontend/app/legal/cookie-notice.tsx` (new) — 14-section in-app notice with the 4 cookie categories (strictly necessary / functional / opt-in performance / opt-in analytics), browser controls, GPC signal handling, mobile ATT compliance.
+
+### C. Sign-up consent checkbox on Register screen
+Replaced the implicit "By registering you agree" footer with an explicit, GDPR / DPDP-grade consent checkbox:
+- Checkbox state `consentAccepted` defaults to `false`.
+- Register button is **disabled** (greyed out) until the checkbox is ticked.
+- On submit, a guard alerts "Consent Required" if unchecked.
+- Label reads: "I confirm I am 18+ and agree to the Terms of Service, Privacy Policy and Cookie Notice." with all three terms tappable to open the respective screen.
+- Test IDs: `register-consent-checkbox`, `register-terms-link`, `register-privacy-link`, `register-cookies-link`, `register-submit-btn`.
+
+### Files touched
+- `/app/memory/legal/PRIVACY_POLICY.md` (new)
+- `/app/memory/legal/TERMS_OF_SERVICE.md` (new)
+- `/app/memory/legal/DPA.md` (new)
+- `/app/memory/legal/COOKIE_NOTICE.md` (new)
+- `/app/frontend/app/legal/privacy-policy.tsx` (rewrite)
+- `/app/frontend/app/legal/terms.tsx` (rewrite)
+- `/app/frontend/app/legal/cookie-notice.tsx` (new)
+- `/app/frontend/app/auth/register.tsx` — added consent checkbox state + disabled-button + Cookie Notice link.
+
+### Verification
+- Smoke screenshot of `/legal/cookie-notice` rendered all 14 sections cleanly.
+- Smoke screenshot of `/auth/register` shows the checkbox unchecked and the Register button disabled.
+- Metro bundle compiles successfully after `supervisorctl restart expo`.
+
+### What still needs the user
+- Fill in `[BRACKETED]` placeholders (legal entity name, CIN, GSTIN, registered address, email aliases, domain `implanr.com/legal/...` paths) across all four markdown files.
+- Have all four documents reviewed by Indian legal counsel before publishing.
+
+---
+
 ## Iteration 170 (Feb 2026) — Catalog dropdown stability + Refirm visibility
 
 ### Two issues, both frontend
