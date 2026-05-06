@@ -23,6 +23,7 @@ export default function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [role, setRole] = useState('student');
   const [loading, setLoading] = useState(false);
+  const [consentAccepted, setConsentAccepted] = useState(false);
   const { register } = useAuth();
   const router = useRouter();
 
@@ -39,6 +40,11 @@ export default function RegisterScreen() {
 
     if (password.length < 6) {
       Alert.alert('Error', 'Password must be at least 6 characters');
+      return;
+    }
+
+    if (!consentAccepted) {
+      Alert.alert('Consent Required', 'Please accept the Terms of Service and Privacy Policy to continue.');
       return;
     }
 
@@ -120,10 +126,51 @@ export default function RegisterScreen() {
                 autoCapitalize="none"
               />
 
+              <View style={styles.consentRow}>
+                <TouchableOpacity
+                  onPress={() => setConsentAccepted(!consentAccepted)}
+                  style={[styles.checkbox, consentAccepted && styles.checkboxChecked]}
+                  activeOpacity={0.7}
+                  data-testid="register-consent-checkbox"
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: consentAccepted }}
+                >
+                  {consentAccepted && <Text style={styles.checkboxTick}>✓</Text>}
+                </TouchableOpacity>
+                <Text style={styles.consentText}>
+                  I confirm I am 18+ and agree to the{' '}
+                  <Text
+                    style={styles.consentLink}
+                    onPress={() => router.push('/legal/terms')}
+                    data-testid="register-terms-link"
+                  >
+                    Terms of Service
+                  </Text>
+                  ,{' '}
+                  <Text
+                    style={styles.consentLink}
+                    onPress={() => router.push('/legal/privacy-policy')}
+                    data-testid="register-privacy-link"
+                  >
+                    Privacy Policy
+                  </Text>
+                  {' '}and{' '}
+                  <Text
+                    style={styles.consentLink}
+                    onPress={() => router.push('/legal/cookie-notice')}
+                    data-testid="register-cookies-link"
+                  >
+                    Cookie Notice
+                  </Text>
+                  .
+                </Text>
+              </View>
+
               <TouchableOpacity
-                style={[styles.button, loading && styles.buttonDisabled]}
+                style={[styles.button, (loading || !consentAccepted) && styles.buttonDisabled]}
                 onPress={handleRegister}
-                disabled={loading}
+                disabled={loading || !consentAccepted}
+                data-testid="register-submit-btn"
               >
                 {loading ? (
                   <ActivityIndicator color="#FFF" />
@@ -131,26 +178,6 @@ export default function RegisterScreen() {
                   <Text style={styles.buttonText}>Register</Text>
                 )}
               </TouchableOpacity>
-
-              <Text style={{ fontSize: 11, color: '#78909C', textAlign: 'center', marginTop: 12, paddingHorizontal: 8, lineHeight: 16 }}>
-                By registering, you agree to our{' '}
-                <Text
-                  style={{ color: '#1565C0', fontWeight: '700' }}
-                  onPress={() => router.push('/legal/terms')}
-                  data-testid="register-terms-link"
-                >
-                  Terms of Service
-                </Text>
-                {' '}and{' '}
-                <Text
-                  style={{ color: '#1565C0', fontWeight: '700' }}
-                  onPress={() => router.push('/legal/privacy-policy')}
-                  data-testid="register-privacy-link"
-                >
-                  Privacy Policy
-                </Text>
-                .
-              </Text>
 
               <TouchableOpacity
                 style={styles.linkButton}
@@ -253,5 +280,43 @@ const styles = StyleSheet.create({
   linkText: {
     color: '#007AFF',
     fontSize: 14,
+  },
+  consentRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginTop: 20,
+    paddingHorizontal: 4,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#90A4AE',
+    backgroundColor: '#FFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  checkboxChecked: {
+    backgroundColor: '#1565C0',
+    borderColor: '#1565C0',
+  },
+  checkboxTick: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '900',
+    lineHeight: 16,
+  },
+  consentText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#455A64',
+    lineHeight: 17,
+  },
+  consentLink: {
+    color: '#1565C0',
+    fontWeight: '700',
   },
 });

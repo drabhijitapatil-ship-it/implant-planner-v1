@@ -16,68 +16,149 @@ export default function PrivacyPolicyScreen() {
       </View>
       <ScrollView contentContainerStyle={styles.content} data-testid="privacy-policy-screen">
         <Text style={styles.h1}>Privacy Policy</Text>
-        <Text style={styles.updated}>Last updated: February 2026</Text>
+        <Text style={styles.updated}>Last updated: February 2026 · Version 1.0</Text>
 
-        <Section title="1. Introduction">
-          This Privacy Policy explains how Implanr (the "App") collects, uses, discloses, and safeguards information when used by authorized personnel at a dental institution or private dental practice — including postgraduate students, supervisors, implant in-charges, dental surgeons, associate dentists, practice owners, clinic managers, and auxiliary staff (referred to collectively as "Users"). The organisation operating the App at any given deployment — whether a dental college, hospital, or private clinic — is referred to as the "Operator".
+        <Section title="1. Who we are">
+          This Privacy Policy describes how Implanr ("we", "us") collects, uses, stores, shares, and protects your information when you use the Implanr mobile application, web application, or any related services (the "Service"). We are the Data Fiduciary under India's Digital Personal Data Protection Act, 2023 ("DPDP Act") for personal data we determine the purpose and means of processing. Where we process Protected Health Information ("PHI") on behalf of a dental college or clinic, that organisation is the controller and we act as a data processor.{"\n\n"}
+          Grievance Officer: grievance@implanr.com{"\n"}
+          General contact: info@implanr.com{"\n"}
+          Security incidents: security@implanr.com
         </Section>
 
-        <Section title="2. Information We Collect">
-          • Account data: name, institutional or clinic email, assigned role, profile photo.{"\n"}
-          • Patient clinical data entered by authorized Users: demographics, medical history, radiographs, intraoral scans, clinical notes, surgical protocols, and treatment plans.{"\n"}
-          • Technical data: device type, app version, timestamps of access, and IP addresses for audit logs.{"\n"}
-          • Edit history: a granular record of every field change, including the editor's identity, role, and timestamp, maintained for clinical accountability.
+        <Section title="2. Scope">
+          This policy applies to the Implanr iOS, Android, and web applications, all Implanr APIs, dashboards, websites, and email communications. It covers two workspace types — Dental College and Dental Clinic. It does not apply to third-party services that integrate with Implanr (Google, Microsoft, Apple SSO, Stripe, App Store, Play Store), each of which has its own policy.
         </Section>
 
-        <Section title="3. How We Use Information">
-          • To operate the 4-phase implant workflow and deliver clinical decision support.{"\n"}
-          • To maintain audit trails (edit history, access logs) for academic evaluation, clinical accountability, and medico-legal defensibility.{"\n"}
-          • To generate de-identified AI summaries and surgical notes via the configured AI provider.{"\n"}
-          • To send in-app alerts and push notifications about case updates to the relevant Users.{"\n"}
-          • We do not sell personal or clinical data to third parties under any circumstances.
+        <Section title="3. Roles & responsibilities">
+          • Dental College / Clinic: Data Controller / Fiduciary for staff, student, and patient records they create. Responsible for valid patient consent.{"\n"}
+          • Implanr: Data Processor when handling PHI; Data Fiduciary for the account profile we create for you.{"\n"}
+          • End User (you): Data Principal whose rights this policy describes.
         </Section>
 
-        <Section title="4. Data Storage & Security">
-          • Patient data is stored on encrypted MongoDB servers with access restricted by role-based authentication (JWT).{"\n"}
-          • All network traffic is transmitted over HTTPS/TLS.{"\n"}
-          • Authentication tokens on-device are stored using platform-native secure storage (iOS Keychain / Android Keystore).{"\n"}
-          • The App applies a session timeout after a period of inactivity — especially important for shared clinic devices.{"\n"}
-          • The Operator is responsible for enforcing device-level safeguards (screen lock, trusted Wi-Fi, approved hardware).
+        <Section title="4. What we collect">
+          4.1 You give us directly:{"\n"}
+          • Account & identity: name, prefix, email, mobile (E.164), hashed password, profile photo, role, qualifications.{"\n"}
+          • Workspace: college / clinic name, registration number, state, seats, billing address.{"\n"}
+          • Clinical Content: diagnostic notes, intra-oral photos, radiographs, treatment plans, implant brand / system / size, surgical reports, prosthesis details, audit overrides, and PDF case reports. May include patient-identified PHI.{"\n"}
+          • Uploaded attachments: PDFs, images, documents. Text is auto-extracted from PDFs to power AI search.{"\n"}
+          • Communications: Chat messages, Forum posts, support tickets, feedback.{"\n"}
+          • Payment data: billing contact, GSTIN, payment method tokens. Card numbers / UPI IDs are processed by Stripe and never stored on our servers.{"\n\n"}
+          4.2 We collect automatically:{"\n"}
+          • Device & usage data, crash logs, screen-view events, click events.{"\n"}
+          • Authentication telemetry (login attempts, sessions, auto-logout, IP, device fingerprint).{"\n"}
+          • Audit logs (HIPAA-aligned): every PHI view / edit / export / PDF download / role change / safety override. Retention: 6 years minimum.{"\n"}
+          • Cookies & local storage on web (session, CSRF, theme, last-active timestamp). See our Cookie Notice.{"\n\n"}
+          4.3 From third parties:{"\n"}
+          • SSO (Google / Microsoft / Apple) — name, email, photo per scopes you approve.{"\n"}
+          • OTP delivery providers — delivery status.{"\n"}
+          • Email & push providers — delivery telemetry, device tokens.{"\n\n"}
+          4.4 We do NOT collect:{"\n"}
+          • Biometrics (Aadhaar, fingerprint, face) for authentication.{"\n"}
+          • Background GPS location.{"\n"}
+          • Contacts, SMS, or call logs.{"\n"}
+          • We never sell your data — to anyone, ever.
         </Section>
 
-        <Section title="5. Third-Party Services">
-          The App integrates with the following third parties solely for delivering core features:{"\n"}
-          • OpenAI API — for AI-assisted clinical summaries. Only de-identified text is transmitted.{"\n"}
-          • Expo / EAS — for application delivery and over-the-air updates.{"\n"}
-          These providers act as data processors and are bound by their own privacy terms.
+        <Section title="5. How we use your information">
+          • Provide and maintain the Service (account, cases, PDFs).{"\n"}
+          • Clinical decision support (bridge / cantilever detection, biological safety, AI explanations).{"\n"}
+          • Authentication & security (password hashing, OTP, 15-min auto-logout, brute-force protection, audit logs).{"\n"}
+          • Customer support and bug investigation.{"\n"}
+          • Service improvements via aggregated, de-identified analytics.{"\n"}
+          • Legal & regulatory compliance (subpoenas, tax filing, medical record retention).{"\n"}
+          • Billing, payments, and GST invoicing.{"\n"}
+          • Marketing communications (only with your consent; you can opt out anytime).{"\n\n"}
+          We do NOT use Clinical Content (PHI) to train any general-purpose AI model. AI features are stateless calls to OpenAI / Anthropic / Google with no training opt-in.
         </Section>
 
-        <Section title="6. Data Sharing & Access">
-          Patient data is only visible to authorized Users assigned to the case — typically the treating clinician (student or practitioner), their supervising faculty or senior dentist, the implant in-charge or practice owner, and designated administrative staff. We do not share identifiable patient data outside your institution or clinic without explicit consent or a legal obligation. Inter-clinic or inter-institutional sharing, if enabled in a future multi-tenant release, will always require written consent from the Operator and the patient.
+        <Section title="6. Sharing & sub-processors">
+          Within your workspace, others see data per the role-based access control matrix. Workspace data is fully tenant-scoped — a clinic never sees a college's data and vice versa.{"\n\n"}
+          Our sub-processors (under written DPAs):{"\n"}
+          • MongoDB / managed database — primary database{"\n"}
+          • Object storage (S3-compatible) — attachments, images{"\n"}
+          • Google Workspace SMTP — transactional email{"\n"}
+          • Twilio Verify / MSG91 — mobile-OTP{"\n"}
+          • Stripe — payments & subscriptions{"\n"}
+          • OpenAI / Anthropic / Google (via Emergent LLM key) — AI prompts (anonymised where possible){"\n"}
+          • Apple APNs, Google FCM — push notifications{"\n"}
+          • Sentry — crash & error monitoring{"\n"}
+          • Expo Application Services — mobile build & OTA delivery{"\n\n"}
+          We may also disclose data if required by law, in connection with a merger or acquisition (with notice), or as fully de-identified, aggregated statistics. We will never share plaintext passwords, card numbers, or patient PHI with advertisers / data brokers.
         </Section>
 
-        <Section title="7. Your Rights">
-          Users may request access to, correction of, or deletion of their account data by contacting their Operator administrator. Patient data retention follows the Operator's clinical records policy and applicable law (for example, Indian Dental Council record-retention rules, GDPR where applicable, or HIPAA for US deployments).
+        <Section title="7. International transfers">
+          Implanr is operated from India. If you access the Service from outside India, your data will be transferred to and processed on servers in India / our region. Where required, we use Standard Contractual Clauses or equivalent safeguards under DPDP § 16 and GDPR.
         </Section>
 
-        <Section title="8. Children's Privacy">
-          The App is intended for use by clinical professionals, students, and support staff. It is not directed at, and does not knowingly collect data from, persons under 16 acting on their own behalf. Paediatric patient data entered by a qualified clinician is treated with the same safeguards as adult patient data.
+        <Section title="8. AI processing of your data">
+          Implanr uses third-party LLM providers via the Emergent Universal LLM integration to power "Ask Implanr", implant recommendations, and explainable suggestions.{"\n\n"}
+          • We send only the minimum context needed.{"\n"}
+          • LLM providers have contractually agreed not to train on our prompts and to delete prompts within 30 days.{"\n"}
+          • AI suggestions are clinical decision support, not a substitute for professional judgment.{"\n"}
+          • You can disable AI features at Settings → AI Features → Off.
         </Section>
 
-        <Section title="9. Regional Compliance">
-          • India: compliant with the Digital Personal Data Protection Act, 2023 and Dental Council of India record-keeping guidelines.{"\n"}
-          • European Economic Area / UK: compliant with GDPR Article 6(1)(f) legitimate interest and Article 9(2)(h) healthcare provisions.{"\n"}
-          • United States: when deployed by covered entities, a Business Associate Agreement is required with the hosting provider to ensure HIPAA compliance.{"\n"}
-          The Operator is responsible for confirming the App's suitability under local law before deployment.
+        <Section title="9. Data retention">
+          • Active account & profile: while active.{"\n"}
+          • Clinical Content & case PDFs: per the Customer's medical record policy; default 10 years (Indian convention) and 6 years minimum where HIPAA applies.{"\n"}
+          • Audit logs: 6 years minimum.{"\n"}
+          • Authentication telemetry: 18 months.{"\n"}
+          • Crash logs / device telemetry: 90 days.{"\n"}
+          • Backups: 35 days rolling, encrypted.{"\n"}
+          • Deleted account residual data: anonymised within 90 days of deletion request; backups expire within 35 days thereafter.
         </Section>
 
-        <Section title="10. Changes to This Policy">
-          We may update this Privacy Policy from time to time. Material changes will be highlighted in the App. Continued use after the effective date constitutes acceptance of the revised policy.
+        <Section title="10. Security measures">
+          • TLS 1.2+ in transit; AES-256 at rest.{"\n"}
+          • Role-based access; least-privilege; MFA for engineering staff.{"\n"}
+          • 15-minute inactivity auto-logout, audit-logged.{"\n"}
+          • Screen-capture blocking on Android; iOS app-switcher blur.{"\n"}
+          • Audit logging for every PHI view / export / override.{"\n"}
+          • Quarterly third-party penetration tests; annual internal review (target SOC-2 Type II).{"\n"}
+          • Encrypted, region-redundant backups; 35-day rolling retention.{"\n"}
+          • CERT-In incident reporting under the IT Act 2000.{"\n\n"}
+          No system is 100% secure. Report any vulnerabilities to security@implanr.com.
         </Section>
 
-        <Section title="11. Contact">
-          For questions about this Privacy Policy, Users should contact their Operator administrator — typically the Department Head (for college deployments) or the Practice Owner / Privacy Officer (for private clinic deployments).
+        <Section title="11. Your rights as a Data Principal">
+          Under DPDP Act 2023 (and GDPR / HIPAA where applicable):{"\n\n"}
+          • Access — Settings → Account → Download my data{"\n"}
+          • Correct — Settings → Profile → Edit, or contact your workspace admin{"\n"}
+          • Erase — Settings → Account → Delete account (90-day soft-delete; instant hard-delete on request){"\n"}
+          • Withdraw consent — Settings → Privacy → Manage consents, or email privacy@implanr.com{"\n"}
+          • Data portability — Settings → Account → Export data (JSON){"\n"}
+          • Nominate a representative — Settings → Account → Nominee{"\n"}
+          • Grievance redressal — grievance@implanr.com (we respond within 15 working days){"\n\n"}
+          Patients should first contact the college / clinic that holds their record. You may also lodge a complaint with the Data Protection Board of India (dpb.gov.in).
         </Section>
+
+        <Section title="12. Children's privacy">
+          Implanr is intended for licensed dental professionals, students enrolled in accredited PG/UG programmes, and clinic staff. We do not knowingly collect personal data from any individual under 18. Patient records may include data about minor patients under their parents' / lawful guardians' explicit consent obtained by the treating dentist; that consent is the Customer's responsibility under DPDP § 9.
+        </Section>
+
+        <Section title="13. Cookies">
+          The web app uses a session cookie (HttpOnly, Secure, SameSite=Strict), a CSRF token cookie, and local storage for theme and last-active timestamp (auto-logout). We do not use third-party advertising cookies, retargeting pixels, or social-media trackers. See the separate Cookie Notice for full details.
+        </Section>
+
+        <Section title="14. Changes to this policy">
+          We may update this Privacy Policy from time to time. Material changes will be notified at least 30 days in advance via in-app banner, email, and an updated effective date. Continued use after the change date constitutes acceptance.
+        </Section>
+
+        <Section title="15. Contact">
+          • Grievance Officer / DPO — grievance@implanr.com{"\n"}
+          • General privacy queries — privacy@implanr.com{"\n"}
+          • Security incidents — security@implanr.com{"\n\n"}
+          We respond to all verified requests within 15 working days (DPDP requirement).
+        </Section>
+
+        <View style={styles.linkRow}>
+          <TouchableOpacity onPress={() => router.push('/legal/cookie-notice')} data-testid="privacy-link-cookies">
+            <Text style={styles.crossLink}>View Cookie Notice ›</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/legal/terms')} data-testid="privacy-link-terms">
+            <Text style={styles.crossLink}>View Terms of Service ›</Text>
+          </TouchableOpacity>
+        </View>
 
         <TouchableOpacity onPress={() => router.back()} style={styles.closeButton} data-testid="privacy-close-btn">
           <Ionicons name="checkmark" size={18} color="#FFF" />
@@ -113,6 +194,8 @@ const styles = StyleSheet.create({
   section: { marginBottom: 18 },
   h2: { fontSize: 15, fontWeight: '700', color: '#1565C0', marginBottom: 6 },
   body: { fontSize: 13, color: '#37474F', lineHeight: 20 },
+  linkRow: { marginTop: 8, marginBottom: 4, gap: 10 },
+  crossLink: { color: '#1565C0', fontSize: 13, fontWeight: '700' },
   closeButton: {
     marginTop: 24,
     flexDirection: 'row',
