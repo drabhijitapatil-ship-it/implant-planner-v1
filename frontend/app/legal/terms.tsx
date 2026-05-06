@@ -98,7 +98,7 @@ export default function TermsScreen() {
         <Section title="11. Service levels & support">
           • Target uptime: 99.5% per calendar month, excluding scheduled maintenance and force majeure.{"\n"}
           • Maintenance windows: 48 hours' advance notice.{"\n"}
-          • Support: support@implanr.com, in-app help.{"\n"}
+          • Support: info@implanr.com, in-app help.{"\n"}
           • Response time targets — P1 (down): 1 business hour; P2 (major degradation): 4 business hours; P3 (minor): 1 business day; P4 (question): 3 business days.{"\n"}
           • Business hours: 09:30–18:30 IST, Monday to Friday, excluding national holidays.{"\n"}
           • No financial SLA / service credits in standard plans; enterprise SLAs on request.
@@ -152,15 +152,15 @@ export default function TermsScreen() {
           • Severability: if any provision is invalid, the rest remains in full force.{"\n"}
           • No waiver: failure to enforce is not a waiver of future enforcement.{"\n"}
           • Assignment: you may not assign without our written consent. We may assign to an affiliate or in connection with a merger / acquisition / sale of assets.{"\n"}
-          • Notices: to you via email or in-app banner; to us at legal@implanr.com.{"\n"}
+          • Notices: to you via email or in-app banner; to us at admin@implanr.com.{"\n"}
           • Independent contractors. No partnership, joint venture, agency, or employment relationship is created.
         </Section>
 
         <Section title="20. Contact">
-          • Legal & contracts — legal@implanr.com{"\n"}
+          • Legal & contracts — admin@implanr.com{"\n"}
           • Privacy & DPDP — admin@implanr.com{"\n"}
           • Security incidents — admin@implanr.com{"\n"}
-          • Customer support — support@implanr.com
+          • Customer support — info@implanr.com
         </Section>
 
         <View style={styles.linkRow}>

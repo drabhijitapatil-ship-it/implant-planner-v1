@@ -296,7 +296,7 @@ Annex I (Parties), Annex II (Description of transfer), Annex III (Technical and 
 
 ## 15. Execution
 
-This DPA is incorporated into and forms part of the Terms. By accepting the Terms or continuing to use the Service after the effective date, the Controller is deemed to have accepted this DPA. A Controller-signed copy is available on request to **[legal@implanr.com]**.
+This DPA is incorporated into and forms part of the Terms. By accepting the Terms or continuing to use the Service after the effective date, the Controller is deemed to have accepted this DPA. A Controller-signed copy is available on request to **[admin@implanr.com]**.
 
 ---
 

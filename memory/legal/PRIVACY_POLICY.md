@@ -193,7 +193,7 @@ Under the DPDP Act 2023, and to the extent applicable to you under GDPR / HIPAA 
 | **Access** your personal data | Settings → Account → Download my data |
 | **Correct** inaccurate data | Settings → Profile → Edit, or contact your workspace admin |
 | **Erase** your account & data | Settings → Account → Delete account (90-day soft-delete; instant hard-delete on request) |
-| **Withdraw consent** | Settings → Privacy → Manage consents; or email **[privacy@implanr.com]** |
+| **Withdraw consent** | Settings → Privacy → Manage consents; or email **[admin@implanr.com]** |
 | **Data portability** | Settings → Account → Export data (JSON) |
 | **Nominate** a representative for your data after death / incapacity | Settings → Account → Nominee |
 | **Grievance redressal** | Email **[admin@implanr.com]**; we respond within **15 working days**. |
@@ -206,7 +206,7 @@ You may also lodge a complaint with the **Data Protection Board of India** at th
 
 ## 12. Children's privacy
 
-Implanr is intended for licensed dental professionals, students enrolled in accredited PG/UG programmes, and clinic staff. We do not knowingly collect personal data from any individual under 18. If you believe a child has created an account, contact **[privacy@implanr.com]** and we will delete the account within 7 working days.
+Implanr is intended for licensed dental professionals, students enrolled in accredited PG/UG programmes, and clinic staff. We do not knowingly collect personal data from any individual under 18. If you believe a child has created an account, contact **[admin@implanr.com]** and we will delete the account within 7 working days.
 
 Patient records may include data about minor patients under their parents' / lawful guardians' explicit consent obtained by the treating dentist; that consent is the Customer's responsibility under the DPDP Act § 9.
 
@@ -239,7 +239,7 @@ For any questions, requests, or complaints regarding privacy or this policy:
   [Name]
   Email: **[admin@implanr.com]**
   Address: [Full postal address]
-- **General privacy queries:** **[privacy@implanr.com]**
+- **General privacy queries:** **[admin@implanr.com]**
 - **Security incidents:** **[admin@implanr.com]**
 
 We respond to all verified requests within **15 working days** (DPDP requirement).
