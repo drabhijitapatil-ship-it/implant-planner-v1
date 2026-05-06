@@ -101,7 +101,7 @@ export default function CookieNoticeScreen() {
         </Section>
 
         <Section title="14. Contact">
-          For questions about cookies or this Notice, please contact your workspace administrator or write to privacy@implanr.com.
+          For questions about cookies or this Notice, please contact your workspace administrator or write to admin@implanr.com.
         </Section>
 
         <TouchableOpacity onPress={() => router.back()} style={styles.closeButton} data-testid="cookie-close-btn">

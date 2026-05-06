@@ -155,7 +155,7 @@ We may update this Cookie Notice from time to time. Material changes will be hig
 
 For questions about cookies or this Notice:
 
-- **Privacy enquiries:** **[privacy@implanr.com]**
+- **Privacy enquiries:** **[admin@implanr.com]**
 - **Grievance Officer:** **[admin@implanr.com]**
 - **Postal address:** [Full postal address]
 

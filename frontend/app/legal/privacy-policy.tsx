@@ -125,7 +125,7 @@ export default function PrivacyPolicyScreen() {
           • Access — Settings → Account → Download my data{"\n"}
           • Correct — Settings → Profile → Edit, or contact your workspace admin{"\n"}
           • Erase — Settings → Account → Delete account (90-day soft-delete; instant hard-delete on request){"\n"}
-          • Withdraw consent — Settings → Privacy → Manage consents, or email privacy@implanr.com{"\n"}
+          • Withdraw consent — Settings → Privacy → Manage consents, or email admin@implanr.com{"\n"}
           • Data portability — Settings → Account → Export data (JSON){"\n"}
           • Nominate a representative — Settings → Account → Nominee{"\n"}
           • Grievance redressal — admin@implanr.com (we respond within 15 working days){"\n\n"}
@@ -146,7 +146,7 @@ export default function PrivacyPolicyScreen() {
 
         <Section title="15. Contact">
           • Grievance Officer / DPO — admin@implanr.com{"\n"}
-          • General privacy queries — privacy@implanr.com{"\n"}
+          • General privacy queries — admin@implanr.com{"\n"}
           • Security incidents — admin@implanr.com{"\n\n"}
           We respond to all verified requests within 15 working days (DPDP requirement).
         </Section>

@@ -146,7 +146,7 @@ The Service integrates with third-party services such as Google Workspace SMTP, 
 
 - **Target uptime:** 99.5% per calendar month, excluding scheduled maintenance and force majeure.
 - **Maintenance windows:** notified at least 48 hours in advance via email and in-app banner.
-- **Support channels:** email **[support@implanr.com]**, in-app help.
+- **Support channels:** email **[info@implanr.com]**, in-app help.
 - **Response time targets:**
   - P1 (Service down for all users) — 1 business hour
   - P2 (Major feature degraded) — 4 business hours
@@ -244,7 +244,7 @@ If you do not agree to the new Terms, you may cancel your subscription before th
 - **Severability.** If any provision is held invalid or unenforceable, the rest remains in full force.
 - **No waiver.** A failure to enforce any provision is not a waiver of future enforcement.
 - **Assignment.** You may not assign these Terms without our prior written consent. We may assign these Terms to an affiliate or in connection with a merger, acquisition, or sale of assets.
-- **Notices.** Notices to you may be given via email to your registered address or via in-app banner. Notices to us must be sent to **[legal@implanr.com]** with a copy to our registered office.
+- **Notices.** Notices to you may be given via email to your registered address or via in-app banner. Notices to us must be sent to **[admin@implanr.com]** with a copy to our registered office.
 - **Independent contractors.** The parties are independent contractors. Nothing creates a partnership, joint venture, agency, or employment relationship.
 - **Headings.** Headings are for convenience only and do not affect interpretation.
 
@@ -252,10 +252,10 @@ If you do not agree to the new Terms, you may cancel your subscription before th
 
 ## 19. Contact
 
-- **Legal & contracts:** **[legal@implanr.com]**
+- **Legal & contracts:** **[admin@implanr.com]**
 - **Privacy & DPDP:** **[admin@implanr.com]**
 - **Security incidents:** **[admin@implanr.com]**
-- **Customer support:** **[support@implanr.com]**
+- **Customer support:** **[info@implanr.com]**
 - **Postal address:** [Full registered office address]
 
 ---
