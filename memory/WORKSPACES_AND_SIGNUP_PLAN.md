@@ -90,8 +90,9 @@ Three large tiles instead of two:
 |---|---|---|
 | Chief Dentist / Owner / Admin | Max 2 | Full admin (= Implant In-Charge) |
 | Dentist / Consultant *(employed)* | Unlimited | Schedule + edit own/under-them; needs Chief Dentist approval (= Supervisor in college). **Asterisk in original doc clarified**: dentists self-approve their own cases; counter-sign needed only for cases assigned to them by another dentist. |
-| Auxiliary - Clinical (Hygienist / Nurse) | Unlimited | Same as college Nurse |
-| **Auxiliary - Front-Desk (Receptionist)** *(new split — split from generic Auxiliary)* | Unlimited | Register patients, collect payment, see Phase 1 patient-info section. **Cannot** mark instruments autoclaved or upload consent forms. |
+| **Auxiliary — Dental Assistant** *(new — Feb 2026)* | Unlimited | Same rights as Nurse. Upload consent forms, mark instruments autoclaved, view Phase 1 only. |
+| **Auxiliary — Nurse** *(new split — Feb 2026)* | Unlimited | Same rights as Dental Assistant. Upload consent forms, mark instruments autoclaved, view Phase 1 only. |
+| **Auxiliary — Dental Receptionist** *(new — Feb 2026)* | Unlimited | Register patients, collect payment, **see SCHEDULED cases only and only up to Phase 1** (no Phase 2/3/4 visibility, no draft/in-planning cases). **Cannot** mark instruments autoclaved or upload consent forms. |
 
 ### Freelancer Consultant *(new)*
 - Single user; no role hierarchy.
