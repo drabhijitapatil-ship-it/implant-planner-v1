@@ -35,7 +35,7 @@ export default function TermsScreen() {
           • You must be at least 18 and a licensed dental professional, an accredited dental student, or staff authorised by a Customer.{"\n"}
           • You must provide accurate information at signup and keep it updated.{"\n"}
           • You are responsible for keeping your password / OTP / SSO credentials confidential and for activity under your account.{"\n"}
-          • Notify security@implanr.com immediately of any suspected unauthorised access.{"\n"}
+          • Notify admin@implanr.com immediately of any suspected unauthorised access.{"\n"}
           • Customer admins (Implant In-Charge / Chief Dentist) manage seat assignments, role changes, and offboarding for their workspace.{"\n"}
           • We may require mobile-OTP, email verification, or SSO at signup; failure to verify may result in account suspension.
         </Section>
@@ -68,7 +68,7 @@ export default function TermsScreen() {
         <Section title="6. Customer Content & Clinical Content">
           • The Customer retains all rights, title, and interest in Customer Content. We claim no ownership.{"\n"}
           • We require only a limited licence to host, transmit, process, display, and back up Customer Content as needed to provide the Service.{"\n"}
-          • The Customer is solely responsible for: valid patient consent for use of Implanr; the clinical correctness of all Clinical Content; compliance with the Indian Medical Council ethics regulations, DPDP Act 2023, IT Act 2000, and any applicable foreign healthcare laws (HIPAA, GDPR); and ensuring End Users follow these Terms.{"\n"}
+          • The Customer is solely responsible for: valid patient consent for use of Implanr; the clinical correctness of all Clinical Content; compliance with the National Dental Commission (NDC) regulations, DPDP Act 2023, IT Act 2000, and any applicable foreign healthcare laws (HIPAA, GDPR); and ensuring End Users follow these Terms.{"\n"}
           • Backups: 35-day encrypted rolling retention. Customer admins may export data anytime via Settings → Account → Export.{"\n"}
           • We may remove Customer Content that we reasonably believe violates these Terms or applicable law.
         </Section>
@@ -158,8 +158,8 @@ export default function TermsScreen() {
 
         <Section title="20. Contact">
           • Legal & contracts — legal@implanr.com{"\n"}
-          • Privacy & DPDP — grievance@implanr.com{"\n"}
-          • Security incidents — security@implanr.com{"\n"}
+          • Privacy & DPDP — admin@implanr.com{"\n"}
+          • Security incidents — admin@implanr.com{"\n"}
           • Customer support — support@implanr.com
         </Section>
 

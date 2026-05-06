@@ -20,9 +20,9 @@ export default function PrivacyPolicyScreen() {
 
         <Section title="1. Who we are">
           This Privacy Policy describes how Implanr ("we", "us") collects, uses, stores, shares, and protects your information when you use the Implanr mobile application, web application, or any related services (the "Service"). We are the Data Fiduciary under India's Digital Personal Data Protection Act, 2023 ("DPDP Act") for personal data we determine the purpose and means of processing. Where we process Protected Health Information ("PHI") on behalf of a dental college or clinic, that organisation is the controller and we act as a data processor.{"\n\n"}
-          Grievance Officer: grievance@implanr.com{"\n"}
+          Grievance Officer: admin@implanr.com{"\n"}
           General contact: info@implanr.com{"\n"}
-          Security incidents: security@implanr.com
+          Security incidents: admin@implanr.com
         </Section>
 
         <Section title="2. Scope">
@@ -117,7 +117,7 @@ export default function PrivacyPolicyScreen() {
           • Quarterly third-party penetration tests; annual internal review (target SOC-2 Type II).{"\n"}
           • Encrypted, region-redundant backups; 35-day rolling retention.{"\n"}
           • CERT-In incident reporting under the IT Act 2000.{"\n\n"}
-          No system is 100% secure. Report any vulnerabilities to security@implanr.com.
+          No system is 100% secure. Report any vulnerabilities to admin@implanr.com.
         </Section>
 
         <Section title="11. Your rights as a Data Principal">
@@ -128,7 +128,7 @@ export default function PrivacyPolicyScreen() {
           • Withdraw consent — Settings → Privacy → Manage consents, or email privacy@implanr.com{"\n"}
           • Data portability — Settings → Account → Export data (JSON){"\n"}
           • Nominate a representative — Settings → Account → Nominee{"\n"}
-          • Grievance redressal — grievance@implanr.com (we respond within 15 working days){"\n\n"}
+          • Grievance redressal — admin@implanr.com (we respond within 15 working days){"\n\n"}
           Patients should first contact the college / clinic that holds their record. You may also lodge a complaint with the Data Protection Board of India (dpb.gov.in).
         </Section>
 
@@ -145,9 +145,9 @@ export default function PrivacyPolicyScreen() {
         </Section>
 
         <Section title="15. Contact">
-          • Grievance Officer / DPO — grievance@implanr.com{"\n"}
+          • Grievance Officer / DPO — admin@implanr.com{"\n"}
           • General privacy queries — privacy@implanr.com{"\n"}
-          • Security incidents — security@implanr.com{"\n\n"}
+          • Security incidents — admin@implanr.com{"\n\n"}
           We respond to all verified requests within 15 working days (DPDP requirement).
         </Section>
 

@@ -11,9 +11,9 @@
 This Privacy Policy describes how **[Legal Entity Name, e.g., "Implanr Technologies Private Limited"]** ("**Implanr**", "**we**", "**us**", "**our**") collects, uses, stores, shares, and protects your information when you use the **Implanr** mobile application, web application, or any related services (collectively, the "**Service**").
 
 - **Registered address:** [Full registered office address, India]
-- **Grievance Officer / Data Protection Officer:** [Name], reachable at **[grievance@implanr.com]**, postal address as above.
+- **Grievance Officer / Data Protection Officer:** [Name], reachable at **[admin@implanr.com]**, postal address as above.
 - **General contact:** **[info@implanr.com]**
-- **Security incident reporting:** **[security@implanr.com]**
+- **Security incident reporting:** **[admin@implanr.com]**
 
 We are the **Data Fiduciary** under India's Digital Personal Data Protection Act, 2023 ("**DPDP Act**") for personal data we determine the purpose and means of processing. Where we process Protected Health Information ("**PHI**") on behalf of a dental college or clinic, that organisation is the controller and we act as a processor / data processor under their instructions.
 
@@ -38,7 +38,7 @@ It does **not** apply to third-party websites, services, or applications that in
 | Dental Clinic | Data Processor (PHI) | Data Controller / Fiduciary for staff and patient records they create. |
 | End user (dentist / student / staff / patient) | Data Fiduciary for the account profile we create for you | Data Principal whose rights this policy describes. |
 
-When PHI is involved, the dental college or clinic ("**Customer**") is responsible for obtaining valid patient consent for use of the Service and for the lawful basis of processing under DPDP, the Indian Medical Council ethics regulations, and any applicable healthcare law.
+When PHI is involved, the dental college or clinic ("**Customer**") is responsible for obtaining valid patient consent for use of the Service and for the lawful basis of processing under DPDP, the National Dental Commission (NDC) regulations, and any applicable healthcare law.
 
 ---
 
@@ -180,7 +180,7 @@ We implement administrative, physical, and technical safeguards aligned with HIP
 - **Incident response** — 72-hour breach notification to the Indian Computer Emergency Response Team (CERT-In) per the IT Act 2000 and DPDP § 8(6).
 - **Secure development** — code review on every change, secrets in environment variables only, no secrets in git.
 
-No system is 100% secure. We cannot guarantee absolute security; if you discover a vulnerability, please email **[security@implanr.com]**.
+No system is 100% secure. We cannot guarantee absolute security; if you discover a vulnerability, please email **[admin@implanr.com]**.
 
 ---
 
@@ -196,7 +196,7 @@ Under the DPDP Act 2023, and to the extent applicable to you under GDPR / HIPAA 
 | **Withdraw consent** | Settings → Privacy → Manage consents; or email **[privacy@implanr.com]** |
 | **Data portability** | Settings → Account → Export data (JSON) |
 | **Nominate** a representative for your data after death / incapacity | Settings → Account → Nominee |
-| **Grievance redressal** | Email **[grievance@implanr.com]**; we respond within **15 working days**. |
+| **Grievance redressal** | Email **[admin@implanr.com]**; we respond within **15 working days**. |
 
 If you are a **patient** whose data is held in a college's or clinic's workspace, please first contact that organisation. If they do not respond satisfactorily, contact us; we will assist in resolving the issue per the DPDP grievance ladder.
 
@@ -237,10 +237,10 @@ For any questions, requests, or complaints regarding privacy or this policy:
 
 - **Grievance Officer / Data Protection Officer**
   [Name]
-  Email: **[grievance@implanr.com]**
+  Email: **[admin@implanr.com]**
   Address: [Full postal address]
 - **General privacy queries:** **[privacy@implanr.com]**
-- **Security incidents:** **[security@implanr.com]**
+- **Security incidents:** **[admin@implanr.com]**
 
 We respond to all verified requests within **15 working days** (DPDP requirement).
 

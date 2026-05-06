@@ -28,7 +28,7 @@ Please read these Terms of Service ("**Terms**") carefully. They govern your acc
 
 ### 2.2 Account security
 - You are responsible for maintaining the confidentiality of your password / OTP / SSO credentials and for all activities that occur under your account.
-- You must notify **[security@implanr.com]** immediately of any unauthorised access or suspected breach.
+- You must notify **[admin@implanr.com]** immediately of any unauthorised access or suspected breach.
 - We are not liable for any loss or damage arising from your failure to comply with this section.
 
 ### 2.3 Workspaces & roles
@@ -91,7 +91,7 @@ We may suspend or terminate accounts that violate this section, with or without 
 - The Customer is solely responsible for:
   - Obtaining valid patient consent for use of Implanr to manage the patient's data.
   - The accuracy and clinical correctness of all Clinical Content.
-  - Compliance with the Indian Medical Council ethics regulations, the DPDP Act 2023, the Indian IT Act 2000 (and SPDI Rules 2011), and any applicable foreign healthcare laws (e.g., HIPAA, GDPR).
+  - Compliance with the National Dental Commission (NDC) regulations, the DPDP Act 2023, the Indian IT Act 2000 (and SPDI Rules 2011), and any applicable foreign healthcare laws (e.g., HIPAA, GDPR).
   - Ensuring End Users follow these Terms and the Customer's internal policies.
 
 ### 5.3 Backups & data export
@@ -253,8 +253,8 @@ If you do not agree to the new Terms, you may cancel your subscription before th
 ## 19. Contact
 
 - **Legal & contracts:** **[legal@implanr.com]**
-- **Privacy & DPDP:** **[grievance@implanr.com]**
-- **Security incidents:** **[security@implanr.com]**
+- **Privacy & DPDP:** **[admin@implanr.com]**
+- **Security incidents:** **[admin@implanr.com]**
 - **Customer support:** **[support@implanr.com]**
 - **Postal address:** [Full registered office address]
 
