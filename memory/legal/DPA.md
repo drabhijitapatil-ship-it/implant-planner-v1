@@ -264,7 +264,7 @@ This DPA is governed by the laws of India and subject to the dispute-resolution 
 - Automated CI dependency scans on every commit.
 - Quarterly third-party penetration test.
 - Annual SOC-2-style internal review (target SOC-2 Type II certification within 18 months of GA).
-- Coordinated vulnerability disclosure programme: **[security@implanr.com]**.
+- Coordinated vulnerability disclosure programme: **[admin@implanr.com]**.
 
 ### A.5 Personnel
 - Mandatory data-protection training on hire and annually.
