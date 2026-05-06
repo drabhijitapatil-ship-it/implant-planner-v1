@@ -6,7 +6,11 @@
 > - Reviewer notes & enhancements (Implanr engineering)
 >
 > **Status: REFERENCE — not yet implemented.** Build will start when explicitly requested.
-> **First implementation slice approved by user**: Consultant profile + referral flow (Phase 1 hand-off).
+>
+> **V1 LAUNCH SCOPE (Feb 2026, per user decision):**
+> - Two workspace types only: **Dental College** + **Dental Clinic**.
+> - **Freelancer Consultant workspace + referral flow are DEFERRED to V2** (post-launch update).
+> - Sections § 5, § 6 (and all consultant references in § 1, § 2, § 3) remain in this doc as the V2 design reference but must NOT be built in V1.
 
 ---
 
