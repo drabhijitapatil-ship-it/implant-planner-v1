@@ -1560,7 +1560,7 @@ export default function NewProcedureScreen() {
               {/* ── Atrophy Assessment (Full-Arch only) ── */}
               <Text style={[styles.subSectionTitle, { marginTop: 18 }]}>Atrophy Assessment</Text>
               <Text style={{ fontSize: 12, color: '#5C6BC0', marginBottom: 10, fontStyle: 'italic' }}>
-                Enter average bone height (and width) in the anterior and posterior regions for each treated arch. The class and recommended therapeutic options are computed automatically.
+                Enter average bone height and width in the anterior and posterior regions for each treated arch. The class and recommended therapeutic options are computed automatically.
               </Text>
 
               {(formData.arch === 'Maxillary' || formData.arch === 'Both') && (
