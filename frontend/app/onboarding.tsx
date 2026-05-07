@@ -10,7 +10,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, AccessibilityInfo,
 } from 'react-native';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, withDelay, withSequence,
 } from 'react-native-reanimated';
@@ -119,7 +119,7 @@ function SlideWelcome({ firstName, hero }: { firstName: string; hero: ReturnType
   return (
     <View style={styles.welcomeWrap}>
       <View style={styles.heroLogo}>
-        <Ionicons name="medkit" size={56} color="#FFF" />
+        <MaterialCommunityIcons name="tooth" size={56} color="#FFF" />
       </View>
       <View style={styles.roleChip}>
         <Ionicons name="ribbon" size={11} color="#0D47A1" />
@@ -171,7 +171,7 @@ function SlideDatabase() {
   return (
     <View style={styles.center}>
       <Text style={styles.h1}>Implant Database & Smart Selection</Text>
-      <Text style={styles.body}>30+ systems with components, datasheets, and clinical guidance.</Text>
+      <Text style={styles.body}>30+ Implant Systems with components, data sheets, and clinical guidance.</Text>
       <View style={styles.twoCol}>
         <FeatureCard
           icon="cube-outline"
@@ -179,10 +179,10 @@ function SlideDatabase() {
           tint="#1565C0"
           testID="slide-feature-database"
           bullets={[
-            '30+ implant systems indexed',
-            'Side-by-side component comparison',
-            'Manufacturer datasheets attached as PDFs',
-            'AI extracts text from datasheets for context',
+            '50+ Implant systems indexed and mapped',
+            'Side-by-Side components comparison',
+            'Implant system-specific unique features and indications',
+            'AI assistance for your questions',
           ]}
         />
         <FeatureCard
@@ -322,11 +322,14 @@ const styles = StyleSheet.create({
   body: { fontSize: 14, color: '#455A64', lineHeight: 20, textAlign: 'center', marginTop: 8, marginBottom: 18, maxWidth: 480 },
 
   footerNote: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: '#E3F2FD', paddingHorizontal: 12, paddingVertical: 8,
-    borderRadius: 999, marginTop: 18, maxWidth: '100%',
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    backgroundColor: '#E3F2FD', paddingHorizontal: 14, paddingVertical: 10,
+    borderRadius: 14, marginTop: 18, alignSelf: 'stretch', maxWidth: 480,
   },
-  footerNoteText: { fontSize: 12, color: '#0D47A1', fontWeight: '600' },
+  footerNoteText: {
+    flex: 1, flexShrink: 1, fontSize: 12, color: '#0D47A1',
+    fontWeight: '600', lineHeight: 17,
+  },
 
   subList: { width: '100%', maxWidth: 480, marginTop: 14, gap: 8 },
   subItem: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
