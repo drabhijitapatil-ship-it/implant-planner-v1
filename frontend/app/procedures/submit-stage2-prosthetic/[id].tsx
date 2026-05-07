@@ -383,7 +383,7 @@ export default function Phase4Step1Screen() {
                 data-testid="phase4-step1-notes" />
             </View>
             {user?.role !== 'implant_incharge' && (
-              <Text style={s.helperText} data-testid="phase4-step1-approval-helper">
+              <Text style={s.helperText} testID="phase4-step1-approval-helper">
                 {user?.role === 'supervisor'
                   ? 'Implant In-Charge remark will be added during approval.'
                   : 'Supervisor and In-Charge remarks added during approval.'}
