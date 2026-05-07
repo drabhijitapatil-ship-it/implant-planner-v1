@@ -1,5 +1,18 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 181 (Feb 2026) — Sibling-count chip on Home → Implant tab
+
+Extended the iter-180 "N systems" badge pattern to the Home → Implant tab. After picking a system (e.g., `Alpha Bio – NeO Internal Hex Connection`), a small light-blue chip appears next to the dropdown showing **`+7 Alpha Bio`** — surfacing how many other systems from the same manufacturer are available, exact same UX pattern as the admin Implant Database chip from iter-180.
+
+- **Pure visual indicator** (View + Text, not interactive) — avoids button-in-button DOM nesting issues on RN-Web. Tapping the dropdown row opens the full picker as before.
+- Hides automatically when the brand has only one system (no value to show "+0 …").
+- Same pill style (`#E1F5FE` background, `#0277BD` text, `#81D4FA` border).
+- Verified via code review — the chip pattern is identical to the proven iter-180 admin chip.
+- File: `/app/frontend/app/(tabs)/implant-selection.tsx` (chip View + 2 styles).
+
+---
+
+
 ## Iteration 180 (Feb 2026) — Brand count chip in Implant Database
 
 User feedback: only saw "SPI" under Alpha Bio in admin/implant-catalog and assumed the new 7 systems were missing — actually they were just hidden behind a second-level dropdown. Added a small **"N systems"** count chip inside the brand dropdown row (between brand name and chevron) so the catalog depth is visible at a glance.
