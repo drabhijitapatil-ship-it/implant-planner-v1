@@ -115,7 +115,13 @@ export default function Phase4Step2Screen() {
                 placeholder="Final observations, occlusion notes, delivery notes..."
                 multiline numberOfLines={4} data-testid="phase4-step2-notes" />
             </View>
-            <Text style={s.helperText}>Supervisor and In-Charge remarks added during approval.</Text>
+            {user?.role !== 'implant_incharge' && (
+              <Text style={s.helperText} data-testid="phase4-step2-approval-helper">
+                {user?.role === 'supervisor'
+                  ? 'Implant In-Charge remark will be added during approval.'
+                  : 'Supervisor and In-Charge remarks added during approval.'}
+              </Text>
+            )}
           </View>
 
           {/* ── Confirmation Statement ── */}

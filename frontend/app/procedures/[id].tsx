@@ -195,6 +195,14 @@ export default function ProcedureDetailScreen() {
   const [showSmartPlanner, setShowSmartPlanner] = useState(false);
   const [aiSummary, setAiSummary] = useState('');
   const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
+  // ── AI Summary editing state (Clinical + Surgical) ─────────────────
+  const [editingAiClinical, setEditingAiClinical] = useState(false);
+  const [editingAiSurgical, setEditingAiSurgical] = useState(false);
+  const [aiClinicalDraft, setAiClinicalDraft] = useState('');
+  const [aiSurgicalDraft, setAiSurgicalDraft] = useState('');
+  const [aiSavingClinical, setAiSavingClinical] = useState(false);
+  const [aiSavingSurgical, setAiSavingSurgical] = useState(false);
+  const [aiSurgicalLoading, setAiSurgicalLoading] = useState(false);
   const [aiChatVisible, setAiChatVisible] = useState(false);
   const [aiChatHistory, setAiChatHistory] = useState<any[]>([]);
   const [aiChatInput, setAiChatInput] = useState('');
@@ -364,6 +372,38 @@ export default function ProcedureDetailScreen() {
       Alert.alert('Error', error?.response?.data?.detail || 'Failed to generate Smart Planner report');
     } finally {
       setSmartPlannerLoading(false);
+    }
+  };
+
+  // ── AI Summary helpers (Clinical + Surgical) ──────────────────────
+  const generateAiSurgicalSummary = async () => {
+    setAiSurgicalLoading(true);
+    try {
+      await api.post('/ai/surgical-notes', { procedure_id: id });
+      await loadProcedure();
+    } catch (e: any) {
+      Alert.alert('Error', e?.response?.data?.detail || 'Failed to generate surgical summary');
+    } finally {
+      setAiSurgicalLoading(false);
+    }
+  };
+
+  const saveAiSummary = async (summaryType: 'case_summary' | 'surgical_notes', content: string) => {
+    const setSaving = summaryType === 'case_summary' ? setAiSavingClinical : setAiSavingSurgical;
+    setSaving(true);
+    try {
+      await api.patch(`/procedures/${id}/ai-summary`, { summary_type: summaryType, content });
+      await loadProcedure();
+      if (summaryType === 'case_summary') {
+        setEditingAiClinical(false);
+        setAiSummary('');
+      } else {
+        setEditingAiSurgical(false);
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e?.response?.data?.detail || 'Failed to save summary');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -1922,18 +1962,101 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
-        {/* AI Surgical Summary — persists after Phase 2 approval */}
-        {procedure.ai_surgical_notes && (
-          <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#3F51B5' }]} data-testid="ai-surgical-summary-section">
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <Ionicons name="sparkles" size={20} color="#3F51B5" />
-              <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#3F51B5', fontSize: 17 }]}>AI Surgical Summary</Text>
+        {/* AI Surgical Summary — Generate after Phase 2 approval; editable + persisted to PDF */}
+        {(() => {
+          const phase2Approved = ['phase2_approved','pending_stage2_surgical','stage2_surgical_approved','pending_stage2_prosthetic','stage2_prosthetic_step1_approved','pending_final_delivery','completed'].includes(procedure.status);
+          if (user?.role === 'nurse') return null;
+          if (!phase2Approved && !procedure.ai_surgical_notes) return null;
+          const hasNotes = !!procedure.ai_surgical_notes;
+          return (
+            <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#3F51B5' }]} data-testid="ai-surgical-summary-section">
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                  <Ionicons name="sparkles" size={20} color="#3F51B5" />
+                  <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#3F51B5', fontSize: 17 }]}>AI Surgical Summary</Text>
+                </View>
+                {hasNotes && !editingAiSurgical && (
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <TouchableOpacity
+                      onPress={() => { setAiSurgicalDraft(procedure.ai_surgical_notes || ''); setEditingAiSurgical(true); }}
+                      style={{ padding: 6, borderRadius: 8, backgroundColor: '#E8EAF6' }}
+                      data-testid="ai-surgical-edit-btn"
+                    >
+                      <Ionicons name="pencil" size={16} color="#3F51B5" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => Alert.alert(
+                        'Regenerate Summary',
+                        'This will replace the current AI Surgical Summary with a freshly generated one. Edits you have made will be lost. Continue?',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Regenerate', style: 'destructive', onPress: generateAiSurgicalSummary },
+                        ],
+                      )}
+                      disabled={aiSurgicalLoading}
+                      style={{ padding: 6, borderRadius: 8, backgroundColor: '#E8EAF6', opacity: aiSurgicalLoading ? 0.5 : 1 }}
+                      data-testid="ai-surgical-regenerate-btn"
+                    >
+                      {aiSurgicalLoading
+                        ? <ActivityIndicator size="small" color="#3F51B5" />
+                        : <Ionicons name="refresh" size={16} color="#3F51B5" />}
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+
+              {!hasNotes && phase2Approved && (
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#3F51B5', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 20, opacity: aiSurgicalLoading ? 0.7 : 1 }}
+                  onPress={generateAiSurgicalSummary}
+                  disabled={aiSurgicalLoading}
+                  data-testid="ai-surgical-generate-btn"
+                >
+                  {aiSurgicalLoading ? <ActivityIndicator color="#FFF" size="small" /> : <Ionicons name="sparkles" size={18} color="#FFF" />}
+                  <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '700' }}>Generate AI Surgical Summary</Text>
+                </TouchableOpacity>
+              )}
+
+              {hasNotes && !editingAiSurgical && (
+                <View style={{ backgroundColor: '#E8EAF6', borderRadius: 12, padding: 14 }}>
+                  <Text style={{ fontSize: 13, color: '#37474F', lineHeight: 20 }}>{procedure.ai_surgical_notes}</Text>
+                </View>
+              )}
+
+              {hasNotes && editingAiSurgical && (
+                <View>
+                  <TextInput
+                    style={{ borderWidth: 1.5, borderColor: '#9FA8DA', borderRadius: 10, padding: 12, fontSize: 13, backgroundColor: '#FFF', minHeight: 160, textAlignVertical: 'top', color: '#37474F', lineHeight: 20 }}
+                    value={aiSurgicalDraft}
+                    onChangeText={setAiSurgicalDraft}
+                    multiline
+                    data-testid="ai-surgical-edit-input"
+                  />
+                  <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+                    <TouchableOpacity
+                      onPress={() => { setEditingAiSurgical(false); setAiSurgicalDraft(''); }}
+                      disabled={aiSavingSurgical}
+                      style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, backgroundColor: '#ECEFF1' }}
+                      data-testid="ai-surgical-cancel-btn"
+                    >
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#546E7A' }}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => saveAiSummary('surgical_notes', aiSurgicalDraft)}
+                      disabled={aiSavingSurgical}
+                      style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, backgroundColor: '#3F51B5', opacity: aiSavingSurgical ? 0.6 : 1 }}
+                      data-testid="ai-surgical-save-btn"
+                    >
+                      {aiSavingSurgical
+                        ? <ActivityIndicator color="#FFF" size="small" />
+                        : <Text style={{ fontSize: 13, fontWeight: '700', color: '#FFF' }}>Save</Text>}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
             </View>
-            <View style={{ backgroundColor: '#E8EAF6', borderRadius: 12, padding: 14 }}>
-              <Text style={{ fontSize: 13, color: '#37474F', lineHeight: 20 }}>{procedure.ai_surgical_notes}</Text>
-            </View>
-          </View>
-        )}
+          );
+        })()}
 
         {/* Legacy Phase 2 remark (for older procedures without phase2_data) */}
         {!procedure.phase2_data && procedure.phase2_remark && (
@@ -2498,8 +2621,12 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
-        {/* ── APPROVAL COMMENT BOX (Phase 2-4 only) ── */}
-        {canApprove() && !showRejectDialog && procedure?.status !== 'pending_phase1' && (
+        {/* ── APPROVAL COMMENT BOX (Phase 2-4 only) ──
+            Hidden for Implant In-Charge on self-created cases (auto-approval flow). */}
+        {canApprove() && !showRejectDialog && procedure?.status !== 'pending_phase1'
+          && !(user?.role === 'implant_incharge'
+               && procedure.created_by_role === 'implant_incharge'
+               && user?.id === procedure.created_by_id) && (
           <View style={{ marginTop: 16, marginHorizontal: 16, backgroundColor: '#F0F4FF', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#C5CAE9' }}>
             <Text style={{ fontSize: 13, fontWeight: '600', color: '#283593', marginBottom: 6 }}>
               Your Remarks (optional)
@@ -2512,9 +2639,11 @@ export default function ProcedureDetailScreen() {
               multiline
               data-testid="approval-comment-input"
             />
-            <Text style={{ fontSize: 11, color: '#7986CB', marginTop: 4, fontStyle: 'italic' }}>
-              This comment will be visible to the student and included in the PDF.
-            </Text>
+            {user?.role !== 'implant_incharge' && (
+              <Text style={{ fontSize: 11, color: '#7986CB', marginTop: 4, fontStyle: 'italic' }}>
+                This comment will be visible to the student and included in the PDF.
+              </Text>
+            )}
           </View>
         )}
 
@@ -2660,25 +2789,66 @@ export default function ProcedureDetailScreen() {
           />
         )}
 
-        {/* AI Case Summary Card — inside ScrollView for scrollability */}
-        {aiSummary ? (
+        {/* AI Clinical Summary Card — persistent + editable + included in PDF */}
+        {(procedure.ai_case_summary || aiSummary) && !editingAiClinical ? (
           <View style={{ marginHorizontal: 16, marginBottom: 16, backgroundColor: '#E8EAF6', borderRadius: 14, padding: 16, borderLeftWidth: 4, borderLeftColor: '#3F51B5' }} data-testid="ai-summary-card">
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Ionicons name="sparkles" size={16} color="#3F51B5" />
                 <Text style={{ fontSize: 14, fontWeight: '700', color: '#3F51B5' }}>AI Clinical Summary</Text>
               </View>
-              <TouchableOpacity
-                onPress={() => setAiSummary('')}
-                style={{ padding: 4 }}
-                data-testid="ai-summary-close"
-              >
-                <Ionicons name="close-circle" size={24} color="#7986CB" />
-              </TouchableOpacity>
+              {user?.role !== 'nurse' && procedure.ai_case_summary && (
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <TouchableOpacity
+                    onPress={() => { setAiClinicalDraft(procedure.ai_case_summary || ''); setEditingAiClinical(true); }}
+                    style={{ padding: 4 }}
+                    data-testid="ai-clinical-edit-btn"
+                  >
+                    <Ionicons name="pencil" size={18} color="#3F51B5" />
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
-            <Text style={{ fontSize: 13, color: '#37474F', lineHeight: 20 }}>{aiSummary}</Text>
+            <Text style={{ fontSize: 13, color: '#37474F', lineHeight: 20 }}>{procedure.ai_case_summary || aiSummary}</Text>
           </View>
         ) : null}
+
+        {/* AI Clinical Summary — edit mode */}
+        {editingAiClinical && (
+          <View style={{ marginHorizontal: 16, marginBottom: 16, backgroundColor: '#E8EAF6', borderRadius: 14, padding: 16, borderLeftWidth: 4, borderLeftColor: '#3F51B5' }} data-testid="ai-summary-edit-card">
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <Ionicons name="sparkles" size={16} color="#3F51B5" />
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#3F51B5' }}>Edit AI Clinical Summary</Text>
+            </View>
+            <TextInput
+              style={{ borderWidth: 1.5, borderColor: '#9FA8DA', borderRadius: 10, padding: 12, fontSize: 13, backgroundColor: '#FFF', minHeight: 200, textAlignVertical: 'top', color: '#37474F', lineHeight: 20 }}
+              value={aiClinicalDraft}
+              onChangeText={setAiClinicalDraft}
+              multiline
+              data-testid="ai-clinical-edit-input"
+            />
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+              <TouchableOpacity
+                onPress={() => { setEditingAiClinical(false); setAiClinicalDraft(''); }}
+                disabled={aiSavingClinical}
+                style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, backgroundColor: '#ECEFF1' }}
+                data-testid="ai-clinical-cancel-btn"
+              >
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#546E7A' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => saveAiSummary('case_summary', aiClinicalDraft)}
+                disabled={aiSavingClinical}
+                style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, backgroundColor: '#3F51B5', opacity: aiSavingClinical ? 0.6 : 1 }}
+                data-testid="ai-clinical-save-btn"
+              >
+                {aiSavingClinical
+                  ? <ActivityIndicator color="#FFF" size="small" />
+                  : <Text style={{ fontSize: 13, fontWeight: '700', color: '#FFF' }}>Save</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         {/* Edit History Footer — tappable, opens full timeline modal. Visible to all viewers including students. */}
         {procedure.last_edited_by && procedure.last_edited_at && (
@@ -2890,8 +3060,8 @@ export default function ProcedureDetailScreen() {
                 onPress={async () => {
                   setAiSummaryLoading(true);
                   try {
-                    const res = await api.post('/ai/case-summary', { procedure_id: procedure.id || procedure._id });
-                    setAiSummary(res.data.summary);
+                    await api.post('/ai/case-summary', { procedure_id: procedure.id || procedure._id });
+                    await loadProcedure();
                   } catch (e: any) {
                     Alert.alert('Error', e.response?.data?.detail || 'Failed to generate summary');
                   } finally { setAiSummaryLoading(false); }
@@ -2904,7 +3074,7 @@ export default function ProcedureDetailScreen() {
                 ) : (
                   <>
                     <Ionicons name="sparkles" size={14} color="#FFF" />
-                    <Text style={styles.barButtonTextCompact}>AI SUMMARY</Text>
+                    <Text style={styles.barButtonTextCompact}>{procedure.ai_case_summary ? 'REGEN AI' : 'AI SUMMARY'}</Text>
                   </>
                 )}
               </TouchableOpacity>

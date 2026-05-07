@@ -5467,6 +5467,57 @@ Write a concise operative note (4-6 sentences) in standard surgical documentatio
     return {"notes": response}
 
 
+@api_router.patch("/procedures/{procedure_id}/ai-summary")
+async def update_ai_summary(procedure_id: str, request: Request, current_user: dict = Depends(get_current_user)):
+    """Update an AI-generated summary (case_summary or surgical_notes).
+    Any logged-in non-nurse user with case access may edit.
+    Edits made by anyone other than the case owner are recorded in edit_log."""
+    if current_user.get("role") == "nurse":
+        raise HTTPException(status_code=403, detail="Read-only access")
+
+    body = await request.json()
+    summary_type = body.get("summary_type")
+    content = body.get("content", "")
+    if summary_type not in ("case_summary", "surgical_notes"):
+        raise HTTPException(status_code=400, detail="Invalid summary_type")
+    if not isinstance(content, str):
+        raise HTTPException(status_code=400, detail="content must be a string")
+
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    field_name = "ai_case_summary" if summary_type == "case_summary" else "ai_surgical_notes"
+    old_value = proc.get(field_name) or ""
+    if old_value == content:
+        return {"ok": True, "unchanged": True, field_name: content}
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    editor_name = current_user.get("name") or current_user.get("_id")
+    editor_role = current_user.get("role", "")
+    editor_id = current_user.get("_id")
+
+    # Owner = case student or original creator. Non-owner edits get logged.
+    is_owner = (editor_id == proc.get("student_id")) or (editor_id == proc.get("created_by_id"))
+
+    update_set: dict = {field_name: content, "updated_at": now_iso}
+    update_op: dict = {"$set": update_set}
+    if not is_owner:
+        update_set["last_edited_by"] = editor_name
+        update_set["last_edited_at"] = now_iso
+        update_op["$push"] = {"edit_log": {
+            "field": field_name,
+            "old_value": old_value,
+            "new_value": content,
+            "edited_by": editor_name,
+            "edited_by_role": editor_role,
+            "edited_at": now_iso,
+        }}
+
+    await db.procedures.update_one({"_id": ObjectId(procedure_id)}, update_op)
+    return {"ok": True, field_name: content}
+
+
 class AIChatMessage(BaseModel):
     procedure_id: str
     message: str
@@ -6425,6 +6476,22 @@ async def generate_case_report(
     phase4_date = procedure.get("treatment_completed_at")
     if phase4_date:
         add_field("Treatment Completed", phase4_date.isoformat() if isinstance(phase4_date, datetime) else str(phase4_date))
+
+    # ── AI-Generated Summaries (editable; included verbatim in PDF) ─────
+    ai_clinical = (procedure.get("ai_case_summary") or "").strip()
+    ai_surgical = (procedure.get("ai_surgical_notes") or "").strip()
+    if ai_clinical or ai_surgical:
+        pdf.add_page()
+        if ai_clinical:
+            add_section_title("AI Clinical Summary", 63, 81, 181)
+            pdf.set_font("Helvetica", "", 10)
+            pdf.multi_cell(0, 6, safe(ai_clinical))
+            pdf.ln(6)
+        if ai_surgical:
+            add_section_title("AI Surgical Summary", 63, 81, 181)
+            pdf.set_font("Helvetica", "", 10)
+            pdf.multi_cell(0, 6, safe(ai_surgical))
+            pdf.ln(6)
 
     # ── Final Page: Faculty Remarks & Confirmation ───────────
     pdf.add_page()
