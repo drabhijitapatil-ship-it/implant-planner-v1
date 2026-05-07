@@ -1,5 +1,40 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 185 (Feb 2026) — Full-Arch Atrophy Classification (silent institutional guidance)
+
+### Why
+For Full-Arch (All-on-4 / 6 / X) cases, give every operator class-driven therapeutic options derived from a peer-reviewed institutional classification of the atrophic edentulous arch — without exposing any source attribution to the user.
+
+### Changes
+**Backend**
+- New module `/app/backend/full_arch_classification.py` — pure classifier with thresholds:
+  - Anterior height: ≥16 mm simple, 12–16 moderate, 8–12 advanced, <8 severe.
+  - Posterior height: ≥12 mm simple, 8–12 moderate, 4–8 advanced, <4 severe.
+  - Width <6 mm forces severe regardless of height.
+  - 5 classes (CCI–CCV) per arch with 3 therapeutic options each (A=multi-implant fixed, B=tilted/zygomatic/short-implant, C=overdenture), loading rules, augmentation guidance.
+- New endpoint `POST /api/full-arch-classify` — pure function for live UI preview.
+- New endpoint `PUT /api/procedures/{id}/atrophy-assessment` — persists per-arch result on the procedure under `atrophy_assessment` (nurses 403).
+- `_build_case_context()` silently appends the rendered classification text for each saved arch so the AI Clinical Summary and AI Surgical Summary can leverage it without naming any source.
+
+**Frontend**
+- `app/(tabs)/new-procedure.tsx` — new "Atrophy Assessment" section visible only for Full-Arch procedure types. 4 numeric fields (anterior/posterior height + width) per arch (maxilla / mandible / both). Live classification preview chip + 3 therapeutic options + loading & augmentation guidance via debounced calls to `/full-arch-classify`. On case create, the values are saved via `PUT /procedures/{id}/atrophy-assessment` (best-effort, non-blocking).
+- New component `components/AtrophyClassificationChip.tsx` — debounced live preview with class colour palette (CCI green → CCV pink).
+- `app/procedures/[id].tsx` — new "Full-Arch Treatment Plan" section displays the persisted classification with all 3 therapeutic options (per arch), loading rule, and augmentation note. No source attribution.
+
+### Files touched
+- `+ /app/backend/full_arch_classification.py`
+- `/app/backend/server.py` — `_build_case_context` injection; new POST `/full-arch-classify`; new PUT `/procedures/{id}/atrophy-assessment`.
+- `+ /app/frontend/components/AtrophyClassificationChip.tsx`
+- `/app/frontend/app/(tabs)/new-procedure.tsx` — atrophy fields + UI panel + save call.
+- `/app/frontend/app/procedures/[id].tsx` — Treatment Plan card.
+
+### Verification
+- 8-case unit test in-process (CCI–CCV maxilla + CCI/CCV-by-width mandible + missing-input error) — all pass.
+- E2E curl: `PUT atrophy-assessment` then `GET procedure` returns persisted CCIV maxilla (Severe posterior) + CCII mandible (Moderate posterior) with 3 options each.
+- `_build_case_context()` verified to append the full per-arch classification text + therapeutic options + loading + augmentation guidance for downstream AI prompts.
+- No source citation appears anywhere in code, UI, or AI output.
+- Backend lint clean.
+
 ## Iteration 184 (Feb 2026) — Digital Sign-Off block (court-defensible attestation)
 
 ### Why
