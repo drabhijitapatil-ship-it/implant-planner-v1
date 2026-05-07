@@ -71,14 +71,9 @@ export default function LoginScreen() {
         router.replace('/onboarding');
         return;
       }
-      // Returning users: check for unseen "What's new" entries before dashboard.
-      try {
-        const wn = await api.get('/whatsnew');
-        if ((wn.data?.entries || []).length > 0) {
-          router.replace('/whatsnew');
-          return;
-        }
-      } catch { /* non-fatal — fall through to dashboard */ }
+      // Returning users: skip the auto-redirect to /whatsnew. Unseen
+      // changelog entries are now surfaced via the WhatsNewBadge on the
+      // dashboard — less intrusive, user-driven discovery.
       router.replace('/(tabs)/dashboard');
     } catch (error: any) {
       const detail =

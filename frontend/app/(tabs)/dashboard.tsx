@@ -15,6 +15,7 @@ import { RecentActivityWidget } from '../../components/RecentActivityWidget';
 import { PatientConsentSection } from '../../components/PatientConsentSection';
 import { ScheduledCasesSection } from '../../components/ScheduledCasesSection';
 import { NurseHomeCalendar } from '../../components/NurseHomeCalendar';
+import WhatsNewBadge from '../../components/WhatsNewBadge';
 
 // ── Status helpers ────────────────────────────────────────
 const ACTION_NEEDED_MAP: Record<string, { label: string; icon: string; color: string }> = {
@@ -67,6 +68,7 @@ function Header({ user, router }: any) {
         <Text style={s.greeting}>Welcome back,</Text>
         <Text style={s.userName} data-testid="dashboard-user-name">{user?.name}</Text>
         <Text style={s.roleTag}>{getRoleLabel(user?.role)}</Text>
+        <WhatsNewBadge />
       </View>
       <TouchableOpacity onPress={() => router.push('/profile')} data-testid="dashboard-profile-avatar">
         {user?.profile_photo ? (

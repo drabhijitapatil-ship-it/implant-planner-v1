@@ -1,5 +1,35 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 174 (Feb 2026) — Role-aware "What's New" badge copy
+
+- Backend now exposes `roles` (nullable) on each `/whatsnew` entry so the frontend can detect role-targeting without re-fetching.
+- `WhatsNewBadge` reads the current user's role and applies a **safety-first rule**: copy reads "What's new for {RolePlural} N ›" **only when every** unseen entry's `roles` array includes the user's role. Otherwise stays generic ("What's new N ›").
+- Plural map: Students / Supervisors / In-Charges / Nurses / Admins.
+- Verified via curl + screenshot — Supervisor with mixed unseen entries (universal v1.4 + supervisor-targeted v1.3) correctly renders generic copy. Activates role-aware copy only when entries are all-targeted.
+
+### Files modified
+- `/app/backend/server.py` — `_entries_for_user()` now includes `roles` field in returned entries.
+- `/app/frontend/components/WhatsNewBadge.tsx` — pulls user from `useAuth`, computes `forRolePlural` from entries, dynamically pluralises label.
+
+---
+
+## Iteration 173 (Feb 2026) — What's New badge on dashboard
+
+- Added compact `WhatsNewBadge` pill in the dashboard header — visible only when there are unseen changelog entries (server-side filtered by `last_seen_whatsnew_version` and role).
+- Tapping the pill opens `/whatsnew`; `useFocusEffect` re-fetches on dashboard re-focus so the badge auto-clears the moment the user reads the entries.
+- **Behaviour change**: removed the post-login auto-redirect to `/whatsnew` (login.tsx + help-workflow.tsx) — the badge is now the **single, non-intrusive** surface for new entries. Users land directly on the dashboard after login; they choose when to read what's new.
+- Smoke-tested via Playwright: badge displays "What's new 2 ›" for the test student after resetting `last_seen_whatsnew_version`.
+
+### Files added
+- `/app/frontend/components/WhatsNewBadge.tsx` — reanimated v4 spring scale-in, sparkles icon, count chip; renders null when count = 0.
+
+### Files modified
+- `/app/frontend/app/(tabs)/dashboard.tsx` — imported + placed `<WhatsNewBadge />` under role tag in `Header`.
+- `/app/frontend/app/auth/login.tsx` — dropped the `/whatsnew` auto-redirect after login.
+- `/app/frontend/app/help-workflow.tsx` — dropped the `/whatsnew` auto-redirect after first-run "Got it".
+
+---
+
 ## Iteration 172 (Feb 2026) — Elegant onboarding v2 + refreshed How-It-Works
 
 ### A. Six-slide first-run onboarding (`/onboarding`)
