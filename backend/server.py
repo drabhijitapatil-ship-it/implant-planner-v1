@@ -12718,73 +12718,68 @@ async def seed_on_startup():
             new_count += 1
     logging.info(f"User sync complete: {len(AUTHORITATIVE_USERS)} checked, {new_count} new users added.")
 
-    # --- Seed implant library (ALWAYS reseed from authoritative Excel on every startup) ---
-    xlsx_path = ROOT_DIR / "implant_library_latest.xlsx"
-    logging.info(f"Implant library seed: looking for XLSX at {xlsx_path} (exists={xlsx_path.exists()})")
-    if xlsx_path.exists():
+    # --- Seed implant library (iter-179: IDEMPOTENT — no more drop()) ──────
+    # Source-of-truth = implant_library_data.SYSTEMS (Python module).
+    # Brochure-derived rows from alpha_bio_brochure_data.SYSTEM_SIZES are
+    # merged on top. Existing rows are preserved (admin-added rows survive
+    # restarts), and missing rows are inserted via $setOnInsert upsert.
+    try:
+        from implant_library_data import SYSTEMS as _LIB_SYSTEMS
+
+        records = []
+        for (brand, system), sizes in _LIB_SYSTEMS.items():
+            for diameter, length in sizes:
+                records.append({
+                    "brand": brand,
+                    "system": system,
+                    "diameter": float(diameter),
+                    "length": float(length),
+                    "source": "library_master",
+                })
+
+        # Append Alpha-Bio brochure rows (NeO×3 / ICE / ATID / DFI / NICE).
         try:
-            df = pd.read_excel(xlsx_path, skiprows=0)
-            df.columns = [c.strip() for c in df.columns]
-            brand_col = [c for c in df.columns if "company" in c.lower() or "brand" in c.lower()][0]
-            system_col = [c for c in df.columns if "system" in c.lower() or "name" in c.lower()][0]
-            diam_col = [c for c in df.columns if "diameter" in c.lower()][0]
-            len_col = [c for c in df.columns if "length" in c.lower()][0]
+            from alpha_bio_brochure_data import SYSTEM_SIZES as _AB_SIZES
+            for sys_name, sizes in _AB_SIZES.items():
+                for diameter, lengths in sizes["lengths_by_diameter"].items():
+                    for length in lengths:
+                        records.append({
+                            "brand": "Alpha Bio",
+                            "system": sys_name,
+                            "diameter": float(diameter),
+                            "length": float(length),
+                            "source": "alpha_bio_brochure",
+                        })
+        except Exception as ab_err:
+            logging.warning(f"Alpha-Bio brochure rows skipped: {ab_err}")
 
-            records = []
-            seen = set()
-            excel_systems = set()
-            for _, row in df.iterrows():
-                try:
-                    brand = str(row[brand_col]).strip()
-                    system = str(row[system_col]).strip()
-                    diameter = round(float(row[diam_col]), 2)
-                    length = round(float(row[len_col]), 2)
-                    if not brand or not system or brand == "nan" or system == "nan":
-                        continue
-                    brand = BRAND_NAME_CORRECTIONS.get(brand, brand)
-                    excel_systems.add(f"{brand}|{system}")
-                    key = (brand, system, diameter, length)
-                    if key not in seen:
-                        seen.add(key)
-                        records.append({"brand": brand, "system": system, "diameter": diameter, "length": length})
-                except (ValueError, TypeError):
-                    continue
+        # Idempotent upsert keyed on the natural composite key. We $set the
+        # source field on every match (so existing rows imported by the
+        # legacy destructive seed get correctly tagged), and $setOnInsert the
+        # base document for new rows. Rows that are NOT in the canonical set
+        # (admin-added or any other origin) keep their fields untouched.
+        inserted = 0
+        for rec in records:
+            key = {k: rec[k] for k in ("brand", "system", "diameter", "length")}
+            res = await db.implant_library.update_one(
+                key,
+                {
+                    "$set": {"source": rec["source"]},
+                    "$setOnInsert": key,
+                },
+                upsert=True,
+            )
+            if res.upserted_id is not None:
+                inserted += 1
 
-            old_count = await db.implant_library.count_documents({})
-            if records:
-                await db.implant_library.drop()
-                await db.implant_library.insert_many(records)
-                # ─── Append Alpha-Bio brochure rows (iter-177) ───
-                # The Excel master covers the original 50 systems. Brochure-
-                # derived systems (NeO×3 / ICE / ATID / DFI / NICE) live in
-                # alpha_bio_brochure_data.py and are merged here so they
-                # survive the destructive Excel reseed on every restart.
-                ab_added = 0
-                try:
-                    from alpha_bio_brochure_data import SYSTEM_SIZES as _AB_SIZES
-                    extra = []
-                    for sys_name, sizes in _AB_SIZES.items():
-                        for diameter, lengths in sizes["lengths_by_diameter"].items():
-                            for length in lengths:
-                                extra.append({
-                                    "brand": "Alpha Bio",
-                                    "system": sys_name,
-                                    "diameter": float(diameter),
-                                    "length": float(length),
-                                })
-                    if extra:
-                        await db.implant_library.insert_many(extra)
-                        ab_added = len(extra)
-                except Exception as ab_err:
-                    logging.warning(f"Alpha-Bio brochure rows not appended: {ab_err}")
-                logging.info(
-                    f"Implant library FORCE-RESEEDED: {len(records)} Excel records, "
-                    f"{len(excel_systems)} unique systems "
-                    f"(replaced {old_count} old records); +{ab_added} Alpha-Bio brochure rows appended."
-                )
-            else:
-                logging.error("Implant library seed: XLSX parsed but produced 0 records!")
-        except Exception as e:
-            logging.error(f"Implant library seed FAILED: {e}")
-    else:
-        logging.warning(f"XLSX file not found at {xlsx_path} — skipping implant seed.")
+        total = await db.implant_library.count_documents({})
+        admin_added = await db.implant_library.count_documents(
+            {"source": {"$exists": False}}
+        )
+        logging.info(
+            f"Implant library seeded (idempotent): {len(records)} canonical "
+            f"records, {inserted} newly inserted, {total} total in DB "
+            f"({admin_added} legacy/admin-added preserved)."
+        )
+    except Exception as e:
+        logging.error(f"Implant library idempotent seed FAILED: {e}")
