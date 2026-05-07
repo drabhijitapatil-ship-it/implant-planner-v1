@@ -385,6 +385,17 @@ export default function ImplantCatalogAdmin() {
             <Text style={[s.dropdownValue, !selectedBrand && s.dropdownPlaceholder]}>
               {selectedBrand || 'Select a brand'}
             </Text>
+            {selectedBrand && familiesForBrand.length > 0 && (
+              <View
+                style={s.brandCountChip}
+                testID="catalog-brand-count-chip"
+                data-testid="catalog-brand-count-chip"
+              >
+                <Text style={s.brandCountChipText}>
+                  {familiesForBrand.length} {familiesForBrand.length === 1 ? 'system' : 'systems'}
+                </Text>
+              </View>
+            )}
             <Ionicons name="chevron-down" size={18} color="#0277BD" />
           </TouchableOpacity>
         </View>
@@ -725,6 +736,16 @@ const s = StyleSheet.create({
   dropdownLabel: { fontSize: 12, fontWeight: '700', color: '#0277BD', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
   dropdown: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFF', borderRadius: 12, borderWidth: 1.5, borderColor: '#B3E5FC', paddingHorizontal: 14, paddingVertical: 12 },
   dropdownValue: { fontSize: 15, fontWeight: '600', color: '#01579B', flex: 1 },
+  brandCountChip: {
+    backgroundColor: '#E1F5FE',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#81D4FA',
+  },
+  brandCountChipText: { fontSize: 11, fontWeight: '700', color: '#0277BD', letterSpacing: 0.3 },
   dropdownPlaceholder: { color: '#90A4AE', fontWeight: '500' },
   // Detail card
   detailCard: { backgroundColor: '#FFF', borderRadius: 14, borderWidth: 1, borderColor: '#ECEFF1', padding: 16, marginTop: 8, marginBottom: 12 },
