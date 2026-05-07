@@ -1,0 +1,37 @@
+{
+  "summary": "Tested iteration 142 changes (AI summary edit endpoint, edit_log, role-aware helper text, persistent AI cards). Backend: 9/9 pytest pass — PATCH /api/procedures/{id}/ai-summary validates input, persists, is idempotent, appends edit_log only on non-owner edits, blocks nurses (403), and PDF case-report includes both 'AI Clinical Summary' and 'AI Surgical Summary' headings. Frontend: AI summary generation/persistence works functionally (REGEN AI label appears after generate, ai_case_summary persists), Phase 2 form has the role-aware helper logic in source and the OLD Generate Surgical Notes block was removed. CRITICAL TESTABILITY BUG: every new `data-testid` prop added in this iteration on RN `TouchableOpacity` / `TextInput` components is NOT forwarded to the DOM — RN Web only converts `testID` (camelCase). Existing buttons that use `testID` (e.g. case-report-export-print-btn, case-detail-back-btn) render correctly; all new ones (ai-summary-btn, ai-clinical-edit-btn, ai-surgical-generate-btn, ai-surgical-edit-btn, ai-surgical-regenerate-btn, ai-surgical-edit-input, ai-surgical-save-btn, ai-surgical-cancel-btn, approval-comment-input, phase2-approval-helper, phase2-submit-btn, phase2-student-notes) do not appear in DOM. Functionality works but automation/E2E testing per the spec cannot use these selectors.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "procedures/[id].tsx + submit-phase2/[id].tsx + submit-stage2-surgical/[id].tsx + submit-stage2-prosthetic/[id].tsx + submit-phase4-step2/[id].tsx", "issue": "All NEW `data-testid=\"...\"` props on RN TouchableOpacity/TextInput/Text are dropped by React Native Web — they don't appear as DOM attributes. RN Web only auto-converts the camelCase `testID` prop. Replace `data-testid=\"foo\"` with `testID=\"foo\"` on RN components, OR (for web-only) wrap in a View/Pressable that accepts raw DOM props.", "selector": "[data-testid='ai-summary-btn'], [data-testid='ai-clinical-edit-btn'], [data-testid='ai-surgical-generate-btn'], [data-testid='ai-surgical-edit-btn'], [data-testid='ai-surgical-regenerate-btn'], [data-testid='ai-surgical-edit-input'], [data-testid='ai-surgical-save-btn'], [data-testid='ai-surgical-cancel-btn'], [data-testid='approval-comment-input'], [data-testid='phase2-approval-helper'], [data-testid='phase2-submit-btn'], [data-testid='phase2-student-notes']", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Case Details (case detail rendered as one ScrollView)", "issues": ["Console floods with `Unexpected text node: . A text node cannot be a child of a <View>.` errors (12+ on every case open). Likely a stray whitespace/empty-string child of <View> introduced somewhere in the AI Surgical / AI Clinical card refactor. Cosmetic but indicates a render bug to track down."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_ai_summary_iteration142.py",
+    "/app/test_reports/pytest/iter142_results.xml"
+  ],
+  "action_items": [
+    "FRONTEND TESTABILITY (HIGH): In all five files modified this iteration, change `data-testid=\"...\"` to `testID=\"...\"` on every RN component (TouchableOpacity, TextInput, Text, View, Pressable, ActivityIndicator etc.). RN Web translates `testID` -> DOM `data-testid` automatically; raw `data-testid` is silently dropped. Affected ids include but are not limited to: ai-summary-btn, ai-clinical-edit-btn, ai-surgical-generate-btn, ai-surgical-edit-btn, ai-surgical-regenerate-btn, ai-surgical-edit-input, ai-surgical-save-btn, ai-surgical-cancel-btn, approval-comment-input, phase2-approval-helper, phase2-submit-btn, phase2-student-notes (and the equivalents on submit-stage2-surgical, submit-stage2-prosthetic, submit-phase4-step2).",
+    "FRONTEND (MEDIUM): Track down the source of `Unexpected text node: . A text node cannot be a child of a <View>` warnings on procedures/[id].tsx — usually a `{cond && ' '}` or `{value}` rendering an empty string outside of <Text>. Likely added by the recent AI-card refactor."
+  ],
+  "critical_code_review_comments": [
+    "Backend PATCH /api/procedures/{id}/ai-summary is well-shaped: pydantic-style validation via manual checks, idempotency, owner detection via student_id||created_by_id, and edit_log push only on non-owner. Looks production-ready.",
+    "Frontend uses the wrong web testing prop on RN components — see HIGH action item.",
+    "submit-phase2/[id].tsx role-aware helper logic at lines 891-897 is correct: hides for implant_incharge, supervisor sees the In-Charge variant, others see the original line. Same pattern should be auditable on the other three forms (not directly UI-tested due to the same testID forwarding issue but source-verified)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "60% (functionality OK; testability/data-testid forwarding broken)"},
+  "test_credentials": "Used /app/memory/test_credentials.md — Abhijit.patil/Admin@123 (admin/implant_incharge), Gaurav.pandey/Student@123 (student), Paresh.gandhi/Supervisor@123 (supervisor). All login OK.",
+  "seed_data_creation": "None. Reused student-owned case TEST_MUA_88c4430c (id 69f640160ae04a75cf8d0cd8) for UI tests. The known id 69cfde8b356c7405230a9dcc from the request still exists and was used for backend tests; module-scope fixture wipes both ai_case_summary and ai_surgical_notes back to empty strings on module exit.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend regression for iteration 142 lives at /app/backend/tests/test_ai_summary_iteration142.py — keep running it. The big open item is frontend data-testid forwarding; once main agent flips `data-testid` -> `testID` on the RN components in the five modified files, re-run the case-detail Playwright loop (login as student Gaurav, click TEST_MUA_88c4430c, wait ~10s; assert presence of the new testids and exercise the AI Surgical edit/save flow on a Phase-2-approved case). Status of the test case TEST_MUA_88c4430c is 'Phase 1 Approved - Ready for Phase 2' so ai-surgical-generate-btn correctly stays hidden — to test the Phase-2-approved branch, pick a case whose status is in {phase2_approved, pending_stage2_surgical, ...}.",
+  "rca_of_the_issue": "RCA — data-testid not appearing in DOM: React Native components (TouchableOpacity, TextInput, Pressable, etc.) do not pass arbitrary lowercase HTML attributes through to the underlying DOM node on RN-Web; RN-Web specifically maps `testID` (camelCase) -> `data-testid` and drops other unknown props. The recent diff added `data-testid=\"...\"` directly which is the React-DOM convention — works only on raw <div>/<button>/<input>, not on RN wrappers. Fix: replace every newly-added `data-testid=` with `testID=` (or for the helper <Text>, wrap in `<View testID=...>`). Reproduction: login as student, open any case, evaluate `document.querySelector('[data-testid=\"ai-summary-btn\"]')` -> null while clicking by visible text 'AI SUMMARY' triggers the spinner and generates the summary."
+}
