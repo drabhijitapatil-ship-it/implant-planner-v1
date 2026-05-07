@@ -8317,6 +8317,42 @@ IMPLANT_INDICATIONS = {
         "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant"],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
+    # ── Alpha-Bio brochure-derived systems (iter-182) ────────────────────────
+    "Alpha Bio|ATID": {
+        "indication": "Suitable for D1 and D2 bone types and conventional loading protocols.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants"],
+        "indicated_bone_types": ["D1", "D2"],
+    },
+    "Alpha Bio|DFI": {
+        "indication": "Indicated in D1, D2, D3, and D4 bone types. Offers both cylindrical and tapered implant design advantages.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Alpha Bio|ICE": {
+        "indication": "Indicated for D1, D2, D3 bone types. Improved stress distribution; stable placement where denser bone is desired.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants"],
+        "indicated_bone_types": ["D1", "D2", "D3"],
+    },
+    "Alpha Bio|NICE": {
+        "indication": "Indicated for narrow alveolar ridges with 4mm, 4.5mm, and 5mm bone width. Suitable for D1, D2, D3, D4 bone types.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Alpha Bio|NeO Conical Hex Connection": {
+        "indication": "Indicated for D1, D2, D3, and D4 bone types and for narrow ridges, limited interdental spaces, and esthetic-zone restorations.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Alpha Bio|NeO Conical Standard Connection": {
+        "indication": "Indicated for immediate and delayed loading and soft-tissue preservation in the high-esthetics zone.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Alpha Bio|NeO Internal Hex Connection": {
+        "indication": "Indicated in D2, D3, and D4 bone types. Suitable for cases requiring high primary stability, immediate or delayed placement and loading.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant"],
+        "indicated_bone_types": ["D2", "D3", "D4"],
+    },
 }
 
 # Map Suggest Me procedure types → New Case procedure types for indication matching
