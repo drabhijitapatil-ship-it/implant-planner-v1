@@ -889,7 +889,7 @@ export default function Phase2SubmissionScreen() {
                 data-testid="phase2-student-notes" />
             </View>
             {user?.role !== 'implant_incharge' && (
-              <Text style={s.helperText} data-testid="phase2-approval-helper">
+              <Text style={s.helperText} testID="phase2-approval-helper">
                 {user?.role === 'supervisor'
                   ? 'Implant In-Charge remark will be added during approval.'
                   : 'Supervisor and In-Charge remarks will be added during approval.'}

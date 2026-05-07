@@ -1,5 +1,42 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 183 (Feb 2026) — Editable AI Summaries + Role-aware approval-helper text + Self-approval polish
+
+### Why
+User asked for finer role-aware UX in the approval flow plus first-class editability for AI-generated summaries so reviewers can refine the output without losing accountability.
+
+### Changes
+**Backend (`/app/backend/server.py`)**
+- New endpoint `PATCH /api/procedures/{id}/ai-summary` accepting `{ summary_type: 'case_summary'|'surgical_notes', content: string }`. Persists to `ai_case_summary` / `ai_surgical_notes`. Idempotent (returns `unchanged: true`). Nurses get 403.
+- Edits made by **anyone other than the case owner** (student_id / created_by_id) push an entry to `procedure.edit_log` with `field`, `old_value`, `new_value`, `edited_by`, `edited_by_role`, `edited_at`. Owner edits don't pollute the log.
+- Case-Report PDF (`generate_case_report`) now appends **AI Clinical Summary** and **AI Surgical Summary** sections (inflated PDF stream verified) right before the signature page.
+
+**Frontend**
+- `submit-phase2/[id].tsx`, `submit-stage2-surgical/[id].tsx`, `submit-stage2-prosthetic/[id].tsx`, `submit-phase4-step2/[id].tsx` — Notes helper text is now **role-aware**:
+  - Student → unchanged ("Supervisor and In-Charge remarks will be added during approval.")
+  - Supervisor → "Implant In-Charge remark will be added during approval."
+  - Implant In-Charge → hidden entirely (auto-approved).
+- `submit-phase2/[id].tsx` — the in-form **"Generate Surgical Notes" button was removed** along with `aiSurgicalNotes` / `aiNotesLoading` state. AI Surgical Summary generation is deferred to **post-Phase 2 approval** so it can analyze final torque, MUA angulation, cuff heights, IOPA, etc.
+- `procedures/[id].tsx`:
+  - **AI Surgical Summary** card shows a **"Generate AI Surgical Summary"** button when status is `phase2_approved` or beyond and notes are empty. Once generated, the card shows the text plus a **pencil edit** icon and a **regenerate** icon (with confirmation).
+  - **AI Clinical Summary** card is now persistent (driven by `procedure.ai_case_summary` instead of ephemeral state) with a pencil edit. Toolbar AI button label switches to **"REGEN AI"** once a summary exists.
+  - Inline edit mode for both summaries: TextInput + Save/Cancel; Save calls the new PATCH endpoint and refetches the procedure.
+  - The entire **"Your Remarks"** approval-comment box is now hidden when an Implant In-Charge is approving their own auto-approval case (`role === 'implant_incharge' && created_by_role === 'implant_incharge' && user.id === created_by_id`).
+  - For other Implant In-Charge approvals (reviewing a student's case), the helper line "This comment will be visible to the student…" is hidden but the box remains visible.
+
+### Files touched
+- `/app/backend/server.py` — `+` PATCH `/procedures/{id}/ai-summary` (~line 5470); `+` AI summary section in PDF generator (~line 6478).
+- `/app/frontend/app/procedures/[id].tsx` — new state + `saveAiSummary` / `generateAiSurgicalSummary` helpers; replaced AI Surgical card; replaced AI Clinical card; added edit-mode card; gated approval-remarks box for self-approval.
+- `/app/frontend/app/procedures/submit-phase2/[id].tsx` — removed in-form AI button and state; role-aware helper.
+- `/app/frontend/app/procedures/submit-stage2-surgical/[id].tsx`, `/app/frontend/app/procedures/submit-stage2-prosthetic/[id].tsx`, `/app/frontend/app/procedures/submit-phase4-step2/[id].tsx` — role-aware helper.
+
+### Tests
+- Backend: `/app/backend/tests/test_ai_summary_iteration142.py` — 9/9 pass.
+- Backend curl-verified: invalid summary_type → 400; idempotent unchanged path; non-owner edit appends `edit_log`; PDF stream contains both AI section headings and saved content.
+
+### Known follow-up (low priority)
+- React-Native-Web `Unexpected text node: .` console warning on case-detail (cosmetic only). Likely a stray whitespace child of the new AI-card IIFE; track down later.
+
 ## Iteration 182 (Feb 2026) — Indications text for Alpha-Bio brochure systems
 
 Added the user-supplied clinical indication strings to the 7 new Alpha-Bio systems (NeO×3 / ICE / ATID / DFI / NICE). These render as **blue subtitle text** below each system name in (a) Phase 1 implant-selection dropdown and (b) the Home → Implant Library tab dropdown — same UI surface where SPI / Lance+ / Ankylos already show indications.

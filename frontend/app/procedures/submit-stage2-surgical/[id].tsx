@@ -445,7 +445,7 @@ export default function Stage2SurgicalSubmissionScreen() {
             </View>
 
             {user?.role !== 'implant_incharge' && (
-              <Text style={s.helperText} data-testid="phase3-approval-helper">
+              <Text style={s.helperText} testID="phase3-approval-helper">
                 {user?.role === 'supervisor'
                   ? 'Implant In-Charge remark will be added during approval.'
                   : 'Supervisor and In-Charge remarks will be added during approval.'}
