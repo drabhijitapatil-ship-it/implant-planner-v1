@@ -1,5 +1,30 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 182 (Feb 2026) — Indications text for Alpha-Bio brochure systems
+
+Added the user-supplied clinical indication strings to the 7 new Alpha-Bio systems (NeO×3 / ICE / ATID / DFI / NICE). These render as **blue subtitle text** below each system name in (a) Phase 1 implant-selection dropdown and (b) the Home → Implant Library tab dropdown — same UI surface where SPI / Lance+ / Ankylos already show indications.
+
+Implementation note: the frontend was already wired to render `system.indication` as blue text (lines 497, 705 in `implant-selection.tsx`; line 1321 in `CaseImplantPlanning.tsx`). Only data was missing. Added 7 entries to `IMPLANT_INDICATIONS` in `server.py` (~line 8320) — each entry includes `indication`, `indicated_procedures` and `indicated_bone_types` so the Suggest-Me filter benefits too.
+
+### Indications added
+| System | Indication |
+|---|---|
+| ATID | Suitable for D1 and D2 bone types and conventional loading protocols. |
+| DFI | Indicated in D1, D2, D3, and D4 bone types. Offers both cylindrical and tapered implant design advantages. |
+| ICE | Indicated for D1, D2, D3 bone types. Improved stress distribution; stable placement where denser bone is desired. |
+| NICE | Indicated for narrow alveolar ridges with 4mm, 4.5mm, and 5mm bone width. Suitable for D1, D2, D3, D4 bone types. |
+| NeO Conical Hex | Indicated for D1, D2, D3, and D4 bone types and for narrow ridges, limited interdental spaces, and esthetic-zone restorations. |
+| NeO Conical Standard | Indicated for immediate and delayed loading and soft-tissue preservation in the high-esthetics zone. |
+| NeO Internal Hex | Indicated in D2, D3, and D4 bone types. Suitable for cases requiring high primary stability, immediate or delayed placement and loading. |
+
+### Verified
+- Live API `/api/implant-library/systems` returns all 8 Alpha-Bio systems with correct `indication` strings ✓
+- Playwright body-text scan in the live dropdown matched all 7 expected substrings ✓
+- File: `/app/backend/server.py` (only). No frontend changes needed.
+
+---
+
+
 ## Iteration 181 (Feb 2026) — Sibling-count chip on Home → Implant tab
 
 Extended the iter-180 "N systems" badge pattern to the Home → Implant tab. After picking a system (e.g., `Alpha Bio – NeO Internal Hex Connection`), a small light-blue chip appears next to the dropdown showing **`+7 Alpha Bio`** — surfacing how many other systems from the same manufacturer are available, exact same UX pattern as the admin Implant Database chip from iter-180.
