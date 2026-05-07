@@ -16,6 +16,7 @@ import { PatientConsentSection } from '../../components/PatientConsentSection';
 import { ScheduledCasesSection } from '../../components/ScheduledCasesSection';
 import { NurseHomeCalendar } from '../../components/NurseHomeCalendar';
 import WhatsNewBadge from '../../components/WhatsNewBadge';
+import PulsingDoubleArrow from '../../components/onboarding/primitives/PulsingDoubleArrow';
 
 // ── Status helpers ────────────────────────────────────────
 const ACTION_NEEDED_MAP: Record<string, { label: string; icon: string; color: string }> = {
@@ -348,6 +349,7 @@ function SupervisorDashboard({ stats, procedures, selectedDate, setSelectedDate,
                   <Text style={s.approvalPatient}>{proc.patient_name}</Text>
                   <Text style={s.approvalSub}>{proc.student_name} - {proc.implant_procedure_type}</Text>
                 </View>
+                <PulsingDoubleArrow color="#EF6C00" size={14} delayMs={120} />
                 <View style={s.reviewChip}>
                   <Text style={s.reviewChipText}>Review</Text>
                 </View>
@@ -505,6 +507,7 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
                   <Text style={s.approvalPatient}>{proc.patient_name}</Text>
                   <Text style={s.approvalSub}>{proc.student_name} - {proc.implant_procedure_type}</Text>
                 </View>
+                <PulsingDoubleArrow color="#EF6C00" size={14} delayMs={120} />
                 <View style={s.reviewChip}>
                   <Text style={s.reviewChipText}>Review</Text>
                 </View>
