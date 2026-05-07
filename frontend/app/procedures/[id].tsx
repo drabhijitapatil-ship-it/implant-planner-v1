@@ -12,6 +12,7 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -190,6 +191,12 @@ export default function ProcedureDetailScreen() {
   const [aiChatInput, setAiChatInput] = useState('');
   const [aiChatSending, setAiChatSending] = useState(false);
   const aiChatScrollRef = useRef<ScrollView | null>(null);
+  // Main page scroller — used by the case-detail progress pill to jump
+  // straight to the current phase's section when tapped.
+  const mainScrollRef = useRef<ScrollView | null>(null);
+  // y-positions of each phase section (recorded via onLayout). Indexed by
+  // the same keys returned by getProgressPair().current.
+  const phaseAnchors = useRef<Record<string, number>>({});
   
   // Edit mode state
   const isEditMode = edit === 'true' && (user?.role === 'implant_incharge' || user?.role === 'supervisor');
@@ -570,7 +577,7 @@ export default function ProcedureDetailScreen() {
         <Text style={styles.pageHeaderTitle} numberOfLines={1}>Case Details</Text>
         <View style={{ width: 44 }} />
       </View>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView ref={mainScrollRef} contentContainerStyle={styles.scrollContent}>
         {/* Pre-Op Augmentation Checklist (iter-136) — auto-derived rule-based
             augmentation/grafting plan items. Self-hides when no findings. */}
         <AugmentationChecklist
@@ -605,8 +612,72 @@ export default function ProcedureDetailScreen() {
           </View>
           {(() => {
             const pair = getProgressPair(procedure.status);
+            const anchorKey =
+              pair.current === 'Phase 1' ? 'p1' :
+              pair.current === 'Phase 2' ? 'p2' :
+              pair.current === 'Phase 3' ? 'p3' :
+              pair.current === 'Phase 4' ? 'p4' : null;
+            const onTap = () => {
+              if (!anchorKey) {
+                // Case is "completed" — no scroll, just acknowledge tap.
+                return;
+              }
+              const y = phaseAnchors.current[anchorKey];
+              const targetY = typeof y === 'number' ? Math.max(0, y - 80) : null;
+
+              // 1) Native + web RN ScrollView API (works on iOS / Android natively).
+              try {
+                if (targetY !== null) {
+                  mainScrollRef.current?.scrollTo({ y: targetY, animated: true });
+                } else {
+                  mainScrollRef.current?.scrollToEnd({ animated: true });
+                }
+              } catch { /* ignore */ }
+
+              // 2) Web DOM fallback — find any scrollable ancestor with
+              //    enough overflow and scroll it. RN-Web's ScrollView ref
+              //    doesn't always expose a working scrollTo on this codebase,
+              //    so we search the DOM as a reliable backup.
+              // 2) Web DOM fallback — searches for the active scroll container
+              //    and scrolls it directly. Runs unconditionally; native is
+              //    handled by the ScrollView ref above.
+              if (typeof document !== 'undefined' && typeof window !== 'undefined') {
+                try {
+                  console.log('[case-progress] tap → targetY=', targetY, 'anchor=', anchorKey);
+                  const all = Array.from(document.querySelectorAll('*')) as HTMLElement[];
+                  const el = all.find((e) => {
+                    const s = window.getComputedStyle(e);
+                    return (
+                      (s.overflowY === 'auto' || s.overflowY === 'scroll') &&
+                      e.scrollHeight > e.clientHeight + 50
+                    );
+                  });
+                  console.log('[case-progress] found scroller:', !!el, el?.scrollHeight, el?.clientHeight);
+                  if (el) {
+                    const top = targetY !== null ? targetY : el.scrollHeight;
+                    el.scrollTop = top;
+                    try { (el as any).scrollTo?.({ top, behavior: 'smooth' }); } catch {}
+                  }
+                } catch (err) {
+                  console.warn('[case-progress] scroll failed', err);
+                }
+              }
+            };
             return (
-              <View style={styles.progressInline} testID="case-progress-indicator">
+              <TouchableOpacity
+                onPress={onTap}
+                {...(Platform.OS === 'web' ? ({ onClick: onTap } as any) : {})}
+                disabled={!anchorKey}
+                activeOpacity={0.7}
+                style={styles.progressInline}
+                testID="case-progress-indicator"
+                accessibilityRole="button"
+                accessibilityLabel={
+                  anchorKey
+                    ? `Jump to ${pair.current} section`
+                    : `Case complete`
+                }
+              >
                 <Text style={styles.progressCurrent}>{pair.current}</Text>
                 {pair.next ? (
                   <>
@@ -616,7 +687,7 @@ export default function ProcedureDetailScreen() {
                 ) : (
                   <Ionicons name="checkmark-circle" size={14} color="#2E7D32" style={{ marginLeft: 4 }} />
                 )}
-              </View>
+              </TouchableOpacity>
             );
           })()}
         </View>
@@ -1107,7 +1178,10 @@ export default function ProcedureDetailScreen() {
 
         {/* Instruments Autoclaved Badge moved inline under PHASE 1 APPROVED button (canSubmitPhase2). */}
 
-        <View style={styles.section}>
+        <View
+          style={styles.section}
+          onLayout={(e) => { phaseAnchors.current['p1'] = e.nativeEvent.layout.y; }}
+        >
           <Text style={styles.sectionTitle}>Patient Information</Text>
           <InfoRow icon="person" label="Patient Name" value={procedure.patient_name} />
           <InfoRow icon="card" label="Registration Number" value={procedure.registration_number} />
@@ -1543,7 +1617,11 @@ export default function ProcedureDetailScreen() {
 
         {/* ═══════════ PHASE 2: SURGICAL PROTOCOLS - Full Data Display ═══════════ */}
         {user?.role !== 'nurse' && procedure.phase2_data && Object.keys(procedure.phase2_data).length > 0 && (
-          <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#0D47A1' }]} data-testid="phase2-full-data-section">
+          <View
+            style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#0D47A1' }]}
+            data-testid="phase2-full-data-section"
+            onLayout={(e) => { phaseAnchors.current['p2'] = e.nativeEvent.layout.y; }}
+          >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <Ionicons name="medkit" size={22} color="#0D47A1" />
               <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#0D47A1', fontSize: 17 }]}>Phase 2 — Implant Surgery</Text>
@@ -2129,7 +2207,11 @@ export default function ProcedureDetailScreen() {
 
         {/* ═══════════ PHASE 4 STEP 1: PROSTHETIC PROTOCOL - Full Data Display ═══════════ */}
         {user?.role !== 'nurse' && (procedure.phase4_step1_data || procedure.stage2_prosthetic_remark || procedure.phase4_step1_student_notes) && (
-          <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#FF6F00' }]} data-testid="phase4-step1-full-data-section">
+          <View
+            style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#FF6F00' }]}
+            data-testid="phase4-step1-full-data-section"
+            onLayout={(e) => { phaseAnchors.current['p4'] = e.nativeEvent.layout.y; }}
+          >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <Ionicons name="construct" size={22} color="#FF6F00" />
               <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#E65100', fontSize: 17 }]}>Phase 4 — Prosthetic Rehabilitation (Step 1 — Prosthetic Planning)</Text>
