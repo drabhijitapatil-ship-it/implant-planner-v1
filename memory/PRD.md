@@ -1,5 +1,23 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 175 (Feb 2026) — Case-detail progress pill: tap-to-scroll
+
+- The `Phase X ›› Phase Y` progress pill in the case-detail header is now a **tappable shortcut** that smoothly scrolls the page to the current phase's full-data section (Phase 1/2/3/4). On a `completed` case the pill shows `Done ✓` and tap is a deliberate no-op.
+- **Why this was hard on RN-Web**: (a) `<ScrollView nativeID>` is not propagated to the inner DOM scroll div by react-native-web, (b) bare `data-testid` props on `<View>` are stripped — the codebase's convention is `testID` + `data-testid` (RN-Web translates `testID` → `data-testid`), and (c) `scrollTo({ behavior: 'smooth' })` is silently no-op on containers with `-webkit-overflow-scrolling: touch`.
+- **Solution**:
+  1. Walk DOM up from the pill itself to locate the actual scroll container (RN-Web wraps `ScrollView` in multiple divs; the inner one with `overflow-y: auto` is the real scroller).
+  2. Phase sections were already keyed by `data-testid="phaseN-full-data-section"` — added the missing `testID` prop so RN-Web actually emits the attribute, plus added a `phase1-full-data-section` testID for Phase 1 patient info.
+  3. Compute scroll target via `getBoundingClientRect()` — robust to current scroll position and parent layout.
+  4. Animate using `requestAnimationFrame` + `easeOutCubic` (250–550 ms) by directly assigning `scrollTop`. Programmatic `scrollTo({behavior:'smooth'})` was unreliable on this container.
+- Native (iOS/Android) path uses `mainScrollRef.current.scrollTo({y, animated: true})` with `onLayout`-captured y values for each phase section.
+- **Verified via Playwright**: pending_phase2 case → scrollTop went from 0 → 1797 px (Phase 2 — Implant Surgery section is at offset 1942 px, header offset 80 px ⇒ 1797 ✓). Re-tap is idempotent. Completed case shows `Done ✓` and tap doesn't crash.
+
+### Files modified
+- `/app/frontend/app/procedures/[id].tsx` — replaced the unreliable progress-pill tap handler with a DOM-walk + rAF-based scroll. Added `testID` (alongside existing `data-testid`) to all 4 phase full-data section Views and added a Phase 1 testID + onLayout anchor.
+
+---
+
+
 ## Iteration 174 (Feb 2026) — Role-aware "What's New" badge copy
 
 - Backend now exposes `roles` (nullable) on each `/whatsnew` entry so the frontend can detect role-targeting without re-fetching.

@@ -577,7 +577,10 @@ export default function ProcedureDetailScreen() {
         <Text style={styles.pageHeaderTitle} numberOfLines={1}>Case Details</Text>
         <View style={{ width: 44 }} />
       </View>
-      <ScrollView ref={mainScrollRef} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        ref={mainScrollRef}
+        contentContainerStyle={styles.scrollContent}
+      >
         {/* Pre-Op Augmentation Checklist (iter-136) — auto-derived rule-based
             augmentation/grafting plan items. Self-hides when no findings. */}
         <AugmentationChecklist
@@ -612,61 +615,83 @@ export default function ProcedureDetailScreen() {
           </View>
           {(() => {
             const pair = getProgressPair(procedure.status);
-            const anchorKey =
-              pair.current === 'Phase 1' ? 'p1' :
-              pair.current === 'Phase 2' ? 'p2' :
-              pair.current === 'Phase 3' ? 'p3' :
-              pair.current === 'Phase 4' ? 'p4' : null;
-            const onTap = () => {
-              if (!anchorKey) {
-                // Case is "completed" — no scroll, just acknowledge tap.
-                return;
-              }
-              const y = phaseAnchors.current[anchorKey];
-              const targetY = typeof y === 'number' ? Math.max(0, y - 80) : null;
+            const phaseNum =
+              pair.current === 'Phase 1' ? 1 :
+              pair.current === 'Phase 2' ? 2 :
+              pair.current === 'Phase 3' ? 3 :
+              pair.current === 'Phase 4' ? 4 : null;
+            const anchorKey = phaseNum ? (`p${phaseNum}` as 'p1'|'p2'|'p3'|'p4') : null;
+            const HEADER_OFFSET = 80;
+            const onTap = (ev?: any) => {
+              if (!anchorKey || !phaseNum) return; // completed → no-op
 
-              // 1) Native + web RN ScrollView API (works on iOS / Android natively).
-              try {
-                if (targetY !== null) {
-                  mainScrollRef.current?.scrollTo({ y: targetY, animated: true });
-                } else {
-                  mainScrollRef.current?.scrollToEnd({ animated: true });
+              // Web path. RN-Web does not propagate `nativeID` reliably to the
+              // inner ScrollView div, so we locate the scroll container by
+              // walking up the DOM from the pill itself (the only DOM node we
+              // know is inside the case-detail scroller) until we find an
+              // element with overflow-y === auto/scroll. Phase sections carry
+              // a stable `data-testid` ("phaseN-full-data-section") which
+              // RN-Web DOES forward to the DOM.
+              if (Platform.OS === 'web' && typeof document !== 'undefined') {
+                let pillEl = (ev && ev.currentTarget) as HTMLElement | undefined;
+                if (!pillEl || !(pillEl instanceof HTMLElement)) {
+                  pillEl = document.querySelector('[data-testid="case-progress-indicator"]') as HTMLElement | null || undefined;
                 }
-              } catch { /* ignore */ }
-
-              // 2) Web DOM fallback — find any scrollable ancestor with
-              //    enough overflow and scroll it. RN-Web's ScrollView ref
-              //    doesn't always expose a working scrollTo on this codebase,
-              //    so we search the DOM as a reliable backup.
-              // 2) Web DOM fallback — searches for the active scroll container
-              //    and scrolls it directly. Runs unconditionally; native is
-              //    handled by the ScrollView ref above.
-              if (typeof document !== 'undefined' && typeof window !== 'undefined') {
-                try {
-                  console.log('[case-progress] tap → targetY=', targetY, 'anchor=', anchorKey);
-                  const all = Array.from(document.querySelectorAll('*')) as HTMLElement[];
-                  const el = all.find((e) => {
-                    const s = window.getComputedStyle(e);
-                    return (
-                      (s.overflowY === 'auto' || s.overflowY === 'scroll') &&
-                      e.scrollHeight > e.clientHeight + 50
-                    );
-                  });
-                  console.log('[case-progress] found scroller:', !!el, el?.scrollHeight, el?.clientHeight);
-                  if (el) {
-                    const top = targetY !== null ? targetY : el.scrollHeight;
-                    el.scrollTop = top;
-                    try { (el as any).scrollTo?.({ top, behavior: 'smooth' }); } catch {}
+                let scrollEl: HTMLElement | null = null;
+                if (pillEl) {
+                  let p: HTMLElement | null = pillEl.parentElement;
+                  while (p && p !== document.body) {
+                    const s = window.getComputedStyle(p);
+                    if ((s.overflowY === 'auto' || s.overflowY === 'scroll') && p.scrollHeight > p.clientHeight + 8) {
+                      scrollEl = p;
+                      break;
+                    }
+                    p = p.parentElement;
                   }
-                } catch (err) {
-                  console.warn('[case-progress] scroll failed', err);
                 }
+                const sectionEl = document.querySelector(`[data-testid="phase${phaseNum}-full-data-section"]`) as HTMLElement | null;
+                if (scrollEl && sectionEl) {
+                  const sRect = scrollEl.getBoundingClientRect();
+                  const tRect = sectionEl.getBoundingClientRect();
+                  const top = Math.max(0, tRect.top - sRect.top + scrollEl.scrollTop - HEADER_OFFSET);
+                  // RN-Web's scroll container has `-webkit-overflow-scrolling: touch`
+                  // which makes `scrollTo({behavior:'smooth'})` a no-op in some
+                  // browsers. Animate manually with rAF for a reliable smooth
+                  // scroll, then ensure the final position is exact.
+                  const start = scrollEl.scrollTop;
+                  const dist = top - start;
+                  if (Math.abs(dist) < 2) return;
+                  const duration = Math.min(550, 250 + Math.abs(dist) * 0.25);
+                  const t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+                  const ease = (k: number) => 1 - Math.pow(1 - k, 3); // easeOutCubic
+                  const step = () => {
+                    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+                    const k = Math.min(1, (now - t0) / duration);
+                    scrollEl.scrollTop = start + dist * ease(k);
+                    if (k < 1) requestAnimationFrame(step);
+                  };
+                  if (typeof requestAnimationFrame !== 'undefined') {
+                    requestAnimationFrame(step);
+                  } else {
+                    scrollEl.scrollTop = top;
+                  }
+                  return;
+                }
+                if (sectionEl) {
+                  try { sectionEl.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch {}
+                  return;
+                }
+              }
+
+              // Native path — RN ScrollView ref + onLayout-captured y values.
+              const y = phaseAnchors.current[anchorKey];
+              if (typeof y === 'number') {
+                mainScrollRef.current?.scrollTo({ y: Math.max(0, y - HEADER_OFFSET), animated: true });
               }
             };
             return (
               <TouchableOpacity
                 onPress={onTap}
-                {...(Platform.OS === 'web' ? ({ onClick: onTap } as any) : {})}
                 disabled={!anchorKey}
                 activeOpacity={0.7}
                 style={styles.progressInline}
@@ -1180,6 +1205,8 @@ export default function ProcedureDetailScreen() {
 
         <View
           style={styles.section}
+          testID="phase1-full-data-section"
+          data-testid="phase1-full-data-section"
           onLayout={(e) => { phaseAnchors.current['p1'] = e.nativeEvent.layout.y; }}
         >
           <Text style={styles.sectionTitle}>Patient Information</Text>
@@ -1619,6 +1646,7 @@ export default function ProcedureDetailScreen() {
         {user?.role !== 'nurse' && procedure.phase2_data && Object.keys(procedure.phase2_data).length > 0 && (
           <View
             style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#0D47A1' }]}
+            testID="phase2-full-data-section"
             data-testid="phase2-full-data-section"
             onLayout={(e) => { phaseAnchors.current['p2'] = e.nativeEvent.layout.y; }}
           >
@@ -1866,7 +1894,12 @@ export default function ProcedureDetailScreen() {
 
         {/* ═══════════ PHASE 3: SECOND STAGE SURGICAL - Full Data Display ═══════════ */}
         {user?.role !== 'nurse' && (procedure.phase3_data || procedure.stage2_surgical_remark || procedure.phase3_student_notes) && (
-          <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#2E7D32' }]} data-testid="phase3-full-data-section">
+          <View
+            style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#2E7D32' }]}
+            testID="phase3-full-data-section"
+            data-testid="phase3-full-data-section"
+            onLayout={(e) => { phaseAnchors.current['p3'] = e.nativeEvent.layout.y; }}
+          >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <Ionicons name="git-branch" size={22} color="#2E7D32" />
               <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#2E7D32', fontSize: 17 }]}>Phase 3 — Healing and Second Stage Surgery</Text>
@@ -2209,6 +2242,7 @@ export default function ProcedureDetailScreen() {
         {user?.role !== 'nurse' && (procedure.phase4_step1_data || procedure.stage2_prosthetic_remark || procedure.phase4_step1_student_notes) && (
           <View
             style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#FF6F00' }]}
+            testID="phase4-step1-full-data-section"
             data-testid="phase4-step1-full-data-section"
             onLayout={(e) => { phaseAnchors.current['p4'] = e.nativeEvent.layout.y; }}
           >
