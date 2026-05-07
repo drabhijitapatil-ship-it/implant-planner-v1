@@ -1417,6 +1417,67 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
+        {/* ── Full-Arch Atrophy Treatment Plan (silent institutional guidance) ── */}
+        {procedure.atrophy_assessment && (procedure.atrophy_assessment.maxilla || procedure.atrophy_assessment.mandible) && (
+          <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#1E88E5' }]} testID="atrophy-treatment-plan-section">
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <Ionicons name="layers" size={20} color="#0D47A1" />
+              <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#0D47A1', fontSize: 17 }]}>Full-Arch Treatment Plan</Text>
+            </View>
+            {(['maxilla', 'mandible'] as const).map((arch) => {
+              const a = procedure.atrophy_assessment[arch];
+              if (!a || !a.class) return null;
+              const palette: Record<string, { bg: string; fg: string; border: string }> = {
+                CCI:   { bg: '#E8F5E9', fg: '#1B5E20', border: '#43A047' },
+                CCII:  { bg: '#E3F2FD', fg: '#0D47A1', border: '#1E88E5' },
+                CCIII: { bg: '#FFF8E1', fg: '#E65100', border: '#FB8C00' },
+                CCIV:  { bg: '#FFEBEE', fg: '#B71C1C', border: '#E53935' },
+                CCV:   { bg: '#FCE4EC', fg: '#880E4F', border: '#C2185B' },
+              };
+              const p = palette[a.class] || palette.CCI;
+              return (
+                <View key={arch} style={{ marginBottom: 14, padding: 12, backgroundColor: '#FAFCFF', borderRadius: 10 }}>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#0D47A1', textTransform: 'capitalize' }}>{arch}</Text>
+                    <View style={{ backgroundColor: p.bg, borderColor: p.border, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999 }}>
+                      <Text style={{ fontSize: 12, fontWeight: '800', color: p.fg }}>{a.class}</Text>
+                    </View>
+                    <Text style={{ fontSize: 11, color: '#455A64' }}>{a.severity_label}</Text>
+                  </View>
+                  <Text style={{ fontSize: 11, color: '#5C6BC0', marginBottom: 6 }}>
+                    Anterior: {a.inputs?.anterior_height_mm ?? '—'} mm height, {a.inputs?.anterior_width_mm ?? '—'} mm width  ·
+                    Posterior: {a.inputs?.posterior_height_mm ?? '—'} mm height, {a.inputs?.posterior_width_mm ?? '—'} mm width
+                  </Text>
+                  {(a.treatment_options || []).map((opt: any, i: number) => (
+                    <View key={i} style={{ marginBottom: i === a.treatment_options.length - 1 ? 0 : 8, paddingTop: i === 0 ? 0 : 8, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: '#E1E7F0' }}>
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: p.fg }}>
+                        Option {opt.label}: {opt.implant_count} implants ({opt.kind})
+                      </Text>
+                      <Text style={{ fontSize: 11, color: '#37474F', marginTop: 2, lineHeight: 16 }}>{opt.placement}</Text>
+                      {opt.tilt && opt.tilt !== '—' && (
+                        <Text style={{ fontSize: 10, color: '#5C6BC0', marginTop: 2, fontStyle: 'italic' }}>Tilt: {opt.tilt}</Text>
+                      )}
+                      {opt.augmentation && (
+                        <Text style={{ fontSize: 10, color: '#C62828', marginTop: 2, fontStyle: 'italic' }}>Augmentation: {opt.augmentation}</Text>
+                      )}
+                    </View>
+                  ))}
+                  {a.loading_recommendation && (
+                    <Text style={{ fontSize: 10, color: '#455A64', marginTop: 8, fontStyle: 'italic' }}>
+                      Loading: {a.loading_recommendation}
+                    </Text>
+                  )}
+                  {a.augmentation_note && (
+                    <Text style={{ fontSize: 10, color: '#455A64', marginTop: 4, fontStyle: 'italic' }}>
+                      Augmentation guidance: {a.augmentation_note}
+                    </Text>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        )}
+
         {/* Clinical Examination */}
         {(procedure.occlusocervical_height || procedure.mesiodistal_space || procedure.edentulous_sites?.length > 0 || procedure.edentulous_site || procedure.arch_condition || procedure.ridge_contour || procedure.soft_tissue_thickness || procedure.keratinized_mucosa) && (
           <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#1E88E5' }]} data-testid="clinical-examination-section">

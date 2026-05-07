@@ -4446,6 +4446,18 @@ def _build_case_context(proc: dict) -> str:
     for i, p in enumerate(plans):
         parts.append(f"Implant Plan {i+1}: Tooth {p.get('position', p.get('tooth_number','?'))}, Brand: {p.get('brand','?')}, System: {p.get('system','?')}, Diameter: {p.get('diameter','?')}mm, Length: {p.get('length','?')}mm, Bone Width: {p.get('bone_width','?')}mm, Bone Height: {p.get('bone_height','?')}mm, Bone Type: {p.get('bone_type','?')}")
 
+    # ── Full-Arch atrophy assessment (silently injected institutional guidance) ──
+    aa = proc.get('atrophy_assessment') or {}
+    for arch_key in ('maxilla', 'mandible'):
+        a = aa.get(arch_key) or {}
+        if a.get('class'):
+            parts.append("")
+            try:
+                from full_arch_classification import render_for_ai_context
+                parts.append(render_for_ai_context(a))
+            except Exception:
+                parts.append(f"Atrophy class for the {arch_key}: {a.get('class')} ({a.get('severity_label','')})")
+
     # Medical assessment
     if proc.get('medical_assessment'):
         ma = proc['medical_assessment']
@@ -5516,6 +5528,72 @@ async def update_ai_summary(procedure_id: str, request: Request, current_user: d
 
     await db.procedures.update_one({"_id": ObjectId(procedure_id)}, update_op)
     return {"ok": True, field_name: content}
+
+
+# ── Full-Arch atrophy classification (silent institutional guidance) ──
+from full_arch_classification import classify_full_arch as _classify_full_arch  # noqa: E402
+
+
+class AtrophyInputs(BaseModel):
+    arch: str  # "maxilla" | "mandible"
+    anterior_height: Optional[float] = None
+    posterior_height: Optional[float] = None
+    anterior_width: Optional[float] = None
+    posterior_width: Optional[float] = None
+
+
+@api_router.post("/full-arch-classify")
+async def full_arch_classify(payload: AtrophyInputs, current_user: dict = Depends(get_current_user)):
+    """Classify a full-arch atrophy case and return the recommended therapeutic options.
+    Pure pure function — does not write to DB."""
+    return _classify_full_arch(
+        payload.arch,
+        payload.anterior_height,
+        payload.posterior_height,
+        payload.anterior_width,
+        payload.posterior_width,
+    )
+
+
+@api_router.put("/procedures/{procedure_id}/atrophy-assessment")
+async def save_atrophy_assessment(procedure_id: str, request: Request, current_user: dict = Depends(get_current_user)):
+    """Save per-arch atrophy assessment(s) on a procedure.
+
+    Body: { "maxilla": {anterior_height, posterior_height, anterior_width, posterior_width},
+            "mandible": {...} }
+    Either or both arches may be provided. Only arches present in the payload are stored.
+    """
+    if current_user.get("role") == "nurse":
+        raise HTTPException(status_code=403, detail="Read-only access")
+
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    body = await request.json()
+    out: Dict[str, Any] = {}
+    for arch_key in ("maxilla", "mandible"):
+        a = body.get(arch_key)
+        if not a:
+            continue
+        result = _classify_full_arch(
+            arch_key,
+            a.get("anterior_height"),
+            a.get("posterior_height"),
+            a.get("anterior_width"),
+            a.get("posterior_width"),
+        )
+        if result.get("ok"):
+            out[arch_key] = result
+
+    if not out:
+        raise HTTPException(status_code=400, detail="No valid atrophy data provided")
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"atrophy_assessment": out, "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    return {"ok": True, "atrophy_assessment": out}
 
 
 class AIChatMessage(BaseModel):

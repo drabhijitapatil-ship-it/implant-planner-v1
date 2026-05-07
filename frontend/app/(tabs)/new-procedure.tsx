@@ -11,6 +11,7 @@ import { showUploadPicker } from '../../utils/uploadPicker';
 import { useAuth } from '../../contexts/AuthContext';
 import BackButton from '../../components/BackButton';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';
+import { AtrophyClassificationChip } from '../../components/AtrophyClassificationChip';
 import { validateImplantSelection, findMissingRuns, clusterLeader } from '../../utils/implantValidation';
 import {
   PROCEDURE_TYPES,
@@ -317,6 +318,15 @@ export default function NewProcedureScreen() {
     // Aesthetic Risk Assessment
     smile_line: '',
     gingival_biotype: '',
+    // Full-Arch atrophy assessment (anterior/posterior bone height + width per arch, mm)
+    atrophy_max_ant_h: '',
+    atrophy_max_post_h: '',
+    atrophy_max_ant_w: '',
+    atrophy_max_post_w: '',
+    atrophy_man_ant_h: '',
+    atrophy_man_post_h: '',
+    atrophy_man_ant_w: '',
+    atrophy_man_post_w: '',
     // Medical Assessment
     medical_assessment: {} as Record<string, string>,
     medical_risk_level: '',
@@ -741,6 +751,43 @@ export default function NewProcedureScreen() {
       const res = await api.post('/procedures', payload);
 
       const procId = res.data.id || res.data._id;
+
+      // ── Persist Atrophy Assessment for Full-Arch cases (silent guidance) ──
+      if (isFullArch && procId) {
+        const atrophyPayload: any = {};
+        const fnum = (s: string) => {
+          const v = parseFloat(s); return Number.isFinite(v) ? v : null;
+        };
+        if (formData.arch === 'Maxillary' || formData.arch === 'Both') {
+          const ah = fnum(formData.atrophy_max_ant_h);
+          const ph = fnum(formData.atrophy_max_post_h);
+          if (ah !== null && ph !== null) {
+            atrophyPayload.maxilla = {
+              anterior_height: ah,
+              posterior_height: ph,
+              anterior_width: fnum(formData.atrophy_max_ant_w),
+              posterior_width: fnum(formData.atrophy_max_post_w),
+            };
+          }
+        }
+        if (formData.arch === 'Mandibular' || formData.arch === 'Both') {
+          const ah = fnum(formData.atrophy_man_ant_h);
+          const ph = fnum(formData.atrophy_man_post_h);
+          if (ah !== null && ph !== null) {
+            atrophyPayload.mandible = {
+              anterior_height: ah,
+              posterior_height: ph,
+              anterior_width: fnum(formData.atrophy_man_ant_w),
+              posterior_width: fnum(formData.atrophy_man_post_w),
+            };
+          }
+        }
+        if (Object.keys(atrophyPayload).length > 0) {
+          try { await api.put(`/procedures/${procId}/atrophy-assessment`, atrophyPayload); }
+          catch { /* best effort — don't block case creation */ }
+        }
+      }
+
       setCreatedProcedureId(procId);
       setStep('implants');
       await clearPersistedForm();
@@ -1509,6 +1556,86 @@ export default function NewProcedureScreen() {
                 onChange={v => updateForm('opposing_arch', v)} />
               <Dropdown label="Temporomandibular Joint" value={formData.tmj}
                 options={TMJ_OPTIONS} onChange={v => updateForm('tmj', v)} />
+
+              {/* ── Atrophy Assessment (Full-Arch only) ── */}
+              <Text style={[styles.subSectionTitle, { marginTop: 18 }]}>Atrophy Assessment</Text>
+              <Text style={{ fontSize: 12, color: '#5C6BC0', marginBottom: 10, fontStyle: 'italic' }}>
+                Enter average bone height (and width) in the anterior and posterior regions for each treated arch. The class and recommended therapeutic options are computed automatically.
+              </Text>
+
+              {(formData.arch === 'Maxillary' || formData.arch === 'Both') && (
+                <View style={{ marginBottom: 12, padding: 12, backgroundColor: '#F3F8FF', borderRadius: 10, borderLeftWidth: 3, borderLeftColor: '#1565C0' }} testID="atrophy-maxilla-block">
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#0D47A1', marginBottom: 8 }}>Maxilla</Text>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Anterior Height (mm)</Text>
+                      <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="e.g. 14"
+                        value={formData.atrophy_max_ant_h} onChangeText={v => updateForm('atrophy_max_ant_h', v)} testID="atrophy-max-ant-h" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Posterior Height (mm)</Text>
+                      <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="e.g. 6"
+                        value={formData.atrophy_max_post_h} onChangeText={v => updateForm('atrophy_max_post_h', v)} testID="atrophy-max-post-h" />
+                    </View>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Anterior Width (mm)</Text>
+                      <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="e.g. 7"
+                        value={formData.atrophy_max_ant_w} onChangeText={v => updateForm('atrophy_max_ant_w', v)} testID="atrophy-max-ant-w" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Posterior Width (mm)</Text>
+                      <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="e.g. 7"
+                        value={formData.atrophy_max_post_w} onChangeText={v => updateForm('atrophy_max_post_w', v)} testID="atrophy-max-post-w" />
+                    </View>
+                  </View>
+                  <AtrophyClassificationChip
+                    arch="maxilla"
+                    anterior_height={formData.atrophy_max_ant_h}
+                    posterior_height={formData.atrophy_max_post_h}
+                    anterior_width={formData.atrophy_max_ant_w}
+                    posterior_width={formData.atrophy_max_post_w}
+                  />
+                </View>
+              )}
+
+              {(formData.arch === 'Mandibular' || formData.arch === 'Both') && (
+                <View style={{ marginBottom: 12, padding: 12, backgroundColor: '#F3F8FF', borderRadius: 10, borderLeftWidth: 3, borderLeftColor: '#1565C0' }} testID="atrophy-mandible-block">
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#0D47A1', marginBottom: 8 }}>Mandible</Text>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Anterior Height (mm)</Text>
+                      <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="e.g. 18"
+                        value={formData.atrophy_man_ant_h} onChangeText={v => updateForm('atrophy_man_ant_h', v)} testID="atrophy-man-ant-h" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Posterior Height (mm)</Text>
+                      <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="e.g. 9"
+                        value={formData.atrophy_man_post_h} onChangeText={v => updateForm('atrophy_man_post_h', v)} testID="atrophy-man-post-h" />
+                    </View>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Anterior Width (mm)</Text>
+                      <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="e.g. 7"
+                        value={formData.atrophy_man_ant_w} onChangeText={v => updateForm('atrophy_man_ant_w', v)} testID="atrophy-man-ant-w" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Posterior Width (mm)</Text>
+                      <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="e.g. 7"
+                        value={formData.atrophy_man_post_w} onChangeText={v => updateForm('atrophy_man_post_w', v)} testID="atrophy-man-post-w" />
+                    </View>
+                  </View>
+                  <AtrophyClassificationChip
+                    arch="mandible"
+                    anterior_height={formData.atrophy_man_ant_h}
+                    posterior_height={formData.atrophy_man_post_h}
+                    anterior_width={formData.atrophy_man_ant_w}
+                    posterior_width={formData.atrophy_man_post_w}
+                  />
+                </View>
+              )}
             </>
           )}
 
