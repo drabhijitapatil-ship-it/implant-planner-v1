@@ -39,6 +39,7 @@ import CaseCompletionBadge from '../../components/CaseCompletionBadge';
 import ExportPrintMenu from '../../components/ExportPrintMenu';
 import Phase2EditModal from '../../components/Phase2EditModal';
 import AugmentationChecklist from '../../components/AugmentationChecklist';
+import PulsingDoubleArrow from '../../components/onboarding/primitives/PulsingDoubleArrow';
 import * as Linking from 'expo-linking';
 
 // Edit mode context for passing edit state to InfoRow
@@ -48,11 +49,36 @@ const EditContext = createContext<{
   editValues: Record<string, any>;
   saving: boolean;
   procedure: any;
-  startEdit: (key: string, val: any) => void;
-  saveField: (key: string) => void;
+  startEdit: (field: string, value: any) => void;
+  saveField: (field: string) => void;
   cancelEdit: () => void;
   setEditValues: React.Dispatch<React.SetStateAction<Record<string, any>>>;
 } | null>(null);
+
+/**
+ * Map a procedure status → the current phase the case sits in + the next
+ * phase it will move to. Powers the "Phase X ›› Phase Y" header indicator.
+ * Returns `next: null` when the case is fully complete.
+ */
+function getProgressPair(status: string): { current: string; next: string | null } {
+  if (['draft', 'pending_phase1'].includes(status)) {
+    return { current: 'Phase 1', next: 'Phase 2' };
+  }
+  if (['phase1_approved', 'pending_phase2'].includes(status)) {
+    return { current: 'Phase 2', next: 'Phase 3' };
+  }
+  if (['phase2_approved', 'pending_stage2_surgical'].includes(status)) {
+    return { current: 'Phase 3', next: 'Phase 4' };
+  }
+  if (['stage2_surgical_approved', 'pending_stage2_prosthetic'].includes(status)) {
+    return { current: 'Phase 4', next: 'Done' };
+  }
+  if (status === 'completed') {
+    return { current: 'Done', next: null };
+  }
+  return { current: 'Phase 1', next: 'Phase 2' };
+}
+
 
 // ─── Field Options Map ───────────────────────────────────
 // Maps fieldKey → picker config. When editing a field present here,
@@ -577,6 +603,22 @@ export default function ProcedureDetailScreen() {
               {STATUS_LABELS[procedure.status as keyof typeof STATUS_LABELS]}
             </Text>
           </View>
+          {(() => {
+            const pair = getProgressPair(procedure.status);
+            return (
+              <View style={styles.progressInline} testID="case-progress-indicator">
+                <Text style={styles.progressCurrent}>{pair.current}</Text>
+                {pair.next ? (
+                  <>
+                    <PulsingDoubleArrow color="#1565C0" size={12} delayMs={150} />
+                    <Text style={styles.progressNext}>{pair.next}</Text>
+                  </>
+                ) : (
+                  <Ionicons name="checkmark-circle" size={14} color="#2E7D32" style={{ marginLeft: 4 }} />
+                )}
+              </View>
+            );
+          })()}
         </View>
 
         {/* Treatment Timeline / Progress Tracker */}
@@ -3016,6 +3058,18 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     alignItems: 'center',
   },
+  progressInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: '#E3F2FD',
+    borderRadius: 999,
+  },
+  progressCurrent: { fontSize: 11, fontWeight: '800', color: '#0D47A1', letterSpacing: 0.4 },
+  progressNext: { fontSize: 11, fontWeight: '600', color: '#546E7A', letterSpacing: 0.3 },
   statusBadge: {
     paddingHorizontal: 24,
     paddingVertical: 10,
