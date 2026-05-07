@@ -1447,8 +1447,8 @@ CONELOG_PROGRESSIVE: Dict[str, Any] = {
 }
 
 ALPHABIO_SPI: Dict[str, Any] = {
-    "key": "Alpha-Bio Tec|SPI",
-    "brand": "Alpha-Bio Tec",
+    "key": "Alpha Bio|SPI",
+    "brand": "Alpha Bio",
     "name": "SPI",
     "connection": {"type": "internal_hex", "subtype": "0.050", "indexing": ["non_indexed"]},
     "platform_switching": False,
@@ -2796,7 +2796,7 @@ STUB_KEYS: List[str] = [
     "NeoBiotech|IS-III active",
     # iter-143 — newly registered brands (full catalogs below).
     "MIS|LANCE+",
-    "Alpha-Bio Tec|SPI",
+    "Alpha Bio|SPI",
     # iter-145 — Cowell Medi (new brand) registered via seed.
     # iter-163 — "Cowell Medi|INNO SLA-SH" was a generic placeholder; deleted
     # because the rich Submerged/Internal/External/Mini Plus records cover the

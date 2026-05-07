@@ -12754,9 +12754,33 @@ async def seed_on_startup():
             if records:
                 await db.implant_library.drop()
                 await db.implant_library.insert_many(records)
+                # ─── Append Alpha-Bio brochure rows (iter-177) ───
+                # The Excel master covers the original 50 systems. Brochure-
+                # derived systems (NeO×3 / ICE / ATID / DFI / NICE) live in
+                # alpha_bio_brochure_data.py and are merged here so they
+                # survive the destructive Excel reseed on every restart.
+                ab_added = 0
+                try:
+                    from alpha_bio_brochure_data import SYSTEM_SIZES as _AB_SIZES
+                    extra = []
+                    for sys_name, sizes in _AB_SIZES.items():
+                        for diameter, lengths in sizes["lengths_by_diameter"].items():
+                            for length in lengths:
+                                extra.append({
+                                    "brand": "Alpha Bio",
+                                    "system": sys_name,
+                                    "diameter": float(diameter),
+                                    "length": float(length),
+                                })
+                    if extra:
+                        await db.implant_library.insert_many(extra)
+                        ab_added = len(extra)
+                except Exception as ab_err:
+                    logging.warning(f"Alpha-Bio brochure rows not appended: {ab_err}")
                 logging.info(
-                    f"Implant library FORCE-RESEEDED: {len(records)} records, {len(excel_systems)} unique systems "
-                    f"(replaced {old_count} old records)."
+                    f"Implant library FORCE-RESEEDED: {len(records)} Excel records, "
+                    f"{len(excel_systems)} unique systems "
+                    f"(replaced {old_count} old records); +{ab_added} Alpha-Bio brochure rows appended."
                 )
             else:
                 logging.error("Implant library seed: XLSX parsed but produced 0 records!")

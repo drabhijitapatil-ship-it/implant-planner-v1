@@ -1,5 +1,27 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 178 (Feb 2026) — Alpha-Bio brochure data made restart-safe
+
+User reported the new systems were not visible in the app despite the iter-177 seed running successfully. Root cause: the backend's startup hook unconditionally **drops** the `implant_library` collection and re-seeds it from `implant_library_latest.xlsx`, wiping the 109 brochure rows on the very next restart.
+
+### Fix
+- Extended the startup seed (`server.py` ~line 12750) to **append** the brochure-derived rows (read from `alpha_bio_brochure_data.SYSTEM_SIZES`) right after the destructive Excel reseed. Excel remains canonical for the original 50 systems; Python data extends it.
+- Normalized the legacy `implant_catalog_seed.ALPHABIO_SPI` constant from key/brand `"Alpha-Bio Tec|SPI"` → `"Alpha Bio|SPI"` (and the matching `STUB_KEYS` entry) so the on-startup catalog seed no longer re-introduces the `"Alpha-Bio Tec"` ghost doc on every restart.
+- Deleted the leftover `Alpha-Bio Tec` brand catalog rows in MongoDB.
+
+### Verified
+- `/api/implant-library/systems`: 50 → **57 systems**, **8 Alpha Bio** (SPI + NeO CS + NeO CHC + NeO IH + ICE + ATID + DFI + NICE).
+- Survives `sudo supervisorctl restart backend` (re-tested twice → still 57 / 8).
+- Implant-tab UI dropdown now reads `Select Implant System (57)`.
+- `/api/drilling-protocols/generate` continues to emit correct brochure sequences (NICE Ø3.5×11.5/D4 → 2.0 → 2.4 short_3mm → implant ✓).
+
+### Files modified
+- `/app/backend/server.py` — append-after-reseed block in implant-library startup hook.
+- `/app/backend/implant_catalog_seed.py` — `ALPHABIO_SPI` brand/key normalized; `STUB_KEYS` entry renamed.
+
+---
+
+
 ## Iteration 177 (Feb 2026) — Alpha-Bio brochure ingestion (6 systems)
 
 Loaded the official Alpha-Bio brochure (NeO, ICE, ATID, DFI, NICE — Spiral
