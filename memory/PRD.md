@@ -1,5 +1,57 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 172 (Feb 2026) — Elegant onboarding v2 + refreshed How-It-Works
+
+### A. Six-slide first-run onboarding (`/onboarding`)
+Replaced the 3-slide placeholder with a polished, role-aware carousel using **react-native-reanimated v4** for purposeful micro-animations:
+
+| # | Slide | Highlights |
+|---|---|---|
+| 1 | Welcome | Soft scale-in hero logo, role chip, one-line value prop tailored per role (Implant In-Charge / Supervisor / Student / Nurse / Administrator) |
+| 2 | 4-phase lifecycle | Animated horizontal timeline — coloured icon nodes + line draw-in stagger; role-specific footer chip |
+| 3 | Two approvals at every gate | Animated three-tile diagram (Student → Supervisor → In-Charge) with **"That's you"** glow ring on the user's own role |
+| 4 | Implant Database & Smart Selection | Two-card layout (30+ systems, components, datasheets, AI extracts // Suggest Me / Let Me Choose / safety chips / bridge-cantilever) |
+| 5 | Drilling Protocol PDF + Implanr AI | PDF mock with "stamping" CBCT-QR badge + word-by-word AI typing bubble (static deterministic sample) |
+| 6 | Forum & Chat + your routine | Discussion Forum + Group Chat cards + role-specific 3-line recap with green checkmarks |
+
+### B. Refreshed Help Workflow (`/help-workflow`)
+Above the existing per-role flowchart we kept, three new sections were appended:
+- **Approval gates at a glance** — embeds the same `ApprovalGateDiagram` primitive so the user always sees their role glow
+- **Smart tools you'll use every day** — 8-tile grid (Implant Database, Smart Selection, Drilling Protocol PDF, Implanr AI, Discussion Forum, Group Chat, HIPAA Safeguards) using the reusable `FeatureCard` primitive
+- **Replay the welcome tour** button — re-opens `/onboarding` for any user, anytime
+
+### C. Versioning hook (auto-replay on content updates)
+- New backend field `User.workflow_seen_version: int` returned by `GET /auth/me`
+- `POST /auth/me/ack-workflow` now accepts `{version}` body and writes both `workflow_seen_at` + `workflow_seen_version`
+- Frontend constant `ONBOARDING_VERSION = 2` in `components/onboarding/content/onboardingContent.ts`
+- Login gate now triggers onboarding when **either** `workflow_seen_at` is null **or** `workflow_seen_version < ONBOARDING_VERSION` — bumps the constant on future content updates and existing users automatically see the new slides on next login
+
+### D. Accessibility
+- Respects OS-level `prefers-reduced-motion` → instant fade-in instead of scale animations
+- `data-testid` on every interactive element (`onboarding-next-btn`, `onboarding-skip-btn`, `onboarding-slide-{n}`, `help-approval-gates`, `help-smart-tools`, `help-replay-onboarding`)
+
+### Files added
+- `/app/frontend/components/onboarding/content/onboardingContent.ts` — single source of truth for role copy + ONBOARDING_VERSION
+- `/app/frontend/components/onboarding/primitives/AnimatedTimeline.tsx`
+- `/app/frontend/components/onboarding/primitives/ApprovalGateDiagram.tsx`
+- `/app/frontend/components/onboarding/primitives/FeatureCard.tsx`
+- `/app/frontend/components/onboarding/primitives/PdfWithQrMock.tsx`
+- `/app/frontend/components/onboarding/primitives/TypingBubble.tsx`
+
+### Files modified
+- `/app/frontend/app/onboarding.tsx` — full rewrite (was 4-slide placeholder)
+- `/app/frontend/app/help-workflow.tsx` — appended Approval Gates + Smart Tools + Replay sections
+- `/app/frontend/app/auth/login.tsx` — version-aware gate import + check
+- `/app/frontend/contexts/AuthContext.tsx` — `workflow_seen_version` field, `ackWorkflow(version)` signature
+- `/app/backend/server.py` — `User.workflow_seen_version` field + version-accepting ack-workflow endpoint
+
+### Verification
+- All 6 slides smoke-tested via Playwright on mobile viewport (480×1000) — render + animations work cleanly on web
+- Help Workflow new sections render with the user's role correctly glowing (`Student` for Gaurav.pandey)
+- Backend smoke test: `POST /auth/me/ack-workflow {version: 2}` returns `{workflow_seen_at, workflow_seen_version: 2}` ✅
+
+---
+
 ## Iteration 171 (Feb 2026) — Legal docs & in-app legal screens
 
 ### A. Comprehensive legal content drafted (markdown — for website + counsel review)

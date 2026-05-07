@@ -13,6 +13,9 @@ interface User {
    *  help. Null/undefined means they haven't seen it → frontend routes them
    *  through /onboarding → /help-workflow once before the dashboard. */
   workflow_seen_at?: string | null;
+  /** Onboarding content version the user has acknowledged. When the client's
+   *  ONBOARDING_VERSION constant exceeds this, the carousel re-fires. */
+  workflow_seen_version?: number | null;
 }
 
 interface AuthContextType {
@@ -25,8 +28,9 @@ interface AuthContextType {
   recordActivity: () => void;
   /** Re-fetch /auth/me and update context (used after ack-workflow). */
   refreshUser: () => Promise<User | null>;
-  /** Hit POST /auth/me/ack-workflow so onboarding + workflow help stop showing. */
-  ackWorkflow: () => Promise<void>;
+  /** Hit POST /auth/me/ack-workflow so onboarding + workflow help stop showing.
+   *  Pass the current ONBOARDING_VERSION so version-based re-fire works. */
+  ackWorkflow: (version?: number) => Promise<void>;
 }
 
 // Auto-logout after 15 minutes of inactivity. Clinic devices are often shared,
@@ -169,8 +173,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const ackWorkflow = async () => {
-    await api.post('/auth/me/ack-workflow');
+  const ackWorkflow = async (version?: number) => {
+    await api.post('/auth/me/ack-workflow', { version: version ?? 1 });
     // Don't refetch here — caller decides whether to refresh user context.
   };
 

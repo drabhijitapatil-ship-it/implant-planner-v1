@@ -20,6 +20,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import api from '../../utils/api';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ONBOARDING_VERSION } from '../../components/onboarding/content/onboardingContent';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -62,9 +63,11 @@ export default function LoginScreen() {
     try {
       await login(email.trim(), password.trim());
       // Ensure we have the full user doc (login response may omit
-      // workflow_seen_at); then route first-timers through onboarding.
+      // workflow_seen_at); then route first-timers, OR users who haven't seen
+      // the latest onboarding version, through the carousel.
       const me = await refreshUser();
-      if (!me?.workflow_seen_at) {
+      const seenVersion = (me as any)?.workflow_seen_version || 0;
+      if (!me?.workflow_seen_at || seenVersion < ONBOARDING_VERSION) {
         router.replace('/onboarding');
         return;
       }

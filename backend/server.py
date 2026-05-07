@@ -212,6 +212,10 @@ class UserResponse(BaseModel):
     # Timestamp when the user dismissed the first-login onboarding + workflow help.
     # Null means they haven't seen it yet → frontend routes them through onboarding.
     workflow_seen_at: Optional[datetime] = None
+    # Version of the onboarding/help content the user has acknowledged.
+    # When ONBOARDING_VERSION on the client > this value, onboarding re-fires
+    # so existing users see new feature slides on major content updates.
+    workflow_seen_version: Optional[int] = 0
     # Latest "What's new" version the user has acknowledged. Null means they
     # haven't seen any → frontend shows the most-recent changelog entry before
     # routing to dashboard. Bumped by POST /api/whatsnew/ack.
@@ -915,6 +919,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         role=current_user["role"],
         profile_photo=current_user.get("profile_photo"),
         workflow_seen_at=current_user.get("workflow_seen_at"),
+        workflow_seen_version=current_user.get("workflow_seen_version", 0),
         last_seen_whatsnew_version=current_user.get("last_seen_whatsnew_version"),
     )
 
@@ -1051,13 +1056,20 @@ async def ack_whatsnew(current_user: dict = Depends(get_current_user)):
 # chart. Writes a timestamp so the client won't re-show these screens on
 # subsequent logins from any device. Idempotent.
 @api_router.post("/auth/me/ack-workflow")
-async def ack_workflow(current_user: dict = Depends(get_current_user)):
+async def ack_workflow(
+    payload: dict = Body(default=None),
+    current_user: dict = Depends(get_current_user),
+):
     now = datetime.now(timezone.utc)
+    try:
+        version = int((payload or {}).get("version", 1))
+    except Exception:
+        version = 1
     await db.users.update_one(
         {"_id": ObjectId(current_user["_id"])},
-        {"$set": {"workflow_seen_at": now}},
+        {"$set": {"workflow_seen_at": now, "workflow_seen_version": version}},
     )
-    return {"workflow_seen_at": now.isoformat()}
+    return {"workflow_seen_at": now.isoformat(), "workflow_seen_version": version}
 
 # --- Logout (JWT Session Invalidation) ---
 @api_router.post("/auth/logout")
