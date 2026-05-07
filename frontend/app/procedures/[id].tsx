@@ -1439,10 +1439,9 @@ export default function ProcedureDetailScreen() {
                 <View key={arch} style={{ marginBottom: 14, padding: 12, backgroundColor: '#FAFCFF', borderRadius: 10 }}>
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 8 }}>
                     <Text style={{ fontSize: 13, fontWeight: '700', color: '#0D47A1', textTransform: 'capitalize' }}>{arch}</Text>
-                    <View style={{ backgroundColor: p.bg, borderColor: p.border, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999 }}>
-                      <Text style={{ fontSize: 12, fontWeight: '800', color: p.fg }}>{a.class}</Text>
+                    <View style={{ backgroundColor: p.bg, borderColor: p.border, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 999 }}>
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: p.fg }}>{a.severity_label}</Text>
                     </View>
-                    <Text style={{ fontSize: 11, color: '#455A64' }}>{a.severity_label}</Text>
                   </View>
                   <Text style={{ fontSize: 11, color: '#5C6BC0', marginBottom: 6 }}>
                     Anterior: {a.inputs?.anterior_height_mm ?? '—'} mm height, {a.inputs?.anterior_width_mm ?? '—'} mm width  ·
@@ -1451,7 +1450,7 @@ export default function ProcedureDetailScreen() {
                   {(a.treatment_options || []).map((opt: any, i: number) => (
                     <View key={i} style={{ marginBottom: i === a.treatment_options.length - 1 ? 0 : 8, paddingTop: i === 0 ? 0 : 8, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: '#E1E7F0' }}>
                       <Text style={{ fontSize: 12, fontWeight: '700', color: p.fg }}>
-                        Option {opt.label}: {opt.implant_count} implants ({opt.kind})
+                        Treatment Option {i + 1}: {opt.implant_count} implants ({opt.kind})
                       </Text>
                       <Text style={{ fontSize: 11, color: '#37474F', marginTop: 2, lineHeight: 16 }}>{opt.placement}</Text>
                       {opt.tilt && opt.tilt !== '—' && (

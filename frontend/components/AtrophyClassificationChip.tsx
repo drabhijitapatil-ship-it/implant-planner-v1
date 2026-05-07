@@ -76,11 +76,8 @@ export const AtrophyClassificationChip: React.FC<Props> = (p) => {
   return (
     <View style={{ marginTop: 12 }} testID={`atrophy-result-${p.arch}`}>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-        <View style={{ backgroundColor: palette.bg, borderColor: palette.border, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 }}>
-          <Text style={{ fontSize: 13, fontWeight: '800', color: palette.fg, letterSpacing: 0.5 }}>{result.class}</Text>
-        </View>
-        <View style={{ backgroundColor: '#FFFFFF', borderColor: palette.border, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 }}>
-          <Text style={{ fontSize: 12, fontWeight: '600', color: palette.fg }}>{result.severity_label}</Text>
+        <View style={{ backgroundColor: palette.bg, borderColor: palette.border, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999 }}>
+          <Text style={{ fontSize: 12, fontWeight: '700', color: palette.fg }}>{result.severity_label}</Text>
         </View>
       </View>
       {result.treatment_options && result.treatment_options.length > 0 && (
@@ -88,7 +85,7 @@ export const AtrophyClassificationChip: React.FC<Props> = (p) => {
           {result.treatment_options.map((opt, i) => (
             <View key={i} style={{ marginBottom: i === result.treatment_options!.length - 1 ? 0 : 8 }}>
               <Text style={{ fontSize: 12, fontWeight: '700', color: palette.fg }}>
-                Option {opt.label}: {opt.implant_count} implants ({opt.kind})
+                Treatment Option {i + 1}: {opt.implant_count} implants ({opt.kind})
               </Text>
               <Text style={{ fontSize: 11, color: '#37474F', marginTop: 2 }}>{opt.placement}</Text>
               {opt.tilt && opt.tilt !== '—' && (
