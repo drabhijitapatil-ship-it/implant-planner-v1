@@ -1,5 +1,28 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 179 (Feb 2026) — Implant library: idempotent seeding (no more `drop()`)
+
+Replaced the destructive `db.implant_library.drop()` + Excel-reseed startup hook with **Python-data + idempotent upserts**. New systems are added by editing one Python file; admin-added rows survive every restart.
+
+### Architecture
+- **NEW** `/app/backend/implant_library_data.py` — single source of truth (680 rows / 50 systems / 18 brands), generated once from `implant_library_latest.xlsx` with whitespace + brand-name normalization already applied.
+- Startup seed now reads `implant_library_data.SYSTEMS` + `alpha_bio_brochure_data.SYSTEM_SIZES`, then `update_one(..., upsert=True)` per natural key `(brand, system, diameter, length)`.
+- Each canonical row is auto-tagged with `source: "library_master"` or `source: "alpha_bio_brochure"`. Admin-added rows (no `source`) are never wiped.
+- The legacy `implant_library_latest.xlsx` file is no longer read at runtime — kept on disk for reference.
+
+### Verified end-to-end
+- 680 master + 109 brochure = **789 canonical rows**, **57 systems** (50 Excel + 7 brochure), **8 Alpha Bio systems** preserved.
+- Inserted a fake admin-only row (`brand=TestVendor`) → **survived `sudo supervisorctl restart backend`** (789 → 790; only +1 admin row, no master/brochure churn).
+- Tagging breakdown after restart: `library_master=680, alpha_bio_brochure=109, no source (truly admin-only)=1` — matches expectations exactly.
+- Adding the next vendor (e.g., Straumann SLActive lengths or a freshly digitised Megagen brochure) is now a 5-minute task: append entries to `implant_library_data.SYSTEMS` and the next backend reload picks them up.
+
+### Files modified
+- **NEW** `/app/backend/implant_library_data.py` (~800 lines, 680 size tuples).
+- `/app/backend/server.py` — replaced the ~70-line destructive XLSX-reseed block with a 30-line idempotent upsert path. `BRAND_NAME_CORRECTIONS` constant retained for potential future Excel imports but no longer used at runtime.
+
+---
+
+
 ## Iteration 178 (Feb 2026) — Alpha-Bio brochure data made restart-safe
 
 User reported the new systems were not visible in the app despite the iter-177 seed running successfully. Root cause: the backend's startup hook unconditionally **drops** the `implant_library` collection and re-seeds it from `implant_library_latest.xlsx`, wiping the 109 brochure rows on the very next restart.
