@@ -1,5 +1,16 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 180 (Feb 2026) — Brand count chip in Implant Database
+
+User feedback: only saw "SPI" under Alpha Bio in admin/implant-catalog and assumed the new 7 systems were missing — actually they were just hidden behind a second-level dropdown. Added a small **"N systems"** count chip inside the brand dropdown row (between brand name and chevron) so the catalog depth is visible at a glance.
+
+- Dynamically reflects the count for whichever brand is selected (e.g., "Alpha Bio → 9 systems").
+- Disappears when no brand is picked.
+- File: `/app/frontend/app/admin/implant-catalog.tsx` (chip + 2 styles).
+
+---
+
+
 ## 📌 Saved for later (deferred enhancements)
 
 - **Admin "Add Implant Size" UI** (P2) — Implant In-Charge / Administrator-only modal: type `brand / system / diameter / length` → POST to `/api/implant-library` (new endpoint) → row lands in `implant_library` without a `source` tag (so it survives every restart per iter-179). ~100 lines of frontend (modal in `/admin/implant-catalog.tsx` or a new `/admin/implant-library.tsx`) + ~25 lines of backend (new POST endpoint with role guard + duplicate check). Lets every clinician maintain niche/regional implants in the picker without redeploying. *Saved 2026-02-07 per user request — implement after multi-tenant Phase A.*
