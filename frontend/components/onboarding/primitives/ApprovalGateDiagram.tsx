@@ -1,7 +1,7 @@
 /**
- * Three role tiles connected by directional arrows. The active tile (the user's
- * own role) gets a soft pulsing glow ring. Used on slide 3 and reused inside
- * the refreshed help-workflow screen.
+ * Three role tiles connected by pulsing double-chevron arrows. The active tile
+ * (the user's own role) gets a soft pulsing glow ring. Reused inside the
+ * help-workflow screen to keep onboarding and help in visual sync.
  */
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
@@ -9,6 +9,7 @@ import Animated, {
   useSharedValue, useAnimatedStyle, withDelay, withTiming, withRepeat, withSequence,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
+import PulsingDoubleArrow from './PulsingDoubleArrow';
 
 type Active = 'student' | 'supervisor' | 'incharge';
 
@@ -19,15 +20,11 @@ const TILES: { key: Active; icon: keyof typeof Ionicons.glyphMap; label: string;
 ];
 
 export default function ApprovalGateDiagram({ active }: { active: Active }) {
-  const arrow1 = useSharedValue(0);
-  const arrow2 = useSharedValue(0);
   const glow = useSharedValue(0);
 
   useEffect(() => {
-    arrow1.value = withDelay(200, withTiming(1, { duration: 350 }));
-    arrow2.value = withDelay(550, withTiming(1, { duration: 350 }));
     glow.value = withDelay(
-      900,
+      400,
       withRepeat(
         withSequence(
           withTiming(1, { duration: 900 }),
@@ -39,9 +36,6 @@ export default function ApprovalGateDiagram({ active }: { active: Active }) {
     );
   }, []);
 
-  const a1Style = useAnimatedStyle(() => ({ opacity: arrow1.value, transform: [{ scaleX: arrow1.value }] }));
-  const a2Style = useAnimatedStyle(() => ({ opacity: arrow2.value, transform: [{ scaleX: arrow2.value }] }));
-
   return (
     <View style={styles.wrap} testID="approval-gate-diagram">
       <View style={styles.row}>
@@ -52,25 +46,28 @@ export default function ApprovalGateDiagram({ active }: { active: Active }) {
             transform: [{ scale: 1 + glow.value * 0.08 }],
           }));
           return (
-            <View key={t.key} style={styles.tileCol}>
-              <View style={styles.tileWrap}>
-                <Animated.View style={[styles.glowRing, { borderColor: t.tint }, ringStyle]} />
-                <View style={[styles.tile, { borderColor: t.tint }]}>
-                  <Ionicons name={t.icon} size={28} color={t.tint} />
+            <React.Fragment key={t.key}>
+              <View style={styles.tileCol}>
+                <View style={styles.tileWrap}>
+                  <Animated.View style={[styles.glowRing, { borderColor: t.tint }, ringStyle]} />
+                  <View style={[styles.tile, { borderColor: t.tint }]}>
+                    <Ionicons name={t.icon} size={28} color={t.tint} />
+                  </View>
                 </View>
+                <Text style={[styles.tileLabel, isActive && { color: t.tint, fontWeight: '800' }]}>
+                  {t.label}
+                </Text>
+                {isActive && <Text style={styles.youAre}>That's you</Text>}
               </View>
-              <Text style={[styles.tileLabel, isActive && { color: t.tint, fontWeight: '800' }]}>{t.label}</Text>
-              {isActive && <Text style={styles.youAre}>That's you</Text>}
               {i < TILES.length - 1 && (
-                <Animated.View
-                  style={[
-                    styles.arrow,
-                    i === 0 ? a1Style : a2Style,
-                    i === 0 ? styles.arrow1pos : styles.arrow2pos,
-                  ]}
+                <PulsingDoubleArrow
+                  color="#90A4AE"
+                  size={16}
+                  delayMs={300 + i * 220}
+                  style={styles.arrowGap}
                 />
               )}
-            </View>
+            </React.Fragment>
           );
         })}
       </View>
@@ -84,8 +81,11 @@ export default function ApprovalGateDiagram({ active }: { active: Active }) {
 
 const styles = StyleSheet.create({
   wrap: { paddingVertical: 24, alignItems: 'center', width: '100%' },
-  row: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', maxWidth: 480 },
-  tileCol: { flex: 1, alignItems: 'center', position: 'relative' },
+  row: {
+    flexDirection: 'row', alignItems: 'flex-start',
+    justifyContent: 'space-between', width: '100%', maxWidth: 480,
+  },
+  tileCol: { alignItems: 'center', width: 84 },
   tileWrap: { width: 72, height: 72, alignItems: 'center', justifyContent: 'center' },
   tile: {
     width: 64, height: 64, borderRadius: 18, borderWidth: 2, backgroundColor: '#FFF',
@@ -96,14 +96,12 @@ const styles = StyleSheet.create({
   },
   tileLabel: { marginTop: 10, fontSize: 12, color: '#455A64', textAlign: 'center', lineHeight: 15, fontWeight: '600' },
   youAre: { marginTop: 2, fontSize: 10, color: '#1565C0', fontWeight: '700' },
-  arrow: {
-    position: 'absolute',
-    top: 30,
-    height: 2,
-    backgroundColor: '#90A4AE',
+  arrowGap: {
+    flex: 1,
+    justifyContent: 'center',
+    height: 72,                  // match tileWrap height for vertical alignment with icon centre
+    paddingHorizontal: 2,
   },
-  arrow1pos: { right: -38, width: 76, transformOrigin: 'left center' as any },
-  arrow2pos: { right: -38, width: 76, transformOrigin: 'left center' as any },
   checkLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 22 },
   checkText: { fontSize: 13, color: '#1B5E20', fontWeight: '700' },
 });
