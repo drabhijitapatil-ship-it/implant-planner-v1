@@ -1010,6 +1010,9 @@ def _entries_for_user(user: dict) -> List[Dict[str, Any]]:
             "date": e.get("date"),
             "title": e.get("title"),
             "items": e.get("items", []),
+            # Surface the role-target so the WhatsNewBadge can render
+            # role-aware copy (e.g., "What's new for In-Charges N").
+            "roles": e.get("roles"),
         })
     return out
 
