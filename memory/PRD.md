@@ -1,8 +1,12 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
-## Iteration 179 (Feb 2026) — Implant library: idempotent seeding (no more `drop()`)
+## 📌 Saved for later (deferred enhancements)
 
-Replaced the destructive `db.implant_library.drop()` + Excel-reseed startup hook with **Python-data + idempotent upserts**. New systems are added by editing one Python file; admin-added rows survive every restart.
+- **Admin "Add Implant Size" UI** (P2) — Implant In-Charge / Administrator-only modal: type `brand / system / diameter / length` → POST to `/api/implant-library` (new endpoint) → row lands in `implant_library` without a `source` tag (so it survives every restart per iter-179). ~100 lines of frontend (modal in `/admin/implant-catalog.tsx` or a new `/admin/implant-library.tsx`) + ~25 lines of backend (new POST endpoint with role guard + duplicate check). Lets every clinician maintain niche/regional implants in the picker without redeploying. *Saved 2026-02-07 per user request — implement after multi-tenant Phase A.*
+
+---
+
+## Iteration 179 (Feb 2026) — Implant library: idempotent seeding (no more `drop()`)Replaced the destructive `db.implant_library.drop()` + Excel-reseed startup hook with **Python-data + idempotent upserts**. New systems are added by editing one Python file; admin-added rows survive every restart.
 
 ### Architecture
 - **NEW** `/app/backend/implant_library_data.py` — single source of truth (680 rows / 50 systems / 18 brands), generated once from `implant_library_latest.xlsx` with whitespace + brand-name normalization already applied.
