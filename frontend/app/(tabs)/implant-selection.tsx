@@ -319,6 +319,21 @@ export default function ImplantSelectionScreen() {
                 <Text style={cSystem ? s.ddText : s.ddPlaceholder}>
                   {cSystem ? `${cSystem.brand} – ${cSystem.system}` : `Select Implant System (${systems.length})`}
                 </Text>
+                {cSystem && (() => {
+                  const sameBrandCount = systems.filter(x => x.brand === cSystem.brand).length;
+                  if (sameBrandCount <= 1) return null;
+                  return (
+                    <View
+                      style={s.brandSiblingChip}
+                      testID="brand-sibling-count-chip"
+                      data-testid="brand-sibling-count-chip"
+                    >
+                      <Text style={s.brandSiblingChipText}>
+                        +{sameBrandCount - 1} {cSystem.brand}
+                      </Text>
+                    </View>
+                  );
+                })()}
                 <Ionicons name="chevron-down" size={18} color="#8E8E93" />
               </TouchableOpacity>
               {/* ── Verbatim Indications & Features from institutional doc ── */}
@@ -1623,6 +1638,15 @@ const s = StyleSheet.create({
   dropdown: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#D0D7DE', borderRadius: 12, padding: 14, backgroundColor: '#FAFAFA', gap: 10 },
   ddText: { flex: 1, fontSize: 14, color: '#263238', fontWeight: '500' },
   ddPlaceholder: { flex: 1, fontSize: 14, color: '#90A4AE' },
+  brandSiblingChip: {
+    backgroundColor: '#E1F5FE',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: '#81D4FA',
+  },
+  brandSiblingChipText: { fontSize: 11, fontWeight: '700', color: '#0277BD', letterSpacing: 0.3 },
   indBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 10, backgroundColor: '#E8EAF6', borderRadius: 8, padding: 10 },
   indText: { flex: 1, fontSize: 12, color: '#1A237E', fontStyle: 'italic', lineHeight: 16 },
 
