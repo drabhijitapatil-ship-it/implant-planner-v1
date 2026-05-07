@@ -1,5 +1,35 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 184 (Feb 2026) — Digital Sign-Off block (court-defensible attestation)
+
+### Why
+Once Phase 4 closes, the case PDF should serve as a court-defensible record. We already capture per-faculty approval timestamps internally; this surfaces them as a clear attestation block on both screen and print without adding any new approval steps.
+
+### Changes
+**Backend (`/app/backend/server.py`)**
+- Replaced the static "Date:" footer on the PDF "Summary & Confirmation" page with a per-faculty sign-off block:
+  - PG Student name
+  - Supervising Faculty + `supervisor_final_delivery_approved_at` stamp + their Phase 4 Step 2 note (if any)
+  - Implant In-Charge + `implant_incharge_final_delivery_approved_at` stamp + their note (if any)
+  - "Treatment Completed: <date>" line
+  - Italic footnote: *"Auto-stamped on case completion. Subsequent edits are recorded in the case audit log."*
+
+**Frontend (`/app/frontend/app/procedures/[id].tsx`)**
+- Added a new **Digital Sign-Off card** under the Treatment-Complete banner, visible only when `procedure.status === 'completed'`. Mirrors the PDF block: faculty name, stamped local-time approval, and any Phase 4 Step 2 notes.
+- Card has an "ATTESTED" green badge in the header for visual authority.
+
+### Files touched
+- `/app/backend/server.py` — `generate_case_report()` Summary & Confirmation page rewritten (~line 6498).
+- `/app/frontend/app/procedures/[id].tsx` — new Sign-Off block right after the existing `completedBanner` (~line 1294).
+
+### Verification
+- Curl + PDF stream extraction on a real `completed` case (id `69cfb036a19e1d1819e0f6fd`):
+  - Found "Supervising Faculty: Dr. Paresh Gandhi", "Approved: April 03, 2026 · 12:21 UTC"
+  - Found "Implant Incharge: Dr. Abhijit Patil", "Approved: April 03, 2026 · 12:21 UTC"
+  - Found "Treatment Completed: April 03, 2026"
+  - Found "Auto-stamped on case completion..."
+- Backend lint: no new errors.
+
 ## Iteration 183 (Feb 2026) — Editable AI Summaries + Role-aware approval-helper text + Self-approval polish
 
 ### Why

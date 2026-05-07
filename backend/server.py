@@ -6503,28 +6503,58 @@ async def generate_case_report(
         "Standard Operating Protocol. All four phases of the treatment protocol have been "
         "reviewed and approved by the supervising faculty and implant incharge."
     ))
-    pdf.ln(15)
+    pdf.ln(10)
 
-    # Signature lines
-    for title, name in [
-        ("PG Student", procedure.get("student_name", "")),
-        ("Supervising Faculty", procedure.get("supervisor_name", "")),
-        ("Implant Incharge", procedure.get("implant_incharge_name", "")),
-    ]:
+    # ── Digital Sign-Off block (auto-stamped on completion) ─────────
+    def _fmt_dt(v):
+        if not v: return ""
+        if isinstance(v, datetime):
+            return v.strftime("%B %d, %Y · %H:%M UTC")
+        return str(v)
+
+    sup_at = _fmt_dt(procedure.get("supervisor_final_delivery_approved_at"))
+    inc_at = _fmt_dt(procedure.get("implant_incharge_final_delivery_approved_at"))
+    sup_note = (procedure.get("phase4_step2_supervisor_notes") or "").strip()
+    inc_note = (procedure.get("phase4_step2_incharge_notes") or "").strip()
+
+    blocks = [
+        ("PG Student", procedure.get("student_name", ""), "", ""),
+        ("Supervising Faculty", procedure.get("supervisor_name", ""), sup_at, sup_note),
+        ("Implant Incharge", procedure.get("implant_incharge_name", ""), inc_at, inc_note),
+    ]
+
+    for title, name, stamp, note in blocks:
         pdf.set_font("Helvetica", "", 10)
         pdf.cell(60, 6, safe(f"{title}:"), ln=False)
         pdf.set_font("Helvetica", "B", 10)
-        pdf.cell(0, 6, safe(name), ln=True)
-        pdf.line(pdf.get_x(), pdf.get_y() + 12, pdf.get_x() + 60, pdf.get_y() + 12)
-        pdf.ln(18)
+        pdf.cell(0, 6, safe(name or "—"), ln=True)
+        if stamp:
+            pdf.set_font("Helvetica", "I", 9)
+            pdf.set_text_color(85, 139, 47)
+            pdf.cell(60, 5, safe(""), ln=False)
+            pdf.cell(0, 5, safe(f"Approved: {stamp}"), ln=True)
+            pdf.set_text_color(0, 0, 0)
+        if note:
+            pdf.set_font("Helvetica", "I", 9)
+            pdf.set_text_color(70, 70, 70)
+            pdf.cell(60, 5, safe(""), ln=False)
+            pdf.multi_cell(0, 5, safe(f'"{note}"'))
+            pdf.set_text_color(0, 0, 0)
+        pdf.ln(6)
 
-    # Date
+    # Treatment-completed date footer
     pdf.set_font("Helvetica", "", 10)
     completed_str = ""
     if procedure.get("treatment_completed_at"):
         d = procedure["treatment_completed_at"]
         completed_str = d.strftime("%B %d, %Y") if isinstance(d, datetime) else str(d)
-    pdf.cell(0, 6, safe(f"Date: {completed_str}"), ln=True)
+    pdf.cell(0, 6, safe(f"Treatment Completed: {completed_str}"), ln=True)
+
+    pdf.ln(2)
+    pdf.set_font("Helvetica", "I", 8)
+    pdf.set_text_color(124, 179, 66)
+    pdf.multi_cell(0, 4, safe("Auto-stamped on case completion. Subsequent edits are recorded in the case audit log."))
+    pdf.set_text_color(0, 0, 0)
 
     buf = io.BytesIO()
     pdf.output(buf)
