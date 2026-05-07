@@ -41,6 +41,15 @@ import ExportPrintMenu from '../../components/ExportPrintMenu';
 import Phase2EditModal from '../../components/Phase2EditModal';
 import AugmentationChecklist from '../../components/AugmentationChecklist';
 import PulsingDoubleArrow from '../../components/onboarding/primitives/PulsingDoubleArrow';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSequence,
+  withDelay,
+  runOnJS,
+} from 'react-native-reanimated';
 import * as Linking from 'expo-linking';
 
 // Edit mode context for passing edit state to InfoRow
@@ -275,6 +284,12 @@ export default function ProcedureDetailScreen() {
 
   const cancelEdit = () => { setEditingField(null); };
 
+  // Persist the "pill hint seen" flag — kept as a top-level helper so it can
+  // be invoked via runOnJS from a reanimated callback (worklet → JS thread).
+  const persistPillHintSeen = () => {
+    AsyncStorage.setItem('case_pill_hint_seen_v1', '1').catch(() => {});
+  };
+
   // EditableInfoRow uses context-aware InfoRow (no longer needed as separate wrapper)
   // All InfoRow components automatically show pencil icons in edit mode via EditContext
 
@@ -283,6 +298,40 @@ export default function ProcedureDetailScreen() {
   useEffect(() => {
     loadProcedure();
   }, [id]);
+
+  // ── One-time pulse hint on the case-detail progress pill ──
+  // The first time a user lands on a case where a phase is in flight (pill is
+  // tappable), we bounce the pill twice so they discover that tapping it jumps
+  // them to that phase's section. After the animation, persist a flag so it
+  // never plays again — discoverability without nagging.
+  const PILL_HINT_KEY = 'case_pill_hint_seen_v1';
+  const pillScale = useSharedValue(1);
+  useEffect(() => {
+    if (!procedure?.status) return;
+    const pair = getProgressPair(procedure.status);
+    const tappable = ['Phase 1','Phase 2','Phase 3','Phase 4'].includes(pair.current) && !!pair.next;
+    if (!tappable) return;
+    let cancelled = false;
+    AsyncStorage.getItem(PILL_HINT_KEY).then((v) => {
+      if (cancelled || v) return;
+      // Two-beat bounce: 1 → 1.18 → 1 → 1.10 → 1, total ~1.05s, after a 600ms settle delay.
+      pillScale.value = withDelay(
+        600,
+        withSequence(
+          withTiming(1.18, { duration: 220 }),
+          withTiming(1.0,  { duration: 220 }),
+          withTiming(1.10, { duration: 180 }),
+          withTiming(1.0,  { duration: 220 }, (finished) => {
+            if (finished) {
+              runOnJS(persistPillHintSeen)();
+            }
+          }),
+        ),
+      );
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [procedure?.status]);
+  const pillAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: pillScale.value }] }));
 
   const loadProcedure = async () => {
     try {
@@ -690,29 +739,31 @@ export default function ProcedureDetailScreen() {
               }
             };
             return (
-              <TouchableOpacity
-                onPress={onTap}
-                disabled={!anchorKey}
-                activeOpacity={0.7}
-                style={styles.progressInline}
-                testID="case-progress-indicator"
-                accessibilityRole="button"
-                accessibilityLabel={
-                  anchorKey
-                    ? `Jump to ${pair.current} section`
-                    : `Case complete`
-                }
-              >
-                <Text style={styles.progressCurrent}>{pair.current}</Text>
-                {pair.next ? (
-                  <>
-                    <PulsingDoubleArrow color="#1565C0" size={12} delayMs={150} />
-                    <Text style={styles.progressNext}>{pair.next}</Text>
-                  </>
-                ) : (
-                  <Ionicons name="checkmark-circle" size={14} color="#2E7D32" style={{ marginLeft: 4 }} />
-                )}
-              </TouchableOpacity>
+              <Animated.View style={pillAnimatedStyle}>
+                <TouchableOpacity
+                  onPress={onTap}
+                  disabled={!anchorKey}
+                  activeOpacity={0.7}
+                  style={styles.progressInline}
+                  testID="case-progress-indicator"
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    anchorKey
+                      ? `Jump to ${pair.current} section`
+                      : `Case complete`
+                  }
+                >
+                  <Text style={styles.progressCurrent}>{pair.current}</Text>
+                  {pair.next ? (
+                    <>
+                      <PulsingDoubleArrow color="#1565C0" size={12} delayMs={150} />
+                      <Text style={styles.progressNext}>{pair.next}</Text>
+                    </>
+                  ) : (
+                    <Ionicons name="checkmark-circle" size={14} color="#2E7D32" style={{ marginLeft: 4 }} />
+                  )}
+                </TouchableOpacity>
+              </Animated.View>
             );
           })()}
         </View>

@@ -1,5 +1,21 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 176 (Feb 2026) — One-time pulse hint on case-detail progress pill
+
+- Building on iteration 175's tap-to-scroll pill, the **first time** a user lands on a case where a phase action is in flight (Phase 1/2/3/4, pill is tappable), the pill now plays a **two-beat scale bounce** (1.0 → 1.18 → 1.0 → 1.10 → 1.0, ~840 ms after a 600 ms settle delay) so they discover the affordance without any tutorial copy.
+- After the animation completes (`runOnJS` callback fires from the worklet), the flag `case_pill_hint_seen_v1` is persisted to AsyncStorage so it never plays again — discoverability without nagging.
+- **Skipped on completed cases** (pill shows `Done ✓`, anchorKey is null, no bounce runs).
+- **Verified via Playwright sampling at 30 ms intervals**:
+  - First-time user → 29 unique transform states captured, peak scale 1.17992 then 1.10x — flag persisted to '1' afterwards.
+  - Returning user (flag = '1') → 1 unique transform state, max scale 1.0 (no bounce).
+  - Tap-to-scroll still works after wrapping in `Animated.View` (scrollTop 0 → 1797 ✓).
+
+### Files modified
+- `/app/frontend/app/procedures/[id].tsx` — added `react-native-reanimated` imports + `AsyncStorage`, added `pillScale` shared value + animated style, added `useEffect` that runs the gated bounce sequence when `procedure.status` indicates an active phase, wrapped the existing `TouchableOpacity` in `<Animated.View style={pillAnimatedStyle}>`, and added a top-level `persistPillHintSeen` JS-thread helper invoked via `runOnJS`.
+
+---
+
+
 ## Iteration 175 (Feb 2026) — Case-detail progress pill: tap-to-scroll
 
 - The `Phase X ›› Phase Y` progress pill in the case-detail header is now a **tappable shortcut** that smoothly scrolls the page to the current phase's full-data section (Phase 1/2/3/4). On a `completed` case the pill shows `Done ✓` and tap is a deliberate no-op.
