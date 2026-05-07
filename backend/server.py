@@ -9569,6 +9569,117 @@ def _generate_alpha_bio_spi_protocol(proto, implant_diameter, implant_length, bo
     return steps
 
 
+# ── Alpha-Bio Brochure Protocols (NeO / ICE / ATID / DFI / NICE) ───────────
+# Driven by the brochure's straight-drilling tables (see
+# alpha_bio_brochure_data.py for the raw data). Each protocol entry embeds
+# its own per-(diameter, bone) drill sequence so the generator stays generic.
+try:
+    from alpha_bio_brochure_data import (
+        DRILL_SEQUENCES as _AB_DRILL_SEQS,
+        SYSTEM_SIZES as _AB_SIZES,
+        SYSTEM_PLATFORM as _AB_PLATFORM,
+    )
+    for _ab_sys, _ab_seqs in _AB_DRILL_SEQS.items():
+        # Lengths are common to the system; use the union across all diameters.
+        _all_lengths = sorted({
+            ln for diam_lengths in _AB_SIZES[_ab_sys]["lengths_by_diameter"].values()
+            for ln in diam_lengths
+        })
+        DRILLING_PROTOCOLS[f"Alpha Bio|{_ab_sys}"] = {
+            "system_name": f"Alpha Bio {_ab_sys}",
+            "protocol_family": "alpha_bio_brochure",
+            "platform": _AB_PLATFORM[_ab_sys],
+            "lengths": _all_lengths,
+            "drill_sequences": _ab_seqs,
+        }
+except Exception as _ab_imp_err:
+    logging.warning(f"Alpha-Bio brochure protocols not loaded: {_ab_imp_err}")
+
+
+def _generate_alpha_bio_brochure_protocol(proto, implant_diameter, implant_length, bone):
+    """Generate drilling protocol for Alpha-Bio NeO / ICE / ATID / DFI / NICE
+    using the brochure's straight-drilling tables.
+    """
+    # Map the 4-tier bone density to the brochure's 3-tier model
+    bone_key = "D1" if bone == "D1" else ("D4" if bone == "D4" else "D2_D3")
+
+    seqs_by_diam = proto.get("drill_sequences", {})
+    if not seqs_by_diam:
+        return []
+
+    # Pick the closest tabulated diameter
+    diam_keys = list(seqs_by_diam.keys())
+    diam = implant_diameter if implant_diameter in seqs_by_diam else min(
+        diam_keys, key=lambda x: abs(x - implant_diameter))
+
+    bone_seqs = seqs_by_diam.get(diam, {})
+    seq = bone_seqs.get(bone_key) or bone_seqs.get("D2_D3") or []
+
+    full_depth = str(implant_length)
+    short_depth = str(max(implant_length - 3, 1))
+
+    steps = []
+    last_idx = len(seq) - 1
+    for i, (drill_d, mode) in enumerate(seq):
+        if mode == "cortical_only":
+            depth = "cortical plate (~2-3mm)"
+            label = "Cortical Drill"
+            rpm = "500-800"
+            note_mode = "Drill through the cortical plate only — do not advance to full implant length."
+        elif mode == "short_3mm":
+            depth = short_depth
+            label = "Drill (3 mm short)"
+            rpm = "500-800" if bone == "D1" else "800-1000"
+            note_mode = "Stop 3 mm short of the implant's full length to preserve apical bone."
+        else:
+            depth = full_depth
+            if drill_d == 2.0:
+                label = "Pilot Drill"
+                rpm = "800-1200"
+            elif i == last_idx and bone == "D1":
+                label = "Final Drill"
+                rpm = "500-800"
+            else:
+                label = "Drill"
+                rpm = "800-1000"
+            note_mode = None
+
+        step = {
+            "step": i + 1,
+            "drill_type": label,
+            "code": "—",
+            "diameter": drill_d,
+            "depth": depth,
+            "rpm": rpm,
+            "irrigation": True,
+        }
+        if note_mode:
+            step["note"] = note_mode
+        steps.append(step)
+
+    # Implant placement
+    sys_name = proto.get("system_name", "Alpha-Bio")
+    placement_note = f"{sys_name} {implant_diameter}mm × {implant_length}mm. "
+    if bone == "D4":
+        placement_note += "Soft bone — under-preparation maintained for primary stability."
+    elif bone == "D1":
+        placement_note += "Hard bone — cortical pass completed; expect higher insertion torque."
+    else:
+        placement_note += "Standard insertion sequence."
+
+    steps.append({
+        "step": len(steps) + 1,
+        "drill_type": "Implant Placement",
+        "code": "—",
+        "diameter": implant_diameter,
+        "depth": full_depth,
+        "rpm": "25-35",
+        "irrigation": False,
+        "note": placement_note,
+    })
+    return steps
+
+
 # ── B&B Dental Drilling Protocols ──────────────────────────────────────────
 # Universal Rule: Drill Depth = Implant Length + 0.5 mm
 # Standard drill set: 2.1, 3.0, 3.5, 4.0, 4.5, 5.0 (sequential)
@@ -10714,6 +10825,8 @@ async def generate_drilling_protocol(
         steps = _generate_conical_rbt_protocol(proto, diameter, length, bone)
     elif proto.get("protocol_family") == "alpha_bio_spi":
         steps = _generate_alpha_bio_spi_protocol(proto, diameter, length, bone)
+    elif proto.get("protocol_family") == "alpha_bio_brochure":
+        steps = _generate_alpha_bio_brochure_protocol(proto, diameter, length, bone)
     elif "Short" in system and "Conelog" not in system and brand != "Neodent":
         steps = _generate_short_protocol(proto, diameter, length, bone)
     elif "Progressive" in system or brand == "Conelog":
@@ -10744,6 +10857,14 @@ async def generate_drilling_protocol(
         protocol_type = "Reduced Protocol (Conical RBT)" if bone == "D4" else ("Conventional Protocol (Conical RBT)" if bone in ("D1", "D2", "D3") else "Standard Protocol (Conical RBT)")
     elif family == "alpha_bio_spi":
         protocol_type = f"Dense Bone Protocol (Alpha-Bio SPI)" if bone in ("D1", "D2") else f"Under-Preparation Protocol (Alpha-Bio SPI)"
+    elif family == "alpha_bio_brochure":
+        sys_label = proto.get("system_name", system)
+        if bone == "D1":
+            protocol_type = f"Hard Bone + Cortical Pass ({sys_label})"
+        elif bone == "D4":
+            protocol_type = f"Soft Bone Under-Preparation ({sys_label})"
+        else:
+            protocol_type = f"Standard Protocol ({sys_label})"
     elif family in ("helix", "drive", "titamax"):
         protocol_type = "Dense Bone Protocol" if bone in ("D1", "D2") else ("Soft Bone Protocol" if bone == "D4" else "Standard Protocol")
     elif "Progressive" in system or brand == "Conelog":
@@ -10964,6 +11085,14 @@ async def export_drilling_pdf(
         protocol_type = "Reduced Protocol (Conical RBT)" if bone == "D4" else ("Conventional Protocol (Conical RBT)" if bone in ("D1", "D2", "D3") else "Standard Protocol (Conical RBT)")
     elif family == "alpha_bio_spi":
         protocol_type = f"Dense Bone Protocol (Alpha-Bio SPI)" if bone in ("D1", "D2") else f"Under-Preparation Protocol (Alpha-Bio SPI)"
+    elif family == "alpha_bio_brochure":
+        sys_label = proto.get("system_name", system)
+        if bone == "D1":
+            protocol_type = f"Hard Bone + Cortical Pass ({sys_label})"
+        elif bone == "D4":
+            protocol_type = f"Soft Bone Under-Preparation ({sys_label})"
+        else:
+            protocol_type = f"Standard Protocol ({sys_label})"
     elif family in ("helix", "drive", "titamax"):
         protocol_type = "Dense Bone Protocol" if bone in ("D1", "D2") else ("Soft Bone Protocol" if bone == "D4" else "Standard Protocol")
     elif "Progressive" in system or brand == "Conelog":

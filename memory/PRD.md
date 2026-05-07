@@ -1,5 +1,40 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 177 (Feb 2026) — Alpha-Bio brochure ingestion (6 systems)
+
+Loaded the official Alpha-Bio brochure (NeO, ICE, ATID, DFI, NICE — Spiral
+already covered as SPI) into the implant database with full drilling
+protocols and component metadata.
+
+### Summary
+- **Brand**: `Alpha Bio` (single brand name across both `implant_library` and `implant_catalog`; existing SPI doc auto-normalized away from "Alpha-Bio Tec").
+- **Systems added** (7): NeO Conical Standard Connection, NeO Conical Hex Connection, NeO Internal Hex Connection, ICE, ATID, DFI, NICE.
+- **`implant_library`**: +109 (diameter, length) rows per the brochure size matrices (24 SPI rows preserved → 133 Alpha-Bio rows total across 8 systems).
+- **`implant_catalog`**: 7 rich catalog docs (connection type, platform, surface treatment, features, indications, components per platform CS/CHC/IH, drilling-protocol-family pointer) + 1 shared "Surgical & Prosthetic Instrumentation" doc covering all kits (4699/4611/4612/65000-65003), drills, drivers, accessories, and torque references.
+- **`DRILLING_PROTOCOLS`**: new `alpha_bio_brochure` family + `_generate_alpha_bio_brochure_protocol(...)` generator. Each system embeds its own per-(diameter, bone density) drill sequence; depth modes `full` / `short_3mm` / `cortical_only` map directly to the brochure's footnotes.
+- Bone-density mapping: D1 → "Hard Bone Type I", D2/D3 → "Medium Bone Type II & III", D4 → "Soft Bone Type IV" (matches brochure 3-tier model).
+
+### Verified end-to-end
+- `/api/implant-library/systems` now returns 8 Alpha Bio systems with correct diameter/length matrices.
+- `/api/drilling-protocols/generate`:
+  - **NeO CS Ø4.2 × 11.5 / D2** → 4 steps: 2.0 → 2.8 → 3.2 (3mm short) → implant ✓
+  - **ICE Ø5.3 × 13 / D1** → 8 steps: 2.0 → 2.8 → 3.2 → 3.65 → 4.1 → 4.5 (3mm short) → 4.8 cortical pass → implant ✓
+  - **NICE Ø3.5 × 11.5 / D4** → 3 steps: 2.0 → 2.4 (3mm short) → implant ✓ (CHC narrow-platform under-preparation)
+- Migration is **idempotent**: re-run inserted 0 rows / skipped 109; SPI brand normalization no-op safe.
+
+### Files added/modified
+- **NEW** `/app/backend/alpha_bio_brochure_data.py` — single source of truth: system size matrices, drill sequences, catalog metadata, shared instruments doc.
+- **NEW** `/app/backend/_seed_alpha_bio_brochure.py` — idempotent migration script (insert-if-missing + upsert).
+- **MOD** `/app/backend/server.py` — registered 7 `DRILLING_PROTOCOLS["Alpha Bio|<system>"]` entries, new `_generate_alpha_bio_brochure_protocol(...)` generator, dispatch branch in `/api/drilling-protocols/generate`, label mappings in 2 protocol-type assignment blocks.
+
+### How to re-run the seed (if needed)
+```bash
+cd /app/backend && python3 _seed_alpha_bio_brochure.py
+```
+
+---
+
+
 ## Iteration 176 (Feb 2026) — One-time pulse hint on case-detail progress pill
 
 - Building on iteration 175's tap-to-scroll pill, the **first time** a user lands on a case where a phase action is in flight (Phase 1/2/3/4, pill is tappable), the pill now plays a **two-beat scale bounce** (1.0 → 1.18 → 1.0 → 1.10 → 1.0, ~840 ms after a 600 ms settle delay) so they discover the affordance without any tutorial copy.
