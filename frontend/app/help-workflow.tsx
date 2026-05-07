@@ -12,6 +12,11 @@ import { Ionicons } from '@expo/vector-icons';
 import BackButton from '../components/BackButton';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../utils/api';
+import {
+  ONBOARDING_VERSION, activeGateFor,
+} from '../components/onboarding/content/onboardingContent';
+import ApprovalGateDiagram from '../components/onboarding/primitives/ApprovalGateDiagram';
+import FeatureCard from '../components/onboarding/primitives/FeatureCard';
 
 type Step = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -105,7 +110,7 @@ export default function HelpWorkflowScreen() {
     if (busy) return;
     setBusy(true);
     try {
-      await ackWorkflow();
+      await ackWorkflow(ONBOARDING_VERSION);
       await refreshUser();
     } catch {
       // Even if ack fails, don't trap the user — move on.
@@ -120,6 +125,8 @@ export default function HelpWorkflowScreen() {
     } catch { /* non-fatal */ }
     router.replace('/(tabs)/dashboard');
   };
+
+  const replayOnboarding = () => router.push('/onboarding');
 
   const close = () => {
     router.back();
@@ -179,6 +186,67 @@ export default function HelpWorkflowScreen() {
           ))}
         </View>
 
+        <Text style={styles.sectionTitle}>Approval gates at a glance</Text>
+        <View style={styles.gatesCard} testID="help-approval-gates">
+          <ApprovalGateDiagram active={activeGateFor(user?.role || '')} />
+          <Text style={styles.gatesNote}>
+            A phase only unlocks after both the Supervisor and the Implant In-Charge approve.
+          </Text>
+        </View>
+
+        <Text style={styles.sectionTitle}>Smart tools you'll use every day</Text>
+        <View style={styles.toolsGrid} testID="help-smart-tools">
+          <View style={styles.toolsRow}>
+            <FeatureCard
+              icon="cube-outline" tint="#1565C0"
+              title="Implant Database"
+              bullets={['30+ implant systems', 'Component comparison', 'Manufacturer datasheets attached']}
+            />
+            <FeatureCard
+              icon="bulb-outline" tint="#2E7D32"
+              title="Smart Selection"
+              bullets={['Suggest Me & Let Me Choose', 'Bone-width / height safety chips', 'Bridge & cantilever auto-detect']}
+            />
+          </View>
+          <View style={styles.toolsRow}>
+            <FeatureCard
+              icon="document-text-outline" tint="#EF6C00"
+              title="Drilling Protocol PDF"
+              bullets={['Auto-generated per case', 'Embedded CBCT QR for chair-side', 'Nurse autoclave stamps']}
+            />
+            <FeatureCard
+              icon="sparkles-outline" tint="#0D47A1"
+              title="Implanr AI"
+              bullets={['Phase summaries on demand', '"Ask Implanr" assistant', 'Explain Recommendation context']}
+            />
+          </View>
+          <View style={styles.toolsRow}>
+            <FeatureCard
+              icon="chatbubbles-outline" tint="#8E24AA"
+              title="Discussion Forum"
+              bullets={['Anonymised case posts', 'Threaded peer replies', 'Bookmarkable threads']}
+            />
+            <FeatureCard
+              icon="people-circle-outline" tint="#00838F"
+              title="Group Chat"
+              bullets={['Direct & group conversations', 'Share images, PDFs, case links', 'Read receipts']}
+            />
+          </View>
+          <View style={styles.toolsRow}>
+            <FeatureCard
+              icon="shield-checkmark-outline" tint="#546E7A"
+              title="HIPAA Safeguards"
+              bullets={['15-min auto-logout on inactivity', 'Screen-capture blocking on Android', 'Append-only audit log']}
+            />
+            <View style={{ flex: 1 }} />
+          </View>
+        </View>
+
+        <TouchableOpacity onPress={replayOnboarding} style={styles.replayBtn} testID="help-replay-onboarding">
+          <Ionicons name="play-circle-outline" size={16} color="#1565C0" />
+          <Text style={styles.replayText}>Replay the welcome tour</Text>
+        </TouchableOpacity>
+
         <Text style={styles.footer}>You can reopen this anytime from Profile → How it works.</Text>
       </ScrollView>
 
@@ -222,4 +290,20 @@ const styles = StyleSheet.create({
   bottomBar: { padding: 14, borderTopWidth: 1, borderTopColor: '#ECEFF1', backgroundColor: '#FFF' },
   primary: { backgroundColor: '#1565C0', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   primaryText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
+  gatesCard: {
+    backgroundColor: '#FFF', borderRadius: 14, padding: 14,
+    borderWidth: 1, borderColor: '#ECEFF1', alignItems: 'center',
+  },
+  gatesNote: {
+    fontSize: 12, color: '#546E7A', textAlign: 'center', marginTop: 6,
+    lineHeight: 17, maxWidth: 360,
+  },
+  toolsGrid: { gap: 10 },
+  toolsRow: { flexDirection: 'row', gap: 10 },
+  replayBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingVertical: 12, marginTop: 18,
+    backgroundColor: '#E3F2FD', borderRadius: 10,
+  },
+  replayText: { color: '#1565C0', fontSize: 13, fontWeight: '700' },
 });

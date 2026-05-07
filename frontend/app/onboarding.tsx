@@ -1,77 +1,51 @@
 /**
- * Role-specific onboarding carousel. Shown once on first login (gated by the
- * backend `workflow_seen_at` timestamp). Simple index-based rendering so we
- * don't fight with FlatList + horizontal paging on web.
+ * First-login onboarding carousel (v2). Six elegant slides — role-aware Welcome
+ * and Recap, universal Phases / Approval / Smart Tools / Forum-Chat in between.
+ * Re-fires for existing users when ONBOARDING_VERSION bumps.
  *
- * Flow:  Onboarding slides  →  /help-workflow  →  /(tabs)/dashboard
+ * Flow:  /onboarding  →  /help-workflow  →  /(tabs)/dashboard
  */
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
+  View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, AccessibilityInfo,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, {
+  useSharedValue, useAnimatedStyle, withTiming, withDelay, withSequence,
+} from 'react-native-reanimated';
 import { useAuth } from '../contexts/AuthContext';
+import {
+  ONBOARDING_VERSION, heroFor, recapFor, activeGateFor, phaseFooterFor,
+} from '../components/onboarding/content/onboardingContent';
+import AnimatedTimeline from '../components/onboarding/primitives/AnimatedTimeline';
+import ApprovalGateDiagram from '../components/onboarding/primitives/ApprovalGateDiagram';
+import FeatureCard from '../components/onboarding/primitives/FeatureCard';
+import PdfWithQrMock from '../components/onboarding/primitives/PdfWithQrMock';
+import TypingBubble from '../components/onboarding/primitives/TypingBubble';
 
-type Slide = { icon: keyof typeof Ionicons.glyphMap; title: string; body: string };
-
-const SLIDES_BY_ROLE: Record<string, Slide[]> = {
-  student: [
-    { icon: 'calendar-outline',   title: 'Schedule a case', body: 'Add patient details, pick the implant system, and attach CBCT / OPG images.' },
-    { icon: 'people-outline',     title: 'Get it approved', body: 'Your Supervisor approves first, then the Implant In-Charge gives the final green light.' },
-    { icon: 'clipboard-outline',  title: 'Pre-surgery prep', body: 'Print the consent form, mark instruments autoclaved, and export the Drilling Protocol PDF.' },
-    { icon: 'checkmark-done-circle-outline', title: 'Log all 4 phases', body: 'Surgical → Second-stage → Prosthetic → Delivery. Finish strong and archive the case.' },
-  ],
-  supervisor: [
-    { icon: 'checkmark-circle-outline', title: 'Review & approve', body: 'You\'re the first approval gate for every student case you\'re assigned to.' },
-    { icon: 'calendar-outline',         title: 'Schedule your own cases', body: 'Book and manage your own patient workflow — same 4-phase flow as students.' },
-    { icon: 'hourglass-outline',        title: 'Track progress', body: 'A passive indicator on each case shows you who\'s blocking the next phase.' },
-  ],
-  implant_incharge: [
-    { icon: 'shield-checkmark-outline', title: 'The final approval', body: 'After the Supervisor approves, you give the final green light for each phase.' },
-    { icon: 'eye-outline',              title: 'See every case', body: 'Your dashboard shows every active case across all supervisors and students.' },
-    { icon: 'calendar-outline',         title: 'Schedule your own', body: 'Your own scheduled cases self-approve — no extra gates.' },
-    { icon: 'settings-outline',         title: 'Admin override', body: 'Edit any field, reassign staff, or archive stuck cases whenever needed.' },
-  ],
-  nurse: [
-    { icon: 'today-outline',    title: 'Scheduled cases at a glance', body: 'Your calendar shows today\'s and the next 7 days\' surgeries.' },
-    { icon: 'clipboard-outline', title: 'Pre-surgery prep', body: 'Upload signed consent forms and mark instruments autoclaved — your stamp prints on the Drilling Protocol.' },
-    { icon: 'notifications-outline', title: '24 h surgery reminders', body: 'Get a push notification the day before each case if anything\'s still pending.' },
-  ],
-  administrator: [
-    { icon: 'shield-checkmark-outline', title: 'Full access', body: 'You have In-Charge-level approval rights across all cases.' },
-    { icon: 'eye-outline',              title: 'See every case', body: 'Nothing is hidden from you — across all supervisors, students, and nurses.' },
-    { icon: 'settings-outline',         title: 'Override any field', body: 'Edit, reassign, or archive cases as needed.' },
-  ],
-};
+const SLIDES = 6;
 
 export default function OnboardingScreen() {
   const { user, refreshUser, ackWorkflow } = useAuth();
   const [idx, setIdx] = useState(0);
+  const [reduceMotion, setReduceMotion] = useState(false);
 
-  const slides = useMemo(() => {
-    const role = (user?.role || 'student').toLowerCase();
-    return SLIDES_BY_ROLE[role] || SLIDES_BY_ROLE.student;
-  }, [user?.role]);
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(() => {});
+  }, []);
 
-  const slide = slides[idx];
-  const isLast = idx === slides.length - 1;
+  const role = (user?.role || 'student').toLowerCase();
+  const firstName = useMemo(() => (user?.name || '').split(' ')[0] || '', [user?.name]);
+  const hero = heroFor(role);
+  const recap = recapFor(role);
+  const activeGate = activeGateFor(role);
 
-  const goNext = () => {
-    if (!isLast) {
-      setIdx((i) => i + 1);
-    } else {
-      // Forward to the workflow chart — it owns the ack so Skip-through still
-      // gets both screens shown.
-      router.replace('/help-workflow');
-    }
-  };
-
-  const goBack = () => setIdx((i) => Math.max(0, i - 1));
-
+  const isLast = idx === SLIDES - 1;
+  const goNext = () => (isLast ? router.replace('/help-workflow') : setIdx(i => i + 1));
+  const goBack = () => setIdx(i => Math.max(0, i - 1));
   const skip = async () => {
-    // Skip both onboarding AND workflow — ack immediately.
-    try { await ackWorkflow(); } catch {}
+    try { await ackWorkflow(ONBOARDING_VERSION); } catch {}
     await refreshUser();
     router.replace('/(tabs)/dashboard');
   };
@@ -79,22 +53,23 @@ export default function OnboardingScreen() {
   return (
     <SafeAreaView style={styles.safe} testID="onboarding-screen">
       <View style={styles.topBar}>
-        <Text style={styles.step}>{idx + 1} / {slides.length}</Text>
+        <Text style={styles.step}>{idx + 1} / {SLIDES}</Text>
         <TouchableOpacity onPress={skip} testID="onboarding-skip-btn">
           <Text style={styles.skip}>Skip</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.slide} testID={`onboarding-slide-${idx}`}>
-        <View style={styles.iconWrap}>
-          <Ionicons name={slide.icon} size={72} color="#1565C0" />
-        </View>
-        <Text style={styles.title}>{slide.title}</Text>
-        <Text style={styles.body}>{slide.body}</Text>
-      </View>
+      <SlideContainer key={idx} reduceMotion={reduceMotion} testID={`onboarding-slide-${idx}`}>
+        {idx === 0 && <SlideWelcome firstName={firstName} hero={hero} />}
+        {idx === 1 && <SlidePhases footer={phaseFooterFor(role)} />}
+        {idx === 2 && <SlideApproval activeGate={activeGate} />}
+        {idx === 3 && <SlideDatabase />}
+        {idx === 4 && <SlideAIAndPDF />}
+        {idx === 5 && <SlideForumChatRecap recap={recap} chipLabel={hero.chipLabel} />}
+      </SlideContainer>
 
       <View style={styles.dots}>
-        {slides.map((_, i) => (
+        {Array.from({ length: SLIDES }).map((_, i) => (
           <View key={i} style={[styles.dot, i === idx && styles.dotActive]} />
         ))}
       </View>
@@ -118,19 +93,257 @@ export default function OnboardingScreen() {
   );
 }
 
+/** Cross-fade + scale-up shell for each slide. Skip animations under reduce-motion. */
+function SlideContainer({
+  children, reduceMotion, testID,
+}: { children: React.ReactNode; reduceMotion: boolean; testID: string }) {
+  const opacity = useSharedValue(reduceMotion ? 1 : 0);
+  const scale = useSharedValue(reduceMotion ? 1 : 0.97);
+  useEffect(() => {
+    if (reduceMotion) return;
+    opacity.value = withSequence(withTiming(0, { duration: 0 }), withTiming(1, { duration: 260 }));
+    scale.value = withSequence(withTiming(0.97, { duration: 0 }), withDelay(40, withTiming(1, { duration: 280 })));
+  }, [reduceMotion]);
+  const a = useAnimatedStyle(() => ({ opacity: opacity.value, transform: [{ scale: scale.value }] }));
+  return (
+    <Animated.View style={[styles.slide, a]} testID={testID}>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {children}
+      </ScrollView>
+    </Animated.View>
+  );
+}
+
+// ── Slide 1 — Welcome ────────────────────────────────────────────────────────
+function SlideWelcome({ firstName, hero }: { firstName: string; hero: ReturnType<typeof heroFor> }) {
+  return (
+    <View style={styles.welcomeWrap}>
+      <View style={styles.heroLogo}>
+        <Ionicons name="medkit" size={56} color="#FFF" />
+      </View>
+      <View style={styles.roleChip}>
+        <Ionicons name="ribbon" size={11} color="#0D47A1" />
+        <Text style={styles.roleChipText}>{hero.chipLabel}</Text>
+      </View>
+      <Text style={styles.welcomeH1}>
+        {hero.greeting}{firstName ? `, ${firstName}` : ''}.
+      </Text>
+      <Text style={styles.welcomeBody}>{hero.subhead}</Text>
+      <Text style={styles.welcomeHint}>Six quick slides walk you through what you can do here.</Text>
+    </View>
+  );
+}
+
+// ── Slide 2 — Phases timeline ────────────────────────────────────────────────
+function SlidePhases({ footer }: { footer: string }) {
+  return (
+    <View style={styles.center}>
+      <Text style={styles.h1}>The 4-phase case lifecycle</Text>
+      <Text style={styles.body}>Every implant case follows the same path.</Text>
+      <AnimatedTimeline />
+      <View style={styles.footerNote}>
+        <Ionicons name="person-circle-outline" size={14} color="#1565C0" />
+        <Text style={styles.footerNoteText}>{footer}</Text>
+      </View>
+    </View>
+  );
+}
+
+// ── Slide 3 — Approval system ────────────────────────────────────────────────
+function SlideApproval({ activeGate }: { activeGate: 'student' | 'supervisor' | 'incharge' }) {
+  return (
+    <View style={styles.center}>
+      <Text style={styles.h1}>Two approvals at every gate</Text>
+      <Text style={styles.body}>
+        A phase only unlocks after both the Supervisor and the Implant In-Charge approve.
+      </Text>
+      <ApprovalGateDiagram active={activeGate} />
+      <View style={styles.subList}>
+        <SubItem icon="time-outline" text="Status indicator on every case shows who's blocking." />
+        <SubItem icon="document-text-outline" text="Reviewers can leave comments on rejection." />
+      </View>
+    </View>
+  );
+}
+
+// ── Slide 4 — Implant Database + Smart Selection ─────────────────────────────
+function SlideDatabase() {
+  return (
+    <View style={styles.center}>
+      <Text style={styles.h1}>Implant Database & Smart Selection</Text>
+      <Text style={styles.body}>30+ systems with components, datasheets, and clinical guidance.</Text>
+      <View style={styles.twoCol}>
+        <FeatureCard
+          icon="cube-outline"
+          title="Implant Database"
+          tint="#1565C0"
+          testID="slide-feature-database"
+          bullets={[
+            '30+ implant systems indexed',
+            'Side-by-side component comparison',
+            'Manufacturer datasheets attached as PDFs',
+            'AI extracts text from datasheets for context',
+          ]}
+        />
+        <FeatureCard
+          icon="bulb-outline"
+          title="Smart Selection"
+          tint="#2E7D32"
+          testID="slide-feature-selection"
+          bullets={[
+            '"Suggest Me" recommends a system from your case',
+            '"Let Me Choose" with biological-safety chips',
+            'Automatic bridge / cantilever detection',
+            'Bone width and height safety validation',
+          ]}
+        />
+      </View>
+    </View>
+  );
+}
+
+// ── Slide 5 — Drilling Protocol PDF + AI summaries ───────────────────────────
+function SlideAIAndPDF() {
+  return (
+    <View style={styles.center}>
+      <Text style={styles.h1}>Drilling Protocol PDF & Implanr AI</Text>
+      <Text style={styles.body}>
+        Drilling Protocol PDF includes embedded CBCT QR for chair-side reference. Implanr AI
+        summarises any phase and answers questions in clinical language.
+      </Text>
+      <PdfWithQrMock />
+      <View style={{ marginTop: 18, width: '100%' }}>
+        <TypingBubble />
+      </View>
+    </View>
+  );
+}
+
+// ── Slide 6 — Forum + Chat + role-specific recap ─────────────────────────────
+function SlideForumChatRecap({ recap, chipLabel }: { recap: string[]; chipLabel: string }) {
+  return (
+    <View style={styles.center}>
+      <Text style={styles.h1}>Stay connected — Forum & Chat</Text>
+      <Text style={styles.body}>
+        Discuss complex cases anonymously with peers; coordinate the surgical team in real time.
+      </Text>
+      <View style={styles.twoCol}>
+        <FeatureCard
+          icon="chatbubbles-outline"
+          title="Discussion Forum"
+          tint="#8E24AA"
+          bullets={[
+            'Post anonymised cases for peer input',
+            'Threaded replies and case-specific tags',
+            'Bookmark posts to revisit later',
+          ]}
+        />
+        <FeatureCard
+          icon="people-circle-outline"
+          title="Group Chat"
+          tint="#00838F"
+          bullets={[
+            'Direct chats and group conversations',
+            'Share images, PDFs, and case links',
+            'Read receipts and typing indicators',
+          ]}
+        />
+      </View>
+      <View style={styles.recapWrap}>
+        <View style={[styles.roleChip, { marginBottom: 8 }]}>
+          <Ionicons name="ribbon" size={11} color="#0D47A1" />
+          <Text style={styles.roleChipText}>Your routine, {chipLabel}</Text>
+        </View>
+        {recap.map((line, i) => <RecapItem key={i} text={line} />)}
+      </View>
+    </View>
+  );
+}
+
+function SubItem({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: string }) {
+  return (
+    <View style={styles.subItem}>
+      <Ionicons name={icon} size={14} color="#546E7A" />
+      <Text style={styles.subItemText}>{text}</Text>
+    </View>
+  );
+}
+
+function RecapItem({ text }: { text: string }) {
+  const opacity = useSharedValue(0);
+  const tx = useSharedValue(8);
+  useEffect(() => {
+    opacity.value = withDelay(150, withTiming(1, { duration: 260 }));
+    tx.value = withDelay(150, withTiming(0, { duration: 260 }));
+  }, []);
+  const a = useAnimatedStyle(() => ({ opacity: opacity.value, transform: [{ translateY: tx.value }] }));
+  return (
+    <Animated.View style={[styles.recapRow, a]}>
+      <Ionicons name="checkmark-circle" size={16} color="#2E7D32" />
+      <Text style={styles.recapText}>{text}</Text>
+    </Animated.View>
+  );
+}
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#F5F7FA' },
-  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12 },
-  step: { fontSize: 13, color: '#78909C', fontWeight: '600' },
-  skip: { fontSize: 14, color: '#1565C0', fontWeight: '700' },
-  slide: { flex: 1, paddingHorizontal: 32, alignItems: 'center', justifyContent: 'center' },
-  iconWrap: {
-    width: 132, height: 132, borderRadius: 66, backgroundColor: '#E3F2FD',
-    alignItems: 'center', justifyContent: 'center', marginBottom: 36,
+  topBar: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 20, paddingVertical: 12,
   },
-  title: { fontSize: 24, fontWeight: '800', color: '#0D47A1', textAlign: 'center', marginBottom: 16 },
-  body: { fontSize: 15, color: '#455A64', textAlign: 'center', lineHeight: 22, maxWidth: 420 },
-  dots: { flexDirection: 'row', justifyContent: 'center', gap: 8, paddingVertical: 16 },
+  step: { fontSize: 13, color: '#78909C', fontWeight: '700' },
+  skip: { fontSize: 14, color: '#1565C0', fontWeight: '700' },
+  slide: { flex: 1 },
+  scroll: { paddingHorizontal: 24, paddingBottom: 16, alignItems: 'center', flexGrow: 1, justifyContent: 'center' },
+  center: { width: '100%', maxWidth: 600, alignItems: 'center' },
+
+  // Welcome
+  welcomeWrap: { alignItems: 'center', paddingTop: 14 },
+  heroLogo: {
+    width: 110, height: 110, borderRadius: 28,
+    backgroundColor: '#0D47A1',
+    alignItems: 'center', justifyContent: 'center',
+    boxShadow: '0px 18px 36px rgba(13, 71, 161, 0.30)',
+    marginBottom: 22,
+  } as any,
+  roleChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingVertical: 5, paddingHorizontal: 12,
+    backgroundColor: '#E3F2FD', borderRadius: 999,
+    marginBottom: 18,
+  },
+  roleChipText: { fontSize: 11, fontWeight: '800', color: '#0D47A1', letterSpacing: 0.4 },
+  welcomeH1: { fontSize: 28, fontWeight: '800', color: '#0D47A1', letterSpacing: -0.4, marginBottom: 12, textAlign: 'center' },
+  welcomeBody: { fontSize: 15, color: '#37474F', lineHeight: 22, textAlign: 'center', maxWidth: 460, marginBottom: 14 },
+  welcomeHint: { fontSize: 12, color: '#78909C', textAlign: 'center' },
+
+  // Generic
+  h1: { fontSize: 22, fontWeight: '800', color: '#0D47A1', marginTop: 6, textAlign: 'center', letterSpacing: -0.3 },
+  body: { fontSize: 14, color: '#455A64', lineHeight: 20, textAlign: 'center', marginTop: 8, marginBottom: 18, maxWidth: 480 },
+
+  footerNote: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#E3F2FD', paddingHorizontal: 12, paddingVertical: 8,
+    borderRadius: 999, marginTop: 18, maxWidth: '100%',
+  },
+  footerNoteText: { fontSize: 12, color: '#0D47A1', fontWeight: '600' },
+
+  subList: { width: '100%', maxWidth: 480, marginTop: 14, gap: 8 },
+  subItem: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
+  subItemText: { fontSize: 13, color: '#455A64', flex: 1 },
+
+  twoCol: { flexDirection: 'row', gap: 12, width: '100%', maxWidth: 540, marginTop: 6 },
+
+  recapWrap: {
+    width: '100%', maxWidth: 480, marginTop: 22,
+    backgroundColor: '#FFF', borderRadius: 16, padding: 16,
+    borderWidth: 1, borderColor: '#ECEFF1',
+  },
+  recapRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
+  recapText: { fontSize: 13, color: '#263238', flex: 1, lineHeight: 18 },
+
+  // Footer
+  dots: { flexDirection: 'row', justifyContent: 'center', gap: 8, paddingVertical: 14 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#CFD8DC' },
   dotActive: { backgroundColor: '#1565C0', width: 22 },
   actions: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 24, gap: 12 },
