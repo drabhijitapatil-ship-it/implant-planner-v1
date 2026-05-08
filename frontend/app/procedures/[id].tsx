@@ -961,6 +961,60 @@ export default function ProcedureDetailScreen() {
           );
         })()}
 
+        {/* iter-189: Pre-Op countdown banner — visible to all team members on a
+            phase1_approved case where Pre-Op is not yet stamped. Surgery time is
+            parsed from procedure_date + procedure_time (24h or 12h format). */}
+        {(() => {
+          if (procedure?.status !== 'phase1_approved') return null;
+          if (procedure?.phase2_preop_completed_at) return null;
+          const dateStr = procedure?.procedure_date;
+          const timeStr = procedure?.procedure_time;
+          if (!dateStr || !timeStr) return null;
+          // Try 12h then 24h.
+          let surgeryAt: Date | null = null;
+          const t1 = new Date(`${dateStr} ${timeStr}`);
+          if (!isNaN(t1.getTime())) surgeryAt = t1;
+          if (!surgeryAt) return null;
+          const diffMs = surgeryAt.getTime() - Date.now();
+          // Show only if surgery is within next 24h (and not >2h past — tolerate
+          // delayed start of the case).
+          if (diffMs < -2 * 3600 * 1000 || diffMs > 24 * 3600 * 1000) return null;
+          const absMin = Math.max(0, Math.round(diffMs / 60000));
+          const h = Math.floor(absMin / 60);
+          const m = absMin % 60;
+          const remaining = h > 0 ? `${h}h ${m}m` : `${m}m`;
+          const urgent = absMin <= 30;
+          const bgColor = urgent ? '#FFEBEE' : '#FFF3E0';
+          const accent = urgent ? '#C62828' : '#E65100';
+          return (
+            <View
+              style={{
+                marginHorizontal: 16,
+                marginVertical: 8,
+                backgroundColor: bgColor,
+                borderLeftWidth: 4,
+                borderLeftColor: accent,
+                borderRadius: 8,
+                padding: 12,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 10,
+              }}
+              testID="preop-countdown-banner"
+            >
+              <Ionicons name={urgent ? 'alert-circle' : 'time-outline'} size={20} color={accent} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: accent, fontSize: 13, fontWeight: '700' }}>
+                  {urgent ? 'URGENT — ' : ''}Surgery in {remaining}
+                </Text>
+                <Text style={{ color: accent, fontSize: 11, marginTop: 2 }}>
+                  Pre-Surgical Checklist not yet completed.
+                </Text>
+              </View>
+            </View>
+          );
+        })()}
+
         {/* Phase 2 edit-request banner for Supervisor / In-Charge / Admin.
             Shown only if there is a pending request on this case. Tap "Edit Now"
             opens Phase2EditModal which patches phase2_data.prosthesis_type /

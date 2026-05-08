@@ -30,6 +30,13 @@ export default function Phase2SubmissionScreen() {
 
   // Pre-Surgery Checklist
   const [preSurgeryChecklist, setPreSurgeryChecklist] = useState<Record<string, boolean>>({});
+  // iter-189: Pre-Op completion stamp (from server). When set, the surgical
+  // block is unlocked and the checklist collapses into a green attestation.
+  const [preopCompletedAt, setPreopCompletedAt] = useState<string | null>(null);
+  const [preopCompletedByName, setPreopCompletedByName] = useState<string>('');
+  const [preopSaving, setPreopSaving] = useState(false);
+  const [preopExpanded, setPreopExpanded] = useState(true);
+  const [preopNotes, setPreopNotes] = useState('');
 
   // Surgical Procedure
   const [anesthesiaAdequate, setAnesthesiaAdequate] = useState('Yes');
@@ -137,10 +144,57 @@ export default function Phase2SubmissionScreen() {
       else if (pType === 'All on X') iopaCount = 5;
       else iopaCount = count;
       setIopaFiles(new Array(iopaCount).fill(null));
+
+      // iter-189: hydrate Pre-Op state if it was already completed.
+      const preopAt = procRes.data.phase2_preop_completed_at || null;
+      setPreopCompletedAt(preopAt);
+      setPreopCompletedByName(procRes.data.phase2_preop_completed_by_name || '');
+      setPreopNotes(procRes.data.phase2_preop_notes || '');
+      if (procRes.data.phase2_preop_checklist) {
+        setPreSurgeryChecklist(procRes.data.phase2_preop_checklist);
+      }
+      // Auto-collapse the checklist once it's signed off (saves real-estate
+      // for the much-longer Surgical Procedure section).
+      if (preopAt) setPreopExpanded(false);
     } catch {
       setTorqueValues(['']);
       setHealingAbutmentCuffHeight(['']);
       setIopaFiles([null]);
+    }
+  };
+
+  // iter-189: list of every mandatory item id, derived from the constants file.
+  const PREOP_MANDATORY_IDS = (CHECKLIST_DATA.surgical.sections || [])
+    .flatMap((sec: any) => (sec.items || []).filter((i: any) => i.mandatory).map((i: any) => i.id));
+
+  const isPreopUnlocked = !!preopCompletedAt;
+
+  const savePreopChecklist = async () => {
+    const missing = PREOP_MANDATORY_IDS.filter(id => !preSurgeryChecklist[id]);
+    if (missing.length > 0) {
+      const firstMissing = (CHECKLIST_DATA.surgical.sections || [])
+        .flatMap((sec: any) => sec.items || [])
+        .find((i: any) => i.id === missing[0]);
+      Alert.alert(
+        'Pre-Surgical Checklist',
+        `Please confirm: ${firstMissing?.label || missing[0]}\n\n${missing.length} mandatory item(s) still need a tick.`
+      );
+      return;
+    }
+    setPreopSaving(true);
+    try {
+      const res = await api.post(`/procedures/${id}/phase2-preop`, {
+        items: preSurgeryChecklist,
+        notes: preopNotes || null,
+      });
+      setPreopCompletedAt(res.data?.phase2_preop_completed_at || new Date().toISOString());
+      setPreopCompletedByName(res.data?.phase2_preop_completed_by_name || (user?.name || ''));
+      setPreopExpanded(false);
+      Alert.alert('Pre-Op Setup Complete', 'Surgical Procedure section is now unlocked.');
+    } catch (err: any) {
+      Alert.alert('Could not save', err.response?.data?.detail || 'Please try again.');
+    } finally {
+      setPreopSaving(false);
     }
   };
 
@@ -234,11 +288,10 @@ export default function Phase2SubmissionScreen() {
   };
 
   const handleSubmit = async () => {
-    // Validate pre-surgery checklist
-    const preItems = CHECKLIST_DATA.surgical.items;
-    const uncheckedPre = preItems.filter(i => !preSurgeryChecklist[i.id]);
-    if (uncheckedPre.length > 0) {
-      Alert.alert('Pre-Surgery Checklist', `Please complete: ${uncheckedPre[0].label}`);
+    // iter-189: pre-op completion is now enforced server-side via
+    // `phase2_preop_completed_at`. No inline checklist re-validation.
+    if (!isPreopUnlocked) {
+      Alert.alert('Pre-Op Required', 'Please complete the Pre-Surgical Checklist before submitting surgical findings.');
       return;
     }
     if (!flapDesign) { Alert.alert('Missing', 'Please select Flap Design'); return; }
@@ -362,30 +415,106 @@ export default function Phase2SubmissionScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} nestedScrollEnabled>
 
-          {/* ── Pre-Surgery Checklist ── */}
-          <View style={s.section}>
-            <View style={s.sectionHeader}>
-              <Ionicons name="clipboard-outline" size={20} color="#1565C0" />
-              <Text style={s.sectionTitle}>Pre-Surgery Checklist <Text style={{ color: '#DC3545' }}>*</Text></Text>
-            </View>
-            {CHECKLIST_DATA.surgical.items.map(item => (
-              <View key={item.id} style={s.checkRow}>
-                <Text style={[s.checkLabel, { flex: 1 }]}>{item.label}</Text>
-                <View style={{ flexDirection: 'row', gap: 6 }}>
-                  {['Yes', 'No'].map(opt => (
-                    <TouchableOpacity key={opt}
-                      style={[s.ynBtn, preSurgeryChecklist[item.id] === true && opt === 'Yes' && s.ynYes, preSurgeryChecklist[item.id] === false && opt === 'No' && s.ynNo]}
-                      onPress={() => setPreSurgeryChecklist(prev => ({ ...prev, [item.id]: opt === 'Yes' }))}>
-                      <Text style={[s.ynText, (preSurgeryChecklist[item.id] === true && opt === 'Yes') || (preSurgeryChecklist[item.id] === false && opt === 'No') ? s.ynTextActive : {}]}>{opt}</Text>
-                    </TouchableOpacity>
-                  ))}
+          {/* ── Pre-Surgical Checklist (iter-189) ── */}
+          <View style={s.section} data-testid="phase2-preop-checklist">
+            <TouchableOpacity
+              style={s.sectionHeader}
+              onPress={() => isPreopUnlocked && setPreopExpanded(v => !v)}
+              activeOpacity={isPreopUnlocked ? 0.6 : 1}
+              data-testid="preop-section-toggle"
+            >
+              <Ionicons name={isPreopUnlocked ? 'shield-checkmark' : 'clipboard-outline'} size={20} color={isPreopUnlocked ? '#2E7D32' : '#1565C0'} />
+              <Text style={s.sectionTitle}>
+                Pre-Surgical Checklist {!isPreopUnlocked && <Text style={{ color: '#DC3545' }}>*</Text>}
+              </Text>
+              {isPreopUnlocked && (
+                <View style={{ marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <View style={{ backgroundColor: '#E8F5E9', borderColor: '#66BB6A', borderWidth: 1, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>
+                    <Text style={{ color: '#2E7D32', fontSize: 11, fontWeight: '700' }}>COMPLETED</Text>
+                  </View>
+                  <Ionicons name={preopExpanded ? 'chevron-up' : 'chevron-down'} size={16} color="#78909C" />
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {/* Stamp banner once complete */}
+            {isPreopUnlocked && (
+              <View style={{ backgroundColor: '#E8F5E9', borderRadius: 8, padding: 10, marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="checkmark-circle" size={18} color="#2E7D32" />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: '#2E7D32', fontSize: 13, fontWeight: '700' }}>
+                    Signed off by {preopCompletedByName || 'you'}
+                  </Text>
+                  <Text style={{ color: '#558B2F', fontSize: 11, marginTop: 2 }}>
+                    {preopCompletedAt ? new Date(preopCompletedAt).toLocaleString() : ''}
+                  </Text>
                 </View>
               </View>
+            )}
+
+            {/* Sectioned items */}
+            {(preopExpanded || !isPreopUnlocked) && (CHECKLIST_DATA.surgical.sections || []).map((sec: any) => (
+              <View key={sec.title} style={{ marginBottom: 14 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#37474F', marginTop: 6, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                  {sec.title}
+                </Text>
+                {sec.items.map((item: any) => {
+                  const checked = !!preSurgeryChecklist[item.id];
+                  return (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={[s.checkRow, { paddingVertical: 8 }]}
+                      activeOpacity={0.7}
+                      disabled={isPreopUnlocked}
+                      onPress={() => setPreSurgeryChecklist(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
+                      data-testid={`preop-item-${item.id}`}
+                    >
+                      <View style={{ width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: checked ? '#2E7D32' : '#B0BEC5', backgroundColor: checked ? '#2E7D32' : '#FFF', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                        {checked && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                      </View>
+                      <Text style={[s.checkLabel, { flex: 1, color: isPreopUnlocked ? '#78909C' : '#263238' }]}>
+                        {item.label}{item.mandatory ? <Text style={{ color: '#DC3545', fontWeight: '700' }}> *</Text> : null}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
             ))}
+
+            {!isPreopUnlocked && (
+              <>
+                <Text style={{ fontSize: 11, color: '#78909C', marginTop: 4, marginBottom: 8 }}>
+                  Tick all applicable items. Items marked <Text style={{ color: '#DC3545', fontWeight: '700' }}>*</Text> are mandatory before unlocking the Surgical Procedure section.
+                </Text>
+                <TouchableOpacity
+                  style={[s.submitBtn, { backgroundColor: '#2E7D32', marginTop: 4 }, preopSaving && { opacity: 0.6 }]}
+                  onPress={savePreopChecklist}
+                  disabled={preopSaving}
+                  data-testid="preop-save-btn"
+                >
+                  {preopSaving ? (
+                    <ActivityIndicator color="#FFF" />
+                  ) : (
+                    <>
+                      <Ionicons name="lock-open-outline" size={18} color="#FFF" />
+                      <Text style={s.submitText}>Save Pre-Op &amp; Unlock Surgery</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
           </View>
 
-          {/* ── Surgical Procedure ── */}
-          <View style={s.section}>
+          {/* ── Surgical Procedure (soft-locked until Pre-Op) ── */}
+          <View style={[s.section, !isPreopUnlocked && { opacity: 0.55 }]} pointerEvents={isPreopUnlocked ? 'auto' : 'none'}>
+            {!isPreopUnlocked && (
+              <View style={{ backgroundColor: '#FFF3E0', borderLeftWidth: 4, borderLeftColor: '#FB8C00', borderRadius: 6, padding: 10, marginBottom: 10, flexDirection: 'row', gap: 8 }} data-testid="preop-locked-banner">
+                <Ionicons name="lock-closed-outline" size={18} color="#E65100" />
+                <Text style={{ color: '#E65100', fontSize: 12, flex: 1 }}>
+                  Complete the Pre-Surgical Checklist above before recording the surgical findings.
+                </Text>
+              </View>
+            )}
             <View style={s.sectionHeader}>
               <Ionicons name="medkit-outline" size={20} color="#E65100" />
               <Text style={s.sectionTitle}>Surgical Procedure</Text>

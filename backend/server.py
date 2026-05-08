@@ -412,7 +412,8 @@ class ApprovalAction(BaseModel):
         return v
 
 class Phase2Submit(BaseModel):
-    # Pre-surgery checklist (7 items)
+    # Pre-surgery checklist (legacy; iter-189 splits this into a separate
+    # phase2_preop submission that must complete before surgical fields are sent)
     pre_surgery_checklist: Optional[Dict[str, bool]] = None
     # Surgical procedure data
     anesthesia_adequate: Optional[str] = Field("Yes", max_length=10)  # Yes/No
@@ -449,6 +450,13 @@ class Phase2Submit(BaseModel):
     # Legacy fields
     checklist_surgical: Optional[ChecklistSection] = None
     remark: Optional[str] = None
+
+class Phase2PreOpSubmit(BaseModel):
+    # iter-189: Pre-Surgical Checklist as a separate, day-of submission.
+    # Items keyed by `id` from CHECKLIST_DATA.surgical.sections — only
+    # mandatory items are enforced server-side.
+    items: Dict[str, bool]
+    notes: Optional[str] = Field(None, max_length=2000)
 
 class Stage2SurgicalSubmit(BaseModel):
     # Second Stage checklist items
@@ -792,6 +800,92 @@ async def pre_surgery_reminder_loop(interval_seconds: int = 3600):
     await asyncio.sleep(30)
     while True:
         await run_pre_surgery_reminders()
+        await asyncio.sleep(interval_seconds)
+
+
+# ───────────────────────────────────────────────────────────────────
+# iter-189: Pre-Op Checklist reminders at T-3h and T-30m
+# ───────────────────────────────────────────────────────────────────
+async def run_preop_checklist_reminders():
+    """Scan phase1_approved cases that haven't completed Pre-Op yet and send
+    Expo push + in-app notif at T-3h and T-30m before scheduled surgery.
+    Idempotent via `preop_reminder_3h_sent` / `preop_reminder_30m_sent` flags."""
+    try:
+        now = datetime.now()
+        # Narrow Mongo query to today's + tomorrow's surgeries.
+        date_strs = [(now.date() + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(2)]
+        cursor = db.procedures.find({
+            "status": "phase1_approved",
+            "procedure_date": {"$in": date_strs},
+            "archived": {"$ne": True},
+            "phase2_preop_completed_at": {"$in": [None, ""]},
+        })
+        async for proc in cursor:
+            surgery_dt = _surgery_dt_from_strings(
+                proc.get("procedure_date", ""), proc.get("procedure_time", "")
+            )
+            if not surgery_dt:
+                continue
+            mins_out = (surgery_dt - now).total_seconds() / 60.0
+            # Decide which bucket (if any) we're in. Use ±8min windows to absorb
+            # scheduler drift at a 15-min poll interval.
+            bucket = None
+            if 172.0 <= mins_out <= 188.0 and not proc.get("preop_reminder_3h_sent"):
+                bucket = "3h"
+            elif 22.0 <= mins_out <= 38.0 and not proc.get("preop_reminder_30m_sent"):
+                bucket = "30m"
+            if bucket is None:
+                continue
+
+            patient_label = proc.get("patient_name") or "your patient"
+            time_label = proc.get("procedure_time") or ""
+            if bucket == "3h":
+                title = "Pre-Op Checklist due (~3h to surgery)"
+                body = f"Surgery for {patient_label} starts in ~3 hours ({time_label}) — Pre-Surgical Checklist is incomplete."
+            else:
+                title = "Pre-Op Checklist URGENT (~30m to surgery)"
+                body = f"Surgery for {patient_label} starts in ~30 minutes ({time_label}) — Pre-Surgical Checklist still pending."
+
+            raw_ids = [
+                proc.get("student_id"),
+                proc.get("supervisor_id"),
+                proc.get("implant_incharge_id"),
+            ]
+            recipient_ids = [str(x) for x in raw_ids if x]
+            recipient_ids = list(dict.fromkeys(recipient_ids))
+
+            for uid in recipient_ids:
+                await db.notifications.insert_one({
+                    "user_id": uid,
+                    "procedure_id": str(proc["_id"]),
+                    "message": body,
+                    "type": "preop_reminder",
+                    "read": False,
+                    "created_at": now,
+                })
+            await send_expo_push_notifications(
+                recipient_ids,
+                title,
+                body,
+                {"procedure_id": str(proc["_id"]), "kind": "preop_reminder", "bucket": bucket},
+            )
+            await db.procedures.update_one(
+                {"_id": proc["_id"]},
+                {"$set": {f"preop_reminder_{bucket}_sent": True, f"preop_reminder_{bucket}_at": now}},
+            )
+            logging.info(
+                "Pre-op reminder sent (%s) for %s (%s); recipients=%d",
+                bucket, patient_label, proc["_id"], len(recipient_ids),
+            )
+    except Exception as exc:
+        logging.error("Pre-op reminder sweep failed: %s", exc)
+
+
+async def preop_checklist_reminder_loop(interval_seconds: int = 900):
+    """Polls every 15min for surgeries hitting the T-3h / T-30m buckets."""
+    await asyncio.sleep(45)  # let startup settle
+    while True:
+        await run_preop_checklist_reminders()
         await asyncio.sleep(interval_seconds)
 
 # Auth Routes
@@ -7418,6 +7512,13 @@ async def submit_phase2(
     if procedure["status"] != "phase1_approved":
         raise HTTPException(status_code=400, detail="Phase 1 must be approved before submitting Phase 2")
     
+    # iter-189: Pre-Surgical Checklist must be completed first
+    if not procedure.get("phase2_preop_completed_at"):
+        raise HTTPException(
+            status_code=400,
+            detail="Pre-Surgical Checklist must be completed before recording surgical findings."
+        )
+    
     # Gate: Patient Consent Form MUST be on file before Phase 2 can be submitted.
     if not procedure.get("patient_consent_form"):
         raise HTTPException(
@@ -7519,7 +7620,88 @@ async def submit_phase2(
     updated_procedure["id"] = updated_procedure["_id"]
     return updated_procedure
 
-# Phase 3 - Second Stage Surgical Protocol Submission
+# ───────────────────────────────────────────────────────────────────
+# iter-189: Phase 2 Pre-Surgical Checklist (separate, day-of submission)
+# ───────────────────────────────────────────────────────────────────
+PHASE2_PREOP_MANDATORY = {
+    "patient_id_consent_verified",
+    "vitals_ok",
+    "preop_chx_rinse",
+    "imaging_chairside",
+    "drilling_sequence_ready",
+    "implant_verified",
+    "drilling_kit_sterile",
+    "physiodispenser_ready",
+    "instruments_autoclaved",
+    "saline_irrigation",
+    "aseptic_field_draped",
+    "suction_tested",
+    "team_briefed",
+}
+
+@api_router.post("/procedures/{procedure_id}/phase2-preop")
+async def submit_phase2_preop(
+    procedure_id: str,
+    payload: Phase2PreOpSubmit,
+    current_user: dict = Depends(get_current_user),
+):
+    """Stamp the Pre-Surgical Checklist as completed. Required before
+    submit_phase2. Idempotent — re-submission overwrites the previous stamp."""
+    procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    
+    is_student = current_user["role"] == "student" and procedure.get("student_id") == current_user["_id"]
+    is_supervisor = current_user["role"] == "supervisor" and procedure.get("supervisor_id") == current_user["_id"]
+    is_incharge = current_user["role"] == "implant_incharge"
+    is_creator = procedure.get("created_by_id") == current_user["_id"]
+    if not (is_student or is_supervisor or is_incharge or is_creator):
+        raise HTTPException(status_code=403, detail="You don't have permission to submit Pre-Op for this procedure")
+    
+    if procedure["status"] != "phase1_approved":
+        raise HTTPException(status_code=400, detail="Phase 1 must be approved before completing the Pre-Surgical Checklist")
+    
+    items = payload.items or {}
+    missing = [k for k in PHASE2_PREOP_MANDATORY if not items.get(k)]
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Mandatory pre-op item(s) not checked: {', '.join(sorted(missing))}",
+        )
+    
+    now = datetime.now(timezone.utc)
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {
+            "phase2_preop_checklist": items,
+            "phase2_preop_notes": payload.notes,
+            "phase2_preop_completed_at": now,
+            "phase2_preop_completed_by": current_user["_id"],
+            "phase2_preop_completed_by_name": current_user.get("name") or current_user.get("email"),
+            "phase2_preop_completed_by_role": current_user.get("role"),
+            "updated_at": now,
+        }},
+    )
+    
+    # Audit
+    try:
+        await log_access(
+            action="phase2_preop.complete",
+            outcome="success",
+            user=current_user,
+            resource_type="procedure",
+            resource_id=procedure_id,
+        )
+    except Exception:
+        pass
+    
+    return {
+        "ok": True,
+        "phase2_preop_completed_at": now.isoformat(),
+        "phase2_preop_completed_by_name": current_user.get("name") or current_user.get("email"),
+    }
+
+
 @api_router.post("/procedures/{procedure_id}/stage2/surgical")
 async def submit_stage2_surgical(
     procedure_id: str,
@@ -12888,7 +13070,8 @@ async def shutdown_db_client():
 async def start_pre_surgery_scheduler():
     """Kick off the background reminder loop once per worker."""
     asyncio.create_task(pre_surgery_reminder_loop(3600))
-    logging.info("Pre-surgery reminder scheduler started (interval=3600s).")
+    asyncio.create_task(preop_checklist_reminder_loop(900))
+    logging.info("Pre-surgery reminder scheduler started (interval=3600s, preop=900s).")
 
 @app.on_event("startup")
 async def ensure_access_log_indexes_on_start():
