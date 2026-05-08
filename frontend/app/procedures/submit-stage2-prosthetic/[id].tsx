@@ -49,6 +49,13 @@ export default function Phase4Step1Screen() {
   const [conventionalTrayType, setConventionalTrayType] = useState<'' | 'open_tray' | 'closed_tray'>('');
   // iter-192: impression material — required when conventional. Three fixed options.
   const [impressionMaterial, setImpressionMaterial] = useState<'' | 'polyether' | 'heavy_light_body' | 'putty_light_body'>('');
+  // iter-194: Shade selection
+  // - For non-full-arch: one shade text per implant (positions[i] → shadeValues[i]).
+  // - For full-arch: exactly two entries — index 0 = Anterior, 1 = Posterior.
+  // Shade entries are mandatory; the note is optional.
+  const [shadeValues, setShadeValues] = useState<string[]>([]);
+  const [shadeNotes, setShadeNotes] = useState('');
+  const [labSlipLoading, setLabSlipLoading] = useState(false);
   const [studentNotes, setStudentNotes] = useState('');
 
   // Per-implant prosthetic plan for multiple implants (non-bridge)
@@ -70,8 +77,22 @@ export default function Phase4Step1Screen() {
       if (positions.length > 1) {
         setPerImplantPlans(positions.map(() => ({ prosthesis: '', material: '', openProsthesis: false, openMaterial: false })));
       }
+      // iter-194: hydrate shade state — full-arch always uses 2 slots, others
+      // mirror the implant count.
+      const procType = procRes.data?.implant_procedure_type || '';
+      const isFullArch = FULL_ARCH_GROUP.has(procType);
+      const slots = isFullArch ? 2 : Math.max(1, positions.length);
+      const existing: string[] = procRes.data?.phase4_step1_data?.shade_values || [];
+      setShadeValues(Array.from({ length: slots }, (_, i) => existing[i] || ''));
+      setShadeNotes(procRes.data?.phase4_step1_data?.shade_notes || '');
     } catch {}
   };
+
+  // iter-194: helpers
+  const isFullArch = (() => {
+    if (!procedure) return false;
+    return FULL_ARCH_GROUP.has(procedure.implant_procedure_type || '');
+  })();
 
   // Determine if per-implant mode: Multiple implants + no bridge in Phase 1 prosthetic plan
   const isPerImplantMode = (() => {
@@ -104,65 +125,80 @@ export default function Phase4Step1Screen() {
   const showMaterial = finalProsthesis && (finalProsthesis.includes('FP1') || finalProsthesis.includes('FP2') || finalProsthesis.includes('FP3'));
   const showOverdenture = finalProsthesis && finalProsthesis.includes('Overdenture');
 
-  const handleSubmit = async () => {
+  // iter-194: validate shape required for both Submit and Generate-Lab-Slip paths.
+  // Returns null when valid, else a user-facing message.
+  const validateForm = (): string | null => {
     if (isPerImplantMode) {
-      // Validate per-implant plans
       for (let i = 0; i < perImplantPlans.length; i++) {
         if (!perImplantPlans[i].prosthesis) {
-          Alert.alert('Missing', `Please select prosthesis for Implant ${i + 1}${implantPositions[i] ? ` (#${implantPositions[i]})` : ''}`);
-          return;
+          return `Please select prosthesis for Implant ${i + 1}${implantPositions[i] ? ` (#${implantPositions[i]})` : ''}`;
         }
         const showMat = perImplantPlans[i].prosthesis.includes('FP1') || perImplantPlans[i].prosthesis.includes('FP2') || perImplantPlans[i].prosthesis.includes('FP3');
         if (showMat && !perImplantPlans[i].material) {
-          Alert.alert('Missing', `Please select material for Implant ${i + 1}${implantPositions[i] ? ` (#${implantPositions[i]})` : ''}`);
-          return;
+          return `Please select material for Implant ${i + 1}${implantPositions[i] ? ` (#${implantPositions[i]})` : ''}`;
         }
       }
     } else {
-      if (!finalProsthesis) { Alert.alert('Missing', 'Please select Final Prosthesis'); return; }
+      if (!finalProsthesis) return 'Please select Final Prosthesis';
     }
-    if (!impressionType) { Alert.alert('Missing', 'Please select impression type'); return; }
-    // iter-191: conventional impression requires the user to choose Open vs Closed tray.
-    if (impressionType === 'conventional' && !conventionalTrayType) {
-      Alert.alert('Missing', 'Please choose Open tray or Closed tray for the conventional impression.');
-      return;
+    if (!impressionType) return 'Please select impression type';
+    if (impressionType === 'conventional' && !conventionalTrayType) return 'Please choose Open tray or Closed tray for the conventional impression.';
+    if (impressionType === 'conventional' && !impressionMaterial) return 'Please choose an impression material (Polyether, Heavy and Light body, or Putty and Light body).';
+    // iter-194: shade is mandatory for every implant slot (or for both A/P in full arch).
+    if (isFullArch) {
+      if (!shadeValues[0]?.trim()) return 'Please enter the Anterior shade';
+      if (!shadeValues[1]?.trim()) return 'Please enter the Posterior shade';
+    } else {
+      const slots = Math.max(1, implantPositions.length || 1);
+      for (let i = 0; i < slots; i++) {
+        if (!shadeValues[i]?.trim()) {
+          const lbl = implantPositions[i] ? ` (#${implantPositions[i]})` : '';
+          return `Please enter the shade for Implant ${i + 1}${lbl}`;
+        }
+      }
     }
-    // iter-192: impression material is mandatory for conventional impressions.
-    if (impressionType === 'conventional' && !impressionMaterial) {
-      Alert.alert('Missing', 'Please choose an impression material (Polyether, Heavy and Light body, or Putty and Light body).');
-      return;
-    }
+    return null;
+  };
 
+  // iter-194: assemble the POST body. Used by both Submit and Generate-Lab-Slip.
+  const buildPayload = () => {
+    const payload: any = {
+      custom_abutment: customAbutment || null,
+      overdenture_attachment: overdentureAttachment || null,
+      payment_complete: paymentComplete,
+      components_available: componentsAvailable,
+      impression_type: impressionType,
+      conventional_tray_type: impressionType === 'conventional' ? conventionalTrayType : null,
+      impression_material: impressionType === 'conventional' ? impressionMaterial : null,
+      // iter-194: shade
+      shade_values: (isFullArch ? shadeValues.slice(0, 2) : shadeValues.slice(0, Math.max(1, implantPositions.length || 1))).map(v => (v || '').trim()),
+      shade_notes: shadeNotes ? shadeNotes.trim() : null,
+      shade_layout: isFullArch ? 'full_arch' : 'per_implant',
+      student_notes: studentNotes || null,
+    };
+    if (isPerImplantMode) {
+      payload.per_implant_plans = perImplantPlans.map((p, idx) => ({
+        position: implantPositions[idx] || '',
+        prosthesis: p.prosthesis,
+        material: p.material || null,
+      }));
+      payload.final_prosthetic_plan = perImplantPlans.map((p, idx) =>
+        `#${implantPositions[idx] || idx + 1}: ${p.prosthesis}${p.material ? ' - ' + p.material : ''}`
+      ).join('; ');
+      payload.prosthetic_material = perImplantPlans.map(p => p.material).filter(Boolean).join(', ') || null;
+    } else {
+      payload.final_prosthetic_plan = finalProsthesis + (prostheticMaterial ? ` - ${prostheticMaterial}` : '');
+      payload.prosthetic_material = prostheticMaterial || null;
+    }
+    return payload;
+  };
+
+  const handleSubmit = async () => {
+    const err = validateForm();
+    if (err) { Alert.alert('Missing', err); return; }
     setLoading(true);
     try {
-      const payload: any = {
-        custom_abutment: customAbutment || null,
-        overdenture_attachment: overdentureAttachment || null,
-        payment_complete: paymentComplete,
-        components_available: componentsAvailable,
-        impression_type: impressionType,
-        // iter-191: only relevant when impressionType === 'conventional'
-        conventional_tray_type: impressionType === 'conventional' ? conventionalTrayType : null,
-        // iter-192: only persisted when conventional impression is selected.
-        impression_material: impressionType === 'conventional' ? impressionMaterial : null,
-        student_notes: studentNotes || null,
-      };
-
-      if (isPerImplantMode) {
-        payload.per_implant_plans = perImplantPlans.map((p, idx) => ({
-          position: implantPositions[idx] || '',
-          prosthesis: p.prosthesis,
-          material: p.material || null,
-        }));
-        payload.final_prosthetic_plan = perImplantPlans.map((p, idx) =>
-          `#${implantPositions[idx] || idx + 1}: ${p.prosthesis}${p.material ? ' - ' + p.material : ''}`
-        ).join('; ');
-        payload.prosthetic_material = perImplantPlans.map(p => p.material).filter(Boolean).join(', ') || null;
-      } else {
-        payload.final_prosthetic_plan = finalProsthesis + (prostheticMaterial ? ` - ${prostheticMaterial}` : '');
-        payload.prosthetic_material = prostheticMaterial || null;
-      }
-
+      const payload = buildPayload();
       await api.post(`/procedures/${id}/stage2/prosthetic`, payload);
       const isInchargeSelfCreated = user?.role === 'implant_incharge' && procedure?.created_by_role === 'implant_incharge' && user?.id === procedure?.created_by_id;
       if (isInchargeSelfCreated) {
@@ -176,6 +212,30 @@ export default function Phase4Step1Screen() {
       Alert.alert('Error', error.response?.data?.detail || 'Failed to submit');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // iter-194: Generate Lab Slip directly from the form. Soft-saves the
+  // Phase 4 Step 1 data without changing case status, then opens the slip
+  // populated with the just-saved values + earlier-phase data.
+  const handleGenerateLabSlip = async () => {
+    const err = validateForm();
+    if (err) { Alert.alert('Missing', err); return; }
+    setLabSlipLoading(true);
+    try {
+      const payload = buildPayload();
+      // ?save_only=true tells the backend to persist phase4_step1_data
+      // without flipping the workflow status.
+      await api.post(`/procedures/${id}/stage2/prosthetic?save_only=true`, payload);
+      // Re-fetch the procedure so the slip has the freshly-persisted shade
+      // and impression details alongside the earlier-phase fields.
+      const fresh = await api.get(`/procedures/${id}`);
+      const { generateLabSlipPDF } = await import('../../utils/pdfGenerator');
+      await generateLabSlipPDF(fresh.data);
+    } catch (error: any) {
+      Alert.alert('Error', error.response?.data?.detail || 'Failed to generate the lab slip.');
+    } finally {
+      setLabSlipLoading(false);
     }
   };
 
@@ -433,6 +493,54 @@ export default function Phase4Step1Screen() {
             </View>
           </View>
 
+          {/* ── iter-194: Shade Selection ── */}
+          <View style={[s.section, { borderColor: '#FFE0B2', backgroundColor: '#FFF9F0' }]} testID="shade-selection-section">
+            <View style={s.sectionHeader}>
+              <Ionicons name="color-palette-outline" size={20} color="#E65100" />
+              <Text style={[s.sectionTitle, { color: '#E65100' }]}>
+                Shade Selection <Text style={{ color: '#DC3545' }}>*</Text>
+              </Text>
+            </View>
+            <Text style={{ fontSize: 11, color: '#8D6E63', marginBottom: 12 }}>
+              {isFullArch
+                ? 'Full-arch case — record one shade for the anterior segment and one for the posterior segment.'
+                : 'Record one shade per implant. Use the natural standard (Vita Classic / Vita 3D-Master / chairside reference).'}
+            </Text>
+            {(isFullArch ? ['Anterior', 'Posterior'] : implantPositions.map((p, i) => `Implant ${i + 1}${p ? ` (#${p})` : ''}`))
+              .map((label, idx) => (
+                <View key={idx} style={s.field}>
+                  <Text style={[s.label, { color: '#5D4037' }]}>
+                    {label} Shade <Text style={{ color: '#DC3545' }}>*</Text>
+                  </Text>
+                  <TextInput
+                    style={[s.input, { borderColor: '#FFCC80', backgroundColor: '#FFFFFF' }]}
+                    value={shadeValues[idx] || ''}
+                    onChangeText={t => {
+                      const next = [...shadeValues];
+                      next[idx] = t;
+                      setShadeValues(next);
+                    }}
+                    placeholder="e.g. A2, B1, 2M2"
+                    autoCapitalize="characters"
+                    testID={`shade-input-${idx}`}
+                  />
+                </View>
+              ))}
+
+            <View style={s.field}>
+              <Text style={[s.label, { color: '#5D4037' }]}>Shade Selection Note <Text style={{ fontStyle: 'italic', color: '#A1887F' }}>(optional — for the lab)</Text></Text>
+              <TextInput
+                style={[s.input, s.textArea, { borderColor: '#FFCC80', backgroundColor: '#FFFFFF' }]}
+                value={shadeNotes}
+                onChangeText={setShadeNotes}
+                placeholder="e.g. Cervical A3, body A2, incisal B1; characterise with mamelons; matches #11."
+                multiline
+                numberOfLines={3}
+                testID="shade-notes-input"
+              />
+            </View>
+          </View>
+
           {/* ── Notes ── */}
           <View style={s.section}>
             <View style={s.sectionHeader}>
@@ -505,8 +613,22 @@ export default function Phase4Step1Screen() {
               </TouchableOpacity>
             </View>
           ) : (
-          <View style={{ padding: 16, paddingBottom: 32 }}>
-            <TouchableOpacity style={[s.submitBtn, loading && { opacity: 0.6 }]} onPress={handleSubmit} disabled={loading}
+          <View style={{ padding: 16, paddingBottom: 32, gap: 10 }}>
+            {/* iter-194: Generate Lab Slip — soft-saves the form data
+                (?save_only=true), then opens the slip populated with the
+                fresh values. Shifted from the post-approval case-detail card. */}
+            <TouchableOpacity
+              style={[s.labSlipBtn, labSlipLoading && { opacity: 0.6 }]}
+              onPress={handleGenerateLabSlip}
+              disabled={labSlipLoading || loading}
+              testID="phase4-step1-generate-lab-slip"
+            >
+              {labSlipLoading ? <ActivityIndicator color="#6A1B9A" /> : (
+                <><Ionicons name="print-outline" size={20} color="#6A1B9A" />
+                <Text style={s.labSlipText}>Generate Lab Slip</Text></>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.submitBtn, loading && { opacity: 0.6 }]} onPress={handleSubmit} disabled={loading || labSlipLoading}
               data-testid="phase4-step1-submit">
               {loading ? <ActivityIndicator color="#FFF" /> : (
                 <><Ionicons name="checkmark-circle" size={22} color="#FFF" />
@@ -546,6 +668,10 @@ const s = StyleSheet.create({
   impressionLabel: { flex: 1, fontSize: 14, color: '#555' },
   submitBtn: { flexDirection: 'row', backgroundColor: '#6A1B9A', borderRadius: 12, padding: 16, alignItems: 'center', justifyContent: 'center', gap: 8 },
   submitText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  // iter-194: Lab-slip button — outlined version of the submit button so it
+  // reads as a secondary action sitting above the primary Submit.
+  labSlipBtn: { flexDirection: 'row', backgroundColor: '#FFF', borderRadius: 12, padding: 14, alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderColor: '#6A1B9A' },
+  labSlipText: { color: '#6A1B9A', fontSize: 15, fontWeight: '700', letterSpacing: 0.3 },
   // iter-140: Copy MUA from Phase 2 affordance (blue theme matches Phase 2 MUA card)
   copyMuaBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: '#E1F5FE', borderColor: '#B3E5FC', borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 10 },
   copyMuaText: { fontSize: 12, fontWeight: '700', color: '#0277BD', letterSpacing: 0.2 },
