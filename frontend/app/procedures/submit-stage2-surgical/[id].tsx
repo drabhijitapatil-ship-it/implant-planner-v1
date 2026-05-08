@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import api, { getAuthFileUrl, getToken } from '../../../utils/api';
+import { goBackOrHome } from '../../../utils/safeNav';
 import { showUploadPicker } from '../../../utils/uploadPicker';
 import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
@@ -218,7 +219,7 @@ export default function Stage2SurgicalSubmissionScreen() {
       } else {
         Alert.alert('Success',
           'Phase 3 submitted successfully! Awaiting approval.',
-          [{ text: 'OK', onPress: () => router.back() }]
+          [{ text: 'OK', onPress: () => goBackOrHome() }]
         );
       }
     } catch (error: any) {

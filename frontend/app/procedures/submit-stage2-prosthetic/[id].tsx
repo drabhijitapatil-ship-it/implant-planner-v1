@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import api from '../../../utils/api';
+import { goBackOrHome } from '../../../utils/safeNav';
 import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
 import { PhaseHeader } from '../../../components/PhaseHeader';
@@ -150,7 +151,7 @@ export default function Phase4Step1Screen() {
         setDoneCompleted(true);
       } else {
         Alert.alert('Success', 'Phase 4 Step 1 submitted! Awaiting approval.',
-          [{ text: 'OK', onPress: () => router.back() }]);
+          [{ text: 'OK', onPress: () => goBackOrHome() }]);
       }
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.detail || 'Failed to submit');
