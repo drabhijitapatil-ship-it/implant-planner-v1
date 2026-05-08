@@ -44,6 +44,9 @@ export default function Phase4Step1Screen() {
   const [paymentComplete, setPaymentComplete] = useState(false);
   const [componentsAvailable, setComponentsAvailable] = useState(false);
   const [impressionType, setImpressionType] = useState('');
+  // iter-191: when impressionType === 'conventional', the user must pick
+  // between an open-tray and a closed-tray technique.
+  const [conventionalTrayType, setConventionalTrayType] = useState<'' | 'open_tray' | 'closed_tray'>('');
   const [studentNotes, setStudentNotes] = useState('');
 
   // Per-implant prosthetic plan for multiple implants (non-bridge)
@@ -117,6 +120,11 @@ export default function Phase4Step1Screen() {
       if (!finalProsthesis) { Alert.alert('Missing', 'Please select Final Prosthesis'); return; }
     }
     if (!impressionType) { Alert.alert('Missing', 'Please select impression type'); return; }
+    // iter-191: conventional impression requires the user to choose Open vs Closed tray.
+    if (impressionType === 'conventional' && !conventionalTrayType) {
+      Alert.alert('Missing', 'Please choose Open tray or Closed tray for the conventional impression.');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -126,6 +134,8 @@ export default function Phase4Step1Screen() {
         payment_complete: paymentComplete,
         components_available: componentsAvailable,
         impression_type: impressionType,
+        // iter-191: only relevant when impressionType === 'conventional'
+        conventional_tray_type: impressionType === 'conventional' ? conventionalTrayType : null,
         student_notes: studentNotes || null,
       };
 
@@ -330,12 +340,52 @@ export default function Phase4Step1Screen() {
                 { id: 'conventional', label: 'Conventional Impressions Made', icon: 'hand-left-outline' },
               ].map(opt => (
                 <TouchableOpacity key={opt.id} style={[s.impressionCard, impressionType === opt.id && s.impressionCardActive]}
-                  onPress={() => setImpressionType(opt.id)}>
+                  onPress={() => {
+                    setImpressionType(opt.id);
+                    // iter-191: clear tray choice if the user moves away from
+                    // 'conventional', so we never persist a stale tray-type.
+                    if (opt.id !== 'conventional') setConventionalTrayType('');
+                  }}
+                  testID={`impression-${opt.id}`}>
                   <Ionicons name={opt.icon as any} size={24} color={impressionType === opt.id ? '#1A73E8' : '#999'} />
                   <Text style={[s.impressionLabel, impressionType === opt.id && { color: '#1A73E8', fontWeight: '700' }]}>{opt.label}</Text>
                   {impressionType === opt.id && <Ionicons name="checkmark-circle" size={22} color="#1A73E8" />}
                 </TouchableOpacity>
               ))}
+
+              {/* iter-191: Tray-type sub-choice — required when conventional is selected. */}
+              {impressionType === 'conventional' && (
+                <View style={{ marginTop: 4, paddingLeft: 10, borderLeftWidth: 3, borderLeftColor: '#FFB74D' }} testID="conventional-tray-options">
+                  <Text style={[s.label, { marginTop: 8 }]}>
+                    Tray Technique <Text style={{ color: '#DC3545' }}>*</Text>
+                  </Text>
+                  {[
+                    { id: 'open_tray', label: 'Open Tray Impression', sub: 'Direct technique — copings unscrewed through the tray' },
+                    { id: 'closed_tray', label: 'Closed Tray Impression', sub: 'Indirect technique — transfer copings reseated after pickup' },
+                  ].map(opt => {
+                    const active = conventionalTrayType === opt.id;
+                    return (
+                      <TouchableOpacity
+                        key={opt.id}
+                        style={[s.impressionCard, active && s.impressionCardActive, { marginTop: 6 }]}
+                        onPress={() => setConventionalTrayType(opt.id as any)}
+                        testID={`tray-${opt.id}`}
+                      >
+                        <Ionicons
+                          name={opt.id === 'open_tray' ? 'open-outline' : 'lock-closed-outline'}
+                          size={22}
+                          color={active ? '#1A73E8' : '#999'}
+                        />
+                        <View style={{ flex: 1, marginLeft: 10 }}>
+                          <Text style={[s.impressionLabel, active && { color: '#1A73E8', fontWeight: '700' }, { marginLeft: 0 }]}>{opt.label}</Text>
+                          <Text style={{ fontSize: 11, color: '#78909C', marginTop: 2 }}>{opt.sub}</Text>
+                        </View>
+                        {active && <Ionicons name="checkmark-circle" size={20} color="#1A73E8" />}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
             </View>
           </View>
 
