@@ -1,5 +1,34 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 194 (Feb 2026) — Phase 4 Step 1: Shade Selection + form-level Lab-Slip + soft-save
+
+### Why
+Two changes that go together:
+1. **Shade selection** is the single most-asked-for field on a lab Rx and was completely missing from the case record. Without per-implant shade (or anterior/posterior for full-arch) every case generated an incomplete slip.
+2. The Lab Slip card was previously only available **after** Phase 4 Step 1 was approved by the In-Charge — but a student needs the slip the day they take the impression. Shifting the button to the form (with a soft-save that doesn't trigger the approval workflow) lets the lab Rx leave the chair on the same visit while the In-Charge approval continues asynchronously.
+
+### Changes
+**Backend** (`/app/backend/server.py`)
+- `Stage2ProstheticSubmit` gains `shade_values: List[str]`, `shade_notes: Optional[str]`, `shade_layout: Optional[str]` (`per_implant` | `full_arch`).
+- `submit_stage2_prosthetic` now accepts `?save_only=true` query flag:
+  - When set, the endpoint persists `phase4_step1_data` but **does not** flip the case status, set `stage2_prosthetic_submitted_at`, or notify supervisor + in-charge. Status precondition is relaxed to also accept `pending_stage2_prosthetic` / `stage2_prosthetic_step1_approved`.
+  - When unset (default), behaviour is unchanged (status → `pending_stage2_prosthetic`, approvers notified).
+- Shade validation runs in **both** modes: `full_arch` requires ≥ 2 non-empty shades, otherwise ≥ 1. Trimmed values stored alongside `shade_layout` for renderer disambiguation. `shade_notes` (optional) trimmed-or-null.
+
+**Frontend** (`submit-stage2-prosthetic/[id].tsx`, `utils/pdfGenerator.ts`, `procedures/[id].tsx`)
+- New **Shade Selection** section after Impression Material: amber-toned panel with one text input per implant in non-full-arch cases (`shade-input-{idx}`) or two inputs (Anterior, Posterior) for any procedure type in `FULL_ARCH_GROUP`. Each input is mandatory (red `*`); auto-uppercase for typical Vita codes (A2, B1, 2M2). Optional **Shade Selection Note** multi-line below it (`shade-notes-input`).
+- Form footer is now **two buttons**:
+  1. Outlined purple "**Generate Lab Slip**" (`phase4-step1-generate-lab-slip`) — runs the same validators as Submit, POSTs `?save_only=true`, then re-fetches the procedure and calls `generateLabSlipPDF` so the rendered slip reflects the just-saved shade and impression material.
+  2. Filled purple "**Submit Step 1 for Approval**" (`phase4-step1-submit`, label changes to **Done** for In-Charge auto-approval flow) — unchanged behaviour.
+- `buildLabSlipHtml` adds a dedicated Shade Selection section (orange accent) listing each value with the right label (Anterior/Posterior or `Implant N (#tooth)`), plus the optional shade note as a `Shade Note (to lab)` row.
+- Case-detail page: post-approval Lab-Prescription card from iter-193 has been **removed** — generation now lives in the form. Comment left in place to mark the move.
+
+### Verification
+- Backend curl 5/5 — save_only no shade → 400 (`Please record at least one implant shade.`); save_only full_arch with only 1 shade → 400 (`Please record both Anterior and Posterior shades.`); save_only with `["A2"]` + note → 200 (status stays `stage2_surgical_approved`, `phase4_step1_data.shade_values=["A2"]`, layout/notes persisted); full submit without shade → 400; full submit with `["A2"]` → 200 (status flips to `pending_stage2_prosthetic`).
+- Web bundle confirmed reloaded (`Bundled 83ms utils/pdfGenerator.ts`).
+- Test procedure reset (status `phase1_approved`, `phase4_step1_data` and Phase 2 pre-op fields cleared).
+
+
 ## Iteration 193 (Feb 2026) — One-tap Lab Slip PDF after Phase 4 Step 1 approval
 
 ### Why

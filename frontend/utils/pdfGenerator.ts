@@ -509,6 +509,20 @@ export const buildLabSlipHtml = (procedure: any): string => {
     ? 'Intra-Oral Digital Scans'
     : `Conventional${trayLabel ? ` — ${trayLabel}` : ''}${matLabel ? ` (${matLabel})` : ''}`;
 
+  // iter-194: shade selection rows
+  const shadeValues: string[] = Array.isArray(p4.shade_values) ? p4.shade_values : [];
+  const shadeLayout: string = p4.shade_layout || 'per_implant';
+  const shadeRowsHtml = shadeValues.length === 0 ? '' : (() => {
+    const rows = shadeValues.map((s: string, i: number) => {
+      const lbl = shadeLayout === 'full_arch'
+        ? (i === 0 ? 'Anterior' : i === 1 ? 'Posterior' : `Slot ${i + 1}`)
+        : `Implant ${i + 1}${plans[i]?.tooth_position ? ` (#${plans[i].tooth_position})` : ''}`;
+      return `<tr><td class="lbl">${lbl} Shade</td><td><strong>${s || '—'}</strong></td></tr>`;
+    }).join('');
+    const note = p4.shade_notes ? `<tr><td class="lbl">Shade Note (to lab)</td><td style="white-space: pre-wrap;">${p4.shade_notes}</td></tr>` : '';
+    return rows + note;
+  })();
+
   const issuedAt = format(new Date(), 'dd MMM yyyy, HH:mm');
   const procDate = procedure.procedure_date ? format(new Date(procedure.procedure_date), 'dd MMM yyyy') : '—';
 
@@ -583,6 +597,15 @@ export const buildLabSlipHtml = (procedure: any): string => {
           ${procedure.shade ? `<tr><td class="lbl">Shade</td><td>${procedure.shade}</td></tr>` : ''}
         </table>
       </div>
+
+      ${shadeRowsHtml ? `
+      <div class="ls-section" style="border-color: #FFB74D; background-color: #FFF8E1;">
+        <h2 style="color: #E65100;">Shade Selection</h2>
+        <table class="grid">
+          ${shadeRowsHtml}
+        </table>
+      </div>
+      ` : ''}
 
       ${procedure.phase4_step1_student_notes || procedure.stage2_prosthetic_remark ? `
         <div class="ls-section lab-instructions">

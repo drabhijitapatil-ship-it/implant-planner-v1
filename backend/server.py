@@ -489,6 +489,10 @@ class Stage2ProstheticSubmit(BaseModel):
     # iter-192: impression material — required when impression_type == 'conventional'.
     # One of: polyether / heavy_light_body / putty_light_body.
     impression_material: Optional[str] = Field(None, max_length=30)
+    # iter-194: shade selection (mandatory; per-implant or anterior+posterior).
+    shade_values: Optional[List[str]] = None
+    shade_notes: Optional[str] = Field(None, max_length=2000)
+    shade_layout: Optional[str] = Field(None, max_length=20)  # 'per_implant' | 'full_arch'
     # Notes
     student_notes: Optional[str] = Field(None, max_length=2000)
     # Legacy
@@ -7812,6 +7816,7 @@ async def submit_stage2_surgical(
 async def submit_stage2_prosthetic(
     procedure_id: str,
     data: Stage2ProstheticSubmit,
+    save_only: bool = False,
     current_user: dict = Depends(get_current_user)
 ):
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
@@ -7825,8 +7830,13 @@ async def submit_stage2_prosthetic(
     is_creator = procedure.get("created_by_id") == current_user["_id"]
     if not (is_student or is_supervisor or is_incharge or is_creator):
         raise HTTPException(status_code=403, detail="You don't have permission")
-    if procedure["status"] != "stage2_surgical_approved":
+    # iter-194: save_only=true (Generate-Lab-Slip on the form) tolerates the
+    # case being mid-flow — it's a soft draft. The full submit (save_only=false)
+    # still requires the strict status precondition below.
+    if not save_only and procedure["status"] != "stage2_surgical_approved":
         raise HTTPException(status_code=400, detail="Phase 3 must be approved before starting Phase 4")
+    if save_only and procedure["status"] not in ("stage2_surgical_approved", "pending_stage2_prosthetic", "stage2_prosthetic_step1_approved"):
+        raise HTTPException(status_code=400, detail="Phase 3 must be approved before drafting Phase 4 data")
 
     # iter-191: when conventional impression is selected, the tray-type sub-choice
     # is mandatory and must be one of {open_tray, closed_tray}.
@@ -7842,6 +7852,16 @@ async def submit_stage2_prosthetic(
                 status_code=400,
                 detail="Please choose an impression material (Polyether, Heavy and Light body, or Putty and Light body).",
             )
+
+    # iter-194: shade selection is mandatory for both submit and save_only paths.
+    sv = [s for s in (data.shade_values or []) if s and s.strip()]
+    layout = data.shade_layout or "per_implant"
+    if layout == "full_arch":
+        if len(sv) < 2:
+            raise HTTPException(status_code=400, detail="Please record both Anterior and Posterior shades.")
+    else:
+        if len(sv) < 1:
+            raise HTTPException(status_code=400, detail="Please record at least one implant shade.")
 
     # Save Phase 4 Step 1 data
     phase4_step1_data = {
@@ -7862,6 +7882,11 @@ async def submit_stage2_prosthetic(
         "impression_material": (
             data.impression_material if data.impression_type == "conventional" else None
         ),
+        # iter-194: shade is always persisted (mandatory), with the layout flag
+        # so renderers can label slots correctly (Anterior/Posterior vs per implant).
+        "shade_values": [s.strip() for s in (data.shade_values or [])],
+        "shade_layout": layout,
+        "shade_notes": (data.shade_notes or "").strip() or None,
     }
     
     existing_checklist = procedure.get("checklist") or {}
@@ -7872,12 +7897,15 @@ async def submit_stage2_prosthetic(
     update_data = {
         "checklist": new_checklist,
         "phase4_step1_data": phase4_step1_data,
-        "status": "pending_stage2_prosthetic",
-        "stage2_prosthetic_submitted_at": datetime.utcnow(),
-        "supervisor_stage2_prosthetic_approved": False,
-        "implant_incharge_stage2_prosthetic_approved": False,
         "updated_at": datetime.utcnow()
     }
+    # iter-194: save_only mode (Generate-Lab-Slip on the form) only persists
+    # the data; it does NOT flip the workflow status or notify approvers.
+    if not save_only:
+        update_data["status"] = "pending_stage2_prosthetic"
+        update_data["stage2_prosthetic_submitted_at"] = datetime.utcnow()
+        update_data["supervisor_stage2_prosthetic_approved"] = False
+        update_data["implant_incharge_stage2_prosthetic_approved"] = False
     if data.student_notes:
         update_data["phase4_step1_student_notes"] = data.student_notes
     if data.final_prosthetic_plan:
@@ -7891,23 +7919,25 @@ async def submit_stage2_prosthetic(
 
     await db.procedures.update_one({"_id": ObjectId(procedure_id)}, {"$set": update_data})
 
-    for uid in [procedure["supervisor_id"], procedure["implant_incharge_id"]]:
-        await db.notifications.insert_one({
-            "user_id": uid,
-            "procedure_id": procedure_id,
-            "message": f"Phase 4: Prosthetic Rehabilitation submitted by {procedure['student_name']} for patient {procedure['patient_name']}",
-            "type": "approval_request",
-            "read": False,
-            "created_at": datetime.utcnow()
-        })
+    # iter-194: in save_only (lab-slip draft) mode we skip notifying approvers.
+    if not save_only:
+        for uid in [procedure["supervisor_id"], procedure["implant_incharge_id"]]:
+            await db.notifications.insert_one({
+                "user_id": uid,
+                "procedure_id": procedure_id,
+                "message": f"Phase 4: Prosthetic Rehabilitation submitted by {procedure['student_name']} for patient {procedure['patient_name']}",
+                "type": "approval_request",
+                "read": False,
+                "created_at": datetime.utcnow()
+            })
 
-    push_recipients = list(set([procedure["supervisor_id"], procedure["implant_incharge_id"]]))
-    await send_expo_push_notifications(
-        push_recipients,
-        "Phase 4: Prosthetic Rehabilitation Requires Approval",
-        f"{procedure['student_name']} submitted Phase 4 Prosthetic Rehabilitation for {procedure['patient_name']}",
-        {"procedure_id": procedure_id, "type": "approval_request"},
-    )
+        push_recipients = list(set([procedure["supervisor_id"], procedure["implant_incharge_id"]]))
+        await send_expo_push_notifications(
+            push_recipients,
+            "Phase 4: Prosthetic Rehabilitation Requires Approval",
+            f"{procedure['student_name']} submitted Phase 4 Prosthetic Rehabilitation for {procedure['patient_name']}",
+            {"procedure_id": procedure_id, "type": "approval_request"},
+        )
 
     updated = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     updated["_id"] = str(updated["_id"])
