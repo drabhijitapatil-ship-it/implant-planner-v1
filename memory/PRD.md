@@ -1,5 +1,40 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 186 (Feb 2026) — Implant In-Charge "Done" workflow + Phase 4 Step 2 imaging & prosthesis photos
+
+### Why
+1. Implant In-Charge cases auto-approve, but the user still had to click "Submit for Approval" then go back to notifications to click "Approve" — double work for an auto-approved flow. Unify into a single "Done" → auto-approve → inline "Proceed to next phase" CTA.
+2. The case file lacked post-delivery imaging and final-prosthesis photographs, both medico-legally important for treatment closure.
+
+### Changes
+**Backend (`/app/backend/server.py`)**
+- `Phase4Step2Submit` model extended with `iopa_uploads`, `opg_upload`, `prosthesis_photos`.
+- `submit_phase4_step2` now enforces: full-arch (`All on 4/6/X`) → OPG required; non-full-arch → IOPA per implant_plan position; ≥2 prosthesis photos; persists `phase4_step2_iopa_uploads`, `phase4_step2_opg_upload`, `phase4_step2_prosthesis_photos`.
+- New endpoint `POST /api/uploads/media-temp` — generic file upload (image/* + PDF), nurse 403, returns clean `{filename, original_name, content_type}`.
+
+**Frontend**
+- **In-Charge "Done" + auto-proceed** applied across all five phase forms: `(tabs)/new-procedure.tsx`, `submit-phase2/[id].tsx`, `submit-stage2-surgical/[id].tsx`, `submit-stage2-prosthetic/[id].tsx`, `submit-phase4-step2/[id].tsx`. When `user.role === 'implant_incharge'` AND case is self-created, the submit button reads **"Done"**; on click the form submits, immediately calls the corresponding approve endpoint, then renders an in-place success card with **"Proceed to Phase X"** CTA navigating straight into the next phase form.
+- **Phase 4 Step 2** fully rewritten:
+  - Trial & Delivery checklist (existing).
+  - **Imaging block**: full-arch → single OPG slot; non-full-arch → one IOPA row per `implant_plans` position with tooth badge.
+  - **Prosthesis Photos block**: 2 default labeled slots (`Frontal view`, `Occlusal view`), editable label TextInput per slot, "+" to append, delete icon on slots ≥3, all photos must have a label.
+  - Hard validation matches backend rules.
+  - Success card distinguishes "Treatment Marked Complete" (In-Charge auto-approve) vs "Submitted for Final Approval" (others).
+
+### Files touched
+- `/app/backend/server.py` — model + endpoint extension, new media-temp upload.
+- `+ /app/frontend/app/procedures/submit-phase4-step2/[id].tsx` — full rewrite (525 lines).
+- `/app/frontend/app/procedures/submit-phase2/[id].tsx`, `submit-stage2-surgical/[id].tsx`, `submit-stage2-prosthetic/[id].tsx`, `(tabs)/new-procedure.tsx` — done-flow ternary success card + In-Charge button label.
+
+### Verification
+- Backend pytest 7/7 pass (`/app/backend/tests/test_phase4_step2_iter143.py`): media-temp happy path + 400 + nurse 403; full-arch missing OPG → 400; non-full-arch missing IOPA → 400; <2 photos → 400; happy path persists all three new fields with status `pending_final_delivery`.
+- Frontend bundles clean. Phase 4 Step 2 page renders correctly (imaging block, photo slots, "+" add button).
+- Testing agent caught + fixed a JSX bug (orphan closing tags in `submit-phase2/[id].tsx`) — confirmed resolved.
+
+### Known follow-ups
+- (Carry-over from iter142) Pre-existing `data-testid` props on RN components in 4 phase forms — not regressed; only an automation testability concern.
+- The auto-approve POST after submit is wrapped in `try{}catch{}` — consider surfacing a toast on failure instead of silently swallowing.
+
 ## Iteration 185 (Feb 2026) — Full-Arch Atrophy Classification (silent institutional guidance)
 
 ### Why
