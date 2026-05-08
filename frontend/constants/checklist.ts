@@ -17,15 +17,58 @@ export const CHECKLIST_DATA = {
   },
   surgical: {
     title: 'Phase 2: Surgical Protocol',
-    items: [
-      { id: 'consent_form', label: 'Signed Patient consent form (LA and Surgical)' },
-      { id: 'vitals_checked', label: 'Patient vitals checked' },
-      { id: 'drilling_protocol', label: 'Drilling Protocol Available' },
-      { id: 'implant_kit', label: 'Implant Kit and Physiodispenser with irrigation Ready' },
-      { id: 'drapes_gowns', label: 'Clean Autoclaved Drapes and Gowns' },
-      { id: 'instruments_equipment', label: 'Clean Autoclaved Instruments and Equipment' },
-      { id: 'asepsis', label: 'Asepsis, Fumigation, and Cleanliness of the Operatory' },
+    // ── Pre-Surgical Checklist (iter-189) ──────────────────────
+    // Sectioned items with `mandatory` flag. Items without the flag
+    // are optional — the user ticks only what applies to the case.
+    // The Pre-Op endpoint (POST /procedures/{id}/phase2-preop) requires
+    // every `mandatory: true` row to be checked before stamping
+    // `phase2_preop_completed_at`. The Surgical Procedure block remains
+    // soft-locked until that stamp exists.
+    sections: [
+      {
+        title: 'Patient readiness',
+        items: [
+          { id: 'patient_id_consent_verified', label: 'Patient identity & consent re-verified (name + DOB)', mandatory: true },
+          { id: 'allergies_meds_reviewed', label: 'Allergies & current medications reviewed' },
+          { id: 'vitals_ok', label: 'Vitals OK (BP, pulse; blood glucose if diabetic)', mandatory: true },
+          { id: 'preop_antibiotic', label: 'Pre-op antibiotic given (if indicated)' },
+          { id: 'preop_chx_rinse', label: 'Pre-op chlorhexidine rinse done (1 min)', mandatory: true },
+        ],
+      },
+      {
+        title: 'Imaging and planning',
+        items: [
+          { id: 'imaging_chairside', label: 'Latest CBCT / OPG / IOPA available chairside', mandatory: true },
+          { id: 'surgical_guide_fit', label: 'Surgical guide present (if guided) — fit verified on cast/intraoral' },
+          { id: 'drilling_sequence_ready', label: 'Drilling sequence printed and displayed', mandatory: true },
+        ],
+      },
+      {
+        title: 'Inventory verification',
+        items: [
+          { id: 'implant_verified', label: 'Implant — brand, system, diameter, length verified', mandatory: true },
+          { id: 'healing_abutment_available', label: 'Healing abutment available' },
+          { id: 'multiunit_abutments_available', label: 'Multiunit abutments available' },
+          { id: 'drilling_kit_sterile', label: 'Implant Specific Drilling kit complete & sterile (expiry checked)', mandatory: true },
+          { id: 'physiodispenser_ready', label: 'Physiodispenser ready and working', mandatory: true },
+          { id: 'instruments_autoclaved', label: 'Instruments autoclaved and ready', mandatory: true },
+          { id: 'bone_graft_membrane', label: 'Bone graft / membrane (if planned) — type, lot, expiry' },
+          { id: 'sutures_ready', label: 'Sutures (type, size) ready' },
+          { id: 'saline_irrigation', label: 'Saline irrigation available & connected', mandatory: true },
+        ],
+      },
+      {
+        title: 'Operatory and team',
+        items: [
+          { id: 'aseptic_field_draped', label: 'Aseptic field draped', mandatory: true },
+          { id: 'suction_tested', label: 'Suction tested', mandatory: true },
+          { id: 'team_briefed', label: 'Assistant & team briefed on case', mandatory: true },
+          { id: 'emergency_drugs', label: 'Emergency drugs available' },
+        ],
+      },
     ],
+    // Flat list kept for any legacy code path that iterates items[]
+    items: [],
   },
   second_stage: {
     title: 'Phase 3: Second Stage Surgical Protocol',
