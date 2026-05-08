@@ -62,6 +62,9 @@ export default function Phase2SubmissionScreen() {
 
   // Post Surgical Radiograph uploads
   const [procedureType, setProcedureType] = useState('');
+  const [createdById, setCreatedById] = useState<string | null>(null);
+  const [createdByRole, setCreatedByRole] = useState<string | null>(null);
+  const [doneCompleted, setDoneCompleted] = useState(false);
   // iter-138: Phase-1 "Type of Attachment" (if any) so Phase 2 can auto-suggest
   // the manufacturer-recommended cuff-height variants instead of free text.
   const [attachmentType, setAttachmentType] = useState('');
@@ -114,6 +117,8 @@ export default function Phase2SubmissionScreen() {
 
       const pType = procRes.data.implant_procedure_type || '';
       setProcedureType(pType);
+      setCreatedById(procRes.data.created_by_id || null);
+      setCreatedByRole(procRes.data.created_by_role || null);
       // Load the Phase-1 attachment choice so the cuff-height field below can
       // render a catalogue-constrained dropdown instead of free text.
       setAttachmentType(procRes.data.attachment_type || '');
@@ -310,8 +315,14 @@ export default function Phase2SubmissionScreen() {
               }))
             : null,
       });
-      Alert.alert('Success', 'Phase 2 submitted successfully! Awaiting approval.',
-        [{ text: 'OK', onPress: () => router.back() }]);
+      const isInchargeSelfCreated = user?.role === 'implant_incharge' && createdByRole === 'implant_incharge' && user?.id === createdById;
+      if (isInchargeSelfCreated) {
+        try { await api.post(`/procedures/${id}/approve`, { action: 'approve', comment: '' }); } catch {}
+        setDoneCompleted(true);
+      } else {
+        Alert.alert('Success', 'Phase 2 submitted successfully! Awaiting approval.',
+          [{ text: 'OK', onPress: () => router.back() }]);
+      }
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.detail || 'Failed to submit Phase 2');
     } finally {
@@ -898,17 +909,36 @@ export default function Phase2SubmissionScreen() {
           </View>
 
           {/* ── Submit Button ── */}
+          {doneCompleted ? (
+            <View style={{ padding: 16, paddingBottom: 32, alignItems: 'center' }} testID="phase2-done-success">
+              <View style={{ width: 100, height: 100, borderRadius: 50, backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                <Ionicons name="checkmark-circle" size={64} color="#43A047" />
+              </View>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: '#1B5E20', marginBottom: 8 }}>Phase 2 Complete</Text>
+              <Text style={{ fontSize: 13, color: '#37474F', textAlign: 'center', marginBottom: 20 }}>Submitted and auto-approved. You can begin Phase 3 now.</Text>
+              <TouchableOpacity style={[s.submitBtn, { backgroundColor: '#1565C0', paddingHorizontal: 28 }]}
+                onPress={() => router.replace(`/procedures/submit-stage2-surgical/${id}`)}
+                testID="phase2-proceed-phase3-btn">
+                <Ionicons name="arrow-forward-circle" size={22} color="#FFF" />
+                <Text style={s.submitText}>Proceed to Phase 3</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => router.replace(`/procedures/${id}`)} style={{ marginTop: 12 }}>
+                <Text style={{ color: '#1565C0', fontWeight: '600' }}>View Case</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
           <View style={{ padding: 16, paddingBottom: 32 }}>
             <TouchableOpacity style={[s.submitBtn, loading && { opacity: 0.6 }]}
               onPress={handleSubmit} disabled={loading} data-testid="phase2-submit-btn">
               {loading ? <ActivityIndicator color="#FFF" /> : (
                 <>
                   <Ionicons name="checkmark-circle" size={22} color="#FFF" />
-                  <Text style={s.submitText}>Submit Phase 2 for Approval</Text>
+                  <Text style={s.submitText}>{(user?.role === 'implant_incharge' && createdByRole === 'implant_incharge' && user?.id === createdById) ? 'Done' : 'Submit Phase 2 for Approval'}</Text>
                 </>
               )}
             </TouchableOpacity>
           </View>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

@@ -29,6 +29,7 @@ export default function Phase4Step1Screen() {
   const notesLabel = isFaculty ? "Operator's Notes" : "Student Notes";
   const [loading, setLoading] = useState(false);
   const [procedure, setProcedure] = useState<any>(null);
+  const [doneCompleted, setDoneCompleted] = useState(false);
 
   // Form state
   const [finalProsthesis, setFinalProsthesis] = useState('');
@@ -143,8 +144,14 @@ export default function Phase4Step1Screen() {
       }
 
       await api.post(`/procedures/${id}/stage2/prosthetic`, payload);
-      Alert.alert('Success', 'Phase 4 Step 1 submitted! Awaiting approval.',
-        [{ text: 'OK', onPress: () => router.back() }]);
+      const isInchargeSelfCreated = user?.role === 'implant_incharge' && procedure?.created_by_role === 'implant_incharge' && user?.id === procedure?.created_by_id;
+      if (isInchargeSelfCreated) {
+        try { await api.post(`/procedures/${id}/stage2/prosthetic/approve`, { action: 'approve', comment: '' }); } catch {}
+        setDoneCompleted(true);
+      } else {
+        Alert.alert('Success', 'Phase 4 Step 1 submitted! Awaiting approval.',
+          [{ text: 'OK', onPress: () => router.back() }]);
+      }
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.detail || 'Failed to submit');
     } finally {
@@ -392,15 +399,34 @@ export default function Phase4Step1Screen() {
           </View>
 
           {/* ── Submit ── */}
+          {doneCompleted ? (
+            <View style={{ padding: 16, paddingBottom: 32, alignItems: 'center' }} testID="phase4-step1-done-success">
+              <View style={{ width: 100, height: 100, borderRadius: 50, backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                <Ionicons name="checkmark-circle" size={64} color="#43A047" />
+              </View>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: '#1B5E20', marginBottom: 8 }}>Step 1 Complete</Text>
+              <Text style={{ fontSize: 13, color: '#37474F', textAlign: 'center', marginBottom: 20 }}>Submitted and auto-approved. You can begin Step 2 (Trial &amp; Delivery) now.</Text>
+              <TouchableOpacity style={[s.submitBtn, { backgroundColor: '#FF6F00', paddingHorizontal: 28 }]}
+                onPress={() => router.replace(`/procedures/submit-phase4-step2/${id}`)}
+                testID="phase4-step1-proceed-step2-btn">
+                <Ionicons name="arrow-forward-circle" size={22} color="#FFF" />
+                <Text style={s.submitText}>Proceed to Step 2</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => router.replace(`/procedures/${id}`)} style={{ marginTop: 12 }}>
+                <Text style={{ color: '#1565C0', fontWeight: '600' }}>View Case</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
           <View style={{ padding: 16, paddingBottom: 32 }}>
             <TouchableOpacity style={[s.submitBtn, loading && { opacity: 0.6 }]} onPress={handleSubmit} disabled={loading}
               data-testid="phase4-step1-submit">
               {loading ? <ActivityIndicator color="#FFF" /> : (
                 <><Ionicons name="checkmark-circle" size={22} color="#FFF" />
-                <Text style={s.submitText}>Submit Step 1 for Approval</Text></>
+                <Text style={s.submitText}>{(user?.role === 'implant_incharge' && procedure?.created_by_role === 'implant_incharge' && user?.id === procedure?.created_by_id) ? 'Done' : 'Submit Step 1 for Approval'}</Text></>
               )}
             </TouchableOpacity>
           </View>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

@@ -490,6 +490,12 @@ class Phase4Step2Submit(BaseModel):
     supervisor_notes: Optional[str] = Field(None, max_length=2000)
     incharge_notes: Optional[str] = Field(None, max_length=2000)
     confirmation_statement: Optional[bool] = False
+    # Per-implant IOPA uploads (non-full-arch) — keyed by tooth position
+    iopa_uploads: Optional[Dict[str, Dict[str, str]]] = None
+    # Single OPG upload for full-arch cases
+    opg_upload: Optional[Dict[str, str]] = None
+    # Final intraoral prosthesis photos with editable labels
+    prosthesis_photos: Optional[List[Dict[str, str]]] = None
 
 class ImplantPlanItem(BaseModel):
     position: str  # FDI tooth number e.g. "14"
@@ -3576,6 +3582,32 @@ async def upload_cbct_temp(
         "cbct_file": unique_name,
         "cbct_original_name": file.filename,
         "cbct_content_type": file.content_type or "application/pdf",
+    }
+
+
+@api_router.post("/uploads/media-temp")
+async def upload_media_temp(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+):
+    """Generic temp upload for Phase 4 Step 2 imaging (IOPA, OPG) and prosthesis photos.
+    Returns clean field names: filename, original_name, content_type."""
+    if current_user.get("role") == "nurse":
+        raise HTTPException(status_code=403, detail="Read-only access")
+    ext = Path(file.filename).suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"File type not allowed. Allowed: {', '.join(ALLOWED_EXTENSIONS)}")
+    contents = await file.read()
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File size exceeds 25MB limit")
+    unique_name = f"{uuid.uuid4().hex}{ext}"
+    file_path = UPLOADS_DIR / unique_name
+    with open(file_path, "wb") as f:
+        f.write(contents)
+    return {
+        "filename": unique_name,
+        "original_name": file.filename,
+        "content_type": file.content_type or "application/octet-stream",
     }
 
 
@@ -7917,6 +7949,24 @@ async def submit_phase4_step2(
     if procedure["status"] != "stage2_prosthetic_step1_approved":
         raise HTTPException(status_code=400, detail="Phase 4 Step 1 must be approved before submitting Step 2")
 
+    # ── Validate IOPA / OPG / Prosthesis-photo uploads ──────────────────
+    full_arch_types = {"All on 4", "All on 6", "All on X"}
+    is_full_arch = procedure.get("implant_procedure_type") in full_arch_types
+    if is_full_arch:
+        if not data.opg_upload or not data.opg_upload.get("filename"):
+            raise HTTPException(status_code=400, detail="An OPG upload is required for full-arch cases.")
+    else:
+        plans = procedure.get("implant_plans") or []
+        positions = [str(p.get("position", "")) for p in plans if p.get("position")]
+        iopa = data.iopa_uploads or {}
+        missing = [pos for pos in positions if not (iopa.get(pos) or {}).get("filename")]
+        if positions and missing:
+            raise HTTPException(status_code=400, detail=f"IOPA missing for tooth positions: {', '.join(missing)}")
+    photos = data.prosthesis_photos or []
+    valid_photos = [p for p in photos if p.get("filename")]
+    if len(valid_photos) < 2:
+        raise HTTPException(status_code=400, detail="At least 2 final prosthesis photos are required.")
+
     phase4_step2_data = {
         "trial_checklist": data.trial_checklist or {},
         "confirmation_statement": data.confirmation_statement,
@@ -7936,6 +7986,12 @@ async def submit_phase4_step2(
         update_data["phase4_step2_supervisor_notes"] = data.supervisor_notes
     if data.incharge_notes:
         update_data["phase4_step2_incharge_notes"] = data.incharge_notes
+    if data.iopa_uploads:
+        update_data["phase4_step2_iopa_uploads"] = data.iopa_uploads
+    if data.opg_upload:
+        update_data["phase4_step2_opg_upload"] = data.opg_upload
+    if data.prosthesis_photos:
+        update_data["phase4_step2_prosthesis_photos"] = [p for p in data.prosthesis_photos if p.get("filename")]
 
     await db.procedures.update_one({"_id": ObjectId(procedure_id)}, {"$set": update_data})
 
