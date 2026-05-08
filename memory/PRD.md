@@ -1,5 +1,27 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 192 (Feb 2026) — Phase 4 Step 1: Impression Material capture for conventional impressions
+
+### Why
+A conventional implant impression is only as good as the elastomer used. Capturing **Polyether** vs **Heavy and Light body** vs **Putty and Light body** alongside the tray technique:
+- gives the lab Rx the full picture (no phone call to confirm), and
+- surfaces a teaching moment when a student picks a material poorly suited to the chosen tray (e.g. putty/light wash with an open-tray pickup is a common novice mistake).
+
+### Changes
+**Backend** (`/app/backend/server.py`)
+- `Stage2ProstheticSubmit` gains `impression_material: Optional[str]` (`polyether` | `heavy_light_body` | `putty_light_body`, max 30).
+- `submit_stage2_prosthetic` validates: when `impression_type == 'conventional'`, `impression_material` MUST be one of the three values → 400 with a friendly message otherwise. Stored in `phase4_step1_data.impression_material`; explicitly nulled when the user later switches to Intra-Oral Scans (same null-on-switch contract as `conventional_tray_type`).
+- Case-report PDF emits a separate `Impression Material` row (e.g. `Heavy and Light body`); AI summary appends `Impression Material: heavy light body` when conventional.
+
+**Frontend** (`submit-stage2-prosthetic/[id].tsx`, `procedures/[id].tsx`)
+- New third-level reveal: after the user picks Open Tray or Closed Tray, an **Impression material used** card group appears with three radio-style cards — Polyether / Heavy and Light body / Putty and Light body — flask icon, mandatory red `*`. Submit button blocks with a clear Alert until one is picked. Switching away from "Conventional Impressions Made" clears both tray-type AND material so no stale value is persisted. testIDs: `impression-material-options`, `impression-material-polyether`, `impression-material-heavy_light_body`, `impression-material-putty_light_body`.
+- Case-detail row now reads e.g. `Conventional Impressions (Open Tray) — Heavy and Light body`.
+
+### Verification
+- Backend curl: 3/3 — `conventional + open_tray` without material → 400; `+ invalid material` (`alginate`) → 400; `+ polyether` → 200 with all three values persisted (`impression_type=conventional`, `conventional_tray_type=open_tray`, `impression_material=polyether`).
+- Test procedure flipped to `stage2_surgical_approved` for the curl tests, then reset to `phase1_approved` with `phase4_step1_data` / `final_prosthetic_plan` / `prosthetic_material` cleared.
+
+
 ## Iteration 191 (Feb 2026) — Phase 4 Step 1: tray-type sub-choice for Conventional Impression
 
 ### Why

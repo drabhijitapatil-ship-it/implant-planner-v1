@@ -486,6 +486,9 @@ class Stage2ProstheticSubmit(BaseModel):
     # iter-191: tray sub-choice required when impression_type == 'conventional'.
     # Validated in submit_stage2_prosthetic; stored alongside impression_type.
     conventional_tray_type: Optional[str] = Field(None, max_length=20)  # open_tray / closed_tray
+    # iter-192: impression material — required when impression_type == 'conventional'.
+    # One of: polyether / heavy_light_body / putty_light_body.
+    impression_material: Optional[str] = Field(None, max_length=30)
     # Notes
     student_notes: Optional[str] = Field(None, max_length=2000)
     # Legacy
@@ -4675,6 +4678,9 @@ def _build_case_context(proc: dict) -> str:
             tray = p4.get('conventional_tray_type')
             label = imp + (f" ({tray.replace('_', ' ')})" if imp == 'conventional' and tray else '')
             parts.append(f"Impression Type: {label}")
+            mat = p4.get('impression_material')
+            if imp == 'conventional' and mat:
+                parts.append(f"Impression Material: {mat.replace('_', ' ')}")
         if p4.get('custom_abutment'):
             parts.append(f"Custom Abutment: {p4.get('custom_abutment')}")
         if p4.get('overdenture_attachment'):
@@ -6644,6 +6650,15 @@ async def generate_case_report(
                 tray_label = "Open Tray" if tray == "open_tray" else "Closed Tray"
                 imp_type = f"{imp_type} ({tray_label})"
             add_field("Impression Type", imp_type)
+            # iter-192: impression material (conventional only)
+            mat = p4s1.get("impression_material")
+            if p4s1["impression_type"] == "conventional" and mat:
+                mat_label = {
+                    "polyether": "Polyether",
+                    "heavy_light_body": "Heavy and Light body",
+                    "putty_light_body": "Putty and Light body",
+                }.get(mat, mat)
+                add_field("Impression Material", mat_label)
         if p4s1.get("payment_complete") is not None:
             add_field("Payment Complete", "Yes" if p4s1["payment_complete"] else "No")
         if p4s1.get("components_available") is not None:
@@ -7821,6 +7836,12 @@ async def submit_stage2_prosthetic(
                 status_code=400,
                 detail="Please choose Open tray or Closed tray for the conventional impression.",
             )
+        # iter-192: impression material is also mandatory for conventional impressions.
+        if data.impression_material not in ("polyether", "heavy_light_body", "putty_light_body"):
+            raise HTTPException(
+                status_code=400,
+                detail="Please choose an impression material (Polyether, Heavy and Light body, or Putty and Light body).",
+            )
 
     # Save Phase 4 Step 1 data
     phase4_step1_data = {
@@ -7836,6 +7857,10 @@ async def submit_stage2_prosthetic(
         # → intra-oral doesn't leave a stale tray-type behind.
         "conventional_tray_type": (
             data.conventional_tray_type if data.impression_type == "conventional" else None
+        ),
+        # iter-192: same null-on-switch contract for impression_material.
+        "impression_material": (
+            data.impression_material if data.impression_type == "conventional" else None
         ),
     }
     

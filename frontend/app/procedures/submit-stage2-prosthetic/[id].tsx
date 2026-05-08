@@ -47,6 +47,8 @@ export default function Phase4Step1Screen() {
   // iter-191: when impressionType === 'conventional', the user must pick
   // between an open-tray and a closed-tray technique.
   const [conventionalTrayType, setConventionalTrayType] = useState<'' | 'open_tray' | 'closed_tray'>('');
+  // iter-192: impression material — required when conventional. Three fixed options.
+  const [impressionMaterial, setImpressionMaterial] = useState<'' | 'polyether' | 'heavy_light_body' | 'putty_light_body'>('');
   const [studentNotes, setStudentNotes] = useState('');
 
   // Per-implant prosthetic plan for multiple implants (non-bridge)
@@ -125,6 +127,11 @@ export default function Phase4Step1Screen() {
       Alert.alert('Missing', 'Please choose Open tray or Closed tray for the conventional impression.');
       return;
     }
+    // iter-192: impression material is mandatory for conventional impressions.
+    if (impressionType === 'conventional' && !impressionMaterial) {
+      Alert.alert('Missing', 'Please choose an impression material (Polyether, Heavy and Light body, or Putty and Light body).');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -136,6 +143,8 @@ export default function Phase4Step1Screen() {
         impression_type: impressionType,
         // iter-191: only relevant when impressionType === 'conventional'
         conventional_tray_type: impressionType === 'conventional' ? conventionalTrayType : null,
+        // iter-192: only persisted when conventional impression is selected.
+        impression_material: impressionType === 'conventional' ? impressionMaterial : null,
         student_notes: studentNotes || null,
       };
 
@@ -344,7 +353,10 @@ export default function Phase4Step1Screen() {
                     setImpressionType(opt.id);
                     // iter-191: clear tray choice if the user moves away from
                     // 'conventional', so we never persist a stale tray-type.
-                    if (opt.id !== 'conventional') setConventionalTrayType('');
+                    if (opt.id !== 'conventional') {
+                      setConventionalTrayType('');
+                      setImpressionMaterial('');
+                    }
                   }}
                   testID={`impression-${opt.id}`}>
                   <Ionicons name={opt.icon as any} size={24} color={impressionType === opt.id ? '#1A73E8' : '#999'} />
@@ -384,6 +396,38 @@ export default function Phase4Step1Screen() {
                       </TouchableOpacity>
                     );
                   })}
+
+                  {/* iter-192: Impression material — only after tray is picked. */}
+                  {!!conventionalTrayType && (
+                    <View style={{ marginTop: 12 }} testID="impression-material-options">
+                      <Text style={[s.label, { marginTop: 0 }]}>
+                        Impression material used <Text style={{ color: '#DC3545' }}>*</Text>
+                      </Text>
+                      {[
+                        { id: 'polyether', label: 'Polyether' },
+                        { id: 'heavy_light_body', label: 'Heavy and Light body' },
+                        { id: 'putty_light_body', label: 'Putty and Light body' },
+                      ].map(opt => {
+                        const active = impressionMaterial === opt.id;
+                        return (
+                          <TouchableOpacity
+                            key={opt.id}
+                            style={[s.impressionCard, active && s.impressionCardActive, { marginTop: 6 }]}
+                            onPress={() => setImpressionMaterial(opt.id as any)}
+                            testID={`impression-material-${opt.id}`}
+                          >
+                            <Ionicons
+                              name="flask-outline"
+                              size={20}
+                              color={active ? '#1A73E8' : '#999'}
+                            />
+                            <Text style={[s.impressionLabel, active && { color: '#1A73E8', fontWeight: '700' }]}>{opt.label}</Text>
+                            {active && <Ionicons name="checkmark-circle" size={20} color="#1A73E8" />}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
                 </View>
               )}
             </View>
