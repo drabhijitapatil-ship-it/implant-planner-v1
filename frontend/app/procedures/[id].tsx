@@ -693,11 +693,14 @@ export default function ProcedureDetailScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         {/* Pre-Op Augmentation Checklist (iter-136) — auto-derived rule-based
-            augmentation/grafting plan items. Self-hides when no findings. */}
-        <AugmentationChecklist
-          procedureId={String(id)}
-          canSignOff={['supervisor', 'implant_incharge', 'administrator'].includes(user?.role || '')}
-        />
+            augmentation/grafting plan items. Hidden on completed cases (already
+            signed off; reviewable inside the phase data sections). */}
+        {procedure.status !== 'completed' && (
+          <AugmentationChecklist
+            procedureId={String(id)}
+            canSignOff={['supervisor', 'implant_incharge', 'administrator'].includes(user?.role || '')}
+          />
+        )}
         {/* Edit Mode Banner */}
         {isEditMode && (
           <View style={{ backgroundColor: '#E3F2FD', borderBottomWidth: 2, borderBottomColor: '#1565C0', paddingHorizontal: 16, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 10 }} data-testid="edit-mode-banner">
@@ -714,16 +717,18 @@ export default function ProcedureDetailScreen() {
         )}
 
         <View style={styles.statusCard}>
-          <View
-            style={[
-              styles.statusBadge,
-              { backgroundColor: STATUS_COLORS[procedure.status as keyof typeof STATUS_COLORS] },
-            ]}
-          >
-            <Text style={styles.statusText}>
-              {STATUS_LABELS[procedure.status as keyof typeof STATUS_LABELS]}
-            </Text>
-          </View>
+          {procedure.status !== 'completed' && (
+            <View
+              style={[
+                styles.statusBadge,
+                { backgroundColor: STATUS_COLORS[procedure.status as keyof typeof STATUS_COLORS] },
+              ]}
+            >
+              <Text style={styles.statusText}>
+                {STATUS_LABELS[procedure.status as keyof typeof STATUS_LABELS]}
+              </Text>
+            </View>
+          )}
           {procedure.status !== 'completed' && (() => {
             const trail = getProgressTrail(procedure.status);
             const phaseToNum: Record<string, number | null> = {
@@ -817,6 +822,50 @@ export default function ProcedureDetailScreen() {
             );
           })()}
         </View>
+
+        {/* ── Treatment Complete + Digital Sign-Off (rendered above timeline on completion) ── */}
+        {procedure.status === 'completed' && (
+          <>
+            <View style={styles.completedBanner}>
+              <Ionicons name="trophy" size={28} color="#4CAF50" />
+              <Text style={styles.completedText}>Treatment Complete</Text>
+              <Text style={styles.completedSubtext}>All protocols have been approved successfully</Text>
+            </View>
+            <View style={{ marginHorizontal: 16, marginTop: 12, marginBottom: 16, backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1.5, borderColor: '#43A047', padding: 16 }} testID="digital-signoff-card">
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <Ionicons name="ribbon" size={20} color="#2E7D32" />
+                <Text style={{ fontSize: 15, fontWeight: '700', color: '#2E7D32' }}>Digital Sign-Off</Text>
+                <View style={{ marginLeft: 'auto', backgroundColor: '#E8F5E9', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#2E7D32', letterSpacing: 0.5 }}>ATTESTED</Text>
+                </View>
+              </View>
+              {(() => {
+                const fmt = (v: any) => {
+                  if (!v) return '—';
+                  try { const d = new Date(v); return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }); }
+                  catch { return String(v); }
+                };
+                const rows = [
+                  { role: 'Supervising Faculty', name: procedure.supervisor_name, at: procedure.supervisor_final_delivery_approved_at, note: procedure.phase4_step2_supervisor_notes },
+                  { role: 'Implant In-Charge', name: procedure.implant_incharge_name, at: procedure.implant_incharge_final_delivery_approved_at, note: procedure.phase4_step2_incharge_notes },
+                ];
+                return rows.map((r, i) => (
+                  <View key={i} style={{ paddingVertical: 8, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: '#E8F5E9' }}>
+                    <Text style={{ fontSize: 11, color: '#2E7D32', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }}>{r.role}</Text>
+                    <Text style={{ fontSize: 14, color: '#1B5E20', fontWeight: '700', marginTop: 2 }}>{r.name || '—'}</Text>
+                    <Text style={{ fontSize: 12, color: '#558B2F', marginTop: 2 }}>{fmt(r.at)}</Text>
+                    {r.note ? (
+                      <Text style={{ fontSize: 12, color: '#37474F', marginTop: 4, fontStyle: 'italic' }}>"{r.note}"</Text>
+                    ) : null}
+                  </View>
+                ));
+              })()}
+              <Text style={{ fontSize: 10, color: '#7CB342', marginTop: 10, fontStyle: 'italic' }}>
+                Auto-stamped on case completion. Subsequent edits are recorded in the case audit log.
+              </Text>
+            </View>
+          </>
+        )}
 
         {/* Treatment Timeline / Progress Tracker */}
         <View style={styles.timelineContainer} testID="treatment-timeline" data-testid="treatment-timeline">
@@ -1293,53 +1342,7 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
-        {/* Treatment Complete Banner */}
-        {procedure.status === 'completed' && (
-          <View style={styles.completedBanner}>
-            <Ionicons name="trophy" size={28} color="#4CAF50" />
-            <Text style={styles.completedText}>Treatment Complete</Text>
-            <Text style={styles.completedSubtext}>All protocols have been approved successfully</Text>
-          </View>
-        )}
-
-        {/* ── Digital Sign-Off (auto-stamped on case completion) ── */}
-        {procedure.status === 'completed' && (
-          <View style={{ marginHorizontal: 16, marginTop: 12, marginBottom: 16, backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1.5, borderColor: '#43A047', padding: 16 }} testID="digital-signoff-card">
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <Ionicons name="ribbon" size={20} color="#2E7D32" />
-              <Text style={{ fontSize: 15, fontWeight: '700', color: '#2E7D32' }}>Digital Sign-Off</Text>
-              <View style={{ marginLeft: 'auto', backgroundColor: '#E8F5E9', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 }}>
-                <Text style={{ fontSize: 10, fontWeight: '700', color: '#2E7D32', letterSpacing: 0.5 }}>ATTESTED</Text>
-              </View>
-            </View>
-
-            {(() => {
-              const fmt = (v: any) => {
-                if (!v) return '—';
-                try { const d = new Date(v); return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }); }
-                catch { return String(v); }
-              };
-              const rows = [
-                { role: 'Supervising Faculty', name: procedure.supervisor_name, at: procedure.supervisor_final_delivery_approved_at, note: procedure.phase4_step2_supervisor_notes },
-                { role: 'Implant In-Charge', name: procedure.implant_incharge_name, at: procedure.implant_incharge_final_delivery_approved_at, note: procedure.phase4_step2_incharge_notes },
-              ];
-              return rows.map((r, i) => (
-                <View key={i} style={{ paddingVertical: 8, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: '#E8F5E9' }}>
-                  <Text style={{ fontSize: 11, color: '#2E7D32', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }}>{r.role}</Text>
-                  <Text style={{ fontSize: 14, color: '#1B5E20', fontWeight: '700', marginTop: 2 }}>{r.name || '—'}</Text>
-                  <Text style={{ fontSize: 12, color: '#558B2F', marginTop: 2 }}>{fmt(r.at)}</Text>
-                  {r.note ? (
-                    <Text style={{ fontSize: 12, color: '#37474F', marginTop: 4, fontStyle: 'italic' }}>"{r.note}"</Text>
-                  ) : null}
-                </View>
-              ));
-            })()}
-
-            <Text style={{ fontSize: 10, color: '#7CB342', marginTop: 10, fontStyle: 'italic' }}>
-              Auto-stamped on case completion. Subsequent edits are recorded in the case audit log.
-            </Text>
-          </View>
-        )}
+        {/* Treatment Complete + Digital Sign-Off — moved above Treatment Progress timeline */}
 
         {/* Instruments Autoclaved Badge moved inline under PHASE 1 APPROVED button (canSubmitPhase2). */}
 
