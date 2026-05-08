@@ -416,12 +416,12 @@ export default function Phase2SubmissionScreen() {
         <ScrollView contentContainerStyle={s.scroll} nestedScrollEnabled>
 
           {/* ── Pre-Surgical Checklist (iter-189) ── */}
-          <View style={s.section} data-testid="phase2-preop-checklist">
+          <View style={s.section} testID="phase2-preop-checklist">
             <TouchableOpacity
               style={s.sectionHeader}
               onPress={() => isPreopUnlocked && setPreopExpanded(v => !v)}
               activeOpacity={isPreopUnlocked ? 0.6 : 1}
-              data-testid="preop-section-toggle"
+              testID="preop-section-toggle"
             >
               <Ionicons name={isPreopUnlocked ? 'shield-checkmark' : 'clipboard-outline'} size={20} color={isPreopUnlocked ? '#2E7D32' : '#1565C0'} />
               <Text style={s.sectionTitle}>
@@ -467,7 +467,7 @@ export default function Phase2SubmissionScreen() {
                       activeOpacity={0.7}
                       disabled={isPreopUnlocked}
                       onPress={() => setPreSurgeryChecklist(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
-                      data-testid={`preop-item-${item.id}`}
+                      testID={`preop-item-${item.id}`}
                     >
                       <View style={{ width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: checked ? '#2E7D32' : '#B0BEC5', backgroundColor: checked ? '#2E7D32' : '#FFF', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
                         {checked && <Ionicons name="checkmark" size={14} color="#FFF" />}
@@ -490,7 +490,7 @@ export default function Phase2SubmissionScreen() {
                   style={[s.submitBtn, { backgroundColor: '#2E7D32', marginTop: 4 }, preopSaving && { opacity: 0.6 }]}
                   onPress={savePreopChecklist}
                   disabled={preopSaving}
-                  data-testid="preop-save-btn"
+                  testID="preop-save-btn"
                 >
                   {preopSaving ? (
                     <ActivityIndicator color="#FFF" />
@@ -508,7 +508,7 @@ export default function Phase2SubmissionScreen() {
           {/* ── Surgical Procedure (soft-locked until Pre-Op) ── */}
           <View style={[s.section, !isPreopUnlocked && { opacity: 0.55 }]} pointerEvents={isPreopUnlocked ? 'auto' : 'none'}>
             {!isPreopUnlocked && (
-              <View style={{ backgroundColor: '#FFF3E0', borderLeftWidth: 4, borderLeftColor: '#FB8C00', borderRadius: 6, padding: 10, marginBottom: 10, flexDirection: 'row', gap: 8 }} data-testid="preop-locked-banner">
+              <View style={{ backgroundColor: '#FFF3E0', borderLeftWidth: 4, borderLeftColor: '#FB8C00', borderRadius: 6, padding: 10, marginBottom: 10, flexDirection: 'row', gap: 8 }} testID="preop-locked-banner">
                 <Ionicons name="lock-closed-outline" size={18} color="#E65100" />
                 <Text style={{ color: '#E65100', fontSize: 12, flex: 1 }}>
                   Complete the Pre-Surgical Checklist above before recording the surgical findings.

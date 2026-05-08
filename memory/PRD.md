@@ -1,5 +1,34 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 190 (Feb 2026) — Phase 2 split: Pre-Surgical Checklist must complete before Surgical Procedure unlocks
+
+### Why
+Until now both the Pre-Surgical Checklist and Surgical Procedure block were filled together, post-op. Clinically the checklist must be ticked **before** the cut (instruments / equipment / operatory readiness), and the surgical findings only after surgery. Without this split, schedulers were attesting to inventory/asepsis hours after the fact — not defensible, and not useful for catching missing items in time.
+
+### Changes
+**Backend** (`/app/backend/server.py`)
+- New `Phase2PreOpSubmit` model (items dict + optional notes).
+- New endpoint `POST /api/procedures/{id}/phase2-preop` — gated on `status == 'phase1_approved'`, role-gated to student-owner / supervisor-owner / any implant_incharge / created_by. Validates 13 mandatory item ids; rejects with 400 listing the missing ones; idempotent (re-submission overwrites timestamp, completed_by_*, completed_by_role, notes).
+- Submit-Phase 2 gate added at line ~7516: refuses 400 unless `phase2_preop_completed_at` is set. Sits before the consent-form gate.
+- Background scheduler `preop_checklist_reminder_loop` (poll every 15 min). Sends Expo push + in-app `notifications` row at **T-3h** and **T-30m** before scheduled surgery to student + supervisor + in-charge if Pre-Op is still incomplete. Idempotent via `preop_reminder_3h_sent` / `preop_reminder_30m_sent` flags.
+
+**Frontend** (`/app/frontend/constants/checklist.ts`, `app/procedures/submit-phase2/[id].tsx`, `app/procedures/[id].tsx`)
+- `CHECKLIST_DATA.surgical` rewritten as 4 sections × 21 items with a per-item `mandatory` flag (13 mandatory + 8 optional). User-supplied final list, kept verbatim.
+- Submit-Phase 2 form: legacy 7-item Yes/No checklist replaced with sectioned checkbox UI; mandatory items show red `*`; "Save Pre-Op & Unlock Surgery" button (separate POST). Surgical block soft-locks below it (opacity 0.55 + pointerEvents `none` + orange lock banner). On successful save, the checklist auto-collapses into a green "Signed off by {name}" stamp and the surgical block becomes interactive.
+- Case-detail page (`procedures/[id].tsx`): countdown banner above status timeline for any `phase1_approved` case where Pre-Op is not yet stamped and the scheduled surgery is within 24 h. Switches to red URGENT style at ≤30 min.
+
+### Custom checklist items (from user)
+- **Patient readiness** — patient_id_consent_verified*, allergies_meds_reviewed, vitals_ok*, preop_antibiotic, preop_chx_rinse*
+- **Imaging and planning** — imaging_chairside*, surgical_guide_fit, drilling_sequence_ready*
+- **Inventory verification** — implant_verified*, healing_abutment_available, multiunit_abutments_available, drilling_kit_sterile*, physiodispenser_ready*, instruments_autoclaved*, bone_graft_membrane, sutures_ready, saline_irrigation*
+- **Operatory and team** — aseptic_field_draped*, suction_tested*, team_briefed*, emergency_drugs
+
+### Verification
+- Backend pytest `/app/backend/tests/test_phase2_preop_iter189.py` — 8/8 PASS (auth, status gate, missing mandatory, mandatory=false treated as missing, happy path, idempotent re-submission, submit-phase2 400 without preop, submit-phase2 200 with preop).
+- Frontend structural render verified: all 4 section titles, 13/13 mandatory labels (with red `*`), 8/8 optional labels, lock banner, save button.
+- testIDs (`preop-section-toggle`, `preop-item-{id}`, `preop-save-btn`, `preop-locked-banner`, `phase2-preop-checklist`, `preop-countdown-banner`) standardised on RN `testID` so Playwright can target them.
+
+
 ## Iteration 189 (Feb 2026) — Implant Planning UI: removed 0/6 cap and locked actions on completed cases
 
 ### Why
