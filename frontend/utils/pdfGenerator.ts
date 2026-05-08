@@ -471,6 +471,169 @@ export const printProcedurePDF = async (procedure: any) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────
+// iter-193: Lab Slip — independent prescription PDF generated from
+// phase4_step1_data once the prosthetic plan is approved. Mirrors
+// the case-report HTML→PDF flow so it works on web (open) and
+// native (Print + Sharing) without any backend round-trip.
+// ─────────────────────────────────────────────────────────────────
+const _labelize = (val: string | undefined | null, map: Record<string, string>): string => {
+  if (!val) return '';
+  return map[val] || val.replace(/_/g, ' ');
+};
+
+export const buildLabSlipHtml = (procedure: any): string => {
+  const p4 = procedure.phase4_step1_data || {};
+  const plans: any[] = procedure.implant_plans || [];
+
+  // Implant table rows
+  const implantRows = plans.map((p: any, i: number) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${p.tooth_position ?? p.toothPosition ?? '—'}</td>
+      <td>${p.implant_brand || p.brand || '—'}</td>
+      <td>${p.implant_system || p.system || '—'}</td>
+      <td>${p.diameter ? `${p.diameter} mm` : '—'}</td>
+      <td>${p.length ? `${p.length} mm` : '—'}</td>
+      <td>${p.platform || p.connection || '—'}</td>
+    </tr>
+  `).join('');
+
+  const trayLabel = _labelize(p4.conventional_tray_type, { open_tray: 'Open Tray', closed_tray: 'Closed Tray' });
+  const matLabel = _labelize(p4.impression_material, {
+    polyether: 'Polyether',
+    heavy_light_body: 'Heavy and Light body',
+    putty_light_body: 'Putty and Light body',
+  });
+  const impressionSummary = p4.impression_type === 'intraoral_scans'
+    ? 'Intra-Oral Digital Scans'
+    : `Conventional${trayLabel ? ` — ${trayLabel}` : ''}${matLabel ? ` (${matLabel})` : ''}`;
+
+  const issuedAt = format(new Date(), 'dd MMM yyyy, HH:mm');
+  const procDate = procedure.procedure_date ? format(new Date(procedure.procedure_date), 'dd MMM yyyy') : '—';
+
+  return `
+  <!DOCTYPE html>
+  <html>
+    <head>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <style>
+        body { font-family: 'Helvetica', 'Arial', sans-serif; padding: 24px; font-size: 12px; color: #1a1a1a; }
+        .ls-header { border-bottom: 3px solid #6A1B9A; padding-bottom: 14px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; }
+        .ls-header h1 { margin: 0; color: #6A1B9A; font-size: 22px; letter-spacing: 1px; }
+        .ls-header .meta { text-align: right; font-size: 11px; color: #555; }
+        .ls-meta .id { font-weight: bold; color: #6A1B9A; font-size: 13px; }
+        .ls-section { margin-bottom: 16px; border: 1px solid #E1BEE7; border-radius: 8px; padding: 12px 14px; }
+        .ls-section h2 { margin: 0 0 8px 0; font-size: 13px; color: #6A1B9A; text-transform: uppercase; letter-spacing: 0.5px; }
+        table { width: 100%; border-collapse: collapse; }
+        .grid td { padding: 5px 8px; vertical-align: top; }
+        .grid td.lbl { font-weight: bold; color: #4A148C; width: 38%; }
+        .implant-tbl th, .implant-tbl td { border: 1px solid #CE93D8; padding: 6px 8px; text-align: left; font-size: 11px; }
+        .implant-tbl th { background-color: #F3E5F5; color: #6A1B9A; }
+        .lab-instructions { background-color: #FFF3E0; border-left: 4px solid #FB8C00; padding: 10px 14px; border-radius: 6px; }
+        .signature-row { display: flex; justify-content: space-between; margin-top: 36px; }
+        .sig-box { width: 45%; border-top: 1px solid #555; padding-top: 6px; font-size: 11px; text-align: center; }
+        .footer { margin-top: 28px; padding-top: 10px; border-top: 1px dashed #BDBDBD; font-size: 10px; color: #757575; text-align: center; }
+        .badge { display: inline-block; padding: 3px 8px; background-color: #6A1B9A; color: white; border-radius: 10px; font-size: 10px; font-weight: bold; }
+      </style>
+    </head>
+    <body>
+      <div class="ls-header">
+        <div>
+          <h1>DENTAL LABORATORY PRESCRIPTION</h1>
+          <div style="font-size: 11px; color: #6A1B9A; margin-top: 4px;">Implant-Supported Prosthesis &middot; Lab Slip</div>
+        </div>
+        <div class="meta">
+          <div class="id">CASE #${(procedure.id || procedure._id || '').toString().slice(-8).toUpperCase()}</div>
+          <div>Issued: ${issuedAt}</div>
+        </div>
+      </div>
+
+      <div class="ls-section ls-meta">
+        <h2>Patient Information</h2>
+        <table class="grid">
+          <tr><td class="lbl">Patient Name</td><td>${procedure.patient_name || '—'}</td></tr>
+          <tr><td class="lbl">Registration No.</td><td>${procedure.registration_number || '—'}</td></tr>
+          <tr><td class="lbl">Age / Gender</td><td>${[procedure.age, procedure.gender].filter(Boolean).join(' / ') || '—'}</td></tr>
+          <tr><td class="lbl">Implant Site / Region</td><td>${procedure.implant_site || procedure.region || '—'}</td></tr>
+          <tr><td class="lbl">Surgery Date</td><td>${procDate}</td></tr>
+        </table>
+      </div>
+
+      <div class="ls-section">
+        <h2>Implant Details</h2>
+        ${plans.length > 0 ? `
+          <table class="implant-tbl">
+            <tr>
+              <th>#</th><th>Tooth</th><th>Brand</th><th>System</th><th>Ø</th><th>Length</th><th>Platform</th>
+            </tr>
+            ${implantRows}
+          </table>
+        ` : `<div style="font-style: italic; color: #777;">No implant plan recorded.</div>`}
+      </div>
+
+      <div class="ls-section">
+        <h2>Final Prosthesis Plan</h2>
+        <table class="grid">
+          <tr><td class="lbl">Final Prosthetic Plan</td><td><span class="badge">${p4.final_prosthetic_plan || '—'}</span></td></tr>
+          <tr><td class="lbl">Prosthetic Material</td><td>${p4.prosthetic_material || '—'}</td></tr>
+          ${p4.custom_abutment ? `<tr><td class="lbl">Custom Abutment</td><td>${p4.custom_abutment}</td></tr>` : ''}
+          ${p4.overdenture_attachment ? `<tr><td class="lbl">Overdenture Attachment</td><td>${p4.overdenture_attachment}</td></tr>` : ''}
+          <tr><td class="lbl">Impression</td><td>${impressionSummary}</td></tr>
+          ${procedure.shade ? `<tr><td class="lbl">Shade</td><td>${procedure.shade}</td></tr>` : ''}
+        </table>
+      </div>
+
+      ${procedure.phase4_step1_student_notes || procedure.stage2_prosthetic_remark ? `
+        <div class="ls-section lab-instructions">
+          <h2 style="color: #E65100;">Special Instructions to Lab</h2>
+          <div style="white-space: pre-wrap; line-height: 1.5;">${procedure.phase4_step1_student_notes || procedure.stage2_prosthetic_remark}</div>
+        </div>
+      ` : ''}
+
+      <div class="signature-row">
+        <div class="sig-box">${procedure.student_name || procedure.created_by_name || '—'}<br /><span style="color: #888;">Prescribing Dentist</span></div>
+        <div class="sig-box">${procedure.implant_incharge_name || procedure.supervisor_name || '—'}<br /><span style="color: #888;">Approving In-Charge</span></div>
+      </div>
+
+      <div class="footer">
+        Generated by Implanr &middot; ${issuedAt}. This prescription is part of the patient's medical record.
+      </div>
+    </body>
+  </html>
+  `;
+};
+
+export const generateLabSlipPDF = async (procedure: any) => {
+  try {
+    const html = buildLabSlipHtml(procedure);
+    if (Platform.OS === 'web') {
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 15000);
+      return url;
+    }
+    const { uri } = await Print.printToFileAsync({ html });
+    const isAvailable = await Sharing.isAvailableAsync();
+    if (isAvailable) {
+      await Sharing.shareAsync(uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: `LabSlip_${procedure.patient_name || 'patient'}.pdf`,
+        UTI: 'com.adobe.pdf',
+      });
+    } else {
+      Alert.alert('Lab Slip', 'PDF generated but sharing is unavailable on this device.');
+    }
+    return uri;
+  } catch (e) {
+    console.error('Lab slip generation failed:', e);
+    Alert.alert('Error', 'Failed to generate the lab slip. Please try again.');
+    throw e;
+  }
+};
+
+
 const renderAdditionalFields = (fields: any): string => {
   if (!fields || Object.keys(fields).length === 0) return '';
   return `<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e0e0e0;">
