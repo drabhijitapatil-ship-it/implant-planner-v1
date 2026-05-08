@@ -22,6 +22,10 @@ interface BackButtonProps {
   style?: ViewStyle;
   color?: string;
   testID?: string;
+  /** Fallback route when there is nothing to pop on the navigation stack
+   *  (e.g. after `router.replace`, deep links, or fresh page load on web).
+   *  Defaults to the Home / Dashboard tab. */
+  fallbackHref?: string;
 }
 
 export default function BackButton({
@@ -29,6 +33,7 @@ export default function BackButton({
   style,
   color = '#1A2332',
   testID = 'back-button',
+  fallbackHref = '/(tabs)/dashboard',
 }: BackButtonProps) {
   // Animated scale shared across press-in / press-out. Spring config tuned
   // for a short, quiet squish (not bouncy) so it reads as tactile, not toy-like.
@@ -56,8 +61,21 @@ export default function BackButton({
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     }
-    if (onPress) onPress();
-    else router.back();
+    if (onPress) { onPress(); return; }
+    // Fall back to a sensible home when there's nothing to pop (e.g. after
+    // router.replace or deep-link entry). router.canGoBack() is the
+    // expo-router-native check; on web we additionally guard against
+    // window.history.length === 1 (fresh tab).
+    let canBack = true;
+    try {
+      // @ts-ignore — expo-router exposes canGoBack on native; on web it's truthy if there is at least one entry behind.
+      canBack = typeof router.canGoBack === 'function' ? router.canGoBack() : true;
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        if ((window.history?.length ?? 0) <= 1) canBack = false;
+      }
+    } catch { /* ignore — fall through to back */ }
+    if (canBack) router.back();
+    else router.replace(fallbackHref as any);
   };
 
   return (
