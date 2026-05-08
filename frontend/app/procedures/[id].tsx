@@ -724,7 +724,7 @@ export default function ProcedureDetailScreen() {
               {STATUS_LABELS[procedure.status as keyof typeof STATUS_LABELS]}
             </Text>
           </View>
-          {(() => {
+          {procedure.status !== 'completed' && (() => {
             const trail = getProgressTrail(procedure.status);
             const phaseToNum: Record<string, number | null> = {
               'Phase 1': 1, 'Phase 2': 2, 'Phase 3': 3, 'Phase 4': 4, 'Done': null,
