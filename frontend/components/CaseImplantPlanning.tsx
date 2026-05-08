@@ -578,11 +578,13 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
   const [bridgePrompt, setBridgePrompt] = useState<BridgeCandidate | null>(null);
   const [bridgeMaterialFor, setBridgeMaterialFor] = useState<BridgeCandidate | null>(null);
 
-  // Editable: students until Phase 2 approved; supervisors/incharge at all stages
+  // Editable: students until Phase 2 approved; supervisors/incharge at all stages.
+  // Hard-locked once the case is `completed` — no role can edit a closed treatment.
   const editableStatuses = ['draft', 'pending_phase1', 'phase1_approved', 'pending_phase2'];
+  const isCaseCompleted = procedureStatus === 'completed';
   const isStudentEdit = isOwner && userRole === 'student' && (!procedureStatus || editableStatuses.includes(procedureStatus));
   const isFacultyEdit = userRole === 'supervisor' || userRole === 'implant_incharge';
-  const canEdit = isStudentEdit || isFacultyEdit;
+  const canEdit = !isCaseCompleted && (isStudentEdit || isFacultyEdit);
 
   const loadData = useCallback(async () => {
     try {
@@ -834,11 +836,11 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
         <View style={st.emptyState}>
           <Ionicons name="medical-outline" size={36} color="#CCC" />
           <Text style={st.emptyText}>No implants planned yet</Text>
-          <Text style={st.emptySubtext}>Add up to 6 implant positions for this case</Text>
+          <Text style={st.emptySubtext}>Add implant positions for this case</Text>
         </View>
       )}
 
-      {canEdit && plans.length < 6 && Array.isArray(missingTeeth) && missingTeeth.length > 0 && (() => {
+      {canEdit && Array.isArray(missingTeeth) && missingTeeth.length > 0 && (() => {
         const planned = new Set(plans.map(p => p.position));
         const pending = missingTeeth.filter(t => !planned.has(t));
         if (pending.length === 0) return null;
@@ -867,7 +869,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
         );
       })()}
 
-      {canEdit && plans.length < 6 && (
+      {canEdit && (
         <TouchableOpacity
           style={st.addButton}
           onPress={() => { setEditingIdx(null); setPendingPreset(undefined); setShowAddModal(true); }}
