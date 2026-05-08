@@ -402,19 +402,12 @@ export default function Phase4Step1Screen() {
           {/* ── Submit ── */}
           {doneCompleted ? (
             <View style={{ padding: 16, paddingBottom: 32, alignItems: 'center' }} testID="phase4-step1-done-success">
-              <View style={{ width: 100, height: 100, borderRadius: 50, backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-                <Ionicons name="checkmark-circle" size={64} color="#43A047" />
+              <View style={{ paddingHorizontal: 28, paddingVertical: 12, borderRadius: 999, backgroundColor: '#E8F5E9', borderWidth: 1.5, borderColor: '#43A047', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="checkmark-circle" size={20} color="#1B5E20" />
+                <Text style={{ fontSize: 15, fontWeight: '800', color: '#1B5E20', letterSpacing: 0.5 }}>Approved</Text>
               </View>
-              <Text style={{ fontSize: 18, fontWeight: '800', color: '#1B5E20', marginBottom: 8 }}>Step 1 Complete</Text>
-              <Text style={{ fontSize: 13, color: '#37474F', textAlign: 'center', marginBottom: 20 }}>Submitted and auto-approved. You can begin Step 2 (Trial &amp; Delivery) now.</Text>
-              <TouchableOpacity style={[s.submitBtn, { backgroundColor: '#FF6F00', paddingHorizontal: 28 }]}
-                onPress={() => router.replace(`/procedures/submit-phase4-step2/${id}`)}
-                testID="phase4-step1-proceed-step2-btn">
-                <Ionicons name="arrow-forward-circle" size={22} color="#FFF" />
-                <Text style={s.submitText}>Proceed to Step 2</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => router.replace(`/procedures/${id}`)} style={{ marginTop: 12 }}>
-                <Text style={{ color: '#1565C0', fontWeight: '600' }}>View Case</Text>
+              <TouchableOpacity onPress={() => router.replace(`/procedures/${id}`)} style={{ marginTop: 14 }} testID="phase4-step1-view-case-link">
+                <Text style={{ color: '#1565C0', fontWeight: '600', fontSize: 14, textDecorationLine: 'underline' }}>View Case</Text>
               </TouchableOpacity>
             </View>
           ) : (

@@ -220,24 +220,12 @@ export default function Phase4Step2Screen() {
       <SafeAreaView style={s.container} edges={['top', 'bottom']}>
         <PhaseHeader title="Phase 4 - Prosthetic Rehabilitation" subtitle="Step 2 of 2: Final Restoration" />
         <View style={s.successWrap}>
-          <View style={s.successIcon}>
-            <Ionicons name="trophy" size={64} color="#43A047" />
+          <View style={{ paddingHorizontal: 28, paddingVertical: 12, borderRadius: 999, backgroundColor: '#E8F5E9', borderWidth: 1.5, borderColor: '#43A047', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name="checkmark-circle" size={20} color="#1B5E20" />
+            <Text style={{ fontSize: 15, fontWeight: '800', color: '#1B5E20', letterSpacing: 0.5 }}>Approved</Text>
           </View>
-          <Text style={s.successTitle}>
-            {isInchargeSelfCreated ? 'Treatment Marked Complete' : 'Submitted for Final Approval'}
-          </Text>
-          <Text style={s.successMsg}>
-            {isInchargeSelfCreated
-              ? 'Phase 4 Step 2 has been auto-approved. The treatment is now sealed and the case PDF is ready to download.'
-              : 'Phase 4 Step 2 has been submitted. Once your supervisor and implant in-charge approve, the treatment will be marked complete.'}
-          </Text>
-          <TouchableOpacity
-            style={[s.submitBtn, { backgroundColor: '#1565C0', marginTop: 24 }]}
-            onPress={() => router.replace(`/procedures/${id}`)}
-            testID="phase4-step2-go-to-case"
-          >
-            <Ionicons name="document-text" size={20} color="#FFF" />
-            <Text style={s.submitText}>View Case</Text>
+          <TouchableOpacity onPress={() => router.replace(`/procedures/${id}`)} style={{ marginTop: 14 }} testID="phase4-step2-view-case-link">
+            <Text style={{ color: '#1565C0', fontWeight: '600', fontSize: 14, textDecorationLine: 'underline' }}>View Case</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
