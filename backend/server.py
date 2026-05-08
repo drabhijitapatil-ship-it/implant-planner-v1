@@ -483,6 +483,9 @@ class Stage2ProstheticSubmit(BaseModel):
     payment_complete: Optional[bool] = False
     components_available: Optional[bool] = False
     impression_type: Optional[str] = Field(None, max_length=100)  # intraoral_scans / conventional
+    # iter-191: tray sub-choice required when impression_type == 'conventional'.
+    # Validated in submit_stage2_prosthetic; stored alongside impression_type.
+    conventional_tray_type: Optional[str] = Field(None, max_length=20)  # open_tray / closed_tray
     # Notes
     student_notes: Optional[str] = Field(None, max_length=2000)
     # Legacy
@@ -4668,7 +4671,10 @@ def _build_case_context(proc: dict) -> str:
         if p4.get('prosthetic_material'):
             parts.append(f"Prosthetic Material: {p4.get('prosthetic_material')}")
         if p4.get('impression_type'):
-            parts.append(f"Impression Type: {p4.get('impression_type')}")
+            imp = p4.get('impression_type')
+            tray = p4.get('conventional_tray_type')
+            label = imp + (f" ({tray.replace('_', ' ')})" if imp == 'conventional' and tray else '')
+            parts.append(f"Impression Type: {label}")
         if p4.get('custom_abutment'):
             parts.append(f"Custom Abutment: {p4.get('custom_abutment')}")
         if p4.get('overdenture_attachment'):
@@ -6633,6 +6639,10 @@ async def generate_case_report(
             add_field("Overdenture Attachment", p4s1["overdenture_attachment"])
         if p4s1.get("impression_type"):
             imp_type = "Intraoral Scans" if p4s1["impression_type"] == "intraoral_scans" else "Conventional Impressions"
+            tray = p4s1.get("conventional_tray_type")
+            if p4s1["impression_type"] == "conventional" and tray:
+                tray_label = "Open Tray" if tray == "open_tray" else "Closed Tray"
+                imp_type = f"{imp_type} ({tray_label})"
             add_field("Impression Type", imp_type)
         if p4s1.get("payment_complete") is not None:
             add_field("Payment Complete", "Yes" if p4s1["payment_complete"] else "No")
@@ -7803,6 +7813,15 @@ async def submit_stage2_prosthetic(
     if procedure["status"] != "stage2_surgical_approved":
         raise HTTPException(status_code=400, detail="Phase 3 must be approved before starting Phase 4")
 
+    # iter-191: when conventional impression is selected, the tray-type sub-choice
+    # is mandatory and must be one of {open_tray, closed_tray}.
+    if data.impression_type == "conventional":
+        if data.conventional_tray_type not in ("open_tray", "closed_tray"):
+            raise HTTPException(
+                status_code=400,
+                detail="Please choose Open tray or Closed tray for the conventional impression.",
+            )
+
     # Save Phase 4 Step 1 data
     phase4_step1_data = {
         "final_prosthetic_plan": data.final_prosthetic_plan,
@@ -7812,6 +7831,12 @@ async def submit_stage2_prosthetic(
         "payment_complete": data.payment_complete,
         "components_available": data.components_available,
         "impression_type": data.impression_type,
+        # iter-191: only persisted when impression_type is conventional;
+        # explicitly nulled otherwise so a user that switches from conventional
+        # → intra-oral doesn't leave a stale tray-type behind.
+        "conventional_tray_type": (
+            data.conventional_tray_type if data.impression_type == "conventional" else None
+        ),
     }
     
     existing_checklist = procedure.get("checklist") or {}

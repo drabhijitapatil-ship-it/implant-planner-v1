@@ -1,5 +1,25 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 191 (Feb 2026) — Phase 4 Step 1: tray-type sub-choice for Conventional Impression
+
+### Why
+Conventional implant impressions split into two clinically distinct techniques — **Open Tray** (direct, copings unscrewed through a windowed tray) and **Closed Tray** (indirect, transfer copings re-seated after pickup). Recording only "Conventional Impression made" hides this distinction in the case record and in the eventual lab Rx; the lab and the In-Charge auditor both need it explicit.
+
+### Changes
+**Backend** (`/app/backend/server.py`)
+- `Stage2ProstheticSubmit` model gains `conventional_tray_type: Optional[str]` (`open_tray` | `closed_tray`, max 20).
+- `submit_stage2_prosthetic` validates: if `impression_type == 'conventional'` and `conventional_tray_type` is not one of the two values → 400 with a user-facing message. Persisted in `phase4_step1_data.conventional_tray_type`; explicitly set to `null` when the user later switches to `intraoral_scans`, so no stale tray is left behind.
+- PDF case report and AI-summary text both append the tray label, e.g. `Impression Type: Conventional Impressions (Open Tray)`.
+
+**Frontend**
+- `submit-stage2-prosthetic/[id].tsx`: when "Conventional Impressions Made" is chosen, an indented sub-panel reveals two large-tap cards — Open Tray / Closed Tray — each with a one-line technique description. Selecting Intra-Oral Scans clears the tray choice. Submit button blocks with an Alert until a tray is picked. testIDs: `impression-conventional`, `impression-intraoral_scans`, `tray-open_tray`, `tray-closed_tray`, `conventional-tray-options`.
+- `procedures/[id].tsx` case-detail row now reads `Conventional Impressions (Open Tray)` / `(Closed Tray)` when present.
+
+### Verification
+- Backend curl: 3/3 — conventional without tray → 400; conventional with invalid tray value → 400; conventional + `open_tray` → 200 with `phase4_step1_data.conventional_tray_type='open_tray'` persisted.
+- Test procedure was temporarily flipped to `stage2_surgical_approved` for the curl tests and reset afterwards (status, phase4_step1_data, final_prosthetic_plan, prosthetic_material all cleared).
+
+
 ## Iteration 190 (Feb 2026) — Phase 2 split: Pre-Surgical Checklist must complete before Surgical Procedure unlocks
 
 ### Why
