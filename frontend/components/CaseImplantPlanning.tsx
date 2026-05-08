@@ -700,7 +700,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
           <Text style={st.headerTitle}>Implant Planning</Text>
         </View>
         <View style={st.badge}>
-          <Text style={st.badgeText}>{plans.length}/6</Text>
+          <Text style={st.badgeText}>{plans.length}</Text>
         </View>
       </View>
 
@@ -881,7 +881,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
           ) : (
             <>
               <Ionicons name="add-circle" size={20} color="#1E88E5" />
-              <Text style={st.addButtonText}>Add Implant Position ({plans.length}/6)</Text>
+              <Text style={st.addButtonText}>Add Implant Position</Text>
             </>
           )}
         </TouchableOpacity>

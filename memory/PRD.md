@@ -1,5 +1,22 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 189 (Feb 2026) — Implant Planning UI: removed 0/6 cap and locked actions on completed cases
+
+### Why
+1. The "0/6" cap was a vestige of an earlier Single-implant assumption — modern Multiple/Full-Arch cases routinely exceed 6 positions, and the visible cap was misleading on every new case.
+2. On `completed` cases the Edit / Remove / Add controls were already gated by `canEdit`, but the visible badge and add-button still spelled out `1/6` — making completed records look mid-edit and the cap feel enforced.
+
+### Changes
+**`/app/frontend/components/CaseImplantPlanning.tsx`** (only file touched)
+- Header badge: `{plans.length}/6` → `{plans.length}` (just the count, no cap).
+- Add button label: `Add Implant Position ({plans.length}/6)` → `Add Implant Position`.
+- No logic change to `canEdit` — pre-existing rule (`!isCaseCompleted && (isStudentEdit || isFacultyEdit)`) already hides Edit / Remove / Add and the Pending-tooth chips on completed cases.
+
+### Verification (Playwright on the live preview)
+- **Completed case** (`Test Approval Patient`, status `completed`): badge renders as `1` (not `1/6`); Edit / Remove / Add buttons absent; only the "Drilling Protocol" button remains. `data-testid="edit-implant-*"`, `delete-implant-*`, `add-implant-btn` all return 0 / false.
+- **In-progress case** (`TEST_MUA_88c4430c`, status `phase1_approved`, 4 planned implants): badge renders as `4`; Edit / Remove buttons visible per implant; "Add Implant Position" button visible without `(N/6)` suffix. Section text `'/6'` count = 0.
+
+
 ## Iteration 188 (Feb 2026) — Cumulative phase breadcrumb + simplified "Approved" success state
 
 ### Why
