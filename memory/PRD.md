@@ -1,5 +1,39 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 188 (Feb 2026) — Cumulative phase breadcrumb + simplified "Approved" success state
+
+### Why
+1. The top-of-case progress pill only showed `current ›› next`, losing the trail of completed phases.
+2. The In-Charge auto-approval success state was overcomplicated (trophy + heading + big "Proceed to Phase N" button + small "View Case" link). Next phase doesn't actually begin immediately, so the prominent CTA was misleading.
+
+### Changes
+**`/app/frontend/app/procedures/[id].tsx`** — replaced `getProgressPair()` with `getProgressTrail()`. The top-of-case pill is now a **cumulative breadcrumb**: each completed phase as a soft-green chip, the current phase as a haloed white chip with blue glow, the chevron leading INTO the current phase animates (existing `PulsingDoubleArrow`). Per-chip tap → smooth scrolls to that phase's section anchor. Final `Done ✓` chip appears on `completed`. Shared across all roles (student / supervisor / In-Charge).
+
+**Phase forms (Phase 1 / 2 / 3 / 4-Step 1 / 4-Step 2)** — replaced trophy + Phase X Complete heading + Proceed-to-Phase-N CTA with a minimal **disabled "Approved" pill** (green) followed by a plain underlined **"View Case"** link. "Proceed to next phase" CTA removed entirely from all 5 forms — clinically the next phase doesn't start immediately. Phase 1 Alert dialog replaced with the same inline pattern via a new `phase1Done` state.
+
+### Files touched
+- `/app/frontend/app/procedures/[id].tsx`
+- `/app/frontend/app/procedures/submit-phase2/[id].tsx`
+- `/app/frontend/app/procedures/submit-stage2-surgical/[id].tsx`
+- `/app/frontend/app/procedures/submit-stage2-prosthetic/[id].tsx`
+- `/app/frontend/app/procedures/submit-phase4-step2/[id].tsx`
+- `/app/frontend/app/(tabs)/new-procedure.tsx`
+
+### Verification
+- Metro bundles compiled cleanly across all touched files (no JSX or TS errors).
+- "Approved" is a styled View (non-interactive); "View Case" navigates via `router.replace`.
+- Per-chip tap on the breadcrumb scrolls to `[data-testid="phaseN-full-data-section"]`.
+
+## Iteration 187 (Feb 2026) — Smart back-navigation everywhere
+
+### Why
+After `router.replace(...)` (used by the new "Done"/"View Case" flow), notification deep links, or fresh page loads on web, the back button silently did nothing because `router.back()` had nothing to pop, leaving users stranded on a blank screen.
+
+### Changes
+- `/app/frontend/components/BackButton.tsx` — now checks `router.canGoBack()` (and `window.history.length` on web), falls back to `router.replace('/(tabs)/dashboard')` when there's no history. New optional `fallbackHref` prop.
+- New utility `/app/frontend/utils/safeNav.ts` — `goBackOrHome()` mirroring the same logic for inline use.
+- Phase 2 / 3 / 4-Step 1 success Alert "OK" callbacks now use `goBackOrHome()` instead of bare `router.back()`.
+
 ## Iteration 186 (Feb 2026) — Implant In-Charge "Done" workflow + Phase 4 Step 2 imaging & prosthesis photos
 
 ### Why

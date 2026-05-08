@@ -257,6 +257,7 @@ export default function NewProcedureScreen() {
   const [supervisors, setSupervisors] = useState<any[]>([]);
   const [incharges, setIncharges] = useState<any[]>([]);
   const [createdProcedureId, setCreatedProcedureId] = useState<string | null>(null);
+  const [phase1Done, setPhase1Done] = useState(false);
   const [isDraftResume, setIsDraftResume] = useState(false);
 
   // ── Form State ──
@@ -863,6 +864,17 @@ export default function NewProcedureScreen() {
           />
         </ScrollView>
         <View style={styles.submitContainer}>
+          {phase1Done ? (
+            <View style={{ alignItems: 'center', paddingVertical: 8 }} testID="phase1-done-success">
+              <View style={{ paddingHorizontal: 28, paddingVertical: 12, borderRadius: 999, backgroundColor: '#E8F5E9', borderWidth: 1.5, borderColor: '#43A047', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="checkmark-circle" size={20} color="#1B5E20" />
+                <Text style={{ fontSize: 15, fontWeight: '800', color: '#1B5E20', letterSpacing: 0.5 }}>Approved</Text>
+              </View>
+              <TouchableOpacity onPress={() => router.replace(`/procedures/${createdProcedureId}`)} style={{ marginTop: 14 }} testID="phase1-view-case-link">
+                <Text style={{ color: '#1565C0', fontWeight: '600', fontSize: 14, textDecorationLine: 'underline' }}>View Case</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
           <TouchableOpacity style={styles.submitBtn} data-testid="submit-for-approval"
             onPress={async () => {
               // Final clinical-correlation summary before submission (Q2=c — also done live).
@@ -909,9 +921,7 @@ export default function NewProcedureScreen() {
                       );
                       if (isInchargeUser) {
                         try { await api.post(`/procedures/${createdProcedureId}/approve`, { action: 'approve', comment: '' }); } catch {}
-                        Alert.alert('Phase 1 Complete', 'Case auto-approved. Open it now to begin Phase 2.', [
-                          { text: 'View Case', onPress: () => router.replace(`/procedures/${createdProcedureId}`) },
-                        ]);
+                        setPhase1Done(true);
                       } else {
                         Alert.alert('Success', 'Case submitted for approval.');
                         router.replace('/(tabs)/dashboard');
@@ -926,6 +936,7 @@ export default function NewProcedureScreen() {
             <Ionicons name="checkmark-circle" size={20} color="#FFF" />
             <Text style={styles.submitBtnText}>{user?.role === 'implant_incharge' ? 'Done' : 'Submit for Approval'}</Text>
           </TouchableOpacity>
+          )}
         </View>
       </View>
     );

@@ -66,27 +66,49 @@ const EditContext = createContext<{
 } | null>(null);
 
 /**
- * Map a procedure status → the current phase the case sits in + the next
- * phase it will move to. Powers the "Phase X ›› Phase Y" header indicator.
- * Returns `next: null` when the case is fully complete.
+ * Map a procedure status → the cumulative phase trail to render in the
+ * top-of-case breadcrumb pill: every phase the case has visibly entered,
+ * with `currentIndex` marking the active one (haloed + animated chevron
+ * leading into it). Final entry "Done" appears only on completion.
  */
-function getProgressPair(status: string): { current: string; next: string | null } {
+function getProgressTrail(status: string): { phases: string[]; currentIndex: number } {
   if (['draft', 'pending_phase1'].includes(status)) {
-    return { current: 'Phase 1', next: 'Phase 2' };
+    return { phases: ['Phase 1'], currentIndex: 0 };
   }
   if (['phase1_approved', 'pending_phase2'].includes(status)) {
-    return { current: 'Phase 2', next: 'Phase 3' };
+    return { phases: ['Phase 1', 'Phase 2'], currentIndex: 1 };
   }
   if (['phase2_approved', 'pending_stage2_surgical'].includes(status)) {
-    return { current: 'Phase 3', next: 'Phase 4' };
+    return { phases: ['Phase 1', 'Phase 2', 'Phase 3'], currentIndex: 2 };
   }
-  if (['stage2_surgical_approved', 'pending_stage2_prosthetic'].includes(status)) {
-    return { current: 'Phase 4', next: 'Done' };
+  if ([
+    'stage2_surgical_approved',
+    'pending_stage2_prosthetic',
+    'stage2_prosthetic_step1_approved',
+    'pending_final_delivery',
+  ].includes(status)) {
+    return { phases: ['Phase 1', 'Phase 2', 'Phase 3', 'Phase 4'], currentIndex: 3 };
   }
   if (status === 'completed') {
-    return { current: 'Done', next: null };
+    return { phases: ['Phase 1', 'Phase 2', 'Phase 3', 'Phase 4', 'Done'], currentIndex: 4 };
   }
-  return { current: 'Phase 1', next: 'Phase 2' };
+  return { phases: ['Phase 1'], currentIndex: 0 };
+}
+
+/**
+ * Legacy helper kept for callers that still ask for the "current/next" pair
+ * (used elsewhere in this file for phase-specific banners). Derives from the
+ * trail so both stay in sync.
+ */
+function getProgressPair(status: string): { current: string; next: string | null } {
+  const { phases, currentIndex } = getProgressTrail(status);
+  const current = phases[currentIndex];
+  if (status === 'completed') return { current: 'Done', next: null };
+  // Determine the next label by extending one beyond the current trail.
+  const labels = ['Phase 1', 'Phase 2', 'Phase 3', 'Phase 4', 'Done'];
+  const idx = labels.indexOf(current);
+  const next = idx >= 0 && idx < labels.length - 1 ? labels[idx + 1] : null;
+  return { current, next };
 }
 
 
@@ -703,24 +725,14 @@ export default function ProcedureDetailScreen() {
             </Text>
           </View>
           {(() => {
-            const pair = getProgressPair(procedure.status);
-            const phaseNum =
-              pair.current === 'Phase 1' ? 1 :
-              pair.current === 'Phase 2' ? 2 :
-              pair.current === 'Phase 3' ? 3 :
-              pair.current === 'Phase 4' ? 4 : null;
-            const anchorKey = phaseNum ? (`p${phaseNum}` as 'p1'|'p2'|'p3'|'p4') : null;
+            const trail = getProgressTrail(procedure.status);
+            const phaseToNum: Record<string, number | null> = {
+              'Phase 1': 1, 'Phase 2': 2, 'Phase 3': 3, 'Phase 4': 4, 'Done': null,
+            };
             const HEADER_OFFSET = 80;
-            const onTap = (ev?: any) => {
-              if (!anchorKey || !phaseNum) return; // completed → no-op
-
-              // Web path. RN-Web does not propagate `nativeID` reliably to the
-              // inner ScrollView div, so we locate the scroll container by
-              // walking up the DOM from the pill itself (the only DOM node we
-              // know is inside the case-detail scroller) until we find an
-              // element with overflow-y === auto/scroll. Phase sections carry
-              // a stable `data-testid` ("phaseN-full-data-section") which
-              // RN-Web DOES forward to the DOM.
+            const scrollToPhase = (phaseLabel: string, ev?: any) => {
+              const phaseNum = phaseToNum[phaseLabel];
+              if (!phaseNum) return; // 'Done' chip is non-scrolling
               if (Platform.OS === 'web' && typeof document !== 'undefined') {
                 let pillEl = (ev && ev.currentTarget) as HTMLElement | undefined;
                 if (!pillEl || !(pillEl instanceof HTMLElement)) {
@@ -731,10 +743,7 @@ export default function ProcedureDetailScreen() {
                   let p: HTMLElement | null = pillEl.parentElement;
                   while (p && p !== document.body) {
                     const s = window.getComputedStyle(p);
-                    if ((s.overflowY === 'auto' || s.overflowY === 'scroll') && p.scrollHeight > p.clientHeight + 8) {
-                      scrollEl = p;
-                      break;
-                    }
+                    if ((s.overflowY === 'auto' || s.overflowY === 'scroll') && p.scrollHeight > p.clientHeight + 8) { scrollEl = p; break; }
                     p = p.parentElement;
                   }
                 }
@@ -743,36 +752,25 @@ export default function ProcedureDetailScreen() {
                   const sRect = scrollEl.getBoundingClientRect();
                   const tRect = sectionEl.getBoundingClientRect();
                   const top = Math.max(0, tRect.top - sRect.top + scrollEl.scrollTop - HEADER_OFFSET);
-                  // RN-Web's scroll container has `-webkit-overflow-scrolling: touch`
-                  // which makes `scrollTo({behavior:'smooth'})` a no-op in some
-                  // browsers. Animate manually with rAF for a reliable smooth
-                  // scroll, then ensure the final position is exact.
                   const start = scrollEl.scrollTop;
                   const dist = top - start;
                   if (Math.abs(dist) < 2) return;
                   const duration = Math.min(550, 250 + Math.abs(dist) * 0.25);
                   const t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-                  const ease = (k: number) => 1 - Math.pow(1 - k, 3); // easeOutCubic
+                  const ease = (k: number) => 1 - Math.pow(1 - k, 3);
                   const step = () => {
                     const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
                     const k = Math.min(1, (now - t0) / duration);
                     scrollEl.scrollTop = start + dist * ease(k);
                     if (k < 1) requestAnimationFrame(step);
                   };
-                  if (typeof requestAnimationFrame !== 'undefined') {
-                    requestAnimationFrame(step);
-                  } else {
-                    scrollEl.scrollTop = top;
-                  }
+                  if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(step);
+                  else scrollEl.scrollTop = top;
                   return;
                 }
-                if (sectionEl) {
-                  try { sectionEl.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch {}
-                  return;
-                }
+                if (sectionEl) { try { sectionEl.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch {} return; }
               }
-
-              // Native path — RN ScrollView ref + onLayout-captured y values.
+              const anchorKey = `p${phaseNum}` as 'p1'|'p2'|'p3'|'p4';
               const y = phaseAnchors.current[anchorKey];
               if (typeof y === 'number') {
                 mainScrollRef.current?.scrollTo({ y: Math.max(0, y - HEADER_OFFSET), animated: true });
@@ -780,29 +778,41 @@ export default function ProcedureDetailScreen() {
             };
             return (
               <Animated.View style={pillAnimatedStyle}>
-                <TouchableOpacity
-                  onPress={onTap}
-                  disabled={!anchorKey}
-                  activeOpacity={0.7}
-                  style={styles.progressInline}
-                  testID="case-progress-indicator"
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    anchorKey
-                      ? `Jump to ${pair.current} section`
-                      : `Case complete`
-                  }
-                >
-                  <Text style={styles.progressCurrent}>{pair.current}</Text>
-                  {pair.next ? (
-                    <>
-                      <PulsingDoubleArrow color="#1565C0" size={12} delayMs={150} />
-                      <Text style={styles.progressNext}>{pair.next}</Text>
-                    </>
-                  ) : (
-                    <Ionicons name="checkmark-circle" size={14} color="#2E7D32" style={{ marginLeft: 4 }} />
-                  )}
-                </TouchableOpacity>
+                <View style={styles.progressInline} testID="case-progress-indicator">
+                  {trail.phases.map((label, i) => {
+                    const isCurrent = i === trail.currentIndex;
+                    const isCompleted = i < trail.currentIndex;
+                    const isDone = label === 'Done';
+                    return (
+                      <React.Fragment key={`${label}-${i}`}>
+                        {i > 0 && (
+                          (i === trail.currentIndex && !isDone)
+                            ? <PulsingDoubleArrow color="#1565C0" size={11} delayMs={120} />
+                            : <Ionicons name="chevron-forward" size={12} color="#90A4AE" style={{ marginHorizontal: 2 }} />
+                        )}
+                        <TouchableOpacity
+                          onPress={(ev) => scrollToPhase(label, ev)}
+                          activeOpacity={0.7}
+                          style={[
+                            styles.progressChip,
+                            isCurrent && styles.progressChipCurrent,
+                            isCompleted && styles.progressChipCompleted,
+                          ]}
+                          testID={`case-progress-chip-${i}`}
+                          accessibilityRole="button"
+                          accessibilityLabel={isCurrent ? `Current: ${label}` : `Jump to ${label} section`}
+                        >
+                          <Text style={[
+                            styles.progressChipText,
+                            isCurrent && styles.progressChipTextCurrent,
+                            isCompleted && styles.progressChipTextCompleted,
+                          ]}>{label}</Text>
+                          {isDone && <Ionicons name="checkmark-circle" size={12} color="#2E7D32" style={{ marginLeft: 3 }} />}
+                        </TouchableOpacity>
+                      </React.Fragment>
+                    );
+                  })}
+                </View>
               </Animated.View>
             );
           })()}
@@ -3497,15 +3507,42 @@ const styles = StyleSheet.create({
   progressInline: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    flexWrap: 'wrap',
+    gap: 4,
     marginTop: 8,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 4,
     backgroundColor: '#E3F2FD',
     borderRadius: 999,
   },
   progressCurrent: { fontSize: 11, fontWeight: '800', color: '#0D47A1', letterSpacing: 0.4 },
   progressNext: { fontSize: 11, fontWeight: '600', color: '#546E7A', letterSpacing: 0.3 },
+  progressChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  progressChipCompleted: {
+    backgroundColor: 'rgba(46, 125, 50, 0.10)',
+    borderColor: 'rgba(46, 125, 50, 0.25)',
+  },
+  progressChipCurrent: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#1565C0',
+    shadowColor: '#1565C0',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 7,
+    elevation: 4,
+  },
+  progressChipText: { fontSize: 11, fontWeight: '600', color: '#546E7A', letterSpacing: 0.3 },
+  progressChipTextCompleted: { color: '#1B5E20', fontWeight: '700' },
+  progressChipTextCurrent: { color: '#0D47A1', fontWeight: '800', letterSpacing: 0.4 },
   statusBadge: {
     paddingHorizontal: 24,
     paddingVertical: 10,
