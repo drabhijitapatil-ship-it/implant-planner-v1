@@ -2615,6 +2615,16 @@ export default function ProcedureDetailScreen() {
                           procedure.phase4_step1_data.conventional_tray_type
                             ? ` (${procedure.phase4_step1_data.conventional_tray_type === 'open_tray' ? 'Open Tray' : 'Closed Tray'})`
                             : ''
+                        }${
+                          procedure.phase4_step1_data.impression_material
+                            ? ` — ${
+                                {
+                                  polyether: 'Polyether',
+                                  heavy_light_body: 'Heavy and Light body',
+                                  putty_light_body: 'Putty and Light body',
+                                }[procedure.phase4_step1_data.impression_material as string] || procedure.phase4_step1_data.impression_material
+                              }`
+                            : ''
                         }`
                   } fieldKey="phase4_step1_data.impression_type" />
                 )}
