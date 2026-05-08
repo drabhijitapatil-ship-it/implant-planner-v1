@@ -2661,6 +2661,43 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
+        {/* iter-193: Generate Lab Slip — visible once Phase 4 Step 1 has been
+            approved (status stage2_prosthetic_step1_approved or beyond).
+            Reads phase4_step1_data + implant_plans on the client and produces
+            an HTML→PDF prescription via expo-print / window.open. */}
+        {user?.role !== 'nurse' && procedure.phase4_step1_data && (
+          ['stage2_prosthetic_step1_approved', 'pending_final_delivery', 'completed'].includes(procedure.status)
+        ) && (
+          <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#6A1B9A', backgroundColor: '#F3E5F5' }]} testID="lab-slip-card">
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <Ionicons name="document-text" size={20} color="#6A1B9A" />
+              <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#6A1B9A', fontSize: 16 }]}>
+                Lab Prescription
+              </Text>
+            </View>
+            <Text style={{ fontSize: 12, color: '#4A148C', marginBottom: 12, lineHeight: 18 }}>
+              The prosthetic plan has been approved. Generate a lab slip to share with the laboratory — auto-built from the implant details, prosthesis plan, and impression record.
+            </Text>
+            <TouchableOpacity
+              style={{ backgroundColor: '#6A1B9A', paddingVertical: 12, paddingHorizontal: 18, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              testID="generate-lab-slip-btn"
+              onPress={async () => {
+                try {
+                  const { generateLabSlipPDF } = await import('../../utils/pdfGenerator');
+                  await generateLabSlipPDF(procedure);
+                } catch (e) {
+                  // generator already alerts on failure
+                }
+              }}
+            >
+              <Ionicons name="print-outline" size={18} color="#FFF" />
+              <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '700', letterSpacing: 0.4 }}>
+                Generate Lab Slip
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* ═══════════ PHASE 4 STEP 2: TRIAL & DELIVERY - Full Data Display ═══════════ */}
         {user?.role !== 'nurse' && (procedure.phase4_step2_data || procedure.phase4_step2_student_notes) && (
           <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#AD1457' }]} data-testid="phase4-step2-full-data-section">

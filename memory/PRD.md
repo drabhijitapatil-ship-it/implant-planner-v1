@@ -1,5 +1,28 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 193 (Feb 2026) — One-tap Lab Slip PDF after Phase 4 Step 1 approval
+
+### Why
+Once the prosthetic plan is approved by the Implant In-Charge, the next step is sending the lab a prescription. Until now this was a hand-scribbled note. With every relevant field already in the case record (implant brand/system/Ø/length, FP1/FP2/FP3 plan, material, abutment, attachment, impression type + tray + material, shade, surgeon, approving in-charge), an auto-generated Lab Slip is essentially free — and it gives the lab a defensible, complete Rx in one tap.
+
+### Changes
+**Frontend** — purely client-side, mirrors the existing case-report HTML→PDF flow, no backend round-trip needed.
+
+- `/app/frontend/utils/pdfGenerator.ts` — new exports `buildLabSlipHtml(procedure)` and `generateLabSlipPDF(procedure)`. The HTML is purpose-built for the lab (purple/Implanr accent, compact A4 layout) with five sections:
+  1. Header: clinic title, case ID (last 8 chars), issued timestamp
+  2. Patient Information: name, registration #, age/gender, implant site, surgery date
+  3. Implant Details: full table (#, tooth, brand, system, Ø, length, platform) per implant in `implant_plans`
+  4. Final Prosthesis Plan: prosthetic plan badge, material, custom abutment, overdenture attachment, impression summary (intra-oral OR conventional + tray + material), shade
+  5. Special Instructions to Lab: any student notes / prosthetic remark
+  + signature row (Prescribing Dentist / Approving In-Charge) and an Implanr footer with timestamp.
+- `/app/frontend/app/procedures/[id].tsx` — purple "Lab Prescription" card slotted between Phase 4 Step 1 details and Phase 4 Step 2 Trial & Delivery. Visible only when `procedure.phase4_step1_data` exists AND `procedure.status` ∈ {`stage2_prosthetic_step1_approved`, `pending_final_delivery`, `completed`}; hidden for `nurse` role. Single "Generate Lab Slip" button (testID `generate-lab-slip-btn`) which dynamically imports `generateLabSlipPDF` and opens the slip in a new tab on web (or via Print/Sharing on native).
+
+### Verification
+- Live Playwright on the preview env, logged in as `Abhijit.patil` → `Test Approval Patient` (status `completed`):
+  - Purple "Lab Prescription" card with descriptive copy and "Generate Lab Slip" button rendered between Phase 4 Step 1 and Phase 4 Step 2 sections.
+  - Click → new tab opens with the rendered prescription showing `CASE #19E0F6FD`, patient info, implant table (Nobel Biocare / Nobel Active / 4.3 mm / 13 mm), Final Prosthetic Plan = PFM Crown / Zirconia / Intra-Oral Digital Scans, special instructions ("Phase 4 step 1 test"), and dual-signature block (Dr. Gaurav Pandey + Dr. Abhijit Patil).
+
+
 ## Iteration 192 (Feb 2026) — Phase 4 Step 1: Impression Material capture for conventional impressions
 
 ### Why
