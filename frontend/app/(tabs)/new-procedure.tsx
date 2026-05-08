@@ -897,16 +897,25 @@ export default function NewProcedureScreen() {
                 // Plan endpoint failed — don't block submission, but log.
               }
 
-              Alert.alert('Submit for Approval', 'Are you sure you want to submit this case?', [
+              const isInchargeUser = user?.role === 'implant_incharge';
+              Alert.alert(isInchargeUser ? 'Mark Case Done' : 'Submit for Approval',
+                isInchargeUser ? 'Submit this case and auto-approve Phase 1?' : 'Are you sure you want to submit this case?', [
                 { text: 'Cancel' },
                 {
-                  text: 'Submit', onPress: async () => {
+                  text: isInchargeUser ? 'Done' : 'Submit', onPress: async () => {
                     try {
                       await api.put(`/procedures/${createdProcedureId}`,
                         { status: 'pending_phase1' }
                       );
-                      Alert.alert('Success', 'Case submitted for approval.');
-                      router.replace('/(tabs)/dashboard');
+                      if (isInchargeUser) {
+                        try { await api.post(`/procedures/${createdProcedureId}/approve`, { action: 'approve', comment: '' }); } catch {}
+                        Alert.alert('Phase 1 Complete', 'Case auto-approved. Open it now to begin Phase 2.', [
+                          { text: 'View Case', onPress: () => router.replace(`/procedures/${createdProcedureId}`) },
+                        ]);
+                      } else {
+                        Alert.alert('Success', 'Case submitted for approval.');
+                        router.replace('/(tabs)/dashboard');
+                      }
                     } catch (e: any) {
                       Alert.alert('Error', e.response?.data?.detail || 'Failed to submit');
                     }
@@ -915,7 +924,7 @@ export default function NewProcedureScreen() {
               ]);
             }}>
             <Ionicons name="checkmark-circle" size={20} color="#FFF" />
-            <Text style={styles.submitBtnText}>Submit for Approval</Text>
+            <Text style={styles.submitBtnText}>{user?.role === 'implant_incharge' ? 'Done' : 'Submit for Approval'}</Text>
           </TouchableOpacity>
         </View>
       </View>

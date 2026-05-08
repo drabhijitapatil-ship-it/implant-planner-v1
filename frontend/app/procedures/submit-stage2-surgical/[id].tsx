@@ -31,6 +31,9 @@ export default function Stage2SurgicalSubmissionScreen() {
   const [phase2ProsthesisType, setPhase2ProsthesisType] = useState<string>('');
   const [phase2ProsthesisOther, setPhase2ProsthesisOther] = useState<string>('');
   const [phase2HealingCuffs, setPhase2HealingCuffs] = useState<string[]>([]);
+  const [createdById, setCreatedById] = useState<string | null>(null);
+  const [createdByRole, setCreatedByRole] = useState<string | null>(null);
+  const [doneCompleted, setDoneCompleted] = useState(false);
 
   // Always drop the Healing-Abutment-Placed checklist row — by product spec, Phase 3 never
   // re-captures it. When Phase 2 had Immediate Loading / Healing Abutment, also drop the
@@ -96,6 +99,8 @@ export default function Stage2SurgicalSubmissionScreen() {
       setPhase2Component(p2.prosthetic_component || '');
       setPhase2ProsthesisType(p2.prosthesis_type || '');
       setPhase2ProsthesisOther(p2.prosthesis_type_other || '');
+      setCreatedById(d.created_by_id || null);
+      setCreatedByRole(d.created_by_role || null);
       if (Array.isArray(p2.healing_abutment_cuff_height)) setPhase2HealingCuffs(p2.healing_abutment_cuff_height);
       // Latest pending edit request (backend blocks more than one at a time).
       const reqs: any[] = Array.isArray(d.phase2_edit_requests) ? d.phase2_edit_requests : [];
@@ -206,10 +211,16 @@ export default function Stage2SurgicalSubmissionScreen() {
         })),
         student_notes: studentNotes || null,
       });
-      Alert.alert('Success',
-        'Phase 3 submitted successfully! Awaiting approval.',
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
+      const isInchargeSelfCreated = user?.role === 'implant_incharge' && createdByRole === 'implant_incharge' && user?.id === createdById;
+      if (isInchargeSelfCreated) {
+        try { await api.post(`/procedures/${id}/stage2/surgical/approve`, { action: 'approve', comment: '' }); } catch {}
+        setDoneCompleted(true);
+      } else {
+        Alert.alert('Success',
+          'Phase 3 submitted successfully! Awaiting approval.',
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
+      }
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.detail || 'Failed to submit Phase 3');
     } finally {
@@ -454,6 +465,24 @@ export default function Stage2SurgicalSubmissionScreen() {
           </View>
 
           {/* ── Submit ── */}
+          {doneCompleted ? (
+            <View style={{ padding: 16, paddingBottom: 32, alignItems: 'center' }} testID="phase3-done-success">
+              <View style={{ width: 100, height: 100, borderRadius: 50, backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                <Ionicons name="checkmark-circle" size={64} color="#43A047" />
+              </View>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: '#1B5E20', marginBottom: 8 }}>Phase 3 Complete</Text>
+              <Text style={{ fontSize: 13, color: '#37474F', textAlign: 'center', marginBottom: 20 }}>Submitted and auto-approved. You can begin Phase 4 Step 1 now.</Text>
+              <TouchableOpacity style={[s.submitBtn, { backgroundColor: '#6A1B9A', paddingHorizontal: 28 }]}
+                onPress={() => router.replace(`/procedures/submit-stage2-prosthetic/${id}`)}
+                testID="phase3-proceed-phase4-btn">
+                <Ionicons name="arrow-forward-circle" size={22} color="#FFF" />
+                <Text style={s.submitText}>Proceed to Phase 4 Step 1</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => router.replace(`/procedures/${id}`)} style={{ marginTop: 12 }}>
+                <Text style={{ color: '#1565C0', fontWeight: '600' }}>View Case</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
           <View style={{ padding: 16, paddingBottom: 32 }}>
             <TouchableOpacity
               style={[s.submitBtn, loading && { opacity: 0.6 }]}
@@ -464,11 +493,12 @@ export default function Stage2SurgicalSubmissionScreen() {
               {loading ? <ActivityIndicator color="#FFF" /> : (
                 <>
                   <Ionicons name="checkmark-circle" size={22} color="#FFF" />
-                  <Text style={s.submitText}>Submit Phase 3 for Approval</Text>
+                  <Text style={s.submitText}>{(user?.role === 'implant_incharge' && createdByRole === 'implant_incharge' && user?.id === createdById) ? 'Done' : 'Submit Phase 3 for Approval'}</Text>
                 </>
               )}
             </TouchableOpacity>
           </View>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
 
