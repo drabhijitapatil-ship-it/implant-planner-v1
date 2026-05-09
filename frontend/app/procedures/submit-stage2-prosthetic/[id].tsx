@@ -230,7 +230,7 @@ export default function Phase4Step1Screen() {
       // Re-fetch the procedure so the slip has the freshly-persisted shade
       // and impression details alongside the earlier-phase fields.
       const fresh = await api.get(`/procedures/${id}`);
-      const { generateLabSlipPDF } = await import('../../utils/pdfGenerator');
+      const { generateLabSlipPDF } = await import('../../../utils/pdfGenerator');
       await generateLabSlipPDF(fresh.data);
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.detail || 'Failed to generate the lab slip.');
