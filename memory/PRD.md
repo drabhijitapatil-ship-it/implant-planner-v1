@@ -1,5 +1,39 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 207 (Feb 2026) — Wire Alpha-Bio brochure seed into FastAPI startup hook
+
+### Why
+User repeatedly reported "only SPI is visible in Implant Database under Alpha Bio" despite iter-205/206 putting all 8 systems on the dev preview. Root cause traced to a deployment topology mismatch:
+
+- **iOS Expo Go (user)** → resolves `EXPO_PUBLIC_BACKEND_URL`. When that's empty (EAS-built standalone, or env not inlined), config.ts falls back to `app.json` → `extra.backendUrl = https://implant-app-r-1774251381.emergent.host` (the deployed production backend).
+- **Production backend** runs on its own MongoDB. The iter-178 `_seed_alpha_bio_brochure.py` script was a **manual run-once tool**, never wired into FastAPI startup. So when the production backend was deployed, it only got the curated catalog from `_seed_implant_catalog()` (which only has SPI hardcoded) — never the 7 brochure systems.
+- iter-205's `seed_if_thin()` correctly expanded SPI on prod (50 components) but cannot create the missing 7 records because `seed_if_thin` only updates existing records.
+
+### Fix
+**Backend (`/app/backend/server.py`)**
+- New step inside `seed_implant_catalog_on_start()` startup hook:
+  ```python
+  from _seed_alpha_bio_brochure import main as _ab_brochure_seed
+  await _ab_brochure_seed()
+  ```
+  runs AFTER `_seed_implant_catalog()` and BEFORE `seed_if_thin()` so the seven missing systems (NeO Conical Standard / Hex / Internal Hex, ICE, ATID, DFI, NICE) + the shared Surgical & Prosthetic Instrumentation doc are inserted as catalog records on every backend boot, then iter-205's component expansion layers the rich 31-50 entry component lists on top. Idempotent (uses upsert + skip-if-exists for library rows). Wrapped in try/except so an import error never breaks startup.
+
+### How prod gets fixed
+The user's iOS Expo Go is talking to the deployed production backend. When the user re-deploys via "Save to GitHub" → Emergent rebuild, the new startup hook runs and the 7 missing Alpha-Bio systems appear automatically. No data migration step required from the user.
+
+### Verification (dev preview)
+- `sudo supervisorctl restart backend` → startup hook output:
+  - `[implant_catalog] upserted=8 system docs`
+  - `[implant_library] inserted=129 skipped(existing)=N`
+  - iter-205 expansion: SPI / NeO IH / ICE / ATID / DFI = 50; NeO CS = 36; NeO CH / NICE = 31.
+- `GET /api/implant-catalog` returns 8 Alpha-Bio systems on dev. iter_145.json regression still 24/24 PASS.
+
+### Notes for next agent
+- For now both deployed prod and dev preview have separate MongoDBs. Once multi-tenancy ships in Phase A this should be revisited so seed scripts target tenant-scoped collections.
+- Frontend iter-206 chips strip is already deployed on dev (TypeScript clean) and will become visible on prod after the same redeploy.
+
+---
+
 ## Iteration 206 (Feb 2026) — Implant Database: surface every system in a multi-system brand
 
 ### Why
