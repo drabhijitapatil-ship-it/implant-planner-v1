@@ -13168,6 +13168,20 @@ async def seed_implant_catalog_on_start():
     """iter-142: ensure the implant_catalog collection has the curated data
     for Ankylos C/X + Osstem TS III, plus stub records for every other system."""
     await _seed_implant_catalog()
+    # iter-178 (re-wired in iter-207): seed the 7 Alpha-Bio brochure systems
+    # (NeO Conical Standard / Hex / Internal Hex, ICE, ATID, DFI, NICE) +
+    # the shared Surgical & Prosthetic Instrumentation doc into both
+    # implant_library (size matrices) and implant_catalog (rich docs).
+    # Previously only ran as a manual run-once script — meaning freshly
+    # deployed backends (e.g. the production `*.emergent.host` instance)
+    # never received these systems and only ever showed SPI in the Implant
+    # Database tile. The seed is idempotent (skips existing library rows
+    # and uses upsert for catalog docs), so it's safe to run on every boot.
+    try:
+        from _seed_alpha_bio_brochure import main as _ab_brochure_seed
+        await _ab_brochure_seed()
+    except Exception as exc:  # pragma: no cover — best-effort
+        logging.warning("Alpha-Bio brochure seed skipped: %s", exc)
     # iter-205: expand Alpha-Bio system component lists from the thin
     # 12-entry per-platform template to the brochure-grade 30-50 entry list,
     # so each AlphaBio system tile mirrors the depth of Neodent / Nobel /
