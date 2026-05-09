@@ -607,19 +607,13 @@ export const buildLabSlipHtml = (procedure: any): string => {
       </div>
       ` : ''}
 
-      ${(procedure.phase4_step1_student_notes || procedure.stage2_prosthetic_remark || procedure.lab_slip_note) ? `
+      ${procedure.lab_slip_note ? `
         <div class="ls-section lab-instructions">
           <h2 style="color: #E65100;">Special Instructions to Lab</h2>
-          ${procedure.lab_slip_note ? `
-            <div style="margin-bottom: 10px;">
-              <div style="font-weight: bold; color: #BF360C; margin-bottom: 4px;">Note to the Lab</div>
-              <div style="white-space: pre-wrap; line-height: 1.5;">${procedure.lab_slip_note}</div>
-            </div>` : ''}
-          ${(procedure.phase4_step1_student_notes || procedure.stage2_prosthetic_remark) ? `
-            <div>
-              ${procedure.lab_slip_note ? `<div style="font-weight: bold; color: #BF360C; margin-bottom: 4px;">Notes from Phase 4 Step 1</div>` : ''}
-              <div style="white-space: pre-wrap; line-height: 1.5;">${procedure.phase4_step1_student_notes || procedure.stage2_prosthetic_remark}</div>
-            </div>` : ''}
+          <div>
+            <div style="font-weight: bold; color: #BF360C; margin-bottom: 4px;">Note to the Lab</div>
+            <div style="white-space: pre-wrap; line-height: 1.5;">${procedure.lab_slip_note}</div>
+          </div>
         </div>
       ` : ''}
 
