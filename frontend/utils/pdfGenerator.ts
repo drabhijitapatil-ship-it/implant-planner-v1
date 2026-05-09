@@ -535,10 +535,10 @@ export const buildLabSlipHtml = (procedure: any): string => {
         const cuff = cuffRaw ? `${cuffRaw} mm` : '—';
         return `
           <tr>
-            <td>${idx + 1}</td>
-            <td>${tooth}</td>
-            <td>${ang}</td>
-            <td>${cuff}</td>
+            <td style="text-align: center;">${idx + 1}</td>
+            <td style="text-align: center;">${tooth}</td>
+            <td style="text-align: center;">${ang}</td>
+            <td style="text-align: center;">${cuff}</td>
           </tr>`;
       }).join('')
     : '';
@@ -620,7 +620,7 @@ export const buildLabSlipHtml = (procedure: any): string => {
         ${plans.length > 0 ? `
           <table class="implant-tbl">
             <tr>
-              <th>#</th><th>Implant Site</th><th>Brand</th><th>System</th><th>Ø</th><th>Length</th><th>Platform</th>
+              <th>#</th><th>Implant Site</th><th>Implant Company</th><th>System</th><th>Ø</th><th>Length</th><th>Platform</th>
             </tr>
             ${implantRows}
           </table>
@@ -630,12 +630,18 @@ export const buildLabSlipHtml = (procedure: any): string => {
       ${muaRows ? `
       <div class="ls-section" style="border-color: #B3E5FC; background-color: #E1F5FE;">
         <h2 style="color: #01579B;">Multi-Unit Abutments</h2>
-        <table class="implant-tbl">
+        <table class="implant-tbl mua-tbl" style="width: auto; max-width: 360px; border-collapse: collapse;">
+          <colgroup>
+            <col style="width: 36px;" />
+            <col style="width: 64px;" />
+            <col style="width: 92px;" />
+            <col style="width: 152px;" />
+          </colgroup>
           <tr>
-            <th style="background-color: #B3E5FC; color: #01579B;">#</th>
-            <th style="background-color: #B3E5FC; color: #01579B;">Site</th>
-            <th style="background-color: #B3E5FC; color: #01579B;">Angulation</th>
-            <th style="background-color: #B3E5FC; color: #01579B;">Cuff (Gingival) Height</th>
+            <th style="background-color: #B3E5FC; color: #01579B; text-align: center;">#</th>
+            <th style="background-color: #B3E5FC; color: #01579B; text-align: center;">Site</th>
+            <th style="background-color: #B3E5FC; color: #01579B; text-align: center;">Angulation</th>
+            <th style="background-color: #B3E5FC; color: #01579B; text-align: center;">Cuff Height</th>
           </tr>
           ${muaRows}
         </table>
