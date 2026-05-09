@@ -2661,10 +2661,44 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
-        {/* iter-194: Lab Prescription card was MOVED to the Phase 4 Step 1
-            form (`submit-stage2-prosthetic/[id].tsx`) so users can generate
-            the slip in the same flow they enter shade + impression material,
-            even before approval. */}
+        {/* iter-195: Lab Prescription — re-printable button at the end of
+            Phase 4 Step 1 details once the prosthetic plan is approved
+            (stage2_prosthetic_step1_approved) AND continues to be available
+            through Phase 4 Step 2 / case completion so the student or lab
+            can re-pull the slip on demand.
+            Note: the *form-level* Generate Lab Slip (iter-194) handles the
+            pre-approval draft path; this button is the post-approval reprint. */}
+        {user?.role !== 'nurse' && procedure.phase4_step1_data && (
+          ['stage2_prosthetic_step1_approved', 'pending_final_delivery', 'completed'].includes(procedure.status)
+        ) && (
+          <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#6A1B9A', backgroundColor: '#F3E5F5' }]} testID="lab-slip-card">
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <Ionicons name="document-text" size={20} color="#6A1B9A" />
+              <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#6A1B9A', fontSize: 16 }]}>
+                Lab Prescription
+              </Text>
+            </View>
+            <Text style={{ fontSize: 12, color: '#4A148C', marginBottom: 12, lineHeight: 18 }}>
+              Phase 4 Step 1 has been approved. Re-generate the lab slip any time to share with the laboratory — auto-built from the saved implant details, prosthesis plan, impression, and shade.
+            </Text>
+            <TouchableOpacity
+              style={{ backgroundColor: '#6A1B9A', paddingVertical: 12, paddingHorizontal: 18, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              testID="generate-lab-slip-btn"
+              onPress={async () => {
+                try {
+                  await generateLabSlipPDF(procedure);
+                } catch (e) {
+                  // generator already alerts on failure
+                }
+              }}
+            >
+              <Ionicons name="print-outline" size={18} color="#FFF" />
+              <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '700', letterSpacing: 0.4 }}>
+                Generate Lab Slip
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* ═══════════ PHASE 4 STEP 2: TRIAL & DELIVERY - Full Data Display ═══════════ */}
         {user?.role !== 'nurse' && (procedure.phase4_step2_data || procedure.phase4_step2_student_notes) && (
