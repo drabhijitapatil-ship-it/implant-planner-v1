@@ -519,6 +519,36 @@ export const buildLabSlipHtml = (procedure: any): string => {
     ? 'Intra-Oral Digital Scans'
     : `Conventional${trayLabel ? ` — ${trayLabel}` : ''}${matLabel ? ` (${matLabel})` : ''}`;
 
+  // iter-202: Multi-Unit Abutment block — sourced from Phase 2 surgical
+  // capture (`procedure.phase2_data.multi_unit_abutment_*`). The lab needs
+  // angulation + cuff height per implant to fabricate the substructure;
+  // historically these were left out of the slip and called in by phone.
+  const p2 = procedure.phase2_data || {};
+  const muaPlaced = p2.multi_unit_abutment_placed === 'yes';
+  const muaDetails: any[] = Array.isArray(p2.multi_unit_abutment_details) ? p2.multi_unit_abutment_details : [];
+  const muaRows = muaPlaced && muaDetails.length > 0
+    ? muaDetails.map((row: any, idx: number) => {
+        const tooth = row?.tooth ?? '—';
+        const angRaw = (row?.angulation ?? '').toString().trim();
+        const cuffRaw = (row?.cuff_height ?? '').toString().trim();
+        const ang = angRaw ? `${angRaw}°` : '—';
+        const cuff = cuffRaw ? `${cuffRaw} mm` : '—';
+        return `
+          <tr>
+            <td>${idx + 1}</td>
+            <td>${tooth}</td>
+            <td>${ang}</td>
+            <td>${cuff}</td>
+          </tr>`;
+      }).join('')
+    : '';
+  // Healing-abutment cuff heights (sometimes recorded even without an MUA)
+  // are included as a small note row when present and MUA wasn't placed.
+  const hch = p2.healing_abutment_cuff_height;
+  const healingNote = !muaPlaced && hch
+    ? (Array.isArray(hch) ? hch.filter(Boolean).join(' / ') : String(hch))
+    : '';
+
   // iter-194: shade selection rows
   const shadeValues: string[] = Array.isArray(p4.shade_values) ? p4.shade_values : [];
   const shadeLayout: string = p4.shade_layout || 'per_implant';
@@ -596,6 +626,29 @@ export const buildLabSlipHtml = (procedure: any): string => {
           </table>
         ` : `<div style="font-style: italic; color: #777;">No implant plan recorded.</div>`}
       </div>
+
+      ${muaRows ? `
+      <div class="ls-section" style="border-color: #B3E5FC; background-color: #E1F5FE;">
+        <h2 style="color: #01579B;">Multi-Unit Abutments</h2>
+        <table class="implant-tbl">
+          <tr>
+            <th style="background-color: #B3E5FC; color: #01579B;">#</th>
+            <th style="background-color: #B3E5FC; color: #01579B;">Site</th>
+            <th style="background-color: #B3E5FC; color: #01579B;">Angulation</th>
+            <th style="background-color: #B3E5FC; color: #01579B;">Cuff (Gingival) Height</th>
+          </tr>
+          ${muaRows}
+        </table>
+      </div>
+      ` : ''}
+      ${healingNote ? `
+      <div class="ls-section" style="border-color: #B3E5FC; background-color: #E1F5FE;">
+        <h2 style="color: #01579B;">Healing Abutment</h2>
+        <table class="grid">
+          <tr><td class="lbl">Cuff (Gingival) Height</td><td><strong>${healingNote}${/mm/i.test(healingNote) ? '' : ' mm'}</strong></td></tr>
+        </table>
+      </div>
+      ` : ''}
 
       <div class="ls-section">
         <h2>Final Prosthesis Plan</h2>
