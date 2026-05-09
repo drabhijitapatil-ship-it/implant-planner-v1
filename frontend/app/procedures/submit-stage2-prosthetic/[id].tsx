@@ -57,6 +57,8 @@ export default function Phase4Step1Screen() {
   const [shadeValues, setShadeValues] = useState<string[]>([]);
   const [shadeNotes, setShadeNotes] = useState('');
   const [labSlipLoading, setLabSlipLoading] = useState(false);
+  // iter-197: form-level Note to the Lab — same UX as the case-detail card.
+  const [labSlipNote, setLabSlipNote] = useState('');
   const [studentNotes, setStudentNotes] = useState('');
 
   // Per-implant prosthetic plan for multiple implants (non-bridge)
@@ -231,7 +233,8 @@ export default function Phase4Step1Screen() {
       // Re-fetch the procedure so the slip has the freshly-persisted shade
       // and impression details alongside the earlier-phase fields.
       const fresh = await api.get(`/procedures/${id}`);
-      await generateLabSlipPDF(fresh.data);
+      // iter-197: pass the form-level Note to the Lab as a transient property.
+      await generateLabSlipPDF({ ...fresh.data, lab_slip_note: labSlipNote.trim() || null });
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.detail || 'Failed to generate the lab slip.');
     } finally {
@@ -614,13 +617,58 @@ export default function Phase4Step1Screen() {
             </View>
           ) : (
           <View style={{ padding: 16, paddingBottom: 32, gap: 10 }}>
-            {/* iter-194: Generate Lab Slip — soft-saves the form data
-                (?save_only=true), then opens the slip populated with the
-                fresh values. Shifted from the post-approval case-detail card. */}
+            {/* iter-197: form-level Note to the Lab — same UX as case-detail.
+                Optional, capped at 150 words. Passed into the slip generator
+                as `lab_slip_note` and rendered in the PDF's Special
+                Instructions section. */}
+            {(() => {
+              const wordCount = labSlipNote.trim() ? labSlipNote.trim().split(/\s+/).length : 0;
+              const overLimit = wordCount > 150;
+              return (
+                <View testID="form-lab-slip-note-block">
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#4A148C', marginBottom: 4 }}>
+                    Note to the Lab <Text style={{ fontStyle: 'italic', fontWeight: '500', color: '#7B1FA2' }}>(optional, up to 150 words — included in the lab slip)</Text>
+                  </Text>
+                  <TextInput
+                    multiline
+                    numberOfLines={4}
+                    value={labSlipNote}
+                    onChangeText={(t) => {
+                      const tokens = t.split(/(\s+)/);
+                      let words = 0;
+                      let out = '';
+                      for (const tok of tokens) {
+                        if (/\S/.test(tok)) {
+                          if (words >= 150) break;
+                          words += 1;
+                        }
+                        out += tok;
+                      }
+                      setLabSlipNote(out);
+                    }}
+                    placeholder="e.g. Try-in next Wednesday; emphasise palatal cusp; deliver in a Glidewell case."
+                    placeholderTextColor="#B39DDB"
+                    style={{
+                      borderWidth: 1, borderColor: overLimit ? '#C62828' : '#CE93D8',
+                      borderRadius: 8, padding: 10, minHeight: 90,
+                      backgroundColor: '#FFFFFF', color: '#1A1A1A', fontSize: 13,
+                      textAlignVertical: 'top',
+                    }}
+                    testID="form-lab-slip-note-input"
+                  />
+                  <Text style={{ fontSize: 11, color: overLimit ? '#C62828' : '#7B1FA2', marginTop: 4, textAlign: 'right' }}>
+                    {wordCount}/150 words{overLimit ? ' — trim to enable Generate' : ''}
+                  </Text>
+                </View>
+              );
+            })()}
+
+            {/* iter-194: Generate Lab Slip — soft-saves (?save_only=true) and
+                opens the slip with the freshly-saved values + form Note. */}
             <TouchableOpacity
-              style={[s.labSlipBtn, labSlipLoading && { opacity: 0.6 }]}
+              style={[s.labSlipBtn, (labSlipLoading || labSlipNote.trim().split(/\s+/).filter(Boolean).length > 150) && { opacity: 0.6 }]}
               onPress={handleGenerateLabSlip}
-              disabled={labSlipLoading || loading}
+              disabled={labSlipLoading || loading || labSlipNote.trim().split(/\s+/).filter(Boolean).length > 150}
               testID="phase4-step1-generate-lab-slip"
             >
               {labSlipLoading ? <ActivityIndicator color="#6A1B9A" /> : (
