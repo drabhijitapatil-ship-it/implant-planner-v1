@@ -13168,6 +13168,16 @@ async def seed_implant_catalog_on_start():
     """iter-142: ensure the implant_catalog collection has the curated data
     for Ankylos C/X + Osstem TS III, plus stub records for every other system."""
     await _seed_implant_catalog()
+    # iter-205: expand Alpha-Bio system component lists from the thin
+    # 12-entry per-platform template to the brochure-grade 30-50 entry list,
+    # so each AlphaBio system tile mirrors the depth of Neodent / Nobel /
+    # MIS LANCE+. Idempotent — only updates when the live row has fewer
+    # components than the expansion target.
+    try:
+        from _seed_alpha_bio_components import seed_if_thin as _ab_seed_if_thin
+        await _ab_seed_if_thin()
+    except Exception as exc:  # pragma: no cover — best-effort
+        logging.warning("Alpha-Bio component expansion seed skipped: %s", exc)
 
 @app.on_event("startup")
 async def seed_on_startup():
