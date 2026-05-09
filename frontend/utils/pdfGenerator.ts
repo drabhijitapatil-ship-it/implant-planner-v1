@@ -2,6 +2,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { Alert, Platform } from 'react-native';
 import { format } from 'date-fns';
+import { getImplantSite } from './implantPlan';
 
 /** Build the full HTML for the procedure case report (shared by download + print flows). */
 export const buildProcedurePdfHtml = (procedure: any): string => {
@@ -487,17 +488,21 @@ export const buildLabSlipHtml = (procedure: any): string => {
   const plans: any[] = procedure.implant_plans || [];
 
   // Implant table rows
-  const implantRows = plans.map((p: any, i: number) => `
+  const implantRows = plans.map((p: any, i: number) => {
+    // iter-200: single source of truth for implant site lookup.
+    const site = getImplantSite(p);
+    return `
     <tr>
       <td>${i + 1}</td>
-      <td>${p.tooth_position ?? p.toothPosition ?? '—'}</td>
+      <td>${site}</td>
       <td>${p.implant_brand || p.brand || '—'}</td>
       <td>${p.implant_system || p.system || '—'}</td>
       <td>${p.diameter ? `${p.diameter} mm` : '—'}</td>
       <td>${p.length ? `${p.length} mm` : '—'}</td>
       <td>${p.platform || p.connection || '—'}</td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 
   const trayLabel = _labelize(p4.conventional_tray_type, { open_tray: 'Open Tray', closed_tray: 'Closed Tray' });
   const matLabel = _labelize(p4.impression_material, {
@@ -514,9 +519,10 @@ export const buildLabSlipHtml = (procedure: any): string => {
   const shadeLayout: string = p4.shade_layout || 'per_implant';
   const shadeRowsHtml = shadeValues.length === 0 ? '' : (() => {
     const rows = shadeValues.map((s: string, i: number) => {
+      const siteVal = getImplantSite(plans[i], '');
       const lbl = shadeLayout === 'full_arch'
         ? (i === 0 ? 'Anterior' : i === 1 ? 'Posterior' : `Slot ${i + 1}`)
-        : `Implant ${i + 1}${plans[i]?.tooth_position ? ` (#${plans[i].tooth_position})` : ''}`;
+        : `Implant ${i + 1}${siteVal ? ` (#${siteVal})` : ''}`;
       return `<tr><td class="lbl">${lbl} Shade</td><td><strong>${s || '—'}</strong></td></tr>`;
     }).join('');
     const note = p4.shade_notes ? `<tr><td class="lbl">Shade Note (to lab)</td><td style="white-space: pre-wrap;">${p4.shade_notes}</td></tr>` : '';
@@ -579,7 +585,7 @@ export const buildLabSlipHtml = (procedure: any): string => {
         ${plans.length > 0 ? `
           <table class="implant-tbl">
             <tr>
-              <th>#</th><th>Tooth</th><th>Brand</th><th>System</th><th>Ø</th><th>Length</th><th>Platform</th>
+              <th>#</th><th>Implant Site</th><th>Brand</th><th>System</th><th>Ø</th><th>Length</th><th>Platform</th>
             </tr>
             ${implantRows}
           </table>
