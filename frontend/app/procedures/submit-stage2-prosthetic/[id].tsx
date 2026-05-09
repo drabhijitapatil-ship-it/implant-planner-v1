@@ -8,6 +8,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import api from '../../../utils/api';
 import { goBackOrHome } from '../../../utils/safeNav';
 import { generateLabSlipPDF } from '../../../utils/pdfGenerator';
+import { getImplantSite } from '../../../utils/implantPlan';
 import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
 import { PhaseHeader } from '../../../components/PhaseHeader';
@@ -74,7 +75,7 @@ export default function Phase4Step1Screen() {
         api.get(`/procedures/${id}/implant-plan`),
       ]);
       setProcedure(procRes.data);
-      const positions = (planRes.data.implant_plans || []).map((p: any) => p.position || p.tooth_number || '');
+      const positions = (planRes.data.implant_plans || []).map((p: any) => getImplantSite(p, ''));
       setImplantPositions(positions);
       // Initialize per-implant plans if needed
       if (positions.length > 1) {
