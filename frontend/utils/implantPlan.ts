@@ -17,6 +17,15 @@ export type ImplantPlanLike = {
   tooth_position?: string | number | null;
   toothPosition?: string | number | null;
   tooth?: string | number | null;
+  // Spec fields (canonical → legacy)
+  implant_brand?: string | null;
+  brand?: string | null;
+  implant_system?: string | null;
+  system?: string | null;
+  diameter?: string | number | null;
+  length?: string | number | null;
+  platform?: string | null;
+  connection?: string | null;
 };
 
 export const getImplantSite = (
@@ -32,4 +41,34 @@ export const getImplantSite = (
     plan.tooth;
   if (v === undefined || v === null || v === '') return fallback;
   return String(v);
+};
+
+// iter-201: same canonical→legacy pattern for the rest of the implant
+// columns (brand / system / diameter / length / platform). Returns
+// already-formatted strings (e.g. `"4.3 mm"`) so renderers can drop them
+// directly into a table cell. `fallback` is only used per-field when the
+// value is missing, never for the whole tuple.
+const _str = (v: unknown, fallback: string): string =>
+  v === undefined || v === null || v === '' ? fallback : String(v);
+
+const _mm = (v: unknown, fallback: string): string => {
+  if (v === undefined || v === null || v === '') return fallback;
+  const s = String(v).trim();
+  return s.endsWith('mm') ? s : `${s} mm`;
+};
+
+export const getImplantSpec = (
+  plan: ImplantPlanLike | null | undefined,
+  fallback: string = '—',
+) => {
+  if (!plan) {
+    return { brand: fallback, system: fallback, diameter: fallback, length: fallback, platform: fallback };
+  }
+  return {
+    brand: _str(plan.implant_brand ?? plan.brand, fallback),
+    system: _str(plan.implant_system ?? plan.system, fallback),
+    diameter: _mm(plan.diameter, fallback),
+    length: _mm(plan.length, fallback),
+    platform: _str(plan.platform ?? plan.connection, fallback),
+  };
 };

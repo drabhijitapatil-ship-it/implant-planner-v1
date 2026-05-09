@@ -2,7 +2,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { Alert, Platform } from 'react-native';
 import { format } from 'date-fns';
-import { getImplantSite } from './implantPlan';
+import { getImplantSite, getImplantSpec } from './implantPlan';
 
 /** Build the full HTML for the procedure case report (shared by download + print flows). */
 export const buildProcedurePdfHtml = (procedure: any): string => {
@@ -147,14 +147,18 @@ export const buildProcedurePdfHtml = (procedure: any): string => {
                 <th style="border:1px solid #ddd;padding:6px;text-align:left;font-size:11px;">Diameter</th>
                 <th style="border:1px solid #ddd;padding:6px;text-align:left;font-size:11px;">Length</th>
               </tr>
-              ${procedure.implant_plans.map((imp: any) => `
+              ${procedure.implant_plans.map((imp: any) => {
+                const site = getImplantSite(imp);
+                const spec = getImplantSpec(imp);
+                return `
               <tr>
-                <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${imp.position}</td>
-                <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${imp.brand}</td>
-                <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${imp.system}</td>
-                <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${imp.diameter}mm</td>
-                <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${imp.length}mm</td>
-              </tr>`).join('')}
+                <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${site}</td>
+                <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${spec.brand}</td>
+                <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${spec.system}</td>
+                <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${spec.diameter}</td>
+                <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${spec.length}</td>
+              </tr>`;
+              }).join('')}
             </table>
           </div>` : ''}
 
@@ -489,17 +493,18 @@ export const buildLabSlipHtml = (procedure: any): string => {
 
   // Implant table rows
   const implantRows = plans.map((p: any, i: number) => {
-    // iter-200: single source of truth for implant site lookup.
+    // iter-200/201: helpers normalise the canonical→legacy field-name drift.
     const site = getImplantSite(p);
+    const spec = getImplantSpec(p);
     return `
     <tr>
       <td>${i + 1}</td>
       <td>${site}</td>
-      <td>${p.implant_brand || p.brand || '—'}</td>
-      <td>${p.implant_system || p.system || '—'}</td>
-      <td>${p.diameter ? `${p.diameter} mm` : '—'}</td>
-      <td>${p.length ? `${p.length} mm` : '—'}</td>
-      <td>${p.platform || p.connection || '—'}</td>
+      <td>${spec.brand}</td>
+      <td>${spec.system}</td>
+      <td>${spec.diameter}</td>
+      <td>${spec.length}</td>
+      <td>${spec.platform}</td>
     </tr>
   `;
   }).join('');
