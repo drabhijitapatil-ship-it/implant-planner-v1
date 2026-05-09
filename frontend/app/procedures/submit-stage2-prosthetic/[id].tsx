@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import api from '../../../utils/api';
 import { goBackOrHome } from '../../../utils/safeNav';
+import { generateLabSlipPDF } from '../../../utils/pdfGenerator';
 import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
 import { PhaseHeader } from '../../../components/PhaseHeader';
@@ -230,7 +231,6 @@ export default function Phase4Step1Screen() {
       // Re-fetch the procedure so the slip has the freshly-persisted shade
       // and impression details alongside the earlier-phase fields.
       const fresh = await api.get(`/procedures/${id}`);
-      const { generateLabSlipPDF } = await import('../../../utils/pdfGenerator');
       await generateLabSlipPDF(fresh.data);
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.detail || 'Failed to generate the lab slip.');

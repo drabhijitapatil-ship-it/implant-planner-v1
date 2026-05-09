@@ -34,7 +34,7 @@ import {
   getProstheticOptions,
 } from '../../constants/checklist';
 import { format } from 'date-fns';
-import { generateProcedurePDF } from '../../utils/pdfGenerator';
+import { generateProcedurePDF, printProcedurePDF } from '../../utils/pdfGenerator';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';
 import CaseCompletionBadge from '../../components/CaseCompletionBadge';
 import ExportPrintMenu from '../../components/ExportPrintMenu';
@@ -3236,7 +3236,6 @@ export default function ProcedureDetailScreen() {
                 onPrint={async () => {
                   setPdfLoading(true);
                   try {
-                    const { printProcedurePDF } = await import('../../utils/pdfGenerator');
                     await printProcedurePDF(procedure);
                   } finally { setPdfLoading(false); }
                 }}
