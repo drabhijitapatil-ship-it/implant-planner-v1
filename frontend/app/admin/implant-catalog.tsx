@@ -93,7 +93,11 @@ export default function ImplantCatalogAdmin() {
     try {
       const res = await api.get('/implant-catalog');
       const all: CatalogRecord[] = res.data?.systems || [];
-      setSystems(all.filter(s => !s.is_stub));  // dropdown excludes stubs per user choice
+      // iter-208: also exclude shared instruments docs (e.g. Alpha Bio's
+      // "Surgical & Prosthetic Instrumentation") from the system list — they
+      // are reference kits shared by every system in a brand, not implant
+      // systems themselves, and showing them as a 9th tile / chip confused users.
+      setSystems(all.filter(s => !s.is_stub && !s.is_shared_instruments_doc));
     } catch (e: any) {
       Alert.alert('Failed to load catalog', e?.response?.data?.detail || String(e?.message || e));
     } finally {
