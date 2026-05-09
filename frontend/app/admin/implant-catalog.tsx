@@ -174,21 +174,26 @@ export default function ImplantCatalogAdmin() {
     return f?.variants || [];
   }, [familiesForBrand, selectedFamily]);
 
-  // When brand changes, auto-select the first family. If the family has only
-  // one variant, auto-pick that variant. Otherwise wait for user selection.
+  // When brand changes: clear family/variant. Auto-pick ONLY if the brand has
+  // exactly one system — otherwise let the user pick from the visible system
+  // chips (iter-206) so multi-system brands like Alpha Bio (8 systems), MIS,
+  // Nobel etc. don't silently default to the first alphabetical entry and
+  // make the rest invisible.
   useEffect(() => {
     if (skipAutoSelect.current > 0) { skipAutoSelect.current -= 1; return; }
     if (!selectedBrand) {
       setSelectedFamily(''); setSelectedKey(''); return;
     }
-    const first = familiesForBrand[0];
-    if (!first) {
-      setSelectedFamily(''); setSelectedKey(''); return;
-    }
-    setSelectedFamily(first.family);
-    if (first.variants.length === 1) {
-      setSelectedKey(first.variants[0].key);
+    if (familiesForBrand.length === 1) {
+      const only = familiesForBrand[0];
+      setSelectedFamily(only.family);
+      if (only.variants.length === 1) {
+        setSelectedKey(only.variants[0].key);
+      } else {
+        setSelectedKey('');
+      }
     } else {
+      setSelectedFamily('');
       setSelectedKey('');
     }
     setAiAnswer(null);
@@ -409,10 +414,48 @@ export default function ImplantCatalogAdmin() {
               data-testid="catalog-family-dropdown"
             >
               <Text style={[s.dropdownValue, !selectedFamily && s.dropdownPlaceholder]}>
-                {selectedFamily || 'Select an implant system'}
+                {selectedFamily || `Select an implant system (${familiesForBrand.length} available)`}
               </Text>
               <Ionicons name="chevron-down" size={18} color="#0277BD" />
             </TouchableOpacity>
+
+            {/* iter-206: inline system chips so a multi-system brand (Alpha Bio
+                = 8 systems, Nobel = 6, MIS = 4 …) surfaces every option without
+                requiring the user to discover the dropdown. Tapping a chip
+                selects that system and loads its detail card immediately. */}
+            {familiesForBrand.length > 1 && (
+              <View
+                style={s.systemChipsRow}
+                testID="catalog-system-chips"
+                data-testid="catalog-system-chips"
+              >
+                {familiesForBrand.map(f => {
+                  const variant = f.variants[0];
+                  const active = selectedFamily === f.family;
+                  return (
+                    <TouchableOpacity
+                      key={f.family}
+                      style={[s.systemChip, active && s.systemChipActive]}
+                      onPress={() => {
+                        setSelectedFamily(f.family);
+                        if (f.variants.length === 1 && variant) {
+                          setSelectedKey(variant.key);
+                        } else {
+                          setSelectedKey('');
+                        }
+                        setAiAnswer(null);
+                      }}
+                      testID={`catalog-system-chip-${f.family}`}
+                      data-testid={`catalog-system-chip-${f.family}`}
+                    >
+                      <Text style={[s.systemChipText, active && s.systemChipTextActive]} numberOfLines={1}>
+                        {f.family}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
           </View>
         )}
 
@@ -747,6 +790,36 @@ const s = StyleSheet.create({
   },
   brandCountChipText: { fontSize: 11, fontWeight: '700', color: '#0277BD', letterSpacing: 0.3 },
   dropdownPlaceholder: { color: '#90A4AE', fontWeight: '500' },
+  // iter-206: inline system chips strip below the family dropdown so every
+  // system in a multi-system brand is visible at a glance.
+  systemChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  systemChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: '#B3E5FC',
+    backgroundColor: '#FFF',
+    maxWidth: 220,
+  },
+  systemChipActive: {
+    backgroundColor: '#0277BD',
+    borderColor: '#0277BD',
+  },
+  systemChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#01579B',
+  },
+  systemChipTextActive: {
+    color: '#FFF',
+    fontWeight: '700',
+  },
   // Detail card
   detailCard: { backgroundColor: '#FFF', borderRadius: 14, borderWidth: 1, borderColor: '#ECEFF1', padding: 16, marginTop: 8, marginBottom: 12 },
   detailBrand: { fontSize: 12, fontWeight: '700', color: '#607D8B', textTransform: 'uppercase', letterSpacing: 0.5 },
