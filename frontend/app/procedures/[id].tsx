@@ -34,7 +34,7 @@ import {
   getProstheticOptions,
 } from '../../constants/checklist';
 import { format } from 'date-fns';
-import { generateProcedurePDF, printProcedurePDF } from '../../utils/pdfGenerator';
+import { generateProcedurePDF, printProcedurePDF, generateLabSlipPDF } from '../../utils/pdfGenerator';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';
 import CaseCompletionBadge from '../../components/CaseCompletionBadge';
 import ExportPrintMenu from '../../components/ExportPrintMenu';
@@ -210,6 +210,10 @@ export default function ProcedureDetailScreen() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [rejectionType, setRejectionType] = useState<'permanent' | 'reconsider' | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  // iter-196: free-text note entered on case-detail right before the
+  // Generate-Lab-Slip click. Optional. Limited to 150 words. Passed
+  // into the slip generator as `lab_slip_note` so the PDF can render it.
+  const [labSlipNote, setLabSlipNote] = useState('');
   const [approvalComment, setApprovalComment] = useState('');
   const [authToken, setAuthToken] = useState('');
   const [smartPlannerReport, setSmartPlannerReport] = useState<any>(null);
@@ -2681,12 +2685,63 @@ export default function ProcedureDetailScreen() {
             <Text style={{ fontSize: 12, color: '#4A148C', marginBottom: 12, lineHeight: 18 }}>
               Phase 4 Step 1 has been approved. Re-generate the lab slip any time to share with the laboratory — auto-built from the saved implant details, prosthesis plan, impression, and shade.
             </Text>
+
+            {/* iter-196: optional Note to the Lab — up to 150 words. */}
+            {(() => {
+              const wordCount = labSlipNote.trim() ? labSlipNote.trim().split(/\s+/).length : 0;
+              const overLimit = wordCount > 150;
+              return (
+                <View style={{ marginBottom: 12 }} testID="lab-slip-note-block">
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#4A148C', marginBottom: 4 }}>
+                    Note to the Lab <Text style={{ fontStyle: 'italic', fontWeight: '500', color: '#7B1FA2' }}>(optional, up to 150 words)</Text>
+                  </Text>
+                  <TextInput
+                    multiline
+                    numberOfLines={4}
+                    value={labSlipNote}
+                    onChangeText={(t) => {
+                      // allow free typing, but clamp at 150 words by trimming
+                      // any words past the limit on input; preserves trailing
+                      // whitespace so the cursor doesn't jump.
+                      const tokens = t.split(/(\s+)/);
+                      let words = 0;
+                      let out = '';
+                      for (const tok of tokens) {
+                        if (/\S/.test(tok)) {
+                          if (words >= 150) break;
+                          words += 1;
+                        }
+                        out += tok;
+                      }
+                      setLabSlipNote(out);
+                    }}
+                    placeholder="e.g. Try-in next Wednesday; emphasise palatal cusp for occlusal balance; deliver in a Glidewell case."
+                    placeholderTextColor="#B39DDB"
+                    style={{
+                      borderWidth: 1, borderColor: overLimit ? '#C62828' : '#CE93D8',
+                      borderRadius: 8, padding: 10, minHeight: 90,
+                      backgroundColor: '#FFFFFF', color: '#1A1A1A', fontSize: 13,
+                      textAlignVertical: 'top',
+                    }}
+                    testID="lab-slip-note-input"
+                  />
+                  <Text style={{ fontSize: 11, color: overLimit ? '#C62828' : '#7B1FA2', marginTop: 4, textAlign: 'right' }}>
+                    {wordCount}/150 words{overLimit ? ' — trim to enable Generate' : ''}
+                  </Text>
+                </View>
+              );
+            })()}
+
             <TouchableOpacity
-              style={{ backgroundColor: '#6A1B9A', paddingVertical: 12, paddingHorizontal: 18, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              style={{ backgroundColor: '#6A1B9A', paddingVertical: 12, paddingHorizontal: 18, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (labSlipNote.trim().split(/\s+/).filter(Boolean).length > 150) ? 0.5 : 1 }}
               testID="generate-lab-slip-btn"
+              disabled={labSlipNote.trim().split(/\s+/).filter(Boolean).length > 150}
               onPress={async () => {
                 try {
-                  await generateLabSlipPDF(procedure);
+                  // iter-196: inject the user-typed note as a transient property
+                  // on a shallow copy of the procedure so the PDF builder can
+                  // render it without a backend round-trip.
+                  await generateLabSlipPDF({ ...procedure, lab_slip_note: labSlipNote.trim() || null });
                 } catch (e) {
                   // generator already alerts on failure
                 }
