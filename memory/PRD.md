@@ -1,5 +1,42 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 205 (Feb 2026) — Alpha-Bio Implant Database: brochure-grade prosthetic component depth
+
+### Why
+Until now, every Alpha-Bio system in the Implant Database tile UI carried only the thin 12-entry per-platform template (cover_screw / healing_abutment / final_abutment / multi_unit_abutment / ti_base / scanbody / impression_coping / analog / casting_abutment / temporary_abutment / pre_milled_blank / overdenture). Compared with peer brands (Neodent Drive GM = 60 components, MIS LANCE+ = 55, Nobel Active = 47), the Alpha-Bio tiles felt empty — and the user reported only the SPI tile felt usable. Other 7 systems (NeO ×3, ICE, ATID, DFI, NICE) were silently present but offered the same thin list.
+
+### Changes
+**Backend**
+- New module `/app/backend/alpha_bio_components_expanded.py` — brochure-grade per-subtype component lists for the three Alpha-Bio prosthetic platforms (CS, CHC, IH). Each subtype variant from the Alpha-Bio brochure (every Ø, every cuff height range, every angulation, engaged vs non-engaged, ALPHALOC vs ball, Sirona vs dual-use scan body, etc.) becomes its own component entry with subtype, platform, material list, retention list, gingival_heights_mm, angulations_deg, diameter_mm/length_mm where applicable, torque_ncm/torque_ncm_max, catalog_code and clinical indication.
+- New seed `/app/backend/_seed_alpha_bio_components.py` exposes `_seed()` (full overwrite) and `seed_if_thin()` (idempotent gate that only writes when the live row has fewer components than the expansion target).
+- `server.py`'s existing `seed_implant_catalog_on_start()` startup hook now calls `seed_if_thin()` AFTER the base catalog seed so the rich component lists layer on top of the iter-178/179 brand normalization. Try/except wrap so a brochure-data import error never breaks startup.
+
+### Verified component counts (iter-205)
+| System | Platform | Components | Component types |
+|---|---|---|---|
+| SPI | IH | 50 | 14 |
+| NeO Conical Standard Connection | CS | 36 | 14 |
+| NeO Conical Hex Connection | CHC | 31 | 13 |
+| NeO Internal Hex Connection | IH | 50 | 14 |
+| ICE | IH | 50 | 14 |
+| ATID | IH | 50 | 14 |
+| DFI | IH | 50 | 14 |
+| NICE | CHC | 31 | 13 |
+
+Total 338 component rows across 8 Alpha-Bio systems (was 96 thin rows pre-iter-205).
+
+### Verification
+- Backend pytest `/app/backend/tests/test_alpha_bio_catalog.py` — **24/24 PASS** (100%).
+- `sudo supervisorctl restart backend` cycle confirmed `seed_if_thin()` is correctly idempotent — counts stay at 31-50 across restarts; no spurious writes.
+- API verified: `GET /api/implant-catalog` returns 8 Alpha-Bio systems with rich `components`, `is_stub: false`. `GET /api/implant-catalog/by-key?key=Alpha%20Bio%7CICE` returns the rich record. `GET /api/implant-catalog/compare?component_type=ti_base` now includes Alpha-Bio ICE / ATID / DFI / NeO IH / SPI alongside Neodent / Nobel / MIS / etc.
+- Other brands' catalog rows are untouched (Neodent Drive GM still has 60 components).
+
+### Notes for next agent
+- Iter-178 catalog seed (`_seed_alpha_bio_brochure.py`) and iter-179 idempotent library upserts remain the source of size matrices + drilling protocols. iter-205 only layers the rich `components` field on top of the catalog records. The two seeds compose cleanly via the startup hook ordering.
+- "MULTI NEO" is not a separate catalog tile — its component matrix is fully covered by the Multi-Unit straight + 17° + 30° entries inside each NeO/ICE/ATID/DFI/NICE/SPI system, which is how the brochure itself lists them.
+
+---
+
 ## Iteration 194 (Feb 2026) — Phase 4 Step 1: Shade Selection + form-level Lab-Slip + soft-save
 
 ### Why
