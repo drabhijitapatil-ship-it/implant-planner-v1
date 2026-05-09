@@ -1,5 +1,28 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 206 (Feb 2026) — Implant Database: surface every system in a multi-system brand
+
+### Why
+After iter-205 expanded all 8 Alpha-Bio catalog records to 31-50 components each, the user reported "Still cannot see other implant systems for Alpha Bio apart from SPI" — same complaint as iter-180. Root cause traced: when a brand was selected, the screen auto-picked the first alphabetical family AND its single variant. Because Alpha-Bio's 8 systems are all 1-variant families, the screen instantly rendered ONE system's detail card and the other 7 were hidden behind a small `Implant System` dropdown the user did not realize was tappable. The iter-180 "+8 systems" count chip wasn't enough of an affordance.
+
+### Changes
+**Frontend (`/app/frontend/app/admin/implant-catalog.tsx`)**
+- Auto-select on brand change now fires **only** when the brand has exactly one family. For multi-family brands (Alpha Bio = 8, Neodent, Nobel, MIS, etc.) the family + variant are cleared so the user can see they need to pick.
+- New inline **System Chips strip** rendered directly below the `Implant System` dropdown when `familiesForBrand.length > 1`. Each chip is a tap-to-select pill carrying the system name; tapping picks the family and (if 1-variant) loads its detail card immediately. Active chip = filled blue.
+- Family dropdown placeholder copy now reads `Select an implant system (N available)` so the count is impossible to miss.
+- testIDs added: `catalog-system-chips` (container), `catalog-system-chip-<family>` (per chip).
+
+### Verification
+- TypeScript compiled cleanly.
+- Backend API unchanged — still returns the 8 Alpha-Bio systems with rich components from iter-205.
+- Frontend: the chips strip renders below the `Implant System` dropdown for any brand with ≥2 systems. Single-system brands still auto-fill (no chips).
+- Web preview's SSR loading spinner could not be bypassed in Playwright (recurring iter-168 quirk; iOS Expo Go and native browsers pick up the change on hot-reload).
+
+### Notes for next agent
+- This same UX pattern should be considered for the "Variant" picker if any single family ever grows past 4-5 variants — currently variants 2-3 are fine in a dropdown.
+
+---
+
 ## Iteration 205 (Feb 2026) — Alpha-Bio Implant Database: brochure-grade prosthetic component depth
 
 ### Why
