@@ -234,6 +234,81 @@ class Checklist(BaseModel):
     pre_surgical: Optional[ChecklistSection] = None
     surgical: Optional[ChecklistSection] = None
 
+# ── iter-211: New-Case-with-Existing-Implants flow ────────────────────────
+# Captures patients who walk in with implants already placed and need a fresh
+# prosthetic plan (Path A — replace prosthesis only). Unlike fresh cases, the
+# surgical phases (1-3) are skipped and the case lands directly in the Phase 4
+# Step 1 inbox. Failure-analysis lets the prosthodontist record WHY the
+# previous restoration failed so the new design avoids the same trap.
+
+class ExistingImplant(BaseModel):
+    """One row of the existing-implant inventory. Tooth # is mandatory; the
+    rest are optional so cases where the patient genuinely doesn't know the
+    system (transferred, foreign treatment, lost paperwork) can still be
+    booked. The Lab Slip prints "system unknown — verify clinically" when
+    `system_unknown` is true."""
+    tooth: str = Field(..., max_length=8)
+    system_unknown: bool = False
+    brand: Optional[str] = Field(None, max_length=100)
+    system: Optional[str] = Field(None, max_length=100)
+    connection_type: Optional[str] = Field(None, max_length=80)
+    platform: Optional[str] = Field(None, max_length=40)
+    diameter_mm: Optional[float] = None
+    length_mm: Optional[float] = None
+    gingival_height_mm: Optional[float] = None
+    surgery_date: Optional[str] = Field(None, max_length=30)
+    original_surgeon: Optional[str] = Field(None, max_length=120)
+    abutment_present: Optional[bool] = None
+    notes: Optional[str] = Field(None, max_length=500)
+
+
+class ProsthesisHistory(BaseModel):
+    """If the patient ever had a prosthesis, what was it and why did it
+    fail (if it did). All chip arrays use a controlled vocabulary so the data
+    stays queryable for analytics + AI re-design recommendations."""
+    had_prosthesis: bool = False
+    prosthesis_type: Optional[str] = Field(None, max_length=80)  # Single Crown / Bridge / Bar Overdenture / Locator Overdenture / Hybrid / All-on-X
+    material: Optional[str] = Field(None, max_length=80)
+    placement_date: Optional[str] = Field(None, max_length=30)
+    lab_name: Optional[str] = Field(None, max_length=120)
+    failed: bool = False
+    failure_categories: List[str] = Field(default_factory=list)  # Mechanical / Biological / Esthetic / Functional
+    failure_modes: List[str] = Field(default_factory=list)        # porcelain_chipping, screw_loosening, ...
+    suspected_root_causes: List[str] = Field(default_factory=list)  # occlusal_overload, parafunction, ...
+    failure_narrative: Optional[str] = Field(None, max_length=500)
+    attachments: List[str] = Field(default_factory=list)  # object-store URLs (re-using Phase 1/2 photo upload)
+
+
+class ProcedureCreateExistingImplants(BaseModel):
+    """Lean creation payload for the Path-A flow.
+
+    No surgical scheduling, no implant-procedure-type, no loading-type — the
+    surgery happened elsewhere. Only the prosthodontic appointment slot
+    matters. Phases 1-3 are stamped as skipped and the case status starts at
+    `pending_stage2_prosthetic` so it lands directly in the Phase 4 Step 1
+    inbox of the assigned implant in-charge."""
+    student_name: Optional[str] = Field("", max_length=100)
+    patient_name: str = Field(..., max_length=100)
+    age: Optional[str] = Field("", max_length=5)
+    sex: Optional[str] = Field("", max_length=10)
+    profession: Optional[str] = Field("", max_length=100)
+    mobile_number: Optional[str] = Field("", max_length=20)
+    patient_email: Optional[str] = Field("", max_length=255)
+    registration_number: str = Field(..., max_length=50)
+    chief_complaint: Optional[str] = Field("", max_length=1000)
+    supervisor_id: str = Field(..., max_length=50)
+    supervisor_name: str = Field(..., max_length=100)
+    implant_incharge_id: str = Field(..., max_length=50)
+    implant_incharge_name: str = Field(..., max_length=100)
+    receipt_number: str = Field(..., max_length=50)
+    amount_paid: float
+    procedure_date: str = Field(..., max_length=30)  # next prosthodontic appointment
+    procedure_time: str = Field(..., max_length=20)
+    existing_implants: List[ExistingImplant] = Field(..., min_length=1)
+    prosthesis_history: ProsthesisHistory = Field(default_factory=ProsthesisHistory)
+    remark: Optional[str] = Field("", max_length=1000)
+
+
 class ProcedureCreate(BaseModel):
     student_name: Optional[str] = Field("", max_length=100)
     patient_name: str = Field(..., max_length=100)
@@ -1515,6 +1590,142 @@ def _apply_missing_teeth_derive(payload: Dict[str, Any]) -> None:
         clean = [t for t in mt if t in ALL_FDI_TEETH]
         payload["missing_teeth"] = clean
         payload["teeth_present"] = [t for t in ALL_FDI_TEETH if t not in clean]
+
+
+@api_router.post("/procedures/with-existing-implants")
+async def create_procedure_with_existing_implants(
+    payload: ProcedureCreateExistingImplants,
+    current_user: dict = Depends(get_current_user),
+):
+    """iter-211 Path A — patient already has implants placed (elsewhere /
+    earlier), needs a fresh prosthetic plan. Skips Phases 1-3 entirely and
+    lands the case in the Phase 4 Step 1 inbox of the assigned implant
+    in-charge."""
+    allowed_roles = {"student", "supervisor", "implant_incharge", "administrator"}
+    if current_user["role"] not in allowed_roles:
+        raise HTTPException(status_code=403, detail="You do not have permission to create procedures")
+
+    is_student = current_user["role"] == "student"
+
+    # Lightweight scheduling validation (Sunday block + Saturday slot).
+    try:
+        procedure_datetime = datetime.strptime(
+            f"{payload.procedure_date} {payload.procedure_time}", "%Y-%m-%d %H:%M"
+        )
+        if procedure_datetime.weekday() == 6:
+            raise HTTPException(status_code=400, detail="No scheduling is available on Sundays.")
+        if procedure_datetime.weekday() == 5 and payload.procedure_time != "10:00":
+            raise HTTPException(status_code=400, detail="Only 10:00 AM slot is available on Saturdays.")
+        if is_student:
+            hours_until = (procedure_datetime - datetime.now()).total_seconds() / 3600
+            if hours_until < 24:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Students cannot schedule procedures less than 24 hours in advance.",
+                )
+    except ValueError:
+        pass
+
+    # Same duplicate-slot guard as fresh-case flow.
+    existing_slot = await db.procedures.find_one({
+        "procedure_date": payload.procedure_date,
+        "procedure_time": payload.procedure_time,
+    })
+    if existing_slot:
+        booked_by = existing_slot.get("created_by_name") or existing_slot.get("student_name") or "Unknown"
+        patient = existing_slot.get("patient_name", "Unknown")
+        slot_label = "10:00 AM" if payload.procedure_time == "10:00" else "2:00 PM"
+        raise HTTPException(
+            status_code=409,
+            detail=f"The {slot_label} slot on {payload.procedure_date} is already booked for patient {patient} (scheduled by {booked_by}). Please choose a different time or date.",
+        )
+
+    procedure_dict = payload.model_dump()
+    existing_impl_count = len(payload.existing_implants)
+
+    # Mark phases 1-3 as skipped so the readback / progress UI knows not to
+    # render them and the Phase 4 Step 1 reads from existing_implants instead
+    # of implant_plans.
+    procedure_dict.update({
+        "case_origin": "existing_implants",
+        "phase1_skipped": True,
+        "phase2_skipped": True,
+        "phase3_skipped": True,
+        # Keep the conventional fields populated so legacy readers (Lab Slip
+        # PDF, dashboard widgets) that key off implant_procedure_type don't
+        # break. We pick the closest matching label given the count.
+        "implant_procedure_type": (
+            "Single Conventional Implant" if existing_impl_count == 1
+            else "Multiple Conventional Implants"
+        ),
+        "number_of_implants": existing_impl_count,
+        "loading_type": [],
+        "checklist": None,
+        "implant_plans": [],   # the Lab Slip will fall back to existing_implants
+        "teeth_present": [],
+        "missing_teeth": [r.tooth for r in payload.existing_implants],
+        # iter-211 status: bypass Phase 1-3 entirely and land in the Phase 4
+        # Step 1 inbox. Approval flags for skipped phases are stamped True so
+        # the frontend doesn't render "Pending phase 1" badges.
+        "status": "pending_stage2_prosthetic",
+        "current_phase": 4,
+        "supervisor_phase1_approved": True,
+        "implant_incharge_phase1_approved": True,
+        "supervisor_phase2_approved": True,
+        "implant_incharge_phase2_approved": True,
+        "phase3_approved": True,
+        "phase1_skipped_reason": "Existing implants — Path A (replace prosthesis only)",
+        "created_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow(),
+    })
+
+    # Role-based ownership block (mirrors the fresh-case endpoint).
+    if is_student:
+        procedure_dict.update({
+            "student_id": current_user["_id"],
+            "student_name": payload.student_name or current_user["name"],
+            "created_by_role": "student",
+        })
+    else:
+        procedure_dict.update({
+            "student_id": None,
+            "student_name": "",
+            "created_by_role": current_user["role"],
+        })
+    procedure_dict["created_by_id"] = current_user["_id"]
+    procedure_dict["created_by_name"] = current_user["name"]
+
+    # case_id is computed on read (see /badge endpoint and the
+    # `IMP<last 4 of _id>` fallback) — no eager generation needed here.
+
+    result = await db.procedures.insert_one(procedure_dict)
+    new_id = str(result.inserted_id)
+
+    # Best-effort access-log entry for HIPAA traceability (matches existing
+    # patterns elsewhere in this file). Keep this lightweight — never blocks
+    # the response if logging fails.
+    try:
+        await db.access_logs.insert_one({
+            "action": "create_procedure_existing_implants",
+            "outcome": "success",
+            "user_id": current_user["_id"],
+            "user_name": current_user["name"],
+            "user_role": current_user["role"],
+            "resource_type": "procedure",
+            "resource_id": new_id,
+            "ts": datetime.now(timezone.utc),
+            "metadata": {
+                "existing_implants_count": existing_impl_count,
+                "had_prosthesis": payload.prosthesis_history.had_prosthesis,
+                "prosthesis_failed": payload.prosthesis_history.failed,
+            },
+        })
+    except Exception:
+        pass
+
+    # case_id is derived on read; mirror the same `IMP<last 4>` fallback here.
+    case_id_resp = procedure_dict.get("case_id") or f"IMP{new_id[-4:].upper()}"
+    return {"id": new_id, "case_id": case_id_resp, "status": "pending_stage2_prosthetic"}
 
 
 @api_router.post("/procedures")
