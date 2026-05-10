@@ -1,5 +1,45 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 213 (Feb 2026) — Unified New Case form: section reorder + "Existing Implant" branch
+
+### Why
+User feedback after iter-211/212: discoverability of the "With Existing Implants" Alert dialog was poor (users tapping "New Case" expected to land in the form, not a popup). Also, the dedicated standalone route felt orphaned from the main form, fragmenting the workflow. The clinically correct UX is a single New Case form where "Existing Implant" is just one option in the procedure-type dropdown — when picked, the rest of the form morphs into the existing-implant wizard.
+
+### Changes
+**Frontend**
+- `/app/frontend/app/(tabs)/_layout.tsx` — reverted iter-212 tab-press Alert; the bottom-tab "New Case" routes directly to `/new-procedure` again.
+- `/app/frontend/app/(tabs)/dashboard.tsx` — reverted iter-211 quick-action Alert; the "New Case" button routes directly to `/new-procedure`.
+- `/app/frontend/constants/checklist.ts` — `PROCEDURE_TYPES` now includes a 10th option "Existing Implant" after "All on X".
+- `/app/frontend/app/(tabs)/new-procedure.tsx` — Procedure Information section moved BEFORE Payment Details (was after). When `implant_procedure_type === 'Existing Implant'`, the rest of the surgical-prep form (Prosthetic Plan, FDI grid, loading-type, scheduling, etc.) is hidden and the new ExistingImplantSection is rendered instead.
+- `/app/frontend/components/ExistingImplantSection.tsx` — NEW component (~600 lines): Type-of-Procedure-Done chips (8 standard types), per-implant inventory cards with FDI tooth picker + Brand/System scrollable dropdowns + auto-filled Connection/Platform from `/api/implant-catalog` + Ø/L/GH inputs + Present Prosthetic Component (None/Healing/Final/MUA — Healing reveals GH only; Final and MUA reveal GH + Angle) + surgery date/surgeon/notes + per-implant IOPA upload (non-full-arch). Prosthetic History (Yes/No → Temporary/Final → Type+Material text boxes). Single OPG upload for full-arch. Save / Move-to-Phase-3 / Move-to-Phase-4-Step-1 routing buttons.
+- DELETED `/app/frontend/app/procedures/new-existing-implant.tsx` — orphan iter-211 standalone route (everything moves into the unified form).
+
+**Backend (`/app/backend/server.py`)**
+- `ExistingImplant` model gained: `present_component`, `present_component_gh`, `present_component_angle`, `iopa_url`.
+- `ProsthesisHistory` model gained: `prosthesis_stage` ('temporary' | 'final').
+- New `RadiographsBlock` model: `opg_url` + `iopas` array.
+- `ProcedureCreateExistingImplants` model gained: `original_procedure_type`, `radiographs`, `phase_to_start` (default `'phase4_step1'` preserves iter-211 behaviour).
+- `POST /api/procedures/with-existing-implants` endpoint now branches status/current_phase based on `phase_to_start`:
+  - `phase3` → `status='phase2_approved'`, `current_phase=3`, `phase3_skipped=false` (lands in Phase 3 inbox for ISQ + healing-abutment swap).
+  - `phase4_step1` → `status='pending_stage2_prosthetic'`, `current_phase=4`, `phase3_skipped=true` (iter-211 default; lands in Phase 4 Step 1 inbox).
+  - `draft` → `status='draft'`, `current_phase=0` (saved without phase progression).
+- Response payload now returns the actual routed status + current_phase (was hardcoded to `'pending_stage2_prosthetic'` — testing-agent flagged minor inconsistency, fixed in same iter).
+- `implant_procedure_type` on the saved doc now reflects `original_procedure_type` from the payload when provided; falls back to the auto-derived label otherwise.
+
+### Verification
+- New backend pytest `test_existing_implants_iter213.py` — **10/10 PASS** (phase routing matrix · new fields round-trip · original_procedure_type override · iter-211 default backward-compat).
+- Combined regression: iter-213 (10) + iter-211 (15) + iter-205 alpha_bio (24) + iter-210 MUA (4) = **53/53 PASS**.
+- TypeScript compiles cleanly (the two `as any` casts on `formData.student_name`/`formData.remark` are intentional — pre-existing strict-mode field-list mismatch in this file).
+- 30 TEST_iter21[13]* orphan procedures swept from the dev DB.
+- Frontend smoke deferred to iOS Expo Go on user's device — web-preview SSR is a known recurring blocker for new components / routes.
+
+### Notes for next agent
+- The "Existing Implant" branch now writes through the same iter-211 endpoint via the `phase_to_start` routing parameter — single backend code path, multiple status outcomes.
+- `phase_to_start='phase3'` puts the case in the Phase 3 inbox. The Phase 3 form doesn't yet know how to read `existing_implants` for ISQ slot count — that's the natural follow-up to ship next iteration if any user picks the "Move to Phase 3" path.
+- The orphan iter-211 standalone route is deleted; if any deep links pointed to `/procedures/new-existing-implant`, they will 404 — but no caller in the codebase referenced it after this iter's edits.
+
+---
+
 ## Iteration 211 (Feb 2026) — New Case with Existing Implants — Slice 1 (Path A: Replace Prosthesis Only)
 
 ### Why
