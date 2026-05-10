@@ -36,7 +36,8 @@ import {
 import { format } from 'date-fns';
 import { generateProcedurePDF, printProcedurePDF, generateLabSlipPDF } from '../../utils/pdfGenerator';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';
-import CaseCompletionBadge from '../../components/CaseCompletionBadge';
+// iter-209: removed CaseCompletionBadge — its facts merged into the green
+// Treatment Complete banner above the timeline.
 import ExportPrintMenu from '../../components/ExportPrintMenu';
 import Phase2EditModal from '../../components/Phase2EditModal';
 import AugmentationChecklist from '../../components/AugmentationChecklist';
@@ -827,13 +828,51 @@ export default function ProcedureDetailScreen() {
           })()}
         </View>
 
-        {/* ── Treatment Complete + Digital Sign-Off (rendered above timeline on completion) ── */}
+        {/* ── Treatment Complete + Case Summary + Digital Sign-Off (rendered above timeline on completion) ── */}
         {procedure.status === 'completed' && (
           <>
             <View style={styles.completedBanner}>
               <Ionicons name="trophy" size={28} color="#4CAF50" />
               <Text style={styles.completedText}>Treatment Complete</Text>
               <Text style={styles.completedSubtext}>All protocols have been approved successfully</Text>
+              {/* iter-209: merged the yellow Case Completed badge facts directly
+                  into this green banner so the case summary lives in one place.
+                  Removes the duplicate yellow card that used to sit at the
+                  bottom of the page, just above the implant-planning section. */}
+              {procedure.case_id && (
+                <Text style={styles.completedCaseId} testID="completed-case-id">
+                  {procedure.case_id}
+                </Text>
+              )}
+              <View style={styles.completedFactsGrid} testID="completed-facts">
+                {(() => {
+                  const operator = procedure.student_name
+                    || (procedure.created_by_role !== 'student' ? procedure.created_by_name : null);
+                  const operatorLabel = procedure.student_name
+                    ? 'Student'
+                    : procedure.created_by_role === 'supervisor'
+                      ? 'Supervisor'
+                      : procedure.created_by_role === 'implant_incharge'
+                        ? 'Implant In-Charge'
+                        : 'Operator';
+                  const completedOn = procedure.completed_at
+                    ? new Date(procedure.completed_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
+                    : null;
+                  const facts: { icon: any; label: string; value: string | null | undefined }[] = [
+                    { icon: 'person', label: operatorLabel, value: operator },
+                    { icon: 'medkit', label: 'Procedure', value: procedure.implant_procedure_type },
+                    { icon: 'medical', label: 'Implants', value: procedure.number_of_implants != null ? String(procedure.number_of_implants) : null },
+                    { icon: 'calendar', label: 'Completed', value: completedOn },
+                  ];
+                  return facts.filter(f => f.value).map((f, i) => (
+                    <View key={i} style={styles.completedFactRow}>
+                      <Ionicons name={f.icon} size={14} color="#2E7D32" />
+                      <Text style={styles.completedFactLabel}>{f.label}:</Text>
+                      <Text style={styles.completedFactValue} numberOfLines={1}>{f.value}</Text>
+                    </View>
+                  ));
+                })()}
+              </View>
             </View>
             <View style={{ marginHorizontal: 16, marginTop: 12, marginBottom: 16, backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1.5, borderColor: '#43A047', padding: 16 }} testID="digital-signoff-card">
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
@@ -2676,15 +2715,26 @@ export default function ProcedureDetailScreen() {
           ['stage2_prosthetic_step1_approved', 'pending_final_delivery', 'completed'].includes(procedure.status)
         ) && (
           <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#6A1B9A', backgroundColor: '#F3E5F5' }]} testID="lab-slip-card">
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <Ionicons name="document-text" size={20} color="#6A1B9A" />
               <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#6A1B9A', fontSize: 16 }]}>
                 Lab Prescription
               </Text>
+              {/* iter-209: replaced the always-on helper text with a tappable
+                  i-circle that explains the slip in an Alert on demand —
+                  keeps the card visually compact for repeat visits. */}
+              <TouchableOpacity
+                onPress={() => Alert.alert(
+                  'Lab Prescription',
+                  'Generate the lab slip anytime to share with the laboratory. Lab slip is auto built from the saved information.'
+                )}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                testID="lab-prescription-info-btn"
+                accessibilityLabel="About Lab Prescription"
+              >
+                <Ionicons name="information-circle-outline" size={20} color="#6A1B9A" />
+              </TouchableOpacity>
             </View>
-            <Text style={{ fontSize: 12, color: '#4A148C', marginBottom: 12, lineHeight: 18 }}>
-              Phase 4 Step 1 has been approved. Re-generate the lab slip any time to share with the laboratory — auto-built from the saved implant details, prosthesis plan, impression, and shade.
-            </Text>
 
             {/* iter-196: optional Note to the Lab — up to 150 words. */}
             {(() => {
@@ -2867,11 +2917,10 @@ export default function ProcedureDetailScreen() {
           </>
         )}
 
-        {/* Case Completion Badge & Report */}
-        <CaseCompletionBadge
-          procedureId={id as string}
-          status={procedure.status}
-        />
+        {/* iter-209: removed the bottom yellow Case Completed badge — its
+            facts (case ID, operator, procedure, implant count, completion
+            date) are now merged into the green Treatment Complete banner
+            at the top of the page so the case summary lives in one place. */}
 
         {/* Implant Planning - Part of Phase 1 Workflow */}
         {procedure.status === 'pending_phase1' && (
@@ -4164,6 +4213,39 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#388E3C',
     textAlign: 'center',
+  },
+  // iter-209: case summary facts merged into the green Treatment Complete banner.
+  completedCaseId: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#1B5E20',
+    marginTop: 4,
+    letterSpacing: 0.4,
+  },
+  completedFactsGrid: {
+    alignSelf: 'stretch',
+    marginTop: 10,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#A5D6A7',
+    gap: 6,
+  },
+  completedFactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  completedFactLabel: {
+    fontSize: 12,
+    color: '#558B2F',
+    fontWeight: '600',
+    width: 100,
+  },
+  completedFactValue: {
+    fontSize: 13,
+    color: '#1B5E20',
+    fontWeight: '700',
+    flex: 1,
   },
   autoclaveBadge: {
     flexDirection: 'row',
