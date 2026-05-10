@@ -13,6 +13,7 @@ import BackButton from '../../components/BackButton';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';
 import { AtrophyClassificationChip } from '../../components/AtrophyClassificationChip';
 import ExistingImplantSection from '../../components/ExistingImplantSection';
+import FdiAnatomicalChart from '../../components/FdiAnatomicalChart';
 import { validateImplantSelection, findMissingRuns, clusterLeader } from '../../utils/implantValidation';
 import {
   PROCEDURE_TYPES,  LOADING_TYPES,
@@ -1239,33 +1240,6 @@ export default function NewProcedureScreen() {
               : 'Mark tooth/teeth for Partial Extraction Therapy')
           : 'Select missing tooth/teeth';
         const missing = formData.missing_teeth || [];
-        const toggleTooth = (t: string) => {
-          const cur = formData.missing_teeth || [];
-          updateForm('missing_teeth', cur.includes(t) ? cur.filter((x: string) => x !== t) : [...cur, t]);
-        };
-        const renderTooth = (t: string) => {
-          const marked = missing.includes(t); // red when marked
-          const isMolar = ['16','17','18','26','27','28','36','37','38','46','47','48'].includes(t);
-          const w = isMolar ? 26 : ['14','15','24','25','34','35','44','45'].includes(t) ? 23 : ['13','23','33','43'].includes(t) ? 22 : 20;
-          return (
-            <TouchableOpacity
-              key={t}
-              onPress={() => toggleTooth(t)}
-              style={{
-                width: w, height: isMolar ? 32 : 28,
-                borderRadius: isMolar ? 5 : 9,
-                backgroundColor: marked ? '#E53935' : '#1E88E5',
-                borderWidth: 1.5,
-                borderColor: marked ? '#B71C1C' : '#1565C0',
-                alignItems: 'center', justifyContent: 'center', marginHorizontal: 1,
-              }}
-              data-testid={`fdi-${t}`}
-              testID={`fdi-${t}`}
-            >
-              <Text style={{ fontWeight: '700', fontSize: 9, color: '#FFF' }}>{t}</Text>
-            </TouchableOpacity>
-          );
-        };
         // Client-side count validation (matched server-side)
         let countError: string | null = null;
         if (ptype === 'Conventional Single Implant' && missing.length !== 1 && missing.length > 0) {
@@ -1277,29 +1251,13 @@ export default function NewProcedureScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>{sectionTitle}</Text>
             <Text style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>{subLabel}</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: '#1E88E5' }} />
-                <Text style={{ fontSize: 10, color: '#546E7A' }}>Present</Text>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: '#E53935' }} />
-                <Text style={{ fontSize: 10, color: '#546E7A' }}>{isExtractFlow ? 'Selected for extraction' : 'Missing'}</Text>
-              </View>
-            </View>
-            <Text style={{ fontSize: 12, fontWeight: '700', color: '#1565C0', marginBottom: 4, textAlign: 'center' }}>Upper Jaw (Maxillary)</Text>
-            <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 2 }}>
-              <View style={{ flexDirection: 'row' }}>{['18','17','16','15','14','13','12','11'].map(renderTooth)}</View>
-              <View style={{ width: 6 }} />
-              <View style={{ flexDirection: 'row' }}>{['21','22','23','24','25','26','27','28'].map(renderTooth)}</View>
-            </View>
-            <View style={{ height: 1, backgroundColor: '#C5CDD5', marginVertical: 6, marginHorizontal: 20 }} />
-            <Text style={{ fontSize: 12, fontWeight: '700', color: '#1565C0', marginBottom: 4, textAlign: 'center' }}>Lower Jaw (Mandibular)</Text>
-            <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 2 }}>
-              <View style={{ flexDirection: 'row' }}>{['48','47','46','45','44','43','42','41'].map(renderTooth)}</View>
-              <View style={{ width: 6 }} />
-              <View style={{ flexDirection: 'row' }}>{['31','32','33','34','35','36','37','38'].map(renderTooth)}</View>
-            </View>
+            <FdiAnatomicalChart
+              mode="multi"
+              value={missing}
+              onChange={(next) => updateForm('missing_teeth', next as string[])}
+              selectedLabel={isExtractFlow ? 'Selected for extraction' : 'Missing'}
+              testIDPrefix="fdi"
+            />
             {missing.length > 0 && (
               <Text style={{ fontSize: 12, color: '#B71C1C', fontWeight: '700', marginTop: 8, textAlign: 'center' }}>
                 {missing.length} {missing.length === 1 ? 'tooth' : 'teeth'} marked — {missing.sort().join(', ')}

@@ -26,14 +26,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import api from '../utils/api';
-
-// ── FDI tooth chart (Universal-FDI 11-48) ──
-const FDI_QUADRANTS: { label: string; teeth: string[] }[] = [
-  { label: 'Upper Right', teeth: ['18','17','16','15','14','13','12','11'] },
-  { label: 'Upper Left',  teeth: ['21','22','23','24','25','26','27','28'] },
-  { label: 'Lower Left',  teeth: ['31','32','33','34','35','36','37','38'] },
-  { label: 'Lower Right', teeth: ['48','47','46','45','44','43','42','41'] },
-];
+import FdiAnatomicalChart from './FdiAnatomicalChart';
 
 // "Type of Implant Procedure Done" (excludes "Existing Implant" so the user
 // can't pick it recursively per Q1 spec).
@@ -315,25 +308,16 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
         </TouchableOpacity>
         <Modal transparent visible={open} animationType="fade" onRequestClose={() => setOpen(false)}>
           <Pressable style={s.modalBackdrop} onPress={() => setOpen(false)}>
-            <View style={s.fdiCard}>
+            <Pressable style={s.fdiCard} onPress={(e) => e.stopPropagation()}>
               <Text style={s.modalTitle}>FDI Chart — pick tooth</Text>
-              {FDI_QUADRANTS.map(q => (
-                <View key={q.label} style={{ marginBottom: 6 }}>
-                  <Text style={s.fdiQuadrantLabel}>{q.label}</Text>
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
-                    {q.teeth.map(t => (
-                      <TouchableOpacity
-                        key={t}
-                        style={[s.fdiCell, value === t && s.fdiCellActive]}
-                        onPress={() => { onPick(t); setOpen(false); }}
-                      >
-                        <Text style={[s.fdiCellText, value === t && s.fdiCellTextActive]}>{t}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-              ))}
-            </View>
+              <FdiAnatomicalChart
+                mode="single"
+                value={value}
+                onChange={(t) => { onPick(t as string); setOpen(false); }}
+                selectedLabel="Selected"
+                testIDPrefix={`${testID}-tooth`}
+              />
+            </Pressable>
           </Pressable>
         </Modal>
       </View>
