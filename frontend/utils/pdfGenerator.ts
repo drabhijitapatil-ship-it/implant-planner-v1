@@ -519,13 +519,23 @@ export const buildLabSlipHtml = (procedure: any): string => {
     ? 'Intra-Oral Digital Scans'
     : `Conventional${trayLabel ? ` — ${trayLabel}` : ''}${matLabel ? ` (${matLabel})` : ''}`;
 
-  // iter-202: Multi-Unit Abutment block — sourced from Phase 2 surgical
-  // capture (`procedure.phase2_data.multi_unit_abutment_*`). The lab needs
-  // angulation + cuff height per implant to fabricate the substructure;
-  // historically these were left out of the slip and called in by phone.
+  // iter-202: Multi-Unit Abutment block — historically sourced from Phase 2
+  // surgical capture (`procedure.phase2_data.multi_unit_abutment_*`). The lab
+  // needs angulation + cuff height per implant to fabricate the substructure.
+  // iter-210: prefer the Phase 4 Step 1 override
+  // (`procedure.phase4_step1_data.multi_unit_abutment_details`) when the
+  // prosthodontist has revised the spec at delivery; fall back to Phase 2
+  // only when Phase 4 doesn't carry an override.
   const p2 = procedure.phase2_data || {};
-  const muaPlaced = p2.multi_unit_abutment_placed === 'yes';
-  const muaDetails: any[] = Array.isArray(p2.multi_unit_abutment_details) ? p2.multi_unit_abutment_details : [];
+  const phase4MuaOverride: any[] = Array.isArray(p4.multi_unit_abutment_details)
+    ? p4.multi_unit_abutment_details
+    : [];
+  const phase2MuaDetails: any[] = Array.isArray(p2.multi_unit_abutment_details)
+    ? p2.multi_unit_abutment_details
+    : [];
+  const muaSourceIsPhase4 = phase4MuaOverride.length > 0;
+  const muaDetails: any[] = muaSourceIsPhase4 ? phase4MuaOverride : phase2MuaDetails;
+  const muaPlaced = muaSourceIsPhase4 || p2.multi_unit_abutment_placed === 'yes';
   const muaRows = muaPlaced && muaDetails.length > 0
     ? muaDetails.map((row: any, idx: number) => {
         const tooth = row?.tooth ?? '—';

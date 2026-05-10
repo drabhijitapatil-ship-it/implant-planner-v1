@@ -1989,18 +1989,11 @@ export default function ProcedureDetailScreen() {
               {procedure.phase2_data.implant_seated_comment && (
                 <InfoRow icon="chatbox" label="Implant Seating Notes" value={procedure.phase2_data.implant_seated_comment} fieldKey="phase2_data.implant_seated_comment" />
               )}
-              {procedure.phase2_data.torque_values && procedure.phase2_data.torque_values.length > 0 && (
-                <View style={{ marginVertical: 6 }}>
-                  <Text style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>Torque Values</Text>
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                    {procedure.phase2_data.torque_values.map((tv: number, idx: number) => (
-                      <View key={idx} style={{ backgroundColor: '#FFF3E0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 }}>
-                        <Text style={{ fontSize: 14, fontWeight: '700', color: '#E65100' }}>Implant {idx + 1}: {tv} Ncm</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              )}
+              {/* iter-210: removed the duplicate Torque Values chips from the
+                  Phase 2 readback. The dedicated orange "Torque Values
+                  Achieved" card (rendered above, near the Final Prosthetic
+                  Plan) is the single source of truth so the value isn't
+                  displayed twice on the case page. */}
               {procedure.phase2_data.bone_graft_used !== undefined && (
                 <InfoRow icon="fitness" label="Bone Graft & Membrane" value={procedure.phase2_data.bone_graft_used ? 'Yes' : 'No'} />
               )}
@@ -2301,39 +2294,80 @@ export default function ProcedureDetailScreen() {
               </View>
             )}
 
-            {/* ISQ & Healing Abutment */}
-            {(procedure.phase3_data?.isq_value || procedure.phase3_data?.healing_abutment_height) && (
-              <View style={{ marginBottom: 16 }}>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: '#388E3C', marginBottom: 8 }}>Measurements</Text>
-                {procedure.phase3_data.isq_value && (
-                  Array.isArray(procedure.phase3_data.isq_value)
-                    ? (
+            {/* ISQ & Healing Abutment.
+                iter-210: per user request, filter out blank entries from the
+                ISQ + Healing-Abutment arrays so we don't render dangling "—"
+                rows. If both arrays end up empty after filtering, render the
+                Measurements section header with a single "NA" line so the
+                section still appears in the readback (option (a) — keeps
+                visual structure). */}
+            {(() => {
+              const isqRaw = procedure.phase3_data?.isq_value;
+              const haRaw = procedure.phase3_data?.healing_abutment_height;
+              if (!isqRaw && !haRaw) return null;
+
+              const nonEmpty = (v: any) =>
+                v !== undefined && v !== null && String(v).trim() !== '';
+
+              const isqArr: string[] = Array.isArray(isqRaw)
+                ? isqRaw.filter(nonEmpty)
+                : nonEmpty(isqRaw) ? [isqRaw] : [];
+              const haArr: string[] = Array.isArray(haRaw)
+                ? haRaw.filter(nonEmpty)
+                : nonEmpty(haRaw) ? [haRaw] : [];
+
+              const isArrISQ = Array.isArray(isqRaw);
+              const isArrHA = Array.isArray(haRaw);
+
+              const hasAnything = isqArr.length > 0 || haArr.length > 0;
+
+              return (
+                <View style={{ marginBottom: 16 }} testID="phase3-measurements-section">
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#388E3C', marginBottom: 8 }}>Measurements</Text>
+
+                  {!hasAnything && (
+                    <View style={{ paddingVertical: 8 }} testID="phase3-measurements-na">
+                      <Text style={{ fontSize: 13, color: '#999', fontStyle: 'italic' }}>NA</Text>
+                    </View>
+                  )}
+
+                  {isqArr.length > 0 && (
+                    isArrISQ ? (
                       <View style={{ backgroundColor: '#E8F5E9', borderRadius: 8, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: '#A5D6A7' }}>
                         <Text style={{ fontSize: 13, fontWeight: '700', color: '#2E7D32', marginBottom: 6 }}>ISQ Values</Text>
-                        {procedure.phase3_data.isq_value.map((val: string, idx: number) => {
+                        {/* preserve the original implant index so the tooth
+                            label still maps to the correct implant_plans row */}
+                        {(isqRaw as any[]).map((val: any, idx: number) => {
+                          if (!nonEmpty(val)) return null;
                           const toothLabel = procedure.implant_plans?.[idx]?.position
                             ? `Tooth #${procedure.implant_plans[idx].position}`
                             : `Implant ${idx + 1}`;
                           return (
                             <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                               <Text style={{ fontSize: 12, fontWeight: '600', color: '#1B5E20', flex: 1 }}>{toothLabel}</Text>
-                              <Text style={{ fontSize: 16, fontWeight: '700', color: '#2E7D32' }}>{val || '—'}</Text>
+                              <Text style={{ fontSize: 16, fontWeight: '700', color: '#2E7D32' }}>{val}</Text>
                             </View>
                           );
                         })}
                       </View>
+                    ) : (
+                      <InfoRow icon="speedometer" label="ISQ Value" value={String(isqRaw)} />
                     )
-                    : <InfoRow icon="speedometer" label="ISQ Value" value={procedure.phase3_data.isq_value} />
-                )}
-                {procedure.phase3_data.healing_abutment_height && (
-                  Array.isArray(procedure.phase3_data.healing_abutment_height)
-                    ? procedure.phase3_data.healing_abutment_height.map((val: string, idx: number) => (
-                      <InfoRow key={idx} icon="resize" label={`Healing Abutment Height (Implant ${idx + 1})`} value={`${val} mm`} />
-                    ))
-                    : <InfoRow icon="resize" label="Healing Abutment Height" value={`${procedure.phase3_data.healing_abutment_height} mm`} />
-                )}
-              </View>
-            )}
+                  )}
+
+                  {haArr.length > 0 && (
+                    isArrHA
+                      ? (haRaw as any[]).map((val: any, idx: number) => {
+                          if (!nonEmpty(val)) return null;
+                          return (
+                            <InfoRow key={idx} icon="resize" label={`Healing Abutment Height (Implant ${idx + 1})`} value={`${val} mm`} />
+                          );
+                        })
+                      : <InfoRow icon="resize" label="Healing Abutment Height" value={`${haRaw} mm`} />
+                  )}
+                </View>
+              );
+            })()}
 
             {/* Phase 3 IOPA Radiograph Thumbnails */}
             {procedure.phase3_data?.iopa_files && procedure.phase3_data.iopa_files.length > 0 && (
