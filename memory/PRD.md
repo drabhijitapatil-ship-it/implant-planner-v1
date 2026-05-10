@@ -1,5 +1,33 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 209 (Feb 2026) — Lab Prescription i-circle + Case-Completed badge merged into green Treatment Complete banner
+
+### Why
+Two small UX clean-ups on the case-detail screen:
+1. The Lab Prescription card carried a paragraph of helper text below its title that became visual noise on every repeat visit.
+2. The case-detail page rendered TWO completion banners after final delivery — a green "Treatment Complete" at the top and a yellow "Case Completed" near the bottom (just above the Implant Planning section). The yellow card duplicated facts the green banner didn't carry (case ID, operator, procedure, implant count, completion date), so users complained the page looked like the case was "completed twice".
+
+### Changes
+**Frontend (`/app/frontend/app/procedures/[id].tsx`)**
+- Lab Prescription card: removed the long helper paragraph. Added an `information-circle-outline` button next to the title that opens an `Alert` with *"Generate the lab slip anytime to share with the laboratory. Lab slip is auto built from the saved information."* Note-to-the-Lab textarea below is unchanged. testID `lab-prescription-info-btn`.
+- Treatment Complete banner: now also renders the case ID and a facts grid (Operator + Procedure + Implants + Completed-on date) inline. Pulled directly from `procedure.*` fields — no extra API call.
+- Removed the `<CaseCompletionBadge>` invocation above the Implant Planning section + its `import`.
+
+### Notes
+- `/app/frontend/components/CaseCompletionBadge.tsx` is now orphaned. Safe to delete in a future cleanup iteration.
+
+### Verification
+- TypeScript: only pre-existing unrelated errors. Metro bundle compiled cleanly.
+- Backend API unchanged.
+
+---
+
+## Iteration 208 (Feb 2026) — Hide shared instruments doc from system list
+
+(see prior PRD entries below for iter-205/206/207/208 details)
+
+---
+
 ## Iteration 207 (Feb 2026) — Wire Alpha-Bio brochure seed into FastAPI startup hook
 
 ### Why
