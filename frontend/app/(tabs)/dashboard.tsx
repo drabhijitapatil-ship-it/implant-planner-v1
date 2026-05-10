@@ -532,25 +532,7 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
           <Text style={s.sectionTitle}>Quick Actions</Text>
         </View>
         <View style={s.quickActions}>
-          <TouchableOpacity
-            style={s.quickBtn}
-            onPress={() => {
-              // iter-211: action sheet — Fresh case (existing flow) vs New
-              // Case with Existing Implants (Path A — replace prosthesis only).
-              Alert.alert(
-                'New Case',
-                'How is this patient presenting?',
-                [
-                  { text: 'Fresh Case', onPress: () => router.push('/new-procedure') },
-                  { text: 'With Existing Implants', onPress: () => router.push('/procedures/new-existing-implant') },
-                  { text: 'Cancel', style: 'cancel' },
-                ],
-                { cancelable: true },
-              );
-            }}
-            testID="quick-new-case-btn"
-            /* @ts-ignore */ data-testid="quick-new-case-btn"
-          >
+          <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/new-procedure')} testID="quick-new-case-btn" /* @ts-ignore */ data-testid="quick-new-case-btn">
             <Ionicons name="add-circle-outline" size={24} color="#1A73E8" />
             <Text style={s.quickBtnText}>New Case</Text>
           </TouchableOpacity>

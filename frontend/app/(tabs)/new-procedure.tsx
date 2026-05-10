@@ -12,10 +12,10 @@ import { useAuth } from '../../contexts/AuthContext';
 import BackButton from '../../components/BackButton';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';
 import { AtrophyClassificationChip } from '../../components/AtrophyClassificationChip';
+import ExistingImplantSection from '../../components/ExistingImplantSection';
 import { validateImplantSelection, findMissingRuns, clusterLeader } from '../../utils/implantValidation';
 import {
-  PROCEDURE_TYPES,
-  LOADING_TYPES,
+  PROCEDURE_TYPES,  LOADING_TYPES,
   CHECKLIST_DATA,
   PROCEDURE_TIME_SLOTS,
   NON_FULL_ARCH_TYPES,
@@ -1092,6 +1092,20 @@ export default function NewProcedureScreen() {
       </View>
       )}
 
+      {/* ─── Procedure Type ─── */}
+      {/* iter-213: Procedure Information now precedes Payment Details so the
+          operator picks the procedure type (which may be "Existing Implant"
+          and morph the rest of the form) before entering payment info. */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Procedure Information</Text>
+        <Dropdown label="Type of Implant Procedure" value={formData.implant_procedure_type}
+          options={PROCEDURE_TYPES} onChange={v => { updateForm('implant_procedure_type', v); updateForm('arch', ''); }} required />
+        {isFullArch && (
+          <Dropdown label="Arch" value={formData.arch}
+            options={['Maxillary', 'Mandibular']} onChange={v => updateForm('arch', v)} required data-testid="arch-dropdown" />
+        )}
+      </View>
+
       {/* ─── Payment Details ─── */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Payment Details</Text>
@@ -1107,16 +1121,48 @@ export default function NewProcedureScreen() {
         </View>
       </View>
 
-      {/* ─── Procedure Type ─── */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Procedure Information</Text>
-        <Dropdown label="Type of Implant Procedure" value={formData.implant_procedure_type}
-          options={PROCEDURE_TYPES} onChange={v => { updateForm('implant_procedure_type', v); updateForm('arch', ''); }} required />
-        {isFullArch && (
-          <Dropdown label="Arch" value={formData.arch}
-            options={['Maxillary', 'Mandibular']} onChange={v => updateForm('arch', v)} required data-testid="arch-dropdown" />
-        )}
-      </View>
+      {/* iter-213: when "Existing Implant" is the procedure type, swap the
+          rest of the surgical-prep form for the existing-implant wizard
+          (FDI inventory, present prosthetic component, prosthetic history,
+          radiograph, save + phase routing). Skips clinical exam / implant
+          planning / loading / scheduling collected by the regular flow. */}
+      {formData.implant_procedure_type === 'Existing Implant' && (
+        <ExistingImplantSection
+          patient={{
+            student_name: (formData as any).student_name || '',
+            patient_name: formData.patient_name,
+            age: formData.age || '',
+            sex: formData.sex || '',
+            profession: formData.profession || '',
+            mobile_number: formData.mobile_number || '',
+            patient_email: formData.patient_email || '',
+            registration_number: formData.registration_number,
+            chief_complaint: formData.chief_complaint || '',
+            supervisor_id: formData.supervisor_id,
+            supervisor_name: formData.supervisor_name || '',
+            implant_incharge_id: formData.implant_incharge_id,
+            implant_incharge_name: formData.implant_incharge_name || '',
+            receipt_number: formData.receipt_number,
+            amount_paid: String(formData.amount_paid || ''),
+            procedure_date: formData.procedure_date || '',
+            procedure_time: formData.procedure_time || '',
+            remark: (formData as any).remark || '',
+          }}
+          validatePatient={() => {
+            if (!formData.patient_name?.trim()) return 'Patient name is required.';
+            if (!formData.registration_number?.trim()) return 'MR / Registration number is required.';
+            if (!formData.supervisor_id) return 'Please select a supervisor.';
+            if (!formData.implant_incharge_id) return 'Please select an implant in-charge.';
+            if (!formData.receipt_number?.trim()) return 'Receipt number is required.';
+            if (!formData.amount_paid) return 'Amount paid is required.';
+            if (!formData.procedure_date) return 'Pick an appointment date.';
+            if (!formData.procedure_time) return 'Pick an appointment time slot.';
+            return null;
+          }}
+        />
+      )}
+
+      {formData.implant_procedure_type !== 'Existing Implant' && (<>
 
       {/* ─── Prosthetic Treatment Plan ─── (moved here per iter-134; now appears
             BEFORE the FDI chart so that an Overdenture-with-Attachment choice
@@ -1902,6 +1948,7 @@ export default function NewProcedureScreen() {
           </>
         )}
       </TouchableOpacity>
+      </>)}
     </ScrollView>
   );
 }

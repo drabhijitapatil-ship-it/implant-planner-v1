@@ -515,26 +515,6 @@ export default function TabsLayout() {
             ),
             href: isNurse ? null : '/new-procedure',
           }}
-          /* iter-212: intercept the tab press so the user picks Fresh vs
-             Existing-Implant flow before navigating. Without this the bottom
-             tab silently routed to /new-procedure and the With-Existing-
-             Implant entry point added in iter-211 was never discoverable. */
-          listeners={{
-            tabPress: (e) => {
-              if (isNurse) return;
-              e.preventDefault();
-              Alert.alert(
-                'New Case',
-                'How is this patient presenting?',
-                [
-                  { text: 'Fresh Case', onPress: () => router.push('/new-procedure') },
-                  { text: 'With Existing Implants', onPress: () => router.push('/procedures/new-existing-implant') },
-                  { text: 'Cancel', style: 'cancel' },
-                ],
-                { cancelable: true },
-              );
-            },
-          }}
         />
         <Tabs.Screen
           name="implant-selection"
