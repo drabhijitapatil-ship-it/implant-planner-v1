@@ -539,8 +539,10 @@ export const buildLabSlipHtml = (procedure: any): string => {
   const muaRows = muaPlaced && muaDetails.length > 0
     ? muaDetails.map((row: any, idx: number) => {
         const tooth = row?.tooth ?? '—';
-        const angRaw = (row?.angulation ?? '').toString().trim();
-        const cuffRaw = (row?.cuff_height ?? '').toString().trim();
+        // iter-210: strip a trailing degree symbol the user may have typed
+        // into the structured editor so we don't render '30°°' on the slip.
+        const angRaw = (row?.angulation ?? '').toString().trim().replace(/°+$/, '');
+        const cuffRaw = (row?.cuff_height ?? '').toString().trim().replace(/(mm|MM)\s*$/, '').trim();
         const ang = angRaw ? `${angRaw}°` : '—';
         const cuff = cuffRaw ? `${cuffRaw} mm` : '—';
         return `
