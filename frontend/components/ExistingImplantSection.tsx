@@ -17,13 +17,52 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, TouchableOpacity, TextInput, ScrollView, Alert,
-  StyleSheet, Modal, Pressable, ActivityIndicator,
+  StyleSheet, Modal, Pressable, ActivityIndicator, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import api from '../utils/api';
 import FdiAnatomicalChart from './FdiAnatomicalChart';
+
+// Mirrors Phase 4 Step 1's prosthetic-plan grouping so the prosthesis-history
+// defaults stay in sync with `constants/checklist.ts` and
+// `submit-stage2-prosthetic/[id].tsx`.
+const SINGLE_PROCEDURES = new Set(['Single Conventional Implant']);
+const MULTIPLE_PROCEDURES = new Set([
+  'Multiple Conventional Implants',
+  'Immediate Implant',
+  'Partial Extraction Therapy',
+  'Implant Placement with Guided Bone Regeneration',
+  'Guided Surgery',
+]);
+const FULL_ARCH_PROCEDURES = new Set(['All on 4', 'All on 6', 'All on X']);
+
+/**
+ * Default Type + Material for the existing-prosthesis history form.
+ *
+ * Final-stage values mirror the first option of the corresponding Phase 4
+ * Step 1 dropdown (`PHASE4_SINGLE_MULTIPLE_OPTIONS` / `PHASE4_FULL_ARCH_OPTIONS`)
+ * + first material from `FP_MATERIAL_OPTIONS` so the data shape matches
+ * downstream Lab-Slip / Case-Report renderers.
+ *
+ * Temporary-stage values fall back to the standard chairside provisional set
+ * (heat-cure / PMMA acrylic) since the institution doesn't enumerate
+ * temporary-prosthesis options in Phase 4 — temporaries are always pre-final.
+ */
+function getProsthesisDefaults(originalProcedure: string, stage: 'temporary' | 'final'): { type: string; material: string } {
+  if (stage === 'final') {
+    if (SINGLE_PROCEDURES.has(originalProcedure)) return { type: 'Cement Retained Crown FP1', material: 'Porcelain Fused to Metal' };
+    if (MULTIPLE_PROCEDURES.has(originalProcedure)) return { type: 'Cement Retained Bridge FP1', material: 'Porcelain Fused to Metal' };
+    if (FULL_ARCH_PROCEDURES.has(originalProcedure)) return { type: 'Full Arch FP3 - Porcelain Fused to Metal Prosthesis', material: 'Porcelain Fused to Metal' };
+    return { type: '', material: '' };
+  }
+  // Temporary
+  if (SINGLE_PROCEDURES.has(originalProcedure)) return { type: 'Acrylic Temporary Crown', material: 'Heat Cure Acrylic' };
+  if (MULTIPLE_PROCEDURES.has(originalProcedure)) return { type: 'Acrylic Temporary Bridge', material: 'Heat Cure Acrylic' };
+  if (FULL_ARCH_PROCEDURES.has(originalProcedure)) return { type: 'Acrylic Temporary Full Arch', material: 'Heat Cure Acrylic' };
+  return { type: '', material: '' };
+}
 
 // "Type of Implant Procedure Done" (excludes "Existing Implant" so the user
 // can't pick it recursively per Q1 spec).
@@ -65,6 +104,8 @@ type ImplantRow = {
   isq_value: string;
   // "Other" manual-entry mode (when brand catalog doesn't carry the implant)
   manual_brand: boolean;
+  // iter-216: per-row save / collapse (sequential lock)
+  saved: boolean;
 };
 
 const blankImplant = (tooth = ''): ImplantRow => ({
@@ -84,6 +125,7 @@ const blankImplant = (tooth = ''): ImplantRow => ({
   notes: '',
   isq_value: '',
   manual_brand: false,
+  saved: false,
 });
 
 type Props = {
@@ -235,7 +277,13 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
       return next;
     }));
   };
-  const addImplant = () => setImplants(prev => [...prev, blankImplant()]);
+  const addImplant = () => {
+    if (implants.some(r => !r.saved)) {
+      Alert.alert('Save the current implant first', 'Please save the current implant before adding another one.');
+      return;
+    }
+    setImplants(prev => [...prev, blankImplant()]);
+  };
   const removeImplant = (idx: number) => {
     if (implants.length === 1) {
       Alert.alert('At least one implant required', 'Add details for the implant in this row.');
@@ -243,6 +291,30 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
     }
     setImplants(prev => prev.filter((_, i) => i !== idx));
   };
+
+  // iter-216 — per-row save / edit (sequential collapse).
+  const validateRow = (r: ImplantRow, idx: number): string | null => {
+    if (!r.tooth) return `FDI position is required for Implant #${idx + 1}.`;
+    if (r.brand && !r.system) return `Pick a System for Implant #${idx + 1} (or clear the brand).`;
+    if (r.present_component !== 'None' && !r.pc_gingival_height) {
+      return `Cuff height is required for Implant #${idx + 1} present component (${r.present_component}).`;
+    }
+    if ((r.present_component === 'Final Abutment' || r.present_component === 'Multi-Unit Abutment') && !r.pc_angle) {
+      return `Angle is required for Implant #${idx + 1} (${r.present_component}).`;
+    }
+    return null;
+  };
+  const saveImplantRow = (idx: number) => {
+    const row = implants[idx];
+    const err = validateRow(row, idx);
+    if (err) { Alert.alert('Missing info', err); return; }
+    setImplants(prev => prev.map((r, i) => (i === idx ? { ...r, saved: true } : r)));
+  };
+  const editImplantRow = (idx: number) => {
+    setImplants(prev => prev.map((r, i) => (i === idx ? { ...r, saved: false } : r)));
+  };
+  // First unsaved implant is the only one expanded (sequential lock).
+  const activeIdx = implants.findIndex(r => !r.saved);
 
   // Radiograph upload
   const pickAndUpload = async (kind: 'iopa' | 'opg', idx?: number) => {
@@ -276,14 +348,9 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
     if (implants.length === 0) return 'Add at least one implant.';
     for (let i = 0; i < implants.length; i++) {
       const r = implants[i];
-      if (!r.tooth) return `FDI position is required for Implant #${i + 1}.`;
-      if (r.brand && !r.system) return `Pick a System for Implant #${i + 1} (or clear the brand).`;
-      if (r.present_component !== 'None' && !r.pc_gingival_height) {
-        return `Cuff height is required for Implant #${i + 1} present component (${r.present_component}).`;
-      }
-      if ((r.present_component === 'Final Abutment' || r.present_component === 'Multi-Unit Abutment') && !r.pc_angle) {
-        return `Angle is required for Implant #${i + 1} (${r.present_component}).`;
-      }
+      if (!r.saved) return `Please save Implant #${i + 1} before submitting.`;
+      const rowErr = validateRow(r, i);
+      if (rowErr) return rowErr;
     }
     if (hadProsthesis === true && !prosthesisStage) return 'Pick Temporary or Final for the existing prosthesis.';
     return null;
@@ -425,8 +492,59 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
             const lenOpts = libHit?.lengths?.map(l => String(l)) || [];
             const showAngle = row.present_component === 'Final Abutment' || row.present_component === 'Multi-Unit Abutment';
             const showGH = row.present_component !== 'None';
+
+            // Sequential lock: only the first unsaved row is editable.
+            // Saved rows render as collapsed summaries with Edit/Delete.
+            // Later unsaved rows render as locked-collapsed placeholders.
+            const isExpanded = !row.saved && idx === activeIdx;
+            const isCollapsedSaved = row.saved;
+            const isLockedAhead = !row.saved && activeIdx >= 0 && idx > activeIdx;
+
+            // ─── Collapsed: SAVED (Edit / Delete) ───
+            if (isCollapsedSaved) {
+              const summary = [
+                row.tooth ? `FDI #${row.tooth}` : null,
+                row.brand && row.system ? `${row.brand} · ${row.system}` : (row.brand || null),
+                row.diameter_mm && row.length_mm ? `Ø${row.diameter_mm} × ${row.length_mm} mm` : null,
+                row.gingival_height_mm ? `GH ${row.gingival_height_mm} mm` : null,
+              ].filter(Boolean).join(' · ');
+              return (
+                <View key={`saved-${idx}-${row.tooth}`} style={styles.implantCardSaved} testID={`ei-row-${idx}`}>
+                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <Ionicons name="checkmark-circle" size={22} color="#43A047" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.savedTitle}>Implant #{idx + 1}</Text>
+                      <Text style={styles.savedSummary} numberOfLines={2}>{summary || '(saved)'}</Text>
+                    </View>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    <TouchableOpacity onPress={() => editImplantRow(idx)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={styles.iconBtn} testID={`ei-edit-${idx}`}>
+                      <Ionicons name="create-outline" size={20} color="#1565C0" />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => removeImplant(idx)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={styles.iconBtn} testID={`ei-delete-${idx}`}>
+                      <Ionicons name="trash-outline" size={20} color="#C62828" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            }
+
+            // ─── Locked-collapsed: future row, save the prior one first ───
+            if (isLockedAhead) {
+              return (
+                <View key={`locked-${idx}-${row.tooth}`} style={styles.implantCardLocked} testID={`ei-row-${idx}`}>
+                  <Ionicons name="lock-closed-outline" size={18} color="#90A4AE" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.lockedTitle}>Implant #{idx + 1}{row.tooth ? ` · FDI #${row.tooth}` : ''}</Text>
+                    <Text style={styles.lockedHint}>Save the previous implant to unlock this card.</Text>
+                  </View>
+                </View>
+              );
+            }
+
+            // ─── Expanded: editable form (only the first unsaved row) ───
             return (
-              <View key={`${idx}-${row.tooth}`} style={styles.implantCard} testID={`ei-row-${idx}`}>
+              <View key={`exp-${idx}-${row.tooth}`} style={styles.implantCard} testID={`ei-row-${idx}`}>
                 <View style={styles.implantHeader}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <Text style={styles.implantTitle}>Implant #{idx + 1}</Text>
@@ -591,7 +709,7 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
                   ))}
                 </View>
                 {showGH && (
-                  <View style={styles.fieldContainer}>
+                  <View style={[styles.fieldContainer, styles.conditionalGap]}>
                     <Text style={styles.label}>Cuff / Gingival Height (mm) *</Text>
                     <TextInput style={styles.input} keyboardType="decimal-pad" value={row.pc_gingival_height}
                       onChangeText={(t) => updateImplant(idx, 'pc_gingival_height', t)}
@@ -609,13 +727,14 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
                   </View>
                 )}
 
-                {/* Surgery date / surgeon */}
+                {/* Surgery date — calendar picker (web HTML-native, mobile fallback) */}
                 <View style={styles.fieldContainer}>
                   <Text style={styles.label}>Surgery Date</Text>
-                  <TextInput style={styles.input} value={row.surgery_date}
-                    onChangeText={(t) => updateImplant(idx, 'surgery_date', t)}
-                    placeholder="YYYY-MM (approx OK)"
-                    testID={`ei-surg-date-${idx}`} />
+                  <SurgeryDatePicker
+                    value={row.surgery_date}
+                    onChange={(d) => updateImplant(idx, 'surgery_date', d)}
+                    testID={`ei-surg-date-${idx}`}
+                  />
                 </View>
                 <View style={styles.fieldContainer}>
                   <Text style={styles.label}>Original Surgeon</Text>
@@ -647,6 +766,16 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
                     {row.iopa_url ? <Text style={styles.uploadedHint}>✓ IOPA uploaded</Text> : null}
                   </View>
                 )}
+
+                {/* Save Implant button — collapses card on success */}
+                <TouchableOpacity
+                  style={styles.saveImplantBtn}
+                  onPress={() => saveImplantRow(idx)}
+                  testID={`ei-save-implant-${idx}`}
+                >
+                  <Ionicons name="save-outline" size={18} color="#FFF" />
+                  <Text style={styles.saveImplantText}>Save Implant</Text>
+                </TouchableOpacity>
               </View>
             );
           })}
@@ -688,18 +817,29 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
               <Text style={styles.subSectionTitle}>Type of Prosthesis</Text>
               <View style={styles.chipRow}>
                 <Chip label="Temporary" active={prosthesisStage === 'temporary'}
-                  onPress={() => setProsthesisStage('temporary')} testID="ei-stage-temp" />
+                  onPress={() => {
+                    setProsthesisStage('temporary');
+                    const def = getProsthesisDefaults(originalProcedure, 'temporary');
+                    if (!prosthesisType) setProsthesisType(def.type);
+                    if (!prosthesisMaterial) setProsthesisMaterial(def.material);
+                  }} testID="ei-stage-temp" />
                 <Chip label="Final" active={prosthesisStage === 'final'}
-                  onPress={() => setProsthesisStage('final')} testID="ei-stage-final" />
+                  onPress={() => {
+                    setProsthesisStage('final');
+                    const def = getProsthesisDefaults(originalProcedure, 'final');
+                    if (!prosthesisType) setProsthesisType(def.type);
+                    if (!prosthesisMaterial) setProsthesisMaterial(def.material);
+                  }} testID="ei-stage-final" />
               </View>
               {prosthesisStage ? (
-                <>
+                <View style={{ marginTop: 16 }}>
                   <View style={styles.fieldContainer}>
                     <Text style={styles.label}>Type</Text>
                     <TextInput style={styles.input} value={prosthesisType}
                       onChangeText={setProsthesisType}
                       placeholder="e.g. PFM Crown"
                       testID="ei-pros-type" />
+                    <Text style={styles.helperHint}>Pre-filled based on the original procedure type. Edit if needed.</Text>
                   </View>
                   <View style={styles.fieldContainer}>
                     <Text style={styles.label}>Material</Text>
@@ -708,7 +848,7 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
                       placeholder="e.g. Zirconia"
                       testID="ei-pros-mat" />
                   </View>
-                </>
+                </View>
               ) : null}
             </View>
           )}
@@ -810,6 +950,89 @@ function DropDown({ value, options, onPick, placeholder, disabled, testID }: {
   );
 }
 
+// ─── Surgery Date picker (native HTML <input type="date"> on web,
+// inline calendar on native — past dates allowed) ───
+function SurgeryDatePicker({ value, onChange, testID }: { value: string; onChange: (date: string) => void; testID?: string }) {
+  // On web: render the browser-native HTML date input directly. RN-Web
+  // forwards unknown props as DOM attributes via createElement, so we use a
+  // small platform-aware wrapper.
+  if (Platform.OS === 'web') {
+    return (
+      // @ts-ignore — dom element for web platform only.
+      <input
+        type="date"
+        value={value || ''}
+        onChange={(e: any) => onChange(e.target.value)}
+        data-testid={testID}
+        style={{
+          borderWidth: 1.5, borderColor: '#D0DCE8', borderRadius: 10,
+          padding: 12, fontSize: 15, backgroundColor: '#F8FAFC', color: '#1A1A1A',
+          width: '100%', boxSizing: 'border-box', borderStyle: 'solid',
+          outline: 'none', minHeight: 48,
+        } as any}
+      />
+    );
+  }
+  return <NativeCalendarTrigger value={value} onChange={onChange} testID={testID} />;
+}
+
+function NativeCalendarTrigger({ value, onChange, testID }: { value: string; onChange: (date: string) => void; testID?: string }) {
+  const [open, setOpen] = useState(false);
+  const today = new Date();
+  const [viewYear, setViewYear] = useState(value ? parseInt(value.split('-')[0]) : today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(value ? parseInt(value.split('-')[1]) - 1 : today.getMonth());
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const dayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  const select = (day: number) => {
+    const m = String(viewMonth + 1).padStart(2, '0');
+    const dd = String(day).padStart(2, '0');
+    onChange(`${viewYear}-${m}-${dd}`);
+    setOpen(false);
+  };
+  return (
+    <View>
+      <TouchableOpacity style={styles.dropdown} onPress={() => setOpen(true)} testID={testID} /* @ts-ignore */ data-testid={testID}>
+        <Text style={[styles.dropdownText, !value && styles.dropdownPlaceholder]}>{value || 'Select Date'}</Text>
+        <Ionicons name="calendar-outline" size={20} color="#1565C0" />
+      </TouchableOpacity>
+      <Modal transparent visible={open} animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setOpen(false)}>
+          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <TouchableOpacity onPress={() => { if (viewMonth === 0) { setViewMonth(11); setViewYear(viewYear - 1); } else setViewMonth(viewMonth - 1); }}>
+                <Ionicons name="chevron-back" size={22} color="#1565C0" />
+              </TouchableOpacity>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: '#0D47A1' }}>{monthNames[viewMonth]} {viewYear}</Text>
+              <TouchableOpacity onPress={() => { if (viewMonth === 11) { setViewMonth(0); setViewYear(viewYear + 1); } else setViewMonth(viewMonth + 1); }}>
+                <Ionicons name="chevron-forward" size={22} color="#1565C0" />
+              </TouchableOpacity>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+              {dayNames.map(d => <Text key={d} style={{ fontSize: 11, fontWeight: '700', color: '#90A4AE', width: 36, textAlign: 'center' }}>{d}</Text>)}
+            </View>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+              {cells.map((d, i) => (
+                <TouchableOpacity key={i}
+                  disabled={!d}
+                  style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}
+                  onPress={() => d && select(d)}
+                >
+                  <Text style={{ fontSize: 14, fontWeight: '600', color: d ? '#1A1A1A' : 'transparent' }}>{d || ''}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </View>
+  );
+}
+
 // ─── Single-tooth FDI picker (full-arch case — modal-wrapped chart) ───
 function FdiSinglePicker({ value, onPick, testID }: { value: string; onPick: (t: string) => void; testID: string }) {
   const [open, setOpen] = useState(false);
@@ -885,6 +1108,25 @@ const styles = StyleSheet.create({
   implantTitle: { fontSize: 15, fontWeight: '700', color: '#0D47A1' },
   toothBadge: { backgroundColor: '#1565C0', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   toothBadgeText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
+
+  // Collapsed-saved card (after Save Implant)
+  implantCardSaved: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E8F5E9', borderRadius: 14, borderWidth: 1.5, borderColor: '#A5D6A7', padding: 14, marginBottom: 12 },
+  savedTitle: { fontSize: 14, fontWeight: '700', color: '#1B5E20' },
+  savedSummary: { fontSize: 12, color: '#2E7D32', marginTop: 2 },
+  iconBtn: { padding: 6, borderRadius: 8, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E0E7EE' },
+
+  // Locked-collapsed card (sequential lock)
+  implantCardLocked: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#ECEFF1', borderRadius: 14, borderWidth: 1.5, borderColor: '#CFD8DC', padding: 14, marginBottom: 12, opacity: 0.85 },
+  lockedTitle: { fontSize: 14, fontWeight: '700', color: '#546E7A' },
+  lockedHint: { fontSize: 11, color: '#90A4AE', marginTop: 2, fontStyle: 'italic' },
+
+  // Save Implant button
+  saveImplantBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#43A047', borderRadius: 12, padding: 14, marginTop: 10, shadowColor: '#43A047', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 6, elevation: 3 },
+  saveImplantText: { color: '#FFF', fontSize: 14, fontWeight: '700', letterSpacing: 0.4 },
+
+  // Spacing utilities
+  conditionalGap: { marginTop: 16 },
+  helperHint: { fontSize: 11, color: '#78909C', marginTop: 4, fontStyle: 'italic' },
 
   // Auto-fill connection / platform display
   autoFillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
