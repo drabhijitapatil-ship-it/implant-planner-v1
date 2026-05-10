@@ -1,5 +1,38 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 211 (Feb 2026) — New Case with Existing Implants — Slice 1 (Path A: Replace Prosthesis Only)
+
+### Why
+Real-world clinical scenario: ~60% of "existing implant" walk-ins have stable osseointegrated implants but a failed / aged prosthesis (porcelain chipping, screw loosening, decementation, peri-implantitis, esthetic failure, etc.). Forcing these patients through Phases 1-3 is wasteful and clinically wrong — the surgery already happened. Critical missing piece: **structured failure analysis** so the new prosthetic design avoids repeating the previous mode of failure (e.g., chipped PFM → switch to monolithic zirconia; decementation → switch to screw-retained).
+
+### Changes
+**Backend (`/app/backend/server.py`)**
+- New Pydantic models: `ExistingImplant` (Tooth # mandatory; `system_unknown=true` flag for transferred/foreign/undocumented cases; everything else optional), `ProsthesisHistory` (had_prosthesis + type + material + lab + failed flag + structured failure_categories[] + failure_modes[] + suspected_root_causes[] + free-text narrative ≤500 chars + attachments[]), `ProcedureCreateExistingImplants` (lean creation payload — no surgical-specific fields).
+- New endpoint `POST /api/procedures/with-existing-implants`. Creates a procedure with `case_origin='existing_implants'`, status starts at `pending_stage2_prosthetic`, current_phase=4, all Phase 1-3 approval flags pre-stamped True, `phase{1,2,3}_skipped=true`. The case lands directly in the Phase 4 Step 1 inbox of the assigned implant in-charge.
+- Reuses existing duplicate-slot guard, Saturday/Sunday scheduling restriction, and 24-hour student-restriction logic.
+- Bug fix during testing: `case_id_resp` now uses `.get('case_id') or f'IMP{new_id[-4:].upper()}'` fallback (matches the on-read derivation pattern used elsewhere in the codebase).
+
+**Frontend**
+- `/app/frontend/app/procedures/new-existing-implant.tsx` — NEW wizard (~600 lines). Sections: Patient Details · Faculty & Appointment · Existing Implants (per-row dynamic editor, Tooth # mandatory + System Unknown toggle for missing-data cases, optional brand/system/connection/platform/Ø/length/GH/surgery date/surgeon/abutment-present/notes) · Prosthesis History (toggle; reveals type/material/placement-date/lab + failed toggle) · Failure Analysis (chip rows for category/mode/root-cause + 500-char narrative + photo upload via existing `/uploads` endpoint).
+- `/app/frontend/app/(tabs)/dashboard.tsx` — "New Case" quick action now opens an Alert with two options: **Fresh Case** (existing flow) vs **With Existing Implants** (new wizard).
+- `/app/frontend/utils/pdfGenerator.ts` — `buildLabSlipHtml` falls back to `existing_implants` when `implant_plans` is empty so the Lab Slip still renders implant-site / brand / system / Ø / length / platform rows. When `system_unknown=true`, the slip prints "System unknown — verify clinically".
+- `/app/frontend/app/procedures/[id].tsx` — new readback block for `case_origin === 'existing_implants'`: rendered above the Treatment Timeline. Shows implant inventory cards (tooth chip · brand · system · connection · platform · Ø · L · GH · surgeon · abutment-present · notes) + Prosthesis History block + a red Failure Analysis sub-block (chip rows for categories / modes / root causes + narrative + attachment chips).
+- `/app/frontend/app/procedures/submit-stage2-prosthetic/[id].tsx` — Phase 4 Step 1 form synthesizes `implantPositions` from `existing_implants` when `case_origin='existing_implants'` and `implant_plans` is empty so the per-implant prosthesis selectors / shade slots / MUA editor still know how many implants exist.
+
+### Verification
+- Backend pytest `/app/backend/tests/test_existing_implants_iter211.py` — **15/15 PASS** (happy path, system_unknown, prosthesis-failure round-trip, empty-implants 422, each missing-field 422, duplicate-slot 409, list visibility, fresh-case regression smoke).
+- Combined regression: iter-211 (15) + iter-205 alpha_bio (24) + iter-210 MUA (4) = **43/43 PASS**.
+- Frontend smoke verified after `sudo supervisorctl restart expo` (Metro route-cache quirk for brand-new files). Wizard renders all sections correctly.
+- TypeScript compiles cleanly. Pre-existing TS errors in unrelated files (AutoclaveRow, ScheduledCasesSection) untouched.
+
+### Notes for next agent
+- **Slice 2 (Path B — add new implants + existing implants)**: Phase 1 form pre-locks existing implants as read-only rows + lets user add new ones. Phase 4 unifies both into a single prosthesis plan + Lab Slip. Out of scope this iteration.
+- **Slice 3 (Path C — implants stable but never had prosthesis + AI integration)**: Surface failure narrative in the AI Explain context window so re-design recommendations are smarter. Migration helper for mistaken case classification. Out of scope this iteration.
+- **Metro route-cache quirk**: brand-new top-level routes under `app/` may not be picked up on hot reload — `sudo supervisorctl restart expo` is the workaround. Same root cause as iter-168/206 SSR loading-spinner. Worth noting in CONTRIBUTING.md if we ever ship one.
+- **Test-data hygiene**: 12 orphan TEST_iter211 procedures (created during the testing-agent buggy-path repro before its fix landed) were swept manually with a one-off Mongo delete query.
+
+---
+
 ## Iteration 210 (Feb 2026) — Torque dedup, Phase 3 NA fallback, structured MUA editor in Phase 4 Step 1
 
 ### Why
