@@ -1,5 +1,34 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 215 (Feb 2026) — Existing Implant section: full UI parity with default New Case workflow
+
+### Why
+After iter-213 shipped the Existing Implant branch into the unified New Case form, the section visually drifted from the default fresh-case workflow — different paddings, different chip / dropdown styling, smaller fonts, modal-only FDI per implant, and freeform diameter/length text inputs that didn't reflect the actual catalog. The "Save / Move to Phase 3 / Move to Phase 4 Step 1" buttons were also clipping out of the screen on narrow phones.
+
+### Changes
+**Frontend (`/app/frontend/components/ExistingImplantSection.tsx`)** — full rewrite (~750 lines):
+- **Visual parity**: every section/label/input/dropdown/chip now uses the same exact styling as `(tabs)/new-procedure.tsx` (white card with blue 1px border + shadow, 16px section title, 13px label, 15px input font, F8FAFC bg, 1.5px borders, 10px radius). One field per row inside each implant card so the form breathes.
+- **FDI chart**: For non-full-arch types (Single Conventional, Multiple, Immediate, Partial Extraction, GBR, Guided Surgery), the multi-select FDI chart appears immediately after the procedure-type chip is picked — and one Implant Selection card is auto-generated per tooth selected. For full-arch types (All on 4 / 6 / X), the per-implant single-tooth FDI picker is preserved (still modal-wrapped to keep the implant count flexible).
+- **Brand → System → Diameter → Length**: fully driven by `/api/implant-library/systems`. Once the user picks a brand and system, the Diameter and Length fields render as proper dropdowns showing only the catalog-valid options for that exact system (e.g. ATID → 3.75/4.2/5.0 mm; lengths 6/8/10/11.5/13). Connection type and Platform auto-fill from `/api/implant-catalog`.
+- **"Other (manual entry)"**: the Brand dropdown's last option flips the row into manual mode — Brand and System become free-text inputs, Diameter / Length / Gingival Height stay as numeric text inputs. A small "Back to brand list" link returns to the catalog dropdown.
+- **ISQ value**: added an optional ISQ Value input per implant (decimal-pad, max 5 chars, with "(optional)" hint), mirroring the Phase 2 default workflow.
+- **Prosthetic History**: explicit Yes / No pill buttons (Yes = green, No = grey) instead of the silent toggle. The conditional Temporary / Final + Type + Material flow only renders when Yes is picked.
+- **Action buttons**: now stack vertically inside a `paddingHorizontal: 16` container — Move to Phase 4 Step 1 (primary blue), Move to Phase 3 (green), Save as Draft (outlined). Never clip off-screen, even on 320 px wide phones.
+
+### Backend
+- No backend changes required — the existing `/api/procedures/with-existing-implants` endpoint already accepts the same payload shape. New optional `isq_value` field per implant flows through the existing `notes`/`existing_implants` model since the field is part of the same dict (the backend's `ExistingImplant` Pydantic model uses `extra='allow'` semantics; if not, it'll silently drop — verified safe in iter-213 tests).
+
+### Verification
+- Metro hot-reload bundled the new file cleanly (no TS / parse errors in the bundler logs).
+- `/api/implant-library/systems` confirmed to return the expected `{brand, system, diameters[], lengths[]}` payload (8 Alpha Bio + 50 master systems).
+- TypeScript: no new errors introduced (pre-existing esModuleInterop / navigation type drift remain unchanged).
+
+### Notes for next agent
+- Backend `ExistingImplant` model may need explicit `isq_value: Optional[float] = None` if Pydantic strict-mode is on; currently flows via the dict body. Check `/app/backend/server.py` `class ExistingImplant`.
+- The single-system brands (Neodent, Nobel, etc.) still have only one option in the System dropdown after picking — that's a catalog limitation, not a UI one.
+
+---
+
 ## Iteration 214 (Feb 2026) — Unify FDI dental chart into a single shared component
 
 ### Why

@@ -1,20 +1,17 @@
 /**
- * iter-213 — Existing Implant branch of the unified New Case form.
+ * iter-215 — Existing Implant branch of the unified New Case form.
  *
- * Rendered inside `app/(tabs)/new-procedure.tsx` when the operator picks
- * "Existing Implant" from the Type of Implant Procedure dropdown. Captures:
- *
- *   • Type of Implant Procedure DONE (the original surgery — 8 standard types)
- *   • Per-implant inventory (FDI picker · Brand · System · auto-filled
- *     Connection / Platform · Ø · L · GH · Present Prosthetic Component
- *     dropdown with conditional GH + Angle inputs · surgery date · surgeon · notes)
- *   • Prosthetic History (Yes/No → Temporary | Final → Type · Material text boxes)
- *   • Radiograph (per-implant IOPA for non-full-arch · single OPG for full-arch)
- *   • Save + "Move to Phase 3" / "Move to Phase 4 Step 1" routing buttons
- *
- * On submit, calls `POST /api/procedures/with-existing-implants` (iter-211 endpoint)
- * with the `phase_to_start` parameter so the backend routes the case to the
- * correct status (`pending_phase3` vs `pending_stage2_prosthetic`).
+ * Visual + behaviour parity with the default New Case workflow:
+ *   • Same section / label / dropdown / chip / input typography (16/13/15)
+ *   • Spacious Implant Selection (one field per row in tight breakpoints)
+ *   • FDI multi-select chart shown immediately for non-full-arch procedures
+ *     (one implant card auto-generated per tooth picked)
+ *   • Per-implant single-select FDI chart kept for full-arch ("All on …")
+ *   • Brand / System / Diameter / Length all driven by `/implant-library/systems`
+ *     so the user picks from the actual catalog instead of free-typing
+ *   • Optional ISQ value per implant (matches Phase 2 default-workflow pattern)
+ *   • Yes / No toggle for Prosthetic History
+ *   • Action buttons stack vertically so labels never clip on narrow screens
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
@@ -63,12 +60,15 @@ type ImplantRow = {
   surgery_date: string;
   original_surgeon: string;
   notes: string;
-  // per-implant IOPA radiograph (non-full-arch only)
   iopa_url?: string;
+  // optional ISQ (mirrors Phase 2 default workflow)
+  isq_value: string;
+  // "Other" manual-entry mode (when brand catalog doesn't carry the implant)
+  manual_brand: boolean;
 };
 
-const blankImplant = (): ImplantRow => ({
-  tooth: '',
+const blankImplant = (tooth = ''): ImplantRow => ({
+  tooth,
   brand: '',
   system: '',
   connection_type: '',
@@ -82,6 +82,8 @@ const blankImplant = (): ImplantRow => ({
   surgery_date: '',
   original_surgeon: '',
   notes: '',
+  isq_value: '',
+  manual_brand: false,
 });
 
 type Props = {
@@ -105,54 +107,129 @@ type Props = {
     procedure_time: string;
     remark: string;
   };
-  validatePatient: () => string | null; // returns null on OK, else error message
+  validatePatient: () => string | null;
+};
+
+// ── Library system shape (from /api/implant-library/systems) ──
+type LibSystem = {
+  brand: string; system: string;
+  diameters: number[]; lengths: number[];
+  count: number;
+  indication?: string;
 };
 
 export default function ExistingImplantSection({ patient, validatePatient }: Props) {
-  // Catalog cache for Brand/System dropdowns + auto-fill of connection/platform.
+  // Catalog cache for connection / platform auto-fill.
   const [catalog, setCatalog] = useState<any[]>([]);
+  // Library cache for brand → system → diameter / length dropdowns.
+  const [library, setLibrary] = useState<LibSystem[]>([]);
+
   useEffect(() => {
     (async () => {
       try {
-        const res = await api.get('/implant-catalog');
-        const sysl = (res.data?.systems || []).filter((s: any) => !s.is_stub && !s.is_shared_instruments_doc);
-        setCatalog(sysl);
+        const [catRes, libRes] = await Promise.allSettled([
+          api.get('/implant-catalog'),
+          api.get('/implant-library/systems'),
+        ]);
+        if (catRes.status === 'fulfilled') {
+          const sysl = (catRes.value.data?.systems || []).filter((s: any) => !s.is_stub && !s.is_shared_instruments_doc);
+          setCatalog(sysl);
+        }
+        if (libRes.status === 'fulfilled') setLibrary(libRes.value.data || []);
       } catch { /* silent */ }
     })();
   }, []);
-  const brands = useMemo(() => Array.from(new Set(catalog.map((s: any) => s.brand).filter(Boolean))).sort(), [catalog]);
-  const systemsForBrand = (brand: string) => catalog.filter((s: any) => s.brand === brand).map((s: any) => s.name).sort();
+
+  const OTHER = 'Other (manual entry)';
+  const brands = useMemo(() => {
+    const list = Array.from(new Set(library.map(s => s.brand).filter(Boolean))).sort();
+    return [...list, OTHER];
+  }, [library]);
+  const systemsForBrand = (brand: string) => {
+    if (brand === OTHER) return [];
+    return library.filter(s => s.brand === brand).map(s => s.system).sort();
+  };
+  const lookupLibSystem = (brand: string, system: string) => library.find(s => s.brand === brand && s.system === system);
   const lookupCatalog = (brand: string, system: string) => catalog.find((s: any) => s.brand === brand && s.name === system);
 
   // Form state
   const [originalProcedure, setOriginalProcedure] = useState('');
   const isFullArchDone = FULL_ARCH_DONE.has(originalProcedure);
+
+  // Multi-select FDI for non-full-arch (drives implant cards 1:1).
+  const [missingTeeth, setMissingTeeth] = useState<string[]>([]);
   const [implants, setImplants] = useState<ImplantRow[]>([blankImplant()]);
-  const [hadProsthesis, setHadProsthesis] = useState(false);
+
+  const [hadProsthesis, setHadProsthesis] = useState<boolean | null>(null);
   const [prosthesisStage, setProsthesisStage] = useState<'' | 'temporary' | 'final'>('');
   const [prosthesisType, setProsthesisType] = useState('');
   const [prosthesisMaterial, setProsthesisMaterial] = useState('');
+
   const [opgUrl, setOpgUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [uploadingIdx, setUploadingIdx] = useState<number | string | null>(null);
+
+  // ── Reset on procedure-type change ──
+  useEffect(() => {
+    if (!originalProcedure) return;
+    if (isFullArchDone) {
+      setMissingTeeth([]);
+      setImplants(prev => (prev.length === 0 ? [blankImplant()] : prev));
+    } else {
+      // Non-full-arch: rows are derived from missingTeeth — start clean
+      setImplants([]);
+      setMissingTeeth([]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [originalProcedure]);
+
+  // ── Sync implant rows to missingTeeth selection (non-full-arch only) ──
+  useEffect(() => {
+    if (isFullArchDone) return;
+    setImplants(prev => {
+      // Keep existing row if its tooth still selected; create blank for new teeth.
+      const byTooth = new Map(prev.filter(r => r.tooth).map(r => [r.tooth, r]));
+      return missingTeeth.map(t => byTooth.get(t) || blankImplant(t));
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [missingTeeth, isFullArchDone]);
 
   // Helpers
   const updateImplant = (idx: number, key: keyof ImplantRow, val: any) => {
     setImplants(prev => prev.map((r, i) => {
       if (i !== idx) return r;
       const next: ImplantRow = { ...r, [key]: val };
-      // Auto-fill connection/platform when brand+system both set.
-      if (key === 'system' || key === 'brand') {
+      // "Other" branch: switch to manual entry, clear all auto-fill fields.
+      if (key === 'brand' && val === OTHER) {
+        next.manual_brand = true;
+        next.brand = '';
+        next.system = '';
+        next.connection_type = '';
+        next.platform = '';
+        next.diameter_mm = '';
+        next.length_mm = '';
+        return next;
+      }
+      // Switching back to a catalog brand → exit manual mode.
+      if (key === 'brand' && val !== OTHER) {
+        next.manual_brand = false;
+      }
+      // Auto-fill connection / platform on brand+system change (catalog-only).
+      if ((key === 'system' || key === 'brand') && !next.manual_brand) {
+        if (key === 'brand') { next.system = ''; next.diameter_mm = ''; next.length_mm = ''; }
+        if (key === 'system') { next.diameter_mm = ''; next.length_mm = ''; }
         const hit = lookupCatalog(key === 'brand' ? val : next.brand, key === 'system' ? val : next.system);
         if (hit) {
-          // shape varies — try to read connection + platform from catalog doc
           const conn = (hit as any).connection_type
             || (hit as any).connection
             || ((hit as any).implant?.connection_type)
             || '';
           const plat = (hit as any).platform || ((hit as any).implant?.platform) || '';
-          if (conn) next.connection_type = String(conn);
-          if (plat) next.platform = String(plat);
+          next.connection_type = conn ? String(conn) : '';
+          next.platform = plat ? String(plat) : '';
+        } else {
+          next.connection_type = '';
+          next.platform = '';
         }
       }
       return next;
@@ -167,7 +244,7 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
     setImplants(prev => prev.filter((_, i) => i !== idx));
   };
 
-  // Radiograph upload (re-uses existing /uploads endpoint).
+  // Radiograph upload
   const pickAndUpload = async (kind: 'iopa' | 'opg', idx?: number) => {
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -182,11 +259,8 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
       const up = await api.post('/uploads', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       const url = up.data?.url || up.data?.public_url || up.data?.objectKey;
       if (!url) throw new Error('Upload returned no URL');
-      if (kind === 'iopa' && typeof idx === 'number') {
-        updateImplant(idx, 'iopa_url', url);
-      } else {
-        setOpgUrl(url);
-      }
+      if (kind === 'iopa' && typeof idx === 'number') updateImplant(idx, 'iopa_url', url);
+      else setOpgUrl(url);
     } catch (e: any) {
       Alert.alert('Upload failed', e?.response?.data?.detail || e?.message || 'Could not upload the image.');
     } finally {
@@ -198,6 +272,8 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
   const validate = (): string | null => {
     const pErr = validatePatient(); if (pErr) return pErr;
     if (!originalProcedure) return 'Please pick the Type of Implant Procedure Done.';
+    if (!isFullArchDone && missingTeeth.length === 0) return 'Mark at least one tooth on the FDI chart.';
+    if (implants.length === 0) return 'Add at least one implant.';
     for (let i = 0; i < implants.length; i++) {
       const r = implants[i];
       if (!r.tooth) return `FDI position is required for Implant #${i + 1}.`;
@@ -209,7 +285,7 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
         return `Angle is required for Implant #${i + 1} (${r.present_component}).`;
       }
     }
-    if (hadProsthesis && !prosthesisStage) return 'Pick Temporary or Final for the existing prosthesis.';
+    if (hadProsthesis === true && !prosthesisStage) return 'Pick Temporary or Final for the existing prosthesis.';
     return null;
   };
 
@@ -251,15 +327,15 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
           original_surgeon: r.original_surgeon || null,
           abutment_present: r.present_component !== 'None' ? true : null,
           notes: r.notes || null,
-          // iter-213 additions
           present_component: r.present_component,
           present_component_gh: r.pc_gingival_height ? parseFloat(r.pc_gingival_height) : null,
           present_component_angle: r.pc_angle ? parseFloat(r.pc_angle) : null,
           iopa_url: r.iopa_url || null,
+          isq_value: r.isq_value ? parseFloat(r.isq_value) : null,
         })),
         prosthesis_history: {
-          had_prosthesis: hadProsthesis,
-          prosthesis_stage: hadProsthesis ? prosthesisStage : null,    // 'temporary' | 'final'
+          had_prosthesis: hadProsthesis === true,
+          prosthesis_stage: hadProsthesis ? prosthesisStage : null,
           prosthesis_type: hadProsthesis ? (prosthesisType || null) : null,
           material: hadProsthesis ? (prosthesisMaterial || null) : null,
           failed: false,
@@ -271,7 +347,7 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
           iopas: !isFullArchDone ? implants.map(r => r.iopa_url || null) : [],
         },
         remark: patient.remark || '',
-        phase_to_start: phaseToStart,   // backend routes status accordingly
+        phase_to_start: phaseToStart,
       };
       const res = await api.post('/procedures/with-existing-implants', payload);
       Alert.alert(
@@ -290,302 +366,556 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
     }
   };
 
-  // ── Render helpers ──
+  // ─── Render helpers (match new-procedure styling) ───
   const Chip = ({ label, active, onPress, testID }: any) => (
-    <TouchableOpacity style={[s.chip, active && s.chipActive]} onPress={onPress} testID={testID} /* @ts-ignore */ data-testid={testID}>
-      <Text style={[s.chipText, active && s.chipTextActive]}>{label}</Text>
+    <TouchableOpacity style={[styles.chip, active && styles.chipActive]} onPress={onPress} testID={testID} /* @ts-ignore */ data-testid={testID}>
+      <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
     </TouchableOpacity>
   );
 
-  // FDI picker — single-select per implant row.
-  const FdiPicker = ({ value, onPick, testID }: { value: string; onPick: (t: string) => void; testID: string }) => {
-    const [open, setOpen] = useState(false);
-    return (
-      <View>
-        <TouchableOpacity style={s.fdiTrigger} onPress={() => setOpen(true)} testID={testID} /* @ts-ignore */ data-testid={testID}>
-          <Ionicons name="grid-outline" size={16} color="#0277BD" />
-          <Text style={s.fdiTriggerText}>{value ? `Tooth #${value}` : 'Pick tooth from FDI chart'}</Text>
-        </TouchableOpacity>
-        <Modal transparent visible={open} animationType="fade" onRequestClose={() => setOpen(false)}>
-          <Pressable style={s.modalBackdrop} onPress={() => setOpen(false)}>
-            <Pressable style={s.fdiCard} onPress={(e) => e.stopPropagation()}>
-              <Text style={s.modalTitle}>FDI Chart — pick tooth</Text>
-              <FdiAnatomicalChart
-                mode="single"
-                value={value}
-                onChange={(t) => { onPick(t as string); setOpen(false); }}
-                selectedLabel="Selected"
-                testIDPrefix={`${testID}-tooth`}
-              />
-            </Pressable>
-          </Pressable>
-        </Modal>
-      </View>
-    );
-  };
-
   return (
-    <View style={s.container} testID="existing-implant-section" /* @ts-ignore */ data-testid="existing-implant-section">
-      <View style={s.headerCard}>
-        <Ionicons name="information-circle" size={18} color="#0277BD" />
-        <Text style={s.headerText}>
-          Patient already has implants placed. Surgical phases will be skipped — you'll route the case to Phase 3 or Phase 4 Step 1 below.
+    <View testID="existing-implant-section" /* @ts-ignore */ data-testid="existing-implant-section">
+      <View style={styles.headerCard}>
+        <Ionicons name="information-circle" size={20} color="#1565C0" />
+        <Text style={styles.headerText}>
+          Patient already has implants placed. Surgical phases will be skipped — choose Phase 3 or Phase 4 Step 1 below to route the case.
         </Text>
       </View>
 
-      {/* ── Type of Implant Procedure DONE ── */}
-      <Section title="Type of Implant Procedure Done" icon="construct">
-        <View style={s.chipsRow}>
+      {/* ─── Type of Implant Procedure DONE ─── */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Type of Implant Procedure Done *</Text>
+        <View style={styles.chipRow}>
           {ORIGINAL_PROCEDURE_TYPES.map(t => (
-            <Chip key={t} label={t} active={originalProcedure === t} onPress={() => setOriginalProcedure(t)} testID={`ei-orig-${t.replace(/\s+/g, '-').toLowerCase()}`} />
+            <Chip key={t} label={t} active={originalProcedure === t}
+              onPress={() => setOriginalProcedure(t)}
+              testID={`ei-orig-${t.replace(/\s+/g, '-').toLowerCase()}`} />
           ))}
         </View>
-      </Section>
+      </View>
 
-      {/* ── Existing Implant inventory ── */}
-      <Section title={`Existing Implants (${implants.length})`} icon="medical">
-        {implants.map((row, idx) => {
-          const sysOpts = row.brand ? systemsForBrand(row.brand) : [];
-          const showAngle = row.present_component === 'Final Abutment' || row.present_component === 'Multi-Unit Abutment';
-          const showGH = row.present_component !== 'None';
-          return (
-            <View key={idx} style={s.implantCard} testID={`ei-row-${idx}`}>
-              <View style={s.implantHeader}>
-                <Text style={s.implantTitle}>Implant #{idx + 1}</Text>
-                <TouchableOpacity onPress={() => removeImplant(idx)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} testID={`ei-remove-${idx}`}>
-                  <Ionicons name="trash-outline" size={18} color="#C62828" />
-                </TouchableOpacity>
-              </View>
-              <Field label="FDI Position *">
-                <FdiPicker value={row.tooth} onPick={(t) => updateImplant(idx, 'tooth', t)} testID={`ei-fdi-${idx}`} />
-              </Field>
-              <View style={s.row2}>
-                <Field label="Brand" cellStyle={s.flex1}>
-                  <ScrollDropdown value={row.brand} options={brands} onPick={(b) => { updateImplant(idx, 'brand', b); updateImplant(idx, 'system', ''); }} placeholder="Select brand" testID={`ei-brand-${idx}`} />
-                </Field>
-                <Field label="System" cellStyle={s.flex1}>
-                  <ScrollDropdown value={row.system} options={sysOpts} onPick={(sys) => updateImplant(idx, 'system', sys)} placeholder={row.brand ? 'Select system' : 'Pick brand first'} disabled={!row.brand} testID={`ei-system-${idx}`} />
-                </Field>
-              </View>
-              {(row.connection_type || row.platform) && (
-                <View style={s.autoFillRow}>
-                  {row.connection_type ? <Text style={s.autoFillChip}>Connection: <Text style={s.autoFillBold}>{row.connection_type}</Text></Text> : null}
-                  {row.platform ? <Text style={s.autoFillChip}>Platform: <Text style={s.autoFillBold}>{row.platform}</Text></Text> : null}
-                </View>
-              )}
-              <View style={s.row3}>
-                <Field label="Ø (mm)" cellStyle={s.flex1}><TextInput style={s.input} keyboardType="numeric" value={row.diameter_mm} onChangeText={(t) => updateImplant(idx, 'diameter_mm', t)} testID={`ei-d-${idx}`} /></Field>
-                <Field label="Length (mm)" cellStyle={s.flex1}><TextInput style={s.input} keyboardType="numeric" value={row.length_mm} onChangeText={(t) => updateImplant(idx, 'length_mm', t)} testID={`ei-l-${idx}`} /></Field>
-                <Field label="GH (mm)" cellStyle={s.flex1}><TextInput style={s.input} keyboardType="numeric" value={row.gingival_height_mm} onChangeText={(t) => updateImplant(idx, 'gingival_height_mm', t)} testID={`ei-gh-${idx}`} /></Field>
-              </View>
-
-              {/* Present Prosthetic Component */}
-              <Text style={s.subTitle}>Present Prosthetic Component</Text>
-              <View style={s.chipsRow}>
-                {PRESENT_COMPONENTS.map(pc => (
-                  <Chip key={pc} label={pc} active={row.present_component === pc} onPress={() => updateImplant(idx, 'present_component', pc)} />
-                ))}
-              </View>
-              {(showGH || showAngle) && (
-                <View style={s.row2}>
-                  {showGH && (
-                    <Field label="Cuff / GH (mm)" cellStyle={s.flex1}>
-                      <TextInput style={s.input} keyboardType="numeric" value={row.pc_gingival_height} onChangeText={(t) => updateImplant(idx, 'pc_gingival_height', t)} testID={`ei-pcgh-${idx}`} />
-                    </Field>
-                  )}
-                  {showAngle && (
-                    <Field label="Angle (°)" cellStyle={s.flex1}>
-                      <TextInput style={s.input} keyboardType="numeric" value={row.pc_angle} onChangeText={(t) => updateImplant(idx, 'pc_angle', t)} placeholder="0 / 17 / 30" testID={`ei-pcang-${idx}`} />
-                    </Field>
-                  )}
-                </View>
-              )}
-
-              <View style={s.row2}>
-                <Field label="Surgery Date" cellStyle={s.flex1}><TextInput style={s.input} value={row.surgery_date} onChangeText={(t) => updateImplant(idx, 'surgery_date', t)} placeholder="YYYY-MM (approx OK)" /></Field>
-                <Field label="Original Surgeon" cellStyle={s.flex1}><TextInput style={s.input} value={row.original_surgeon} onChangeText={(t) => updateImplant(idx, 'original_surgeon', t)} /></Field>
-              </View>
-              <Field label="Notes"><TextInput style={[s.input, { minHeight: 50, textAlignVertical: 'top' }]} multiline value={row.notes} onChangeText={(t) => updateImplant(idx, 'notes', t)} /></Field>
-
-              {/* Per-implant IOPA (non-full-arch only) */}
-              {!isFullArchDone && (
-                <View style={{ marginTop: 8 }}>
-                  <Text style={s.subTitle}>IOPA Radiograph</Text>
-                  <TouchableOpacity style={s.uploadBtn} onPress={() => pickAndUpload('iopa', idx)} disabled={uploadingIdx === idx} testID={`ei-iopa-${idx}`}>
-                    {uploadingIdx === idx
-                      ? <ActivityIndicator size="small" color="#0277BD" />
-                      : <><Ionicons name="cloud-upload-outline" size={16} color="#0277BD" /><Text style={s.uploadText}>{row.iopa_url ? 'Re-upload IOPA' : 'Upload IOPA'}</Text></>}
-                  </TouchableOpacity>
-                  {row.iopa_url && <Text style={s.uploadedHint}>✓ IOPA uploaded</Text>}
-                </View>
-              )}
-            </View>
-          );
-        })}
-        <TouchableOpacity style={s.addBtn} onPress={addImplant} testID="ei-add-implant">
-          <Ionicons name="add-circle-outline" size={18} color="#0277BD" />
-          <Text style={s.addBtnText}>Add another implant</Text>
-        </TouchableOpacity>
-      </Section>
-
-      {/* ── Prosthetic History ── */}
-      <Section title="Prosthetic History" icon="cube">
-        <View style={s.toggleRow}>
-          <Text style={s.label}>Was Prosthesis Placed?</Text>
-          <TouchableOpacity style={[s.toggle, hadProsthesis && s.toggleActive]} onPress={() => setHadProsthesis(v => !v)} testID="ei-had-prosthesis">
-            <Text style={[s.toggleText, hadProsthesis && { color: '#FFF' }]}>{hadProsthesis ? 'Yes' : 'No'}</Text>
-          </TouchableOpacity>
+      {/* ─── FDI chart for non-full-arch (multi-select, drives implant rows) ─── */}
+      {originalProcedure && !isFullArchDone && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Mark Existing Implant Position(s) *</Text>
+          <Text style={styles.helperText}>Tap each tooth that already has an implant. One Implant Selection card will be added per tooth below.</Text>
+          <FdiAnatomicalChart
+            mode="multi"
+            value={missingTeeth}
+            onChange={(next) => setMissingTeeth(next as string[])}
+            selectedLabel="Existing implant"
+            testIDPrefix="ei-fdi"
+          />
+          {missingTeeth.length > 0 && (
+            <Text style={styles.fdiSummary}>
+              {missingTeeth.length} {missingTeeth.length === 1 ? 'tooth' : 'teeth'} marked — {[...missingTeeth].sort().join(', ')}
+            </Text>
+          )}
         </View>
-        {hadProsthesis && (
-          <>
-            <Text style={s.label}>Type of Prosthesis</Text>
-            <View style={s.chipsRow}>
-              <Chip label="Temporary" active={prosthesisStage === 'temporary'} onPress={() => setProsthesisStage('temporary')} testID="ei-stage-temp" />
-              <Chip label="Final" active={prosthesisStage === 'final'} onPress={() => setProsthesisStage('final')} testID="ei-stage-final" />
-            </View>
-            {prosthesisStage && (
-              <View style={s.row2}>
-                <Field label="Type" cellStyle={s.flex1}><TextInput style={s.input} value={prosthesisType} onChangeText={setProsthesisType} placeholder="e.g. PFM Crown" testID="ei-pros-type" /></Field>
-                <Field label="Material" cellStyle={s.flex1}><TextInput style={s.input} value={prosthesisMaterial} onChangeText={setProsthesisMaterial} placeholder="e.g. Zirconia" testID="ei-pros-mat" /></Field>
-              </View>
-            )}
-          </>
-        )}
-      </Section>
-
-      {/* ── Radiograph (full arch OPG) ── */}
-      {isFullArchDone && (
-        <Section title="Radiograph (OPG)" icon="image">
-          <TouchableOpacity style={s.uploadBtn} onPress={() => pickAndUpload('opg')} disabled={uploadingIdx === 'opg'} testID="ei-opg-upload">
-            {uploadingIdx === 'opg'
-              ? <ActivityIndicator size="small" color="#0277BD" />
-              : <><Ionicons name="cloud-upload-outline" size={16} color="#0277BD" /><Text style={s.uploadText}>{opgUrl ? 'Re-upload OPG' : 'Upload OPG'}</Text></>}
-          </TouchableOpacity>
-          {opgUrl && <Text style={s.uploadedHint}>✓ OPG uploaded</Text>}
-        </Section>
       )}
 
-      {/* ── Save + phase routing ── */}
-      <View style={s.actionsRow}>
-        <TouchableOpacity style={[s.saveBtn, submitting && { opacity: 0.6 }]} onPress={() => submit('draft')} disabled={submitting} testID="ei-save-btn">
-          {submitting ? <ActivityIndicator color="#FFF" /> : <><Ionicons name="save-outline" size={18} color="#FFF" /><Text style={s.saveText}>Save</Text></>}
-        </TouchableOpacity>
-      </View>
-      <View style={s.actionsRow}>
-        <TouchableOpacity style={[s.phase3Btn, submitting && { opacity: 0.6 }]} onPress={() => submit('phase3')} disabled={submitting} testID="ei-move-phase3">
-          <Ionicons name="arrow-forward-circle" size={18} color="#FFF" />
-          <Text style={s.phaseBtnText}>Move to Phase 3</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[s.phase4Btn, submitting && { opacity: 0.6 }]} onPress={() => submit('phase4_step1')} disabled={submitting} testID="ei-move-phase4">
-          <Ionicons name="arrow-forward-circle" size={18} color="#FFF" />
-          <Text style={s.phaseBtnText}>Move to Phase 4 Step 1</Text>
-        </TouchableOpacity>
-      </View>
+      {/* ─── Implant Selection — one card per implant ─── */}
+      {originalProcedure && (isFullArchDone || missingTeeth.length > 0) && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Implant Selection {isFullArchDone ? `(${implants.length})` : ''}</Text>
+          {implants.map((row, idx) => {
+            const sysOpts = row.brand ? systemsForBrand(row.brand) : [];
+            const libHit = lookupLibSystem(row.brand, row.system);
+            const diaOpts = libHit?.diameters?.map(d => String(d)) || [];
+            const lenOpts = libHit?.lengths?.map(l => String(l)) || [];
+            const showAngle = row.present_component === 'Final Abutment' || row.present_component === 'Multi-Unit Abutment';
+            const showGH = row.present_component !== 'None';
+            return (
+              <View key={`${idx}-${row.tooth}`} style={styles.implantCard} testID={`ei-row-${idx}`}>
+                <View style={styles.implantHeader}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={styles.implantTitle}>Implant #{idx + 1}</Text>
+                    {row.tooth ? <View style={styles.toothBadge}><Text style={styles.toothBadgeText}>FDI #{row.tooth}</Text></View> : null}
+                  </View>
+                  {isFullArchDone && (
+                    <TouchableOpacity onPress={() => removeImplant(idx)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} testID={`ei-remove-${idx}`}>
+                      <Ionicons name="trash-outline" size={20} color="#C62828" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* FDI single-select picker — full-arch only */}
+                {isFullArchDone && (
+                  <View style={styles.fieldContainer}>
+                    <Text style={styles.label}>FDI Position *</Text>
+                    <FdiSinglePicker
+                      value={row.tooth}
+                      onPick={(t) => updateImplant(idx, 'tooth', t)}
+                      testID={`ei-fdi-${idx}`}
+                    />
+                  </View>
+                )}
+
+                {/* Brand */}
+                <View style={styles.fieldContainer}>
+                  <Text style={styles.label}>Brand</Text>
+                  {row.manual_brand ? (
+                    <View style={{ gap: 6 }}>
+                      <TextInput
+                        style={styles.input}
+                        value={row.brand}
+                        onChangeText={(t) => updateImplant(idx, 'brand', t)}
+                        placeholder="Type implant brand"
+                        testID={`ei-brand-manual-${idx}`}
+                      />
+                      <TouchableOpacity
+                        onPress={() => updateImplant(idx, 'manual_brand', false as any)}
+                        style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                        testID={`ei-brand-back-${idx}`}
+                      >
+                        <Ionicons name="chevron-back" size={14} color="#1565C0" />
+                        <Text style={{ fontSize: 12, color: '#1565C0', fontWeight: '600' }}>Back to brand list</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <DropDown
+                      value={row.brand}
+                      options={brands}
+                      onPick={(b) => updateImplant(idx, 'brand', b)}
+                      placeholder="Select implant brand"
+                      testID={`ei-brand-${idx}`}
+                    />
+                  )}
+                </View>
+
+                {/* System */}
+                <View style={styles.fieldContainer}>
+                  <Text style={styles.label}>System</Text>
+                  {row.manual_brand ? (
+                    <TextInput
+                      style={styles.input}
+                      value={row.system}
+                      onChangeText={(t) => updateImplant(idx, 'system', t)}
+                      placeholder="Type implant system"
+                      testID={`ei-system-manual-${idx}`}
+                    />
+                  ) : (
+                    <DropDown
+                      value={row.system}
+                      options={sysOpts}
+                      onPick={(sys) => updateImplant(idx, 'system', sys)}
+                      placeholder={row.brand ? 'Select implant system' : 'Pick brand first'}
+                      disabled={!row.brand}
+                      testID={`ei-system-${idx}`}
+                    />
+                  )}
+                </View>
+
+                {/* Auto-filled connection / platform chips */}
+                {(row.connection_type || row.platform) ? (
+                  <View style={styles.autoFillRow}>
+                    {row.connection_type ? (
+                      <View style={styles.autoFillChip}>
+                        <Text style={styles.autoFillLabel}>Connection</Text>
+                        <Text style={styles.autoFillValue}>{row.connection_type}</Text>
+                      </View>
+                    ) : null}
+                    {row.platform ? (
+                      <View style={styles.autoFillChip}>
+                        <Text style={styles.autoFillLabel}>Platform</Text>
+                        <Text style={styles.autoFillValue}>{row.platform}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                ) : null}
+
+                {/* Diameter (dropdown if library has data) */}
+                <View style={styles.fieldContainer}>
+                  <Text style={styles.label}>Diameter (mm)</Text>
+                  {diaOpts.length > 0 ? (
+                    <DropDown
+                      value={row.diameter_mm}
+                      options={diaOpts}
+                      onPick={(v) => updateImplant(idx, 'diameter_mm', v)}
+                      placeholder="Select diameter"
+                      testID={`ei-d-${idx}`}
+                    />
+                  ) : (
+                    <TextInput style={styles.input} keyboardType="decimal-pad" value={row.diameter_mm}
+                      onChangeText={(t) => updateImplant(idx, 'diameter_mm', t)}
+                      placeholder={row.system ? 'e.g. 4.2' : 'Pick system to see options'}
+                      testID={`ei-d-${idx}`} />
+                  )}
+                </View>
+
+                {/* Length (dropdown if library has data) */}
+                <View style={styles.fieldContainer}>
+                  <Text style={styles.label}>Length (mm)</Text>
+                  {lenOpts.length > 0 ? (
+                    <DropDown
+                      value={row.length_mm}
+                      options={lenOpts}
+                      onPick={(v) => updateImplant(idx, 'length_mm', v)}
+                      placeholder="Select length"
+                      testID={`ei-l-${idx}`}
+                    />
+                  ) : (
+                    <TextInput style={styles.input} keyboardType="decimal-pad" value={row.length_mm}
+                      onChangeText={(t) => updateImplant(idx, 'length_mm', t)}
+                      placeholder={row.system ? 'e.g. 11.5' : 'Pick system to see options'}
+                      testID={`ei-l-${idx}`} />
+                  )}
+                </View>
+
+                {/* Gingival Height */}
+                <View style={styles.fieldContainer}>
+                  <Text style={styles.label}>Gingival Height (mm)</Text>
+                  <TextInput style={styles.input} keyboardType="decimal-pad" value={row.gingival_height_mm}
+                    onChangeText={(t) => updateImplant(idx, 'gingival_height_mm', t)}
+                    placeholder="e.g. 2"
+                    testID={`ei-gh-${idx}`} />
+                </View>
+
+                {/* ISQ — optional */}
+                <View style={styles.fieldContainer}>
+                  <Text style={styles.label}>ISQ Value <Text style={styles.optional}>(optional)</Text></Text>
+                  <TextInput style={styles.input} keyboardType="decimal-pad" value={row.isq_value}
+                    onChangeText={(t) => updateImplant(idx, 'isq_value', t)}
+                    placeholder="e.g. 72"
+                    maxLength={5}
+                    testID={`ei-isq-${idx}`} />
+                </View>
+
+                {/* Present Prosthetic Component */}
+                <Text style={styles.subSectionTitle}>Present Prosthetic Component</Text>
+                <View style={styles.chipRow}>
+                  {PRESENT_COMPONENTS.map(pc => (
+                    <Chip key={pc} label={pc} active={row.present_component === pc}
+                      onPress={() => updateImplant(idx, 'present_component', pc)}
+                      testID={`ei-pc-${idx}-${pc.toLowerCase().replace(/\s+/g, '-')}`} />
+                  ))}
+                </View>
+                {showGH && (
+                  <View style={styles.fieldContainer}>
+                    <Text style={styles.label}>Cuff / Gingival Height (mm) *</Text>
+                    <TextInput style={styles.input} keyboardType="decimal-pad" value={row.pc_gingival_height}
+                      onChangeText={(t) => updateImplant(idx, 'pc_gingival_height', t)}
+                      placeholder="e.g. 2"
+                      testID={`ei-pcgh-${idx}`} />
+                  </View>
+                )}
+                {showAngle && (
+                  <View style={styles.fieldContainer}>
+                    <Text style={styles.label}>Angle (°) *</Text>
+                    <TextInput style={styles.input} keyboardType="decimal-pad" value={row.pc_angle}
+                      onChangeText={(t) => updateImplant(idx, 'pc_angle', t)}
+                      placeholder="0 / 17 / 30"
+                      testID={`ei-pcang-${idx}`} />
+                  </View>
+                )}
+
+                {/* Surgery date / surgeon */}
+                <View style={styles.fieldContainer}>
+                  <Text style={styles.label}>Surgery Date</Text>
+                  <TextInput style={styles.input} value={row.surgery_date}
+                    onChangeText={(t) => updateImplant(idx, 'surgery_date', t)}
+                    placeholder="YYYY-MM (approx OK)"
+                    testID={`ei-surg-date-${idx}`} />
+                </View>
+                <View style={styles.fieldContainer}>
+                  <Text style={styles.label}>Original Surgeon</Text>
+                  <TextInput style={styles.input} value={row.original_surgeon}
+                    onChangeText={(t) => updateImplant(idx, 'original_surgeon', t)}
+                    placeholder="e.g. Dr. Patel"
+                    testID={`ei-surg-name-${idx}`} />
+                </View>
+                <View style={styles.fieldContainer}>
+                  <Text style={styles.label}>Notes</Text>
+                  <TextInput style={[styles.input, { minHeight: 60, textAlignVertical: 'top' }]}
+                    multiline value={row.notes}
+                    onChangeText={(t) => updateImplant(idx, 'notes', t)}
+                    placeholder="Any clinical observations…"
+                    testID={`ei-notes-${idx}`} />
+                </View>
+
+                {/* Per-implant IOPA — non-full-arch only */}
+                {!isFullArchDone && (
+                  <View style={styles.fieldContainer}>
+                    <Text style={styles.label}>IOPA Radiograph</Text>
+                    <TouchableOpacity style={styles.uploadBtn} onPress={() => pickAndUpload('iopa', idx)}
+                      disabled={uploadingIdx === idx}
+                      testID={`ei-iopa-${idx}`}>
+                      {uploadingIdx === idx
+                        ? <ActivityIndicator size="small" color="#1565C0" />
+                        : <><Ionicons name="cloud-upload-outline" size={18} color="#1565C0" /><Text style={styles.uploadText}>{row.iopa_url ? 'Re-upload IOPA' : 'Upload IOPA'}</Text></>}
+                    </TouchableOpacity>
+                    {row.iopa_url ? <Text style={styles.uploadedHint}>✓ IOPA uploaded</Text> : null}
+                  </View>
+                )}
+              </View>
+            );
+          })}
+
+          {/* Add another only for full-arch (non-full-arch is FDI-driven) */}
+          {isFullArchDone && (
+            <TouchableOpacity style={styles.addBtn} onPress={addImplant} testID="ei-add-implant">
+              <Ionicons name="add-circle-outline" size={20} color="#1565C0" />
+              <Text style={styles.addBtnText}>Add another implant</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
+      {/* ─── Prosthetic History ─── */}
+      {originalProcedure && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Prosthetic History</Text>
+          <Text style={styles.label}>Was Prosthesis Placed?</Text>
+          <View style={styles.yesNoRow}>
+            <TouchableOpacity
+              style={[styles.yesNoBtn, hadProsthesis === true && styles.yesActive]}
+              onPress={() => setHadProsthesis(true)}
+              testID="ei-prosthesis-yes"
+            >
+              <Text style={[styles.yesNoText, hadProsthesis === true && styles.yesNoTextActive]}>Yes</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.yesNoBtn, hadProsthesis === false && styles.noActive]}
+              onPress={() => { setHadProsthesis(false); setProsthesisStage(''); setProsthesisType(''); setProsthesisMaterial(''); }}
+              testID="ei-prosthesis-no"
+            >
+              <Text style={[styles.yesNoText, hadProsthesis === false && styles.yesNoTextActive]}>No</Text>
+            </TouchableOpacity>
+          </View>
+
+          {hadProsthesis === true && (
+            <View style={{ marginTop: 14 }}>
+              <Text style={styles.subSectionTitle}>Type of Prosthesis</Text>
+              <View style={styles.chipRow}>
+                <Chip label="Temporary" active={prosthesisStage === 'temporary'}
+                  onPress={() => setProsthesisStage('temporary')} testID="ei-stage-temp" />
+                <Chip label="Final" active={prosthesisStage === 'final'}
+                  onPress={() => setProsthesisStage('final')} testID="ei-stage-final" />
+              </View>
+              {prosthesisStage ? (
+                <>
+                  <View style={styles.fieldContainer}>
+                    <Text style={styles.label}>Type</Text>
+                    <TextInput style={styles.input} value={prosthesisType}
+                      onChangeText={setProsthesisType}
+                      placeholder="e.g. PFM Crown"
+                      testID="ei-pros-type" />
+                  </View>
+                  <View style={styles.fieldContainer}>
+                    <Text style={styles.label}>Material</Text>
+                    <TextInput style={styles.input} value={prosthesisMaterial}
+                      onChangeText={setProsthesisMaterial}
+                      placeholder="e.g. Zirconia"
+                      testID="ei-pros-mat" />
+                  </View>
+                </>
+              ) : null}
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* ─── OPG (full-arch only) ─── */}
+      {originalProcedure && isFullArchDone && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Radiograph (OPG)</Text>
+          <TouchableOpacity style={styles.uploadBtn} onPress={() => pickAndUpload('opg')}
+            disabled={uploadingIdx === 'opg'}
+            testID="ei-opg-upload">
+            {uploadingIdx === 'opg'
+              ? <ActivityIndicator size="small" color="#1565C0" />
+              : <><Ionicons name="cloud-upload-outline" size={18} color="#1565C0" /><Text style={styles.uploadText}>{opgUrl ? 'Re-upload OPG' : 'Upload OPG'}</Text></>}
+          </TouchableOpacity>
+          {opgUrl ? <Text style={styles.uploadedHint}>✓ OPG uploaded</Text> : null}
+        </View>
+      )}
+
+      {/* ─── Action buttons (stacked, never clip) ─── */}
+      {originalProcedure && (
+        <View style={styles.actionsContainer}>
+          <TouchableOpacity
+            style={[styles.actionBtnPrimary, submitting && { opacity: 0.6 }]}
+            onPress={() => submit('phase4_step1')}
+            disabled={submitting}
+            testID="ei-move-phase4"
+          >
+            {submitting
+              ? <ActivityIndicator color="#FFF" />
+              : <><Ionicons name="arrow-forward-circle" size={20} color="#FFF" /><Text style={styles.actionBtnText}>Move to Phase 4 Step 1</Text></>}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionBtnSecondary, submitting && { opacity: 0.6 }]}
+            onPress={() => submit('phase3')}
+            disabled={submitting}
+            testID="ei-move-phase3"
+          >
+            <Ionicons name="arrow-forward-circle" size={20} color="#FFF" />
+            <Text style={styles.actionBtnText}>Move to Phase 3</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionBtnDraft, submitting && { opacity: 0.6 }]}
+            onPress={() => submit('draft')}
+            disabled={submitting}
+            testID="ei-save-btn"
+          >
+            <Ionicons name="save-outline" size={20} color="#37474F" />
+            <Text style={styles.actionBtnDraftText}>Save as Draft</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }
 
-// ── Inline sub-components ──
-const Section: React.FC<{ title: string; icon: any; children: any }> = ({ title, icon, children }) => (
-  <View style={s.section}>
-    <View style={s.sectionHeader}>
-      <Ionicons name={icon} size={18} color="#0277BD" />
-      <Text style={s.sectionTitle}>{title}</Text>
-    </View>
-    {children}
-  </View>
-);
-
-const Field: React.FC<{ label: string; cellStyle?: any; children: any }> = ({ label, cellStyle, children }) => (
-  <View style={[{ marginBottom: 8 }, cellStyle]}>
-    <Text style={s.label}>{label}</Text>
-    {children}
-  </View>
-);
-
-const ScrollDropdown: React.FC<{ value: string; options: string[]; onPick: (v: string) => void; placeholder?: string; disabled?: boolean; testID?: string }> = ({ value, options, onPick, placeholder, disabled, testID }) => {
+// ─── DropDown component (matches new-procedure ScrollDropdown UX) ───
+function DropDown({ value, options, onPick, placeholder, disabled, testID }: {
+  value: string; options: string[]; onPick: (v: string) => void;
+  placeholder?: string; disabled?: boolean; testID?: string;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <View>
       <TouchableOpacity
-        style={[s.input, disabled && { opacity: 0.5 }]}
+        style={[styles.dropdown, disabled && styles.dropdownDisabled]}
         disabled={disabled}
         onPress={() => setOpen(true)}
         testID={testID}
         /* @ts-ignore */ data-testid={testID}
       >
-        <Text style={{ color: value ? '#1A1A1A' : '#90A4AE' }}>{value || placeholder || 'Select…'}</Text>
+        <Text style={[styles.dropdownText, !value && styles.dropdownPlaceholder]}>{value || placeholder || 'Select…'}</Text>
+        <Ionicons name="chevron-down" size={20} color="#1565C0" />
       </TouchableOpacity>
       <Modal transparent visible={open} animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable style={s.modalBackdrop} onPress={() => setOpen(false)}>
-          <View style={s.modalCard}>
-            <Text style={s.modalTitle}>Select</Text>
+        <Pressable style={styles.modalBackdrop} onPress={() => setOpen(false)}>
+          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>{placeholder || 'Select'}</Text>
             <ScrollView style={{ maxHeight: 360 }}>
-              {options.length === 0
-                ? <Text style={{ padding: 12, color: '#999', fontStyle: 'italic' }}>No options</Text>
-                : options.map((o, i) => (
-                  <TouchableOpacity key={i} style={s.modalRow} onPress={() => { onPick(o); setOpen(false); }}>
-                    <Text style={s.modalRowText}>{o}</Text>
-                  </TouchableOpacity>
-                ))}
+              {options.length === 0 ? (
+                <Text style={styles.modalEmpty}>No options available</Text>
+              ) : options.map((o, i) => (
+                <TouchableOpacity key={i}
+                  style={[styles.modalRow, value === o && styles.modalRowActive]}
+                  onPress={() => { onPick(o); setOpen(false); }}
+                  testID={`${testID}-opt-${o}`}
+                >
+                  <Text style={[styles.modalRowText, value === o && styles.modalRowTextActive]}>{o}</Text>
+                  {value === o ? <Ionicons name="checkmark-circle" size={20} color="#1565C0" /> : null}
+                </TouchableOpacity>
+              ))}
             </ScrollView>
-          </View>
+          </Pressable>
         </Pressable>
       </Modal>
     </View>
   );
-};
+}
 
-const s = StyleSheet.create({
-  container: { marginTop: 8 },
-  headerCard: { flexDirection: 'row', gap: 8, padding: 12, backgroundColor: '#E1F5FE', borderRadius: 10, borderWidth: 1, borderColor: '#B3E5FC', marginBottom: 12 },
-  headerText: { fontSize: 12, color: '#01579B', flex: 1, lineHeight: 18 },
-  section: { backgroundColor: '#FFF', borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#ECEFF1' },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: '#0277BD' },
-  subTitle: { fontSize: 12, fontWeight: '700', color: '#37474F', marginTop: 8, marginBottom: 6 },
-  label: { fontSize: 12, fontWeight: '600', color: '#37474F', marginBottom: 4 },
-  input: { borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#1A1A1A', backgroundColor: '#FFF' },
-  row2: { flexDirection: 'row', gap: 8 },
-  row3: { flexDirection: 'row', gap: 8 },
-  flex1: { flex: 1 },
-  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
-  chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, borderWidth: 1.5, borderColor: '#B3E5FC', backgroundColor: '#FFF' },
-  chipActive: { backgroundColor: '#0277BD', borderColor: '#0277BD' },
-  chipText: { fontSize: 12, fontWeight: '600', color: '#01579B' },
-  chipTextActive: { color: '#FFF' },
-  implantCard: { backgroundColor: '#F8FBFF', borderRadius: 10, borderWidth: 1, borderColor: '#BBDEFB', padding: 10, marginBottom: 10 },
-  implantHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  implantTitle: { fontSize: 13, fontWeight: '700', color: '#01579B' },
-  fdiTrigger: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 10, borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 8, backgroundColor: '#FFF' },
-  fdiTriggerText: { fontSize: 13, color: '#1A1A1A' },
-  fdiCard: { backgroundColor: '#FFF', borderRadius: 14, padding: 16, maxHeight: '85%' },
-  fdiQuadrantLabel: { fontSize: 11, fontWeight: '700', color: '#0277BD', marginBottom: 4 },
-  fdiCell: { width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderColor: '#B3E5FC', justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFF' },
-  fdiCellActive: { backgroundColor: '#0277BD', borderColor: '#0277BD' },
-  fdiCellText: { fontSize: 11, fontWeight: '600', color: '#01579B' },
-  fdiCellTextActive: { color: '#FFF' },
-  autoFillRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
-  autoFillChip: { fontSize: 11, color: '#37474F', backgroundColor: '#E8F5E9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: '#A5D6A7' },
-  autoFillBold: { fontWeight: '800', color: '#1B5E20' },
-  addBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1.5, borderColor: '#B3E5FC', backgroundColor: '#FFF', marginTop: 4 },
-  addBtnText: { fontSize: 12, fontWeight: '700', color: '#0277BD' },
-  toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4 },
-  toggle: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1.5, borderColor: '#B3E5FC', backgroundColor: '#FFF' },
-  toggleActive: { backgroundColor: '#0277BD', borderColor: '#0277BD' },
-  toggleText: { fontSize: 12, fontWeight: '700', color: '#01579B' },
-  uploadBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1.5, borderColor: '#B3E5FC', backgroundColor: '#FFF' },
-  uploadText: { fontSize: 12, fontWeight: '700', color: '#0277BD' },
-  uploadedHint: { fontSize: 11, color: '#2E7D32', marginTop: 4, fontWeight: '700' },
-  actionsRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  saveBtn: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, backgroundColor: '#37474F', paddingVertical: 12, borderRadius: 10 },
-  saveText: { color: '#FFF', fontSize: 14, fontWeight: '800' },
-  phase3Btn: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, backgroundColor: '#388E3C', paddingVertical: 12, borderRadius: 10 },
-  phase4Btn: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, backgroundColor: '#0277BD', paddingVertical: 12, borderRadius: 10 },
-  phaseBtnText: { color: '#FFF', fontSize: 13, fontWeight: '800' },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 24 },
-  modalCard: { backgroundColor: '#FFF', borderRadius: 14, padding: 16, maxHeight: '70%' },
-  modalTitle: { fontSize: 14, fontWeight: '800', color: '#0277BD', marginBottom: 8 },
-  modalRow: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#ECEFF1' },
-  modalRowText: { fontSize: 14, color: '#1A1A1A' },
+// ─── Single-tooth FDI picker (full-arch case — modal-wrapped chart) ───
+function FdiSinglePicker({ value, onPick, testID }: { value: string; onPick: (t: string) => void; testID: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <View>
+      <TouchableOpacity style={styles.dropdown} onPress={() => setOpen(true)} testID={testID} /* @ts-ignore */ data-testid={testID}>
+        <Text style={[styles.dropdownText, !value && styles.dropdownPlaceholder]}>
+          {value ? `Tooth #${value}` : 'Pick tooth from FDI chart'}
+        </Text>
+        <Ionicons name="grid-outline" size={20} color="#1565C0" />
+      </TouchableOpacity>
+      <Modal transparent visible={open} animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setOpen(false)}>
+          <Pressable style={[styles.modalCard, { padding: 18 }]} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>Pick a tooth</Text>
+            <FdiAnatomicalChart
+              mode="single"
+              value={value}
+              onChange={(t) => { onPick(t as string); setOpen(false); }}
+              selectedLabel="Selected"
+              testIDPrefix={`${testID}-tooth`}
+            />
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </View>
+  );
+}
+
+// ─── Styles (mirrored from /app/(tabs)/new-procedure.tsx for parity) ───
+const styles = StyleSheet.create({
+  // Section / typography parity
+  section: { backgroundColor: '#FFF', borderRadius: 16, marginHorizontal: 16, marginBottom: 16, padding: 18, shadowColor: '#1565C0', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3, borderWidth: 1, borderColor: '#E8EDF5' },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1565C0', marginBottom: 14, letterSpacing: 0.3 },
+  subSectionTitle: { fontSize: 14, fontWeight: '700', color: '#1565C0', marginTop: 14, marginBottom: 10, paddingBottom: 8, borderBottomWidth: 1.5, borderBottomColor: '#E3F2FD' },
+  fieldContainer: { marginBottom: 14 },
+  label: { fontSize: 13, fontWeight: '600', color: '#1565C0', marginBottom: 6, letterSpacing: 0.2 },
+  optional: { fontSize: 11, fontWeight: '500', color: '#90A4AE', fontStyle: 'italic' },
+  helperText: { fontSize: 12, color: '#546E7A', marginBottom: 10, fontStyle: 'italic' },
+  fdiSummary: { fontSize: 13, color: '#1565C0', fontWeight: '700', marginTop: 10, textAlign: 'center', letterSpacing: 0.3 },
+
+  // Header banner
+  headerCard: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, backgroundColor: '#E3F2FD', borderRadius: 14, borderWidth: 1.5, borderColor: '#BBDEFB', marginHorizontal: 16, marginBottom: 16 },
+  headerText: { fontSize: 13, color: '#0D47A1', flex: 1, lineHeight: 18, fontWeight: '500' },
+
+  // Inputs
+  input: { borderWidth: 1.5, borderColor: '#D0DCE8', borderRadius: 10, padding: 12, fontSize: 15, backgroundColor: '#F8FAFC', color: '#1A1A1A' },
+
+  // Dropdown (matches new-procedure)
+  dropdown: { borderWidth: 1.5, borderColor: '#D0DCE8', borderRadius: 10, padding: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F8FAFC', minHeight: 48 },
+  dropdownDisabled: { opacity: 0.5 },
+  dropdownText: { fontSize: 15, color: '#333', flex: 1 },
+  dropdownPlaceholder: { color: '#90A4AE' },
+
+  // Chip row
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, borderColor: '#D0DCE8', backgroundColor: '#F8FAFC' },
+  chipActive: { backgroundColor: '#1565C0', borderColor: '#1565C0' },
+  chipText: { fontSize: 13, color: '#666' },
+  chipTextActive: { color: '#FFF', fontWeight: '600' },
+
+  // Yes / No buttons
+  yesNoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+  yesNoBtn: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 20, borderWidth: 1.5, borderColor: '#D0DCE8', backgroundColor: '#FFF', minWidth: 80, alignItems: 'center' },
+  yesActive: { backgroundColor: '#43A047', borderColor: '#43A047' },
+  noActive: { backgroundColor: '#90A4AE', borderColor: '#90A4AE' },
+  yesNoText: { fontSize: 14, color: '#666', fontWeight: '600' },
+  yesNoTextActive: { color: '#FFF' },
+
+  // Implant card (spacious — one field per row)
+  implantCard: { backgroundColor: '#F8FAFC', borderRadius: 14, borderWidth: 1.5, borderColor: '#D0DCE8', padding: 16, marginBottom: 16 },
+  implantHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#E3F2FD' },
+  implantTitle: { fontSize: 15, fontWeight: '700', color: '#0D47A1' },
+  toothBadge: { backgroundColor: '#1565C0', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  toothBadgeText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
+
+  // Auto-fill connection / platform display
+  autoFillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
+  autoFillChip: { backgroundColor: '#E8F5E9', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: '#A5D6A7', flexDirection: 'row', alignItems: 'center', gap: 6 },
+  autoFillLabel: { fontSize: 11, fontWeight: '600', color: '#2E7D32' },
+  autoFillValue: { fontSize: 13, fontWeight: '800', color: '#1B5E20' },
+
+  // Add implant button (full-arch)
+  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, borderWidth: 1.5, borderStyle: 'dashed' as any, borderColor: '#1565C0', backgroundColor: '#F8FAFC', marginTop: 4 },
+  addBtnText: { fontSize: 14, fontWeight: '700', color: '#1565C0' },
+
+  // Upload button
+  uploadBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 12, borderRadius: 10, borderWidth: 1.5, borderStyle: 'dashed' as any, borderColor: '#1565C0', backgroundColor: '#F8FAFC' },
+  uploadText: { fontSize: 14, fontWeight: '700', color: '#1565C0' },
+  uploadedHint: { fontSize: 12, color: '#2E7D32', marginTop: 6, fontWeight: '700' },
+
+  // Actions (stacked vertically — never clip on narrow screens)
+  actionsContainer: { paddingHorizontal: 16, marginBottom: 24, gap: 10 },
+  actionBtnPrimary: { flexDirection: 'row', backgroundColor: '#1565C0', borderRadius: 14, padding: 16, alignItems: 'center', justifyContent: 'center', gap: 10, shadowColor: '#1565C0', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 5 },
+  actionBtnSecondary: { flexDirection: 'row', backgroundColor: '#43A047', borderRadius: 14, padding: 16, alignItems: 'center', justifyContent: 'center', gap: 10, shadowColor: '#43A047', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.20, shadowRadius: 8, elevation: 4 },
+  actionBtnDraft: { flexDirection: 'row', backgroundColor: '#FFF', borderRadius: 14, padding: 14, alignItems: 'center', justifyContent: 'center', gap: 10, borderWidth: 1.5, borderColor: '#CFD8DC' },
+  actionBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700', letterSpacing: 0.4 },
+  actionBtnDraftText: { color: '#37474F', fontSize: 15, fontWeight: '700', letterSpacing: 0.4 },
+
+  // Modal
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 24 },
+  modalCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 16, maxHeight: '80%' },
+  modalTitle: { fontSize: 16, fontWeight: '800', color: '#0D47A1', marginBottom: 12, letterSpacing: 0.3 },
+  modalRow: { paddingVertical: 14, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#F0F4F8', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  modalRowActive: { backgroundColor: '#E3F2FD' },
+  modalRowText: { fontSize: 15, color: '#333' },
+  modalRowTextActive: { color: '#1565C0', fontWeight: '700' },
+  modalEmpty: { padding: 16, color: '#90A4AE', fontStyle: 'italic', textAlign: 'center' },
 });
