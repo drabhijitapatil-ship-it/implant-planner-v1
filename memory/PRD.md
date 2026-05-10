@@ -1,5 +1,31 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 214 (Feb 2026) — Unify FDI dental chart into a single shared component
+
+### Why
+Two separate FDI tooth charts existed in the codebase:
+- `app/(tabs)/new-procedure.tsx` had an inline ~85-line multi-select FDI grid for marking missing teeth.
+- `components/ExistingImplantSection.tsx` had a Modal-wrapped single-select FDI grid for picking the tooth of each existing implant.
+
+They drifted in styling (anatomical proportions vs uniform 36×36 cells), legend labels, and testID conventions, making both pieces harder to maintain and inconsistent for users who flip between the fresh-case and existing-implant flows.
+
+### Changes
+**Frontend**
+- `/app/frontend/components/FdiAnatomicalChart.tsx` — shared component supporting `mode='single' | 'multi'`. Anatomically scaled tooth widths (molars > premolars > canines > incisors), configurable `selectedColor` / `presentColor` / legend labels / testID prefix.
+- `/app/frontend/app/(tabs)/new-procedure.tsx` — replaced the inline ~85-line multi-select grid with a single `<FdiAnatomicalChart mode="multi" value={missing_teeth} … />` instance. testIDs `fdi-{tooth}` preserved.
+- `/app/frontend/components/ExistingImplantSection.tsx` — replaced the Modal's quadrant grid with `<FdiAnatomicalChart mode="single" value={tooth} … />`. Removed unused `FDI_QUADRANTS` constant. testID prefix per row preserved as `${testID}-tooth-{n}`.
+
+### Verification
+- Metro bundler hot-reloaded both files cleanly (`Web Bundled` lines in expo logs).
+- TypeScript: only pre-existing unrelated errors remain (esModuleInterop config, navigation type drift). No new errors introduced.
+- Web preview SSR routing is the recurring known limitation (iter-168/206/211 quirk); user verifies on iOS Expo Go where Metro hot reload works. Single component code path means the chart can be smoke-tested once and trusted in both surfaces.
+
+### Notes for next agent
+- ExistingImplantSection.tsx still has 5 unused style entries (`fdiCell*` and `fdiQuadrantLabel`) that became dead after this refactor — safe to delete in a future cleanup pass; left in to keep this iteration's diff focused.
+- `<FdiAnatomicalChart>` is also a natural fit if Phase 1 / Phase 4 forms ever need a tooth picker — same component, no new code.
+
+---
+
 ## Iteration 213 (Feb 2026) — Unified New Case form: section reorder + "Existing Implant" branch
 
 ### Why
