@@ -1,5 +1,43 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 210 (Feb 2026) — Torque dedup, Phase 3 NA fallback, structured MUA editor in Phase 4 Step 1
+
+### Why
+Three small UX clean-ups requested by the user on the case-detail screen + Phase 4 Step 1 form:
+1. Torque values appeared **twice** on completed cases — once in the standalone orange "Torque Values Achieved" card, again as inline chips inside the Phase 2 readback. Confusing, looked like the case had two torque records.
+2. Phase 3's "Measurements" sub-section rendered dangling `—` rows for blank ISQ / Healing-Abutment-Height entries, and the section header didn't appear at all when both arrays were entirely empty (so the user couldn't tell whether Phase 3 was skipped or unrecorded).
+3. The Phase 4 Step 1 "Copy MUA from Phase 2" button only dumped a **plain-text block** into the Notes field; the prosthodontist couldn't structurally adjust angulation / cuff height per tooth at delivery, and the Lab Slip always pulled from Phase 2 even after the spec changed.
+
+### Changes
+**Backend (`/app/backend/server.py`)**
+- `Stage2ProstheticSubmit` Pydantic model gained `multi_unit_abutment_details: Optional[List[Dict[str, Any]]] = None` (around line 477).
+- `POST /api/procedures/{id}/stage2/prosthetic` persists the field into `phase4_step1_data.multi_unit_abutment_details` only when non-null. `null`/omitted ⇒ no key written; `[]` ⇒ stored as empty list (override cleared).
+
+**Frontend (`/app/frontend/app/procedures/[id].tsx`)**
+- Removed the duplicate Torque chips block from inside Phase 2 readback (was around line 1992-2003). Only the standalone orange "Torque Values Achieved" card remains.
+- Phase 3 Measurements sub-section refactored: filters blank entries from ISQ + Healing-Abutment-Height arrays. If both arrays end up empty after filtering, the section header still renders with a single italic **"NA"** line (testID `phase3-measurements-na`) so the readback structure is preserved.
+
+**Frontend (`/app/frontend/app/procedures/submit-stage2-prosthetic/[id].tsx`)**
+- New structured MUA editor block surfaces when Phase 2 captured `multi_unit_abutment_placed === 'yes'` OR a Phase-4 override is already saved.
+- Each row has editable Tooth / Angulation / Cuff Height inputs (testIDs `mua-tooth-{i}` / `mua-angulation-{i}` / `mua-cuff-{i}`). "Copy MUA from Phase 2" pre-fills rows from `phase2_data.multi_unit_abutment_details`. "Add MUA" / trash buttons let the user grow / shrink the list.
+- Hydrates from `phase4_step1_data.multi_unit_abutment_details` on mount and sets `muaTouched=true` so subsequent saves preserve the override even when the user doesn't re-edit.
+- `buildPayload()` sends `multi_unit_abutment_details: cleaned[] | null` only when `muaTouched`.
+
+**Frontend (`/app/frontend/utils/pdfGenerator.ts`)**
+- `buildLabSlipHtml` now prefers `procedure.phase4_step1_data.multi_unit_abutment_details` over `procedure.phase2_data.multi_unit_abutment_details`. Falls back to Phase 2 only when Phase 4 has no override.
+- Cosmetic guard: trailing `°` on angulation and trailing `mm` on cuff_height get stripped before re-appending so user-typed `30°` doesn't render `30°°`.
+
+### Verification
+- Backend pytest `test_mua_phase4_override_iter210.py` — **4/4 PASS**. iter-145 alpha-bio regression — **24/24 PASS**. iter-143 phase4 step2 regression — **7/7 PASS**. Total **35/35**.
+- TypeScript: clean (no new errors from this iteration).
+- Frontend code review by testing agent — 5 critical-review comments all confirm spec compliance; one cosmetic concern (°°) addressed.
+
+### Notes for next agent
+- The MUA editor only appears when there's a reason to (Phase 2 captured MUA OR Phase 4 override exists). For regular non-immediate-loading cases the form is unchanged.
+- Live UI smoke could not be exercised in this run because the dev DB has no procedures with `phase2_data.multi_unit_abutment_placed='yes'` reaching Phase 4. Seed one if a future iter touches MUA flow.
+
+---
+
 ## Iteration 209 (Feb 2026) — Lab Prescription i-circle + Case-Completed badge merged into green Treatment Complete banner
 
 ### Why
