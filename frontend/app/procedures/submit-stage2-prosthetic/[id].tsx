@@ -62,6 +62,19 @@ export default function Phase4Step1Screen() {
   const [labSlipNote, setLabSlipNote] = useState('');
   const [studentNotes, setStudentNotes] = useState('');
 
+  // iter-210: Multi-Unit Abutment override editor for Phase 4 Step 1.
+  // Phase 2 captures MUA at the time of immediate loading; the prosthodontist
+  // may need to revise angulation / cuff height at delivery (e.g. soft tissue
+  // remodelling, lab feedback). State seeded on mount from
+  // phase4_step1_data.multi_unit_abutment_details when present (the live
+  // override) and falls back to phase2_data on Copy.
+  type MuaRow = { tooth: string; angulation: string; cuff_height: string };
+  const [muaRows, setMuaRows] = useState<MuaRow[]>([]);
+  // Tracks whether the user has interacted with MUA in Phase 4. Without this
+  // flag we cannot tell "no MUA" from "haven't touched it yet" when deciding
+  // whether to fall back to Phase 2 in the Lab Slip.
+  const [muaTouched, setMuaTouched] = useState(false);
+
   // Per-implant prosthetic plan for multiple implants (non-bridge)
   const [perImplantPlans, setPerImplantPlans] = useState<{ prosthesis: string; material: string; openProsthesis: boolean; openMaterial: boolean }[]>([]);
   const [implantPositions, setImplantPositions] = useState<string[]>([]);
@@ -89,6 +102,19 @@ export default function Phase4Step1Screen() {
       const existing: string[] = procRes.data?.phase4_step1_data?.shade_values || [];
       setShadeValues(Array.from({ length: slots }, (_, i) => existing[i] || ''));
       setShadeNotes(procRes.data?.phase4_step1_data?.shade_notes || '');
+
+      // iter-210: hydrate MUA override from any saved phase4_step1_data.
+      // This makes the form sticky across reloads and lets the user keep
+      // editing instead of re-typing everything.
+      const savedMua: any[] | undefined = procRes.data?.phase4_step1_data?.multi_unit_abutment_details;
+      if (Array.isArray(savedMua) && savedMua.length > 0) {
+        setMuaRows(savedMua.map((r: any) => ({
+          tooth: String(r?.tooth ?? ''),
+          angulation: String(r?.angulation ?? ''),
+          cuff_height: String(r?.cuff_height ?? ''),
+        })));
+        setMuaTouched(true);
+      }
     } catch {}
   };
 
@@ -193,6 +219,20 @@ export default function Phase4Step1Screen() {
     } else {
       payload.final_prosthetic_plan = finalProsthesis + (prostheticMaterial ? ` - ${prostheticMaterial}` : '');
       payload.prosthetic_material = prostheticMaterial || null;
+    }
+    // iter-210: include the MUA override if the user touched the editor or
+    // we hydrated saved rows from a previous session. Sending null when the
+    // user explicitly cleared all rows lets the backend / Lab Slip fall
+    // back to phase2_data.
+    if (muaTouched) {
+      const cleaned = muaRows
+        .map(r => ({
+          tooth: (r.tooth ?? '').trim(),
+          angulation: (r.angulation ?? '').trim(),
+          cuff_height: (r.cuff_height ?? '').trim(),
+        }))
+        .filter(r => r.tooth || r.angulation || r.cuff_height);
+      payload.multi_unit_abutment_details = cleaned.length > 0 ? cleaned : null;
     }
     return payload;
   };
@@ -545,51 +585,145 @@ export default function Phase4Step1Screen() {
             </View>
           </View>
 
+          {/* iter-210: Multi-Unit Abutment override editor — replaces the
+              earlier plain-text "Copy MUA from Phase 2" affordance. The
+              prosthodontist can adjust angulation / cuff height per tooth at
+              delivery. The Lab Slip + case-detail readback prefer this
+              override and fall back to phase2_data only when this section is
+              empty. Hidden when Phase 2 didn't capture MUA AND the user has
+              no rows yet — keeps the form minimal for non-immediate-loading cases. */}
+          {(() => {
+            const phase2Mua = procedure?.phase2_data?.multi_unit_abutment_placed;
+            const phase2Details: any[] = procedure?.phase2_data?.multi_unit_abutment_details || [];
+            const phase2HasMua = phase2Mua === 'yes' && phase2Details.length > 0;
+            // If neither Phase 2 captured MUA nor there are existing rows,
+            // do not show the editor at all.
+            if (!phase2HasMua && muaRows.length === 0) return null;
+
+            const update = (idx: number, key: keyof MuaRow, val: string) => {
+              setMuaTouched(true);
+              setMuaRows(prev => prev.map((r, i) => i === idx ? { ...r, [key]: val } : r));
+            };
+            const addRow = () => {
+              setMuaTouched(true);
+              setMuaRows(prev => [...prev, { tooth: '', angulation: '', cuff_height: '' }]);
+            };
+            const removeRow = (idx: number) => {
+              setMuaTouched(true);
+              setMuaRows(prev => prev.filter((_, i) => i !== idx));
+            };
+            const copyFromPhase2 = () => {
+              if (!phase2HasMua) return;
+              const seeded: MuaRow[] = phase2Details.map((r: any) => ({
+                tooth: String(r?.tooth ?? ''),
+                angulation: String(r?.angulation ?? ''),
+                cuff_height: String(r?.cuff_height ?? ''),
+              }));
+              setMuaRows(seeded);
+              setMuaTouched(true);
+              Alert.alert('Copied', `Multi-unit Abutment details (${seeded.length} ${seeded.length === 1 ? 'tooth' : 'teeth'}) copied from Phase 2. Edit any field below — the Lab Slip will use these values.`);
+            };
+
+            return (
+              <View style={s.section} testID="phase4-mua-section">
+                <View style={s.sectionHeader}>
+                  <Ionicons name="git-compare-outline" size={20} color="#0277BD" />
+                  <Text style={s.sectionTitle}>Multi-Unit Abutments</Text>
+                </View>
+                <Text style={s.helperText}>
+                  Override the angulation / cuff height per tooth if the prosthetic plan has changed since Phase 2. The Lab Slip will use these values.
+                </Text>
+
+                {phase2HasMua && (
+                  <TouchableOpacity
+                    style={s.copyMuaBtn}
+                    onPress={copyFromPhase2}
+                    testID="copy-mua-from-phase2-btn"
+                    /* @ts-ignore */ data-testid="copy-mua-from-phase2-btn"
+                  >
+                    <Ionicons name="copy-outline" size={16} color="#0277BD" />
+                    <Text style={s.copyMuaText}>Copy MUA from Phase 2 ({phase2Details.length})</Text>
+                  </TouchableOpacity>
+                )}
+
+                {muaRows.length === 0 ? (
+                  <View style={{ padding: 12, backgroundColor: '#F5F5F5', borderRadius: 8, alignItems: 'center' }}>
+                    <Text style={{ fontSize: 12, color: '#666', fontStyle: 'italic' }}>
+                      No MUA rows yet — tap "Copy MUA from Phase 2" or "Add MUA" below.
+                    </Text>
+                  </View>
+                ) : (
+                  muaRows.map((row, idx) => (
+                    <View key={idx} style={s.muaRow} testID={`mua-row-${idx}`}>
+                      <View style={s.muaRowHeader}>
+                        <Text style={s.muaRowTitle}>Implant {idx + 1}</Text>
+                        <TouchableOpacity
+                          onPress={() => removeRow(idx)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          testID={`mua-remove-${idx}`}
+                        >
+                          <Ionicons name="trash-outline" size={18} color="#C62828" />
+                        </TouchableOpacity>
+                      </View>
+                      <View style={s.muaInputsRow}>
+                        <View style={s.muaInputCell}>
+                          <Text style={s.muaInputLabel}>Implant Site</Text>
+                          <TextInput
+                            style={s.muaInput}
+                            value={row.tooth}
+                            onChangeText={(t) => update(idx, 'tooth', t)}
+                            placeholder="e.g. 16"
+                            placeholderTextColor="#B0BEC5"
+                            testID={`mua-tooth-${idx}`}
+                          />
+                        </View>
+                        <View style={s.muaInputCell}>
+                          <Text style={s.muaInputLabel}>Angulation</Text>
+                          <TextInput
+                            style={s.muaInput}
+                            value={row.angulation}
+                            onChangeText={(t) => update(idx, 'angulation', t)}
+                            keyboardType="numeric"
+                            placeholder="0 / 17 / 30°"
+                            placeholderTextColor="#B0BEC5"
+                            testID={`mua-angulation-${idx}`}
+                          />
+                        </View>
+                        <View style={s.muaInputCell}>
+                          <Text style={s.muaInputLabel}>Cuff Height (mm)</Text>
+                          <TextInput
+                            style={s.muaInput}
+                            value={row.cuff_height}
+                            onChangeText={(t) => update(idx, 'cuff_height', t)}
+                            keyboardType="numeric"
+                            placeholder="e.g. 2.5"
+                            placeholderTextColor="#B0BEC5"
+                            testID={`mua-cuff-${idx}`}
+                          />
+                        </View>
+                      </View>
+                    </View>
+                  ))
+                )}
+
+                <TouchableOpacity
+                  style={s.muaAddBtn}
+                  onPress={addRow}
+                  testID="mua-add-row-btn"
+                >
+                  <Ionicons name="add-circle-outline" size={18} color="#0277BD" />
+                  <Text style={s.muaAddText}>Add MUA</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          })()}
+
           {/* ── Notes ── */}
           <View style={s.section}>
             <View style={s.sectionHeader}>
               <Ionicons name="document-text-outline" size={20} color="#00695C" />
               <Text style={s.sectionTitle}>Notes</Text>
             </View>
-            {/* iter-140: one-tap Copy MUA from Phase 2 — only surfaces when
-                Phase 2 captured Yes + per-tooth details. Non-destructive:
-                appends to existing notes with a separator, never overwrites. */}
-            {(() => {
-              const mua = procedure?.phase2_data?.multi_unit_abutment_placed;
-              const details = procedure?.phase2_data?.multi_unit_abutment_details;
-              const hasMua = mua === 'yes' && Array.isArray(details) && details.length > 0;
-              if (!hasMua) return null;
-              const copyMuaToNotes = () => {
-                const lines = details.map((r: any) => {
-                  const t = r?.tooth ?? '—';
-                  const a = (r?.angulation ?? '').toString().trim();
-                  const c = (r?.cuff_height ?? '').toString().trim();
-                  const aStr = a ? `${a}°` : '—';
-                  const cStr = c ? `${c} mm` : '—';
-                  return `- Tooth ${t}: Angulation ${aStr}, Cuff Height ${cStr}`;
-                }).join('\n');
-                const block = `Multi-unit Abutments (from Phase 2):\n${lines}`;
-                const existing = (studentNotes || '').trim();
-                if (existing.includes('Multi-unit Abutments (from Phase 2):')) {
-                  Alert.alert('Already copied', 'MUA details are already in the notes. Edit freely below.');
-                  return;
-                }
-                const next = existing ? `${existing}\n\n${block}` : block;
-                setStudentNotes(next);
-                Alert.alert('Copied', `Multi-unit Abutment details (${details.length} ${details.length === 1 ? 'tooth' : 'teeth'}) added to ${notesLabel}. You can still edit them below.`);
-              };
-              return (
-                <TouchableOpacity
-                  style={s.copyMuaBtn}
-                  onPress={copyMuaToNotes}
-                  testID="copy-mua-to-notes-btn"
-                  /* @ts-ignore */ data-testid="copy-mua-to-notes-btn"
-                >
-                  <Ionicons name="copy-outline" size={16} color="#0277BD" />
-                  <Text style={s.copyMuaText}>Copy MUA from Phase 2 ({details.length})</Text>
-                </TouchableOpacity>
-              );
-            })()}
             <View style={s.field}>
               <Text style={s.label}>{notesLabel}</Text>
               <TextInput style={[s.input, s.textArea]} value={studentNotes} onChangeText={setStudentNotes}
@@ -724,4 +858,68 @@ const s = StyleSheet.create({
   // iter-140: Copy MUA from Phase 2 affordance (blue theme matches Phase 2 MUA card)
   copyMuaBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: '#E1F5FE', borderColor: '#B3E5FC', borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 10 },
   copyMuaText: { fontSize: 12, fontWeight: '700', color: '#0277BD', letterSpacing: 0.2 },
+  // iter-210: structured MUA editor cells.
+  muaRow: {
+    backgroundColor: '#F8FBFF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#BBDEFB',
+    padding: 10,
+    marginBottom: 10,
+  },
+  muaRowHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  muaRowTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#01579B',
+  },
+  muaInputsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  muaInputCell: {
+    flex: 1,
+    minWidth: 90,
+  },
+  muaInputLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#0277BD',
+    marginBottom: 4,
+  },
+  muaInput: {
+    borderWidth: 1,
+    borderColor: '#B3E5FC',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: '#1A1A1A',
+    backgroundColor: '#FFFFFF',
+  },
+  muaAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: '#B3E5FC',
+    backgroundColor: '#FFFFFF',
+    marginTop: 6,
+  },
+  muaAddText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0277BD',
+    letterSpacing: 0.2,
+  },
 });

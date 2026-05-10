@@ -493,6 +493,12 @@ class Stage2ProstheticSubmit(BaseModel):
     shade_values: Optional[List[str]] = None
     shade_notes: Optional[str] = Field(None, max_length=2000)
     shade_layout: Optional[str] = Field(None, max_length=20)  # 'per_implant' | 'full_arch'
+    # iter-210: optional Multi-Unit Abutment override entered at delivery.
+    # When present (and non-empty), the Lab Slip + case-detail readback
+    # prefer this over the Phase-2 capture so the prosthodontist can
+    # revise angulation / cuff height after soft-tissue remodelling.
+    # Each row: {"tooth": "...", "angulation": "...", "cuff_height": "..."}.
+    multi_unit_abutment_details: Optional[List[Dict[str, Any]]] = None
     # Notes
     student_notes: Optional[str] = Field(None, max_length=2000)
     # Legacy
@@ -7887,6 +7893,13 @@ async def submit_stage2_prosthetic(
         "shade_values": [s.strip() for s in (data.shade_values or [])],
         "shade_layout": layout,
         "shade_notes": (data.shade_notes or "").strip() or None,
+        # iter-210: optional MUA override entered at delivery. Stored only
+        # when the client sent a non-null payload (touched in the UI). When
+        # omitted, the existing override (if any) is preserved by the
+        # caller; when explicitly null, the override is cleared so the Lab
+        # Slip falls back to phase2_data.
+        **({} if data.multi_unit_abutment_details is None
+            else {"multi_unit_abutment_details": data.multi_unit_abutment_details}),
     }
     
     existing_checklist = procedure.get("checklist") or {}
