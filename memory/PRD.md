@@ -1,5 +1,56 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 216 (Feb 2026) — Existing Implant: Save/Edit/Delete sequential cards + smart prosthesis defaults + spacing
+
+### Why
+Three follow-up requests after iter-215 visual parity:
+1. Conditional fields (Cuff/GH after Final/MUA chips, Type/Material after Temporary/Final chips) crowded their parent chip rows.
+2. Implant Selection had no notion of "saved" state — every card stayed editable, surgery date was free-text, and there was no way to lock down captured data while adding more implants.
+3. When the user picked Yes for "Was prosthesis placed?" + Temporary or Final, the Type and Material text boxes started empty — clinicians had to type them every time even though the procedure type strongly implies the right defaults.
+
+### Changes
+**Frontend (`/app/frontend/components/ExistingImplantSection.tsx`)**
+
+1. **Spacing**
+- New `conditionalGap` style (`marginTop: 16`) applied to the Cuff / Gingival Height field so it breathes from the Present Prosthetic Component chips above.
+- The Type + Material reveal under Temporary / Final chips is now wrapped in a `marginTop: 16` container; small italic helper hint clarifies that the value is pre-filled from the procedure type and editable.
+
+2. **Save / Edit / Delete + Sequential collapse**
+- `ImplantRow` gained `saved: boolean`. Three card states render based on `activeIdx = implants.findIndex(r => !r.saved)`:
+  - **Expanded** (only the first unsaved row): full form ending in a green "Save Implant" button. `saveImplantRow(idx)` runs the same per-row validation as the top-level submit.
+  - **Collapsed-saved** (saved=true): green pill with a check-circle, "Implant #N", a one-line summary (`FDI #16 · Alpha Bio · ATID · Ø4.2 × 11.5 mm · GH 2 mm`), Edit (pencil) and Delete (trash) icon buttons.
+  - **Locked-collapsed** (later unsaved rows): grey pill with lock icon and "Save the previous implant to unlock this card" hint.
+- "Add another implant" (full-arch) blocked unless every existing row is saved — Alert prompts the user to save first.
+- Top-level submit (`Move to Phase 3` / `Move to Phase 4 Step 1`) refuses to fire until every row is saved (per-row error message lists which implant is missing).
+- New `editImplantRow(idx)` flips a saved row back to expanded for revisions.
+
+3. **Surgery Date calendar**
+- New `SurgeryDatePicker` component:
+  - On web: `<input type="date">` (native browser HTML, exact request from user). Styled to match the dropdown look (1.5 px border, F8FAFC bg, 10 px radius, 48 px height).
+  - On native: `NativeCalendarTrigger` modal with month-nav header + day grid, past dates allowed (since the surgery already happened).
+- Replaces the previous YYYY-MM text input.
+
+4. **Smart Type/Material defaults**
+- New `getProsthesisDefaults(originalProcedure, stage)` mirrors Phase 4 Step 1's groupings (`SINGLE_PROCEDURES`, `MULTIPLE_PROCEDURES`, `FULL_ARCH_PROCEDURES`) and returns:
+  - **Final**: `Cement Retained Crown FP1` / `Cement Retained Bridge FP1` / `Full Arch FP3 - Porcelain Fused to Metal Prosthesis` paired with `Porcelain Fused to Metal` material.
+  - **Temporary**: `Acrylic Temporary Crown` / `…Bridge` / `…Full Arch` paired with `Heat Cure Acrylic`.
+- Prefill is non-destructive: only fills empty Type/Material so user edits are never overwritten.
+
+### Backend
+No changes — the iter-211 endpoint already accepts the same payload.
+
+### Verification
+- Metro hot-reload bundled the rewrite cleanly (`Web Bundled` lines, no parse / type errors).
+- `Platform.OS === 'web'` import wired through React Native — DOM `<input>` only renders on web.
+- Per-row validator (`validateRow`) re-uses the same rules as the top-level `validate()`, so save-then-submit is consistent.
+
+### Notes for next agent
+- `NativeCalendarTrigger` could be DRY'd with the `CalendarPicker` already in `(tabs)/new-procedure.tsx`. Out of scope this iteration to avoid touching the working fresh-case form.
+- If Phase 4 Step 1's option lists ever change (`PHASE4_SINGLE_MULTIPLE_OPTIONS` / `PHASE4_FULL_ARCH_OPTIONS`), update `getProsthesisDefaults` so the existing-implant prefills stay in sync.
+- The "+ Add another implant" guard works for the full-arch flow only (non-full-arch is FDI-driven, no Add button).
+
+---
+
 ## Iteration 215 (Feb 2026) — Existing Implant section: full UI parity with default New Case workflow
 
 ### Why
