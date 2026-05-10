@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Tabs, useRouter } from 'expo-router';
+import { Tabs, useRouter, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
   View,
@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Platform,
   Image,
+  Alert,
 } from 'react-native';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -513,6 +514,26 @@ export default function TabsLayout() {
               <Ionicons name="document-text-outline" size={24} color={color} />
             ),
             href: isNurse ? null : '/new-procedure',
+          }}
+          /* iter-212: intercept the tab press so the user picks Fresh vs
+             Existing-Implant flow before navigating. Without this the bottom
+             tab silently routed to /new-procedure and the With-Existing-
+             Implant entry point added in iter-211 was never discoverable. */
+          listeners={{
+            tabPress: (e) => {
+              if (isNurse) return;
+              e.preventDefault();
+              Alert.alert(
+                'New Case',
+                'How is this patient presenting?',
+                [
+                  { text: 'Fresh Case', onPress: () => router.push('/new-procedure') },
+                  { text: 'With Existing Implants', onPress: () => router.push('/procedures/new-existing-implant') },
+                  { text: 'Cancel', style: 'cancel' },
+                ],
+                { cancelable: true },
+              );
+            },
           }}
         />
         <Tabs.Screen
