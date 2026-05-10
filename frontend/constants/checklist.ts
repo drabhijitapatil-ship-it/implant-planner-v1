@@ -124,6 +124,12 @@ export const PROCEDURE_TYPES = [
   'All on 4',
   'All on 6',
   'All on X',
+  // iter-213: "Existing Implant" branch — patient already has implants
+  // placed (elsewhere / earlier) and needs prosthetic continuation.
+  // The form swaps the surgical sections for an existing-implant
+  // wizard (FDI inventory, brand/system auto-fill, present prosthetic
+  // component, prosthetic history, radiographs, phase-routing).
+  'Existing Implant',
 ];
 
 // Group A: Shows Edentulous Site in clinical exam

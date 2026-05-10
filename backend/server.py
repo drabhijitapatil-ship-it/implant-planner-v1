@@ -260,6 +260,13 @@ class ExistingImplant(BaseModel):
     original_surgeon: Optional[str] = Field(None, max_length=120)
     abutment_present: Optional[bool] = None
     notes: Optional[str] = Field(None, max_length=500)
+    # iter-213: Present Prosthetic Component already in the mouth at intake.
+    # Drives the next-phase logic (e.g. healing-abutment-only ⇒ Phase 3
+    # ISQ + swap; final or MUA ⇒ Phase 4 Step 1 directly).
+    present_component: Optional[str] = Field(None, max_length=40)  # 'None' | 'Healing Abutment' | 'Final Abutment' | 'Multi-Unit Abutment'
+    present_component_gh: Optional[float] = None
+    present_component_angle: Optional[float] = None
+    iopa_url: Optional[str] = Field(None, max_length=500)
 
 
 class ProsthesisHistory(BaseModel):
@@ -267,26 +274,37 @@ class ProsthesisHistory(BaseModel):
     fail (if it did). All chip arrays use a controlled vocabulary so the data
     stays queryable for analytics + AI re-design recommendations."""
     had_prosthesis: bool = False
-    prosthesis_type: Optional[str] = Field(None, max_length=80)  # Single Crown / Bridge / Bar Overdenture / Locator Overdenture / Hybrid / All-on-X
+    # iter-213: Temporary vs Final flag drives downstream phase decisions
+    # (a temporary in place still warrants a Phase 4 Step 1 plan;
+    # a failed final demands either Phase 3 evaluation first or a fresh
+    # Phase 4 plan depending on operator judgement).
+    prosthesis_stage: Optional[str] = Field(None, max_length=20)  # 'temporary' | 'final'
+    prosthesis_type: Optional[str] = Field(None, max_length=80)
     material: Optional[str] = Field(None, max_length=80)
     placement_date: Optional[str] = Field(None, max_length=30)
     lab_name: Optional[str] = Field(None, max_length=120)
     failed: bool = False
-    failure_categories: List[str] = Field(default_factory=list)  # Mechanical / Biological / Esthetic / Functional
-    failure_modes: List[str] = Field(default_factory=list)        # porcelain_chipping, screw_loosening, ...
-    suspected_root_causes: List[str] = Field(default_factory=list)  # occlusal_overload, parafunction, ...
+    failure_categories: List[str] = Field(default_factory=list)
+    failure_modes: List[str] = Field(default_factory=list)
+    suspected_root_causes: List[str] = Field(default_factory=list)
     failure_narrative: Optional[str] = Field(None, max_length=500)
-    attachments: List[str] = Field(default_factory=list)  # object-store URLs (re-using Phase 1/2 photo upload)
+    attachments: List[str] = Field(default_factory=list)
+
+
+class RadiographsBlock(BaseModel):
+    """iter-213 radiograph upload set. For non-full-arch we keep one IOPA per
+    implant (positionally aligned with `existing_implants`); full-arch uses
+    a single OPG."""
+    opg_url: Optional[str] = None
+    iopas: List[Optional[str]] = Field(default_factory=list)
 
 
 class ProcedureCreateExistingImplants(BaseModel):
-    """Lean creation payload for the Path-A flow.
+    """Lean creation payload for the existing-implants flow.
 
     No surgical scheduling, no implant-procedure-type, no loading-type — the
     surgery happened elsewhere. Only the prosthodontic appointment slot
-    matters. Phases 1-3 are stamped as skipped and the case status starts at
-    `pending_stage2_prosthetic` so it lands directly in the Phase 4 Step 1
-    inbox of the assigned implant in-charge."""
+    matters. Phases 1-3 are stamped as skipped per `phase_to_start`."""
     student_name: Optional[str] = Field("", max_length=100)
     patient_name: str = Field(..., max_length=100)
     age: Optional[str] = Field("", max_length=5)
@@ -302,10 +320,17 @@ class ProcedureCreateExistingImplants(BaseModel):
     implant_incharge_name: str = Field(..., max_length=100)
     receipt_number: str = Field(..., max_length=50)
     amount_paid: float
-    procedure_date: str = Field(..., max_length=30)  # next prosthodontic appointment
+    procedure_date: str = Field(..., max_length=30)
     procedure_time: str = Field(..., max_length=20)
     existing_implants: List[ExistingImplant] = Field(..., min_length=1)
     prosthesis_history: ProsthesisHistory = Field(default_factory=ProsthesisHistory)
+    # iter-213: original procedure that placed these implants (e.g. "All on 4")
+    original_procedure_type: Optional[str] = Field(None, max_length=80)
+    radiographs: Optional[RadiographsBlock] = None
+    # iter-213: routing — 'phase3' (Phase 1+2 pre-stamped, ISQ check pending),
+    # 'phase4_step1' (Phase 1+2+3 pre-stamped, ready for prosthetic plan —
+    # default and the iter-211 behaviour), or 'draft' (saved but not routed).
+    phase_to_start: Optional[str] = Field("phase4_step1", max_length=20)
     remark: Optional[str] = Field("", max_length=1000)
 
 
@@ -1643,6 +1668,25 @@ async def create_procedure_with_existing_implants(
     procedure_dict = payload.model_dump()
     existing_impl_count = len(payload.existing_implants)
 
+    # iter-213: status routing based on phase_to_start. 'phase4_step1'
+    # (default) preserves the iter-211 behaviour. 'phase3' routes the case
+    # to the Phase 3 inbox (ISQ + healing-abutment swap pending) with only
+    # Phase 1+2 pre-stamped. 'draft' keeps the case parked without phase
+    # progression so the operator can return and finish it.
+    phase_to_start = (payload.phase_to_start or "phase4_step1").lower()
+    if phase_to_start == "phase3":
+        new_status = "phase2_approved"   # lands in Phase 3 inbox
+        new_phase = 3
+        phase3_skipped_flag = False
+    elif phase_to_start == "draft":
+        new_status = "draft"
+        new_phase = 0
+        phase3_skipped_flag = True
+    else:
+        new_status = "pending_stage2_prosthetic"
+        new_phase = 4
+        phase3_skipped_flag = True
+
     # Mark phases 1-3 as skipped so the readback / progress UI knows not to
     # render them and the Phase 4 Step 1 reads from existing_implants instead
     # of implant_plans.
@@ -1650,13 +1694,13 @@ async def create_procedure_with_existing_implants(
         "case_origin": "existing_implants",
         "phase1_skipped": True,
         "phase2_skipped": True,
-        "phase3_skipped": True,
+        "phase3_skipped": phase3_skipped_flag,
         # Keep the conventional fields populated so legacy readers (Lab Slip
         # PDF, dashboard widgets) that key off implant_procedure_type don't
         # break. We pick the closest matching label given the count.
         "implant_procedure_type": (
-            "Single Conventional Implant" if existing_impl_count == 1
-            else "Multiple Conventional Implants"
+            payload.original_procedure_type
+            or ("Single Conventional Implant" if existing_impl_count == 1 else "Multiple Conventional Implants")
         ),
         "number_of_implants": existing_impl_count,
         "loading_type": [],
@@ -1664,17 +1708,15 @@ async def create_procedure_with_existing_implants(
         "implant_plans": [],   # the Lab Slip will fall back to existing_implants
         "teeth_present": [],
         "missing_teeth": [r.tooth for r in payload.existing_implants],
-        # iter-211 status: bypass Phase 1-3 entirely and land in the Phase 4
-        # Step 1 inbox. Approval flags for skipped phases are stamped True so
-        # the frontend doesn't render "Pending phase 1" badges.
-        "status": "pending_stage2_prosthetic",
-        "current_phase": 4,
+        # iter-213 status: routed by phase_to_start.
+        "status": new_status,
+        "current_phase": new_phase,
         "supervisor_phase1_approved": True,
         "implant_incharge_phase1_approved": True,
         "supervisor_phase2_approved": True,
         "implant_incharge_phase2_approved": True,
-        "phase3_approved": True,
-        "phase1_skipped_reason": "Existing implants — Path A (replace prosthesis only)",
+        "phase3_approved": phase3_skipped_flag,
+        "phase1_skipped_reason": "Existing implants — patient presented with implants placed elsewhere",
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),
     })
