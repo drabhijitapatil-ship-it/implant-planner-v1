@@ -1767,7 +1767,7 @@ async def create_procedure_with_existing_implants(
 
     # case_id is derived on read; mirror the same `IMP<last 4>` fallback here.
     case_id_resp = procedure_dict.get("case_id") or f"IMP{new_id[-4:].upper()}"
-    return {"id": new_id, "case_id": case_id_resp, "status": "pending_stage2_prosthetic"}
+    return {"id": new_id, "case_id": case_id_resp, "status": new_status, "current_phase": new_phase}
 
 
 @api_router.post("/procedures")
