@@ -489,7 +489,22 @@ const _labelize = (val: string | undefined | null, map: Record<string, string>):
 
 export const buildLabSlipHtml = (procedure: any): string => {
   const p4 = procedure.phase4_step1_data || {};
-  const plans: any[] = procedure.implant_plans || [];
+  // iter-211: when the case originates from existing implants (Path A), the
+  // surgical phases were skipped so `implant_plans` is empty. Pull the
+  // implant inventory from `existing_implants` instead so the Lab Slip
+  // still has implant-site / brand / system / Ø / length / platform rows.
+  const plans: any[] = (Array.isArray(procedure.implant_plans) && procedure.implant_plans.length > 0)
+    ? procedure.implant_plans
+    : ((procedure.existing_implants || []).map((r: any) => ({
+        position: r.tooth,
+        tooth: r.tooth,
+        implant_brand: r.system_unknown ? 'System unknown — verify clinically' : (r.brand || ''),
+        implant_system: r.system_unknown ? '—' : (r.system || ''),
+        implant_diameter: r.diameter_mm ?? '',
+        implant_length: r.length_mm ?? '',
+        implant_platform: r.platform || '',
+        gingival_height: r.gingival_height_mm ?? '',
+      })));
 
   // Implant table rows
   const implantRows = plans.map((p: any, i: number) => {

@@ -88,7 +88,16 @@ export default function Phase4Step1Screen() {
         api.get(`/procedures/${id}/implant-plan`),
       ]);
       setProcedure(procRes.data);
-      const positions = (planRes.data.implant_plans || []).map((p: any) => getImplantSite(p, ''));
+      // iter-211: existing-implant cases (Path A) skip Phase 1 — `implant_plans`
+      // is empty. Synthesize positions from `existing_implants` so the rest
+      // of this form (per-implant prosthesis selectors, shade slots, MUA
+      // editor) still has the implant count it needs.
+      const livePlans: any[] = (planRes.data?.implant_plans || []);
+      const existingImplants: any[] = procRes.data?.existing_implants || [];
+      const fromExisting = procRes.data?.case_origin === 'existing_implants' && livePlans.length === 0 && existingImplants.length > 0;
+      const positions = fromExisting
+        ? existingImplants.map((r: any) => String(r?.tooth || '').trim())
+        : livePlans.map((p: any) => getImplantSite(p, ''));
       setImplantPositions(positions);
       // Initialize per-implant plans if needed
       if (positions.length > 1) {

@@ -910,6 +910,132 @@ export default function ProcedureDetailScreen() {
           </>
         )}
 
+        {/* iter-211: Existing Implants readback — only renders for Path A
+            cases (case_origin === 'existing_implants'). Shows implant
+            inventory + prosthesis history + structured failure analysis so
+            the prosthodontist sees the clinical context immediately when
+            opening the case from the Phase 4 inbox. */}
+        {procedure.case_origin === 'existing_implants' && (
+          <View style={{ backgroundColor: '#FFF', borderRadius: 12, padding: 14, marginBottom: 12, borderLeftWidth: 4, borderLeftColor: '#0277BD', borderWidth: 1, borderColor: '#ECEFF1' }} testID="existing-implants-block">
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <Ionicons name="archive-outline" size={20} color="#0277BD" />
+              <Text style={{ fontSize: 15, fontWeight: '800', color: '#0277BD' }}>Existing Implants — Path A (Replace Prosthesis Only)</Text>
+            </View>
+
+            {Array.isArray(procedure.existing_implants) && procedure.existing_implants.length > 0 ? (
+              procedure.existing_implants.map((row: any, idx: number) => (
+                <View key={idx} style={{ backgroundColor: '#F8FBFF', borderRadius: 8, borderWidth: 1, borderColor: '#BBDEFB', padding: 10, marginBottom: 8 }} testID={`existing-implant-row-${idx}`}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <View style={{ backgroundColor: '#0277BD', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 }}>
+                      <Text style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>Tooth #{row.tooth || '—'}</Text>
+                    </View>
+                    {row.system_unknown ? (
+                      <View style={{ backgroundColor: '#FFF8E1', borderColor: '#FFE082', borderWidth: 1, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 }}>
+                        <Text style={{ fontSize: 11, color: '#F57C00', fontWeight: '700' }}>System Unknown</Text>
+                      </View>
+                    ) : (
+                      <Text style={{ fontSize: 13, color: '#01579B', fontWeight: '700', flex: 1 }} numberOfLines={1}>
+                        {[row.brand, row.system].filter(Boolean).join(' · ') || '—'}
+                      </Text>
+                    )}
+                  </View>
+                  {!row.system_unknown && (
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 4 }}>
+                      {row.connection_type && <Text style={{ fontSize: 12, color: '#37474F' }}>Conn: <Text style={{ fontWeight: '700' }}>{row.connection_type}</Text></Text>}
+                      {row.platform && <Text style={{ fontSize: 12, color: '#37474F' }}>Platform: <Text style={{ fontWeight: '700' }}>{row.platform}</Text></Text>}
+                      {row.diameter_mm != null && <Text style={{ fontSize: 12, color: '#37474F' }}>Ø: <Text style={{ fontWeight: '700' }}>{row.diameter_mm} mm</Text></Text>}
+                      {row.length_mm != null && <Text style={{ fontSize: 12, color: '#37474F' }}>L: <Text style={{ fontWeight: '700' }}>{row.length_mm} mm</Text></Text>}
+                      {row.gingival_height_mm != null && <Text style={{ fontSize: 12, color: '#37474F' }}>GH: <Text style={{ fontWeight: '700' }}>{row.gingival_height_mm} mm</Text></Text>}
+                    </View>
+                  )}
+                  {(row.surgery_date || row.original_surgeon || row.abutment_present !== null) && (
+                    <Text style={{ fontSize: 11, color: '#607D8B', lineHeight: 17 }}>
+                      {row.surgery_date ? `Placed: ${row.surgery_date}` : ''}
+                      {row.surgery_date && row.original_surgeon ? '  •  ' : ''}
+                      {row.original_surgeon ? `Surgeon: ${row.original_surgeon}` : ''}
+                      {(row.surgery_date || row.original_surgeon) && row.abutment_present !== null ? '  •  ' : ''}
+                      {row.abutment_present === true ? 'Abutment in place' : row.abutment_present === false ? 'No abutment' : ''}
+                    </Text>
+                  )}
+                  {row.notes && <Text style={{ fontSize: 12, color: '#37474F', marginTop: 4, fontStyle: 'italic' }}>"{row.notes}"</Text>}
+                </View>
+              ))
+            ) : (
+              <Text style={{ fontSize: 12, color: '#999', fontStyle: 'italic' }}>No implants captured.</Text>
+            )}
+
+            {/* Prosthesis history & failure analysis */}
+            {procedure.prosthesis_history && procedure.prosthesis_history.had_prosthesis && (
+              <View style={{ marginTop: 8, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#ECEFF1' }} testID="prosthesis-history-block">
+                <Text style={{ fontSize: 13, fontWeight: '800', color: '#0277BD', marginBottom: 6 }}>Prosthesis History</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 8 }}>
+                  {procedure.prosthesis_history.prosthesis_type && <Text style={{ fontSize: 12, color: '#37474F' }}>Type: <Text style={{ fontWeight: '700' }}>{procedure.prosthesis_history.prosthesis_type}</Text></Text>}
+                  {procedure.prosthesis_history.material && <Text style={{ fontSize: 12, color: '#37474F' }}>Material: <Text style={{ fontWeight: '700' }}>{procedure.prosthesis_history.material}</Text></Text>}
+                  {procedure.prosthesis_history.placement_date && <Text style={{ fontSize: 12, color: '#37474F' }}>Placed: <Text style={{ fontWeight: '700' }}>{procedure.prosthesis_history.placement_date}</Text></Text>}
+                  {procedure.prosthesis_history.lab_name && <Text style={{ fontSize: 12, color: '#37474F' }}>Lab: <Text style={{ fontWeight: '700' }}>{procedure.prosthesis_history.lab_name}</Text></Text>}
+                </View>
+
+                {procedure.prosthesis_history.failed && (
+                  <View style={{ backgroundColor: '#FFF8F8', borderRadius: 8, borderWidth: 1, borderColor: '#FFCDD2', padding: 10 }} testID="failure-analysis-block">
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <Ionicons name="warning" size={16} color="#C62828" />
+                      <Text style={{ fontSize: 13, fontWeight: '800', color: '#C62828', letterSpacing: 0.3 }}>Failure Analysis</Text>
+                    </View>
+                    {Array.isArray(procedure.prosthesis_history.failure_categories) && procedure.prosthesis_history.failure_categories.length > 0 && (
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                        {procedure.prosthesis_history.failure_categories.map((c: string) => (
+                          <View key={c} style={{ backgroundColor: '#C62828', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 }}>
+                            <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '700' }}>{c}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                    {Array.isArray(procedure.prosthesis_history.failure_modes) && procedure.prosthesis_history.failure_modes.length > 0 && (
+                      <View style={{ marginBottom: 6 }}>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#5D4037', marginBottom: 3 }}>MODES</Text>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+                          {procedure.prosthesis_history.failure_modes.map((m: string) => (
+                            <View key={m} style={{ backgroundColor: '#FFE0E0', borderWidth: 1, borderColor: '#FFCDD2', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
+                              <Text style={{ color: '#B71C1C', fontSize: 11, fontWeight: '600' }}>{m}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    )}
+                    {Array.isArray(procedure.prosthesis_history.suspected_root_causes) && procedure.prosthesis_history.suspected_root_causes.length > 0 && (
+                      <View style={{ marginBottom: 6 }}>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#5D4037', marginBottom: 3 }}>SUSPECTED ROOT CAUSES</Text>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+                          {procedure.prosthesis_history.suspected_root_causes.map((c: string) => (
+                            <View key={c} style={{ backgroundColor: '#FFF3E0', borderWidth: 1, borderColor: '#FFE0B2', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
+                              <Text style={{ color: '#E65100', fontSize: 11, fontWeight: '600' }}>{c}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    )}
+                    {procedure.prosthesis_history.failure_narrative && (
+                      <Text style={{ fontSize: 12, color: '#3E2723', marginTop: 6, fontStyle: 'italic', lineHeight: 18 }}>
+                        "{procedure.prosthesis_history.failure_narrative}"
+                      </Text>
+                    )}
+                    {Array.isArray(procedure.prosthesis_history.attachments) && procedure.prosthesis_history.attachments.length > 0 && (
+                      <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                        {procedure.prosthesis_history.attachments.map((url: string, i: number) => (
+                          <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#E1F5FE', paddingHorizontal: 8, paddingVertical: 5, borderRadius: 999 }}>
+                            <Ionicons name="image" size={12} color="#0277BD" />
+                            <Text style={{ fontSize: 11, color: '#0277BD', fontWeight: '700' }}>Attachment {i + 1}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+        )}
+
         {/* Treatment Timeline / Progress Tracker */}
         <View style={styles.timelineContainer} testID="treatment-timeline" data-testid="treatment-timeline">
           <Text style={styles.timelineTitle}>Treatment Progress</Text>

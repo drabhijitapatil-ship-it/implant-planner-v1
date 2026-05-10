@@ -1,0 +1,49 @@
+{
+  "summary": "iter-211 Slice 1 (Path A) — backend tested + frontend smoke verified. Found and FIXED one CRITICAL backend bug: POST /api/procedures/with-existing-implants always returned 500 'KeyError: case_id' on the success path because line 1726 referenced procedure_dict['case_id'] which was never populated (the comment at 1698-1699 even acknowledged 'case_id is computed on read'). Applied minimal fix mirroring the read-side IMP<last4> fallback. After fix: 15/15 iter-211 tests pass + 24/24 iter-205 alpha_bio regression + 4/4 iter-210 MUA regression = 43/43. Frontend wizard renders correctly at /procedures/new-existing-implant with banner + Patient Details + Faculty & Appointment + Existing Implants (System Unknown toggle) + Prosthesis History + Create Case button — but ONLY after `sudo supervisorctl restart expo` to pick up the new route file (Metro bundler had cached the old route table, so navigation hit [id].tsx → 'Procedure not found' until restart).",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/procedures/with-existing-implants", "issue": "KeyError 'case_id' → 500 on every successful create (FIXED in this iteration: server.py:1726 now uses .get with IMP<last4> fallback). Root cause: code at L1649-1680 never set case_id in procedure_dict, but the response builder hard-indexed it. Side effect of the bug: docs were inserted into Mongo before the 500 was raised, so old test slots remained booked.", "priority": "CRITICAL"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/procedures/with-existing-implants", "issue": "supervisor_id / implant_incharge_id Field max_length=50 — typical Mongo ObjectId is 24 chars so OK, but if the user-id format ever changes (uuid4=36, longer custom prefixes) this will silently 422. Consider raising to 64 for headroom."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "navigation to /procedures/new-existing-implant", "issue": "Brand-new route file not picked up by Expo/Metro bundler until a manual `supervisorctl restart expo`. Direct navigation fell through to [id].tsx and rendered 'Procedure not found'. Once restarted, the route resolves correctly and the wizard renders. Confirms a recurring infrastructure quirk, not a regression — flagged for awareness.", "affected_selectors": ["/procedures/new-existing-implant"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_existing_implants_iter211.py",
+    "/app/test_reports/pytest/iter211_full.xml"
+  ],
+  "action_items": [
+    "Verify the case_id fallback fix on server.py:1726-1728 — minimal one-liner change, no behavioural divergence from the documented 'case_id is computed on read' design. Consider extracting the IMP<last4> helper because it's now duplicated 3x in the file (lines 6458, 8555, 1727).",
+    "Optional: bump supervisor_id / implant_incharge_id max_length from 50 to 64 in ProcedureCreateExistingImplants for consistency with the rest of the codebase.",
+    "Consider documenting in the iter-211 PR notes that adding a new top-level route under app/procedures/ requires an `expo` supervisor restart in this preview env (Metro route-cache quirk) — the test agent had to do this to unblock the smoke test.",
+    "Slice-2 follow-up (out of iter-211 scope but worth flagging): the fresh-case POST /api/procedures still rejects loading_type='Conventional' / 'Delayed' with 400 'Invalid loading type'. The accepted vocabulary is not obvious from the model — please document the allowlist."
+  ],
+  "critical_code_review_comments": [
+    "server.py:1726 — KeyError on success path. Fixed in-place. Root cause: copy-paste from fresh-case endpoint where case_id was eagerly generated. The new endpoint follows the on-read derivation pattern, so the response should not eagerly index case_id. Fix: `procedure_dict.get('case_id') or f\"IMP{new_id[-4:].upper()}\"`.",
+    "server.py:1644-1680 — endpoint side-effects (insert + access_log) happen BEFORE the response is constructed. With the old buggy line 1726, every prod call would have left orphan docs in Mongo with status='pending_stage2_prosthetic' but the client thinking the call failed. The fix prevents this going forward but ANY procedures already inserted by the buggy version (e.g. during this test run) will linger. Suggest a one-time sweep: docs with case_origin='existing_implants' AND no client-side reference can be safely deleted, but leave that decision to the main agent.",
+    "server.py:1666 — `missing_teeth: [r.tooth for r in payload.existing_implants]` — fine, but if tooth strings repeat (two implants on the same notation) the list will contain duplicates. Not necessarily a bug, just noting.",
+    "ExistingImplant model — surgery_date / placement_date are `Optional[str]` with no format validation. Future analytics queries that bucket by month will need defensive parsing.",
+    "Metro/Expo bundler quirk: brand-new files under app/ do not always get picked up on hot reload in this preview. Worth a tiny note in CONTRIBUTING.md (the iter-206 stuck-spinner symptom may be related)."
+  ],
+  "updated_files": [
+    "/app/backend/server.py (line 1726 — fix KeyError)",
+    "/app/backend/tests/test_existing_implants_iter211.py (new — 15 pytest cases incl. happy path, system_unknown, prosthesis-history round-trip, 422 on empty implants, 422 on each missing required field, 409 on duplicate slot, list visibility, fresh-case regression smoke)"
+  ],
+  "success_rate": {
+    "backend": "100% (43/43 — 15 new + 24 iter-205 alpha_bio + 4 iter-210 MUA)",
+    "frontend": "smoke-verified: route loads, all expected sections render. Did not exhaustively submit the form because that requires picking real supervisor/incharge from dropdowns + DateTime selection — backend round-trip for those payloads is already proven via pytest."
+  },
+  "test_credentials": "Abhijit.patil / Admin@123 (admin). Verified login → /dashboard. /procedures/new-existing-implant verified after expo restart.",
+  "seed_data_creation": "None — tests use TEST_-prefixed patient names + per-run randomized future weekday offsets to avoid duplicate-slot collisions across runs.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "iter-211 backend endpoint POST /api/procedures/with-existing-implants is now fully working. Pytest file: /app/backend/tests/test_existing_implants_iter211.py — uses _OFFSET dict with random seed per session so reruns don't collide on the same future date. 15 cases cover happy path, system_unknown, full prosthesis-failure round-trip, empty-implants 422, each missing required field 422, duplicate-slot 409, list-visibility, and a smoke ping of the legacy /api/procedures endpoint. The backend bug at server.py:1726 was fixed in this iteration (was: hard-indexed procedure_dict['case_id'] which was never set; now: .get with IMP<last4> fallback). Frontend wizard at /procedures/new-existing-implant is reachable AFTER `sudo supervisorctl restart expo`. End-to-end form submission was not driven from the UI in this run because the supervisor/incharge dropdowns are custom Pickers — backend POST contract is fully verified at the API layer, and the readback block on /procedures/[id].tsx after a real submit was not visually exercised; consider an explicit smoke for that block in the next iteration if the user reports issues.",
+  "rca of the issue": "Critical KeyError 'case_id' on POST /api/procedures/with-existing-implants. RCA: line 1726 was copy-pasted from the fresh-case endpoint pattern but the new endpoint adopts the on-read case_id derivation pattern (per the comment at L1698-1699). The dict.update at L1649-1680 never set case_id, so dict[\"case_id\"] threw KeyError → 500. Reproduction: any valid POST. Mitigation applied: replaced the hard index with `procedure_dict.get('case_id') or f'IMP{new_id[-4:].upper()}'` to match the fallback used elsewhere (e.g., L6458, L8555). Side-effect: 4 orphan procedures were inserted into Mongo during reproduction (TEST_iter211*); they have status='pending_stage2_prosthetic' and case_origin='existing_implants' and can be left or swept by the main agent."
+}
