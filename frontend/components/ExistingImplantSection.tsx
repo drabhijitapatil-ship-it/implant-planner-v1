@@ -183,16 +183,41 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
   }, []);
 
   const OTHER = 'Other (manual entry)';
+  // iter-217: brands & systems are unioned from BOTH /implant-library/systems
+  // and /implant-catalog so the dropdown is always populated even when one
+  // source is partially seeded on production. Diameter / length options are
+  // also pulled from whichever source has them.
   const brands = useMemo(() => {
-    const list = Array.from(new Set(library.map(s => s.brand).filter(Boolean))).sort();
-    return [...list, OTHER];
-  }, [library]);
+    const libBrands = library.map(s => s.brand).filter(Boolean);
+    const catBrands = catalog.map((s: any) => s.brand).filter(Boolean);
+    const merged = Array.from(new Set([...libBrands, ...catBrands])).sort();
+    return [...merged, OTHER];
+  }, [library, catalog]);
   const systemsForBrand = (brand: string) => {
-    if (brand === OTHER) return [];
-    return library.filter(s => s.brand === brand).map(s => s.system).sort();
+    if (!brand || brand === OTHER) return [];
+    const libSys = library.filter(s => s.brand === brand).map(s => s.system);
+    const catSys = catalog.filter((s: any) => s.brand === brand).map((s: any) => s.name);
+    return Array.from(new Set([...libSys, ...catSys].filter(Boolean))).sort();
   };
   const lookupLibSystem = (brand: string, system: string) => library.find(s => s.brand === brand && s.system === system);
   const lookupCatalog = (brand: string, system: string) => catalog.find((s: any) => s.brand === brand && s.name === system);
+  // Diameter / length option union — library first, fallback to catalog.implant.{diameters_mm,lengths_mm}.
+  const diametersForSystem = (brand: string, system: string): string[] => {
+    if (!brand || !system) return [];
+    const fromLib = lookupLibSystem(brand, system)?.diameters || [];
+    const cat = lookupCatalog(brand, system);
+    const fromCat: number[] = (cat as any)?.implant?.diameters_mm || (cat as any)?.diameters_mm || [];
+    const merged = Array.from(new Set([...fromLib, ...fromCat])).sort((a: any, b: any) => Number(a) - Number(b));
+    return merged.map(v => String(v));
+  };
+  const lengthsForSystem = (brand: string, system: string): string[] => {
+    if (!brand || !system) return [];
+    const fromLib = lookupLibSystem(brand, system)?.lengths || [];
+    const cat = lookupCatalog(brand, system);
+    const fromCat: number[] = (cat as any)?.implant?.lengths_mm || (cat as any)?.lengths_mm || [];
+    const merged = Array.from(new Set([...fromLib, ...fromCat])).sort((a: any, b: any) => Number(a) - Number(b));
+    return merged.map(v => String(v));
+  };
 
   // Form state
   const [originalProcedure, setOriginalProcedure] = useState('');
@@ -487,9 +512,8 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
           <Text style={styles.sectionTitle}>Implant Selection {isFullArchDone ? `(${implants.length})` : ''}</Text>
           {implants.map((row, idx) => {
             const sysOpts = row.brand ? systemsForBrand(row.brand) : [];
-            const libHit = lookupLibSystem(row.brand, row.system);
-            const diaOpts = libHit?.diameters?.map(d => String(d)) || [];
-            const lenOpts = libHit?.lengths?.map(l => String(l)) || [];
+            const diaOpts = diametersForSystem(row.brand, row.system);
+            const lenOpts = lengthsForSystem(row.brand, row.system);
             const showAngle = row.present_component === 'Final Abutment' || row.present_component === 'Multi-Unit Abutment';
             const showGH = row.present_component !== 'None';
 

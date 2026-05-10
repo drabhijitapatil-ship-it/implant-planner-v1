@@ -1,5 +1,29 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 217 (Feb 2026) — Existing Implant: union Brand/System/Diameter/Length from both catalog and library
+
+### Why
+User reported that the Brand dropdown in `ExistingImplantSection` showed *only* the "Other (manual entry)" option — no catalog brands were available. Root cause: the iter-215 rewrite sourced brands exclusively from `/api/implant-library/systems`. While that endpoint is correctly auth-guarded and returns 57 systems / 18 brands on the dev backend, the production EAS backend may not have the `implant_library` MongoDB collection fully seeded (the Alpha-Bio components are seeded by `_seed_alpha_bio_components.py` at startup but the master `implant_library` collection isn't). Single-source dropdown ⇒ empty list ⇒ only "Other" visible.
+
+### Changes
+**Frontend (`/app/frontend/components/ExistingImplantSection.tsx`)** — single robust source of truth for catalog choices:
+- `brands` now unions `library.brands ∪ catalog.brands` (catalog comes from `/api/implant-catalog`, which is reliably seeded on every restart).
+- `systemsForBrand(brand)` unions library systems and catalog systems for that brand.
+- New `diametersForSystem(brand, system)` and `lengthsForSystem(brand, system)` helpers pull from library first (precise per-size records) and fall back to `catalog.implant.diameters_mm` / `catalog.implant.lengths_mm` so the user always sees a populated dropdown when the picked system has any size data anywhere in the system.
+- All numeric values normalised to sorted ascending strings (e.g. `["3.3","3.75","4.2","5","6"]`).
+- "Other (manual entry)" still pinned at the bottom of the brand list for one-off implants outside the catalog (e.g., legacy patient referrals).
+
+### Verification
+- Backend logs confirm both `/api/implant-library/systems` and `/api/implant-catalog` return 200 OK for the student token (`Gaurav.pandey`).
+- `/api/implant-catalog` returns 48 catalog entries / 13 brands; `/api/implant-library/systems` returns 57 / 18 — union ensures all 18 brands are picker-visible.
+- Metro hot-reload bundled the rewrite cleanly.
+
+### Notes for next agent
+- If `implant_library` ends up genuinely empty on a tenant, the catalog union ensures the user can still pick brand + system. Diameter and length still render via dropdown when the catalog has `implant.diameters_mm` / `implant.lengths_mm` (Alpha Bio always does; other catalog brands need verification).
+- Long-term fix: add a `_seed_implant_library.py` startup script (mirroring `_seed_alpha_bio_components.py`) so the master library is always present on every prod restart. Out of scope this iteration.
+
+---
+
 ## Iteration 216 (Feb 2026) — Existing Implant: Save/Edit/Delete sequential cards + smart prosthesis defaults + spacing
 
 ### Why
