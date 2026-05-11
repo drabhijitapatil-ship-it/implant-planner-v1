@@ -1,5 +1,67 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 222 (Feb 2026) — Existing Implant: onDismiss picker fix + draft-resume flow
+
+### Why
+Two reported bugs:
+1. After iter-221's 350 ms setTimeout, the iOS chooser sheet **still** failed to launch Image Library / PDF pickers (only Camera worked). The setTimeout-after-`setPicker(null)` pattern relied on best-effort timing that's unreliable across iOS versions.
+2. Saving an existing-implant case as draft and re-opening it routed the user through the regular Phase 1 Step 2 → Phase 2 (consent upload) flow — entirely wrong for existing-implant cases where the surgery already happened.
+
+### Changes
+
+**Frontend — Modal picker race (`ExistingImplantSection.tsx`)**
+- New `pendingPick` state queues the chosen source (`library` / `camera` / `pdf`) and target.
+- `setPicker(null)` closes the chooser, then the Modal's iOS-native `onDismiss` callback fires **after the dismiss animation completes** and calls `runPendingPick()` to launch the selected picker. Canonical RN/Expo workaround for the Modal-stacking race.
+- Android / web fallback `useEffect` watches `picker === null && pendingPick !== null` and fires after 350 ms (`onDismiss` is iOS-only).
+- Internal launcher helpers isolate the actual picker-launch logic + wrap in try/catch with surfacing Alerts.
+
+**Frontend — Draft-resume routing**
+- New `existingImplantDraft` state in `new-procedure.tsx`. When `proc.case_origin === 'existing_implants'`:
+  - Forces `implant_procedure_type = 'Existing Implant'` so the ExistingImplantSection re-renders instead of the regular Phase 1 form.
+  - Keeps `step = 'details'` (no jump to Phase 1 Step 2 implant-selection).
+  - Stashes the full `proc` record into `existingImplantDraft` for hydration.
+- `ExistingImplantSection` now accepts an optional `draft` prop:
+  - One-shot hydration `useEffect` (guarded by `hydratedDraftId` ref) replays `originalProcedure`, `missingTeeth`, `implants[]` (all `saved: true` so they collapse to summary), `prosthesis_history`, and `radiographs.opg_url`.
+  - Reset-on-procedure-type-change + sync-rows-to-missing-teeth effects skip while a draft is hydrating so they don't clobber the replay.
+  - **Save as Draft button hidden** when `isDraftResume === true` — only Move to Phase 4 Step 1 and Move to Phase 3 remain.
+  - Submit payload now includes `procedure_id` so the backend updates the existing record instead of inserting a duplicate.
+
+**Backend — `/api/procedures/with-existing-implants` (`server.py`)**
+- `WithExistingImplantsRequest` gained `procedure_id: Optional[str]`.
+- Handler now does update-in-place when `procedure_id` is supplied: looks up by `ObjectId(procedure_id)`, preserves immutable identity fields (`_id`, `created_at`, `created_by_*`, `student_id`), uses `replace_one` for the rest. Refuses non-owners unless supervisor/in-charge/administrator.
+- Scheduling guards (Sunday block, Saturday-slot restriction, 24h-advance, slot-conflict) **dropped for this endpoint entirely** — the `procedure_date` field for existing-implant cases is a synthetic "today" placeholder, not a real appointment, so the policy checks only produced false positives (especially self-conflict for draft-resume).
+
+### Verification
+- `curl` round-trip confirms: draft created → update with `procedure_id` → status flipped from `draft` to `phase2_approved`, `current_phase: 3`, `prosthesis_history.prosthesis_type` correctly persisted, same Mongo `_id`.
+- Metro bundler rebuilt cleanly on every frontend change.
+- Backend uvicorn reloaded successfully after each `server.py` edit.
+
+### Notes for next agent
+- If a clinic ever needs actual appointment scheduling for an existing-implant case (e.g., book Phase 3 impression visit at creation), add a `phase3_appointment_date` field instead of repurposing `procedure_date`.
+- `ImagePicker.MediaTypeOptions.Images` is deprecated in Expo SDK 51+ but still works. Future cleanup: switch to `['images']`.
+
+---
+
+## Iteration 221 (Feb 2026) — Existing Implant: defer picker launch so library/PDF pickers actually open on iOS
+
+### Why
+After iter-220 shipped the 3-source chooser, the user reported that **"Choose Image from Library"** and **"Upload PDF"** silently did nothing on iOS — only **"Take Photo"** worked. Root cause: a known iOS RN Modal-stacking race — closing the chooser Modal and immediately launching a system picker fails because the Modal is still mid-dismiss-animation when iOS receives the picker request, so iOS denies the new picker. Camera was unaffected because its permission alert provides a natural pause that lets the Modal finish dismissing.
+
+### Changes
+**Frontend (`/app/frontend/components/ExistingImplantSection.tsx`)**
+- All three picker launchers (`pickFromLibrary`, `takePhoto`, `pickPdf`) now wrap their picker call in a `setTimeout(…, 350)` after closing the chooser Modal. 350 ms aligns with React Native's default Modal `fade` animation duration on iOS so the chooser is fully gone by the time the picker launches.
+- Each picker is also wrapped in a try/catch with an Alert fallback so unexpected errors surface instead of silently failing.
+
+### Verification
+- Metro bundler rebuilt cleanly after the change (`Web Bundled 2360ms`).
+- This is the canonical fix for the RN `Modal` ↔ native picker race; documented in the official React Native and Expo image-picker repos as the recommended workaround until the underlying `react-native-screens` change lands.
+
+### Notes for next agent
+- If a later screen mounts another chooser-style Modal that launches `ImagePicker` / `DocumentPicker`, apply the same `setTimeout(…, 350)` pattern.
+- Long-term fix: extract a `<UploadChooserSheet>` shared component that handles the deferred-launch pattern internally so callers never have to think about it.
+
+---
+
 ## Iteration 220 (Feb 2026) — Existing Implant: 3-source radiograph upload, drop date validation, rename header
 
 ### Why

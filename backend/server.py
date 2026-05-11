@@ -332,6 +332,9 @@ class ProcedureCreateExistingImplants(BaseModel):
     # default and the iter-211 behaviour), or 'draft' (saved but not routed).
     phase_to_start: Optional[str] = Field("phase4_step1", max_length=20)
     remark: Optional[str] = Field("", max_length=1000)
+    # iter-222: when set, update the existing procedure in-place instead of
+    # creating a new one (used by the draft-resume flow in new-procedure.tsx).
+    procedure_id: Optional[str] = Field(None, max_length=64)
 
 
 class ProcedureCreate(BaseModel):
@@ -1632,38 +1635,12 @@ async def create_procedure_with_existing_implants(
 
     is_student = current_user["role"] == "student"
 
-    # Lightweight scheduling validation (Sunday block + Saturday slot).
-    try:
-        procedure_datetime = datetime.strptime(
-            f"{payload.procedure_date} {payload.procedure_time}", "%Y-%m-%d %H:%M"
-        )
-        if procedure_datetime.weekday() == 6:
-            raise HTTPException(status_code=400, detail="No scheduling is available on Sundays.")
-        if procedure_datetime.weekday() == 5 and payload.procedure_time != "10:00":
-            raise HTTPException(status_code=400, detail="Only 10:00 AM slot is available on Saturdays.")
-        if is_student:
-            hours_until = (procedure_datetime - datetime.now()).total_seconds() / 3600
-            if hours_until < 24:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Students cannot schedule procedures less than 24 hours in advance.",
-                )
-    except ValueError:
-        pass
-
-    # Same duplicate-slot guard as fresh-case flow.
-    existing_slot = await db.procedures.find_one({
-        "procedure_date": payload.procedure_date,
-        "procedure_time": payload.procedure_time,
-    })
-    if existing_slot:
-        booked_by = existing_slot.get("created_by_name") or existing_slot.get("student_name") or "Unknown"
-        patient = existing_slot.get("patient_name", "Unknown")
-        slot_label = "10:00 AM" if payload.procedure_time == "10:00" else "2:00 PM"
-        raise HTTPException(
-            status_code=409,
-            detail=f"The {slot_label} slot on {payload.procedure_date} is already booked for patient {patient} (scheduled by {booked_by}). Please choose a different time or date.",
-        )
+    # iter-222: Skip scheduling guards (Sunday block, 24h-advance, slot
+    # conflict) for existing-implant cases. The `procedure_date` field is a
+    # synthetic placeholder ("today") since the actual surgery already
+    # happened — there's no real appointment being scheduled, so the policy
+    # checks would only ever produce false positives (esp. for draft-resume
+    # where the same record self-conflicts on its own saved date).
 
     procedure_dict = payload.model_dump()
     existing_impl_count = len(payload.existing_implants)
@@ -1740,8 +1717,30 @@ async def create_procedure_with_existing_implants(
     # case_id is computed on read (see /badge endpoint and the
     # `IMP<last 4 of _id>` fallback) — no eager generation needed here.
 
-    result = await db.procedures.insert_one(procedure_dict)
-    new_id = str(result.inserted_id)
+    # iter-222: Update-in-place when a procedure_id is supplied (draft resume
+    # flow). Otherwise insert a new row.
+    if payload.procedure_id:
+        try:
+            obj_pid = ObjectId(payload.procedure_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid procedure_id.")
+        existing = await db.procedures.find_one({"_id": obj_pid})
+        if not existing:
+            raise HTTPException(status_code=404, detail="Draft procedure not found.")
+        if existing.get("created_by_id") and existing.get("created_by_id") != current_user["_id"] and current_user["role"] not in ("supervisor", "implant_incharge", "administrator"):
+            raise HTTPException(status_code=403, detail="You don't have permission to update this draft.")
+        # Preserve immutable identity fields from the original record.
+        procedure_dict["_id"] = existing["_id"]
+        procedure_dict["created_at"] = existing.get("created_at", procedure_dict.get("created_at"))
+        procedure_dict["created_by_id"] = existing.get("created_by_id", procedure_dict.get("created_by_id"))
+        procedure_dict["created_by_name"] = existing.get("created_by_name", procedure_dict.get("created_by_name"))
+        procedure_dict["created_by_role"] = existing.get("created_by_role", procedure_dict.get("created_by_role"))
+        procedure_dict["student_id"] = existing.get("student_id", procedure_dict.get("student_id"))
+        await db.procedures.replace_one({"_id": existing["_id"]}, procedure_dict)
+        new_id = str(existing["_id"])
+    else:
+        result = await db.procedures.insert_one(procedure_dict)
+        new_id = str(result.inserted_id)
 
     # Best-effort access-log entry for HIPAA traceability (matches existing
     # patterns elsewhere in this file). Keep this lightweight — never blocks

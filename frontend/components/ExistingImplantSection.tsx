@@ -14,7 +14,7 @@
  *   • Action buttons stack vertically so labels never clip on narrow screens
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, TextInput, ScrollView, Alert,
   StyleSheet, Modal, Pressable, ActivityIndicator, Platform,
@@ -243,6 +243,12 @@ type Props = {
     remark: string;
   };
   validatePatient: () => string | null;
+  /** iter-222: When set, the section hydrates its state from the persisted
+   * draft procedure record and switches into "resume" mode (no Save-as-Draft
+   * button — only Move to Phase 3 / Move to Phase 4 Step 1). The draft's
+   * `id` is also sent back to the backend on submit so the existing record
+   * is updated in place rather than a new one being created. */
+  draft?: any | null;
 };
 
 // ── Library system shape (from /api/implant-library/systems) ──
@@ -253,7 +259,8 @@ type LibSystem = {
   indication?: string;
 };
 
-export default function ExistingImplantSection({ patient, validatePatient }: Props) {
+export default function ExistingImplantSection({ patient, validatePatient, draft }: Props) {
+  const isDraftResume = !!draft;
   // Catalog cache for connection / platform auto-fill.
   const [catalog, setCatalog] = useState<any[]>([]);
   // Library cache for brand → system → diameter / length dropdowns.
@@ -332,9 +339,58 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
   const [submitting, setSubmitting] = useState(false);
   const [uploadingIdx, setUploadingIdx] = useState<number | string | null>(null);
 
+  // iter-222: hydrate from a saved draft on mount. Runs once per fresh draft id.
+  const hydratedDraftId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!draft || !draft.id) return;
+    if (hydratedDraftId.current === draft.id) return;
+    hydratedDraftId.current = draft.id;
+    const op = draft.original_procedure_type || draft.implant_procedure_type || '';
+    setOriginalProcedure(op);
+    const isFA = FULL_ARCH_DONE.has(op);
+    const savedImpls: any[] = Array.isArray(draft.existing_implants) ? draft.existing_implants : [];
+    const rows: ImplantRow[] = savedImpls.map((r: any) => ({
+      tooth: r.tooth || '',
+      brand: r.brand || '',
+      system: r.system || '',
+      connection_type: r.connection_type || '',
+      platform: r.platform || '',
+      diameter_mm: r.diameter_mm != null ? String(r.diameter_mm) : '',
+      length_mm: r.length_mm != null ? String(r.length_mm) : '',
+      gingival_height_mm: r.gingival_height_mm != null ? String(r.gingival_height_mm) : '',
+      present_component: (r.present_component || 'None') as PresentComponent,
+      pc_gingival_height: r.present_component_gh != null ? String(r.present_component_gh) : '',
+      pc_angle: r.present_component_angle != null ? String(r.present_component_angle) : '',
+      surgery_date: r.surgery_date || '',
+      original_surgeon: r.original_surgeon || '',
+      notes: r.notes || '',
+      iopa_url: r.iopa_url || '',
+      isq_value: r.isq_value != null ? String(r.isq_value) : '',
+      manual_brand: false,
+      saved: true, // collapse all on resume so the user sees a clean summary
+    }));
+    if (rows.length > 0) setImplants(rows);
+    if (!isFA) setMissingTeeth(rows.map(r => r.tooth).filter(Boolean));
+    const ph = draft.prosthesis_history || {};
+    if (ph.had_prosthesis === true) {
+      setHadProsthesis(true);
+      const stage = (ph.prosthesis_stage || '') as '' | 'temporary' | 'final';
+      setProsthesisStage(stage);
+      setProsthesisType(ph.prosthesis_type || '');
+      setProsthesisMaterial(ph.material || '');
+    } else if (ph.had_prosthesis === false) {
+      setHadProsthesis(false);
+    }
+    const rg = draft.radiographs || {};
+    if (rg.opg_url) setOpgUrl(rg.opg_url);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft]);
+
   // ── Reset on procedure-type change ──
   useEffect(() => {
     if (!originalProcedure) return;
+    // iter-222: don't blow away state we just hydrated from a saved draft.
+    if (draft?.id && hydratedDraftId.current === draft.id) return;
     if (isFullArchDone) {
       setMissingTeeth([]);
       setImplants(prev => (prev.length === 0 ? [blankImplant()] : prev));
@@ -349,8 +405,9 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
   // ── Sync implant rows to missingTeeth selection (non-full-arch only) ──
   useEffect(() => {
     if (isFullArchDone) return;
+    // iter-222: preserve hydrated implant data — rebuild from byTooth map so
+    // existing rows with the same tooth ID keep their captured details.
     setImplants(prev => {
-      // Keep existing row if its tooth still selected; create blank for new teeth.
       const byTooth = new Map(prev.filter(r => r.tooth).map(r => [r.tooth, r]));
       return missingTeeth.map(t => byTooth.get(t) || blankImplant(t));
     });
@@ -442,6 +499,32 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
   // (per-implant IOPA or case-level OPG); `idx` is the implant-row index
   // when kind === 'iopa'.
   const [picker, setPicker] = useState<{ kind: 'iopa' | 'opg'; idx?: number } | null>(null);
+  // iter-222: deferred-launch state — the canonical RN fix for the iOS Modal
+  // ↔ system picker race. The chooser Modal closes, its `onDismiss` fires
+  // AFTER the dismiss animation completes, and only then does the picker
+  // launch. setTimeout fallback covers Android (onDismiss is iOS-only).
+  const [pendingPick, setPendingPick] = useState<{ source: 'library' | 'camera' | 'pdf'; target: { kind: 'iopa' | 'opg'; idx?: number } } | null>(null);
+
+  const runPendingPick = () => {
+    const job = pendingPick;
+    if (!job) return;
+    setPendingPick(null);
+    if (job.source === 'library') pickFromLibraryInternal(job.target);
+    else if (job.source === 'camera') takePhotoInternal(job.target);
+    else if (job.source === 'pdf') pickPdfInternal(job.target);
+  };
+
+  // iter-222: Android / web fallback — `onDismiss` is iOS-only on RN's Modal.
+  // After the chooser Modal closes on these platforms, manually fire the
+  // pending pick after the typical fade duration.
+  useEffect(() => {
+    if (Platform.OS === 'ios') return; // iOS handled by onDismiss
+    if (picker === null && pendingPick !== null) {
+      const t = setTimeout(() => runPendingPick(), 350);
+      return () => clearTimeout(t);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picker, pendingPick]);
 
   // Generic upload of a {uri,name,type} blob to /uploads/media-temp.
   const uploadBlob = async (uri: string, name: string, type: string, target: { kind: 'iopa' | 'opg'; idx?: number }) => {
@@ -469,32 +552,58 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
     }
   };
 
-  const pickFromLibrary = async (target: { kind: 'iopa' | 'opg'; idx?: number }) => {
+  // iter-222: Entry points queue the pending action then close the chooser
+  // Modal. The internal launchers fire via onDismiss (iOS) or setTimeout
+  // fallback (Android / web), guaranteeing the Modal has fully animated out
+  // before the system picker is invoked.
+  const pickFromLibrary = (target: { kind: 'iopa' | 'opg'; idx?: number }) => {
+    setPendingPick({ source: 'library', target });
     setPicker(null);
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { Alert.alert('Permission needed', 'Please grant photo library access.'); return; }
-    const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.7 });
-    if (r.canceled || !r.assets?.length) return;
-    const a = r.assets[0];
-    await uploadBlob(a.uri, a.fileName || `${target.kind}-${Date.now()}.jpg`, a.mimeType || 'image/jpeg', target);
+  };
+  const takePhoto = (target: { kind: 'iopa' | 'opg'; idx?: number }) => {
+    setPendingPick({ source: 'camera', target });
+    setPicker(null);
+  };
+  const pickPdf = (target: { kind: 'iopa' | 'opg'; idx?: number }) => {
+    setPendingPick({ source: 'pdf', target });
+    setPicker(null);
   };
 
-  const takePhoto = async (target: { kind: 'iopa' | 'opg'; idx?: number }) => {
-    setPicker(null);
-    const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) { Alert.alert('Permission needed', 'Please grant camera access.'); return; }
-    const r = await ImagePicker.launchCameraAsync({ quality: 0.7 });
-    if (r.canceled || !r.assets?.length) return;
-    const a = r.assets[0];
-    await uploadBlob(a.uri, a.fileName || `${target.kind}-${Date.now()}.jpg`, a.mimeType || 'image/jpeg', target);
+  const pickFromLibraryInternal = async (target: { kind: 'iopa' | 'opg'; idx?: number }) => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) { Alert.alert('Permission needed', 'Please grant photo library access.'); return; }
+      const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.7 });
+      if (r.canceled || !r.assets?.length) return;
+      const a = r.assets[0];
+      await uploadBlob(a.uri, a.fileName || `${target.kind}-${Date.now()}.jpg`, a.mimeType || 'image/jpeg', target);
+    } catch (e: any) {
+      Alert.alert('Could not pick image', e?.message || 'Please try again.');
+    }
   };
 
-  const pickPdf = async (target: { kind: 'iopa' | 'opg'; idx?: number }) => {
-    setPicker(null);
-    const r = await DocumentPicker.getDocumentAsync({ type: 'application/pdf', copyToCacheDirectory: true });
-    if (r.canceled || !r.assets?.length) return;
-    const a = r.assets[0];
-    await uploadBlob(a.uri, a.name || `${target.kind}-${Date.now()}.pdf`, a.mimeType || 'application/pdf', target);
+  const takePhotoInternal = async (target: { kind: 'iopa' | 'opg'; idx?: number }) => {
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) { Alert.alert('Permission needed', 'Please grant camera access.'); return; }
+      const r = await ImagePicker.launchCameraAsync({ quality: 0.7 });
+      if (r.canceled || !r.assets?.length) return;
+      const a = r.assets[0];
+      await uploadBlob(a.uri, a.fileName || `${target.kind}-${Date.now()}.jpg`, a.mimeType || 'image/jpeg', target);
+    } catch (e: any) {
+      Alert.alert('Could not take photo', e?.message || 'Please try again.');
+    }
+  };
+
+  const pickPdfInternal = async (target: { kind: 'iopa' | 'opg'; idx?: number }) => {
+    try {
+      const r = await DocumentPicker.getDocumentAsync({ type: 'application/pdf', copyToCacheDirectory: true });
+      if (r.canceled || !r.assets?.length) return;
+      const a = r.assets[0];
+      await uploadBlob(a.uri, a.name || `${target.kind}-${Date.now()}.pdf`, a.mimeType || 'application/pdf', target);
+    } catch (e: any) {
+      Alert.alert('Could not pick PDF', e?.message || 'Please try again.');
+    }
   };
 
   // Validation + submit
@@ -526,6 +635,9 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
       const todayDate = patient.procedure_date || today;
       const todayTime = patient.procedure_time || '09:00';
       const payload: any = {
+        // iter-222: when resuming a draft, ship the existing procedure_id so
+        // the backend can update in place instead of creating a duplicate.
+        procedure_id: draft?.id || undefined,
         student_name: patient.student_name,
         patient_name: patient.patient_name.trim(),
         age: patient.age,
@@ -1081,20 +1193,33 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
             <Ionicons name="arrow-forward-circle" size={20} color="#FFF" />
             <Text style={styles.actionBtnText}>Move to Phase 3</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionBtnDraft, submitting && { opacity: 0.6 }]}
-            onPress={() => submit('draft')}
-            disabled={submitting}
-            testID="ei-save-btn"
-          >
-            <Ionicons name="save-outline" size={20} color="#37474F" />
-            <Text style={styles.actionBtnDraftText}>Save as Draft</Text>
-          </TouchableOpacity>
+          {!isDraftResume && (
+            <TouchableOpacity
+              style={[styles.actionBtnDraft, submitting && { opacity: 0.6 }]}
+              onPress={() => submit('draft')}
+              disabled={submitting}
+              testID="ei-save-btn"
+            >
+              <Ionicons name="save-outline" size={20} color="#37474F" />
+              <Text style={styles.actionBtnDraftText}>Save as Draft</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
       {/* iter-220: Upload-source chooser sheet (Image library / Camera / PDF) */}
-      <Modal transparent visible={picker !== null} animationType="fade" onRequestClose={() => setPicker(null)}>
+      <Modal
+        transparent
+        visible={picker !== null}
+        animationType="fade"
+        onRequestClose={() => { setPicker(null); setPendingPick(null); }}
+        onDismiss={() => {
+          // iter-222: iOS-only — fires AFTER the dismiss animation completes,
+          // so the system picker can safely launch without the Modal-stacking
+          // race we saw in iter-220/221.
+          runPendingPick();
+        }}
+      >
         <Pressable style={styles.modalBackdrop} onPress={() => setPicker(null)}>
           <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
             <Text style={styles.modalTitle}>Upload Radiograph</Text>
