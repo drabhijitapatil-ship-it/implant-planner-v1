@@ -1,5 +1,44 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 220 (Feb 2026) — Existing Implant: 3-source radiograph upload, drop date validation, rename header
+
+### Why
+Three friction points reported by the clinician:
+1. The IOPA upload button hit a non-existent `/uploads` endpoint and returned a "Not found" alert; it also opened the photo library directly with no option to take a fresh photo or attach a PDF.
+2. Submitting an existing-implant case threw "Missing info — Pick an appointment date" even though no appointment-date input is rendered (the surgery happened in the past).
+3. The "Existing Implant" header still said "Phase 1 - Diagnosis and Treatment Planning · Step 1 of 2: Case Details" — wrong because the existing-implant flow doesn't enter Phase 1 surgical planning.
+
+### Changes
+**Frontend**
+
+1. **Radiograph upload — `ExistingImplantSection.tsx`**
+   - Endpoint corrected from `/uploads` → `/uploads/media-temp` (the existing generic file endpoint that already accepts `.pdf / .png / .jpg / .jpeg / .heif / .heic` up to 25 MB).
+   - Response parser updated to read `filename` (was looking for `url / public_url / objectKey` which don't exist on the response).
+   - New `picker` state + Modal chooser opens on Upload tap with three options:
+     - **Choose Image from Library** (`ImagePicker.launchImageLibraryAsync`).
+     - **Take Photo** (`ImagePicker.launchCameraAsync` with camera permission request).
+     - **Upload PDF** (`expo-document-picker` with `application/pdf` mime filter).
+   - Web platform sends real `File` blobs via `fetch` + `Blob`; native uses RN FormData blob shape — both paths share the same `uploadBlob` helper.
+   - Renames: `IOPA Radiograph` → `IOPA Radiograph / CBCT`, button `Upload IOPA` → `Upload`, OPG section `Radiograph (OPG)` → `Radiograph (OPG / CBCT)`. Uploaded hint now shows the actual filename.
+
+2. **Drop appointment-date validation — `new-procedure.tsx`**
+   - `validatePatient` for the Existing Implant branch no longer requires `procedure_date` / `procedure_time` — those are auto-filled with today's date + 09:00 inside `ExistingImplantSection.submit()` (the backend payload still receives valid values so nothing downstream breaks).
+
+3. **Header rename — `new-procedure.tsx`**
+   - When `formData.implant_procedure_type === 'Existing Implant'`, the header now reads `Phase 1 Examination and Case Details` and the `Step 1 of 2: Case Details` subtitle is hidden.
+   - Default (non-existing-implant) flow is unchanged.
+
+### Verification
+- Metro full-bundled cleanly in 7.4 s (no parse / TS errors).
+- `/api/uploads/media-temp` confirmed in `server.py:3951` — accepts `UploadFile`, returns `{filename, original_name, content_type}`.
+- `expo-document-picker` confirmed in `package.json` (`~14.0.8`); no new dependencies required.
+
+### Notes for next agent
+- `iopa_url` now stores a bare `filename` (relative). When rendering the radiograph downstream, use `getAuthFileUrl(filename)` from `utils/api.ts` to attach the auth token and resolve to the absolute URL.
+- If clinicians want to view the uploaded PDF inline, wire a quick `<WebView source={{ uri: getAuthFileUrl(filename) }} />` viewer in the case-detail screen — out of scope this iteration.
+
+---
+
 ## Iteration 219 (Feb 2026) — Existing Implant: count-aware prosthesis Type options + Material removed
 
 ### Why

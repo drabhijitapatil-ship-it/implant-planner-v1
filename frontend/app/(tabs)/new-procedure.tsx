@@ -950,9 +950,13 @@ export default function NewProcedureScreen() {
         <BackButton />
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>
-            Phase 1 - Diagnosis and Treatment Planning
+            {formData.implant_procedure_type === 'Existing Implant'
+              ? 'Phase 1 Examination and Case Details'
+              : 'Phase 1 - Diagnosis and Treatment Planning'}
           </Text>
-          <Text style={styles.stepIndicator}>Step 1 of 2: Case Details</Text>
+          {formData.implant_procedure_type !== 'Existing Implant' && (
+            <Text style={styles.stepIndicator}>Step 1 of 2: Case Details</Text>
+          )}
         </View>
       </View>
 
@@ -1156,8 +1160,9 @@ export default function NewProcedureScreen() {
             if (!formData.implant_incharge_id) return 'Please select an implant in-charge.';
             if (!formData.receipt_number?.trim()) return 'Receipt number is required.';
             if (!formData.amount_paid) return 'Amount paid is required.';
-            if (!formData.procedure_date) return 'Pick an appointment date.';
-            if (!formData.procedure_time) return 'Pick an appointment time slot.';
+            // iter-220: appointment date/time are irrelevant for historical
+            // (existing-implant) cases — the surgery already happened. Backend
+            // payload auto-fills today's date inside ExistingImplantSection.
             return null;
           }}
         />
