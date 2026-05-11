@@ -260,6 +260,9 @@ export default function NewProcedureScreen() {
   const [createdProcedureId, setCreatedProcedureId] = useState<string | null>(null);
   const [phase1Done, setPhase1Done] = useState(false);
   const [isDraftResume, setIsDraftResume] = useState(false);
+  // iter-222: full procedure record when resuming an existing-implant draft.
+  // ExistingImplantSection hydrates its internal state from this snapshot.
+  const [existingImplantDraft, setExistingImplantDraft] = useState<any | null>(null);
 
   // ── Form State ──
   const [formData, setFormData] = useState({
@@ -432,12 +435,25 @@ export default function NewProcedureScreen() {
                 });
                 setChecklistItems(restored);
               }
-              setStep('implants');
+              // iter-222: For existing-implant drafts, the backend stored
+              // `implant_procedure_type` as the underlying procedure label
+              // ("Single Conventional Implant" etc.) so legacy widgets keep
+              // working. On resume we need the ExistingImplant branch to
+              // render, so override the type back to 'Existing Implant' and
+              // stash the full proc object as the hydration source.
+              if (proc.case_origin === 'existing_implants') {
+                setExistingImplantDraft(proc);
+                setFormData(prev => ({ ...prev, implant_procedure_type: 'Existing Implant' }));
+                setStep('details');
+              } else {
+                setStep('implants');
+              }
             }
           } catch { /* ignore — draft may have been deleted */ }
         };
         loadDraft();
       } else if (!createdProcedureId) {
+        setExistingImplantDraft(null);
         setFormData({
           patient_name: '', age: '', sex: '', profession: '', mobile_number: '', patient_email: '',
           registration_number: '', chief_complaint: '', student_name: user?.name || '',
@@ -1165,6 +1181,7 @@ export default function NewProcedureScreen() {
             // payload auto-fills today's date inside ExistingImplantSection.
             return null;
           }}
+          draft={existingImplantDraft}
         />
       )}
 
