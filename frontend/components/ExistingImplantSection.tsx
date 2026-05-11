@@ -22,6 +22,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import api from '../utils/api';
 import FdiAnatomicalChart from './FdiAnatomicalChart';
 
@@ -436,28 +437,64 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
   // First unsaved implant is the only one expanded (sequential lock).
   const activeIdx = implants.findIndex(r => !r.saved);
 
-  // Radiograph upload
-  const pickAndUpload = async (kind: 'iopa' | 'opg', idx?: number) => {
+  // iter-220: chooser sheet selecting which source the user wants to upload
+  // from (image library / camera / PDF). `kind` is which target slot
+  // (per-implant IOPA or case-level OPG); `idx` is the implant-row index
+  // when kind === 'iopa'.
+  const [picker, setPicker] = useState<{ kind: 'iopa' | 'opg'; idx?: number } | null>(null);
+
+  // Generic upload of a {uri,name,type} blob to /uploads/media-temp.
+  const uploadBlob = async (uri: string, name: string, type: string, target: { kind: 'iopa' | 'opg'; idx?: number }) => {
     try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) { Alert.alert('Permission needed', 'Please grant photo library access.'); return; }
-      const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.7 });
-      if (r.canceled || !r.assets?.length) return;
-      const asset = r.assets[0];
-      setUploadingIdx(kind === 'iopa' ? (idx ?? -1) : 'opg');
+      setUploadingIdx(target.kind === 'iopa' ? (target.idx ?? -1) : 'opg');
       const fd = new FormData();
-      // @ts-ignore RN FormData blob shape
-      fd.append('file', { uri: asset.uri, name: asset.fileName || `${kind}-${Date.now()}.jpg`, type: asset.mimeType || 'image/jpeg' });
-      const up = await api.post('/uploads', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      const url = up.data?.url || up.data?.public_url || up.data?.objectKey;
-      if (!url) throw new Error('Upload returned no URL');
-      if (kind === 'iopa' && typeof idx === 'number') updateImplant(idx, 'iopa_url', url);
-      else setOpgUrl(url);
+      if (Platform.OS === 'web') {
+        // RN-Web FormData expects a real File / Blob to send the binary.
+        const resp = await fetch(uri);
+        const blob = await resp.blob();
+        fd.append('file', new File([blob], name, { type }));
+      } else {
+        // @ts-ignore RN FormData blob shape on native.
+        fd.append('file', { uri, name, type });
+      }
+      const up = await api.post('/uploads/media-temp', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      const filename = up.data?.filename;
+      if (!filename) throw new Error('Upload returned no filename');
+      if (target.kind === 'iopa' && typeof target.idx === 'number') updateImplant(target.idx, 'iopa_url', filename);
+      else setOpgUrl(filename);
     } catch (e: any) {
-      Alert.alert('Upload failed', e?.response?.data?.detail || e?.message || 'Could not upload the image.');
+      Alert.alert('Upload failed', e?.response?.data?.detail || e?.message || 'Could not upload the file.');
     } finally {
       setUploadingIdx(null);
     }
+  };
+
+  const pickFromLibrary = async (target: { kind: 'iopa' | 'opg'; idx?: number }) => {
+    setPicker(null);
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) { Alert.alert('Permission needed', 'Please grant photo library access.'); return; }
+    const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.7 });
+    if (r.canceled || !r.assets?.length) return;
+    const a = r.assets[0];
+    await uploadBlob(a.uri, a.fileName || `${target.kind}-${Date.now()}.jpg`, a.mimeType || 'image/jpeg', target);
+  };
+
+  const takePhoto = async (target: { kind: 'iopa' | 'opg'; idx?: number }) => {
+    setPicker(null);
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) { Alert.alert('Permission needed', 'Please grant camera access.'); return; }
+    const r = await ImagePicker.launchCameraAsync({ quality: 0.7 });
+    if (r.canceled || !r.assets?.length) return;
+    const a = r.assets[0];
+    await uploadBlob(a.uri, a.fileName || `${target.kind}-${Date.now()}.jpg`, a.mimeType || 'image/jpeg', target);
+  };
+
+  const pickPdf = async (target: { kind: 'iopa' | 'opg'; idx?: number }) => {
+    setPicker(null);
+    const r = await DocumentPicker.getDocumentAsync({ type: 'application/pdf', copyToCacheDirectory: true });
+    if (r.canceled || !r.assets?.length) return;
+    const a = r.assets[0];
+    await uploadBlob(a.uri, a.name || `${target.kind}-${Date.now()}.pdf`, a.mimeType || 'application/pdf', target);
   };
 
   // Validation + submit
@@ -481,6 +518,13 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
     if (err) { Alert.alert('Missing info', err); return; }
     setSubmitting(true);
     try {
+      // iter-220: existing-implant cases are historical — surgery happened in
+      // the past, so there's no "appointment" to schedule. Backend still wants
+      // procedure_date/procedure_time, so default to today's date + 09:00 if
+      // the operator hasn't already entered them in the patient form.
+      const today = new Date().toISOString().slice(0, 10);
+      const todayDate = patient.procedure_date || today;
+      const todayTime = patient.procedure_time || '09:00';
       const payload: any = {
         student_name: patient.student_name,
         patient_name: patient.patient_name.trim(),
@@ -497,8 +541,8 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
         implant_incharge_name: patient.implant_incharge_name,
         receipt_number: patient.receipt_number.trim(),
         amount_paid: parseFloat(patient.amount_paid),
-        procedure_date: patient.procedure_date,
-        procedure_time: patient.procedure_time,
+        procedure_date: todayDate,
+        procedure_time: todayTime,
         original_procedure_type: originalProcedure,
         existing_implants: implants.map(r => ({
           tooth: r.tooth,
@@ -871,18 +915,18 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
                     testID={`ei-notes-${idx}`} />
                 </View>
 
-                {/* Per-implant IOPA — non-full-arch only */}
+                {/* Per-implant IOPA / CBCT — non-full-arch only */}
                 {!isFullArchDone && (
                   <View style={styles.fieldContainer}>
-                    <Text style={styles.label}>IOPA Radiograph</Text>
-                    <TouchableOpacity style={styles.uploadBtn} onPress={() => pickAndUpload('iopa', idx)}
+                    <Text style={styles.label}>IOPA Radiograph / CBCT</Text>
+                    <TouchableOpacity style={styles.uploadBtn} onPress={() => setPicker({ kind: 'iopa', idx })}
                       disabled={uploadingIdx === idx}
                       testID={`ei-iopa-${idx}`}>
                       {uploadingIdx === idx
                         ? <ActivityIndicator size="small" color="#1565C0" />
-                        : <><Ionicons name="cloud-upload-outline" size={18} color="#1565C0" /><Text style={styles.uploadText}>{row.iopa_url ? 'Re-upload IOPA' : 'Upload IOPA'}</Text></>}
+                        : <><Ionicons name="cloud-upload-outline" size={18} color="#1565C0" /><Text style={styles.uploadText}>{row.iopa_url ? 'Re-upload' : 'Upload'}</Text></>}
                     </TouchableOpacity>
-                    {row.iopa_url ? <Text style={styles.uploadedHint}>✓ IOPA uploaded</Text> : null}
+                    {row.iopa_url ? <Text style={styles.uploadedHint}>✓ Uploaded · {row.iopa_url}</Text> : null}
                   </View>
                 )}
 
@@ -1000,18 +1044,18 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
         </View>
       )}
 
-      {/* ─── OPG (full-arch only) ─── */}
+      {/* ─── OPG / CBCT (full-arch only) ─── */}
       {originalProcedure && isFullArchDone && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Radiograph (OPG)</Text>
-          <TouchableOpacity style={styles.uploadBtn} onPress={() => pickAndUpload('opg')}
+          <Text style={styles.sectionTitle}>Radiograph (OPG / CBCT)</Text>
+          <TouchableOpacity style={styles.uploadBtn} onPress={() => setPicker({ kind: 'opg' })}
             disabled={uploadingIdx === 'opg'}
             testID="ei-opg-upload">
             {uploadingIdx === 'opg'
               ? <ActivityIndicator size="small" color="#1565C0" />
-              : <><Ionicons name="cloud-upload-outline" size={18} color="#1565C0" /><Text style={styles.uploadText}>{opgUrl ? 'Re-upload OPG' : 'Upload OPG'}</Text></>}
+              : <><Ionicons name="cloud-upload-outline" size={18} color="#1565C0" /><Text style={styles.uploadText}>{opgUrl ? 'Re-upload' : 'Upload'}</Text></>}
           </TouchableOpacity>
-          {opgUrl ? <Text style={styles.uploadedHint}>✓ OPG uploaded</Text> : null}
+          {opgUrl ? <Text style={styles.uploadedHint}>✓ Uploaded · {opgUrl}</Text> : null}
         </View>
       )}
 
@@ -1048,6 +1092,54 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
           </TouchableOpacity>
         </View>
       )}
+
+      {/* iter-220: Upload-source chooser sheet (Image library / Camera / PDF) */}
+      <Modal transparent visible={picker !== null} animationType="fade" onRequestClose={() => setPicker(null)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setPicker(null)}>
+          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>Upload Radiograph</Text>
+            <TouchableOpacity
+              style={styles.chooserRow}
+              onPress={() => picker && pickFromLibrary(picker)}
+              testID="ei-upload-image"
+            >
+              <Ionicons name="image-outline" size={22} color="#1565C0" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.chooserTitle}>Choose Image from Library</Text>
+                <Text style={styles.chooserHint}>JPG / PNG / HEIC from your photo library</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#90A4AE" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.chooserRow}
+              onPress={() => picker && takePhoto(picker)}
+              testID="ei-upload-camera"
+            >
+              <Ionicons name="camera-outline" size={22} color="#1565C0" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.chooserTitle}>Take Photo</Text>
+                <Text style={styles.chooserHint}>Capture a fresh photo with the camera</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#90A4AE" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.chooserRow, { borderBottomWidth: 0 }]}
+              onPress={() => picker && pickPdf(picker)}
+              testID="ei-upload-pdf"
+            >
+              <Ionicons name="document-outline" size={22} color="#1565C0" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.chooserTitle}>Upload PDF</Text>
+                <Text style={styles.chooserHint}>Select a PDF radiograph report</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#90A4AE" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setPicker(null)} style={{ alignItems: 'center', paddingVertical: 12, marginTop: 8 }}>
+              <Text style={{ color: '#90A4AE', fontWeight: '600' }}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -1300,6 +1392,11 @@ const styles = StyleSheet.create({
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 24 },
   modalCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 16, maxHeight: '80%' },
   modalTitle: { fontSize: 16, fontWeight: '800', color: '#0D47A1', marginBottom: 12, letterSpacing: 0.3 },
+
+  // Upload-source chooser (iter-220)
+  chooserRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: '#F0F4F8' },
+  chooserTitle: { fontSize: 15, fontWeight: '700', color: '#0D47A1' },
+  chooserHint: { fontSize: 12, color: '#78909C', marginTop: 2 },
   modalRow: { paddingVertical: 14, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#F0F4F8', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   modalRowActive: { backgroundColor: '#E3F2FD' },
   modalRowText: { fontSize: 15, color: '#333' },
