@@ -1,5 +1,41 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 218 (Feb 2026) — Existing Implant: institution-curated prosthesis Type dropdown
+
+### Why
+The "Type" of existing prosthesis was a free-text input — clinicians had to type the full prosthesis description every time, with no source of truth for the institution's curated catalog. The implant-incharge supplied six explicit option lists keyed by (procedure-group × stage) which should drive a scrollable dropdown.
+
+### Changes
+**Frontend (`/app/frontend/components/ExistingImplantSection.tsx`)**
+
+New option arrays (verbatim from clinician spec):
+- `TEMP_SINGLE_OPTIONS` (2 + Other)
+- `TEMP_MULTIPLE_OPTIONS` (4 + Other)
+- `TEMP_FULL_ARCH_OPTIONS` (3 + Other)
+- `FINAL_SINGLE_OPTIONS` (10 + Other)
+- `FINAL_MULTIPLE_OPTIONS` (17 + Other, dedup'd from the spec's duplicated "Screw retained multiple Crowns Porcelain fused to metal")
+- `FINAL_FULL_ARCH_OPTIONS` (5 + Other)
+
+New helper `getProsthesisTypeOptions(originalProcedure, stage)` returns the right list based on the procedure group (SINGLE / MULTIPLE / FULL_ARCH) and stage (temporary / final).
+
+`getProsthesisDefaults()` updated to seed Type from the first non-"Other" option of the matching list, keeping defaults aligned with the dropdown source of truth (no more "Cement Retained Crown FP1" string drift).
+
+Render changes:
+- Free-text Type input replaced with the existing scrollable `DropDown` component (same UX as Brand/System — modal with `ScrollView`).
+- Picking "Other (manual entry)" flips Type into a free-text input with a "Back to options list" link.
+- Switching Temporary ↔ Final now hard-resets the Type to the new stage's default (was previously a soft prefill that left stale text behind).
+- "No" on "Was Prosthesis Placed?" also resets `manualProsthesisType` so the dropdown returns clean if the user toggles back to Yes.
+
+### Verification
+- Metro bundler rebuilt cleanly (11.3 s full bundle, no parse / type errors).
+- All option arrays cover the exact strings supplied by the user; "Other" pinned at bottom of every list.
+
+### Notes for next agent
+- Same dropdown pattern would benefit the **Material** field too — current free-text yields data-quality drift over time. Future iteration: add `MATERIAL_OPTIONS` keyed by procedure stage (PFM / Zirconia / Lithium Disilicate / Co-Cr / Titanium / PEEK / Heat-Cure Acrylic / PMMA) and convert Material to a similar dropdown + Other.
+- If the prosthesis catalog evolves, update only the constant arrays — the render contract stays the same.
+
+---
+
 ## Iteration 217 (Feb 2026) — Existing Implant: union Brand/System/Diameter/Length from both catalog and library
 
 ### Why

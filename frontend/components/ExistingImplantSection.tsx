@@ -50,18 +50,94 @@ const FULL_ARCH_PROCEDURES = new Set(['All on 4', 'All on 6', 'All on X']);
  * (heat-cure / PMMA acrylic) since the institution doesn't enumerate
  * temporary-prosthesis options in Phase 4 — temporaries are always pre-final.
  */
+const PROSTHESIS_TYPE_OTHER = 'Other (manual entry)';
+
+// iter-218: institution-curated prosthesis type options keyed by procedure
+// group + stage. Lists supplied directly by the implant-incharge so the
+// downstream Lab-Slip / Case-Report renderers stay aligned.
+const TEMP_SINGLE_OPTIONS = [
+  'PMMA Crown with Temporary Abutment',
+  'PMMA Crown with Ti-Base',
+  PROSTHESIS_TYPE_OTHER,
+];
+const TEMP_MULTIPLE_OPTIONS = [
+  'Multiple PMMA Crown with Temporary Abutment',
+  'Multiple PMMA Crown with Ti-Base',
+  'Temporary Bridge',
+  'Implant Supported Overdenture',
+  PROSTHESIS_TYPE_OTHER,
+];
+const TEMP_FULL_ARCH_OPTIONS = [
+  'Full Arch Temporary Prostheses with Multiunit Abutments and Temporary Cylinders',
+  'Temporary PMMA CAD Prostheses with Multiunit Abutments and Temporary Cylinders',
+  'Temporary PMMA CAD Prostheses on Ti-Base',
+  PROSTHESIS_TYPE_OTHER,
+];
+const FINAL_SINGLE_OPTIONS = [
+  'Cement-retained crown, metal',
+  'Cement Retained Crown Porcelain fused to Metal',
+  'Cement Retained Crown Zirconia',
+  'Cement Retained Crown Lithium Disilicate',
+  'Screw Retained Crown Metal',
+  'Screw Retained Crown Porcelain fused to Metal',
+  'Screw Retained Crown Zirconia',
+  'Screw Retained Crown Lithium Disilicate',
+  'Zirconia Abutment Ti Base',
+  'Custom Abutment',
+  PROSTHESIS_TYPE_OTHER,
+];
+const FINAL_MULTIPLE_OPTIONS = [
+  'Cement Retained Bridge Metal',
+  'Cement Retained Bridge Porcelain fused to Metal',
+  'Cement Retained Bridge Zirconia',
+  'Cement Retained Bridge Lithium Disilicate',
+  'Screw Retained Bridge Metal',
+  'Screw Retained Bridge Porcelain Fused to Metal',
+  'Screw Retained Bridge Zirconia',
+  'Screw Retained Bridge Lithium Disilicate',
+  'Overdenture with Attachment',
+  'Malo Prosthesis with MUA',
+  'Zirconia Abutment Ti Base',
+  'Screw retained multiple Crowns Metal',
+  'Screw retained multiple crowns Porcelain fused to metal',
+  'Screw retained multiple crowns zirconia',
+  'Screw retained multiple crowns lithium disilicate',
+  'Cement retained multiple crowns zirconia',
+  'Cement retained multiple crowns lithium disilicates',
+  PROSTHESIS_TYPE_OTHER,
+];
+const FINAL_FULL_ARCH_OPTIONS = [
+  'Implant Prosthesis - Full Arch – Co-Cr Framework',
+  'Full Arch – Porcelain Fused to Metal Prosthesis',
+  'Full Arch – Co-Cr Framework - Zirconia Prosthesis',
+  'Full Per Arch – Titanium Framework - Zirconia Prosthesis',
+  'Full Arch - Peek and Zirconia Ti Base',
+  PROSTHESIS_TYPE_OTHER,
+];
+
+function getProsthesisTypeOptions(originalProcedure: string, stage: 'temporary' | 'final'): string[] {
+  if (stage === 'temporary') {
+    if (SINGLE_PROCEDURES.has(originalProcedure)) return TEMP_SINGLE_OPTIONS;
+    if (MULTIPLE_PROCEDURES.has(originalProcedure)) return TEMP_MULTIPLE_OPTIONS;
+    if (FULL_ARCH_PROCEDURES.has(originalProcedure)) return TEMP_FULL_ARCH_OPTIONS;
+  } else {
+    if (SINGLE_PROCEDURES.has(originalProcedure)) return FINAL_SINGLE_OPTIONS;
+    if (MULTIPLE_PROCEDURES.has(originalProcedure)) return FINAL_MULTIPLE_OPTIONS;
+    if (FULL_ARCH_PROCEDURES.has(originalProcedure)) return FINAL_FULL_ARCH_OPTIONS;
+  }
+  return [PROSTHESIS_TYPE_OTHER];
+}
+
 function getProsthesisDefaults(originalProcedure: string, stage: 'temporary' | 'final'): { type: string; material: string } {
+  // Default Type = first non-"Other" option from the institution-curated list.
+  const opts = getProsthesisTypeOptions(originalProcedure, stage).filter(o => o !== PROSTHESIS_TYPE_OTHER);
+  const type = opts[0] || '';
   if (stage === 'final') {
-    if (SINGLE_PROCEDURES.has(originalProcedure)) return { type: 'Cement Retained Crown FP1', material: 'Porcelain Fused to Metal' };
-    if (MULTIPLE_PROCEDURES.has(originalProcedure)) return { type: 'Cement Retained Bridge FP1', material: 'Porcelain Fused to Metal' };
-    if (FULL_ARCH_PROCEDURES.has(originalProcedure)) return { type: 'Full Arch FP3 - Porcelain Fused to Metal Prosthesis', material: 'Porcelain Fused to Metal' };
-    return { type: '', material: '' };
+    if (FULL_ARCH_PROCEDURES.has(originalProcedure)) return { type, material: 'Porcelain Fused to Metal' };
+    return { type, material: 'Porcelain Fused to Metal' };
   }
   // Temporary
-  if (SINGLE_PROCEDURES.has(originalProcedure)) return { type: 'Acrylic Temporary Crown', material: 'Heat Cure Acrylic' };
-  if (MULTIPLE_PROCEDURES.has(originalProcedure)) return { type: 'Acrylic Temporary Bridge', material: 'Heat Cure Acrylic' };
-  if (FULL_ARCH_PROCEDURES.has(originalProcedure)) return { type: 'Acrylic Temporary Full Arch', material: 'Heat Cure Acrylic' };
-  return { type: '', material: '' };
+  return { type, material: 'Heat Cure Acrylic' };
 }
 
 // "Type of Implant Procedure Done" (excludes "Existing Implant" so the user
@@ -230,6 +306,9 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
   const [hadProsthesis, setHadProsthesis] = useState<boolean | null>(null);
   const [prosthesisStage, setProsthesisStage] = useState<'' | 'temporary' | 'final'>('');
   const [prosthesisType, setProsthesisType] = useState('');
+  // iter-218: switch the Type dropdown into a free-text input when user picks
+  // "Other (manual entry)" so legacy / one-off prostheses can be captured too.
+  const [manualProsthesisType, setManualProsthesisType] = useState(false);
   const [prosthesisMaterial, setProsthesisMaterial] = useState('');
 
   const [opgUrl, setOpgUrl] = useState('');
@@ -829,7 +908,7 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.yesNoBtn, hadProsthesis === false && styles.noActive]}
-              onPress={() => { setHadProsthesis(false); setProsthesisStage(''); setProsthesisType(''); setProsthesisMaterial(''); }}
+              onPress={() => { setHadProsthesis(false); setProsthesisStage(''); setProsthesisType(''); setProsthesisMaterial(''); setManualProsthesisType(false); }}
               testID="ei-prosthesis-no"
             >
               <Text style={[styles.yesNoText, hadProsthesis === false && styles.yesNoTextActive]}>No</Text>
@@ -843,15 +922,17 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
                 <Chip label="Temporary" active={prosthesisStage === 'temporary'}
                   onPress={() => {
                     setProsthesisStage('temporary');
+                    setManualProsthesisType(false);
                     const def = getProsthesisDefaults(originalProcedure, 'temporary');
-                    if (!prosthesisType) setProsthesisType(def.type);
+                    setProsthesisType(def.type);
                     if (!prosthesisMaterial) setProsthesisMaterial(def.material);
                   }} testID="ei-stage-temp" />
                 <Chip label="Final" active={prosthesisStage === 'final'}
                   onPress={() => {
                     setProsthesisStage('final');
+                    setManualProsthesisType(false);
                     const def = getProsthesisDefaults(originalProcedure, 'final');
-                    if (!prosthesisType) setProsthesisType(def.type);
+                    setProsthesisType(def.type);
                     if (!prosthesisMaterial) setProsthesisMaterial(def.material);
                   }} testID="ei-stage-final" />
               </View>
@@ -859,10 +940,36 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
                 <View style={{ marginTop: 16 }}>
                   <View style={styles.fieldContainer}>
                     <Text style={styles.label}>Type</Text>
-                    <TextInput style={styles.input} value={prosthesisType}
-                      onChangeText={setProsthesisType}
-                      placeholder="e.g. PFM Crown"
-                      testID="ei-pros-type" />
+                    {manualProsthesisType ? (
+                      <View style={{ gap: 6 }}>
+                        <TextInput style={styles.input} value={prosthesisType}
+                          onChangeText={setProsthesisType}
+                          placeholder="Type prosthesis name"
+                          testID="ei-pros-type-manual" />
+                        <TouchableOpacity
+                          onPress={() => { setManualProsthesisType(false); const def = getProsthesisDefaults(originalProcedure, prosthesisStage); setProsthesisType(def.type); }}
+                          style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                          testID="ei-pros-type-back"
+                        >
+                          <Ionicons name="chevron-back" size={14} color="#1565C0" />
+                          <Text style={{ fontSize: 12, color: '#1565C0', fontWeight: '600' }}>Back to options list</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <DropDown
+                        value={prosthesisType}
+                        options={getProsthesisTypeOptions(originalProcedure, prosthesisStage)}
+                        onPick={(v) => {
+                          if (v === PROSTHESIS_TYPE_OTHER) {
+                            setManualProsthesisType(true);
+                            setProsthesisType('');
+                          } else {
+                            setProsthesisType(v);
+                          }
+                        }}
+                        placeholder="Select prosthesis type"
+                        testID="ei-pros-type" />
+                    )}
                     <Text style={styles.helperHint}>Pre-filled based on the original procedure type. Edit if needed.</Text>
                   </View>
                   <View style={styles.fieldContainer}>
