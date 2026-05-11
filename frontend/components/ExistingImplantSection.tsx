@@ -104,6 +104,7 @@ const FINAL_MULTIPLE_OPTIONS = [
   'Screw retained multiple crowns lithium disilicate',
   'Cement retained multiple crowns zirconia',
   'Cement retained multiple crowns lithium disilicates',
+  'Implant supported overdenture',
   PROSTHESIS_TYPE_OTHER,
 ];
 const FINAL_FULL_ARCH_OPTIONS = [
@@ -115,29 +116,44 @@ const FINAL_FULL_ARCH_OPTIONS = [
   PROSTHESIS_TYPE_OTHER,
 ];
 
-function getProsthesisTypeOptions(originalProcedure: string, stage: 'temporary' | 'final'): string[] {
+// iter-219: For PET / Immediate Implant / GBR / Guided Surgery the FDI chart
+// can have 1 OR multiple implants. The option list must pivot on the actual
+// implant count, not the procedure label alone.
+const COUNT_DRIVEN_PROCEDURES = new Set([
+  'Immediate Implant',
+  'Partial Extraction Therapy',
+  'Implant Placement with Guided Bone Regeneration',
+  'Guided Surgery',
+]);
+
+function getProsthesisTypeOptions(originalProcedure: string, stage: 'temporary' | 'final', implantCount: number = 0): string[] {
+  // Full arch beats everything.
+  if (FULL_ARCH_PROCEDURES.has(originalProcedure)) {
+    return stage === 'temporary' ? TEMP_FULL_ARCH_OPTIONS : FINAL_FULL_ARCH_OPTIONS;
+  }
+  // Count-driven procedures pivot on the FDI selection size.
+  if (COUNT_DRIVEN_PROCEDURES.has(originalProcedure)) {
+    const isMulti = implantCount > 1;
+    if (stage === 'temporary') return isMulti ? TEMP_MULTIPLE_OPTIONS : TEMP_SINGLE_OPTIONS;
+    return isMulti ? FINAL_MULTIPLE_OPTIONS : FINAL_SINGLE_OPTIONS;
+  }
+  // Explicit single / multiple conventional.
   if (stage === 'temporary') {
     if (SINGLE_PROCEDURES.has(originalProcedure)) return TEMP_SINGLE_OPTIONS;
     if (MULTIPLE_PROCEDURES.has(originalProcedure)) return TEMP_MULTIPLE_OPTIONS;
-    if (FULL_ARCH_PROCEDURES.has(originalProcedure)) return TEMP_FULL_ARCH_OPTIONS;
   } else {
     if (SINGLE_PROCEDURES.has(originalProcedure)) return FINAL_SINGLE_OPTIONS;
     if (MULTIPLE_PROCEDURES.has(originalProcedure)) return FINAL_MULTIPLE_OPTIONS;
-    if (FULL_ARCH_PROCEDURES.has(originalProcedure)) return FINAL_FULL_ARCH_OPTIONS;
   }
   return [PROSTHESIS_TYPE_OTHER];
 }
 
-function getProsthesisDefaults(originalProcedure: string, stage: 'temporary' | 'final'): { type: string; material: string } {
+function getProsthesisDefaults(originalProcedure: string, stage: 'temporary' | 'final', implantCount: number = 0): { type: string; material: string } {
   // Default Type = first non-"Other" option from the institution-curated list.
-  const opts = getProsthesisTypeOptions(originalProcedure, stage).filter(o => o !== PROSTHESIS_TYPE_OTHER);
+  const opts = getProsthesisTypeOptions(originalProcedure, stage, implantCount).filter(o => o !== PROSTHESIS_TYPE_OTHER);
   const type = opts[0] || '';
-  if (stage === 'final') {
-    if (FULL_ARCH_PROCEDURES.has(originalProcedure)) return { type, material: 'Porcelain Fused to Metal' };
-    return { type, material: 'Porcelain Fused to Metal' };
-  }
-  // Temporary
-  return { type, material: 'Heat Cure Acrylic' };
+  // Material field removed in iter-219 — empty string flows as null to backend.
+  return { type, material: '' };
 }
 
 // "Type of Implant Procedure Done" (excludes "Existing Implant" so the user
@@ -923,17 +939,17 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
                   onPress={() => {
                     setProsthesisStage('temporary');
                     setManualProsthesisType(false);
-                    const def = getProsthesisDefaults(originalProcedure, 'temporary');
+                    const count = isFullArchDone ? implants.length : missingTeeth.length;
+                    const def = getProsthesisDefaults(originalProcedure, 'temporary', count);
                     setProsthesisType(def.type);
-                    if (!prosthesisMaterial) setProsthesisMaterial(def.material);
                   }} testID="ei-stage-temp" />
                 <Chip label="Final" active={prosthesisStage === 'final'}
                   onPress={() => {
                     setProsthesisStage('final');
                     setManualProsthesisType(false);
-                    const def = getProsthesisDefaults(originalProcedure, 'final');
+                    const count = isFullArchDone ? implants.length : missingTeeth.length;
+                    const def = getProsthesisDefaults(originalProcedure, 'final', count);
                     setProsthesisType(def.type);
-                    if (!prosthesisMaterial) setProsthesisMaterial(def.material);
                   }} testID="ei-stage-final" />
               </View>
               {prosthesisStage ? (
@@ -947,7 +963,12 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
                           placeholder="Type prosthesis name"
                           testID="ei-pros-type-manual" />
                         <TouchableOpacity
-                          onPress={() => { setManualProsthesisType(false); const def = getProsthesisDefaults(originalProcedure, prosthesisStage); setProsthesisType(def.type); }}
+                          onPress={() => {
+                            setManualProsthesisType(false);
+                            const count = isFullArchDone ? implants.length : missingTeeth.length;
+                            const def = getProsthesisDefaults(originalProcedure, prosthesisStage, count);
+                            setProsthesisType(def.type);
+                          }}
                           style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 4 }}
                           testID="ei-pros-type-back"
                         >
@@ -958,7 +979,7 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
                     ) : (
                       <DropDown
                         value={prosthesisType}
-                        options={getProsthesisTypeOptions(originalProcedure, prosthesisStage)}
+                        options={getProsthesisTypeOptions(originalProcedure, prosthesisStage, isFullArchDone ? implants.length : missingTeeth.length)}
                         onPick={(v) => {
                           if (v === PROSTHESIS_TYPE_OTHER) {
                             setManualProsthesisType(true);
@@ -970,14 +991,7 @@ export default function ExistingImplantSection({ patient, validatePatient }: Pro
                         placeholder="Select prosthesis type"
                         testID="ei-pros-type" />
                     )}
-                    <Text style={styles.helperHint}>Pre-filled based on the original procedure type. Edit if needed.</Text>
-                  </View>
-                  <View style={styles.fieldContainer}>
-                    <Text style={styles.label}>Material</Text>
-                    <TextInput style={styles.input} value={prosthesisMaterial}
-                      onChangeText={setProsthesisMaterial}
-                      placeholder="e.g. Zirconia"
-                      testID="ei-pros-mat" />
+                    <Text style={styles.helperHint}>Pre-filled based on the original procedure type & number of implants. Edit if needed.</Text>
                   </View>
                 </View>
               ) : null}

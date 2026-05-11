@@ -1,5 +1,38 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 219 (Feb 2026) — Existing Implant: count-aware prosthesis Type options + Material removed
+
+### Why
+After iter-218 shipped the curated Type dropdown, the implant-incharge clarified that for PET / Immediate Implant / GBR / Guided Surgery the prosthesis type must **pivot on the actual number of teeth picked on the FDI chart**, not on the procedure label alone — because all four of those procedures can be either single or multiple. Also added one more option to the multi-implant Final list and dropped the now-redundant Material field (the material is baked into every Type option already, e.g. "Cement Retained Crown Zirconia").
+
+### Changes
+**Frontend (`/app/frontend/components/ExistingImplantSection.tsx`)**
+
+1. New `COUNT_DRIVEN_PROCEDURES` set: `Immediate Implant`, `Partial Extraction Therapy`, `Implant Placement with Guided Bone Regeneration`, `Guided Surgery`.
+2. `getProsthesisTypeOptions(originalProcedure, stage, implantCount)` now takes an `implantCount` and pivots:
+   - Full-arch procedures still use full-arch lists.
+   - Count-driven procedures: `implantCount <= 1` ⇒ Single list; `> 1` ⇒ Multiple list.
+   - Single Conventional / Multiple Conventional remain hardcoded to their respective lists.
+3. `FINAL_MULTIPLE_OPTIONS` gained **"Implant supported overdenture"** (covers both Multiple Conventional + count-driven multi cases).
+4. `getProsthesisDefaults(originalProcedure, stage, implantCount)` updated to mirror the count-aware behaviour. Returns `material: ''` since the field was removed.
+5. Material field render removed from the Prosthetic History section. State variable kept (declared + reset on No / payload `material` still flows as null) so the backend contract stays intact.
+6. Helper hint updated: "Pre-filled based on the original procedure type & number of implants. Edit if needed."
+
+Implant count at call sites: `isFullArchDone ? implants.length : missingTeeth.length` — re-evaluated every render so the dropdown options auto-correct when the user adds / removes teeth on the FDI chart.
+
+### Verification
+- Metro bundler full-rebuilt cleanly in 7.4 s (no parse / TS errors).
+- Count-driven branch unit-checks mentally:
+  - PET + 1 tooth + Temporary → TEMP_SINGLE_OPTIONS (2 + Other) ✓
+  - Immediate + 3 teeth + Final → FINAL_MULTIPLE_OPTIONS (18 + Other) ✓ — includes "Implant supported overdenture"
+  - Guided Surgery + 1 tooth + Final → FINAL_SINGLE_OPTIONS (10 + Other) ✓
+
+### Notes for next agent
+- Material state is dead-coded but harmless. Safe to fully remove (state + payload key) in a later cleanup once we're sure no consumer reads it.
+- "Implant supported overdenture" appears as a Temporary option (Multiple list) AND a Final option (Multiple list) per the spec — intentional, no dedup needed.
+
+---
+
 ## Iteration 218 (Feb 2026) — Existing Implant: institution-curated prosthesis Type dropdown
 
 ### Why
