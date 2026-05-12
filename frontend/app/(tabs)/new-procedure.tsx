@@ -435,13 +435,24 @@ export default function NewProcedureScreen() {
                 });
                 setChecklistItems(restored);
               }
-              // iter-222: For existing-implant drafts, the backend stored
+              // iter-222/224: For existing-implant drafts, the backend stored
               // `implant_procedure_type` as the underlying procedure label
               // ("Single Conventional Implant" etc.) so legacy widgets keep
               // working. On resume we need the ExistingImplant branch to
               // render, so override the type back to 'Existing Implant' and
               // stash the full proc object as the hydration source.
-              if (proc.case_origin === 'existing_implants') {
+              //
+              // iter-224: detect via three signals so legacy drafts (created
+              // before `case_origin` was added) also resume correctly:
+              //   1. proc.case_origin === 'existing_implants' (canonical)
+              //   2. proc.existing_implants is a non-empty array
+              //   3. proc.original_procedure_type is set (only this endpoint sets it)
+              const isExistingImplantDraft = (
+                proc.case_origin === 'existing_implants'
+                || (Array.isArray(proc.existing_implants) && proc.existing_implants.length > 0)
+                || !!proc.original_procedure_type
+              );
+              if (isExistingImplantDraft) {
                 setExistingImplantDraft(proc);
                 setFormData(prev => ({ ...prev, implant_procedure_type: 'Existing Implant' }));
                 setStep('details');
