@@ -1,5 +1,46 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 225 (Feb 2026) — Existing Implant: skip Phase 2 in trail/timeline, polish Phase 3/4 headers, fix Phase 4 Step 2 IOPA per implant, thumbnails
+
+### Why
+After iter-224 wired draft resume correctly, the user surfaced a batch of visual + workflow gaps in the existing-implant downstream phases:
+1. The chevron progress trail and the "Treatment Progress" timeline at the bottom of the case detail still listed **Phase 2** (Implant Surgery) — irrelevant for existing-implant cases.
+2. The "Existing Implants — Path A (Replace Prosthesis Only)" banner was visually noisy and not centred.
+3. Phase 4 Step 1's "Procedure Type" text was a plain `helperText` — easy to miss.
+4. Phase 4 Step 2's per-implant IOPA section said **"No implants found in this case — IOPA upload is skipped"** because it only read `procedure.implant_plans[]` (empty for existing-implant cases) and ignored `procedure.existing_implants[]`.
+5. Uploaded IOPA / OPG / CBCT files in Phase 1 only showed a filename — no thumbnail or "View" affordance for the student or supervisor / implant in-charge.
+
+### Changes
+
+**Frontend — Case detail (`procedures/[id].tsx`)**
+- `getProgressTrail` and `getProgressPair` now accept an optional `caseOrigin`; when `'existing_implants'`, the returned phase array drops Phase 2 entirely (Phase 1 → Phase 3 → Phase 4 → Done). All call sites pass `procedure.case_origin`.
+- "Treatment Progress" timeline computes the step list inline; existing-implant cases filter out the `phase2` step so only Phase 1 → Phase 3 → Phase 4 → Complete renders.
+- Phase 1 subtitle in the timeline becomes "Examination and Case Details" for existing-implant cases (matches the iter-220 header rename).
+- The Path-A banner becomes a centred pill: **"Existing Implants · Prosthesis-Only"** with archive icon, light-blue chip background, and white-ish padding — consistent with the rest of the case-detail visual rhythm.
+
+**Frontend — Phase 4 Step 1 (`submit-stage2-prosthetic/[id].tsx`)**
+- The plain "Procedure Type: …" `helperText` line is replaced with a centred pill: blue-50 background, 1.5 px blue border, all-caps "PROCEDURE TYPE" label, bold dark-blue value. For existing-implant cases the value uses `procedure.original_procedure_type` (the real procedure label, e.g. "Single Conventional Implant") rather than the form-only "Existing Implant" override.
+
+**Frontend — Phase 4 Step 2 (`submit-phase4-step2/[id].tsx`)**
+- `implantPositions` now falls back to `procedure.existing_implants[].tooth` when `implant_plans[]` is empty and `case_origin === 'existing_implants'`. The "No implants found" message no longer fires for existing-implant cases — the per-implant IOPA grid populates from the historical implant rows captured in Phase 1.
+- `isFullArch` now uses `effectiveProcType` (existing-implant cases honour `original_procedure_type`) so All-on-X cases route correctly.
+
+**Frontend — Thumbnails (`ExistingImplantSection.tsx`)**
+- New `RadiographThumb` component: async-resolves the auth file URL via `getAuthFileUrl`, renders a 56×56 px image preview (or document icon for PDFs) plus filename and "Tap to view" affordance. Tapping opens the file in a new browser tab on web, or hands off to `Linking` on native.
+- Per-implant IOPA card and case-level OPG card both swap the text-only "✓ Uploaded · filename" line for `<RadiographThumb>`.
+
+### Verification
+- Backend uvicorn reloaded cleanly; both `/api/procedures/with-existing-implants` and `/api/procedures/{id}` continue to return the expected payload shape.
+- Metro hot-reload picked up every frontend change without parse / TS errors.
+- All four `getProgressTrail` / `getProgressPair` call sites updated to pass `procedure.case_origin`.
+
+### Notes for next agent
+- The case-detail existing-implants block (around `procedures/[id].tsx:931+`) lists each implant but does NOT yet show the per-row `iopa_url` thumbnail to the supervisor / implant in-charge. Adding `<RadiographThumb>` there too is a 5-min follow-up (component already exists in `ExistingImplantSection.tsx`; just re-export and use).
+- `RadiographThumb` is currently colocated in `ExistingImplantSection.tsx`. Future cleanup: lift it into `components/RadiographThumb.tsx` so other screens (Phase 4 Step 2 uploads, case-report PDF preview) can reuse it.
+- `Linking.openURL` requires the URL host to be HTTPS — auth-signed URLs are already HTTPS so no issue.
+
+---
+
 ## Iteration 224 (Feb 2026) — Existing Implant: multi-signal draft detection
 
 ### Why

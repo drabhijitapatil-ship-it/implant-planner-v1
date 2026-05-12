@@ -328,7 +328,16 @@ export default function Phase4Step1Screen() {
               <Ionicons name="construct-outline" size={20} color="#6A1B9A" />
               <Text style={s.sectionTitle}>Final Prosthesis Selection</Text>
             </View>
-            {procedure && <Text style={s.helperText}>Procedure Type: {procedure.implant_procedure_type}</Text>}
+            {procedure && (
+              <View style={{ alignItems: 'center', backgroundColor: '#E3F2FD', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14, marginVertical: 10, borderWidth: 1.5, borderColor: '#90CAF9' }}>
+                <Text style={{ fontSize: 11, color: '#1976D2', fontWeight: '600', letterSpacing: 0.5, marginBottom: 2 }}>PROCEDURE TYPE</Text>
+                <Text style={{ fontSize: 15, color: '#0D47A1', fontWeight: '800', textAlign: 'center' }}>
+                  {procedure.case_origin === 'existing_implants' && procedure.original_procedure_type
+                    ? procedure.original_procedure_type
+                    : procedure.implant_procedure_type}
+                </Text>
+              </View>
+            )}
 
             {isPerImplantMode ? (
               <>

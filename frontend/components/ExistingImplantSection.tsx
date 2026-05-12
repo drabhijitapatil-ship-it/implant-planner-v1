@@ -17,13 +17,13 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, TextInput, ScrollView, Alert,
-  StyleSheet, Modal, Pressable, ActivityIndicator, Platform,
+  StyleSheet, Modal, Pressable, ActivityIndicator, Platform, Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import api from '../utils/api';
+import api, { getAuthFileUrl } from '../utils/api';
 import FdiAnatomicalChart from './FdiAnatomicalChart';
 
 // Mirrors Phase 4 Step 1's prosthetic-plan grouping so the prosthesis-history
@@ -1038,7 +1038,7 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
                         ? <ActivityIndicator size="small" color="#1565C0" />
                         : <><Ionicons name="cloud-upload-outline" size={18} color="#1565C0" /><Text style={styles.uploadText}>{row.iopa_url ? 'Re-upload' : 'Upload'}</Text></>}
                     </TouchableOpacity>
-                    {row.iopa_url ? <Text style={styles.uploadedHint}>✓ Uploaded · {row.iopa_url}</Text> : null}
+                    {row.iopa_url ? <RadiographThumb filename={row.iopa_url} testID={`ei-iopa-thumb-${idx}`} /> : null}
                   </View>
                 )}
 
@@ -1167,7 +1167,7 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
               ? <ActivityIndicator size="small" color="#1565C0" />
               : <><Ionicons name="cloud-upload-outline" size={18} color="#1565C0" /><Text style={styles.uploadText}>{opgUrl ? 'Re-upload' : 'Upload'}</Text></>}
           </TouchableOpacity>
-          {opgUrl ? <Text style={styles.uploadedHint}>✓ Uploaded · {opgUrl}</Text> : null}
+          {opgUrl ? <RadiographThumb filename={opgUrl} testID="ei-opg-thumb" /> : null}
         </View>
       )}
 
@@ -1309,6 +1309,53 @@ function DropDown({ value, options, onPick, placeholder, disabled, testID }: {
         </Pressable>
       </Modal>
     </View>
+  );
+}
+
+// iter-225: tiny thumbnail + view-action helper for an uploaded radiograph.
+// Async-resolves the auth URL, shows an image preview (or PDF doc icon) +
+// "View" link that opens in browser on web / shares on native.
+function RadiographThumb({ filename, testID }: { filename: string; testID?: string }) {
+  const [uri, setUri] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    getAuthFileUrl(filename).then(u => { if (!cancelled) setUri(u); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [filename]);
+  const isPdf = filename.toLowerCase().endsWith('.pdf');
+  const open = async () => {
+    if (!uri) return;
+    if (Platform.OS === 'web') window.open(uri, '_blank');
+    else {
+      // RN doesn't have a built-in viewer; rely on Linking
+      try {
+        const { Linking } = await import('react-native');
+        await Linking.openURL(uri);
+      } catch { /* noop */ }
+    }
+  };
+  return (
+    <TouchableOpacity
+      onPress={open}
+      activeOpacity={0.8}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 8, padding: 10, backgroundColor: '#F1F8E9', borderRadius: 10, borderWidth: 1, borderColor: '#C5E1A5' }}
+      testID={testID}
+      /* @ts-ignore */ data-testid={testID}
+    >
+      {isPdf || !uri ? (
+        <View style={{ width: 56, height: 56, borderRadius: 8, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#A5D6A7', alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name={isPdf ? 'document-text' : 'image-outline'} size={28} color="#2E7D32" />
+        </View>
+      ) : (
+        <Image source={{ uri }} style={{ width: 56, height: 56, borderRadius: 8, backgroundColor: '#FFF' }} />
+      )}
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontSize: 12, fontWeight: '700', color: '#1B5E20' }} numberOfLines={1}>✓ Uploaded</Text>
+        <Text style={{ fontSize: 11, color: '#558B2F' }} numberOfLines={1}>{filename}</Text>
+        <Text style={{ fontSize: 11, color: '#1565C0', fontWeight: '700', marginTop: 2 }}>Tap to view</Text>
+      </View>
+      <Ionicons name="open-outline" size={20} color="#1565C0" />
+    </TouchableOpacity>
   );
 }
 

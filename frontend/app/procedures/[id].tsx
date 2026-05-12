@@ -72,15 +72,22 @@ const EditContext = createContext<{
  * with `currentIndex` marking the active one (haloed + animated chevron
  * leading into it). Final entry "Done" appears only on completion.
  */
-function getProgressTrail(status: string): { phases: string[]; currentIndex: number } {
+function getProgressTrail(status: string, caseOrigin?: string): { phases: string[]; currentIndex: number } {
+  // iter-225: existing-implant cases skip Phase 2 (surgery already done in the
+  // past — captured in the existing_implants[] array on Phase 1 instead).
+  const isExisting = caseOrigin === 'existing_implants';
   if (['draft', 'pending_phase1'].includes(status)) {
     return { phases: ['Phase 1'], currentIndex: 0 };
   }
   if (['phase1_approved', 'pending_phase2'].includes(status)) {
-    return { phases: ['Phase 1', 'Phase 2'], currentIndex: 1 };
+    return isExisting
+      ? { phases: ['Phase 1', 'Phase 3'], currentIndex: 1 }
+      : { phases: ['Phase 1', 'Phase 2'], currentIndex: 1 };
   }
   if (['phase2_approved', 'pending_stage2_surgical'].includes(status)) {
-    return { phases: ['Phase 1', 'Phase 2', 'Phase 3'], currentIndex: 2 };
+    return isExisting
+      ? { phases: ['Phase 1', 'Phase 3'], currentIndex: 1 }
+      : { phases: ['Phase 1', 'Phase 2', 'Phase 3'], currentIndex: 2 };
   }
   if ([
     'stage2_surgical_approved',
@@ -88,10 +95,14 @@ function getProgressTrail(status: string): { phases: string[]; currentIndex: num
     'stage2_prosthetic_step1_approved',
     'pending_final_delivery',
   ].includes(status)) {
-    return { phases: ['Phase 1', 'Phase 2', 'Phase 3', 'Phase 4'], currentIndex: 3 };
+    return isExisting
+      ? { phases: ['Phase 1', 'Phase 3', 'Phase 4'], currentIndex: 2 }
+      : { phases: ['Phase 1', 'Phase 2', 'Phase 3', 'Phase 4'], currentIndex: 3 };
   }
   if (status === 'completed') {
-    return { phases: ['Phase 1', 'Phase 2', 'Phase 3', 'Phase 4', 'Done'], currentIndex: 4 };
+    return isExisting
+      ? { phases: ['Phase 1', 'Phase 3', 'Phase 4', 'Done'], currentIndex: 3 }
+      : { phases: ['Phase 1', 'Phase 2', 'Phase 3', 'Phase 4', 'Done'], currentIndex: 4 };
   }
   return { phases: ['Phase 1'], currentIndex: 0 };
 }
@@ -101,12 +112,14 @@ function getProgressTrail(status: string): { phases: string[]; currentIndex: num
  * (used elsewhere in this file for phase-specific banners). Derives from the
  * trail so both stay in sync.
  */
-function getProgressPair(status: string): { current: string; next: string | null } {
-  const { phases, currentIndex } = getProgressTrail(status);
+function getProgressPair(status: string, caseOrigin?: string): { current: string; next: string | null } {
+  const { phases, currentIndex } = getProgressTrail(status, caseOrigin);
   const current = phases[currentIndex];
   if (status === 'completed') return { current: 'Done', next: null };
-  // Determine the next label by extending one beyond the current trail.
-  const labels = ['Phase 1', 'Phase 2', 'Phase 3', 'Phase 4', 'Done'];
+  // iter-225: respect the same skip-Phase-2 rule when computing "next".
+  const labels = caseOrigin === 'existing_implants'
+    ? ['Phase 1', 'Phase 3', 'Phase 4', 'Done']
+    : ['Phase 1', 'Phase 2', 'Phase 3', 'Phase 4', 'Done'];
   const idx = labels.indexOf(current);
   const next = idx >= 0 && idx < labels.length - 1 ? labels[idx + 1] : null;
   return { current, next };
@@ -343,7 +356,7 @@ export default function ProcedureDetailScreen() {
   const pillScale = useSharedValue(1);
   useEffect(() => {
     if (!procedure?.status) return;
-    const pair = getProgressPair(procedure.status);
+    const pair = getProgressPair(procedure.status, procedure.case_origin);
     const tappable = ['Phase 1','Phase 2','Phase 3','Phase 4'].includes(pair.current) && !!pair.next;
     if (!tappable) return;
     let cancelled = false;
@@ -735,7 +748,7 @@ export default function ProcedureDetailScreen() {
             </View>
           )}
           {procedure.status !== 'completed' && (() => {
-            const trail = getProgressTrail(procedure.status);
+            const trail = getProgressTrail(procedure.status, procedure.case_origin);
             const phaseToNum: Record<string, number | null> = {
               'Phase 1': 1, 'Phase 2': 2, 'Phase 3': 3, 'Phase 4': 4, 'Done': null,
             };
@@ -917,9 +930,14 @@ export default function ProcedureDetailScreen() {
             opening the case from the Phase 4 inbox. */}
         {procedure.case_origin === 'existing_implants' && (
           <View style={{ backgroundColor: '#FFF', borderRadius: 12, padding: 14, marginBottom: 12, borderLeftWidth: 4, borderLeftColor: '#0277BD', borderWidth: 1, borderColor: '#ECEFF1' }} testID="existing-implants-block">
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <Ionicons name="archive-outline" size={20} color="#0277BD" />
-              <Text style={{ fontSize: 15, fontWeight: '800', color: '#0277BD' }}>Existing Implants — Path A (Replace Prosthesis Only)</Text>
+            {/* iter-225: centred pill replacing the verbose "Path A (Replace
+                Prosthesis Only)" label. Cleaner and matches the case-detail
+                visual rhythm. */}
+            <View style={{ alignItems: 'center', marginBottom: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#E3F2FD', borderColor: '#90CAF9', borderWidth: 1.5, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999 }}>
+                <Ionicons name="archive-outline" size={18} color="#0D47A1" />
+                <Text style={{ fontSize: 14, fontWeight: '800', color: '#0D47A1', letterSpacing: 0.3 }}>Existing Implants · Prosthesis-Only</Text>
+              </View>
             </View>
 
             {Array.isArray(procedure.existing_implants) && procedure.existing_implants.length > 0 ? (
@@ -1040,28 +1058,35 @@ export default function ProcedureDetailScreen() {
         <View style={styles.timelineContainer} testID="treatment-timeline" data-testid="treatment-timeline">
           <Text style={styles.timelineTitle}>Treatment Progress</Text>
           <View style={styles.timelineSteps}>
-            {[
-              { key: 'phase1', label: 'Phase 1', subtitle: 'Diagnosis and Treatment Planning', 
-                done: ['phase1_approved','pending_phase2','phase2_approved','pending_stage2_surgical','stage2_surgical_approved','pending_stage2_prosthetic','completed'].includes(procedure.status),
-                active: procedure.status === 'pending_phase1',
-                timestamp: procedure.phase1_completed_at },
-              { key: 'phase2', label: 'Phase 2', subtitle: 'Implant Surgery',
-                done: ['phase2_approved','pending_stage2_surgical','stage2_surgical_approved','pending_stage2_prosthetic','completed'].includes(procedure.status),
-                active: ['phase1_approved','pending_phase2'].includes(procedure.status),
-                timestamp: procedure.phase2_completed_at },
-              { key: 'stage2s', label: 'Phase 3', subtitle: 'Healing and Second Stage Surgery',
-                done: ['stage2_surgical_approved','pending_stage2_prosthetic','completed'].includes(procedure.status),
-                active: ['phase2_approved','pending_stage2_surgical'].includes(procedure.status),
-                timestamp: procedure.stage2_surgical_completed_at },
-              { key: 'stage2p', label: 'Phase 4', subtitle: 'Prosthetic Rehabilitation',
-                done: procedure.status === 'completed',
-                active: ['stage2_surgical_approved','pending_stage2_prosthetic'].includes(procedure.status),
-                timestamp: procedure.stage2_prosthetic_completed_at },
-              { key: 'complete', label: 'Complete', subtitle: 'Treatment Done',
-                done: procedure.status === 'completed',
-                active: false,
-                timestamp: procedure.treatment_completed_at },
-            ].map((step, index, arr) => (
+            {(() => {
+              // iter-225: drop the Phase 2 step for existing-implant cases —
+              // the implant surgery already happened and is captured in
+              // existing_implants[] on Phase 1.
+              const isExistingImplant = procedure.case_origin === 'existing_implants';
+              const allSteps = [
+                { key: 'phase1', label: 'Phase 1', subtitle: isExistingImplant ? 'Examination and Case Details' : 'Diagnosis and Treatment Planning',
+                  done: ['phase1_approved','pending_phase2','phase2_approved','pending_stage2_surgical','stage2_surgical_approved','pending_stage2_prosthetic','completed'].includes(procedure.status),
+                  active: procedure.status === 'pending_phase1',
+                  timestamp: procedure.phase1_completed_at },
+                { key: 'phase2', label: 'Phase 2', subtitle: 'Implant Surgery',
+                  done: ['phase2_approved','pending_stage2_surgical','stage2_surgical_approved','pending_stage2_prosthetic','completed'].includes(procedure.status),
+                  active: ['phase1_approved','pending_phase2'].includes(procedure.status),
+                  timestamp: procedure.phase2_completed_at },
+                { key: 'stage2s', label: 'Phase 3', subtitle: 'Healing and Second Stage Surgery',
+                  done: ['stage2_surgical_approved','pending_stage2_prosthetic','completed'].includes(procedure.status),
+                  active: ['phase2_approved','pending_stage2_surgical'].includes(procedure.status),
+                  timestamp: procedure.stage2_surgical_completed_at },
+                { key: 'stage2p', label: 'Phase 4', subtitle: 'Prosthetic Rehabilitation',
+                  done: procedure.status === 'completed',
+                  active: ['stage2_surgical_approved','pending_stage2_prosthetic'].includes(procedure.status),
+                  timestamp: procedure.stage2_prosthetic_completed_at },
+                { key: 'complete', label: 'Complete', subtitle: 'Treatment Done',
+                  done: procedure.status === 'completed',
+                  active: false,
+                  timestamp: procedure.treatment_completed_at },
+              ];
+              return isExistingImplant ? allSteps.filter(s => s.key !== 'phase2') : allSteps;
+            })().map((step, index, arr) => (
               <View key={step.key} style={styles.timelineStep}>
                 <View style={styles.timelineNodeCol}>
                   <View style={[

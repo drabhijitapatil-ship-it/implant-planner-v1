@@ -62,10 +62,28 @@ export default function Phase4Step2Screen() {
     })();
   }, [id]);
 
-  const isFullArch = procedure && FULL_ARCH_TYPES.has(procedure.implant_procedure_type);
-  const implantPositions: string[] = (procedure?.implant_plans || [])
-    .map((p: any) => String(p.position || ''))
-    .filter(Boolean);
+  // iter-225: For existing-implant cases the original procedure type lives
+  // on `original_procedure_type` (the wizard maps it back to "Existing Implant"
+  // for the form picker). Honour both fields when deciding full-arch.
+  const effectiveProcType = procedure?.case_origin === 'existing_implants' && procedure?.original_procedure_type
+    ? procedure.original_procedure_type
+    : procedure?.implant_procedure_type;
+  const isFullArch = procedure && FULL_ARCH_TYPES.has(effectiveProcType);
+  // iter-225: implant positions fall back to existing_implants[].tooth when
+  // the case originated as "Existing Implant" — implant_plans[] is empty
+  // for those cases because the surgery was historical.
+  const implantPositions: string[] = (() => {
+    const fromPlans = (procedure?.implant_plans || [])
+      .map((p: any) => String(p.position || ''))
+      .filter(Boolean);
+    if (fromPlans.length > 0) return fromPlans;
+    if (procedure?.case_origin === 'existing_implants') {
+      return (procedure?.existing_implants || [])
+        .map((r: any) => String(r.tooth || ''))
+        .filter(Boolean);
+    }
+    return [];
+  })();
   const isInchargeSelfCreated =
     user?.role === 'implant_incharge'
     && procedure?.created_by_role === 'implant_incharge'
