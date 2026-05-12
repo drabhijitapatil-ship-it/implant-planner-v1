@@ -4766,7 +4766,7 @@ async def get_procedure_badge(
 
 
 # ── AI Integration (Implanr AI) ────────────────────────────────────────────
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
 import uuid
 
 def _build_case_context(proc: dict) -> str:
@@ -5147,6 +5147,204 @@ Provide a clinical explanation in professional scientific language. Do not menti
     response = await chat.send_message(UserMessage(text=prompt))
 
     return {"explanation": response}
+
+
+
+# ────────────────────────────────────────────────────────────────────────
+# iter-227: Radiograph compare — AI-generated clinical notes with editable
+# follow-up persisted per tooth on the procedure. Used by the Phase 4 Step 2
+# side-by-side comparison view (Phase 1 vs Phase 4 for existing-implant
+# cases, Phase 2 vs Phase 4 for routine cases).
+# ────────────────────────────────────────────────────────────────────────
+
+import base64 as _b64
+from PIL import Image as _PILImage  # noqa: WPS433 — already installed via fpdf deps; soft-fall handled below
+
+class RadiographAINoteRequest(BaseModel):
+    tooth_label: str = Field(..., max_length=40)
+    baseline_filename: Optional[str] = Field(None, max_length=300)
+    current_filename: Optional[str] = Field(None, max_length=300)
+    baseline_phase_label: str = Field("Baseline", max_length=80)
+    current_phase_label: str = Field("Current", max_length=80)
+
+
+class RadiographEditNoteRequest(BaseModel):
+    tooth_label: str = Field(..., max_length=40)
+    notes: str = Field(..., max_length=4000)
+
+
+def _user_can_edit_radiograph_notes(user: dict, procedure: dict) -> bool:
+    role = user.get("role")
+    if role in ("administrator", "implant_incharge"):
+        return True
+    if role == "supervisor" and procedure.get("supervisor_id") == str(user["_id"]):
+        return True
+    # "Primal user" = the student who created the case.
+    if role == "student" and procedure.get("student_id") == str(user["_id"]):
+        return True
+    return False
+
+
+def _load_radiograph_image_b64(filename: Optional[str]) -> Optional[Dict[str, str]]:
+    """Read an uploaded radiograph from disk → re-encode as JPEG base64 so it
+    plays nicely with the LLM vision payload (HEIC/HEIF are rejected by some
+    providers; PDFs are not supported)."""
+    if not filename:
+        return None
+    file_path = UPLOADS_DIR / filename
+    if not file_path.exists():
+        return None
+    lower = filename.lower()
+    if lower.endswith(".pdf"):
+        return {"error": "pdf"}
+    try:
+        with _PILImage.open(file_path) as img:
+            img = img.convert("RGB")
+            # Resize down to keep payload small / costs predictable.
+            max_dim = 1600
+            if max(img.size) > max_dim:
+                img.thumbnail((max_dim, max_dim))
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=85)
+            b64 = _b64.b64encode(buf.getvalue()).decode("ascii")
+            return {"b64": b64, "mime": "image/jpeg"}
+    except Exception:
+        return None
+
+
+@api_router.post("/procedures/{procedure_id}/radiograph-compare/ai-notes")
+async def generate_radiograph_ai_notes(
+    procedure_id: str,
+    body: RadiographAINoteRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Generate AI clinical comparison notes for two radiographs of the same
+    tooth taken at different phases. Saves the AI-generated text on the
+    procedure under `radiograph_compare_notes[tooth_label]` and returns it.
+    The frontend lets the primary student, supervisor, or implant in-charge
+    edit the saved text afterwards via the PUT endpoint below."""
+    procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if not _user_can_edit_radiograph_notes(current_user, procedure):
+        raise HTTPException(status_code=403, detail="Not authorised for this case")
+
+    baseline = _load_radiograph_image_b64(body.baseline_filename)
+    current_img = _load_radiograph_image_b64(body.current_filename)
+
+    if not baseline and not current_img:
+        raise HTTPException(status_code=400, detail="No readable radiograph images supplied")
+    if (baseline and baseline.get("error") == "pdf") or (current_img and current_img.get("error") == "pdf"):
+        raise HTTPException(status_code=415, detail="PDF radiographs are not supported for AI analysis — please upload an image (JPG/PNG).")
+
+    image_attachments = []
+    image_descriptors = []
+    if baseline and baseline.get("b64"):
+        image_attachments.append(ImageContent(image_base64=baseline["b64"]))
+        image_descriptors.append(f"Image 1: {body.baseline_phase_label} (Tooth {body.tooth_label})")
+    if current_img and current_img.get("b64"):
+        image_attachments.append(ImageContent(image_base64=current_img["b64"]))
+        image_descriptors.append(f"Image {len(image_attachments)}: {body.current_phase_label} (Tooth {body.tooth_label})")
+
+    prompt = f"""You are reviewing two periapical radiographs of the SAME implant site to support a prosthodontist's final-delivery sign-off. Compare the two images and write concise clinical notes (4-7 bullet points) that a supervising clinician would find useful.
+
+{chr(10).join(image_descriptors)}
+
+For each of the following, comment ONLY on what is visually discernible — if a finding is not assessable from the image, say so plainly rather than speculating:
+1. Crestal bone level around the implant (mesial vs distal change relative to baseline)
+2. Peri-implant radiolucency (presence, location, magnitude)
+3. Implant-abutment / implant-crown interface fit
+4. Apical region — any periapical lesion or change
+5. Adjacent structures (sinus floor, IAN canal, neighbouring teeth) where visible
+6. Overall comparison verdict — stable / improving / concerning
+
+Begin with a one-line summary line "Verdict: stable | watchful | concerning — <one phrase rationale>". Then list the bullets.
+
+End with an explicit one-line caveat: "AI radiographic review — not a diagnostic substitute. Clinical correlation required."
+
+Write in professional clinical language. Do not invent measurements or units. If image quality is too poor to assess a specific item, state that explicitly for that item."""
+
+    try:
+        chat = LlmChat(
+            api_key=_get_llm_key(),
+            session_id=f"radio-compare-{procedure_id}-{body.tooth_label}-{uuid.uuid4().hex[:8]}",
+            system_message="You are an expert prosthodontist providing concise radiographic comparison notes. You are conservative — you flag what you cannot assess rather than guess.",
+        ).with_model("openai", "gpt-5.2")
+        response = await chat.send_message(UserMessage(text=prompt, file_contents=image_attachments))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"AI generation failed: {e}")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    note_entry = {
+        "tooth_label": body.tooth_label,
+        "ai_generated": response,
+        "ai_generated_at": now_iso,
+        "ai_model": "gpt-5.2",
+        "ai_baseline_phase": body.baseline_phase_label,
+        "ai_current_phase": body.current_phase_label,
+        # On first generation `edited` mirrors AI text so the front-end can
+        # always render a single source of truth.
+        "edited": response,
+        "edited_at": now_iso,
+        "edited_by_id": str(current_user["_id"]),
+        "edited_by_role": current_user.get("role"),
+        "edited_by_name": current_user.get("name") or current_user.get("identifier"),
+        "is_ai_only": True,
+    }
+
+    # Preserve any prior manual edits if the user already typed something:
+    existing = (procedure.get("radiograph_compare_notes") or {}).get(body.tooth_label) or {}
+    if existing.get("edited") and not existing.get("is_ai_only", True):
+        # User already customised the note — keep their edit, just refresh AI metadata.
+        note_entry["edited"] = existing["edited"]
+        note_entry["edited_at"] = existing.get("edited_at", now_iso)
+        note_entry["edited_by_id"] = existing.get("edited_by_id", str(current_user["_id"]))
+        note_entry["edited_by_role"] = existing.get("edited_by_role")
+        note_entry["edited_by_name"] = existing.get("edited_by_name")
+        note_entry["is_ai_only"] = False
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {f"radiograph_compare_notes.{body.tooth_label}": note_entry, "updated_at": datetime.utcnow()}},
+    )
+
+    return {"note": note_entry}
+
+
+@api_router.put("/procedures/{procedure_id}/radiograph-compare/notes")
+async def edit_radiograph_notes(
+    procedure_id: str,
+    body: RadiographEditNoteRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Persist a user-edited radiograph comparison note. Only the student
+    creator, supervisor of record, implant in-charge, or administrator may
+    edit."""
+    procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if not _user_can_edit_radiograph_notes(current_user, procedure):
+        raise HTTPException(status_code=403, detail="Not authorised for this case")
+
+    existing = (procedure.get("radiograph_compare_notes") or {}).get(body.tooth_label) or {}
+    now_iso = datetime.now(timezone.utc).isoformat()
+    merged = {
+        **existing,
+        "tooth_label": body.tooth_label,
+        "edited": body.notes,
+        "edited_at": now_iso,
+        "edited_by_id": str(current_user["_id"]),
+        "edited_by_role": current_user.get("role"),
+        "edited_by_name": current_user.get("name") or current_user.get("identifier"),
+        "is_ai_only": False,
+    }
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {f"radiograph_compare_notes.{body.tooth_label}": merged, "updated_at": datetime.utcnow()}},
+    )
+
+    return {"note": merged}
 
 
 # ────────────────────────────────────────────────────────────────────────
