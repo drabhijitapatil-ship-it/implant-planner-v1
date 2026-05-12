@@ -11,6 +11,7 @@ import { PhaseHeader } from '../../../components/PhaseHeader';
 import { Ionicons } from '@expo/vector-icons';
 import { CHECKLIST_DATA } from '../../../constants/checklist';
 import { showUploadPicker } from '../../../utils/uploadPicker';
+import RadiographCompare from '../../../components/RadiographCompare';
 
 const TRIAL_ITEMS = CHECKLIST_DATA.prosthetic_phase.step2.items;
 const FULL_ARCH_TYPES = new Set(['All on 4', 'All on 6', 'All on X']);
@@ -264,6 +265,15 @@ export default function Phase4Step2Screen() {
       <PhaseHeader title="Phase 4 - Prosthetic Rehabilitation" subtitle="Step 2 of 2: Final Restoration" testID="phase4-step2-submit-header" />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} nestedScrollEnabled>
+          {/* iter-226: Side-by-side baseline vs current radiograph comparison.
+              Existing-implant cases compare Phase 1 IOPA vs Phase 4 IOPA;
+              routine cases compare Phase 2 post-surgical IOPA vs Phase 4 IOPA. */}
+          <RadiographCompare
+            procedure={procedure}
+            iopaUploads={iopaUploads}
+            opgUpload={opgUpload}
+          />
+
           <View style={s.infoBox}>
             <Ionicons name="star" size={22} color="#FF6F00" />
             <Text style={s.infoText}>

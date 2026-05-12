@@ -1,5 +1,36 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 226 (Feb 2026) — Phase 4 Step 2: Side-by-side baseline radiograph comparison
+
+### Why
+Supervisor sign-off in Phase 4 Step 2 (final delivery) needs a quick visual check that bone levels and osseointegration look healthy compared with the baseline. Until now the post-delivery IOPA was uploaded in isolation — the supervisor had to open the case detail, scroll back to Phase 1 / Phase 2 to find the original radiograph, and eyeball them in separate tabs. User asked for a clinical-grade compare-with-baseline view.
+
+### Changes
+**New component (`components/RadiographCompare.tsx`)**
+- Collapsible "Compare with baseline radiograph" section. Per-tooth row renders the baseline thumbnail (left) and the just-uploaded Phase 4 IOPA thumbnail (right) side-by-side. Tapping either thumb opens a full-screen dark-themed modal with both panes laid out together; tapping a pane opens the underlying file in a new tab / Linking.
+- Baseline source switches on `case_origin`:
+  - `existing_implants` → reads `radiographs.iopas[]` (positionally aligned with `existing_implants[]`) and falls back to `existing_implants[i].iopa_url`. Labels "Baseline — Phase 1 (intake)".
+  - Routine → reads `phase2_data.iopa_files[]` matched by `tooth_label`. Labels "Baseline — Phase 2 (post-surgical)".
+- Full-arch cases (`All on 4 / 6 / X`) compare the single OPG instead (`radiographs.opg_url` vs `phase2_data.opg_file.filename`).
+- When no baseline exists at all the section returns `null`, so older cases without historical radiographs see no clutter.
+- Missing-current state ("Not uploaded yet") and missing-baseline state ("No baseline") use dashed-border placeholders so the row stays balanced.
+
+**Phase 4 Step 2 screen (`procedures/submit-phase4-step2/[id].tsx`)**
+- Mounted `<RadiographCompare procedure iopaUploads opgUpload />` at the top of the ScrollView (above the "This is the final step" info box) so the comparison block is visible the moment the screen opens and updates live as the user uploads each new IOPA.
+
+### Verification
+- Web bundle compiles cleanly (login screen renders on the preview URL).
+- API smoke: GET on legacy procedures without baseline returns `radiographs: null` / `phase2_data.iopa_files: null` — the compare panel correctly returns `null` in this state.
+- TypeScript: no new errors introduced beyond pre-existing global-type noise in the RN/DOM lib conflict.
+
+### Notes for next agent
+- Component is intentionally self-contained — no backend changes were required. If a new "Existing Implant Path B" or "Failure Replacement" workflow ever adds another historical IOPA store, extend the baseline lookup inside `RadiographCompare`.
+- Full-arch baseline OPG path for routine cases reads `phase2_data.opg_file.filename` (string) — keep that field present when refactoring phase2_data.
+- iOS Expo Go points at the EAS production backend. To see this UI on iOS, either reload the bundle or rebuild EAS. The component degrades gracefully if the backend payload shape changes.
+
+---
+
+
 ## Iteration 225 (Feb 2026) — Existing Implant: skip Phase 2 in trail/timeline, polish Phase 3/4 headers, fix Phase 4 Step 2 IOPA per implant, thumbnails
 
 ### Why
