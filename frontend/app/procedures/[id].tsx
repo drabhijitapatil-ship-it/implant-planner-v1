@@ -3083,7 +3083,7 @@ export default function ProcedureDetailScreen() {
             at the top of the page so the case summary lives in one place. */}
 
         {/* Implant Planning - Part of Phase 1 Workflow */}
-        {procedure.status === 'pending_phase1' && (
+        {procedure.status === 'pending_phase1' && procedure.case_origin !== 'existing_implants' && (
           <View style={{ marginTop: 4 }}>
             <View style={{ backgroundColor: '#E3F2FD', padding: 12, marginBottom: 0 }}>
               <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', textAlign: 'center' }}>
@@ -3257,8 +3257,11 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
-        {/* Implant Planning - Standalone Section */}
-        {procedure.status !== 'pending_phase1' && (
+        {/* Implant Planning - Standalone Section.
+            iter-223: hidden for existing-implant cases — those have the
+            implants pre-captured in `procedure.existing_implants[]` and the
+            implant-planning UI doesn't apply (no Add Implant / Pending). */}
+        {procedure.status !== 'pending_phase1' && procedure.case_origin !== 'existing_implants' && (
           <CaseImplantPlanning
             procedureId={id as string}
             isOwner={user?.id === procedure.student_id}
