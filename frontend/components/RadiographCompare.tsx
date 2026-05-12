@@ -2,13 +2,28 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Image,
   Modal, Pressable, ScrollView, Platform, ActivityIndicator,
+  TextInput, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { getAuthFileUrl } from '../utils/api';
+import api, { getAuthFileUrl } from '../utils/api';
+import { useAuth } from '../contexts/AuthContext';
 
 const FULL_ARCH_TYPES = new Set(['All on 4', 'All on 6', 'All on X']);
 
 type Upload = { filename: string; original_name?: string; content_type?: string };
+
+type CompareNote = {
+  tooth_label: string;
+  ai_generated?: string;
+  ai_generated_at?: string;
+  ai_model?: string;
+  edited: string;
+  edited_at?: string;
+  edited_by_id?: string;
+  edited_by_role?: string;
+  edited_by_name?: string;
+  is_ai_only?: boolean;
+};
 
 type Props = {
   procedure: any;
@@ -30,7 +45,22 @@ type Props = {
  */
 export default function RadiographCompare({ procedure, iopaUploads, opgUpload }: Props) {
   const [expanded, setExpanded] = useState(true);
-  const [viewer, setViewer] = useState<{ baseline: string | null; current: string | null; toothLabel: string } | null>(null);
+  const [viewer, setViewer] = useState<{ baseline: string | null; current: string | null; toothKey: string; toothLabel: string } | null>(null);
+
+  const { user } = useAuth();
+  const procedureId: string = procedure?._id || procedure?.id || '';
+
+  // ── Edit permission: student creator, supervisor of record, implant in-charge, admin.
+  const canEditNotes = useMemo(() => {
+    if (!user || !procedure) return false;
+    const role = user.role;
+    if (role === 'administrator' || role === 'implant_incharge') return true;
+    if (role === 'supervisor' && procedure.supervisor_id === user.id) return true;
+    if (role === 'student' && procedure.student_id === user.id) return true;
+    return false;
+  }, [user, procedure]);
+
+  const notesMap: Record<string, CompareNote> = procedure?.radiograph_compare_notes || {};
 
   const isExisting = procedure?.case_origin === 'existing_implants';
   const effectiveProcType = isExisting && procedure?.original_procedure_type
@@ -115,7 +145,7 @@ export default function RadiographCompare({ procedure, iopaUploads, opgUpload }:
               current={opgUpload?.filename || null}
               baselineLabel={baselineLabel}
               currentLabel={currentLabel}
-              onOpen={(b, c) => setViewer({ baseline: b, current: c, toothLabel: 'Full Arch — OPG' })}
+              onOpen={(b, c) => setViewer({ baseline: b, current: c, toothKey: 'opg', toothLabel: 'Full Arch — OPG' })}
             />
           ) : (
             teeth.map(tooth => (
@@ -126,7 +156,7 @@ export default function RadiographCompare({ procedure, iopaUploads, opgUpload }:
                 current={iopaUploads[tooth]?.filename || null}
                 baselineLabel={baselineLabel}
                 currentLabel={currentLabel}
-                onOpen={(b, c) => setViewer({ baseline: b, current: c, toothLabel: `Tooth ${tooth}` })}
+                onOpen={(b, c) => setViewer({ baseline: b, current: c, toothKey: tooth, toothLabel: `Tooth ${tooth}` })}
               />
             ))
           )}
@@ -135,11 +165,15 @@ export default function RadiographCompare({ procedure, iopaUploads, opgUpload }:
 
       {viewer && (
         <FullScreenCompare
+          procedureId={procedureId}
+          toothKey={viewer.toothKey}
           baseline={viewer.baseline}
           current={viewer.current}
           toothLabel={viewer.toothLabel}
           baselineLabel={baselineLabel}
           currentLabel={currentLabel}
+          existingNote={notesMap[viewer.toothKey]}
+          canEdit={canEditNotes}
           onClose={() => setViewer(null)}
         />
       )}
@@ -222,16 +256,21 @@ function CompareThumb({
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Full-screen side-by-side modal with both baseline + current.
+// Full-screen side-by-side modal with both baseline + current + AI notes.
 // ─────────────────────────────────────────────────────────────────────────
 function FullScreenCompare({
-  baseline, current, toothLabel, baselineLabel, currentLabel, onClose,
+  procedureId, toothKey, baseline, current, toothLabel,
+  baselineLabel, currentLabel, existingNote, canEdit, onClose,
 }: {
+  procedureId: string;
+  toothKey: string;
   baseline: string | null;
   current: string | null;
   toothLabel: string;
   baselineLabel: string;
   currentLabel: string;
+  existingNote?: CompareNote;
+  canEdit: boolean;
   onClose: () => void;
 }) {
   return (
@@ -248,9 +287,211 @@ function FullScreenCompare({
             <FullPane filename={baseline} caption={baselineLabel} testID="fullscreen-baseline" />
             <FullPane filename={current} caption={currentLabel} testID="fullscreen-current" />
           </View>
+
+          <AINotesPanel
+            procedureId={procedureId}
+            toothKey={toothKey}
+            toothLabel={toothLabel}
+            baselineFilename={baseline}
+            currentFilename={current}
+            baselineLabel={baselineLabel}
+            currentLabel={currentLabel}
+            existingNote={existingNote}
+            canEdit={canEdit}
+          />
         </ScrollView>
       </View>
     </Modal>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// AI radiograph notes — generated by GPT-5.2 vision; editable by the
+// primary student / supervisor of record / implant in-charge / admin.
+// ─────────────────────────────────────────────────────────────────────────
+function AINotesPanel({
+  procedureId, toothKey, toothLabel, baselineFilename, currentFilename,
+  baselineLabel, currentLabel, existingNote, canEdit,
+}: {
+  procedureId: string;
+  toothKey: string;
+  toothLabel: string;
+  baselineFilename: string | null;
+  currentFilename: string | null;
+  baselineLabel: string;
+  currentLabel: string;
+  existingNote?: CompareNote;
+  canEdit: boolean;
+}) {
+  const [note, setNote] = useState<CompareNote | undefined>(existingNote);
+  const [draft, setDraft] = useState<string>(existingNote?.edited || '');
+  const [dirty, setDirty] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const hasGeneratable = !!baselineFilename && !!currentFilename;
+  const baselineIsPdf = !!baselineFilename && baselineFilename.toLowerCase().endsWith('.pdf');
+  const currentIsPdf = !!currentFilename && currentFilename.toLowerCase().endsWith('.pdf');
+  const blockedByPdf = baselineIsPdf || currentIsPdf;
+
+  const onGenerate = async () => {
+    if (!hasGeneratable) {
+      Alert.alert('Both radiographs required', 'Upload the post-delivery IOPA first, then generate AI notes.');
+      return;
+    }
+    if (blockedByPdf) {
+      Alert.alert('Image required', 'AI analysis needs a JPG/PNG radiograph. Re-upload the file as an image to use this feature.');
+      return;
+    }
+    setGenerating(true);
+    try {
+      const res = await api.post(`/procedures/${procedureId}/radiograph-compare/ai-notes`, {
+        tooth_label: toothKey,
+        baseline_filename: baselineFilename,
+        current_filename: currentFilename,
+        baseline_phase_label: baselineLabel,
+        current_phase_label: currentLabel,
+      });
+      const fresh: CompareNote = res.data?.note;
+      setNote(fresh);
+      setDraft(fresh.edited || fresh.ai_generated || '');
+      setDirty(false);
+    } catch (e: any) {
+      Alert.alert('AI generation failed', e?.response?.data?.detail || 'Could not generate AI notes. Please try again.');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const onSave = async () => {
+    if (!draft.trim()) {
+      Alert.alert('Empty note', 'Cannot save an empty note.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await api.put(`/procedures/${procedureId}/radiograph-compare/notes`, {
+        tooth_label: toothKey,
+        notes: draft,
+      });
+      const fresh: CompareNote = res.data?.note;
+      setNote(fresh);
+      setDirty(false);
+    } catch (e: any) {
+      Alert.alert('Save failed', e?.response?.data?.detail || 'Could not save your edits. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateDraft = (val: string) => {
+    setDraft(val);
+    setDirty(val !== (note?.edited || ''));
+  };
+
+  const aiSubtitle = note?.ai_generated_at
+    ? `AI · ${note.ai_model || 'gpt-5.2'} · ${new Date(note.ai_generated_at).toLocaleString()}`
+    : null;
+  const editorLine = note?.edited_at && !note?.is_ai_only
+    ? `Edited by ${note.edited_by_name || 'user'} (${note.edited_by_role}) · ${new Date(note.edited_at).toLocaleString()}`
+    : null;
+
+  return (
+    <View style={s.aiPanel} testID="ai-notes-panel">
+      <View style={s.aiHeader}>
+        <Ionicons name="sparkles" size={18} color="#FFD54F" />
+        <Text style={s.aiTitle}>AI Radiograph Notes</Text>
+        {note?.ai_generated ? (
+          <View style={s.aiChip}><Text style={s.aiChipText}>{note.is_ai_only ? 'AI draft' : 'Edited'}</Text></View>
+        ) : null}
+      </View>
+
+      <Text style={s.aiDisclaimer}>
+        AI compares the two radiographs and drafts clinical observations. This is a clinician aid — not a diagnostic substitute. Please review and edit before sign-off.
+      </Text>
+
+      {!note?.ai_generated && !generating && (
+        <TouchableOpacity
+          style={[s.aiPrimaryBtn, (!hasGeneratable || blockedByPdf) && s.aiBtnDisabled]}
+          onPress={onGenerate}
+          disabled={!hasGeneratable || blockedByPdf || !canEdit}
+          testID="ai-notes-generate-btn"
+        >
+          <Ionicons name="sparkles" size={16} color="#1A1A1A" />
+          <Text style={s.aiPrimaryBtnText}>Generate AI Notes</Text>
+        </TouchableOpacity>
+      )}
+
+      {generating && (
+        <View style={s.aiLoading}>
+          <ActivityIndicator color="#FFD54F" />
+          <Text style={s.aiLoadingText}>Analysing radiographs… this can take 10–20 seconds.</Text>
+        </View>
+      )}
+
+      {!hasGeneratable && !note?.ai_generated && (
+        <Text style={s.aiHint}>
+          {!baselineFilename ? 'No baseline radiograph on file. ' : ''}
+          {!currentFilename ? 'Upload the post-delivery radiograph to enable AI analysis.' : ''}
+        </Text>
+      )}
+      {blockedByPdf && (
+        <Text style={s.aiHint}>One of the radiographs is a PDF — AI analysis needs an image (JPG / PNG).</Text>
+      )}
+
+      {(note?.ai_generated || draft) && (
+        <>
+          <View style={s.aiEditorWrap}>
+            {canEdit ? (
+              <TextInput
+                value={draft}
+                onChangeText={updateDraft}
+                multiline
+                editable={!saving && !generating}
+                placeholder="AI notes will appear here. Edit freely before sign-off."
+                placeholderTextColor="#90A4AE"
+                style={s.aiEditor}
+                testID="ai-notes-editor"
+              />
+            ) : (
+              <Text style={s.aiReadonly} testID="ai-notes-readonly">{draft || '(No notes yet)'}</Text>
+            )}
+          </View>
+
+          <View style={s.aiActionsRow}>
+            {note?.ai_generated && canEdit ? (
+              <TouchableOpacity
+                style={s.aiSecondaryBtn}
+                onPress={onGenerate}
+                disabled={generating || saving}
+                testID="ai-notes-regenerate-btn"
+              >
+                <Ionicons name="refresh" size={14} color="#FFD54F" />
+                <Text style={s.aiSecondaryBtnText}>Regenerate</Text>
+              </TouchableOpacity>
+            ) : <View />}
+
+            {canEdit && (
+              <TouchableOpacity
+                style={[s.aiSaveBtn, (!dirty || saving) && s.aiBtnDisabled]}
+                onPress={onSave}
+                disabled={!dirty || saving || generating}
+                testID="ai-notes-save-btn"
+              >
+                {saving ? <ActivityIndicator color="#1A1A1A" size="small" /> : <Ionicons name="checkmark" size={16} color="#1A1A1A" />}
+                <Text style={s.aiSaveBtnText}>{dirty ? 'Save edits' : 'Saved'}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <View style={s.aiMeta}>
+            {aiSubtitle ? <Text style={s.aiMetaLine}>{aiSubtitle}</Text> : null}
+            {editorLine ? <Text style={s.aiMetaLine}>{editorLine}</Text> : null}
+            {!canEdit && <Text style={s.aiMetaLine}>You have read-only access to these notes.</Text>}
+          </View>
+        </>
+      )}
+    </View>
   );
 }
 
@@ -329,4 +570,27 @@ const s = StyleSheet.create({
   paneEmpty: { alignItems: 'center', gap: 8 },
   paneEmptyText: { color: '#90A4AE', fontSize: 12, fontWeight: '600' },
   paneHint: { color: '#78909C', fontSize: 10, textAlign: 'center', fontStyle: 'italic' },
+  // AI notes panel (in full-screen modal)
+  aiPanel: { marginTop: 16, backgroundColor: '#11202E', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#1F3346', gap: 10 },
+  aiHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  aiTitle: { flex: 1, color: '#FFD54F', fontSize: 14, fontWeight: '800', letterSpacing: 0.3 },
+  aiChip: { backgroundColor: '#1F3346', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
+  aiChipText: { color: '#FFD54F', fontSize: 10, fontWeight: '700' },
+  aiDisclaimer: { color: '#90A4AE', fontSize: 11, fontStyle: 'italic', lineHeight: 16 },
+  aiPrimaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FFD54F', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 14 },
+  aiPrimaryBtnText: { color: '#1A1A1A', fontSize: 13, fontWeight: '800' },
+  aiBtnDisabled: { opacity: 0.5 },
+  aiLoading: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, backgroundColor: '#1F3346', borderRadius: 8 },
+  aiLoadingText: { color: '#90CAF9', fontSize: 12, flex: 1 },
+  aiHint: { color: '#FFB74D', fontSize: 11, fontStyle: 'italic' },
+  aiEditorWrap: { backgroundColor: '#0A1620', borderRadius: 8, borderWidth: 1, borderColor: '#1F3346', minHeight: 140 },
+  aiEditor: { color: '#ECEFF1', fontSize: 13, lineHeight: 19, padding: 10, minHeight: 140, textAlignVertical: 'top' },
+  aiReadonly: { color: '#CFD8DC', fontSize: 13, lineHeight: 19, padding: 10 },
+  aiActionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  aiSecondaryBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: '#FFD54F' },
+  aiSecondaryBtnText: { color: '#FFD54F', fontSize: 12, fontWeight: '700' },
+  aiSaveBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, backgroundColor: '#FFD54F' },
+  aiSaveBtnText: { color: '#1A1A1A', fontSize: 12, fontWeight: '800' },
+  aiMeta: { gap: 2 },
+  aiMetaLine: { color: '#78909C', fontSize: 10, fontStyle: 'italic' },
 });

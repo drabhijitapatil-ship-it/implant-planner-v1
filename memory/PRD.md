@@ -1,5 +1,45 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 227 (Feb 2026) — AI Radiograph Notes (editable) in the Phase 4 Step 2 compare view
+
+### Why
+After shipping the side-by-side comparison view (iter-226) the user asked for an in-modal "AI Radiograph Notes" button that drafts clinical observations from the two radiographs and lets the primary student, supervisor of record, and implant in-charge edit + sign off on the draft.
+
+Honest caveat documented for the user: AI vision models read what they can see — they reliably describe **overt** findings (gross radiolucency, large crestal bone loss, missing/loose components, clear apical lesions) and reliably refuse on poor-quality films. They are NOT reliable for **subtle** measurements (sub-millimetre crestal change, early peri-implantitis, fine threads). Treat the AI text as a clinician aid, not a diagnostic substitute.
+
+### Changes
+**Backend (`backend/server.py`, around line 5150)**
+- New `POST /api/procedures/{id}/radiograph-compare/ai-notes`: re-encodes the two uploaded radiographs as JPEG (PIL, downscaled to 1600 px max), sends them with a structured prompt to `gpt-5.2` via `emergentintegrations.LlmChat` + `ImageContent`. Persists the response under `procedures.radiograph_compare_notes[tooth_label]`. If the user already edited the note manually, the AI refresh preserves their edited text.
+- New `PUT /api/procedures/{id}/radiograph-compare/notes`: lets the authorised editor save free-text edits to the note for a given tooth.
+- Role gate: student creator (`student_id`), supervisor of record (`supervisor_id`), implant in-charge, administrator.
+- PDF baselines / current radiographs are rejected with a 415 + clear message — AI vision needs an image.
+
+**Frontend (`components/RadiographCompare.tsx`)**
+- New `<AINotesPanel>` rendered inside the full-screen `FullScreenCompare` modal (below the two image panes).
+- States covered: no baseline yet (helper hint), PDF radiograph (helper hint), generating (spinner + estimate "10–20 seconds"), AI draft ready (editor pre-filled), saved (button disabled until dirty), regenerate (preserves user edits server-side).
+- "Generate AI Notes" → "Regenerate" once a draft exists. "Save edits" appears only when the textarea is dirty.
+- Read-only mode for users who lack edit permission (e.g. a nurse opening the screen as part of a case review).
+- Metadata footer shows AI model + timestamp and last manual editor + role.
+- Auth context (`useAuth`) drives `canEditNotes`: student creator, supervisor of record, implant in-charge, admin.
+
+**Misc**
+- `/app/image_testing.md` saved per the integration playbook's mandatory rule.
+
+### Verification
+- `PUT /radiograph-compare/notes` round-trips a note and persists to `radiograph_compare_notes` ✓.
+- `POST /ai-notes` round-trips to gpt-5.2 with two real JPGs and returns a structured response in ~20 s ✓. AI correctly refused on non-radiograph images ("Not assessable") instead of fabricating findings — a good safety signal.
+- 403 path: a student who does not own the case is blocked ✓.
+- Web bundle compiles cleanly.
+
+### Notes for next agent
+- Data shape on `procedure.radiograph_compare_notes`: `{ [tooth_label]: { ai_generated, ai_generated_at, ai_model, edited, edited_at, edited_by_*, is_ai_only } }`.
+- The "primal user" (student creator) can edit even after submit — gate this in case Phase 4 Step 2 is sealed for compliance.
+- The AI prompt explicitly forbids inventing measurements and asks the model to mark items "not assessable" rather than guess. Tune the prompt if clinicians want a stricter / looser format.
+- If we want notes to surface on the case-detail timeline or PDF report, read them from `radiograph_compare_notes` and group by tooth.
+
+---
+
+
 ## Iteration 226 (Feb 2026) — Phase 4 Step 2: Side-by-side baseline radiograph comparison
 
 ### Why
