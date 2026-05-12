@@ -1,5 +1,34 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 223 (Feb 2026) — Existing Implant: hide Implant Planning in Phase 3/4 + defensive draft-resume guard
+
+### Why
+Two follow-ups after iter-222:
+(a) Some users still saw the routine Phase 1 Step 2 (Implant Selection / Risk Assessment) when continuing an existing-implant draft from the Home screen — the iter-222 guard fired *inside* `loadDraft`, but race-conditions with other `useEffect`s and form-restoration paths could still let the step flip. Need a defensive `useEffect` that watches `existingImplantDraft` directly.
+(b) When viewing an existing-implant case in Phase 3 / Phase 4 Step 1 / Step 2, the **Implant Planning** standalone section (with "Add Implant" / "Pending Implant" rows) was still rendering — irrelevant for these cases since the implants are already captured in `procedure.existing_implants[]` and are treated as surgically placed.
+
+### Changes
+
+**Frontend — Hide Implant Planning for existing-implant cases (`procedures/[id].tsx`)**
+- Both `<CaseImplantPlanning>` render sites now also check `procedure.case_origin !== 'existing_implants'`:
+  - Line 3086: `status === 'pending_phase1' && case_origin !== 'existing_implants'` (Phase 1 planning context — never applies to existing-implant cases).
+  - Line 3262: `status !== 'pending_phase1' && case_origin !== 'existing_implants'` (the persistent standalone block visible in Phase 3 / 4 Step 1 / 4 Step 2 — now skipped for existing-implant cases).
+- The `existing_implants[]` array remains the source of truth for which implants are in the case; downstream Lab-Slip / Case-Report renderers already pull from it per iter-213.
+
+**Frontend — Defensive draft-resume guard (`new-procedure.tsx`)**
+- New `useEffect([existingImplantDraft])`: whenever the existing-implant draft state becomes truthy, forces `setStep('details')` and forces `formData.implant_procedure_type = 'Existing Implant'` (idempotent — checks current value before re-firing setFormData). This is belt-and-suspenders for issue (a): even if a subsequent restore-form `useEffect` or AppState handler tries to flip the step or type back, this guard immediately corrects it.
+
+### Verification
+- Backend uvicorn confirms reloaded server. `/api/procedures/{id}` returns `case_origin: "existing_implants"` for the freshly created test draft.
+- Metro full-rebuilt in 8 s, no parse/TS errors.
+- The two CaseImplantPlanning conditionals now short-circuit correctly when `case_origin === 'existing_implants'`.
+
+### Notes for next agent
+- If new surfaces add Implant Planning UI (e.g., the prosthetic workflow gets a manual implant editor), check `case_origin` there too. A future refactor could centralise this with a `useIsExistingImplantCase(procedure)` hook.
+- The defensive `useEffect` doesn't add re-renders for fresh-case flow because `existingImplantDraft` stays `null` for non-existing-implant cases.
+
+---
+
 ## Iteration 222 (Feb 2026) — Existing Implant: onDismiss picker fix + draft-resume flow
 
 ### Why

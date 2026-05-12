@@ -480,6 +480,17 @@ export default function NewProcedureScreen() {
     }, [params.draftId, createdProcedureId, user?.name])
   );
 
+  // iter-223: defensive — whenever an existing-implant draft is hydrated,
+  // ensure we never accidentally render the Step 2 (implant selection) UI.
+  // Belt-and-suspenders for issue (a) where users reported the draft resume
+  // still routing to routine Phase 1 Step 2 / risk assessment.
+  useEffect(() => {
+    if (existingImplantDraft) {
+      setStep('details');
+      setFormData(prev => prev.implant_procedure_type === 'Existing Implant' ? prev : ({ ...prev, implant_procedure_type: 'Existing Implant' }));
+    }
+  }, [existingImplantDraft]);
+
   // ── Restore form ONLY when app returns from background, NOT on mount/focus ──
   useEffect(() => {
     const sub = AppState.addEventListener('change', async (nextState) => {
