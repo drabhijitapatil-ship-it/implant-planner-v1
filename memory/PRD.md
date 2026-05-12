@@ -1,5 +1,33 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 224 (Feb 2026) — Existing Implant: multi-signal draft detection
+
+### Why
+User reported (a) the same draft-resume bug — even after iter-222/223, the Continue button from Home still routed the case into routine Phase 1 Step 2 (Implant Selection / Risk Assessment) instead of the Existing Implant section.
+
+Root cause analysis: the iter-222 fix detected existing-implant drafts via `proc.case_origin === 'existing_implants'`. While the canonical signal is correctly set by the backend `/api/procedures/with-existing-implants` endpoint, there are two edge cases where this single signal can fail:
+1. **Legacy drafts** created before `case_origin` was wired into the backend response payload.
+2. **Production EAS backend divergence** — if the EAS-deployed backend bundle is older than dev and isn't returning `case_origin` in the GET response, the field would arrive as `undefined`.
+
+### Changes
+**Frontend — Multi-signal existing-implant detection (`new-procedure.tsx`)**
+- `isExistingImplantDraft` now true when **any** of these signals fire:
+  1. `proc.case_origin === 'existing_implants'` (canonical, from iter-220+)
+  2. `Array.isArray(proc.existing_implants) && length > 0` (proof the case has existing-implant rows)
+  3. `!!proc.original_procedure_type` (this field is only set by the with-existing-implants endpoint)
+
+Any one of those flips the branch to `setExistingImplantDraft(proc)` + `setFormData({implant_procedure_type: 'Existing Implant'})` + `setStep('details')`, ensuring even production EAS backends that haven't been updated with the iter-220 field return still resume into the correct section.
+
+### Verification
+- Bundler hot-reloaded cleanly.
+- Curl confirms the dev backend returns `case_origin: existing_implants`, `existing_implants: [...]`, and `original_procedure_type` on every existing-implant draft — so all three signals fire and detection is unanimous.
+
+### Notes for next agent
+- Issue (b) — implant-planning hidden in Phase 3 / 4 — was already shipped in iter-223 (`procedures/[id].tsx` checks `procedure.case_origin !== 'existing_implants'` on both CaseImplantPlanning mount points). The submit-stage2-prosthetic screen has used `case_origin === 'existing_implants'` since iter-213 to pull implant data from `existing_implants[]` directly. No further changes needed there.
+- If the user STILL sees the regular Phase 1 flow after this fix lands on iOS Expo Go, ask them to **force-reload the Expo Go app** (shake → Reload) — Metro CI mode disables auto-reload, and stale device bundles are a frequent source of "fix shipped but I still see the old behaviour" reports.
+
+---
+
 ## Iteration 223 (Feb 2026) — Existing Implant: hide Implant Planning in Phase 3/4 + defensive draft-resume guard
 
 ### Why
