@@ -1,5 +1,40 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 230 (Feb 2026) — Existing Implant: draft-resume hydration race + connection `[object Object]` bug
+
+### Why
+User reproduced two issues on the Existing Implant workflow:
+1. **Draft resume showed empty implant cards.** When the user saved a draft (with implant brand/system/diameter filled and the Save-Implant row collapsed) and later tapped "Continue" from the Home dashboard, the case re-opened but the implant cards rendered as fresh blank editors instead of the saved summary. Patient info hydrated fine — only the implant rows were wiped.
+2. **`[object Object]` showed in the Connection auto-fill chip** for some catalog systems (e.g. B&B 3P Line). After picking a brand+system, the Connection field rendered the literal string "[object Object]" instead of the human-readable connection name.
+
+### Root causes
+1. **Draft race**: the `ExistingImplantSection` had three useEffects that all fired on the post-hydration commit:
+   - `[draft]` → hydration writes the rows + originalProcedure + missingTeeth.
+   - `[originalProcedure]` → "Reset on procedure-type change" — guarded by `hydratedDraftId.current === draft.id` (safe).
+   - `[missingTeeth, isFullArchDone]` → "Sync rows to missingTeeth" — re-runs `setImplants(prev => …)` using `prev.filter(r => r.tooth)`. Under React 18 batching on web (Metro `renderer/react-native-web`) the Sync's closure occasionally captured the **pre-hydration** `[blankImplant()]` value rather than the freshly-committed full row, so the byTooth map was empty and the rebuilt list was `[blankImplant("36")]` — wiping the hydrated brand/system/diameter and flipping `saved` back to `false`.
+   - Confirmed by injecting window-level instrumentation that showed hydration ran with `brand:"B&B Dental"` but the rendered card was blank.
+2. **`[object Object]`**: `/api/implant-catalog` returns `connection` as a nested object (`{ type: "Conexa", subtype: "internal" }`). The form did `String(conn)` which produced "[object Object]" for any catalog row that used the nested shape.
+
+### Changes
+**`components/ExistingImplantSection.tsx`**
+- Post-hydration re-apply: after `setImplants(rows)` we schedule `setTimeout(() => setImplants(rows), 0)` so that the deferred call lands AFTER the Sync effect's `setImplants(prev => …)` flushes — guaranteeing the hydrated rows always win regardless of the closure-capture race. Documented inline with the iter-230 tag.
+- Catalog auto-fill flattening: `connection_type` and `platform` are now read defensively — if the raw value is an object we extract `type` / `subtype` (rendered as `"Type (subtype)"` when both present, otherwise just the populated field). Strings still pass through unchanged.
+- Hydration cleanup: drafts that were previously poisoned with the literal `"[object Object]"` string have that value stripped at hydration time so the user sees an empty dropdown and can re-pick instead of seeing the broken string.
+
+**`app/(tabs)/new-procedure.tsx`**
+- Removed `createdProcedureId` from the `useFocusEffect` deps array. That dep used to mutate moments after `loadDraft` set state, causing `useFocusEffect` to re-fire and racing against the freshly-saved `existingImplantDraft`. The reset branch is now guarded only by `params.draftId` absence, which is what we actually meant.
+
+### Verification (browser E2E via Playwright)
+- Created an in-charge draft `DRAFT-A` with `brand="B&B Dental"`, `system="3P Line"`, `diameter=4.3`, `length=10`, tooth 36 → logged out → logged back in → tapped "Continue" on the dashboard card → form now renders **Implant #1 / FDI #36 · B&B Dental · 3P Line · Ø4.3 × 10 mm** as a collapsed saved-summary card ✅.
+- The two role-aware submit buttons ("Move to Phase 4 Step 1" / "Move to Phase 3" for in-charge; "Send for Approval and Move to …" for student/supervisor) appear at the bottom; "Save Draft" is hidden on resume per iter-229 ✅.
+- Tested by deleting the test draft after verification.
+
+### Open thread for next agent
+- The user's third request *("For post graduate student when Phase 1 is entered and Move to Phase 3 is clicked → case saved in inbox and ask for Upload patient consent form … Patient consent form is not required in Existing Implant work flow.")* reads ambiguously — it both describes a consent prompt and says it isn't required. I deferred this change pending clarification: should the consent form be (a) required for ROUTINE-only Phase 1 submits and silently skipped for Existing Implant, or (b) an optional/soft prompt after Existing Implant Phase 1 submit?
+
+---
+
+
 ## Iteration 229 (Feb 2026) — Existing Implant: role-aware Phase 1 submission buttons + correct CTA labels for all four routes
 
 ### Why

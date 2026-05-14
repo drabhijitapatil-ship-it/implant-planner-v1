@@ -359,6 +359,14 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
     if (!draft || !draft.id) return;
     if (hydratedDraftId.current === draft.id) return;
     hydratedDraftId.current = draft.id;
+    // iter-230: legacy drafts may have `connection_type` saved as the
+    // literal string "[object Object]" (from the previous bug). Strip it
+    // so the user sees a clean dropdown to re-pick when reopening.
+    const cleanConn = (v: any): string => {
+      if (!v) return '';
+      const s = typeof v === 'object' ? '' : String(v);
+      return s === '[object Object]' ? '' : s;
+    };
     const op = draft.original_procedure_type || draft.implant_procedure_type || '';
     setOriginalProcedure(op);
     const isFA = FULL_ARCH_DONE.has(op);
@@ -367,8 +375,8 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
       tooth: r.tooth || '',
       brand: r.brand || '',
       system: r.system || '',
-      connection_type: r.connection_type || '',
-      platform: r.platform || '',
+      connection_type: cleanConn(r.connection_type),
+      platform: cleanConn(r.platform),
       diameter_mm: r.diameter_mm != null ? String(r.diameter_mm) : '',
       length_mm: r.length_mm != null ? String(r.length_mm) : '',
       gingival_height_mm: r.gingival_height_mm != null ? String(r.gingival_height_mm) : '',
@@ -383,7 +391,17 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
       manual_brand: false,
       saved: true, // collapse all on resume so the user sees a clean summary
     }));
-    if (rows.length > 0) setImplants(rows);
+    if (rows.length > 0) {
+      setImplants(rows);
+      // iter-230: Force-reapply after the same render's `Reset` and `Sync`
+      // effects flush, in case either of them blew the rows away due to a
+      // dep-change race (`originalProcedure: '' → x` and `missingTeeth: [] → [tooth]`
+      // both fire on the SAME post-hydration commit; the Sync effect's
+      // `prev` closure can capture the pre-hydration `[blankImplant()]`
+      // value in strict-mode or batched renderers and overwrite the
+      // hydrated rows with blanks).
+      setTimeout(() => setImplants(rows), 0);
+    }
     if (!isFA) setMissingTeeth(rows.map(r => r.tooth).filter(Boolean));
     const ph = draft.prosthesis_history || {};
     if (ph.had_prosthesis === true) {
@@ -404,6 +422,12 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
   useEffect(() => {
     if (!originalProcedure) return;
     // iter-222: don't blow away state we just hydrated from a saved draft.
+    if (draft?.id && hydratedDraftId.current === draft.id) return;
+    // iter-222: don't blow away state we just hydrated from a saved draft.
+    if (typeof window !== 'undefined') {
+      (window as any).__RESET_EFFECT__ = (window as any).__RESET_EFFECT__ || [];
+      (window as any).__RESET_EFFECT__.push({ originalProcedure, draftId: draft?.id, hydratedRefMatches: !!(draft?.id && hydratedDraftId.current === draft.id), ts: Date.now() });
+    }
     if (draft?.id && hydratedDraftId.current === draft.id) return;
     if (isFullArchDone) {
       setMissingTeeth([]);
@@ -454,13 +478,33 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
         if (key === 'system') { next.diameter_mm = ''; next.length_mm = ''; }
         const hit = lookupCatalog(key === 'brand' ? val : next.brand, key === 'system' ? val : next.system);
         if (hit) {
-          const conn = (hit as any).connection_type
+          // iter-230: The catalog stores connection as a nested object
+          // (e.g. `{ type: "Conexa", subtype: "internal" }`) — coercing the
+          // raw object with `String(...)` previously produced "[object Object]"
+          // in the auto-fill chip. Flatten to a readable "Type (subtype)"
+          // string and fall back gracefully when only a flat string exists.
+          const rawConn = (hit as any).connection_type
             || (hit as any).connection
             || ((hit as any).implant?.connection_type)
+            || ((hit as any).implant?.connection)
             || '';
-          const plat = (hit as any).platform || ((hit as any).implant?.platform) || '';
-          next.connection_type = conn ? String(conn) : '';
-          next.platform = plat ? String(plat) : '';
+          let conn = '';
+          if (rawConn && typeof rawConn === 'object') {
+            const t = String(rawConn.type || '').trim();
+            const st = String(rawConn.subtype || '').trim();
+            conn = t && st ? `${t} (${st})` : (t || st || '');
+          } else if (rawConn) {
+            conn = String(rawConn);
+          }
+          const rawPlat = (hit as any).platform || ((hit as any).implant?.platform) || '';
+          let plat = '';
+          if (rawPlat && typeof rawPlat === 'object') {
+            plat = String(rawPlat.type || rawPlat.name || rawPlat.subtype || '').trim();
+          } else if (rawPlat) {
+            plat = String(rawPlat);
+          }
+          next.connection_type = conn;
+          next.platform = plat;
         } else {
           next.connection_type = '';
           next.platform = '';
