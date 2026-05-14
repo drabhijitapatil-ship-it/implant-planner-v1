@@ -1650,28 +1650,40 @@ async def create_procedure_with_existing_implants(
     # to the Phase 3 inbox (ISQ + healing-abutment swap pending) with only
     # Phase 1+2 pre-stamped. 'draft' keeps the case parked without phase
     # progression so the operator can return and finish it.
+    #
+    # iter-228: When `phase_to_start` is 'phase3' or 'phase4_step1' we no
+    # longer auto-stamp Phase 1 as approved. The case enters the standard
+    # `pending_phase1` review queue (supervisor → implant-incharge approve)
+    # and the chosen target is recorded on `existing_phase_to_start` so the
+    # approve endpoint can route it to the correct downstream phase after
+    # both approvals land. Phase 2 stays skipped because no surgery is
+    # performed by us — Phase 1 captures the intake exam and we go
+    # straight to Phase 3 / Phase 4 Step 1 once approved.
     phase_to_start = (payload.phase_to_start or "phase4_step1").lower()
-    if phase_to_start == "phase3":
-        new_status = "phase2_approved"   # lands in Phase 3 inbox
-        new_phase = 3
-        phase3_skipped_flag = False
-    elif phase_to_start == "draft":
+    if phase_to_start == "draft":
         new_status = "draft"
         new_phase = 0
-        phase3_skipped_flag = True
+        existing_phase_to_start: Optional[str] = None
+    elif phase_to_start == "phase3":
+        new_status = "pending_phase1"
+        new_phase = 1
+        existing_phase_to_start = "phase3"
     else:
-        new_status = "pending_stage2_prosthetic"
-        new_phase = 4
-        phase3_skipped_flag = True
+        new_status = "pending_phase1"
+        new_phase = 1
+        existing_phase_to_start = "phase4_step1"
 
-    # Mark phases 1-3 as skipped so the readback / progress UI knows not to
-    # render them and the Phase 4 Step 1 reads from existing_implants instead
-    # of implant_plans.
+    # Mark phase 2 as skipped (no surgery in our clinic — the implants were
+    # placed elsewhere). Phase 1 is NOT skipped any more — the student /
+    # supervisor / in-charge fills it just like a routine case.
     procedure_dict.update({
         "case_origin": "existing_implants",
-        "phase1_skipped": True,
+        "phase1_skipped": False,
         "phase2_skipped": True,
-        "phase3_skipped": phase3_skipped_flag,
+        # Phase 3 is skipped only if the user routed straight to Phase 4
+        # Step 1. Recorded once the approve endpoint stamps Phase 1.
+        "phase3_skipped": existing_phase_to_start == "phase4_step1",
+        "existing_phase_to_start": existing_phase_to_start,
         # Keep the conventional fields populated so legacy readers (Lab Slip
         # PDF, dashboard widgets) that key off implant_procedure_type don't
         # break. We pick the closest matching label given the count.
@@ -1685,15 +1697,15 @@ async def create_procedure_with_existing_implants(
         "implant_plans": [],   # the Lab Slip will fall back to existing_implants
         "teeth_present": [],
         "missing_teeth": [r.tooth for r in payload.existing_implants],
-        # iter-213 status: routed by phase_to_start.
         "status": new_status,
         "current_phase": new_phase,
-        "supervisor_phase1_approved": True,
-        "implant_incharge_phase1_approved": True,
+        # Phase 1 approval defaults — overridden per role below.
+        "supervisor_phase1_approved": False,
+        "implant_incharge_phase1_approved": False,
+        # Phase 2 approvals stay auto-stamped because Phase 2 is skipped.
         "supervisor_phase2_approved": True,
         "implant_incharge_phase2_approved": True,
-        "phase3_approved": phase3_skipped_flag,
-        "phase1_skipped_reason": "Existing implants — patient presented with implants placed elsewhere",
+        "phase3_approved": False,
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),
     })
@@ -1713,6 +1725,19 @@ async def create_procedure_with_existing_implants(
         })
     procedure_dict["created_by_id"] = current_user["_id"]
     procedure_dict["created_by_name"] = current_user["name"]
+
+    # iter-228: Mirror routine `POST /procedures` behaviour for Phase 1
+    # approval auto-stamping when the case is being routed through the
+    # standard review flow (`pending_phase1`).
+    #   • Supervisor creating: own Phase 1 approval auto-stamped — in-charge
+    #     still needs to approve.
+    #   • Implant in-charge creating: kept un-stamped here; the existing
+    #     `is_incharge_self_created` branch inside `approve_procedure` will
+    #     auto-stamp both roles when the in-charge approves their own case.
+    #   • Student creating: nothing auto-stamped — full review flow.
+    if new_status == "pending_phase1" and current_user["role"] == "supervisor":
+        procedure_dict["supervisor_phase1_approved"] = True
+        procedure_dict["supervisor_phase1_approved_at"] = datetime.utcnow()
 
     # case_id is computed on read (see /badge endpoint and the
     # `IMP<last 4 of _id>` fallback) — no eager generation needed here.
@@ -7632,15 +7657,48 @@ async def approve_procedure(
         if action.action == "approve":
             # Mark this approver as having approved
             update_fields = {"updated_at": datetime.utcnow()}
-            
+
+            # iter-228: Helper — when Phase 1 is fully approved on an
+            # existing-implant case the status moves directly to the
+            # downstream phase chosen at case-creation time. Routine cases
+            # land in `phase1_approved` (the student then submits Phase 2).
+            def _stamp_phase1_done(fields: dict) -> None:
+                target = procedure.get("existing_phase_to_start") if procedure.get("case_origin") == "existing_implants" else None
+                now_ts = datetime.utcnow()
+                fields["phase1_completed_at"] = now_ts
+                if target == "phase3":
+                    # Skip Phase 2 (no surgery performed by us) → land in the Phase 3 inbox.
+                    fields["status"] = "phase2_approved"
+                    fields["current_phase"] = 3
+                    fields["phase2_skipped"] = True
+                    fields["supervisor_phase2_approved"] = True
+                    fields["supervisor_phase2_approved_at"] = now_ts
+                    fields["implant_incharge_phase2_approved"] = True
+                    fields["implant_incharge_phase2_approved_at"] = now_ts
+                    fields["phase2_completed_at"] = now_ts
+                elif target == "phase4_step1":
+                    # Skip Phase 2 + Phase 3 → land in the Phase 4 Step 1 inbox.
+                    fields["status"] = "stage2_surgical_approved"
+                    fields["current_phase"] = 4
+                    fields["phase2_skipped"] = True
+                    fields["phase3_skipped"] = True
+                    fields["supervisor_phase2_approved"] = True
+                    fields["supervisor_phase2_approved_at"] = now_ts
+                    fields["implant_incharge_phase2_approved"] = True
+                    fields["implant_incharge_phase2_approved_at"] = now_ts
+                    fields["phase2_completed_at"] = now_ts
+                    fields["phase3_approved"] = True
+                    fields["phase3_completed_at"] = now_ts
+                else:
+                    fields["status"] = "phase1_approved"
+
             # In-Charge self-created case: auto-approve both roles at once
             if is_incharge_self_created:
                 update_fields["supervisor_phase1_approved"] = True
                 update_fields["supervisor_phase1_approved_at"] = datetime.utcnow()
                 update_fields["implant_incharge_phase1_approved"] = True
                 update_fields["implant_incharge_phase1_approved_at"] = datetime.utcnow()
-                update_fields["status"] = "phase1_approved"
-                update_fields["phase1_completed_at"] = datetime.utcnow()
+                _stamp_phase1_done(update_fields)
                 
                 await db.procedures.update_one(
                     {"_id": ObjectId(procedure_id)},
@@ -7672,16 +7730,29 @@ async def approve_procedure(
             implant_incharge_approved = procedure.get("implant_incharge_phase1_approved", False) or is_implant_incharge or (same_person_both_roles and is_supervisor)
             
             if supervisor_approved and implant_incharge_approved:
-                # Both approved - move to Phase 1 Approved
-                update_fields["status"] = "phase1_approved"
-                update_fields["phase1_completed_at"] = datetime.utcnow()
-                
+                # Both approved - move to Phase 1 Approved (or directly to the
+                # next phase for existing-implant cases — see helper above).
+                _stamp_phase1_done(update_fields)
+
+                # iter-228: Tailor the student notification to the actual
+                # downstream phase the case is moving to.
+                if procedure.get("case_origin") == "existing_implants":
+                    if procedure.get("existing_phase_to_start") == "phase3":
+                        notif_msg = "Phase 1 approved! You can now submit Phase 3 — Healing and Second Stage Surgery."
+                        push_body = "Phase 1 approved. You can now start Phase 3."
+                    else:
+                        notif_msg = "Phase 1 approved! You can now submit Phase 4 Step 1 — Prosthetic Phase."
+                        push_body = "Phase 1 approved. You can now start Phase 4 Step 1."
+                else:
+                    notif_msg = "Phase 1 (Diagnosis and Treatment Planning) approved! You can now submit Phase 2 (Implant Surgery) after completing the procedure."
+                    push_body = "Diagnosis and Treatment Planning approved. You can now submit Phase 2."
+
                 # Notify student that Phase 1 is approved (if student exists)
                 if procedure.get("student_id"):
                     await db.notifications.insert_one({
                         "user_id": procedure["student_id"],
                         "procedure_id": procedure_id,
-                        "message": "Phase 1 (Diagnosis and Treatment Planning) approved! You can now submit Phase 2 (Implant Surgery) after completing the procedure.",
+                        "message": notif_msg,
                         "type": "approved",
                         "read": False,
                         "created_at": datetime.utcnow()
@@ -7689,7 +7760,7 @@ async def approve_procedure(
                     await send_expo_push_notifications(
                         [procedure["student_id"]],
                         "Phase 1 Approved!",
-                        "Diagnosis and Treatment Planning approved. You can now submit Phase 2.",
+                        push_body,
                         {"procedure_id": procedure_id, "type": "approved"},
                     )
             else:
