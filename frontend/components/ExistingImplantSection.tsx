@@ -25,6 +25,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import api, { getAuthFileUrl } from '../utils/api';
 import FdiAnatomicalChart from './FdiAnatomicalChart';
+import { useAuth } from '../contexts/AuthContext';
 
 // Mirrors Phase 4 Step 1's prosthetic-plan grouping so the prosthesis-history
 // defaults stay in sync with `constants/checklist.ts` and
@@ -338,6 +339,19 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
   const [opgUrl, setOpgUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [uploadingIdx, setUploadingIdx] = useState<number | string | null>(null);
+
+  // iter-229: role-aware button copy. Implant in-charge keeps the original
+  // "Move to …" wording because their submission auto-approves Phase 1.
+  // Students and supervisors send the case for the standard dual-review,
+  // so the buttons explicitly say "Send for Approval and Move to …".
+  const { user } = useAuth();
+  const needsApproval = user?.role !== 'implant_incharge';
+  const labelPhase4 = needsApproval
+    ? 'Send for Approval and Move to Phase 4 Step 1'
+    : 'Move to Phase 4 Step 1';
+  const labelPhase3 = needsApproval
+    ? 'Send for Approval and Move to Phase 3'
+    : 'Move to Phase 3';
 
   // iter-222: hydrate from a saved draft on mount. Runs once per fresh draft id.
   const hydratedDraftId = useRef<string | null>(null);
@@ -1182,7 +1196,7 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
           >
             {submitting
               ? <ActivityIndicator color="#FFF" />
-              : <><Ionicons name="arrow-forward-circle" size={20} color="#FFF" /><Text style={styles.actionBtnText}>Move to Phase 4 Step 1</Text></>}
+              : <><Ionicons name="arrow-forward-circle" size={20} color="#FFF" /><Text style={styles.actionBtnText} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>{labelPhase4}</Text></>}
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.actionBtnSecondary, submitting && { opacity: 0.6 }]}
@@ -1191,7 +1205,7 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
             testID="ei-move-phase3"
           >
             <Ionicons name="arrow-forward-circle" size={20} color="#FFF" />
-            <Text style={styles.actionBtnText}>Move to Phase 3</Text>
+            <Text style={styles.actionBtnText} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>{labelPhase3}</Text>
           </TouchableOpacity>
           {!isDraftResume && (
             <TouchableOpacity
@@ -1201,7 +1215,7 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
               testID="ei-save-btn"
             >
               <Ionicons name="save-outline" size={20} color="#37474F" />
-              <Text style={styles.actionBtnDraftText}>Save as Draft</Text>
+              <Text style={styles.actionBtnDraftText}>Save Draft</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -1554,11 +1568,15 @@ const styles = StyleSheet.create({
 
   // Actions (stacked vertically — never clip on narrow screens)
   actionsContainer: { paddingHorizontal: 16, marginBottom: 24, gap: 10 },
-  actionBtnPrimary: { flexDirection: 'row', backgroundColor: '#1565C0', borderRadius: 14, padding: 16, alignItems: 'center', justifyContent: 'center', gap: 10, shadowColor: '#1565C0', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 5 },
-  actionBtnSecondary: { flexDirection: 'row', backgroundColor: '#43A047', borderRadius: 14, padding: 16, alignItems: 'center', justifyContent: 'center', gap: 10, shadowColor: '#43A047', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.20, shadowRadius: 8, elevation: 4 },
-  actionBtnDraft: { flexDirection: 'row', backgroundColor: '#FFF', borderRadius: 14, padding: 14, alignItems: 'center', justifyContent: 'center', gap: 10, borderWidth: 1.5, borderColor: '#CFD8DC' },
-  actionBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700', letterSpacing: 0.4 },
-  actionBtnDraftText: { color: '#37474F', fontSize: 15, fontWeight: '700', letterSpacing: 0.4 },
+  // iter-229: bumped min-height + textAlign:center so longer labels like
+  // "Send for Approval and Move to Phase 4 Step 1" wrap to 2 lines cleanly
+  // without breaking the button's vertical rhythm. text-shrink (flexShrink:1)
+  // keeps the label inside the icon → text → spacer flex layout.
+  actionBtnPrimary: { flexDirection: 'row', backgroundColor: '#1565C0', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16, minHeight: 60, alignItems: 'center', justifyContent: 'center', gap: 10, shadowColor: '#1565C0', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 5 },
+  actionBtnSecondary: { flexDirection: 'row', backgroundColor: '#43A047', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16, minHeight: 60, alignItems: 'center', justifyContent: 'center', gap: 10, shadowColor: '#43A047', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.20, shadowRadius: 8, elevation: 4 },
+  actionBtnDraft: { flexDirection: 'row', backgroundColor: '#FFF', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16, minHeight: 52, alignItems: 'center', justifyContent: 'center', gap: 10, borderWidth: 1.5, borderColor: '#CFD8DC' },
+  actionBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700', letterSpacing: 0.4, textAlign: 'center', flexShrink: 1 },
+  actionBtnDraftText: { color: '#37474F', fontSize: 15, fontWeight: '700', letterSpacing: 0.4, textAlign: 'center', flexShrink: 1 },
 
   // Modal
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 24 },
