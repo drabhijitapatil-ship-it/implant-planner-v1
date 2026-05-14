@@ -22,6 +22,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { showUploadPicker } from '../../utils/uploadPicker';
 import { downloadConsentTemplate, printConsentTemplate } from '../../utils/consentPdf';
 import BackButton from '../../components/BackButton';
+import RadiographThumb from '../../components/RadiographThumb';
 import {
   STATUS_COLORS, STATUS_LABELS, CHECKLIST_DATA,
   PROCEDURE_TYPES, LOADING_TYPES,
@@ -976,10 +977,32 @@ export default function ProcedureDetailScreen() {
                     </Text>
                   )}
                   {row.notes && <Text style={{ fontSize: 12, color: '#37474F', marginTop: 4, fontStyle: 'italic' }}>"{row.notes}"</Text>}
+                  {/* iter-228: per-implant IOPA thumbnail (resolved from
+                      `existing_implants[i].iopa_url` first, then positional
+                      `radiographs.iopas[i]`). Visible to the creator,
+                      supervisor of record, and implant in-charge. */}
+                  {(() => {
+                    const perImplant = row.iopa_url || (procedure.radiographs?.iopas || [])[idx] || '';
+                    if (!perImplant) return null;
+                    return <RadiographThumb filename={String(perImplant)} testID={`existing-impl-iopa-${idx}`} label={`IOPA · Tooth ${row.tooth || '—'}`} />;
+                  })()}
                 </View>
               ))
             ) : (
               <Text style={{ fontSize: 12, color: '#999', fontStyle: 'italic' }}>No implants captured.</Text>
+            )}
+
+            {/* iter-228: case-level OPG / CBCT for full-arch existing-implant
+                cases. Falls back to either the wizard-level `radiographs.opg_url`
+                or the legacy `cbct_file` field. */}
+            {(procedure.radiographs?.opg_url || procedure.cbct_file) && (
+              <View style={{ marginTop: 4 }} testID="existing-implants-opg-block">
+                <RadiographThumb
+                  filename={String(procedure.radiographs?.opg_url || procedure.cbct_file)}
+                  testID="existing-impl-opg-thumb"
+                  label="OPG / CBCT"
+                />
+              </View>
             )}
 
             {/* Prosthesis history & failure analysis */}
@@ -1546,7 +1569,9 @@ export default function ProcedureDetailScreen() {
             >
               <Ionicons name="medkit" size={24} color="#FFF" />
               <View style={styles.phase2ButtonTextContainer}>
-                <Text style={styles.phase2ButtonTitle}>PHASE 2 APPROVED</Text>
+                <Text style={styles.phase2ButtonTitle}>
+                  {procedure.case_origin === 'existing_implants' ? 'PHASE 1 APPROVED' : 'PHASE 2 APPROVED'}
+                </Text>
                 <Text style={styles.phase2ButtonSubtitle}>Tap to start Phase 3 - Healing and Second Stage Surgery</Text>
               </View>
               <Ionicons name="chevron-forward" size={24} color="#FFF" />
@@ -1564,8 +1589,14 @@ export default function ProcedureDetailScreen() {
             >
               <Ionicons name="construct" size={24} color="#FFF" />
               <View style={styles.phase2ButtonTextContainer}>
-                <Text style={styles.phase2ButtonTitle}>PHASE 3 APPROVED</Text>
-                <Text style={styles.phase2ButtonSubtitle}>Tap to start Phase 4 Step 1 - Final Prosthesis & Impressions</Text>
+                <Text style={styles.phase2ButtonTitle}>
+                  {procedure.case_origin === 'existing_implants' ? 'PHASE 1 APPROVED' : 'PHASE 3 APPROVED'}
+                </Text>
+                <Text style={styles.phase2ButtonSubtitle}>
+                  {procedure.case_origin === 'existing_implants'
+                    ? 'Tap to Start Phase 4 Step 1 - Prosthetic Phase'
+                    : 'Tap to start Phase 4 Step 1 - Final Prosthesis & Impressions'}
+                </Text>
               </View>
               <Ionicons name="chevron-forward" size={24} color="#FFF" />
             </TouchableOpacity>

@@ -1,5 +1,55 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 228 (Feb 2026) — Existing Implant: real Phase 1 approval flow + visibility + correct "Phase 1 Approved" CTA labels
+
+### Why
+User reported three gaps in the Existing Implant workflow:
+1. The "next phase" CTA card said "PHASE 2 APPROVED" / "PHASE 3 APPROVED" — wrong for an existing-implant case where Phase 2 (and sometimes Phase 3) is skipped.
+2. Phase 1 was being auto-stamped as approved at case creation — supervisor and implant in-charge never got a chance to review the intake data the way they do for routine cases.
+3. The IOPA / CBCT files captured at intake were stored but never *displayed* on the case-detail screen for the supervisor or in-charge to actually look at.
+
+### Changes
+
+**Backend — `with-existing-implants` endpoint (`server.py` ~L1660)**
+- Removed the iter-211/213 behaviour that pre-stamped Phase 1 (and Phase 2/3) as approved.
+- For `phase_to_start in ('phase3', 'phase4_step1')` the case now creates as `status = pending_phase1`, `current_phase = 1`, with Phase 1 approval flags `False`.
+- `phase1_skipped` is now `False` (it's the active phase). `phase2_skipped` stays `True` (no surgery in our clinic). `phase3_skipped` is set based on whether the user routed straight to Phase 4 Step 1.
+- The chosen target is persisted on `procedure.existing_phase_to_start` so the approve endpoint can route after Phase 1.
+- Supervisor creators get their own Phase 1 auto-stamped (mirrors `POST /procedures` for routine cases); implant in-charge creators continue to rely on the existing `is_incharge_self_created` auto-approve branch.
+
+**Backend — `approve_procedure` endpoint (`server.py` ~L7657)**
+- Added a `_stamp_phase1_done(fields)` helper that decides the next status after both Phase 1 approvals land:
+  - Existing implant → `phase3`: status → `phase2_approved`, current_phase → 3, Phase 2 auto-stamped as approved (skipped).
+  - Existing implant → `phase4_step1`: status → `stage2_surgical_approved`, current_phase → 4, Phase 2 + Phase 3 auto-stamped as approved (skipped).
+  - Routine case: status → `phase1_approved` (unchanged).
+- Used in both the in-charge self-approve branch and the both-approved-by-different-people branch.
+- The student notification + push body are now tailored: "Phase 1 approved! You can now submit Phase 3 — …" or "Phase 1 approved! You can now submit Phase 4 Step 1 — …".
+
+**Frontend — case detail (`procedures/[id].tsx`)**
+- The "PHASE 2 APPROVED" CTA card (Phase 3 entry) now reads "PHASE 1 APPROVED" when `case_origin === 'existing_implants'`.
+- The "PHASE 3 APPROVED" CTA card (Phase 4 Step 1 entry) now reads "PHASE 1 APPROVED" and subtitle becomes "Tap to Start Phase 4 Step 1 — Prosthetic Phase" for existing-implant cases.
+- Imported the new shared `RadiographThumb` component.
+- Inside the existing-implants readback block, each implant row now renders an inline IOPA thumbnail (resolved from `existing_implants[i].iopa_url` or positionally `radiographs.iopas[i]`).
+- A case-level OPG / CBCT thumbnail row renders for full-arch cases (falls back to legacy `cbct_file`).
+
+**New shared component — `components/RadiographThumb.tsx`**
+- Extracted from `ExistingImplantSection.tsx` for reuse from `[id].tsx` (and any future consumer). Accepts an optional `label` prop so the case-detail rows can prefix "IOPA · Tooth 36" / "OPG / CBCT".
+
+### Verification (curl E2E)
+- **Student creates → routes to Phase 4 Step 1**: status starts at `pending_phase1`, supervisor approves → still `pending_phase1`, in-charge approves → status flips to `stage2_surgical_approved`, current_phase = 4, Phase 2 + Phase 3 auto-stamped. ✅
+- **Student creates → routes to Phase 3**: same flow ends at `phase2_approved`, current_phase = 3, Phase 2 auto-stamped, Phase 3 NOT skipped. ✅
+- **Implant in-charge self-creates → self-approves**: skips the dual-review and lands directly in the chosen downstream phase. ✅
+- 403 path / inbox routing remain intact (`pending_phase1` cases already match the supervisor/in-charge dashboard query).
+- Web bundle compiles cleanly after the new file (required an `expo` supervisor restart since Metro is in CI mode).
+
+### Notes for next agent
+- `existing_phase_to_start` is a new field on `procedures`. Read-only for the frontend — the approve endpoint is the only writer beyond creation.
+- The legacy `phase1_skipped_reason` field was removed from the create payload because Phase 1 is no longer skipped — if any reader still depends on it (PDF, dashboard tile) we can re-introduce a `phase2_skipped_reason` and `phase3_skipped_reason` instead.
+- The PDF Case Report and Timeline already filter the trail correctly for `case_origin === 'existing_implants'` (iter-225) — no further change required there.
+
+---
+
+
 ## Iteration 227 (Feb 2026) — AI Radiograph Notes (editable) in the Phase 4 Step 2 compare view
 
 ### Why
