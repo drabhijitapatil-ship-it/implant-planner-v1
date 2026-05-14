@@ -1,5 +1,40 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 229 (Feb 2026) — Existing Implant: role-aware Phase 1 submission buttons + correct CTA labels for all four routes
+
+### Why
+User refinements after iter-228 testing:
+1. Phase 1 submit buttons should explicitly say "Save Draft", "Send for Approval and Move to Phase 3", "Send for Approval and Move to Phase 4 Step 1" — and not clip on narrow phones. Implant in-charge keeps the original wording (no "Send for Approval" prefix) because their submission auto-approves Phase 1.
+2/3. CTA "tap to start next phase" cards must say "Phase 1 Approved" (heading) and the exact subtitles "Tap to Start Phase 3 — Healing and Second Stage Surgery" / "Tap to start Phase 4 Step 1 Prosthetic Planning".
+4. When an existing-implant case takes the Phase 1 → Phase 3 → Phase 4 Step 1 route, the Phase 4 Step 1 entry card must revert to the routine workflow's "PHASE 3 APPROVED" / "Tap to start Phase 4 Step 1 - Final Prosthesis & Impressions" copy — the user should see the same affordance as in a regular case once Phase 3 has been performed.
+
+### Changes
+**Frontend — `components/ExistingImplantSection.tsx`**
+- Imported `useAuth` and derived `needsApproval = user?.role !== 'implant_incharge'`.
+- New role-aware labels:
+  - Student / supervisor: "Send for Approval and Move to Phase 4 Step 1", "Send for Approval and Move to Phase 3", "Save Draft".
+  - Implant in-charge: kept "Move to Phase 4 Step 1", "Move to Phase 3", "Save Draft" (their submission auto-approves Phase 1).
+- Text props `numberOfLines={2}`, `adjustsFontSizeToFit`, `flexShrink:1`, plus `textAlign:'center'` so long labels wrap to 2 lines inside the button without breaking the icon/text layout.
+- Bumped each button to `minHeight: 60` (52 for the draft button) so two-line labels never overflow vertically.
+
+**Frontend — `app/procedures/[id].tsx`**
+- Refined the Phase 4 Step 1 entry CTA card to differentiate the two existing-implant paths:
+  - `phase3_skipped === true` (direct Phase 1 → Phase 4 Step 1) → heading "PHASE 1 APPROVED" / subtitle "Tap to start Phase 4 Step 1 Prosthetic Planning".
+  - `phase3_skipped === false` (Phase 1 → Phase 3 → Phase 4 Step 1) → falls back to the routine "PHASE 3 APPROVED" / "Tap to start Phase 4 Step 1 - Final Prosthesis & Impressions" copy so the user sees an identical affordance to a regular workflow.
+- The Phase 3 entry card from iter-228 (heading "PHASE 1 APPROVED" / subtitle "Tap to start Phase 3 - Healing and Second Stage Surgery") is unchanged.
+
+### Verification
+- Web bundle compiles cleanly.
+- Backend regression spot-check: the routine `POST /procedures` endpoint is untouched (the iter-228 supervisor-auto-stamp clause sits inside `/procedures/with-existing-implants` only).
+- Logic correctness: `phase3_skipped` is set correctly by the create endpoint (`True` only for the `phase4_step1` route) and is never flipped back, so the CTA card always reflects the actual route taken.
+
+### Notes for next agent
+- The new "Send for Approval and Move to …" labels are intentionally verbose so the user clearly understands two side-effects (submit + advance). If the labels are still tight on iPhone SE / 5.4" screens, the `adjustsFontSizeToFit` prop will down-scale the font.
+- The differentiation for the Phase 4 Step 1 CTA card uses `phase3_skipped` as the single source of truth — do not rely on `current_phase` or `status` because both are shared with routine cases.
+
+---
+
+
 ## Iteration 228 (Feb 2026) — Existing Implant: real Phase 1 approval flow + visibility + correct "Phase 1 Approved" CTA labels
 
 ### Why

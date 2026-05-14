@@ -1589,14 +1589,24 @@ export default function ProcedureDetailScreen() {
             >
               <Ionicons name="construct" size={24} color="#FFF" />
               <View style={styles.phase2ButtonTextContainer}>
-                <Text style={styles.phase2ButtonTitle}>
-                  {procedure.case_origin === 'existing_implants' ? 'PHASE 1 APPROVED' : 'PHASE 3 APPROVED'}
-                </Text>
-                <Text style={styles.phase2ButtonSubtitle}>
-                  {procedure.case_origin === 'existing_implants'
-                    ? 'Tap to Start Phase 4 Step 1 - Prosthetic Phase'
-                    : 'Tap to start Phase 4 Step 1 - Final Prosthesis & Impressions'}
-                </Text>
+                {/* iter-229: an existing-implant case can reach this card
+                    two ways:
+                    (a) Phase 1 routed directly to Phase 4 Step 1 — `phase3_skipped`
+                        is true. CTA must say "PHASE 1 APPROVED".
+                    (b) Phase 1 → Phase 3 (approved) → Phase 4 Step 1 — `phase3_skipped`
+                        is false. CTA reverts to the routine "PHASE 3 APPROVED" copy
+                        so the user sees the same affordance as a regular workflow. */}
+                {procedure.case_origin === 'existing_implants' && procedure.phase3_skipped ? (
+                  <>
+                    <Text style={styles.phase2ButtonTitle}>PHASE 1 APPROVED</Text>
+                    <Text style={styles.phase2ButtonSubtitle}>Tap to start Phase 4 Step 1 Prosthetic Planning</Text>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.phase2ButtonTitle}>PHASE 3 APPROVED</Text>
+                    <Text style={styles.phase2ButtonSubtitle}>Tap to start Phase 4 Step 1 - Final Prosthesis & Impressions</Text>
+                  </>
+                )}
               </View>
               <Ionicons name="chevron-forward" size={24} color="#FFF" />
             </TouchableOpacity>
