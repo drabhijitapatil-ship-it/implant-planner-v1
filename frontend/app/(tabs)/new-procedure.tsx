@@ -463,7 +463,12 @@ export default function NewProcedureScreen() {
           } catch { /* ignore — draft may have been deleted */ }
         };
         loadDraft();
-      } else if (!createdProcedureId) {
+      } else {
+        // iter-229: No draftId in route → start a fresh case. (Previously this
+        // branch was gated on `!createdProcedureId` and `createdProcedureId`
+        // sat in the dep array which caused useFocusEffect to re-fire the
+        // moment loadDraft set the id — racing against `setExistingImplantDraft`
+        // and clearing it before ExistingImplantSection saw the data.)
         setExistingImplantDraft(null);
         setFormData({
           patient_name: '', age: '', sex: '', profession: '', mobile_number: '', patient_email: '',
@@ -485,10 +490,12 @@ export default function NewProcedureScreen() {
         setChecklistItems({});
         setCbctFiles([null, null]);
         setExtraCbctCount(0);
+        setCreatedProcedureId(null);
+        setIsDraftResume(false);
         setStep('details');
         AsyncStorage.removeItem(FORM_STORAGE_KEY).catch(() => {});
       }
-    }, [params.draftId, createdProcedureId, user?.name])
+    }, [params.draftId, user?.name])
   );
 
   // iter-223: defensive — whenever an existing-implant draft is hydrated,
