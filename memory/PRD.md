@@ -1,5 +1,35 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 234 (Feb 2026) — Existing Implant: Clinical Examination now renders after Implant Selection & Prosthetic History
+
+### Why
+After iter-231 lifted Clinical Examination into the parent and gated it on `effectiveProcType`, the section still lived **inside** the `{formData.implant_procedure_type !== 'Existing Implant' && (<>` fragment, so Existing Implant cases never rendered it. User reported: "Clinical Examination section described before is not showing after selecting the 'Type of Implant Procedure done'. It should be available after Implant Selection and Present Prosthetic Component section based on Type of Implant Procedure Done is selected."
+
+### Changes in `app/(tabs)/new-procedure.tsx`
+The page used to have **one** big `<>` fragment gated on non-Existing-Implant that wrapped everything from Prosthetic Treatment Plan all the way down to the Continue button. Now we have **three** smaller fragments so the Clinical Examination + Medical Assessment + lifted submit buttons can render between them for Existing Implant cases:
+
+1. **Fragment A** (lines 1284 → 1393): routine-only blocks that come **before** Clinical Examination — Prosthetic Treatment Plan, FDI Chart (missing teeth selector).
+2. **(Always-rendered) Clinical Examination** — gate changed from `formData.implant_procedure_type` to `effectiveProcType`, so it lights up for Existing Implant the moment the user picks an inner "Type of Implant Procedure Done" chip. The parent's iter-231 `useEffect` syncs lifted implant tooth-positions into `formData.missing_teeth`, so the cluster utilities (`findMissingRuns`, edentulous-site measurements, full-arch / overdenture-as-full-arch layouts) all work identically.
+3. **Fragment B** (lines 1812 → 2031): routine-only blocks that come **after** Clinical Examination — Schedule, Loading Type, CBCT, Phase 1 Checklist (which has its OWN Medical Assessment sub-section for routine flow).
+4. **(Existing-Implant-only) Standalone Medical Assessment** — same `MEDICAL_RISK_FACTORS` UI, score badge, warnings panel.
+5. **(Existing-Implant-only) Lifted submit buttons** — `Submit for Approval and Move to Phase 4 Step 1` / `Phase 3` / `Save Draft`.
+6. **Fragment C** (lines 2119 → 2148): routine-only Bone Graft + Continue-to-Implant-Selection button.
+
+Final render order for Existing Implant:
+Patient → Chief Complaint → Faculty → Procedure Info → Payment Details → **ExistingImplantSection** (Original Procedure Type + FDI chart + per-implant cards + Prosthetic History + Failure Analysis) → **Clinical Examination** (gated on inner procedure type, driven by `effectiveProcType` / lifted tooth-positions) → **Medical Assessment** → **Submit / Draft buttons**.
+
+### Verification (screenshot tool, mobile viewport, real preview URL)
+- Existing Implant + inner chip "Single Conventional Implant": sections visible in order — Patient, Chief Complaint, Faculty, Procedure, Payment, Type of Implant Procedure Done, Mark Existing Implant Position(s), Prosthetic History, **Clinical Examination**, **Medical Assessment**. Bottom action buttons rendered: `Submit for Approval and Move to Phase 4 Step 1`, `Submit for Approval and Move to Phase 3`, `Save Draft`.
+- Console errors: **0** (no ReferenceError, no Max-update-depth, no JSX parsing issues).
+- Routine flow (Single Conventional Implant, non-Existing) still renders Schedule / CBCT / Phase 1 Checklist / Continue button unchanged.
+
+### Notes for next agent
+- The 3-fragment structure looks slightly busy but is much safer than re-nesting everything in a single mega-conditional. Future additions should pick the correct fragment based on whether the new block is "routine-only" (Fragment A / B / C), "common" (sit outside fragments), or "existing-implant-only" (sit outside fragments with their own `isExistingImplantCase` gate).
+- P0 server.py decomposition still outstanding.
+
+---
+
+
 ## Iteration 233 (Feb 2026) — P0 hotfix: New Case blank screen + Existing Implant chip lockout
 
 ### What broke
