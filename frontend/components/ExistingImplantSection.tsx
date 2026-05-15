@@ -250,6 +250,15 @@ type Props = {
    * `id` is also sent back to the backend on submit so the existing record
    * is updated in place rather than a new one being created. */
   draft?: any | null;
+  /** iter-231: lift the picked "Original procedure type" + tooth-positions
+   * up to the parent so the parent's Clinical Examination + Medical
+   * Assessment blocks can fire with the same pattern as the routine
+   * (non-Existing-Implant) workflow. */
+  onOriginalProcedureChange?: (op: string) => void;
+  onImplantTeethChange?: (teeth: string[]) => void;
+  /** Extra fields merged into the submit payload (clinical exam / medical
+   * assessment data captured by the parent). */
+  extraSubmitFields?: Record<string, any>;
 };
 
 // ── Library system shape (from /api/implant-library/systems) ──
@@ -260,7 +269,7 @@ type LibSystem = {
   indication?: string;
 };
 
-export default function ExistingImplantSection({ patient, validatePatient, draft }: Props) {
+export default function ExistingImplantSection({ patient, validatePatient, draft, onOriginalProcedureChange, onImplantTeethChange, extraSubmitFields }: Props) {
   const isDraftResume = !!draft;
   // Catalog cache for connection / platform auto-fill.
   const [catalog, setCatalog] = useState<any[]>([]);
@@ -347,11 +356,21 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
   const { user } = useAuth();
   const needsApproval = user?.role !== 'implant_incharge';
   const labelPhase4 = needsApproval
-    ? 'Send for Approval and Move to Phase 4 Step 1'
+    ? 'Submit for Approval and Move to Phase 4 Step 1'
     : 'Move to Phase 4 Step 1';
   const labelPhase3 = needsApproval
-    ? 'Send for Approval and Move to Phase 3'
+    ? 'Submit for Approval and Move to Phase 3'
     : 'Move to Phase 3';
+
+  // iter-231: notify parent so it can fire Clinical Examination + Medical
+  // Assessment blocks gated on the original (effective) procedure type and
+  // the implant tooth-positions.
+  useEffect(() => {
+    onOriginalProcedureChange?.(originalProcedure);
+  }, [originalProcedure, onOriginalProcedureChange]);
+  useEffect(() => {
+    onImplantTeethChange?.(implants.map(r => r.tooth).filter(Boolean) as string[]);
+  }, [implants, onImplantTeethChange]);
 
   // iter-222: hydrate from a saved draft on mount. Runs once per fresh draft id.
   const hydratedDraftId = useRef<string | null>(null);
@@ -749,6 +768,9 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
         },
         remark: patient.remark || '',
         phase_to_start: phaseToStart,
+        // iter-231: parent merges Clinical Examination + Medical Assessment
+        // captured at the form level.
+        ...(extraSubmitFields || {}),
       };
       const res = await api.post('/procedures/with-existing-implants', payload);
       Alert.alert(

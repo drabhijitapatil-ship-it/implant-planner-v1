@@ -1,5 +1,37 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 231 (Feb 2026) — Existing Implant gains full Clinical Examination + Medical Assessment + button rename
+
+### Why
+User asked for the Existing Implant workflow to fully mirror the routine (non-Existing-Implant) Phase 1 form:
+- Add a **Clinical Examination** block + all its sub-sections (cluster/non-cluster, full-arch vs non-full-arch, overdenture-as-full-arch, edentulous-site measurements, occlusion / parafunction / TMJ / etc.) based on the original procedure type the user picks for the existing implants.
+- Add a **Medical Assessment** checklist (the same risk-factor list with Yes/No buttons, total score, and warnings panel).
+- Rename the submit buttons "Send for Approval and Move to …" → "Submit for Approval and Move to …" for student/supervisor (in-charge keeps "Move to …" because their submission auto-approves Phase 1).
+
+### Changes
+**`components/ExistingImplantSection.tsx`**
+- Three new optional props: `onOriginalProcedureChange`, `onImplantTeethChange`, `extraSubmitFields`. The first two are wired to `useEffect`s so the parent always knows the current "original procedure type" + tooth-positions. The third is merged into the submit payload so the Clinical Exam + Medical Assessment values captured at the form level reach the backend.
+- Submit-button labels renamed for non-in-charge users: "Submit for Approval and Move to Phase 4 Step 1" / "Submit for Approval and Move to Phase 3". In-charge labels and "Save Draft" untouched.
+
+**`app/(tabs)/new-procedure.tsx`**
+- New state: `existingOrigProcedure`, `existingImplantTeeth` — fed by the callbacks above.
+- New derived `effectiveProcType = isExistingImplantCase ? existingOrigProcedure : formData.implant_procedure_type` drives `isFullArch`, `isNonFullArch`, `isClinicalExamGroup`, `isOverdentureNonFullArch` — so the **existing** Clinical Examination JSX (cluster utilities, sites measurements, occlusion / parafunction / TMJ / smile-line / gingival-biotype panels, full-arch layout) fires unchanged for Existing Implant cases.
+- `formData.missing_teeth` is now synced from `existingImplantTeeth` while in Existing Implant mode so `findMissingRuns` + `clusterLeader` give the same results as routine cases.
+- Hidden for Existing Implant: parent's FDI chart (the section ships its own), CBCT Report upload, full Phase 1 Checklist, and the "Continue to Implant Selection" button (Existing Implant has its own submit buttons inside the section).
+- Added a standalone Medical Assessment block (same `MEDICAL_RISK_FACTORS`, same Yes/No UI, same risk badge + warnings) that renders only for Existing Implant cases.
+- Existing Implant submit payload now includes the lifted clinical + medical fields via `extraSubmitFields`: `medical_assessment`, `medical_risk_level`, `edentulous_sites`, `occlusocervical_height`, `mesiodistal_space`, `arch_condition`, `ridge_contour`, `soft_tissue_thickness`, `keratinized_mucosa`, `periodontal_status`, `occlusal_scheme`, `parafunction_habit`, `vertical_dimension`, `opposing_dentition`, `vertical_dimension_mm`, `available_interarch_space`, `opposing_arch`, `tmj`, `smile_line`, `gingival_biotype`.
+
+### Verification
+- Web bundle compiles cleanly after a full restart (Metro is in CI mode — touch a watched file then `supervisorctl restart expo` if changes don't pick up).
+- The new screens use the **same** components/widgets as routine — no UI duplication, no copy-paste of the Clinical Examination JSX.
+
+### Notes for next agent
+- Pre-Surgical Checklist (consent done, OPG done, oral prophylaxis, implant kit ready, etc.) is **intentionally skipped** for Existing Implant — only the Medical Assessment item from that group remains. User confirmed (default option **a** from my clarification ask) that surgical-checklist items don't apply to an existing-implant intake.
+- Implementation order on screen for Existing Implant is now: Patient → Chief Complaint → Faculty → Procedure Type → Payment → ExistingImplantSection (Original procedure type → FDI chart → per-implant cards → prosthetic history → failure analysis → submit buttons) → Clinical Examination → Medical Assessment. The submit buttons remain inside the section above the new exam/assessment blocks. If the user wants the buttons at the bottom of *the entire form*, lift them to the parent next.
+
+---
+
+
 ## Iteration 230 (Feb 2026) — Existing Implant: draft-resume hydration race + connection `[object Object]` bug
 
 ### Why
