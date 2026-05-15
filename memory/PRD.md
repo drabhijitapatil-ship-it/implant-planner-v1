@@ -1,5 +1,33 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 232 (Feb 2026) — Existing Implant: lifted submit buttons to render below Medical Assessment
+
+### Why
+Continuing the UX "Potential Improvement" from iter-231: the Existing Implant submit buttons used to live inside `ExistingImplantSection`, which placed them visually *above* the newly-added Clinical Examination + Medical Assessment blocks rendered by the parent (`new-procedure.tsx`). That forced the user to scroll back up after completing Medical Assessment to find the submit row. Lift the buttons to the parent so they appear at the very bottom of the entire form.
+
+### Changes
+**`components/ExistingImplantSection.tsx`**
+- New optional prop `hideActionButtons` — when true the internal submit row is hidden.
+- New optional prop `onReady(api)` — exposes a small API object to the parent containing `{ canSubmit, submitting, submit(target: 'phase3'|'phase4_step1'|'draft'), labels, isDraftResume }`. The parent uses this to render its own buttons at the bottom of the entire form.
+
+**`app/(tabs)/new-procedure.tsx`**
+- New state `existingSubmitApi` populated via `onReady={setExistingSubmitApi}` callback (line 1276).
+- Section now passed `hideActionButtons` (line 1275) so the internal buttons no longer render.
+- New parent-level button row (line 2062+) gated on `isExistingImplantCase && existingSubmitApi?.canSubmit` — renders the same three buttons (Submit for Approval and Move to Phase 4 Step 1 / Phase 3, plus optional Save Draft) using the labels and submit callbacks supplied by the section.
+
+### Verification
+- Code review confirms `extraSubmitFields`, `onReady`, and `hideActionButtons` are wired correctly between parent and section.
+- Smoke screenshot of preview URL shows the Implanr login page rendering — Metro bundle compiles cleanly post-restart.
+- Manual flow validation (Student creates Existing Implant case → fills Original procedure type → implants → Clinical Examination → Medical Assessment → submit buttons appear at the bottom) recommended by user before mobile build.
+
+### Notes for next agent
+- **P0 Tech Debt**: `/app/backend/server.py` is now >13,800 lines and is causing `search_replace` failures and parser timeouts. Decompose into FastAPI routers under `/app/backend/routes/` (auth, procedures, admin, audit, ai) BEFORE adding multi-tenant logic.
+- Pending integrations: Microsoft OAuth (awaiting user Client ID/Secret); swap EMERGENT_LLM_KEY for production OpenAI key when user provides it.
+- Future workstream: Multi-tenant architecture (Phase A: tenants/platform_users/tenant_id, Phase B: public chief-dentist signup, Phase C: invites/SMTP, Phase D: clinic-specific Phase 1 + front-desk roles).
+
+---
+
+
 ## Iteration 231 (Feb 2026) — Existing Implant gains full Clinical Examination + Medical Assessment + button rename
 
 ### Why
