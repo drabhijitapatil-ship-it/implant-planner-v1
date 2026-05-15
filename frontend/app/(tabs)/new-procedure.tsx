@@ -268,6 +268,17 @@ export default function NewProcedureScreen() {
   // procedure type and the lifted implant tooth-positions.
   const [existingOrigProcedure, setExistingOrigProcedure] = useState<string>('');
   const [existingImplantTeeth, setExistingImplantTeeth] = useState<string[]>([]);
+  // iter-232: handle exposed by ExistingImplantSection so the parent can
+  // render the action buttons at the very bottom of the form (after
+  // Clinical Examination + Medical Assessment).
+  const [existingSubmitApi, setExistingSubmitApi] = useState<null | {
+    submit: (phase: 'phase3' | 'phase4_step1' | 'draft') => Promise<void>;
+    submitting: boolean;
+    isDraftResume: boolean;
+    canSubmit: boolean;
+    needsApproval: boolean;
+    labels: { phase3: string; phase4: string };
+  }>(null);
 
   // ── Form State ──
   const [formData, setFormData] = useState({
@@ -1261,6 +1272,8 @@ export default function NewProcedureScreen() {
             smile_line: formData.smile_line,
             gingival_biotype: formData.gingival_biotype,
           }}
+          hideActionButtons
+          onReady={setExistingSubmitApi}
         />
       )}
 
@@ -2039,6 +2052,45 @@ export default function NewProcedureScreen() {
               );
             })()}
           </View>
+        </View>
+      )}
+
+      {/* iter-232: Lifted submit buttons for Existing Implant — rendered
+          at the bottom of the form so the user fills everything top-to-
+          bottom and submits as the natural last action. Buttons stay
+          inside ExistingImplantSection for non-existing flows. */}
+      {isExistingImplantCase && existingSubmitApi?.canSubmit && (
+        <View style={[styles.section, { gap: 10 }]} testID="existing-impl-action-buttons">
+          <TouchableOpacity
+            style={[styles.continueBtn, { backgroundColor: '#1565C0' }, existingSubmitApi.submitting && { opacity: 0.6 }]}
+            onPress={() => existingSubmitApi.submit('phase4_step1')}
+            disabled={existingSubmitApi.submitting}
+            data-testid="ei-move-phase4-bottom"
+          >
+            {existingSubmitApi.submitting
+              ? <ActivityIndicator color="#FFF" />
+              : <><Ionicons name="arrow-forward-circle" size={20} color="#FFF" /><Text style={styles.continueBtnText} numberOfLines={2}>{existingSubmitApi.labels.phase4}</Text></>}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.continueBtn, { backgroundColor: '#43A047' }, existingSubmitApi.submitting && { opacity: 0.6 }]}
+            onPress={() => existingSubmitApi.submit('phase3')}
+            disabled={existingSubmitApi.submitting}
+            data-testid="ei-move-phase3-bottom"
+          >
+            <Ionicons name="arrow-forward-circle" size={20} color="#FFF" />
+            <Text style={styles.continueBtnText} numberOfLines={2}>{existingSubmitApi.labels.phase3}</Text>
+          </TouchableOpacity>
+          {!existingSubmitApi.isDraftResume && (
+            <TouchableOpacity
+              style={[styles.continueBtn, { backgroundColor: '#FFF', borderWidth: 1.5, borderColor: '#CFD8DC' }, existingSubmitApi.submitting && { opacity: 0.6 }]}
+              onPress={() => existingSubmitApi.submit('draft')}
+              disabled={existingSubmitApi.submitting}
+              data-testid="ei-save-draft-bottom"
+            >
+              <Ionicons name="save-outline" size={20} color="#37474F" />
+              <Text style={[styles.continueBtnText, { color: '#37474F' }]}>Save Draft</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 

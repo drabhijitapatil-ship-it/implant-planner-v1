@@ -259,6 +259,13 @@ type Props = {
   /** Extra fields merged into the submit payload (clinical exam / medical
    * assessment data captured by the parent). */
   extraSubmitFields?: Record<string, any>;
+  /** iter-232: when true, the section hides its own action buttons — the
+   * parent renders them below Medical Assessment instead so the user fills
+   * the whole form top-to-bottom and submits at the natural last step. */
+  hideActionButtons?: boolean;
+  /** Receives a callable `(phase) => Promise<void>` once the section mounts,
+   * so the parent's lifted action buttons can trigger submission. */
+  onReady?: (api: { submit: (phase: 'phase3' | 'phase4_step1' | 'draft') => Promise<void>; submitting: boolean; isDraftResume: boolean; canSubmit: boolean; labels: { phase3: string; phase4: string }; needsApproval: boolean }) => void;
 };
 
 // ── Library system shape (from /api/implant-library/systems) ──
@@ -269,7 +276,7 @@ type LibSystem = {
   indication?: string;
 };
 
-export default function ExistingImplantSection({ patient, validatePatient, draft, onOriginalProcedureChange, onImplantTeethChange, extraSubmitFields }: Props) {
+export default function ExistingImplantSection({ patient, validatePatient, draft, onOriginalProcedureChange, onImplantTeethChange, extraSubmitFields, hideActionButtons, onReady }: Props) {
   const isDraftResume = !!draft;
   // Catalog cache for connection / platform auto-fill.
   const [catalog, setCatalog] = useState<any[]>([]);
@@ -371,6 +378,11 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
   useEffect(() => {
     onImplantTeethChange?.(implants.map(r => r.tooth).filter(Boolean) as string[]);
   }, [implants, onImplantTeethChange]);
+
+  // iter-232: expose the submit API + UI state to the parent so it can
+  // render the action buttons at the very bottom of the form (after the
+  // Clinical Examination + Medical Assessment sections) and call the same
+  // submission flow.
 
   // iter-222: hydrate from a saved draft on mount. Runs once per fresh draft id.
   const hydratedDraftId = useRef<string | null>(null);
@@ -795,6 +807,20 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
       <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
     </TouchableOpacity>
   );
+
+  // iter-232: push the submit handle to the parent (only when it asked
+  // for hidden buttons — avoids unnecessary updates on routine renders).
+  useEffect(() => {
+    if (!hideActionButtons || !onReady) return;
+    onReady({
+      submit,
+      submitting,
+      isDraftResume,
+      canSubmit: !!originalProcedure,
+      needsApproval,
+      labels: { phase3: labelPhase3, phase4: labelPhase4 },
+    });
+  }, [hideActionButtons, onReady, submit, submitting, isDraftResume, originalProcedure, needsApproval, labelPhase3, labelPhase4]);
 
   return (
     <View testID="existing-implant-section" /* @ts-ignore */ data-testid="existing-implant-section">
@@ -1252,7 +1278,11 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
       )}
 
       {/* ─── Action buttons (stacked, never clip) ─── */}
-      {originalProcedure && (
+      {/* iter-232: when `hideActionButtons` is true, the parent screen
+          renders the buttons at the very bottom of the page (after
+          Clinical Examination + Medical Assessment) so the user submits
+          as a natural last step. */}
+      {originalProcedure && !hideActionButtons && (
         <View style={styles.actionsContainer}>
           <TouchableOpacity
             style={[styles.actionBtnPrimary, submitting && { opacity: 0.6 }]}
