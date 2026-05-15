@@ -1,5 +1,40 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 233 (Feb 2026) — P0 hotfix: New Case blank screen + Existing Implant chip lockout
+
+### What broke
+User reported two regressions:
+1. Selecting **any** value in the "Type of Implant Procedure" dropdown turned the screen blank.
+2. With **Existing Implant** selected, the inner "Type of Implant Procedure Done" chips could not be picked.
+
+### Root cause
+The iter-231 refactor of `new-procedure.tsx` introduced an `effectiveProcType` derivation (so Existing Implant cases reuse the same Clinical Examination gates as routine cases) and **accidentally deleted the `isOverdentureNonFullArch` constant declaration** while replacing the surrounding code block with a new `useEffect`. The variable was still referenced 4 times (lines 1348, 1397, 1608, 1613) so as soon as `formData.implant_procedure_type` became truthy, JSX evaluation hit `ReferenceError: isOverdentureNonFullArch is not defined` and React rendered a blank screen for both routine and Existing Implant flows.
+
+A second, latent infinite-render loop only became reachable once the ReferenceError was fixed:
+- The iter-232 `onReady` `useEffect` in `ExistingImplantSection` listed the locally-declared `submit` function in its dep array. `submit` is a fresh function reference on every render, so the effect re-fired every commit, the parent's `setExistingSubmitApi({...})` produced a new object reference each time, and the parent re-rendered → child re-rendered → loop.
+- Similarly, the `onImplantTeethChange` effect always passed a freshly-created `implants.map(…).filter(…)` array, which mutated parent state even when contents were identical.
+
+### Fix
+**`app/(tabs)/new-procedure.tsx`** (1 line restored):
+```ts
+const isOverdentureNonFullArch = isNonFullArch && formData.prosthetic_plan === 'Overdenture with Attachment';
+```
+
+**`components/ExistingImplantSection.tsx`** (2 stability guards):
+1. `onImplantTeethChange` effect now compares the sorted joined tooth-string against `lastTeethRef.current` and bails out when the content is unchanged.
+2. `onReady` effect now stores the latest `submit` closure in `submitRef` and uses a primitive-only dependency array (`submitting`, `isDraftResume`, `originalProcedure`, `needsApproval`, `labelPhase3`, `labelPhase4`). It also content-keys the payload via `onReadyKeyRef` so duplicate pushes are skipped.
+
+### Verification (screenshot tool, headless web preview)
+- Routine flow: pick "Single Conventional Implant" → form renders fully; **0 console errors**.
+- Existing Implant flow: pick "Existing Implant" → section renders; pick inner "Single Conventional Implant" chip → chip becomes blue/selected; "Mark Existing Implant Position(s)" appears; **0 console errors over 8s idle window** (loop eliminated).
+
+### Notes for next agent
+- The **P0 server.py decomposition** is still outstanding — that file is now causing repeated `search_replace` failures.
+- Microsoft OAuth + production OpenAI key swap remain blocked on user-provided credentials.
+
+---
+
+
 ## Iteration 232 (Feb 2026) — Existing Implant: lifted submit buttons to render below Medical Assessment
 
 ### Why

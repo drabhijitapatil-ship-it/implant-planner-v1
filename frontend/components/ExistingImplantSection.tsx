@@ -375,8 +375,19 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
   useEffect(() => {
     onOriginalProcedureChange?.(originalProcedure);
   }, [originalProcedure, onOriginalProcedureChange]);
+  // iter-232 fix: guard against the new-array-every-render trap. `implants.map`
+  // returns a fresh array reference on every commit; without this comparison
+  // the parent's `setExistingImplantTeeth` would always Object.is-fail, then
+  // the parent's `existingImplantTeeth`-watching effect would re-fire, then
+  // the parent would re-render and pass new prop references back — causing
+  // "Maximum update depth exceeded".
+  const lastTeethRef = useRef<string>('');
   useEffect(() => {
-    onImplantTeethChange?.(implants.map(r => r.tooth).filter(Boolean) as string[]);
+    const next = implants.map(r => r.tooth).filter(Boolean) as string[];
+    const key = next.slice().sort().join('|');
+    if (key === lastTeethRef.current) return;
+    lastTeethRef.current = key;
+    onImplantTeethChange?.(next);
   }, [implants, onImplantTeethChange]);
 
   // iter-232: expose the submit API + UI state to the parent so it can
@@ -810,17 +821,28 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
 
   // iter-232: push the submit handle to the parent (only when it asked
   // for hidden buttons — avoids unnecessary updates on routine renders).
+  // `submit` is a fresh function reference every render, so without a
+  // content-guard the parent's `setExistingSubmitApi(newObj)` would always
+  // dirty state and we'd loop. We keep `submit` itself out of the dep array
+  // and stash the latest version in a ref so the parent always calls the
+  // newest closure.
+  const submitRef = useRef(submit);
+  useEffect(() => { submitRef.current = submit; });
+  const onReadyKeyRef = useRef<string>('');
   useEffect(() => {
     if (!hideActionButtons || !onReady) return;
+    const key = [submitting, isDraftResume, !!originalProcedure, needsApproval, labelPhase3, labelPhase4].join('|');
+    if (key === onReadyKeyRef.current) return;
+    onReadyKeyRef.current = key;
     onReady({
-      submit,
+      submit: (phase) => submitRef.current(phase),
       submitting,
       isDraftResume,
       canSubmit: !!originalProcedure,
       needsApproval,
       labels: { phase3: labelPhase3, phase4: labelPhase4 },
     });
-  }, [hideActionButtons, onReady, submit, submitting, isDraftResume, originalProcedure, needsApproval, labelPhase3, labelPhase4]);
+  }, [hideActionButtons, onReady, submitting, isDraftResume, originalProcedure, needsApproval, labelPhase3, labelPhase4]);
 
   return (
     <View testID="existing-implant-section" /* @ts-ignore */ data-testid="existing-implant-section">
