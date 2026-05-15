@@ -372,6 +372,10 @@ export default function NewProcedureScreen() {
   // prosthetic plan, the case is biomechanically full-arch (the attachment
   // splints the entire arch). We therefore SKIP the FDI missing-teeth chart and
   // render the Clinical Examination as a full-arch layout.
+  // iter-232 fix: re-added (the iter-231 refactor accidentally removed this
+  // declaration while keeping 4 usages → ReferenceError → blank screen).
+  const isOverdentureNonFullArch = isNonFullArch && formData.prosthetic_plan === 'Overdenture with Attachment';
+
   // iter-231: sync the lifted existing-implant tooth positions into the
   // form's `missing_teeth` so the Clinical Examination's cluster utilities
   // (findMissingRuns, clusterLeader, edentulous_site_measurements) work
