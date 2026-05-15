@@ -1390,8 +1390,16 @@ export default function NewProcedureScreen() {
         );
       })()}
 
+      </>)}
+
       {/* ─── Clinical Examination ─── */}
-      {formData.implant_procedure_type && (
+      {/* iter-233: rendered for BOTH routine cases AND Existing Implant cases.
+          For Existing Implant the gate is `effectiveProcType` (= the inner
+          "Type of Implant Procedure Done") so the section only appears once
+          the user picks an original procedure type inside the section. The
+          parent's iter-231 useEffect syncs the lifted implant tooth-positions
+          into `formData.missing_teeth` so cluster utilities work identically. */}
+      {effectiveProcType && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Clinical Examination</Text>
 
@@ -1796,6 +1804,13 @@ export default function NewProcedureScreen() {
         </View>
       )}
 
+      {/* iter-233: resume the non-Existing-Implant gated section. Everything
+          below (Schedule, Loading Type, CBCT upload, Phase 1 Checklist, Bone
+          Graft, Continue button) belongs only to the routine flow; Existing
+          Implant cases skip straight to the Medical Assessment + lifted
+          submit buttons rendered further down. */}
+      {!isExistingImplantCase && (<>
+
       {/* ─── Schedule ─── */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Schedule</Text>
@@ -2013,6 +2028,8 @@ export default function NewProcedureScreen() {
       </View>
       )}
 
+      </>)}
+
       {/* iter-231: Standalone Medical Assessment block for Existing Implant
           cases — mirrors the routine flow's sub-section but without the
           surrounding pre-surgical checklist items. */}
@@ -2097,6 +2114,9 @@ export default function NewProcedureScreen() {
           )}
         </View>
       )}
+
+      {/* iter-233: resume the routine-only block for Bone Graft + Continue. */}
+      {!isExistingImplantCase && (<>
 
       {/* ─── Bone Graft (if applicable) ─── */}
       {formData.implant_procedure_type.includes('Bone') && (
