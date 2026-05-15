@@ -263,6 +263,11 @@ export default function NewProcedureScreen() {
   // iter-222: full procedure record when resuming an existing-implant draft.
   // ExistingImplantSection hydrates its internal state from this snapshot.
   const [existingImplantDraft, setExistingImplantDraft] = useState<any | null>(null);
+  // iter-231: surfaced from ExistingImplantSection so the parent's Clinical
+  // Examination + Medical Assessment gates can fire using the original
+  // procedure type and the lifted implant tooth-positions.
+  const [existingOrigProcedure, setExistingOrigProcedure] = useState<string>('');
+  const [existingImplantTeeth, setExistingImplantTeeth] = useState<string[]>([]);
 
   // ── Form State ──
   const [formData, setFormData] = useState({
@@ -342,15 +347,35 @@ export default function NewProcedureScreen() {
   const [showSupervisorPicker, setShowSupervisorPicker] = useState(false);
   const [showInchargePicker, setShowInchargePicker] = useState(false);
 
-  const isFullArch = FULL_ARCH_GROUP.has(formData.implant_procedure_type);
-  const isNonFullArch = NON_FULL_ARCH_TYPES.has(formData.implant_procedure_type);
-  const isClinicalExamGroup = CLINICAL_EXAM_GROUP.has(formData.implant_procedure_type);
+  // iter-231: for Existing Implant cases use the *original* procedure type
+  // captured inside ExistingImplantSection so the Clinical Examination + Medical
+  // Assessment blocks fire with the same gates (cluster, non-cluster, full-arch,
+  // overdenture-as-full-arch) as routine cases.
+  const isExistingImplantCase = formData.implant_procedure_type === 'Existing Implant';
+  const effectiveProcType = isExistingImplantCase ? existingOrigProcedure : formData.implant_procedure_type;
+  const isFullArch = FULL_ARCH_GROUP.has(effectiveProcType);
+  const isNonFullArch = NON_FULL_ARCH_TYPES.has(effectiveProcType);
+  const isClinicalExamGroup = CLINICAL_EXAM_GROUP.has(effectiveProcType);
   const prostheticOptions = getProstheticOptions(formData.implant_procedure_type, formData.loading_type);
   // When a non-full-arch procedure is paired with an Overdenture-with-Attachment
   // prosthetic plan, the case is biomechanically full-arch (the attachment
   // splints the entire arch). We therefore SKIP the FDI missing-teeth chart and
   // render the Clinical Examination as a full-arch layout.
-  const isOverdentureNonFullArch = isNonFullArch && formData.prosthetic_plan === 'Overdenture with Attachment';
+  // iter-231: sync the lifted existing-implant tooth positions into the
+  // form's `missing_teeth` so the Clinical Examination's cluster utilities
+  // (findMissingRuns, clusterLeader, edentulous_site_measurements) work
+  // identically to routine cases. Only runs while we're in Existing Implant
+  // mode.
+  useEffect(() => {
+    if (!isExistingImplantCase) return;
+    const fresh = existingImplantTeeth.filter(Boolean).sort();
+    setFormData(prev => {
+      const cur = (prev.missing_teeth || []).slice().sort();
+      if (cur.length === fresh.length && cur.every((t, i) => t === fresh[i])) return prev;
+      return { ...prev, missing_teeth: fresh };
+    });
+  }, [isExistingImplantCase, existingImplantTeeth]);
+
 
   const FORM_STORAGE_KEY = `new_procedure_form_${user?.id || 'anon'}`;
   const appState = useRef(AppState.currentState);
@@ -1211,6 +1236,31 @@ export default function NewProcedureScreen() {
             return null;
           }}
           draft={existingImplantDraft}
+          onOriginalProcedureChange={setExistingOrigProcedure}
+          onImplantTeethChange={setExistingImplantTeeth}
+          extraSubmitFields={{
+            medical_assessment: formData.medical_assessment,
+            medical_risk_level: formData.medical_risk_level,
+            // Clinical Examination fields captured by the parent.
+            edentulous_sites: formData.edentulous_sites,
+            occlusocervical_height: formData.occlusocervical_height,
+            mesiodistal_space: formData.mesiodistal_space,
+            arch_condition: formData.arch_condition,
+            ridge_contour: formData.ridge_contour,
+            soft_tissue_thickness: formData.soft_tissue_thickness,
+            keratinized_mucosa: formData.keratinized_mucosa,
+            periodontal_status: formData.periodontal_status,
+            occlusal_scheme: formData.occlusal_scheme,
+            parafunction_habit: formData.parafunction_habit,
+            vertical_dimension: formData.vertical_dimension,
+            opposing_dentition: formData.opposing_dentition,
+            vertical_dimension_mm: formData.vertical_dimension_mm,
+            available_interarch_space: formData.available_interarch_space,
+            opposing_arch: formData.opposing_arch,
+            tmj: formData.tmj,
+            smile_line: formData.smile_line,
+            gingival_biotype: formData.gingival_biotype,
+          }}
         />
       )}
 
@@ -1280,7 +1330,9 @@ export default function NewProcedureScreen() {
       )}
 
       {/* ─── FDI Chart (Non-Full-Arch Only) — Missing Teeth selector ─── */}
-      {formData.implant_procedure_type && !isFullArch && !isOverdentureNonFullArch && (() => {
+      {/* iter-231: hide on Existing Implant — `ExistingImplantSection` ships
+          its own FDI chart driven by the implant tooth-positions. */}
+      {formData.implant_procedure_type && !isFullArch && !isOverdentureNonFullArch && !isExistingImplantCase && (() => {
         const ptype = formData.implant_procedure_type;
         const EXTRACT_SET = new Set(['Immediate Implant', 'Partial Extraction Therapy']);
         const isExtractFlow = EXTRACT_SET.has(ptype);
@@ -1808,6 +1860,9 @@ export default function NewProcedureScreen() {
           Information (iter-134). Empty placeholder retained intentionally. */}
 
       {/* ─── CBCT Report Upload (Mandatory: 2 minimum) ─── */}
+      {/* iter-231: skipped for Existing Implant cases — intake CBCT is
+          captured directly on the implant cards instead. */}
+      {!isExistingImplantCase && (
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>CBCT Report <Text style={{ color: '#DC3545' }}>*</Text></Text>
         {cbctFiles.map((file, idx) => {
@@ -1873,8 +1928,13 @@ export default function NewProcedureScreen() {
           Minimum 2 CBCT Reports required. Accepted: PDF, PNG, JPG, HEIC (Max 25MB each)
         </Text>
       </View>
+      )}
 
       {/* ─── Phase 1 Checklist ─── */}
+      {/* iter-231: routine flow only. Existing Implant cases render a
+          standalone Medical Assessment block below instead (no pre-surgical
+          checklist items because no surgery is performed). */}
+      {!isExistingImplantCase && (
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Phase 1 Checklist <Text style={{ color: '#DC3545' }}>*</Text></Text>
         {CHECKLIST_DATA.pre_surgical.items.filter(item => item.id !== 'medical_assessment').filter(item => !(isFullArch && item.id === 'oral_prophylaxis')).map(item => (
@@ -1934,6 +1994,53 @@ export default function NewProcedureScreen() {
           })()}
         </View>
       </View>
+      )}
+
+      {/* iter-231: Standalone Medical Assessment block for Existing Implant
+          cases — mirrors the routine flow's sub-section but without the
+          surrounding pre-surgical checklist items. */}
+      {isExistingImplantCase && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Medical Assessment <Text style={{ color: '#DC3545' }}>*</Text></Text>
+          <View style={styles.medicalSection}>
+            {MEDICAL_RISK_FACTORS.map(factor => (
+              <View key={factor.id} style={styles.medicalRow}>
+                <Text style={styles.medicalLabel}>{factor.label}</Text>
+                <View style={styles.yesNoRow}>
+                  {factor.options.map(opt => (
+                    <TouchableOpacity key={opt}
+                      style={[styles.yesNoBtn, formData.medical_assessment[factor.id] === opt && (opt === 'No' ? styles.noActive : styles.yesActive)]}
+                      onPress={() => updateMedical(factor.id, opt)}>
+                      <Text style={[styles.yesNoText, formData.medical_assessment[factor.id] === opt && styles.yesNoTextActive]}>{opt}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            ))}
+            {Object.keys(formData.medical_assessment).length > 0 && (() => {
+              const risk = calculateMedicalRisk(formData.medical_assessment);
+              return (
+                <View>
+                  <View style={[styles.riskBadge, { backgroundColor: risk.color + '18' }]}>
+                    <Text style={[styles.riskBadgeText, { color: risk.color }]}>
+                      Medical Risk: {risk.level} (Score: {risk.score}/15)
+                    </Text>
+                  </View>
+                  {risk.warnings.length > 0 && (
+                    <View style={{ marginTop: 8, padding: 10, backgroundColor: '#FFF3E0', borderRadius: 8, borderLeftWidth: 3, borderLeftColor: risk.color }}>
+                      {risk.warnings.map((w, i) => (
+                        <Text key={i} style={{ fontSize: 12, color: '#5D4037', marginBottom: i < risk.warnings.length - 1 ? 4 : 0 }}>
+                          {'\u26A0'} {w}
+                        </Text>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              );
+            })()}
+          </View>
+        </View>
+      )}
 
       {/* ─── Bone Graft (if applicable) ─── */}
       {formData.implant_procedure_type.includes('Bone') && (
@@ -1946,6 +2053,10 @@ export default function NewProcedureScreen() {
       )}
 
       {/* ─── Continue Button ─── */}
+      {/* iter-231: hide for Existing Implant — that flow has its own
+          "Submit for Approval and Move to …" buttons inside
+          ExistingImplantSection. */}
+      {!isExistingImplantCase && (
       <TouchableOpacity style={styles.continueBtn} onPress={handleContinueToImplants}
         disabled={loading} data-testid="continue-to-implants">
         {loading ? (
@@ -1957,6 +2068,7 @@ export default function NewProcedureScreen() {
           </>
         )}
       </TouchableOpacity>
+      )}
       </>)}
     </ScrollView>
   );
