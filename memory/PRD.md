@@ -1,5 +1,42 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 236 (Feb 2026) — Sticky 5-step progress strip + bilateral "Both" arch option
+
+### Why
+1. **Sticky progress indicator** — the Existing Implant workflow now spans 8+ scrollable sections (Patient → Chief Complaint → Faculty → Procedure → Payment → Implant Inventory → Clinical Examination → Medical Assessment → Submit). Long forms feel overwhelming and drive drop-off if users don't know how far they have to go. A sticky strip at the top showing "Step X of N — Section Name" + a thin filling progress bar gives constant orientation.
+2. **Bilateral "Both" arch option** — biologically valid for full-mouth rehabs where the same case has All on 4 / 6 / X placed in both maxilla and mandible. Adding it avoids forcing the user to create two separate procedures.
+
+### Changes
+**`app/(tabs)/new-procedure.tsx`**
+- New constants + state: `EXISTING_STEP_LABELS = ['Case Details', 'Implant Inventory', 'Clinical Examination', 'Medical Assessment', 'Submit']`, `existingStepYs` ref (size 5), `currentExistingStep` state.
+- New helpers: `onExistingStepLayout(idx)` captures each milestone section's Y on layout; `onScrollExisting` reads `contentOffset.y`, finds the largest milestone whose Y has been crossed (with a 120px peek offset so the indicator changes just before the section title pins to the top).
+- `ScrollView` now wires `stickyHeaderIndices={[1]}` (only when `isExistingImplantCase`), `onScroll={onScrollExisting}`, and `scrollEventThrottle={64}`. A new progress-strip View is rendered immediately after the header bar — for non-Existing Implant cases an empty `<View />` placeholder keeps the children-index shape stable so `stickyHeaderIndices` is never applied to the wrong child.
+- Five milestone wrappers get `onLayout={onExistingStepLayout(idx)}`:
+  - `0` → Patient Information section
+  - `1` → ExistingImplantSection wrapper
+  - `2` → Clinical Examination section
+  - `3` → Standalone Medical Assessment block
+  - `4` → Lifted submit-buttons block
+- New styles: `existingProgressBar`, `existingProgressLabel`, `existingProgressCount`, `existingProgressTrack`, `existingProgressFill`.
+
+**`components/ExistingImplantSection.tsx`**
+- Arch chip options expanded from `['Maxillary', 'Mandibular']` → `['Maxillary', 'Mandibular', 'Both']`. The downstream Atrophy block already handled `arch === 'Both'`, no other change required.
+
+### Verification (screenshot tool, mobile viewport)
+- Top of form: bar shows "Step 1 of 5 — Case Details, 20%" with a 20%-filled blue track.
+- Scrolling past Implant Inventory: bar updates to "Step 2 of 5 — Implant Inventory, 40%".
+- Bottom of form: bar shows "Step 4 of 5 — Medical Assessment, 80%" with the green Phase 3, blue Phase 4 Step 1, and outlined Save Draft buttons still in the correct tightly-spaced order from iter-235.
+- Arch picker after picking All on 4 shows Maxillary / Mandibular / **Both** chips; clicking Both turns the chip blue and persists `formData.arch = 'Both'`.
+- Console errors: 0 on the full Existing Implant → All on 4 → Both → scroll-to-bottom path.
+
+### Notes for next agent
+- For routine (non-Existing) cases nothing changes — the ScrollView falls back to plain non-sticky scrolling.
+- `existingStepYs` is a ref, not state — re-renders don't re-fire `onLayout`, so the captured Y values stay stable even when content above shifts (e.g., the Arch picker appearing/disappearing). If a future feature inserts a new milestone between two existing ones, just bump `EXISTING_STEP_LABELS` and the matching `onExistingStepLayout(idx)` call.
+- P0 server.py decomposition still outstanding.
+
+---
+
+
 ## Iteration 235 (Feb 2026) — Existing Implant polish: Arch picker relocation, Atrophy hidden, button reorder
 
 ### Why

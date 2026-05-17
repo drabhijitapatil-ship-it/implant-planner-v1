@@ -876,12 +876,16 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
           (All on 4 / 6 / X). Lives between "Type of Implant Procedure Done"
           and "Mark Existing Implant Position(s)". Writes through to the
           parent's `formData.arch` so the rest of the workflow (Atrophy
-          Assessment for routine, PDF, etc.) sees the same value. */}
+          Assessment for routine, PDF, etc.) sees the same value.
+          iter-236: added "Both" so bilateral full-arch rehabs (e.g. All on 4
+          placed in both maxilla and mandible) can be recorded as a single
+          procedure. The Atrophy block downstream already handles
+          `arch === 'Both'`. */}
       {isFullArchDone && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Arch *</Text>
           <View style={styles.chipRow}>
-            {['Maxillary', 'Mandibular'].map(a => (
+            {['Maxillary', 'Mandibular', 'Both'].map(a => (
               <Chip key={a} label={a} active={arch === a}
                 onPress={() => onArchChange?.(a)}
                 testID={`ei-arch-${a.toLowerCase()}`} />
