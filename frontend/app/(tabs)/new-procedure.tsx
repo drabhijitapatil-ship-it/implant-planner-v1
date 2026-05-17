@@ -280,6 +280,32 @@ export default function NewProcedureScreen() {
     labels: { phase3: string; phase4: string };
   }>(null);
 
+  // iter-236: sticky progress indicator for the long Existing Implant form.
+  // We track 5 milestone sections via onLayout-captured Y positions and bump
+  // `currentExistingStep` on scroll. The 5 milestones map to the natural
+  // sub-flows users tackle one after another:
+  //   0 → Case Details (patient / chief complaint / faculty / procedure / payment)
+  //   1 → Implant Inventory (Type of Implant Procedure Done + Arch + FDI + Implant Selection + Prosthetic History)
+  //   2 → Clinical Examination
+  //   3 → Medical Assessment
+  //   4 → Submit
+  const EXISTING_STEP_LABELS = ['Case Details', 'Implant Inventory', 'Clinical Examination', 'Medical Assessment', 'Submit'];
+  const existingStepYs = useRef<number[]>([0, 0, 0, 0, 0]);
+  const [currentExistingStep, setCurrentExistingStep] = useState(0);
+  const onExistingStepLayout = (idx: number) => (e: any) => {
+    const y = e?.nativeEvent?.layout?.y ?? 0;
+    existingStepYs.current[idx] = y;
+  };
+  const onScrollExisting = (e: any) => {
+    const y = e?.nativeEvent?.contentOffset?.y ?? 0;
+    // pick the largest index whose recorded Y is below current scroll + 120px peek
+    let idx = 0;
+    for (let i = 0; i < existingStepYs.current.length; i++) {
+      if (existingStepYs.current[i] && existingStepYs.current[i] <= y + 120) idx = i;
+    }
+    if (idx !== currentExistingStep) setCurrentExistingStep(idx);
+  };
+
   // ── Form State ──
   const [formData, setFormData] = useState({
     patient_name: '',
@@ -1030,7 +1056,13 @@ export default function NewProcedureScreen() {
 
   // ── Render Step: Case Details ──
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 100 }}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ paddingBottom: 100 }}
+      stickyHeaderIndices={isExistingImplantCase ? [1] : undefined}
+      onScroll={isExistingImplantCase ? onScrollExisting : undefined}
+      scrollEventThrottle={64}
+    >
       <View style={styles.headerBar}>
         <BackButton />
         <View style={{ flex: 1 }}>
@@ -1045,8 +1077,28 @@ export default function NewProcedureScreen() {
         </View>
       </View>
 
+      {/* iter-236: sticky progress strip for Existing Implant — shows the
+          user where they are in the 5-milestone form. A render-cycle-only
+          empty View is mounted for non-Existing-Implant cases so the JSX
+          tree shape stays stable. */}
+      {isExistingImplantCase ? (
+        <View style={styles.existingProgressBar} testID="existing-progress-strip">
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={styles.existingProgressLabel} numberOfLines={1}>
+              Step {currentExistingStep + 1} of {EXISTING_STEP_LABELS.length} — {EXISTING_STEP_LABELS[currentExistingStep]}
+            </Text>
+            <Text style={styles.existingProgressCount}>
+              {Math.round(((currentExistingStep + 1) / EXISTING_STEP_LABELS.length) * 100)}%
+            </Text>
+          </View>
+          <View style={styles.existingProgressTrack}>
+            <View style={[styles.existingProgressFill, { width: `${((currentExistingStep + 1) / EXISTING_STEP_LABELS.length) * 100}%` }]} />
+          </View>
+        </View>
+      ) : <View />}
+
       {/* ─── Patient Info ─── */}
-      <View style={styles.section}>
+      <View style={styles.section} onLayout={isExistingImplantCase ? onExistingStepLayout(0) : undefined}>
         <Text style={styles.sectionTitle}>Patient Information</Text>
         <View style={styles.fieldContainer}>
           <Text style={styles.label}>Patient Name <Text style={{ color: '#DC3545' }}>*</Text></Text>
@@ -1220,6 +1272,7 @@ export default function NewProcedureScreen() {
           radiograph, save + phase routing). Skips clinical exam / implant
           planning / loading / scheduling collected by the regular flow. */}
       {formData.implant_procedure_type === 'Existing Implant' && (
+        <View onLayout={onExistingStepLayout(1)}>
         <ExistingImplantSection
           patient={{
             student_name: (formData as any).student_name || '',
@@ -1284,6 +1337,7 @@ export default function NewProcedureScreen() {
           hideActionButtons
           onReady={setExistingSubmitApi}
         />
+        </View>
       )}
 
       {formData.implant_procedure_type !== 'Existing Implant' && (<>
@@ -1405,7 +1459,7 @@ export default function NewProcedureScreen() {
           parent's iter-231 useEffect syncs the lifted implant tooth-positions
           into `formData.missing_teeth` so cluster utilities work identically. */}
       {effectiveProcType && (
-        <View style={styles.section}>
+        <View style={styles.section} onLayout={isExistingImplantCase ? onExistingStepLayout(2) : undefined}>
           <Text style={styles.sectionTitle}>Clinical Examination</Text>
 
           {/* Intraoral Examination – Non-Full-Arch (Single, Multiple, GBR, Guided Surgery)
@@ -2044,7 +2098,7 @@ export default function NewProcedureScreen() {
           cases — mirrors the routine flow's sub-section but without the
           surrounding pre-surgical checklist items. */}
       {isExistingImplantCase && (
-        <View style={styles.section}>
+        <View style={styles.section} onLayout={onExistingStepLayout(3)}>
           <Text style={styles.sectionTitle}>Medical Assessment <Text style={{ color: '#DC3545' }}>*</Text></Text>
           <View style={styles.medicalSection}>
             {MEDICAL_RISK_FACTORS.map(factor => (
@@ -2093,7 +2147,7 @@ export default function NewProcedureScreen() {
           iter-235: order is Phase 3 → Phase 4 Step 1 → Save Draft, with a
           tighter 6px vertical gap (per user request). */}
       {isExistingImplantCase && existingSubmitApi?.canSubmit && (
-        <View style={[styles.section, { gap: 6 }]} testID="existing-impl-action-buttons">
+        <View style={[styles.section, { gap: 6 }]} testID="existing-impl-action-buttons" onLayout={onExistingStepLayout(4)}>
           <TouchableOpacity
             style={[styles.continueBtn, { backgroundColor: '#43A047', marginVertical: 0, marginHorizontal: 0 }, existingSubmitApi.submitting && { opacity: 0.6 }]}
             onPress={() => existingSubmitApi.submit('phase3')}
@@ -2173,6 +2227,12 @@ const styles = StyleSheet.create({
   stepTitle: { fontSize: 18, fontWeight: '700', color: '#0D47A1', marginLeft: 12 },
   section: { backgroundColor: '#FFF', borderRadius: 16, marginHorizontal: 16, marginBottom: 16, padding: 18, shadowColor: '#1565C0', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3, borderWidth: 1, borderColor: '#E8EDF5' },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1565C0', marginBottom: 14, letterSpacing: 0.3 },
+  // iter-236: sticky progress strip for the Existing Implant workflow.
+  existingProgressBar: { backgroundColor: '#FFFFFF', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#E3F2FD', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 2 },
+  existingProgressLabel: { fontSize: 13, fontWeight: '700', color: '#0F2740', letterSpacing: 0.2, flex: 1 },
+  existingProgressCount: { fontSize: 12, fontWeight: '700', color: '#1565C0', marginLeft: 8 },
+  existingProgressTrack: { marginTop: 8, height: 6, backgroundColor: '#E3F2FD', borderRadius: 999, overflow: 'hidden' },
+  existingProgressFill: { height: 6, backgroundColor: '#1565C0', borderRadius: 999 },
   subSectionTitle: { fontSize: 14, fontWeight: '700', color: '#1565C0', marginTop: 14, marginBottom: 10, paddingBottom: 8, borderBottomWidth: 1.5, borderBottomColor: '#E3F2FD' },
   fieldContainer: { marginBottom: 14 },
   label: { fontSize: 13, fontWeight: '600', color: '#1565C0', marginBottom: 6, letterSpacing: 0.2 },
