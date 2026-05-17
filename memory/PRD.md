@@ -1,5 +1,37 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 235 (Feb 2026) — Existing Implant polish: Arch picker relocation, Atrophy hidden, button reorder
+
+### Why
+User requested three quality-of-life refinements to the Existing Implant workflow:
+1. When a full-arch case is picked in "Type of Implant Procedure Done" (All on 4 / 6 / X) the **Arch** dropdown was appearing inside the outer "Procedure Information" section (because the parent shared `isFullArch`). The Arch picker should instead sit between "Type of Implant Procedure Done" and "Implant Selection" as its own section, only for Existing Implant full-arch cases.
+2. **Atrophy Assessment** should not appear in Clinical Examination for Existing Implant cases — the implants are already placed, so a classification + therapeutic-option recommendation is not actionable.
+3. The lifted submit buttons should re-order to **Move to Phase 3** → **Move to Phase 4 Step 1** → **Save Draft**, with a tighter vertical gap (they were spaced out by 20px `marginVertical` on each button).
+
+### Changes
+**`components/ExistingImplantSection.tsx`**
+- New optional props `arch: string` + `onArchChange: (a: string) => void`.
+- New "Arch *" chip-row section inserted between Type of Implant Procedure Done and the FDI / Implant Selection blocks, rendered only when `isFullArchDone` (`All on 4` / `All on 6` / `All on X`).
+
+**`app/(tabs)/new-procedure.tsx`**
+- Procedure Information Arch dropdown gate changed from `isFullArch && (...)` to `isFullArch && !isExistingImplantCase && (...)` so the outer dropdown disappears for Existing Implant cases — the new in-section Arch picker takes over.
+- Pass-through `arch={formData.arch}` + `onArchChange={v => updateForm('arch', v)}` to `<ExistingImplantSection>`.
+- Atrophy Assessment sub-block (Maxilla + Mandible inputs + classification chips) wrapped in `{!isExistingImplantCase && (<>...</>)}` so it no longer renders for Existing Implant full-arch cases.
+- Lifted submit-buttons block: reordered to Phase 3 (green) → Phase 4 Step 1 (blue) → Save Draft (outlined). Each `TouchableOpacity` now passes `marginVertical: 0, marginHorizontal: 0` to override the 20px default in `styles.continueBtn`, and the wrapping `View` uses `gap: 6` instead of `gap: 10` for a more compact button stack.
+
+### Verification (screenshot tool, mobile viewport, real preview URL)
+- Pick Existing Implant → outer Procedure Information shows **only** Type of Implant Procedure dropdown (no Arch dropdown).
+- Pick inner "All on 4" → new **Arch *** chip section appears between "Type of Implant Procedure Done" and "Implant Selection" with Maxillary / Mandibular chips.
+- Scroll to bottom: **Atrophy Assessment** is absent from Clinical Examination, **Medical Assessment** still renders, submit buttons appear in the new order with tight spacing.
+- Console errors: **0** on the full Existing Implant + All on 4 + Maxillary path.
+
+### Notes for next agent
+- Backend submission already serializes `arch` from `formData.arch` (no schema change needed).
+- P0 server.py decomposition still outstanding.
+
+---
+
+
 ## Iteration 234 (Feb 2026) — Existing Implant: Clinical Examination now renders after Implant Selection & Prosthetic History
 
 ### Why
