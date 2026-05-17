@@ -1,5 +1,30 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 237 (Feb 2026) — Tappable step pills in the sticky progress strip
+
+### Why
+Iter-236 added a sticky 5-step progress strip but it was purely informational. Turning each step into a **tappable pill** converts the strip into a true navigator — users can jump back/forward between Case Details, Implant Inventory, Clinical Examination, Medical Assessment, and Submit without scrolling through the whole long form. Especially useful when reviewing or editing a half-filled draft before submission.
+
+### Changes in `app/(tabs)/new-procedure.tsx`
+- New `scrollRef = useRef<ScrollView | null>(null)`; attached to the root ScrollView.
+- New `jumpToExistingStep(idx)` helper that calls `scrollRef.current?.scrollTo({ y: Math.max(0, existingStepYs.current[idx] - 24), animated: true })` (the 24px offset avoids the section title hiding under the sticky strip) and optimistically calls `setCurrentExistingStep(idx)` so the active-pill highlight changes instantly instead of waiting for the onScroll handler to reconcile.
+- The progress strip now renders a `existingStepPillRow` View containing 5 `TouchableOpacity` pills (one per `EXISTING_STEP_LABELS` entry). Active pill uses `existingStepPillActive` style (filled blue / white text) and idle pills use a subtle outlined chip. Each pill is labelled `"{idx + 1}. {label}"` and carries `testID={"existing-step-pill-{idx}"}` for QA.
+- New styles: `existingStepPillRow`, `existingStepPill`, `existingStepPillActive`, `existingStepPillText`, `existingStepPillTextActive`.
+
+### Verification (screenshot tool, mobile viewport)
+- Tap "4. Medical Assessment" → strip immediately updates to "Step 4 of 5 — Medical Assessment 80%", pill #4 turns blue, form scrolls to the Medical Assessment section.
+- Tap "1. Case Details" → strip updates to "Step 1 of 5 — Case Details 20%", pill #1 turns blue, form scrolls back to top.
+- All 5 pills visible and wrapped on a 420px-wide viewport without overflow.
+- 0 console errors.
+
+### Notes for next agent
+- The pill row gracefully wraps to two lines on narrow viewports (`flexWrap: 'wrap'`), keeping all 5 pills accessible without horizontal scroll.
+- Optimistic state update inside `jumpToExistingStep` makes the highlight feel snappy even when the section is large or the `onScroll` handler's Y threshold check doesn't immediately reconcile.
+- P0 server.py decomposition still outstanding.
+
+---
+
+
 ## Iteration 236 (Feb 2026) — Sticky 5-step progress strip + bilateral "Both" arch option
 
 ### Why

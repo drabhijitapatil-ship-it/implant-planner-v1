@@ -1055,8 +1055,19 @@ export default function NewProcedureScreen() {
   }
 
   // ── Render Step: Case Details ──
+  const scrollRef = useRef<ScrollView | null>(null);
+  const jumpToExistingStep = (idx: number) => {
+    const y = existingStepYs.current[idx] || 0;
+    // small upward offset so the section title isn't hidden under the sticky strip
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - 24), animated: true });
+    // iter-237: optimistically set the active pill so the strip gives
+    // immediate feedback — the onScroll handler will reconcile if the
+    // section's actual Y resolves differently.
+    setCurrentExistingStep(idx);
+  };
   return (
     <ScrollView
+      ref={scrollRef}
       style={styles.container}
       contentContainerStyle={{ paddingBottom: 100 }}
       stickyHeaderIndices={isExistingImplantCase ? [1] : undefined}
@@ -1093,6 +1104,28 @@ export default function NewProcedureScreen() {
           </View>
           <View style={styles.existingProgressTrack}>
             <View style={[styles.existingProgressFill, { width: `${((currentExistingStep + 1) / EXISTING_STEP_LABELS.length) * 100}%` }]} />
+          </View>
+          {/* iter-237: tappable step pills — turn the strip into a true
+              navigator so users can jump back/forward between sections
+              instead of having to scroll through the whole long form. */}
+          <View style={styles.existingStepPillRow}>
+            {EXISTING_STEP_LABELS.map((label, idx) => {
+              const active = idx === currentExistingStep;
+              return (
+                <TouchableOpacity
+                  key={label}
+                  onPress={() => jumpToExistingStep(idx)}
+                  style={[styles.existingStepPill, active && styles.existingStepPillActive]}
+                  testID={`existing-step-pill-${idx}`}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Jump to ${label}`}
+                >
+                  <Text style={[styles.existingStepPillText, active && styles.existingStepPillTextActive]} numberOfLines={1}>
+                    {idx + 1}. {label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
       ) : <View />}
@@ -2233,6 +2266,12 @@ const styles = StyleSheet.create({
   existingProgressCount: { fontSize: 12, fontWeight: '700', color: '#1565C0', marginLeft: 8 },
   existingProgressTrack: { marginTop: 8, height: 6, backgroundColor: '#E3F2FD', borderRadius: 999, overflow: 'hidden' },
   existingProgressFill: { height: 6, backgroundColor: '#1565C0', borderRadius: 999 },
+  // iter-237: tappable step pills under the progress strip.
+  existingStepPillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
+  existingStepPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: '#CFD8DC', backgroundColor: '#F8FAFC' },
+  existingStepPillActive: { backgroundColor: '#1565C0', borderColor: '#1565C0' },
+  existingStepPillText: { fontSize: 11, fontWeight: '600', color: '#37474F', letterSpacing: 0.1 },
+  existingStepPillTextActive: { color: '#FFFFFF' },
   subSectionTitle: { fontSize: 14, fontWeight: '700', color: '#1565C0', marginTop: 14, marginBottom: 10, paddingBottom: 8, borderBottomWidth: 1.5, borderBottomColor: '#E3F2FD' },
   fieldContainer: { marginBottom: 14 },
   label: { fontSize: 13, fontWeight: '600', color: '#1565C0', marginBottom: 6, letterSpacing: 0.2 },
