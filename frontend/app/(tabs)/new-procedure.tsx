@@ -1190,7 +1190,10 @@ export default function NewProcedureScreen() {
         <Text style={styles.sectionTitle}>Procedure Information</Text>
         <Dropdown label="Type of Implant Procedure" value={formData.implant_procedure_type}
           options={PROCEDURE_TYPES} onChange={v => { updateForm('implant_procedure_type', v); updateForm('arch', ''); }} required />
-        {isFullArch && (
+        {/* iter-235: hide the Arch dropdown for Existing Implant — it lives
+            inside the ExistingImplantSection between Type of Implant Procedure
+            Done and Implant Selection instead. */}
+        {isFullArch && !isExistingImplantCase && (
           <Dropdown label="Arch" value={formData.arch}
             options={['Maxillary', 'Mandibular']} onChange={v => updateForm('arch', v)} required data-testid="arch-dropdown" />
         )}
@@ -1253,6 +1256,8 @@ export default function NewProcedureScreen() {
           draft={existingImplantDraft}
           onOriginalProcedureChange={setExistingOrigProcedure}
           onImplantTeethChange={setExistingImplantTeeth}
+          arch={formData.arch}
+          onArchChange={v => updateForm('arch', v)}
           extraSubmitFields={{
             medical_assessment: formData.medical_assessment,
             medical_risk_level: formData.medical_risk_level,
@@ -1710,6 +1715,10 @@ export default function NewProcedureScreen() {
                 options={TMJ_OPTIONS} onChange={v => updateForm('tmj', v)} />
 
               {/* ── Atrophy Assessment (Full-Arch only) ── */}
+              {/* iter-235: hide Atrophy Assessment for Existing Implant full-arch
+                  cases — the implants are already placed so an atrophy class /
+                  therapeutic-option recommendation is not actionable. */}
+              {!isExistingImplantCase && (<>
               <Text style={[styles.subSectionTitle, { marginTop: 18 }]}>Atrophy Assessment</Text>
               <Text style={{ fontSize: 12, color: '#5C6BC0', marginBottom: 10, fontStyle: 'italic' }}>
                 Enter average bone height and width in the anterior and posterior regions for each treated arch. The class and recommended therapeutic options are computed automatically.
@@ -1788,6 +1797,7 @@ export default function NewProcedureScreen() {
                   />
                 </View>
               )}
+              </>)}
             </>
           )}
 
@@ -2079,11 +2089,22 @@ export default function NewProcedureScreen() {
       {/* iter-232: Lifted submit buttons for Existing Implant — rendered
           at the bottom of the form so the user fills everything top-to-
           bottom and submits as the natural last action. Buttons stay
-          inside ExistingImplantSection for non-existing flows. */}
+          inside ExistingImplantSection for non-existing flows.
+          iter-235: order is Phase 3 → Phase 4 Step 1 → Save Draft, with a
+          tighter 6px vertical gap (per user request). */}
       {isExistingImplantCase && existingSubmitApi?.canSubmit && (
-        <View style={[styles.section, { gap: 10 }]} testID="existing-impl-action-buttons">
+        <View style={[styles.section, { gap: 6 }]} testID="existing-impl-action-buttons">
           <TouchableOpacity
-            style={[styles.continueBtn, { backgroundColor: '#1565C0' }, existingSubmitApi.submitting && { opacity: 0.6 }]}
+            style={[styles.continueBtn, { backgroundColor: '#43A047', marginVertical: 0, marginHorizontal: 0 }, existingSubmitApi.submitting && { opacity: 0.6 }]}
+            onPress={() => existingSubmitApi.submit('phase3')}
+            disabled={existingSubmitApi.submitting}
+            data-testid="ei-move-phase3-bottom"
+          >
+            <Ionicons name="arrow-forward-circle" size={20} color="#FFF" />
+            <Text style={styles.continueBtnText} numberOfLines={2}>{existingSubmitApi.labels.phase3}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.continueBtn, { backgroundColor: '#1565C0', marginVertical: 0, marginHorizontal: 0 }, existingSubmitApi.submitting && { opacity: 0.6 }]}
             onPress={() => existingSubmitApi.submit('phase4_step1')}
             disabled={existingSubmitApi.submitting}
             data-testid="ei-move-phase4-bottom"
@@ -2092,18 +2113,9 @@ export default function NewProcedureScreen() {
               ? <ActivityIndicator color="#FFF" />
               : <><Ionicons name="arrow-forward-circle" size={20} color="#FFF" /><Text style={styles.continueBtnText} numberOfLines={2}>{existingSubmitApi.labels.phase4}</Text></>}
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.continueBtn, { backgroundColor: '#43A047' }, existingSubmitApi.submitting && { opacity: 0.6 }]}
-            onPress={() => existingSubmitApi.submit('phase3')}
-            disabled={existingSubmitApi.submitting}
-            data-testid="ei-move-phase3-bottom"
-          >
-            <Ionicons name="arrow-forward-circle" size={20} color="#FFF" />
-            <Text style={styles.continueBtnText} numberOfLines={2}>{existingSubmitApi.labels.phase3}</Text>
-          </TouchableOpacity>
           {!existingSubmitApi.isDraftResume && (
             <TouchableOpacity
-              style={[styles.continueBtn, { backgroundColor: '#FFF', borderWidth: 1.5, borderColor: '#CFD8DC' }, existingSubmitApi.submitting && { opacity: 0.6 }]}
+              style={[styles.continueBtn, { backgroundColor: '#FFF', borderWidth: 1.5, borderColor: '#CFD8DC', marginVertical: 0, marginHorizontal: 0 }, existingSubmitApi.submitting && { opacity: 0.6 }]}
               onPress={() => existingSubmitApi.submit('draft')}
               disabled={existingSubmitApi.submitting}
               data-testid="ei-save-draft-bottom"

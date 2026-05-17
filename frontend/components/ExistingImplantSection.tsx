@@ -256,6 +256,13 @@ type Props = {
    * (non-Existing-Implant) workflow. */
   onOriginalProcedureChange?: (op: string) => void;
   onImplantTeethChange?: (teeth: string[]) => void;
+  /** iter-235: parent-owned `formData.arch` exposed to the section so the
+   * Arch dropdown appears here (between Type of Implant Procedure Done and
+   * Implant Selection) only for full-arch existing-implant cases. The
+   * parent stops rendering its Procedure-Information Arch dropdown for
+   * Existing Implant. */
+  arch?: string;
+  onArchChange?: (a: string) => void;
   /** Extra fields merged into the submit payload (clinical exam / medical
    * assessment data captured by the parent). */
   extraSubmitFields?: Record<string, any>;
@@ -276,7 +283,7 @@ type LibSystem = {
   indication?: string;
 };
 
-export default function ExistingImplantSection({ patient, validatePatient, draft, onOriginalProcedureChange, onImplantTeethChange, extraSubmitFields, hideActionButtons, onReady }: Props) {
+export default function ExistingImplantSection({ patient, validatePatient, draft, onOriginalProcedureChange, onImplantTeethChange, arch, onArchChange, extraSubmitFields, hideActionButtons, onReady }: Props) {
   const isDraftResume = !!draft;
   // Catalog cache for connection / platform auto-fill.
   const [catalog, setCatalog] = useState<any[]>([]);
@@ -864,6 +871,24 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
           ))}
         </View>
       </View>
+
+      {/* iter-235: Arch picker — only for full-arch existing-implant cases
+          (All on 4 / 6 / X). Lives between "Type of Implant Procedure Done"
+          and "Mark Existing Implant Position(s)". Writes through to the
+          parent's `formData.arch` so the rest of the workflow (Atrophy
+          Assessment for routine, PDF, etc.) sees the same value. */}
+      {isFullArchDone && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Arch *</Text>
+          <View style={styles.chipRow}>
+            {['Maxillary', 'Mandibular'].map(a => (
+              <Chip key={a} label={a} active={arch === a}
+                onPress={() => onArchChange?.(a)}
+                testID={`ei-arch-${a.toLowerCase()}`} />
+            ))}
+          </View>
+        </View>
+      )}
 
       {/* ─── FDI chart for non-full-arch (multi-select, drives implant rows) ─── */}
       {originalProcedure && !isFullArchDone && (
