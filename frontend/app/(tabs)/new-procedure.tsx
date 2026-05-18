@@ -285,13 +285,20 @@ export default function NewProcedureScreen() {
   // `currentExistingStep` on scroll. The 5 milestones map to the natural
   // sub-flows users tackle one after another:
   //   0 → Case Details (patient / chief complaint / faculty / procedure / payment)
-  //   1 → Implant Inventory (Type of Implant Procedure Done + Arch + FDI + Implant Selection + Prosthetic History)
+  //   1 → Implant Details (Type of Implant Procedure Done + Arch + FDI + Implant Selection + Prosthetic History)
   //   2 → Clinical Examination
   //   3 → Medical Assessment
   //   4 → Submit
-  const EXISTING_STEP_LABELS = ['Case Details', 'Implant Inventory', 'Clinical Examination', 'Medical Assessment', 'Submit'];
+  // iter-238: renamed "Implant Inventory" → "Implant Details" per user request.
+  const EXISTING_STEP_LABELS = ['Case Details', 'Implant Details', 'Clinical Examination', 'Medical Assessment', 'Submit'];
   const existingStepYs = useRef<number[]>([0, 0, 0, 0, 0]);
   const [currentExistingStep, setCurrentExistingStep] = useState(0);
+  // iter-238 hotfix: `scrollRef` MUST be declared before the early return at
+  // `if (step === 'implants' && createdProcedureId)` further down — otherwise
+  // the hook-count differs between the two render paths and React crashes
+  // with "Rendered fewer hooks than expected" when a draft is resumed and
+  // step transitions to 'implants'.
+  const scrollRef = useRef<ScrollView | null>(null);
   const onExistingStepLayout = (idx: number) => (e: any) => {
     const y = e?.nativeEvent?.layout?.y ?? 0;
     existingStepYs.current[idx] = y;
@@ -304,6 +311,15 @@ export default function NewProcedureScreen() {
       if (existingStepYs.current[i] && existingStepYs.current[i] <= y + 120) idx = i;
     }
     if (idx !== currentExistingStep) setCurrentExistingStep(idx);
+  };
+  const jumpToExistingStep = (idx: number) => {
+    const y = existingStepYs.current[idx] || 0;
+    // small upward offset so the section title isn't hidden under the sticky strip
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - 24), animated: true });
+    // iter-237: optimistically set the active pill so the strip gives
+    // immediate feedback — the onScroll handler will reconcile if the
+    // section's actual Y resolves differently.
+    setCurrentExistingStep(idx);
   };
 
   // ── Form State ──
@@ -1055,16 +1071,16 @@ export default function NewProcedureScreen() {
   }
 
   // ── Render Step: Case Details ──
-  const scrollRef = useRef<ScrollView | null>(null);
-  const jumpToExistingStep = (idx: number) => {
-    const y = existingStepYs.current[idx] || 0;
-    // small upward offset so the section title isn't hidden under the sticky strip
-    scrollRef.current?.scrollTo({ y: Math.max(0, y - 24), animated: true });
-    // iter-237: optimistically set the active pill so the strip gives
-    // immediate feedback — the onScroll handler will reconcile if the
-    // section's actual Y resolves differently.
-    setCurrentExistingStep(idx);
-  };
+  // iter-238: compute per-step completion so each pill can show a small
+  // green ✓ once that section's required fields are filled. Submit (idx 4)
+  // is treated as complete only when the previous 4 milestones are all
+  // green (a "ready to submit" cue). Declared AFTER all state hooks but
+  // BEFORE the JSX to avoid the TDZ trap that hit iter-238 first attempt.
+  const caseDetailsDone = !!(formData.patient_name?.trim() && formData.registration_number?.trim() && formData.chief_complaint?.trim() && formData.supervisor_id && formData.implant_incharge_id && formData.receipt_number?.trim() && formData.amount_paid);
+  const implantDetailsDone = !!(existingOrigProcedure && (FULL_ARCH_GROUP.has(existingOrigProcedure) ? !!formData.arch : (existingImplantTeeth || []).length > 0));
+  const clinicalDone = !!(formData.occlusocervical_height && formData.mesiodistal_space && formData.ridge_contour);
+  const medicalDone = !!(formData.diabetes && formData.smoking_status && formData.anticoagulant_therapy && formData.osteoporosis_medication && formData.radiation_therapy);
+  const existingStepDone = [caseDetailsDone, implantDetailsDone, clinicalDone, medicalDone, caseDetailsDone && implantDetailsDone && clinicalDone && medicalDone];
   return (
     <ScrollView
       ref={scrollRef}
@@ -1107,21 +1123,30 @@ export default function NewProcedureScreen() {
           </View>
           {/* iter-237: tappable step pills — turn the strip into a true
               navigator so users can jump back/forward between sections
-              instead of having to scroll through the whole long form. */}
+              instead of having to scroll through the whole long form.
+              iter-238: uniform pill width (flex 1/min) so all 5 pills line
+              up on one tidy row; green ✓ replaces the leading number once
+              that section's required fields are filled. */}
           <View style={styles.existingStepPillRow}>
             {EXISTING_STEP_LABELS.map((label, idx) => {
               const active = idx === currentExistingStep;
+              const done = existingStepDone[idx];
               return (
                 <TouchableOpacity
                   key={label}
                   onPress={() => jumpToExistingStep(idx)}
-                  style={[styles.existingStepPill, active && styles.existingStepPillActive]}
+                  style={[styles.existingStepPill, active && styles.existingStepPillActive, done && !active && styles.existingStepPillDone]}
                   testID={`existing-step-pill-${idx}`}
                   accessibilityRole="button"
-                  accessibilityLabel={`Jump to ${label}`}
+                  accessibilityLabel={`Jump to ${label}${done ? ', complete' : ''}`}
                 >
-                  <Text style={[styles.existingStepPillText, active && styles.existingStepPillTextActive]} numberOfLines={1}>
-                    {idx + 1}. {label}
+                  {done ? (
+                    <Ionicons name="checkmark-circle" size={12} color={active ? '#FFF' : '#2E7D32'} style={{ marginRight: 3 }} />
+                  ) : (
+                    <Text style={[styles.existingStepPillNum, active && styles.existingStepPillTextActive]}>{idx + 1}.</Text>
+                  )}
+                  <Text style={[styles.existingStepPillText, active && styles.existingStepPillTextActive, done && !active && styles.existingStepPillTextDone]} numberOfLines={1}>
+                    {label}
                   </Text>
                 </TouchableOpacity>
               );
@@ -2267,11 +2292,16 @@ const styles = StyleSheet.create({
   existingProgressTrack: { marginTop: 8, height: 6, backgroundColor: '#E3F2FD', borderRadius: 999, overflow: 'hidden' },
   existingProgressFill: { height: 6, backgroundColor: '#1565C0', borderRadius: 999 },
   // iter-237: tappable step pills under the progress strip.
-  existingStepPillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
-  existingStepPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: '#CFD8DC', backgroundColor: '#F8FAFC' },
+  // iter-238: pills now flex to fill the row evenly + render number/✓ icon
+  // separately so they line up on a single tidy row.
+  existingStepPillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 10 },
+  existingStepPill: { flexGrow: 1, flexBasis: 0, minWidth: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, paddingVertical: 5, borderRadius: 999, borderWidth: 1, borderColor: '#CFD8DC', backgroundColor: '#F8FAFC' },
   existingStepPillActive: { backgroundColor: '#1565C0', borderColor: '#1565C0' },
-  existingStepPillText: { fontSize: 11, fontWeight: '600', color: '#37474F', letterSpacing: 0.1 },
+  existingStepPillDone: { backgroundColor: '#E8F5E9', borderColor: '#A5D6A7' },
+  existingStepPillNum: { fontSize: 10, fontWeight: '700', color: '#37474F', marginRight: 3 },
+  existingStepPillText: { fontSize: 10, fontWeight: '600', color: '#37474F', letterSpacing: 0.1 },
   existingStepPillTextActive: { color: '#FFFFFF' },
+  existingStepPillTextDone: { color: '#2E7D32' },
   subSectionTitle: { fontSize: 14, fontWeight: '700', color: '#1565C0', marginTop: 14, marginBottom: 10, paddingBottom: 8, borderBottomWidth: 1.5, borderBottomColor: '#E3F2FD' },
   fieldContainer: { marginBottom: 14 },
   label: { fontSize: 13, fontWeight: '600', color: '#1565C0', marginBottom: 6, letterSpacing: 0.2 },

@@ -27,9 +27,9 @@ const PREMOLARS = new Set(['14', '15', '24', '25', '34', '35', '44', '45']);
 const CANINES = new Set(['13', '23', '33', '43']);
 
 const toothWidth = (t: string) =>
-  MOLARS.has(t) ? 26 : PREMOLARS.has(t) ? 23 : CANINES.has(t) ? 22 : 20;
-const toothHeight = (t: string) => (MOLARS.has(t) ? 32 : 28);
-const toothRadius = (t: string) => (MOLARS.has(t) ? 5 : 9);
+  MOLARS.has(t) ? 22 : PREMOLARS.has(t) ? 19 : CANINES.has(t) ? 18 : 16;
+const toothHeight = (t: string) => (MOLARS.has(t) ? 28 : 24);
+const toothRadius = (t: string) => (MOLARS.has(t) ? 4 : 8);
 
 export type FdiMode = 'single' | 'multi';
 
