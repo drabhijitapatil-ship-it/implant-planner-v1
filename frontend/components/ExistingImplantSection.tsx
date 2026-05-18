@@ -478,28 +478,23 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
       (window as any).__RESET_EFFECT__.push({ originalProcedure, draftId: draft?.id, hydratedRefMatches: !!(draft?.id && hydratedDraftId.current === draft.id), ts: Date.now() });
     }
     if (draft?.id && hydratedDraftId.current === draft.id) return;
-    if (isFullArchDone) {
-      setMissingTeeth([]);
-      setImplants(prev => (prev.length === 0 ? [blankImplant()] : prev));
-    } else {
-      // Non-full-arch: rows are derived from missingTeeth — start clean
-      setImplants([]);
-      setMissingTeeth([]);
-    }
+    // iter-239: both full-arch and non-full-arch now derive their implant rows
+    // from the multi-select FDI chart. Reset both states on procedure change.
+    setImplants([]);
+    setMissingTeeth([]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [originalProcedure]);
 
-  // ── Sync implant rows to missingTeeth selection (non-full-arch only) ──
+  // ── Sync implant rows to missingTeeth selection (both flows now) ──
   useEffect(() => {
-    if (isFullArchDone) return;
-    // iter-222: preserve hydrated implant data — rebuild from byTooth map so
-    // existing rows with the same tooth ID keep their captured details.
+    // iter-239: full-arch cases also now drive their implant card count from
+    // the FDI multi-select chart, mirroring the non-full-arch UX.
     setImplants(prev => {
       const byTooth = new Map(prev.filter(r => r.tooth).map(r => [r.tooth, r]));
       return missingTeeth.map(t => byTooth.get(t) || blankImplant(t));
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [missingTeeth, isFullArchDone]);
+  }, [missingTeeth]);
 
   // Helpers
   const updateImplant = (idx: number, key: keyof ImplantRow, val: any) => {
@@ -578,15 +573,26 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
   };
 
   // iter-216 — per-row save / edit (sequential collapse).
+  // iter-239: tightened validation — every field except ISQ is now compulsory.
+  // Per-implant IOPA radiograph required for non-full-arch; for full-arch the
+  // case-level OPG/CBCT is enforced in the top-level `validate()` below.
   const validateRow = (r: ImplantRow, idx: number): string | null => {
     if (!r.tooth) return `FDI position is required for Implant #${idx + 1}.`;
-    if (r.brand && !r.system) return `Pick a System for Implant #${idx + 1} (or clear the brand).`;
+    if (!r.brand) return `Brand is required for Implant #${idx + 1}.`;
+    if (!r.system) return `System is required for Implant #${idx + 1}.`;
+    if (!r.diameter_mm) return `Diameter is required for Implant #${idx + 1}.`;
+    if (!r.length_mm) return `Length is required for Implant #${idx + 1}.`;
+    if (!r.gingival_height_mm) return `Gingival height is required for Implant #${idx + 1}.`;
+    if (!r.present_component) return `Present Prosthetic Component is required for Implant #${idx + 1}.`;
     if (r.present_component !== 'None' && !r.pc_gingival_height) {
       return `Cuff height is required for Implant #${idx + 1} present component (${r.present_component}).`;
     }
     if ((r.present_component === 'Final Abutment' || r.present_component === 'Multi-Unit Abutment') && !r.pc_angle) {
       return `Angle is required for Implant #${idx + 1} (${r.present_component}).`;
     }
+    if (!r.surgery_date) return `Surgery date is required for Implant #${idx + 1}.`;
+    if (!r.original_surgeon) return `Original surgeon is required for Implant #${idx + 1}.`;
+    if (!isFullArchDone && !r.iopa_url) return `IOPA Radiograph / CBCT upload is required for Implant #${idx + 1}.`;
     return null;
   };
   const saveImplantRow = (idx: number) => {
@@ -717,7 +723,9 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
   const validate = (): string | null => {
     const pErr = validatePatient(); if (pErr) return pErr;
     if (!originalProcedure) return 'Please pick the Type of Implant Procedure Done.';
-    if (!isFullArchDone && missingTeeth.length === 0) return 'Mark at least one tooth on the FDI chart.';
+    // iter-239: full-arch case Arch picker is now compulsory before submission.
+    if (isFullArchDone && !arch) return 'Please pick the Arch (Maxillary, Mandibular, or Both).';
+    if (missingTeeth.length === 0) return 'Mark at least one tooth on the FDI chart.';
     if (implants.length === 0) return 'Add at least one implant.';
     for (let i = 0; i < implants.length; i++) {
       const r = implants[i];
@@ -725,7 +733,22 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
       const rowErr = validateRow(r, i);
       if (rowErr) return rowErr;
     }
+    // iter-239: case-level OPG / CBCT upload is compulsory for full-arch cases.
+    if (isFullArchDone && !opgUrl) return 'Please upload the Radiograph (OPG / CBCT) for the case.';
+    if (hadProsthesis === null) return 'Please answer the Prosthetic History question.';
     if (hadProsthesis === true && !prosthesisStage) return 'Pick Temporary or Final for the existing prosthesis.';
+    // iter-239: Clinical Examination + Medical Assessment fields live on the
+    // parent screen and are merged into the submit payload via
+    // `extraSubmitFields`. The parent's progress strip turns green only when
+    // those sections are complete; we cross-check the merged payload here as
+    // a defense-in-depth gate before posting to the backend.
+    const exf = extraSubmitFields || {};
+    if (!exf.occlusocervical_height || !exf.mesiodistal_space || !exf.ridge_contour) {
+      return 'Please complete the Clinical Examination section.';
+    }
+    if (!exf.diabetes || !exf.smoking_status || !exf.anticoagulant_therapy || !exf.osteoporosis_medication || !exf.radiation_therapy) {
+      return 'Please complete the Medical Assessment section.';
+    }
     return null;
   };
 
@@ -897,8 +920,11 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
         </View>
       )}
 
-      {/* ─── FDI chart for non-full-arch (multi-select, drives implant rows) ─── */}
-      {originalProcedure && !isFullArchDone && (
+      {/* ─── FDI chart — multi-select drives implant rows for BOTH non-full-arch
+              AND full-arch cases (iter-239 change). User picks each tooth that
+              already has an implant; one Implant Selection card is added per
+              tooth below. */}
+      {originalProcedure && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Mark Existing Implant Position(s) *</Text>
           <Text style={styles.helperText}>Tap each tooth that already has an implant. One Implant Selection card will be added per tooth below.</Text>
@@ -918,9 +944,9 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
       )}
 
       {/* ─── Implant Selection — one card per implant ─── */}
-      {originalProcedure && (isFullArchDone || missingTeeth.length > 0) && (
+      {originalProcedure && missingTeeth.length > 0 && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Implant Selection {isFullArchDone ? `(${implants.length})` : ''}</Text>
+          <Text style={styles.sectionTitle}>Implant Selection ({implants.length})</Text>
           {implants.map((row, idx) => {
             const sysOpts = row.brand ? systemsForBrand(row.brand) : [];
             const diaOpts = diametersForSystem(row.brand, row.system);
@@ -992,17 +1018,9 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
                   )}
                 </View>
 
-                {/* FDI single-select picker — full-arch only */}
-                {isFullArchDone && (
-                  <View style={styles.fieldContainer}>
-                    <Text style={styles.label}>FDI Position *</Text>
-                    <FdiSinglePicker
-                      value={row.tooth}
-                      onPick={(t) => updateImplant(idx, 'tooth', t)}
-                      testID={`ei-fdi-${idx}`}
-                    />
-                  </View>
-                )}
+                {/* iter-239: per-implant FDI picker removed — tooth is now
+                    set by the multi-select chart at the top of the section
+                    for both full-arch and non-full-arch cases. */}
 
                 {/* Brand */}
                 <View style={styles.fieldContainer}>
@@ -1215,13 +1233,9 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
             );
           })}
 
-          {/* Add another only for full-arch (non-full-arch is FDI-driven) */}
-          {isFullArchDone && (
-            <TouchableOpacity style={styles.addBtn} onPress={addImplant} testID="ei-add-implant">
-              <Ionicons name="add-circle-outline" size={20} color="#1565C0" />
-              <Text style={styles.addBtnText}>Add another implant</Text>
-            </TouchableOpacity>
-          )}
+          {/* iter-239: "Add another" button removed — both full-arch and
+              non-full-arch flows now drive the implant card count from the
+              FDI multi-select chart at the top of the section. */}
         </View>
       )}
 

@@ -1,5 +1,38 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 239 (Feb 2026) — Full-arch FDI multi-select unified, validation tightened, routine progress strip, pill numerals fix
+
+### Changes
+
+**1. Full-arch existing-implant cases now use the same FDI multi-select chart as non-full-arch**
+- `ExistingImplantSection.tsx`: removed the per-implant `FdiSinglePicker` and the "Add another implant" button. The multi-select FDI chart that previously only rendered for non-full-arch now renders for **both** flows whenever `originalProcedure` is picked. Each tooth tap auto-adds (or removes) an Implant Selection card 1:1 — exactly like the routine multi-implant UX.
+- The `implants <-> missingTeeth` sync `useEffect` is now unconditional (was gated on `!isFullArchDone`). Reset effect on procedure-type change also unified.
+- Per-implant IOPA Radiograph upload stays for non-full-arch only — full-arch uses the case-level OPG / CBCT (validated separately).
+- Implant Selection section gate simplified to `originalProcedure && missingTeeth.length > 0` for both flows.
+
+**2. Implant Selection validation tightened (all fields compulsory except ISQ)**
+- `validateRow()` now requires: tooth, brand, system, diameter, length, gingival height, present prosthetic component (+ cuff height & angle where the component demands them), surgery date, original surgeon. For non-full-arch the per-implant IOPA Radiograph / CBCT upload is also required.
+- `validate()` adds case-level checks: arch picked when full-arch; at least one tooth marked on the FDI chart for *both* flows; case-level OPG / CBCT upload (`opgUrl`) compulsory for full-arch; Prosthetic History answered (Yes → stage required); merged `extraSubmitFields` cross-checked so Clinical Examination (`occlusocervical_height`, `mesiodistal_space`, `ridge_contour`) and Medical Assessment (all 5 risk factors) are present before posting to the backend.
+
+**3. Progress strip + tappable pills + green ticks now apply to routine (non-Existing) cases too**
+- `new-procedure.tsx`: replaced `EXISTING_STEP_LABELS` with a flow-aware `FLOW_STEP_LABELS` (routine = `Case Details → Treatment Plan → Clinical Examination → Phase 1 Checklist → Submit`; existing = unchanged). `showFlowStrip = !!formData.implant_procedure_type` gates the strip + sticky header + scroll listener for both flows.
+- New `medicalOrChecklistDone` derivation splits by flow (routine uses CBCT + loading type + medical fields; existing uses medical risk factors).
+- Routine milestone wrappers now carry `onLayout={onExistingStepLayout(idx)}` — Patient Information (0), Prosthetic Treatment Plan (1), Clinical Examination (2), Phase 1 Checklist (3), Continue button (4).
+
+**4. Pill numeral overflow fix**
+- Increased pill `paddingHorizontal: 6→8` and `paddingVertical: 5→6`, added explicit `lineHeight: 13` on both `existingStepPillNum` and `existingStepPillText`, and `flexShrink: 1` on the label so the leading "2." / "3." numerals stay fully inside the pill bubble on narrow viewports.
+
+### Verification (screenshot tool)
+- Routine flow (Single Conventional Implant): sticky strip shows "Step 1 of 5 — Case Details 20%" with pills `1. Case Det... | 2. Treatmen... | 3. Clinical E... | 4. Phase 1 ... | 5. Submit` lined up uniformly on a single row. `ROUTINE_HAS_TREATMENT_PLAN_PILL: True`, `ROUTINE_HAS_PHASE1_PILL: True`.
+- Existing Implant + All on 4 + Maxillary: "Mark Existing Implant Position(s)" multi-select chart visible (`FULL_ARCH_HAS_MARK_SECTION: True`).
+
+### Notes for next agent
+- The unified FDI flow means draft hydration for legacy "Add another"-style full-arch drafts may show fewer rows than expected if those drafts saved implants without a `tooth` value. The hydration code already filters by `.tooth` so blanks are dropped naturally.
+- P0 server.py decomposition still outstanding.
+
+---
+
+
 ## Iteration 238 (Feb 2026) — P0 draft crash hotfix + Existing Implant polish (dropdown, uniform pills with ✓, FDI overflow)
 
 ### P0 hotfix — Continue Draft crashing to blank screen
