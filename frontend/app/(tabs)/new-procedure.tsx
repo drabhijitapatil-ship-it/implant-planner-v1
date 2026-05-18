@@ -1078,19 +1078,63 @@ export default function NewProcedureScreen() {
   // BEFORE the JSX to avoid the TDZ trap that hit iter-238 first attempt.
   // iter-239: same strip now also renders for routine (non-Existing) cases
   // — milestone labels + completion logic switch on `isExistingImplantCase`.
+  // iter-240: per-step *missing-fields* list — drives the tap-to-validate
+  // popup so users see exactly what's outstanding before they jump.
   const FLOW_STEP_LABELS = isExistingImplantCase
     ? ['Case Details', 'Implant Details', 'Clinical Examination', 'Medical Assessment', 'Submit']
     : ['Case Details', 'Treatment Plan', 'Clinical Examination', 'Phase 1 Checklist', 'Submit'];
-  const caseDetailsDone = !!(formData.patient_name?.trim() && formData.registration_number?.trim() && formData.chief_complaint?.trim() && formData.supervisor_id && formData.implant_incharge_id && formData.receipt_number?.trim() && formData.amount_paid);
-  const implantDetailsDone = isExistingImplantCase
-    ? !!(existingOrigProcedure && (FULL_ARCH_GROUP.has(existingOrigProcedure) ? !!formData.arch : true) && (existingImplantTeeth || []).length > 0)
-    : !!(formData.prosthetic_plan && (isFullArch ? !!formData.arch : (formData.missing_teeth || []).length > 0));
-  const clinicalDone = !!(formData.occlusocervical_height && formData.mesiodistal_space && formData.ridge_contour);
-  const medicalOrChecklistDone = isExistingImplantCase
-    ? !!(formData.diabetes && formData.smoking_status && formData.anticoagulant_therapy && formData.osteoporosis_medication && formData.radiation_therapy)
-    : !!(formData.cbct_url && formData.loading_type && formData.diabetes && formData.smoking_status);
-  const existingStepDone = [caseDetailsDone, implantDetailsDone, clinicalDone, medicalOrChecklistDone, caseDetailsDone && implantDetailsDone && clinicalDone && medicalOrChecklistDone];
-  // iter-239: show the strip whenever a procedure type is set (covers both flows).
+
+  const missCaseDetails: string[] = [];
+  if (!formData.patient_name?.trim()) missCaseDetails.push('Patient name');
+  if (!formData.registration_number?.trim()) missCaseDetails.push('Registration number');
+  if (!formData.chief_complaint?.trim()) missCaseDetails.push('Chief complaint');
+  if (!formData.supervisor_id) missCaseDetails.push('Supervising faculty');
+  if (!formData.implant_incharge_id) missCaseDetails.push('Implant in-charge');
+  if (!formData.receipt_number?.trim()) missCaseDetails.push('Receipt number');
+  if (!formData.amount_paid) missCaseDetails.push('Amount paid');
+
+  const missImplantDetails: string[] = [];
+  if (isExistingImplantCase) {
+    if (!existingOrigProcedure) missImplantDetails.push('Type of Implant Procedure Done');
+    else if (FULL_ARCH_GROUP.has(existingOrigProcedure) && !formData.arch) missImplantDetails.push('Arch');
+    if ((existingImplantTeeth || []).length === 0) missImplantDetails.push('At least one tooth marked on FDI chart');
+  } else {
+    if (!formData.prosthetic_plan) missImplantDetails.push('Prosthetic Plan');
+    if (isFullArch && !formData.arch) missImplantDetails.push('Arch');
+    if (!isFullArch && (formData.missing_teeth || []).length === 0) missImplantDetails.push('At least one missing tooth on FDI chart');
+  }
+
+  const missClinical: string[] = [];
+  if (!formData.occlusocervical_height) missClinical.push('Occlusocervical height');
+  if (!formData.mesiodistal_space) missClinical.push('Mesiodistal space');
+  if (!formData.ridge_contour) missClinical.push('Ridge contour');
+
+  const missMedicalOrChecklist: string[] = [];
+  if (isExistingImplantCase) {
+    if (!formData.diabetes) missMedicalOrChecklist.push('Diabetes');
+    if (!formData.smoking_status) missMedicalOrChecklist.push('Smoking status');
+    if (!formData.anticoagulant_therapy) missMedicalOrChecklist.push('Anticoagulant therapy');
+    if (!formData.osteoporosis_medication) missMedicalOrChecklist.push('Osteoporosis medication');
+    if (!formData.radiation_therapy) missMedicalOrChecklist.push('Radiation therapy');
+  } else {
+    if (!formData.cbct_url) missMedicalOrChecklist.push('CBCT Report upload');
+    if (!formData.loading_type) missMedicalOrChecklist.push('Type of Loading');
+    if (!formData.diabetes) missMedicalOrChecklist.push('Diabetes (medical assessment)');
+    if (!formData.smoking_status) missMedicalOrChecklist.push('Smoking status (medical assessment)');
+  }
+
+  const flowStepMissing: string[][] = [missCaseDetails, missImplantDetails, missClinical, missMedicalOrChecklist, []];
+  // Submit pill (idx 4) is "missing" if any of the prior 4 are not green —
+  // its missing list is the union of upstream blockers so the user gets a
+  // single roll-up summary when they tap it.
+  flowStepMissing[4] = [
+    ...(missCaseDetails.length ? ['Case Details has missing fields'] : []),
+    ...(missImplantDetails.length ? [isExistingImplantCase ? 'Implant Details has missing fields' : 'Treatment Plan has missing fields'] : []),
+    ...(missClinical.length ? ['Clinical Examination has missing fields'] : []),
+    ...(missMedicalOrChecklist.length ? [isExistingImplantCase ? 'Medical Assessment has missing fields' : 'Phase 1 Checklist has missing fields'] : []),
+  ];
+
+  const existingStepDone = flowStepMissing.map(arr => arr.length === 0);
   const showFlowStrip = !!formData.implant_procedure_type;
   return (
     <ScrollView
@@ -1141,7 +1185,37 @@ export default function NewProcedureScreen() {
               return (
                 <TouchableOpacity
                   key={label}
-                  onPress={() => jumpToExistingStep(idx)}
+                  onPress={() => {
+                    // iter-240: tap pill to validate & jump. Already-green
+                    // pills just scroll; incomplete pills first show a brief
+                    // popup listing the missing fields, then scroll on
+                    // confirm. Submit pill rolls up upstream blockers.
+                    const missing = flowStepMissing[idx] || [];
+                    if (missing.length === 0) {
+                      jumpToExistingStep(idx);
+                      return;
+                    }
+                    const list = missing.slice(0, 8).map(m => `• ${m}`).join('\n');
+                    const more = missing.length > 8 ? `\n…and ${missing.length - 8} more` : '';
+                    const body = `Please complete the following before this section is marked done:\n\n${list}${more}`;
+                    // React Native Web's Alert.alert only renders the message
+                    // (buttons are no-ops). Fall back to window.confirm on web
+                    // so users still get a Stay/Go choice.
+                    if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.confirm === 'function') {
+                      if (window.confirm(`Missing: ${label}\n\n${body}\n\nTap OK to jump there, Cancel to stay here.`)) {
+                        jumpToExistingStep(idx);
+                      }
+                      return;
+                    }
+                    Alert.alert(
+                      `Missing: ${label}`,
+                      body,
+                      [
+                        { text: 'Stay here', style: 'cancel' },
+                        { text: 'Take me there', onPress: () => jumpToExistingStep(idx) },
+                      ]
+                    );
+                  }}
                   style={[styles.existingStepPill, active && styles.existingStepPillActive, done && !active && styles.existingStepPillDone]}
                   testID={`existing-step-pill-${idx}`}
                   accessibilityRole="button"
