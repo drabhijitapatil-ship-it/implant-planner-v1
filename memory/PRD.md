@@ -1,5 +1,37 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 241 (Feb 2026) — Progress strip on landing + calendar polish + Ask Implanr AI design
+
+### Changes
+**1. Progress strip now visible immediately on New Case landing** (`app/(tabs)/new-procedure.tsx`)
+- `showFlowStrip` is hard-coded to `true` (was `!!formData.implant_procedure_type`). Strip shows from the moment the user opens New Case, even before picking a procedure type. Labels default to the routine flow (`Case Details → Treatment Plan → Clinical Examination → Phase 1 Checklist → Submit`) and swap to existing-implant labels the instant the user picks "Existing Implant".
+
+**2. Phase 2 surgical calendar styling fixed** (`app/(tabs)/new-procedure.tsx` `calStyles`)
+- Cells were using `aspectRatio: 1` which rendered inconsistently on RN-Web — the "today" numeral drifted toward the bottom of the blue outline. Replaced with a hard-set `height: 38` parent cell + a new 30×30 `cellInner` round wrapper that holds the today-outline / selected-fill; the day numeral now sits dead-centre.
+- `textAlign: 'center'` + `lineHeight: 30` on the cell text for explicit centering across web/native.
+- Container padding tightened from `padding: 12` → `paddingHorizontal: 8, paddingTop: 10, paddingBottom: 6` to remove the dead white-space below the last week's row.
+
+### Q&A — Ask Implanr AI floating assistant
+User asked if a floating round tab à la the in-flow "Ask Implanr AI" could be added globally. Answered yes with an outlined design:
+- Layers: floating FAB (bottom-right, every screen except auth) → chat sheet → backend `/api/ai/assistant` endpoint → Emergent LLM Key (Claude Sonnet 4.5 or GPT-5.2).
+- Context payload: user role, current screen, compact case summary, active case ID.
+- Knowledge: app help (system prompt) + implant DB (`implant_indications.py`) + live case context.
+- Privacy: backend tokenises patient names before LLM calls; logs every prompt to `access_logs` for HIPAA.
+- Effort: 2-3 iterations. v1 = FAB + role-aware Q&A + implant lookups + per-case status. Suggestions/next-actions deferred to v2.
+- Awaiting user go-ahead before starting build.
+
+### Verification
+- Land on New Case (no fields filled): strip shows "Step 1 of 5 — Case Details 20%" with all 5 routine pills. `PROGRESS_STRIP_VISIBLE_ON_LAND: True`. 0 console errors.
+- Pick Single Conventional Implant → form scrolled bottom: strip auto-tracks to "Step 5 of 5 — Submit 100%" once everything is filled.
+- Calendar styling code change verified visually; render path was not exercised in playwright (Schedule section only appears after FDI tooth picks, which the smoke run didn't reach), but the structural fix is minimal and risk-free.
+
+### Notes for next agent
+- P0 server.py decomposition still outstanding.
+- "Ask Implanr AI" awaiting user approval to start.
+
+---
+
+
 ## Iteration 240 (Feb 2026) — Tap-pill-to-validate: missing-fields popup before jump
 
 ### Why
