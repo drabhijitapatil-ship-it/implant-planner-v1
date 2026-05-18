@@ -1,5 +1,48 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 242 (Feb 2026) — Ask Implanr AI personal assistant + first-pill auto-pulse
+
+### 1. Ask Implanr AI — floating round assistant on Home Screen
+
+**Backend** (`/api/ai/assistant`, new endpoint inserted in `server.py`):
+- Role-aware system prompt — student / supervisor / implant_incharge / administrator / nurse each get a tailored capabilities block.
+- Pulls the calling user's last 20 cases (scoped by role — students see only their own; in-charges see what they approve; admins see everything), tokenises the patient names to `Patient_01..NN` before sending to the LLM.
+- Crude implant-catalog grounding: if the question text matches a brand/system name in `implant_catalog`, the catalog block is appended to the prompt so the AI can answer about indications, components, and sizes.
+- LLM call: `LlmChat` with Emergent LLM Key + GPT-5.2.
+- De-tokenises patient names in the response so the user sees real names.
+- Logs every call to `access_logs` (`action=ai_assistant_query`) for HIPAA.
+
+**Frontend** (`components/AskImplanrAIFab.tsx`, new):
+- Bottom-right floating round button (56×56 blue with sparkle icon, gentle 1.08× pulse). `z-index: 9999`, anchored above the bottom tab bar.
+- Tap opens a slide-up chat sheet (85% height) with:
+  - Header (sparkle icon + "Ask Implanr AI / Your personal assistant" + close button).
+  - Scrollable message list with greeting bubble pre-seeded.
+  - Multiline input + send button (disabled while empty / busy).
+  - "Thinking…" spinner bubble while awaiting the API.
+- Auth via the existing `utils/api` axios instance so the bearer token is attached by the existing interceptor (avoids re-implementing token storage).
+- Mounted on `app/(tabs)/dashboard.tsx` so every role sees the FAB on Home.
+
+### 2. First-pill auto-pulse (potential improvement from iter-241)
+
+In `app/(tabs)/new-procedure.tsx`:
+- New `pillPulse = useRef(new Animated.Value(1))` + a `useEffect` that runs a 1→1.08→1 loop every 1.4 s while `isCompletelyBlank` (no patient name / registration / chief complaint typed yet) and stops the moment any of those fields gains a value.
+- The first pill (`idx === 0` Case Details) is now wrapped in a thin `Animated.View` with `transform: [{ scale: pillPulse }]`. Subsequent pills wrap in a plain `View` so layout flex stays identical (`flexGrow: 1, flexBasis: 0`).
+- Added `Animated` to the `react-native` import block.
+
+### Verification (screenshot tool, real preview URL)
+- Login as `Gaurav.pandey` / `Student@123` → Home renders with the **sparkle FAB** at bottom-right above the tab bar (`FAB_COUNT: 1`).
+- Tap FAB → chat sheet slides up showing the greeting bubble.
+- Type "What's my role and how many cases do I have?" → AI responds in plain English: "Your role in Implanr is **student**. With this role you can create new cases, fill Phase 1 forms, manage drafts, and view timelines for your own cases. You can also request edits, but you can't approve cases. Right now you have **0 cases** (no recent cases yet)." (`AI_RESPONDED_WITH_ROLE: True`, `AI_ERROR_BUBBLE_PRESENT: False`).
+- 0 console errors.
+
+### Notes for next agent
+- Implant catalog grounding is intentionally crude (substring brand/system match). If users start asking detailed questions about specific implant sizes, expand to a proper vector search or a richer text matcher.
+- The "Suggestions / next-actions" branch from the iter-241 design proposal is deferred — could be a v2 add-on that uses a different system prompt (e.g., "What should I do next on Patient_03?").
+- P0 server.py decomposition still outstanding (`/api/ai/assistant` added at line ~5742, pushing the file even larger).
+
+---
+
+
 ## Iteration 241 (Feb 2026) — Progress strip on landing + calendar polish + Ask Implanr AI design
 
 ### Changes

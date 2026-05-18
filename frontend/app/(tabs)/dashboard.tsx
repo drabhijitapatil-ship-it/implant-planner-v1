@@ -17,6 +17,7 @@ import { ScheduledCasesSection } from '../../components/ScheduledCasesSection';
 import { NurseHomeCalendar } from '../../components/NurseHomeCalendar';
 import WhatsNewBadge from '../../components/WhatsNewBadge';
 import PulsingDoubleArrow from '../../components/onboarding/primitives/PulsingDoubleArrow';
+import AskImplanrAIFab from '../../components/AskImplanrAIFab';
 
 // ── Status helpers ────────────────────────────────────────
 const ACTION_NEEDED_MAP: Record<string, { label: string; icon: string; color: string }> = {
@@ -908,6 +909,8 @@ export default function DashboardScreen() {
 
         <View style={{ height: 24 }} />
       </ScrollView>
+      {/* iter-242: floating "Ask Implanr AI" personal assistant — available to every role. */}
+      <AskImplanrAIFab />
     </SafeAreaView>
   );
 }
