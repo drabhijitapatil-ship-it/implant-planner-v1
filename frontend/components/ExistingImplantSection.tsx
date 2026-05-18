@@ -861,15 +861,18 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
       </View>
 
       {/* ─── Type of Implant Procedure DONE ─── */}
+      {/* iter-238: switched from a chip row to a scrollable Dropdown to
+          match the outer "Type of Implant Procedure" picker — saves vertical
+          space and feels consistent with the rest of the form. */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Type of Implant Procedure Done *</Text>
-        <View style={styles.chipRow}>
-          {ORIGINAL_PROCEDURE_TYPES.map(t => (
-            <Chip key={t} label={t} active={originalProcedure === t}
-              onPress={() => setOriginalProcedure(t)}
-              testID={`ei-orig-${t.replace(/\s+/g, '-').toLowerCase()}`} />
-          ))}
-        </View>
+        <DropDown
+          value={originalProcedure}
+          options={ORIGINAL_PROCEDURE_TYPES}
+          onPick={(v) => setOriginalProcedure(v)}
+          placeholder="Select Type of Implant Procedure Done"
+          testID="ei-orig-procedure-dropdown"
+        />
       </View>
 
       {/* iter-235: Arch picker — only for full-arch existing-implant cases
@@ -1616,15 +1619,22 @@ function FdiSinglePicker({ value, onPick, testID }: { value: string; onPick: (t:
       </TouchableOpacity>
       <Modal transparent visible={open} animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setOpen(false)}>
-          <Pressable style={[styles.modalCard, { padding: 18 }]} onPress={(e) => e.stopPropagation()}>
+          <Pressable style={[styles.modalCard, { padding: 14, maxWidth: '95%' }]} onPress={(e) => e.stopPropagation()}>
             <Text style={styles.modalTitle}>Pick a tooth</Text>
-            <FdiAnatomicalChart
-              mode="single"
-              value={value}
-              onChange={(t) => { onPick(t as string); setOpen(false); }}
-              selectedLabel="Selected"
-              testIDPrefix={`${testID}-tooth`}
-            />
+            {/* iter-238 fix: on narrow phones the 16-tooth-wide jaw rows
+                used to overflow the modal's white background. Horizontal
+                ScrollView lets the chart breathe at its natural width while
+                a small per-tooth size reduction in FdiAnatomicalChart keeps
+                it visible without scroll on most viewports. */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 4 }}>
+              <FdiAnatomicalChart
+                mode="single"
+                value={value}
+                onChange={(t) => { onPick(t as string); setOpen(false); }}
+                selectedLabel="Selected"
+                testIDPrefix={`${testID}-tooth`}
+              />
+            </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>

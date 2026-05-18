@@ -1,5 +1,47 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 238 (Feb 2026) — P0 draft crash hotfix + Existing Implant polish (dropdown, uniform pills with ✓, FDI overflow)
+
+### P0 hotfix — Continue Draft crashing to blank screen
+**Root cause:** I added `const scrollRef = useRef<ScrollView | null>(null)` *after* the `if (step === 'implants' && createdProcedureId) { return (...) }` early return on line 915. Resumed drafts where the user had advanced to step `'implants'` hit that early return → `useRef` was never called → hook count differed between renders → React threw "Rendered fewer hooks than expected" and unmounted the whole tree → blank screen. Reproduced in screenshot tool with the All-on-X draft.
+
+**Fix in `app/(tabs)/new-procedure.tsx`:** Moved `scrollRef`, `onExistingStepLayout`, `onScrollExisting`, and `jumpToExistingStep` to right after the `currentExistingStep` state (still **above** the early return) so the hook order is stable for every render path.
+
+### Existing Implant polish (iter-238)
+**a. "Implant Inventory" → "Implant Details"**
+- Renamed `EXISTING_STEP_LABELS[1]` from `'Implant Inventory'` → `'Implant Details'` and updated comments.
+
+**b. Uniform pill sizing + green tick on completion**
+- `existingStepPill` now uses `flexGrow: 1, flexBasis: 0, minWidth: 64` so all 5 pills line up on a single tidy row with equal width.
+- New per-step completion derivation computed *after* `formData` is in scope:
+  - `caseDetailsDone` — patient name, registration #, chief complaint, supervisor, in-charge, receipt #, amount filled.
+  - `implantDetailsDone` — original procedure picked, AND (arch picked for full-arch OR at least one implant tooth for non-full-arch).
+  - `clinicalDone` — occlusocervical height + mesiodistal space + ridge contour.
+  - `medicalDone` — all 5 medical risk factors answered.
+  - Submit (idx 4) `done = caseDetailsDone && implantDetailsDone && clinicalDone && medicalDone` (a "ready to submit" cue).
+- Pill renders a green `checkmark-circle` icon + green-tinted background (`existingStepPillDone` style) when its step is complete; otherwise the leading number "1./2./..." is shown.
+
+**c. "Type of Implant Procedure Done" — chip row → scrollable Dropdown**
+- In `ExistingImplantSection.tsx`, replaced the `<View style={styles.chipRow}>` with a `<DropDown>` reusing the same scrollable picker UX as the outer "Type of Implant Procedure". Saves vertical space and feels consistent with the rest of the form.
+
+**d. FDI chart in Implant Selection — teeth no longer overflow the white background**
+- `FdiAnatomicalChart.tsx`: tooth widths reduced from `(26 / 23 / 22 / 20)` → `(22 / 19 / 18 / 16)`; heights from `(32 / 28)` → `(28 / 24)`; radii from `(5 / 9)` → `(4 / 8)`. Total chart row width drops from ~406px → ~310px, fitting comfortably inside the 372-px-wide modal on a 420-px-wide phone.
+- `ExistingImplantSection.tsx → FdiSinglePicker`: modal chart now wrapped in `<ScrollView horizontal showsHorizontalScrollIndicator={false}>` as a safety net, and `modalCard` is overridden to `maxWidth: '95%', padding: 14` to maximise usable width on narrow viewports.
+
+### Verification (screenshot tool, mobile viewport)
+- Continue from Drafts (All-on-X draft) → step `implants` resumes successfully, no blank screen, 0 errors.
+- Pills: equal width, single row, ellipsis-truncated long labels ("Implant D...", "Clinical E...", "Medical A..."), pill #2 turns green with ✓ once Implant Details fields are filled.
+- "Type of Implant Procedure Done" is now a Dropdown ("Select Type of Implant Procedure Done" placeholder, opens scrollable list, lets user pick "All on 4").
+- After All-on-4 + Maxillary picks, the strip auto-updates to "Step 2 of 5 — Implant Details 40%" and pill #2 highlights blue.
+- 0 console errors.
+
+### Notes for next agent
+- The TDZ trap that hit my first iter-238 attempt (referencing `formData` in `existingStepDone` before its `useState` declaration) is the second time hoisting state has bitten this session — keep all derived booleans/strings AFTER every `useState`/`useRef` call.
+- P0 server.py decomposition still outstanding.
+
+---
+
+
 ## Iteration 237 (Feb 2026) — Tappable step pills in the sticky progress strip
 
 ### Why
