@@ -1,5 +1,46 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 243 (Feb 2026) — Fix Ask Implanr AI 502/520 + AI summary feedback loop
+
+### 1. Ask Implanr AI 502/520 fix
+
+**Root cause:** GPT-5.2 calls were taking 25-30 s on average, which is over Cloudflare's ~30 s origin timeout — clients saw 502 (k8s ingress timeout) or 520 (Cloudflare origin error). The errors were never the LLM's fault — they were the gateway giving up before the LLM responded.
+
+**Fixes in `server.py`** (`/ai/assistant` endpoint):
+- Swapped `gpt-5.2` → `gpt-4o-mini` for the assistant model. The personal-assistant use case (app help + role + case summary + implant catalog lookups) doesn't need top-tier reasoning and 4o-mini answers in ~3-5 s instead of 25-30 s.
+- Wrapped the LLM call in `asyncio.wait_for(..., timeout=25.0)` so we fail fast with a friendly bubble ("I'm taking a bit too long to think — could you ask that again, maybe a touch shorter?") instead of letting the gateway return a confusing 5xx.
+- Added a blanket `except Exception` that returns a graceful "Hmm, I hit an error reaching the AI service — please try again in a moment. (debug: ErrorClassName)" so users never see a raw stack trace.
+- Reduced the case-summary block from the last 20 cases → last 10 to shave a few hundred prompt tokens.
+
+**Fix in `components/AskImplanrAIFab.tsx`:**
+- Bumped the axios call's `timeout` to 35 s so the client waits long enough for the backend's 25 s LLM budget + network overhead instead of giving up at the default 10 s window.
+
+**Measured**: GPT-4o-mini round-trip for "What can I do as a student?" — **4 s end-to-end** (prior gpt-5.2: 25-30 s). 502/520 no longer reachable for typical queries.
+
+### 2. AI summary feedback loop ("learn from clinician edits")
+
+When any clinician edits an AI-generated summary (the existing `PATCH /procedures/{id}/ai-summary` endpoint), we now capture the *(original AI text → edited text)* pair in a new collection so future generations can use those edits as in-context examples — a poor-man's RLHF without needing to fine-tune.
+
+**Backend changes (`server.py`):**
+- New `ai_summary_feedback` collection. Document shape: `{ summary_type, procedure_id, ai_text, edited_text, edited_by, edited_by_role, edited_by_id, is_owner_edit, created_at }`.
+- The existing `update_ai_summary` endpoint now writes a feedback doc whenever both the original and the edited text are non-empty (i.e., the clinician genuinely rewrote, not just cleared the field). Wrapped in `try/except` so write failures never block the actual summary save.
+- New helper `_get_summary_feedback_examples(summary_type, limit=5)` returns the most recent N (ai_text, edited_text) pairs.
+- The case-summary generator (`/ai/case-summary`) now folds the most recent **3** examples into the prompt under a `"VOICE & STYLE EXAMPLES — match the cadence, tone, and clinician phrasing…"` block, so GPT learns the rewriting style our users prefer (sentence length, terminology, what they keep vs. cut) without copying the example content.
+- New admin / in-charge endpoint `GET /api/ai/summary-feedback-stats` returns counts (`case_summary_examples`, `surgical_notes_examples`, `total`) so we can monitor how much feedback data we've accumulated.
+
+**Verification (curl):**
+- `POST /api/ai/assistant` with student creds → 4 s response, role-aware (`student`), 997-char answer, 0 timeouts.
+- `GET /api/ai/summary-feedback-stats` with admin creds → `{"case_summary_examples": 0, "surgical_notes_examples": 0, "total": 0}` (collection is empty as expected on first deploy; will populate the first time a clinician edits a summary).
+
+### Notes for next agent
+- Once we have ~30+ feedback examples, consider deduping (some clinicians may make near-identical edits) and prefer ones where `is_owner_edit` is false (other-clinician edits encode richer style signals).
+- The voice-and-style block is capped at 600 chars per `ai_text` / `edited_text` slice so the prompt budget stays predictable even when summaries grow.
+- If `case_summary_examples` ever climbs past 100, switch from "most recent 3" to a vector-search retrieval of the most stylistically similar examples to the case at hand.
+- P0 server.py decomposition still outstanding.
+
+---
+
+
 ## Iteration 242 (Feb 2026) — Ask Implanr AI personal assistant + first-pill auto-pulse
 
 ### 1. Ask Implanr AI — floating round assistant on Home Screen

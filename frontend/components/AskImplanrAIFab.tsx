@@ -52,11 +52,14 @@ export default function AskImplanrAIFab() {
     setBusy(true);
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
     try {
+      // iter-243: AI calls can take 10-20s on GPT-4o-mini, give axios a
+      // generous timeout so we don't trip the default 10s/30s window and
+      // surface 502/520 errors that look like server problems.
       const res = await api.post('/ai/assistant', {
         question: q,
         history: msgs.slice(-6),
         session_id: sessionRef.current,
-      });
+      }, { timeout: 35000 });
       const data = res.data || {};
       sessionRef.current = data.session_id || sessionRef.current;
       setMsgs(m => [...m, { role: 'assistant', content: data.answer || '(empty response)' }]);

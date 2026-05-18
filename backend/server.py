@@ -5773,7 +5773,7 @@ async def ai_assistant(request: Request, current_user: dict = Depends(get_curren
     procs = await db.procedures.find(
         case_filter,
         {"_id": 1, "patient_name": 1, "registration_number": 1, "implant_procedure_type": 1, "status": 1, "current_phase": 1, "created_at": 1, "case_origin": 1}
-    ).sort("created_at", -1).limit(20).to_list(length=20)
+    ).sort("created_at", -1).limit(10).to_list(length=10)
 
     # Tokenise patient names so the LLM never sees raw PII.
     tokens: dict[str, str] = {}
@@ -5837,12 +5837,21 @@ async def ai_assistant(request: Request, current_user: dict = Depends(get_curren
     )
 
     session_id = body.get("session_id") or f"assistant-{user_id}-{uuid.uuid4().hex[:8]}"
-    chat = LlmChat(
-        api_key=_get_llm_key(),
-        session_id=session_id,
-        system_message=system_message,
-    ).with_model("openai", "gpt-5.2")
-    response_text = await chat.send_message(UserMessage(text=prompt))
+    # iter-243: 520/502s reported — those are gateway timeouts when the LLM
+    # call exceeds Cloudflare's 30s budget. Use a faster model and asyncio
+    # wait_for so we fail fast (in 25s) with a friendly message instead of
+    # letting the gateway return a confusing 5xx.
+    try:
+        chat = LlmChat(
+            api_key=_get_llm_key(),
+            session_id=session_id,
+            system_message=system_message,
+        ).with_model("openai", "gpt-4o-mini")
+        response_text = await asyncio.wait_for(chat.send_message(UserMessage(text=prompt)), timeout=25.0)
+    except asyncio.TimeoutError:
+        return {"answer": "I'm taking a bit too long to think — could you ask that again, maybe a touch shorter? (My responses time out at 25 s.)", "session_id": session_id}
+    except Exception as e:
+        return {"answer": f"Hmm, I hit an error reaching the AI service — please try again in a moment. (debug: {type(e).__name__})", "session_id": session_id}
 
     # De-tokenise patient names so the user sees the real names.
     for tok, real in tokens.items():
@@ -6157,6 +6166,22 @@ FORMAT INSTRUCTIONS:
 - Skip any section where no relevant data is available, but note it briefly as "Data pending for this phase"
 - Make the summary clinically meaningful and specific to THIS patient — avoid boilerplate language"""
 
+    # iter-243: feedback loop — fold the most recent (ai_text → edited_text)
+    # pairs from `ai_summary_feedback` into the prompt as voice/style
+    # examples. The model learns the rewrites our clinicians prefer
+    # (tone, sentence length, terminology) without us shipping a fine-tune.
+    fb_examples = await _get_summary_feedback_examples("case_summary", limit=3)
+    if fb_examples:
+        style_block = "\n\n".join(
+            f"--- BEFORE (AI draft) ---\n{ex['ai_text'][:600]}\n--- AFTER (clinician edit) ---\n{ex['edited_text'][:600]}"
+            for ex in fb_examples
+        )
+        prompt += (
+            "\n\nVOICE & STYLE EXAMPLES — match the cadence, tone, and clinician phrasing shown in these recent edits "
+            "(do NOT copy their content; copy the rewriting style — sentence length, terminology, what they keep vs. cut):\n\n"
+            + style_block
+        )
+
     chat = LlmChat(
         api_key=_get_llm_key(),
         session_id=f"summary-{procedure_id}-{uuid.uuid4().hex[:8]}",
@@ -6277,7 +6302,57 @@ async def update_ai_summary(procedure_id: str, request: Request, current_user: d
         }}
 
     await db.procedures.update_one({"_id": ObjectId(procedure_id)}, update_op)
+
+    # iter-243: feedback loop — capture (original AI text → user-edited text)
+    # pairs into `ai_summary_feedback` so we can replay them as few-shot
+    # examples on future generations. The AI gradually learns the kinds of
+    # rewrites our users prefer (tone, sentence length, terminology).
+    try:
+        if old_value.strip() and content.strip():
+            await db.ai_summary_feedback.insert_one({
+                "summary_type": summary_type,
+                "procedure_id": procedure_id,
+                "ai_text": old_value,
+                "edited_text": content,
+                "edited_by": editor_name,
+                "edited_by_role": editor_role,
+                "edited_by_id": str(editor_id) if editor_id else None,
+                "is_owner_edit": is_owner,
+                "created_at": now_iso,
+            })
+    except Exception:
+        pass
+
     return {"ok": True, field_name: content}
+
+
+# ── iter-243: Few-shot retrieval for AI summary generators ──
+# Returns the N most recent (ai_text → edited_text) pairs of the given
+# summary type so future AI calls can include them as in-context examples
+# (a poor-man's RLHF). Capped at 5 to keep the prompt budget under control.
+async def _get_summary_feedback_examples(summary_type: str, limit: int = 5) -> list[dict]:
+    try:
+        cursor = db.ai_summary_feedback.find(
+            {"summary_type": summary_type},
+            {"_id": 0, "ai_text": 1, "edited_text": 1}
+        ).sort("created_at", -1).limit(limit)
+        return await cursor.to_list(length=limit)
+    except Exception:
+        return []
+
+
+@api_router.get("/ai/summary-feedback-stats")
+async def ai_summary_feedback_stats(current_user: dict = Depends(get_current_user)):
+    """Admin / in-charge view of how many feedback examples we've accumulated."""
+    if current_user.get("role") not in ("administrator", "implant_incharge"):
+        raise HTTPException(status_code=403, detail="Not authorised")
+    case_count = await db.ai_summary_feedback.count_documents({"summary_type": "case_summary"})
+    surg_count = await db.ai_summary_feedback.count_documents({"summary_type": "surgical_notes"})
+    return {
+        "case_summary_examples": case_count,
+        "surgical_notes_examples": surg_count,
+        "total": case_count + surg_count,
+    }
 
 
 # ── Full-Arch atrophy classification (silent institutional guidance) ──
