@@ -206,22 +206,27 @@ function CalendarPicker({ value, onChange, label, required }: {
             {cells.map((day, idx) => (
               <TouchableOpacity
                 key={idx}
-                style={[
-                  calStyles.cell,
-                  day && isSelected(day) && calStyles.cellSelected,
-                  day && isToday(day) && !isSelected(day) && calStyles.cellToday,
-                ]}
+                style={calStyles.cell}
                 disabled={!day || isDisabled(day)}
                 onPress={() => day && selectDate(day)}
               >
-                <Text style={[
-                  calStyles.cellText,
-                  day && isDisabled(day) && calStyles.cellDisabled,
-                  day && isSelected(day) && calStyles.cellSelectedText,
-                  day && isToday(day) && !isSelected(day) && calStyles.cellTodayText,
+                {/* iter-241: inner 30×30 circle holds the today-outline /
+                    selected-fill so the day numeral sits dead-centre instead
+                    of toward the bottom of the parent cell. */}
+                <View style={[
+                  calStyles.cellInner,
+                  day && isSelected(day) && calStyles.cellSelected,
+                  day && isToday(day) && !isSelected(day) && calStyles.cellToday,
                 ]}>
-                  {day || ''}
-                </Text>
+                  <Text style={[
+                    calStyles.cellText,
+                    day && isDisabled(day) && calStyles.cellDisabled,
+                    day && isSelected(day) && calStyles.cellSelectedText,
+                    day && isToday(day) && !isSelected(day) && calStyles.cellTodayText,
+                  ]}>
+                    {day || ''}
+                  </Text>
+                </View>
               </TouchableOpacity>
             ))}
           </View>
@@ -232,19 +237,25 @@ function CalendarPicker({ value, onChange, label, required }: {
 }
 
 const calStyles = StyleSheet.create({
-  container: { borderWidth: 1, borderColor: '#DDD', borderRadius: 10, marginTop: 4, backgroundColor: '#FFF', padding: 12 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  // iter-241: tighter padding so the calendar doesn't leave dead white space
+  // below the last week of days.
+  container: { borderWidth: 1, borderColor: '#DDD', borderRadius: 10, marginTop: 4, backgroundColor: '#FFF', paddingHorizontal: 8, paddingTop: 10, paddingBottom: 6 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   navBtn: { padding: 6 },
   monthYear: { fontSize: 15, fontWeight: '700', color: '#1A1A2E' },
-  dayNamesRow: { flexDirection: 'row', marginBottom: 4 },
+  dayNamesRow: { flexDirection: 'row', marginBottom: 2 },
   dayName: { flex: 1, textAlign: 'center', fontSize: 12, fontWeight: '600', color: '#999' },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  cell: { width: '14.28%', aspectRatio: 1, justifyContent: 'center', alignItems: 'center', borderRadius: 20 },
-  cellText: { fontSize: 14, color: '#333' },
+  // iter-241: hard-set cell to a square 38×38 (overrides the aspect-ratio
+  // fallback that was rendering inconsistent heights on web and pushing the
+  // "today" numeral toward the bottom of its blue outline).
+  cell: { width: `${100/7}%`, height: 38, justifyContent: 'center', alignItems: 'center' },
+  cellInner: { width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
+  cellText: { fontSize: 14, color: '#333', textAlign: 'center', lineHeight: 30 },
   cellDisabled: { color: '#CCC' },
   cellSelected: { backgroundColor: '#1A73E8' },
   cellSelectedText: { color: '#FFF', fontWeight: '700' },
-  cellToday: { borderWidth: 1.5, borderColor: '#1A73E8', borderRadius: 20 },
+  cellToday: { borderWidth: 1.5, borderColor: '#1A73E8' },
   cellTodayText: { color: '#1A73E8', fontWeight: '600' },
 });
 
@@ -1135,7 +1146,11 @@ export default function NewProcedureScreen() {
   ];
 
   const existingStepDone = flowStepMissing.map(arr => arr.length === 0);
-  const showFlowStrip = !!formData.implant_procedure_type;
+  // iter-241: progress strip now renders immediately on landing on New Case
+  // (was gated on procedure-type being picked). Pre-selection it shows the
+  // routine flow's first 5 labels; once the user picks "Existing Implant"
+  // the labels swap automatically via `FLOW_STEP_LABELS`.
+  const showFlowStrip = true;
   return (
     <ScrollView
       ref={scrollRef}
