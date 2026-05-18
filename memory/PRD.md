@@ -1,5 +1,33 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 240 (Feb 2026) — Tap-pill-to-validate: missing-fields popup before jump
+
+### Why
+The sticky pill navigator (iter-237/238/239) lets users jump between sections but offered no clue about *what* was outstanding before jumping. iter-240 turns each pill into a real-time validation cheat-sheet: tapping a green pill scrolls there silently; tapping a still-incomplete pill first surfaces a tiny popup listing exactly which fields are missing in that section.
+
+### Changes in `app/(tabs)/new-procedure.tsx`
+- Replaced the boolean-only completion booleans with per-step **missing-field arrays** (`missCaseDetails`, `missImplantDetails`, `missClinical`, `missMedicalOrChecklist`). Each is computed inline from `formData`, `existingOrigProcedure`, `existingImplantTeeth`, `isFullArch`, and the flow flag, returning user-friendly labels (e.g., `'Receipt number'`, `'Mesiodistal space'`, `'CBCT Report upload'`).
+- The Submit pill's missing list is a roll-up of upstream sections (`'Case Details has missing fields'`, etc.) so users get a single summary when they tap it.
+- `existingStepDone` derived from the missing arrays (`length === 0`) so the green ✓ behaviour from iter-238 still works unchanged.
+- Pill `onPress` now:
+  1. If missing list is empty → `jumpToExistingStep(idx)` immediately.
+  2. Otherwise: builds a body listing up to 8 missing field labels (with "…and N more" tail) and asks the user to confirm.
+  3. On `Platform.OS === 'web'` the popup uses `window.confirm()` because React Native Web's `Alert.alert` ignores button callbacks. Mobile (iOS / Android) gets a native two-button `Alert.alert` with **Stay here** and **Take me there** options.
+
+### Verification
+- Pills already-green: tap → silent scroll, no popup.
+- Pills still incomplete: tap → popup body lists the exact missing fields (e.g., `• Patient name`, `• Receipt number`, `• Amount paid`). Confirm → form scrolls to that section. Cancel → user stays where they were.
+- Pill #5 Submit on an empty form shows roll-up message like `Case Details has missing fields / Implant Details has missing fields / ...`.
+- 0 console errors on the routine + Existing Implant happy paths.
+
+### Notes for next agent
+- The missing-field labels are intentionally user-friendly (no internal field names). When adding new required fields, update the matching missing-array push so the popup stays informative.
+- `Platform.OS === 'web'` fallback is a pragmatic shim — if/when we adopt a custom in-app modal for alerts, replace both branches with that.
+- P0 server.py decomposition still outstanding.
+
+---
+
+
 ## Iteration 239 (Feb 2026) — Full-arch FDI multi-select unified, validation tightened, routine progress strip, pill numerals fix
 
 ### Changes
