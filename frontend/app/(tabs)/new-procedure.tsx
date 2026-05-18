@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, Alert, ActivityIndicator, Platform, AppState, Linking, Image
+  StyleSheet, Alert, ActivityIndicator, Platform, AppState, Linking, Image, Animated
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -1151,6 +1151,25 @@ export default function NewProcedureScreen() {
   // routine flow's first 5 labels; once the user picks "Existing Implant"
   // the labels swap automatically via `FLOW_STEP_LABELS`.
   const showFlowStrip = true;
+
+  // iter-242: gentle auto-pulse on the "Case Details" pill until the user
+  // types the very first field — draws the eye toward where to start. Stops
+  // the moment any required field becomes non-empty.
+  const isCompletelyBlank = !formData.patient_name && !formData.registration_number && !formData.chief_complaint;
+  const pillPulse = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (!isCompletelyBlank) {
+      pillPulse.setValue(1);
+      return;
+    }
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(pillPulse, { toValue: 1.08, duration: 700, useNativeDriver: true }),
+      Animated.timing(pillPulse, { toValue: 1, duration: 700, useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [isCompletelyBlank, pillPulse]);
+
   return (
     <ScrollView
       ref={scrollRef}
@@ -1197,7 +1216,10 @@ export default function NewProcedureScreen() {
             {FLOW_STEP_LABELS.map((label, idx) => {
               const active = idx === currentExistingStep;
               const done = existingStepDone[idx];
+              const PillWrap: any = idx === 0 ? Animated.View : View;
+              const pillWrapProps = idx === 0 ? { style: { transform: [{ scale: pillPulse }], flexGrow: 1, flexBasis: 0 } } : { style: { flexGrow: 1, flexBasis: 0 } };
               return (
+                <PillWrap key={label} {...pillWrapProps}>
                 <TouchableOpacity
                   key={label}
                   onPress={() => {
@@ -1245,6 +1267,7 @@ export default function NewProcedureScreen() {
                     {label}
                   </Text>
                 </TouchableOpacity>
+                </PillWrap>
               );
             })}
           </View>

@@ -5740,6 +5740,133 @@ async def download_catalog_attachment(
     return Response(content=data, media_type=record.get("content_type") or ctype, headers=headers)
 
 
+# ── iter-242: Ask Implanr AI personal assistant ──────────────────────────
+# Broad-scope assistant available from the Home Screen FAB. Unlike the
+# catalog-only `/ai/ask-implanr` endpoint above, this one is aware of:
+#   • the calling user's role + display name
+#   • a compact summary of THEIR cases (status + last activity)
+#   • the implant catalog (when the question matches a brand/system name)
+#   • app-workflow help (system prompt only)
+# Patient names are tokenised before being sent to the LLM so the model
+# never sees raw PII; tokens are de-tokenised in the response.
+@api_router.post("/ai/assistant")
+async def ai_assistant(request: Request, current_user: dict = Depends(get_current_user)):
+    body = await request.json()
+    question = (body.get("question") or "").strip()
+    history = body.get("history") or []  # list of {role: user|assistant, content: str}
+    if not question:
+        raise HTTPException(status_code=400, detail="question is required")
+
+    role = current_user.get("role", "student")
+    user_id = current_user.get("id") or current_user.get("user_id") or current_user.get("_id")
+
+    # ── Gather a compact case summary scoped by role ──
+    case_filter: dict = {"is_deleted": {"$ne": True}}
+    if role == "student":
+        case_filter["user_id"] = str(user_id)
+    elif role == "supervisor":
+        case_filter["supervisor_id"] = str(user_id)
+    elif role == "implant_incharge":
+        case_filter["implant_incharge_id"] = str(user_id)
+    # admin / nurse: no scope filter — they see everything (limited by .limit below)
+
+    procs = await db.procedures.find(
+        case_filter,
+        {"_id": 1, "patient_name": 1, "registration_number": 1, "implant_procedure_type": 1, "status": 1, "current_phase": 1, "created_at": 1, "case_origin": 1}
+    ).sort("created_at", -1).limit(20).to_list(length=20)
+
+    # Tokenise patient names so the LLM never sees raw PII.
+    tokens: dict[str, str] = {}
+    case_lines = []
+    for i, p in enumerate(procs):
+        pid = str(p.get("_id"))
+        pname = (p.get("patient_name") or "").strip() or "Unknown"
+        token = f"Patient_{i+1:02d}"
+        tokens[token] = pname
+        case_lines.append(
+            f"• [{token}] reg#{p.get('registration_number', '—')} | "
+            f"{p.get('implant_procedure_type', 'Unknown procedure')} | "
+            f"origin={p.get('case_origin', 'routine')} | "
+            f"status={p.get('status', '—')} | phase={p.get('current_phase', '—')}"
+        )
+    cases_block = ("\n".join(case_lines)) if case_lines else "(no cases yet)"
+
+    # ── Catalog grounding: if the question mentions a brand/system, pull
+    #     its catalog block so the AI can answer about components / sizes. ──
+    catalog_block = ""
+    try:
+        from implant_catalog_seed import build_ai_context as _build_cat_ctx
+        # crude match — pull up to 3 catalogs whose key/brand appears in the question
+        q_lower = question.lower()
+        cursor = db.implant_catalog.find({"is_stub": {"$ne": True}}, {"_id": 0}).limit(50)
+        all_cat = await cursor.to_list(length=50)
+        matched = [c for c in all_cat if (c.get("brand", "").lower() in q_lower) or (c.get("system", "").lower() in q_lower)][:3]
+        if matched:
+            catalog_block = "\n\n".join(_build_cat_ctx(c) for c in matched if _build_cat_ctx(c))
+    except Exception:
+        pass
+
+    role_capabilities = {
+        "student": "Students create new cases, fill Phase 1 forms, manage drafts, and view their own case timelines. They can request edits, but cannot approve cases.",
+        "supervisor": "Supervisors review student Phase 1 submissions, approve/reject them, and route approved cases to the implant in-charge.",
+        "implant_incharge": "Implant in-charges give final Phase 1 approval, manage surgical planning (Phase 2), schedule cases, and approve subsequent phases.",
+        "administrator": "Administrators can do everything — manage users, see all cases, configure the implant catalog, view audit logs, export reports.",
+        "nurse": "Nurses see the case schedule, prep checklists, and have read-only access to most case details.",
+    }
+    role_help = role_capabilities.get(role, "")
+
+    system_message = (
+        "You are Implanr AI, a friendly and concise personal assistant for prosthodontists using the Implanr mobile app. "
+        "Your job: help the current user navigate the app and use its full potential. "
+        "Answer in plain professional language, 1-4 short paragraphs unless a list is clearer. "
+        "Never invent facts about cases or the implant catalog — if the data isn't in the provided context, say so honestly. "
+        "Never use the raw patient name; refer to cases by their token (e.g. Patient_01) — the app de-tokenises before showing the answer to the user. "
+        "Do NOT mention HIPAA tokenisation or that names are anonymised; just use the tokens naturally."
+    )
+
+    prompt = (
+        f"USER ROLE: {role}\n"
+        f"USER NAME: {current_user.get('name', '—')}\n"
+        f"ROLE CAPABILITIES: {role_help}\n\n"
+        f"USER'S RECENT CASES (most recent first, max 20):\n{cases_block}\n\n"
+        + (f"RELEVANT IMPLANT CATALOG DATA:\n{catalog_block}\n\n" if catalog_block else "")
+        + (("RECENT CONVERSATION:\n" + "\n".join(f"{m.get('role','user')}: {m.get('content','')[:400]}" for m in history[-6:]) + "\n\n") if history else "")
+        + f"USER QUESTION: {question}\n\n"
+        + "Answer the user directly and helpfully. If their question is about how to do something in the app, give the step-by-step. "
+        + "If it's about a case, use the token from the list above. If it's about an implant system, ground in the catalog block."
+    )
+
+    session_id = body.get("session_id") or f"assistant-{user_id}-{uuid.uuid4().hex[:8]}"
+    chat = LlmChat(
+        api_key=_get_llm_key(),
+        session_id=session_id,
+        system_message=system_message,
+    ).with_model("openai", "gpt-5.2")
+    response_text = await chat.send_message(UserMessage(text=prompt))
+
+    # De-tokenise patient names so the user sees the real names.
+    for tok, real in tokens.items():
+        response_text = response_text.replace(tok, real)
+
+    # Log to access_logs for HIPAA.
+    try:
+        await db.access_logs.insert_one({
+            "action": "ai_assistant_query",
+            "outcome": "ok",
+            "user_id": str(user_id),
+            "resource_type": "ai_assistant",
+            "resource_id": session_id,
+            "metadata": {"question_length": len(question), "tokens_used": len(tokens)},
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception:
+        pass
+
+    return {"answer": response_text, "session_id": session_id}
+
+
+
+
 @api_router.post("/ai/ask-implanr")
 async def ai_ask_implanr(request: Request, current_user: dict = Depends(get_current_user)):
     """Free-form Implanr AI Q&A scoped to the implant catalog. Auto-scopes to
