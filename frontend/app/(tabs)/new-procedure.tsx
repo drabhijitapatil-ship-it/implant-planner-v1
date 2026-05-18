@@ -1076,18 +1076,29 @@ export default function NewProcedureScreen() {
   // is treated as complete only when the previous 4 milestones are all
   // green (a "ready to submit" cue). Declared AFTER all state hooks but
   // BEFORE the JSX to avoid the TDZ trap that hit iter-238 first attempt.
+  // iter-239: same strip now also renders for routine (non-Existing) cases
+  // — milestone labels + completion logic switch on `isExistingImplantCase`.
+  const FLOW_STEP_LABELS = isExistingImplantCase
+    ? ['Case Details', 'Implant Details', 'Clinical Examination', 'Medical Assessment', 'Submit']
+    : ['Case Details', 'Treatment Plan', 'Clinical Examination', 'Phase 1 Checklist', 'Submit'];
   const caseDetailsDone = !!(formData.patient_name?.trim() && formData.registration_number?.trim() && formData.chief_complaint?.trim() && formData.supervisor_id && formData.implant_incharge_id && formData.receipt_number?.trim() && formData.amount_paid);
-  const implantDetailsDone = !!(existingOrigProcedure && (FULL_ARCH_GROUP.has(existingOrigProcedure) ? !!formData.arch : (existingImplantTeeth || []).length > 0));
+  const implantDetailsDone = isExistingImplantCase
+    ? !!(existingOrigProcedure && (FULL_ARCH_GROUP.has(existingOrigProcedure) ? !!formData.arch : true) && (existingImplantTeeth || []).length > 0)
+    : !!(formData.prosthetic_plan && (isFullArch ? !!formData.arch : (formData.missing_teeth || []).length > 0));
   const clinicalDone = !!(formData.occlusocervical_height && formData.mesiodistal_space && formData.ridge_contour);
-  const medicalDone = !!(formData.diabetes && formData.smoking_status && formData.anticoagulant_therapy && formData.osteoporosis_medication && formData.radiation_therapy);
-  const existingStepDone = [caseDetailsDone, implantDetailsDone, clinicalDone, medicalDone, caseDetailsDone && implantDetailsDone && clinicalDone && medicalDone];
+  const medicalOrChecklistDone = isExistingImplantCase
+    ? !!(formData.diabetes && formData.smoking_status && formData.anticoagulant_therapy && formData.osteoporosis_medication && formData.radiation_therapy)
+    : !!(formData.cbct_url && formData.loading_type && formData.diabetes && formData.smoking_status);
+  const existingStepDone = [caseDetailsDone, implantDetailsDone, clinicalDone, medicalOrChecklistDone, caseDetailsDone && implantDetailsDone && clinicalDone && medicalOrChecklistDone];
+  // iter-239: show the strip whenever a procedure type is set (covers both flows).
+  const showFlowStrip = !!formData.implant_procedure_type;
   return (
     <ScrollView
       ref={scrollRef}
       style={styles.container}
       contentContainerStyle={{ paddingBottom: 100 }}
-      stickyHeaderIndices={isExistingImplantCase ? [1] : undefined}
-      onScroll={isExistingImplantCase ? onScrollExisting : undefined}
+      stickyHeaderIndices={showFlowStrip ? [1] : undefined}
+      onScroll={showFlowStrip ? onScrollExisting : undefined}
       scrollEventThrottle={64}
     >
       <View style={styles.headerBar}>
@@ -1104,31 +1115,27 @@ export default function NewProcedureScreen() {
         </View>
       </View>
 
-      {/* iter-236: sticky progress strip for Existing Implant — shows the
-          user where they are in the 5-milestone form. A render-cycle-only
-          empty View is mounted for non-Existing-Implant cases so the JSX
-          tree shape stays stable. */}
-      {isExistingImplantCase ? (
+      {/* iter-236: sticky progress strip — shows the user where they are
+          in the 5-milestone form. A render-cycle-only empty View is mounted
+          for cases without a procedure type yet so the JSX tree shape stays
+          stable. iter-239: now renders for both routine and Existing
+          Implant flows with different milestone labels. */}
+      {showFlowStrip ? (
         <View style={styles.existingProgressBar} testID="existing-progress-strip">
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <Text style={styles.existingProgressLabel} numberOfLines={1}>
-              Step {currentExistingStep + 1} of {EXISTING_STEP_LABELS.length} — {EXISTING_STEP_LABELS[currentExistingStep]}
+              Step {currentExistingStep + 1} of {FLOW_STEP_LABELS.length} — {FLOW_STEP_LABELS[currentExistingStep]}
             </Text>
             <Text style={styles.existingProgressCount}>
-              {Math.round(((currentExistingStep + 1) / EXISTING_STEP_LABELS.length) * 100)}%
+              {Math.round(((currentExistingStep + 1) / FLOW_STEP_LABELS.length) * 100)}%
             </Text>
           </View>
           <View style={styles.existingProgressTrack}>
-            <View style={[styles.existingProgressFill, { width: `${((currentExistingStep + 1) / EXISTING_STEP_LABELS.length) * 100}%` }]} />
+            <View style={[styles.existingProgressFill, { width: `${((currentExistingStep + 1) / FLOW_STEP_LABELS.length) * 100}%` }]} />
           </View>
-          {/* iter-237: tappable step pills — turn the strip into a true
-              navigator so users can jump back/forward between sections
-              instead of having to scroll through the whole long form.
-              iter-238: uniform pill width (flex 1/min) so all 5 pills line
-              up on one tidy row; green ✓ replaces the leading number once
-              that section's required fields are filled. */}
+          {/* iter-237/238/239: tappable step pills — uniform width, green ✓ when section is complete. */}
           <View style={styles.existingStepPillRow}>
-            {EXISTING_STEP_LABELS.map((label, idx) => {
+            {FLOW_STEP_LABELS.map((label, idx) => {
               const active = idx === currentExistingStep;
               const done = existingStepDone[idx];
               return (
@@ -1156,7 +1163,7 @@ export default function NewProcedureScreen() {
       ) : <View />}
 
       {/* ─── Patient Info ─── */}
-      <View style={styles.section} onLayout={isExistingImplantCase ? onExistingStepLayout(0) : undefined}>
+      <View style={styles.section} onLayout={showFlowStrip ? onExistingStepLayout(0) : undefined}>
         <Text style={styles.sectionTitle}>Patient Information</Text>
         <View style={styles.fieldContainer}>
           <Text style={styles.label}>Patient Name <Text style={{ color: '#DC3545' }}>*</Text></Text>
@@ -1404,7 +1411,7 @@ export default function NewProcedureScreen() {
             BEFORE the FDI chart so that an Overdenture-with-Attachment choice
             can flip the case into a full-arch protocol and skip teeth selection.) */}
       {prostheticOptions.length > 0 && (
-        <View style={styles.section}>
+        <View style={styles.section} onLayout={showFlowStrip ? onExistingStepLayout(1) : undefined}>
           <Text style={styles.sectionTitle}>Prosthetic Treatment Plan</Text>
           <Dropdown label="Prosthetic Plan" value={formData.prosthetic_plan}
             options={prostheticOptions} onChange={v => {
@@ -1517,7 +1524,7 @@ export default function NewProcedureScreen() {
           parent's iter-231 useEffect syncs the lifted implant tooth-positions
           into `formData.missing_teeth` so cluster utilities work identically. */}
       {effectiveProcType && (
-        <View style={styles.section} onLayout={isExistingImplantCase ? onExistingStepLayout(2) : undefined}>
+        <View style={styles.section} onLayout={showFlowStrip ? onExistingStepLayout(2) : undefined}>
           <Text style={styles.sectionTitle}>Clinical Examination</Text>
 
           {/* Intraoral Examination – Non-Full-Arch (Single, Multiple, GBR, Guided Surgery)
@@ -2089,7 +2096,7 @@ export default function NewProcedureScreen() {
           standalone Medical Assessment block below instead (no pre-surgical
           checklist items because no surgery is performed). */}
       {!isExistingImplantCase && (
-      <View style={styles.section}>
+      <View style={styles.section} onLayout={showFlowStrip ? onExistingStepLayout(3) : undefined}>
         <Text style={styles.sectionTitle}>Phase 1 Checklist <Text style={{ color: '#DC3545' }}>*</Text></Text>
         {CHECKLIST_DATA.pre_surgical.items.filter(item => item.id !== 'medical_assessment').filter(item => !(isFullArch && item.id === 'oral_prophylaxis')).map(item => (
           <View key={item.id} style={styles.checklistRow}>
@@ -2257,6 +2264,7 @@ export default function NewProcedureScreen() {
           "Submit for Approval and Move to …" buttons inside
           ExistingImplantSection. */}
       {!isExistingImplantCase && (
+      <View onLayout={showFlowStrip ? onExistingStepLayout(4) : undefined}>
       <TouchableOpacity style={styles.continueBtn} onPress={handleContinueToImplants}
         disabled={loading} data-testid="continue-to-implants">
         {loading ? (
@@ -2268,6 +2276,7 @@ export default function NewProcedureScreen() {
           </>
         )}
       </TouchableOpacity>
+      </View>
       )}
       </>)}
     </ScrollView>
@@ -2294,12 +2303,14 @@ const styles = StyleSheet.create({
   // iter-237: tappable step pills under the progress strip.
   // iter-238: pills now flex to fill the row evenly + render number/✓ icon
   // separately so they line up on a single tidy row.
+  // iter-239: tightened paddings so the leading "2." / "3." numerals stay
+  // fully inside the pill (they were clipping on narrow viewports).
   existingStepPillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 10 },
-  existingStepPill: { flexGrow: 1, flexBasis: 0, minWidth: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, paddingVertical: 5, borderRadius: 999, borderWidth: 1, borderColor: '#CFD8DC', backgroundColor: '#F8FAFC' },
+  existingStepPill: { flexGrow: 1, flexBasis: 0, minWidth: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: '#CFD8DC', backgroundColor: '#F8FAFC' },
   existingStepPillActive: { backgroundColor: '#1565C0', borderColor: '#1565C0' },
   existingStepPillDone: { backgroundColor: '#E8F5E9', borderColor: '#A5D6A7' },
-  existingStepPillNum: { fontSize: 10, fontWeight: '700', color: '#37474F', marginRight: 3 },
-  existingStepPillText: { fontSize: 10, fontWeight: '600', color: '#37474F', letterSpacing: 0.1 },
+  existingStepPillNum: { fontSize: 10, fontWeight: '700', color: '#37474F', marginRight: 4, lineHeight: 13 },
+  existingStepPillText: { fontSize: 10, fontWeight: '600', color: '#37474F', letterSpacing: 0.1, lineHeight: 13, flexShrink: 1 },
   existingStepPillTextActive: { color: '#FFFFFF' },
   existingStepPillTextDone: { color: '#2E7D32' },
   subSectionTitle: { fontSize: 14, fontWeight: '700', color: '#1565C0', marginTop: 14, marginBottom: 10, paddingBottom: 8, borderBottomWidth: 1.5, borderBottomColor: '#E3F2FD' },
