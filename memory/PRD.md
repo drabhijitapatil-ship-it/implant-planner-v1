@@ -1,5 +1,45 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 248 (Feb 2026) — Phase 1 role-specific approval comments
+
+### What the user asked for
+"In New Case workflow Phase 1, Supervisor and Implant In-Charge should each have a separate comment box (optional). When the same person holds both roles, only one box. Display them with role-specific headings on the case detail page."
+
+### What changed
+**Backend (`/api/procedures/{id}/approve` for `pending_phase1`)**
+- New routing in the comment-save logic (mirrors the existing Phase 2 pattern at lines 8126-8131):
+  - `same_person_both_roles` → write comment to BOTH `phase1_supervisor_notes` and `phase1_incharge_notes` so display logic stays uniform.
+  - Distinct supervisor + in-charge → write only to the role of the approver. Supervisor's earlier comment is NEVER overwritten when in-charge approves later.
+  - `is_incharge_self_created` explicitly does NOT touch the supervisor's note (the first bug discovered during e2e testing; fixed in the same iter).
+- PDF (`generate_case_report_pdf`): Phase 1 section now includes `Supervisor Comment` and `Implant In-Charge Comment` rows when present, right after `Phase 1 Completed`.
+
+**Frontend (`procedures/[id].tsx`)**
+- Removed the `procedure?.status !== 'pending_phase1'` exclusion so the approval comment box now appears on Phase 1 reviews too.
+- Heading is dynamic per role-on-this-case:
+  - Same person both roles → "Comment (optional)"
+  - Pure supervisor → "Supervisor Comment (optional)"
+  - Pure in-charge → "Implant In-Charge Comment (optional)"
+- New display block right after "Phase 1 Remarks" renders `phase1_supervisor_notes` and `phase1_incharge_notes` in role-coloured cards (purple = supervisor, green = in-charge — matches Phase 2/3/4 visual language).
+
+### Why Phase 2-4 untouched
+The user explicitly said "Check if comment protocol is already established through Phase 2 to Phase 4 — if it's there then don't implement it." A grep confirmed `phase2_supervisor_notes` / `phase2_incharge_notes` / `phase4_step1_supervisor_notes` / `phase4_step1_incharge_notes` etc. already store role-split. Their display already uses role headings. Pattern preserved as-is.
+
+### E2E verification (curl against localhost backend)
+| Scenario | Result |
+|---|---|
+| Two distinct approvers, separate comments | ✅ Each note isolated; neither overwrites the other |
+| Same person both roles, single comment | ✅ Written to both fields; both approvals flagged; status → `phase1_approved` |
+| Optional / blank comment | ✅ `.strip()` guard skips empty strings |
+| `is_incharge_self_created` after supervisor pre-comment | ✅ (bug fixed in same iter) Supervisor's prior comment preserved |
+
+### Files touched
+- `/app/backend/server.py` — comment routing in Phase 1 approve branch; PDF section.
+- `/app/frontend/app/procedures/[id].tsx` — case detail display block + dynamic heading on the approval comment box.
+
+---
+
+
+
 ## Iteration 247 (Feb 2026) — Phase 2 sticky 5-step progress strip
 
 ### What
