@@ -11,6 +11,7 @@ import {
   Platform,
   Image,
   Alert,
+  Animated as RNAnimated,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
@@ -617,9 +618,30 @@ export default function TabsLayout() {
 // pill when the tab is focused. The pill picks up the BlurView behind
 // it so it reads as "this glass tile is lit", echoing the iOS 26 Liquid
 // Glass selection state.
+// iter-249: Animated scale + fade transition (~150 ms) so the pill
+// gracefully glides into focus instead of snapping.
 function FocusedPill({ focused, children }: { focused: boolean; children: React.ReactNode }) {
+  const anim = React.useRef(new RNAnimated.Value(focused ? 1 : 0)).current;
+  useEffect(() => {
+    RNAnimated.timing(anim, {
+      toValue: focused ? 1 : 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  }, [focused, anim]);
+
+  const scale = anim.interpolate({ inputRange: [0, 1], outputRange: [0.86, 1] });
+
   return (
-    <View style={[pillStyles.wrap, focused && pillStyles.wrapFocused]}>
+    <View style={pillStyles.wrap}>
+      {/* Background fill animates in/out so the pill softly glows into focus. */}
+      <RNAnimated.View
+        pointerEvents="none"
+        style={[
+          pillStyles.fill,
+          { opacity: anim, transform: [{ scale }] },
+        ]}
+      />
       {children}
     </View>
   );
@@ -633,7 +655,13 @@ const pillStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  wrapFocused: {
+  fill: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    borderRadius: 16,
     backgroundColor: 'rgba(30, 136, 229, 0.14)',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(30, 136, 229, 0.32)',
