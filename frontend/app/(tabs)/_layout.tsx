@@ -488,7 +488,7 @@ export default function TabsLayout() {
             <BlurView
               intensity={80}
               tint="light"
-              experimentalBlurMethod="dimezisBlurView"
+              pointerEvents="none"
               style={[StyleSheet.absoluteFill, glassStyles.glassFill]}
             />
           ),
@@ -615,33 +615,13 @@ export default function TabsLayout() {
 }
 
 // iter-248: Active-tab pill — wraps any icon in a soft blue rounded
-// pill when the tab is focused. The pill picks up the BlurView behind
-// it so it reads as "this glass tile is lit", echoing the iOS 26 Liquid
-// Glass selection state.
-// iter-249: Animated scale + fade transition (~150 ms) so the pill
-// gracefully glides into focus instead of snapping.
+// pill when the tab is focused. Kept intentionally simple (no absolute
+// fill, no transform) so it never affects sibling tab layout. The pill
+// background appears/disappears on the focused state; sibling icons are
+// unaffected because each pill lives entirely inside its own tab slot.
 function FocusedPill({ focused, children }: { focused: boolean; children: React.ReactNode }) {
-  const anim = React.useRef(new RNAnimated.Value(focused ? 1 : 0)).current;
-  useEffect(() => {
-    RNAnimated.timing(anim, {
-      toValue: focused ? 1 : 0,
-      duration: 180,
-      useNativeDriver: true,
-    }).start();
-  }, [focused, anim]);
-
-  const scale = anim.interpolate({ inputRange: [0, 1], outputRange: [0.86, 1] });
-
   return (
-    <View style={pillStyles.wrap}>
-      {/* Background fill animates in/out so the pill softly glows into focus. */}
-      <RNAnimated.View
-        pointerEvents="none"
-        style={[
-          pillStyles.fill,
-          { opacity: anim, transform: [{ scale }] },
-        ]}
-      />
+    <View style={[pillStyles.wrap, focused && pillStyles.wrapFocused]}>
       {children}
     </View>
   );
@@ -649,19 +629,13 @@ function FocusedPill({ focused, children }: { focused: boolean; children: React.
 
 const pillStyles = StyleSheet.create({
   wrap: {
-    paddingHorizontal: 14,
-    paddingVertical: 5,
-    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  fill: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    borderRadius: 16,
+  wrapFocused: {
     backgroundColor: 'rgba(30, 136, 229, 0.14)',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(30, 136, 229, 0.32)',
