@@ -480,8 +480,12 @@ export default function TabsLayout() {
             backgroundColor: '#FFF',
             borderTopWidth: 1,
             borderTopColor: '#E5E5EA',
-            paddingBottom: 4,
-            paddingTop: 8,
+            // iter-246: shift icons + labels upward inside the same 70-px
+            // white strip — paddingBottom 14 (was 4) pushes the content
+            // up; paddingTop 4 (was 8) compensates so the strip height
+            // stays the same.
+            paddingBottom: 14,
+            paddingTop: 4,
             height: 70,
           },
           tabBarLabelStyle: {

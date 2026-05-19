@@ -17,11 +17,13 @@ import {
   StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../utils/api';
 
 type ChatMsg = { role: 'user' | 'assistant'; content: string };
 
 export default function AskImplanrAIFab() {
+  const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -159,7 +161,7 @@ export default function AskImplanrAIFab() {
               )}
             </ScrollView>
 
-            <View style={styles.inputRow}>
+            <View style={[styles.inputRow, { paddingBottom: 10 + Math.max(insets.bottom, 8) }]}>
               <TextInput
                 style={styles.input}
                 value={input}
@@ -207,7 +209,7 @@ const styles = StyleSheet.create({
   bubbleAi: { backgroundColor: '#F1F5F9', borderTopLeftRadius: 4 },
   bubbleUser: { backgroundColor: '#1565C0', borderTopRightRadius: 4 },
   bubbleText: { fontSize: 14, color: '#1A1A2E', lineHeight: 20 },
-  inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#E3F2FD', backgroundColor: '#FAFAFA' },
+  inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, paddingHorizontal: 18, paddingTop: 12, paddingBottom: 10, borderTopWidth: 1, borderTopColor: '#E3F2FD', backgroundColor: '#FAFAFA' },
   input: { flex: 1, minHeight: 40, maxHeight: 120, backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#CFD8DC', paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: '#1A1A2E' },
   sendBtn: { padding: 4 },
   chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 4, paddingTop: 8, paddingBottom: 4 },
