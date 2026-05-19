@@ -497,12 +497,18 @@ export default function TabsLayout() {
             // background shows through. We keep the bar in-flow (not
             // position:'absolute') so existing scroll content keeps its
             // natural bottom padding and nothing hides behind the glass.
+            // iter-251: reverted padding to the original 4/8 split because
+            // the wider paddingBottom (14) introduced in iter-246 was
+            // squeezing the icon area enough to clip the bottom half of
+            // smaller Ionicons (size 24) while leaving the larger
+            // ImplantIcon (size 28) visible — that's the symptom the user
+            // reported.
             backgroundColor: 'transparent',
             borderTopWidth: StyleSheet.hairlineWidth,
             borderTopColor: 'rgba(120, 144, 156, 0.20)',
             elevation: 0,
-            paddingBottom: 14,
-            paddingTop: 4,
+            paddingBottom: 4,
+            paddingTop: 8,
             height: 70,
           },
           tabBarLabelStyle: {
@@ -629,8 +635,8 @@ function FocusedPill({ focused, children }: { focused: boolean; children: React.
 
 const pillStyles = StyleSheet.create({
   wrap: {
-    paddingHorizontal: 10,
-    paddingVertical: 3,
+    paddingHorizontal: 12,
+    paddingVertical: 2,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
