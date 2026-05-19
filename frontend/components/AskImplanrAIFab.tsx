@@ -43,8 +43,18 @@ export default function AskImplanrAIFab() {
     return () => loop.stop();
   }, [pulse]);
 
-  const send = async () => {
-    const q = input.trim();
+  // iter-245: starter suggestion chips so first-time users discover what
+  // the assistant can do without staring at a blank input. They render
+  // under the greeting bubble and disappear after the first user message.
+  const SUGGESTIONS = [
+    'What can I do as my role here?',
+    'Show me my recent cases',
+    'List the implant systems available',
+    'How do I create a new case?',
+  ];
+
+  const sendQuestion = async (q: string) => {
+    q = q.trim();
     if (!q || busy) return;
     setInput('');
     const next = [...msgs, { role: 'user' as const, content: q }];
@@ -52,9 +62,6 @@ export default function AskImplanrAIFab() {
     setBusy(true);
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
     try {
-      // iter-243: AI calls can take 10-20s on GPT-4o-mini, give axios a
-      // generous timeout so we don't trip the default 10s/30s window and
-      // surface 502/520 errors that look like server problems.
       const res = await api.post('/ai/assistant', {
         question: q,
         history: msgs.slice(-6),
@@ -71,6 +78,8 @@ export default function AskImplanrAIFab() {
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
     }
   };
+
+  const send = () => sendQuestion(input);
 
   return (
     <>
@@ -131,6 +140,23 @@ export default function AskImplanrAIFab() {
                   </View>
                 </View>
               )}
+              {/* iter-245: starter chips — only when nothing's been asked yet */}
+              {msgs.length === 1 && !busy && (
+                <View style={styles.chipsWrap}>
+                  {SUGGESTIONS.map((s, i) => (
+                    <TouchableOpacity
+                      key={i}
+                      style={styles.chip}
+                      onPress={() => sendQuestion(s)}
+                      testID={`ask-implanr-chip-${i}`}
+                      accessibilityRole="button"
+                    >
+                      <Ionicons name="sparkles-outline" size={13} color="#1565C0" />
+                      <Text style={styles.chipText}>{s}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
             </ScrollView>
 
             <View style={styles.inputRow}>
@@ -184,4 +210,7 @@ const styles = StyleSheet.create({
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#E3F2FD', backgroundColor: '#FAFAFA' },
   input: { flex: 1, minHeight: 40, maxHeight: 120, backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#CFD8DC', paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: '#1A1A2E' },
   sendBtn: { padding: 4 },
+  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 4, paddingTop: 8, paddingBottom: 4 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18, borderWidth: 1, borderColor: '#BBDEFB', backgroundColor: '#F5FAFF' },
+  chipText: { fontSize: 13, color: '#1565C0', fontWeight: '600' },
 });
