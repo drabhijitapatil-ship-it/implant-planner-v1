@@ -1,5 +1,34 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 244 (Feb 2026) — Ask Implanr AI polish: input visibility, asterisk strip, real catalog grounding
+
+### What was broken
+1. **Chat sheet input cut off** — the modal's `<Modal>` → `<KeyboardAvoidingView>` → wrapper → `<sheet height: 85%>` structure had no flex parent for the wrapper, so the sheet measured against a zero-height parent on RN-Web and the bottom input row was pushed off-screen before the keyboard even opened.
+2. **Asterisks in AI replies** — GPT-4o-mini ignored "no markdown" prompt instructions ~30 % of the time and emitted `**bold**` and `*italic*` wrappers.
+3. **AI hallucinated / under-listed implant systems** — the `systems_block` builder projected `system` from `db.implant_catalog`, but the actual field is `name`. The block was always empty, so the AI fell back to whatever 2-3 systems the crude substring match in `catalog_block` happened to surface, and invented or omitted everything else.
+
+### Fixes
+**`components/AskImplanrAIFab.tsx`**
+- Added the missing `sheetOuter: { flex: 1, justifyContent: 'flex-end' }` style. The intermediate `<View>` was previously styleless, so the sheet's `height: '85%'` had nothing to measure against. With `flex: 1` the sheet anchors to the bottom of the available area and the input row sits at the bottom edge inside the visible viewport.
+
+**`backend/server.py` — `/api/ai/assistant`**
+- `systems_block` query corrected: `system: 1` → `name: 1`; tuple key now reads `(d.get("name") or "").strip()`. The block now lists every brand and every system name from the live catalog (47 systems across 12 brands at the time of this commit).
+- The markdown-strip pass (`re.sub` for `**bold**`, `*italic*`, `_underscore_`) is preserved as defence in depth; combined with the explicit "no markdown" instruction in the system prompt this reliably yields plain-text answers.
+- The `APP_KNOWLEDGE` block (full 4-phase workflow, role capabilities, existing-implant workflow, features, navigation) is unchanged from iter-243's plan.
+
+### Verification (curl + screenshot)
+- `POST /api/ai/assistant` "List EVERY implant brand and system available" → AI returns all 12 brands (Alpha Bio, B&B Dental, BioHorizons, Bredent, Camlog, Cowell Medi, Dentsply Sirona, MIS, Neodent, Nobel Biocare, Osstem, Refirm) and their 47 systems — no hallucination, no asterisks.
+- `POST /api/ai/assistant` "How many implant systems are in the app?" → "There are currently 47 implant systems available in the app." (matches the live count).
+- Screenshot: home → tap FAB → chat sheet slides up; greeting bubble visible at top, user-bubble + AI answer bubble visible in the middle, and the input row + send arrow are clearly anchored at the bottom of the visible screen on a 420×800 viewport.
+
+### Notes for next agent
+- The mobile-EAS build won't pick up the `sheetOuter` style until a rebuild; the web preview reflects it immediately.
+- P0 server.py decomposition (>14,000 lines) remains the next priority — pitch the user the router-split plan before adding multi-tenant logic.
+
+---
+
+
+
 ## Iteration 243 (Feb 2026) — Fix Ask Implanr AI 502/520 + AI summary feedback loop
 
 ### 1. Ask Implanr AI 502/520 fix
