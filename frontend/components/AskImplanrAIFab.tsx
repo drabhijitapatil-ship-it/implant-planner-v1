@@ -90,9 +90,15 @@ export default function AskImplanrAIFab() {
       {/* Chat sheet */}
       <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={0}
           style={styles.backdrop}
         >
+          {/* iter-244: extra wrapper with flex: 1 + paddingTop to keep
+              the sheet tall enough that the bottom input row is always
+              visible above the device safe-area / bottom tab bar even
+              before the keyboard opens. */}
+          <View style={styles.sheetOuter}>
           <View style={styles.sheet}>
             <View style={styles.header}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -147,6 +153,7 @@ export default function AskImplanrAIFab() {
                 <Ionicons name="arrow-up-circle" size={32} color="#1565C0" />
               </TouchableOpacity>
             </View>
+          </View>
           </View>
         </KeyboardAvoidingView>
       </Modal>

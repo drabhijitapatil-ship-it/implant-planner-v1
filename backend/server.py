@@ -5815,13 +5815,95 @@ async def ai_assistant(request: Request, current_user: dict = Depends(get_curren
     }
     role_help = role_capabilities.get(role, "")
 
+    # iter-244: pull the FULL distinct list of implant brands + systems from
+    # the catalog so the AI can answer "which systems are available?" without
+    # hallucinating or under-listing.
+    systems_block = ""
+    try:
+        sys_cursor = db.implant_catalog.find(
+            {"is_stub": {"$ne": True}},
+            {"_id": 0, "brand": 1, "system": 1}
+        )
+        sys_docs = await sys_cursor.to_list(length=500)
+        by_brand: dict[str, set] = {}
+        for d in sys_docs:
+            b = (d.get("brand") or "").strip()
+            s = (d.get("system") or "").strip()
+            if not b or not s:
+                continue
+            by_brand.setdefault(b, set()).add(s)
+        if by_brand:
+            lines = []
+            for brand in sorted(by_brand.keys()):
+                lines.append(f"  • {brand}: {', '.join(sorted(by_brand[brand]))}")
+            systems_block = "IMPLANT SYSTEMS AVAILABLE IN THE APP (live count: " + str(sum(len(v) for v in by_brand.values())) + "):\n" + "\n".join(lines)
+    except Exception:
+        systems_block = ""
+
+    # iter-244: comprehensive app knowledge baked into the system prompt so
+    # the assistant gives complete, accurate answers about features, role
+    # capabilities, and workflows — not just whatever it can infer from the
+    # short capability blurb above.
+    APP_KNOWLEDGE = """
+IMPLANR APP — COMPLETE OVERVIEW
+
+WHAT IT IS
+  Implanr is a mobile-first prosthodontics workflow app for managing dental implant cases across 4 sequential phases. It enforces multi-tier clinical approvals, generates phase-aware AI case summaries (which clinicians can edit, and edits are fed back so the AI learns), and ships HIPAA technical safeguards (15-minute auto-logout, screenshot blocking, full access-log audit trail).
+
+ROLES & EXACT CAPABILITIES
+  • STUDENT — creates new cases (routine OR existing-implant), fills Phase 1 (clinical exam, medical assessment, prosthetic plan, FDI tooth chart, CBCT upload, Phase 1 checklist), saves drafts, requests Phase-2 edits if surgical info changes; cannot approve.
+  • SUPERVISOR — reviews and approves/rejects student Phase 1 submissions; once approved, the case routes to the implant in-charge.
+  • IMPLANT IN-CHARGE — gives the final Phase 1 approval, plans surgery (Phase 2 — implant brand/system/size selection, surgical date scheduling), reviews Pre-Phase-3 summary, resolves student edit requests, approves Phase 3 (delivery) and Phase 4 (follow-up).
+  • NURSE — read-only across cases; sees the surgical schedule and prep checklists; cannot approve or edit.
+  • ADMINISTRATOR — full access; manages users, configures the implant catalog, views audit logs, exports CSV reports, runs the AI feedback stats dashboard.
+
+4-PHASE CASE WORKFLOW (every routine case)
+  PHASE 1 — Diagnosis & Treatment Planning
+    Step 1 (Case Details): patient info, chief complaint, faculty assignment, procedure type (dropdown), payment.
+    Step 2 (Treatment Plan): prosthetic plan, FDI chart, clinical examination, schedule, type of loading, CBCT upload, Phase 1 Checklist (including medical assessment risk factors).
+    Submit → routes to Supervisor → Implant In-Charge for sequential approval.
+  PHASE 2 — Surgical Planning & Surgery
+    Implant in-charge selects implant brand/system/diameter/length/gingival height, schedules surgery date, captures intra-op notes, healing-abutment PDF generation, prosthesis type selection.
+  PHASE 3 — Prosthesis Delivery
+    Pre-Phase-3 readback summary; Student can raise an edit-request if Phase-2 data is wrong, In-Charge resolves; final prosthesis delivery captured.
+  PHASE 4 — Follow-Up & Closure
+    Step 1: clinical review; Step 2: side-by-side radiograph compare with AI-editable notes (compares baseline vs. follow-up). Case closes with a full case-report PDF.
+
+EXISTING IMPLANT WORKFLOW (parallel entry — for patients who already have implants placed elsewhere)
+  Shares the same 3-tier approval routing, Clinical Examination, and Medical Assessment as routine cases.
+  Additional sections: Type of Implant Procedure Done (dropdown), Arch picker (Maxillary / Mandibular / Both, for All on 4 / 6 / X), FDI multi-select chart to mark each existing implant tooth, per-implant Brand / System / Diameter / Length / Gingival Height / Present Prosthetic Component / Surgery Date / Original Surgeon (all required; ISQ is optional), Prosthetic History (with stage Temporary / Final), Failure Analysis.
+  Per-implant IOPA Radiograph upload is required for non-full-arch; case-level OPG / CBCT upload is required for full-arch.
+  Phase 1 submit routes to Phase 3 OR Phase 4 Step 1 depending on the implant state.
+
+KEY FEATURES
+  • Sticky 5-step progress strip (Case Details → Treatment Plan/Implant Details → Clinical Examination → Phase 1 Checklist/Medical Assessment → Submit) with green ✓ on completed steps and tap-to-jump pills. Pills show a popup listing missing fields if incomplete.
+  • Phase-aware AI case summary (this assistant's sibling endpoint): generates a clinical summary covering the sections relevant to the case's current phase; clinicians can edit and edits feed back as voice/style examples for future generations.
+  • Clinical decision support: bridge / cantilever detection, biological safety validation (bone width soft-blocks, bone height hard-blocks for posteriors), implant-tooth correlation checks, automatic atrophy classification for full-arch cases (skipped for existing-implant cases since implants are already placed).
+  • Implant Catalog with 30+ institutional systems (each carrying indications, components, diameter & length matrices). The catalog grounds the AI "Explain Recommendation" feature and surfaces the "Suggest Me" tool in the Home Screen Implant Selection tab.
+  • HIPAA safeguards: 15-min auto-logout, screenshot blocking (expo-screen-capture), every read/export/login/override is logged to access_logs, admin CSV export.
+  • Per-case AI radiograph comparison (Phase 4 Step 2) with editable AI notes.
+  • Ask Implanr AI (this assistant): role-aware Q&A, case-status lookups, implant catalog answers, app navigation help.
+
+WHERE TO FIND THINGS IN THE APP
+  • Home (Dashboard tab) — counters for Drafts, Active, Approved, Completed, plus quick action cards.
+  • New Case tab — creates a new case (routine or existing-implant).
+  • Implant tab — Implant Database, Suggest Me, Let Me Choose, Safety rules.
+  • My Cases tab — paginated list of every case the user has access to, with filters.
+  • Alerts tab — notifications about approvals, edit-requests, schedule changes.
+  • Admin (admin only) — user management, audit log, AI feedback stats, implant catalog editor.
+"""
+
     system_message = (
-        "You are Implanr AI, a friendly and concise personal assistant for prosthodontists using the Implanr mobile app. "
+        "You are Implanr AI, a friendly, accurate, and concise personal assistant for prosthodontists using the Implanr mobile app. "
         "Your job: help the current user navigate the app and use its full potential. "
-        "Answer in plain professional language, 1-4 short paragraphs unless a list is clearer. "
-        "Never invent facts about cases or the implant catalog — if the data isn't in the provided context, say so honestly. "
+        "Answer in plain professional language. Use short paragraphs, not bullet markdown. "
+        "Do NOT use Markdown — no asterisks for bold (**), no underscores for italic (_), no leading dashes for lists. Write in plain natural sentences. "
+        "If a list is clearer, use a number followed by a period (1. ...) at the start of each item with a blank line between items. "
+        "Never invent facts about cases, app features, or the implant catalog — if the data isn't in the provided context, say so honestly. "
         "Never use the raw patient name; refer to cases by their token (e.g. Patient_01) — the app de-tokenises before showing the answer to the user. "
         "Do NOT mention HIPAA tokenisation or that names are anonymised; just use the tokens naturally."
+        + APP_KNOWLEDGE
+        + (("\n\n" + systems_block) if systems_block else "")
     )
 
     prompt = (
@@ -5856,6 +5938,14 @@ async def ai_assistant(request: Request, current_user: dict = Depends(get_curren
     # De-tokenise patient names so the user sees the real names.
     for tok, real in tokens.items():
         response_text = response_text.replace(tok, real)
+
+    # iter-244: strip residual markdown asterisks / underscores so the
+    # chat bubble renders as plain text. We tell the model not to use
+    # markdown in the system prompt; this is defense-in-depth.
+    import re as _re_md
+    response_text = _re_md.sub(r"\*\*(.*?)\*\*", r"\1", response_text)
+    response_text = _re_md.sub(r"(?<!\w)\*(.+?)\*(?!\w)", r"\1", response_text)
+    response_text = _re_md.sub(r"(?<!\w)_(.+?)_(?!\w)", r"\1", response_text)
 
     # Log to access_logs for HIPAA.
     try:
