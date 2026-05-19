@@ -7227,6 +7227,12 @@ async def generate_case_report(
     phase1_date = procedure.get("phase1_completed_at")
     if phase1_date:
         add_field("Phase 1 Completed", phase1_date.isoformat() if isinstance(phase1_date, datetime) else str(phase1_date))
+    # iter-248: include Phase 1 approval comments (when present) in the
+    # case-report PDF, mirroring the Phase 2 supervisor/incharge remarks.
+    if procedure.get("phase1_supervisor_notes"):
+        add_field("Supervisor Comment", procedure.get("phase1_supervisor_notes"))
+    if procedure.get("phase1_incharge_notes"):
+        add_field("Implant In-Charge Comment", procedure.get("phase1_incharge_notes"))
 
     # ── Phase 2: Implant Surgery ──────────────────────────────
     add_section_title("Phase 2 - Implant Surgery", 255, 107, 53)
@@ -7952,6 +7958,26 @@ async def approve_procedure(
         if action.action == "approve":
             # Mark this approver as having approved
             update_fields = {"updated_at": datetime.utcnow()}
+
+            # iter-248: Save the role-specific approval comment (optional).
+            # Mirrors the Phase 2 pattern — supervisor comment + in-charge
+            # comment are stored in separate fields so the case detail page
+            # can render them with role-specific headings. When the same
+            # person holds both roles (`same_person_both_roles`), their
+            # single comment is written to BOTH fields so downstream
+            # display logic stays uniform. The `is_incharge_self_created`
+            # path purposely does NOT touch the supervisor field here so a
+            # separate supervisor's earlier comment is not overwritten.
+            if action.comment and action.comment.strip():
+                cmt = action.comment.strip()
+                if same_person_both_roles:
+                    update_fields["phase1_supervisor_notes"] = cmt
+                    update_fields["phase1_incharge_notes"] = cmt
+                else:
+                    if is_supervisor:
+                        update_fields["phase1_supervisor_notes"] = cmt
+                    if is_implant_incharge:
+                        update_fields["phase1_incharge_notes"] = cmt
 
             # iter-228: Helper — when Phase 1 is fully approved on an
             # existing-implant case the status moves directly to the

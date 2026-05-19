@@ -2127,6 +2127,28 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
+        {/* iter-248: Phase 1 approval comments — shown after either or
+            both approvers leave a note. Supervisor first, In-Charge
+            second, matching the Phase 4 layout already in the app. Each
+            block only renders if that role left a comment. */}
+        {(procedure.phase1_supervisor_notes || procedure.phase1_incharge_notes) && (
+          <View style={styles.section} data-testid="phase1-approval-comments">
+            <Text style={styles.sectionTitle}>Phase 1 Approval Comments</Text>
+            {procedure.phase1_supervisor_notes && (
+              <View style={{ marginBottom: 8, backgroundColor: '#F3E5F5', borderRadius: 8, padding: 12 }} data-testid="phase1-supervisor-comment">
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#6A1B9A', marginBottom: 8 }}>Supervisor Comment</Text>
+                <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase1_supervisor_notes}</Text>
+              </View>
+            )}
+            {procedure.phase1_incharge_notes && (
+              <View style={{ marginBottom: 8, backgroundColor: '#E8F5E9', borderRadius: 8, padding: 12 }} data-testid="phase1-incharge-comment">
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#2E7D32', marginBottom: 8 }}>Implant In-Charge Comment</Text>
+                <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase1_incharge_notes}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
         {/* Phase 1 Pre-Surgical Checklist — shown right after Phase 1 data */}
         {procedure.checklist?.pre_surgical && (
           <>
@@ -3174,31 +3196,48 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
-        {/* ── APPROVAL COMMENT BOX (Phase 2-4 only) ──
+        {/* ── APPROVAL COMMENT BOX (Phase 1-4) ──
+            iter-248: now shown on Phase 1 too with a role-aware heading.
             Hidden for Implant In-Charge on self-created cases (auto-approval flow). */}
-        {canApprove() && !showRejectDialog && procedure?.status !== 'pending_phase1'
+        {canApprove() && !showRejectDialog
           && !(user?.role === 'implant_incharge'
                && procedure.created_by_role === 'implant_incharge'
-               && user?.id === procedure.created_by_id) && (
-          <View style={{ marginTop: 16, marginHorizontal: 16, backgroundColor: '#F0F4FF', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#C5CAE9' }}>
-            <Text style={{ fontSize: 13, fontWeight: '600', color: '#283593', marginBottom: 6 }}>
-              Your Remarks (optional)
-            </Text>
-            <TextInput
-              style={{ borderWidth: 1, borderColor: '#C5CAE9', borderRadius: 8, padding: 10, fontSize: 14, backgroundColor: '#FFF', minHeight: 60, textAlignVertical: 'top' }}
-              value={approvalComment}
-              onChangeText={setApprovalComment}
-              placeholder="Write your remarks for the postgraduate student..."
-              multiline
-              testID="approval-comment-input"
-            />
-            {user?.role !== 'implant_incharge' && (
-              <Text style={{ fontSize: 11, color: '#7986CB', marginTop: 4, fontStyle: 'italic' }}>
-                This comment will be visible to the student and included in the PDF.
+               && user?.id === procedure.created_by_id) && (() => {
+          // Compute the right heading based on the current user's role(s)
+          // on this specific case.
+          const isSupervisorOnCase = user?.id === procedure.supervisor_id;
+          const isInchargeOnCase = user?.id === procedure.implant_incharge_id;
+          const samePersonBothRoles = procedure.supervisor_id && procedure.implant_incharge_id
+            && procedure.supervisor_id === procedure.implant_incharge_id;
+          let heading = 'Your Remarks (optional)';
+          if (samePersonBothRoles && (isSupervisorOnCase || isInchargeOnCase)) {
+            heading = 'Comment (optional)';
+          } else if (isSupervisorOnCase && !isInchargeOnCase) {
+            heading = 'Supervisor Comment (optional)';
+          } else if (isInchargeOnCase && !isSupervisorOnCase) {
+            heading = 'Implant In-Charge Comment (optional)';
+          }
+          return (
+            <View style={{ marginTop: 16, marginHorizontal: 16, backgroundColor: '#F0F4FF', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#C5CAE9' }} data-testid="approval-comment-box">
+              <Text style={{ fontSize: 13, fontWeight: '600', color: '#283593', marginBottom: 6 }}>
+                {heading}
               </Text>
-            )}
-          </View>
-        )}
+              <TextInput
+                style={{ borderWidth: 1, borderColor: '#C5CAE9', borderRadius: 8, padding: 10, fontSize: 14, backgroundColor: '#FFF', minHeight: 60, textAlignVertical: 'top' }}
+                value={approvalComment}
+                onChangeText={setApprovalComment}
+                placeholder="Write your remarks for the postgraduate student..."
+                multiline
+                testID="approval-comment-input"
+              />
+              {user?.role !== 'implant_incharge' && (
+                <Text style={{ fontSize: 11, color: '#7986CB', marginTop: 4, fontStyle: 'italic' }}>
+                  This comment will be visible to the student and included in the PDF.
+                </Text>
+              )}
+            </View>
+          );
+        })()}
 
         {/* ── APPROVAL SECTION ── */}
         {canApprove() && !showRejectDialog && (
