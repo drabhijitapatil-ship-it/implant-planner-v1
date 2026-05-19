@@ -12,6 +12,7 @@ import {
   Image,
   Alert,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -476,14 +477,29 @@ export default function TabsLayout() {
           tabBarInactiveTintColor: '#8E8E93',
           headerShown: true,
           headerLeft: () => <HeaderLeft />,
+          // iter-247: Apple Liquid Glass on the bottom tab bar.
+          // BlurView renders the iOS UIBlurEffect underneath the tabs
+          // (true Liquid Glass on iOS 26+, high-quality blur on
+          // iOS 17-25 and Android; CSS backdrop-filter fallback on web).
+          // We make the bar transparent + absolutely positioned so the
+          // content underneath shows through the glass.
+          tabBarBackground: () => (
+            <BlurView
+              intensity={80}
+              tint="light"
+              experimentalBlurMethod="dimezisBlurView"
+              style={[StyleSheet.absoluteFill, glassStyles.glassFill]}
+            />
+          ),
           tabBarStyle: {
-            backgroundColor: '#FFF',
-            borderTopWidth: 1,
-            borderTopColor: '#E5E5EA',
-            // iter-246: shift icons + labels upward inside the same 70-px
-            // white strip — paddingBottom 14 (was 4) pushes the content
-            // up; paddingTop 4 (was 8) compensates so the strip height
-            // stays the same.
+            // iter-247: Apple Liquid Glass — transparent so the BlurView
+            // background shows through. We keep the bar in-flow (not
+            // position:'absolute') so existing scroll content keeps its
+            // natural bottom padding and nothing hides behind the glass.
+            backgroundColor: 'transparent',
+            borderTopWidth: StyleSheet.hairlineWidth,
+            borderTopColor: 'rgba(120, 144, 156, 0.20)',
+            elevation: 0,
             paddingBottom: 14,
             paddingTop: 4,
             height: 70,
@@ -625,4 +641,25 @@ const badgeStyles = StyleSheet.create({
     backgroundColor: '#E53935',
     marginLeft: 6,
   },
+});
+
+// iter-247: Liquid Glass styling for the bottom tab bar.
+// On iOS BlurView already produces the native UIBlurEffect (Apple's
+// Liquid Glass material on iOS 26+). On Android, expo-blur uses a
+// native blur view. On web, we layer a CSS `backdrop-filter` fallback
+// + a soft white tint so the bar still looks like frosted glass even
+// when the browser supports backdrop-filter.
+const glassStyles = StyleSheet.create({
+  glassFill: Platform.select({
+    web: {
+      // @ts-ignore — RN-Web passes these straight through to CSS.
+      backdropFilter: 'blur(22px) saturate(180%)',
+      // @ts-ignore
+      WebkitBackdropFilter: 'blur(22px) saturate(180%)',
+      backgroundColor: 'rgba(255, 255, 255, 0.55)',
+    },
+    default: {
+      backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    },
+  }) as any,
 });
