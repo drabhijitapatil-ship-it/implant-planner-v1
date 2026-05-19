@@ -5822,13 +5822,16 @@ async def ai_assistant(request: Request, current_user: dict = Depends(get_curren
     try:
         sys_cursor = db.implant_catalog.find(
             {"is_stub": {"$ne": True}},
-            {"_id": 0, "brand": 1, "system": 1}
+            {"_id": 0, "brand": 1, "name": 1}
         )
         sys_docs = await sys_cursor.to_list(length=500)
         by_brand: dict[str, set] = {}
         for d in sys_docs:
             b = (d.get("brand") or "").strip()
-            s = (d.get("system") or "").strip()
+            # iter-244: actual field in implant_catalog is `name`, not
+            # `system`. Without this the systems_block was always empty
+            # and the AI hallucinated/under-listed available systems.
+            s = (d.get("name") or "").strip()
             if not b or not s:
                 continue
             by_brand.setdefault(b, set()).add(s)

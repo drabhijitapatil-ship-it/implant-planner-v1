@@ -165,6 +165,11 @@ const styles = StyleSheet.create({
   fab: { position: 'absolute', bottom: 92, right: 18, zIndex: 9999 },
   fabBtn: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#1565C0', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 6 },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  // iter-244: flex:1 wrapper so the inner sheet's 85% height resolves
+  // against the available screen height. Without this the sheet was
+  // collapsing on some platforms and the input row at the bottom got
+  // pushed below the visible area before the keyboard even opened.
+  sheetOuter: { flex: 1, justifyContent: 'flex-end' },
   sheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, height: '85%', overflow: 'hidden' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#E3F2FD' },
   headerIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#E3F2FD', justifyContent: 'center', alignItems: 'center' },
