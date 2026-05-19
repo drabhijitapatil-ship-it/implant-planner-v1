@@ -585,6 +585,16 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
   const isStudentEdit = isOwner && userRole === 'student' && (!procedureStatus || editableStatuses.includes(procedureStatus));
   const isFacultyEdit = userRole === 'supervisor' || userRole === 'implant_incharge';
   const canEdit = !isCaseCompleted && (isStudentEdit || isFacultyEdit);
+  // iter-249: once Phase 2 surgery is performed, adding NEW implant
+  // positions no longer makes clinical sense (the surgery is already
+  // done with the existing positions). We hide both entry points to
+  // the Add modal — the "Add Implant Position" button and the
+  // "Pending Implant Selection" chips — and disable deletion of
+  // existing positions. Editing existing positions remains allowed
+  // for faculty record corrections.
+  const phase2Done = !!procedureStatus && !editableStatuses.includes(procedureStatus);
+  const canAddImplant = canEdit && !phase2Done;
+  const canDeleteImplant = canEdit && !phase2Done;
 
   const loadData = useCallback(async () => {
     try {
@@ -745,10 +755,12 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
                   <Ionicons name="pencil" size={16} color="#1E88E5" />
                   <Text style={st.editBtnText}>Edit</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={st.deleteBtn} onPress={() => handleDeleteImplant(idx)} data-testid={`delete-implant-${idx}`}>
-                  <Ionicons name="trash-outline" size={16} color="#F44336" />
-                  <Text style={st.deleteBtnText}>Remove</Text>
-                </TouchableOpacity>
+                {canDeleteImplant && (
+                  <TouchableOpacity style={st.deleteBtn} onPress={() => handleDeleteImplant(idx)} data-testid={`delete-implant-${idx}`}>
+                    <Ionicons name="trash-outline" size={16} color="#F44336" />
+                    <Text style={st.deleteBtnText}>Remove</Text>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity
                   style={st.protocolBtn}
                   onPress={() => setExpandedProtocol(expandedProtocol === idx ? null : idx)}
@@ -840,7 +852,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
         </View>
       )}
 
-      {canEdit && Array.isArray(missingTeeth) && missingTeeth.length > 0 && (() => {
+      {canAddImplant && Array.isArray(missingTeeth) && missingTeeth.length > 0 && (() => {
         const planned = new Set(plans.map(p => p.position));
         const pending = missingTeeth.filter(t => !planned.has(t));
         if (pending.length === 0) return null;
@@ -869,7 +881,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
         );
       })()}
 
-      {canEdit && (
+      {canAddImplant && (
         <TouchableOpacity
           style={st.addButton}
           onPress={() => { setEditingIdx(null); setPendingPreset(undefined); setShowAddModal(true); }}
