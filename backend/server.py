@@ -4695,7 +4695,7 @@ async def save_implant_plan(
         oid = ObjectId(procedure_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid procedure ID")
-    proc = await db.procedures.find_one({"_id": oid}, {"_id": 1, "student_id": 1, "status": 1, "supervisor_id": 1, "implant_incharge_id": 1})
+    proc = await db.procedures.find_one({"_id": oid}, {"_id": 1, "student_id": 1, "status": 1, "supervisor_id": 1, "implant_incharge_id": 1, "implant_plans": 1})
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
 
@@ -4705,11 +4705,26 @@ async def save_implant_plan(
     if not is_assigned_faculty and not is_student_owner:
         raise HTTPException(status_code=403, detail="You do not have permission to modify this implant plan")
 
+    editable_statuses = {"draft", "pending_phase1", "phase1_approved", "pending_phase2"}
+
     # Students locked after Phase 2 approval; supervisors/incharge can edit at all stages
     if is_student_owner and not is_assigned_faculty:
-        editable_statuses = {"draft", "pending_phase1", "phase1_approved", "pending_phase2"}
         if proc.get("status") not in editable_statuses:
             raise HTTPException(status_code=403, detail="Implant plan cannot be modified after Phase 2 approval")
+
+    # iter-249: After Phase 2 surgery is performed, no role (including
+    # faculty) can ADD or REMOVE implant positions — the surgery is
+    # already done with the existing set. Editing the metadata of an
+    # existing position (brand / size / torque) is still allowed for
+    # post-hoc record corrections.
+    if proc.get("status") and proc.get("status") not in editable_statuses:
+        old_positions = {p.get("position") for p in (proc.get("implant_plans") or []) if p.get("position")}
+        new_positions = {imp.position for imp in plan.implants}
+        if old_positions and old_positions != new_positions:
+            raise HTTPException(
+                status_code=403,
+                detail="Implant positions cannot be added or removed after Phase 2 surgery. Existing positions can still be edited.",
+            )
 
     if len(plan.implants) < 1 or len(plan.implants) > 6:
         raise HTTPException(status_code=400, detail="Must plan between 1 and 6 implants")

@@ -1,5 +1,40 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 249 (Feb 2026) — "Add Implant Position" locked after Phase 2
+
+### What the user reported
+"The option to 'Add Implant Position' is still available after completion of Phase 2. Once Phase 2 is completed then 'Add Implant Position' should not be available."
+
+### Defence-in-depth fix (frontend + backend)
+**Frontend (`components/CaseImplantPlanning.tsx`)**
+- Introduced two derived flags right after the existing `canEdit`:
+  - `phase2Done = !!procedureStatus && !editableStatuses.includes(procedureStatus)` — true once status moves past `pending_phase2`.
+  - `canAddImplant = canEdit && !phase2Done`
+  - `canDeleteImplant = canEdit && !phase2Done`
+- Three UI gates now use these flags:
+  - The orange "Pending Implant Selection" chips (preset-tooth add entry) → hidden when `phase2Done`.
+  - The "Add Implant Position" button → hidden when `phase2Done`.
+  - The per-row "Remove" delete button → hidden when `phase2Done` (faculty still see Edit + Drilling Protocol).
+
+**Backend (`POST /api/procedures/{id}/implant-plan`)**
+- New 403 guard: if status is past Phase 2 AND the incoming `new_positions` set ≠ the stored `old_positions` set, reject with *"Implant positions cannot be added or removed after Phase 2 surgery. Existing positions can still be edited."*
+- Edits to brand / system / diameter / length / bone width / bone height / bone type / risk metadata on existing positions remain allowed for both faculty and the rare student-edit-window.
+
+### E2E verification (curl against localhost backend)
+| Action after Phase 2 approved | Result |
+|---|---|
+| Faculty adds a new position (16 + 26 when only 16 exists) | ✅ 403 |
+| Faculty edits an existing position's brand/size (16 → ICE 5.0×13) | ✅ 200 |
+| Faculty removes the only position (replaces with 26) | ✅ 403 |
+
+### Files touched
+- `/app/frontend/components/CaseImplantPlanning.tsx`
+- `/app/backend/server.py`
+
+---
+
+
+
 ## Iteration 248 (Feb 2026) — Phase 1 role-specific approval comments
 
 ### What the user asked for
