@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity,
-  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Switch, Image, Linking,
+  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Switch, Image, Linking, Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -405,6 +405,75 @@ export default function Phase2SubmissionScreen() {
     </View>
   );
 
+  // ─── iter-247: sticky 5-step progress strip ───
+  // The same tappable-pill pattern users love in Phase 1, ported to Phase 2.
+  // Section Y positions are captured via onLayout on each milestone <View>
+  // and used to bump `currentStep` on scroll + animate jumpToStep.
+  const PHASE2_STEP_LABELS = ['Pre-Op', 'Surgery', 'Radiographs', 'Post-Op', 'Notes'];
+  const scrollRef = useRef<ScrollView | null>(null);
+  const stepYs = useRef<number[]>([0, 0, 0, 0, 0]);
+  const [currentStep, setCurrentStep] = useState(0);
+  const onStepLayout = (idx: number) => (e: any) => {
+    const y = e?.nativeEvent?.layout?.y ?? 0;
+    stepYs.current[idx] = y;
+  };
+  const onScrollPhase2 = (e: any) => {
+    const y = e?.nativeEvent?.contentOffset?.y ?? 0;
+    let idx = 0;
+    for (let i = 0; i < stepYs.current.length; i++) {
+      if (stepYs.current[i] && stepYs.current[i] <= y + 140) idx = i;
+    }
+    if (idx !== currentStep) setCurrentStep(idx);
+  };
+  const jumpToStep = (idx: number) => {
+    const y = stepYs.current[idx] || 0;
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - 24), animated: true });
+    setCurrentStep(idx);
+  };
+
+  // Compute per-step missing-field arrays so the pills can show green ticks
+  // and the validation popup has accurate "what's missing" lists.
+  const stepMissing = useMemo<string[][]>(() => {
+    const missPreop: string[] = isPreopUnlocked ? [] : ['Save the Pre-Surgical Checklist'];
+
+    const missSurgery: string[] = [];
+    if (!flapDesign) missSurgery.push('Flap Design');
+    if (!drillingType) missSurgery.push('Drilling Type');
+    for (let i = 0; i < torqueValues.length; i++) {
+      const v = parseFloat(torqueValues[i]);
+      if (isNaN(v) || v < 10 || v > 90) missSurgery.push(`Torque for implant ${i + 1} (10-90 Ncm)`);
+    }
+    if (!prostheticComponent) missSurgery.push('Prosthetic Component');
+    if (prostheticComponent === 'Immediate Loading Done') {
+      if (!prosthesisType) missSurgery.push('Prosthesis Type');
+      if (prosthesisType === 'Other' && !prosthesisTypeOther.trim()) missSurgery.push('Prosthesis Type description');
+    }
+
+    const missRadiographs: string[] = [];
+    const baseIopaCount = iopaFiles.length;
+    const missingIopa = iopaFiles.slice(0, baseIopaCount).filter(f => f === null).length;
+    if (baseIopaCount === 0) missRadiographs.push('At least one IOPA Radiograph');
+    if (missingIopa > 0) missRadiographs.push(`${missingIopa} IOPA upload${missingIopa > 1 ? 's' : ''} pending`);
+    if (isFullArch && !opgFile) missRadiographs.push('OPG Radiograph (full-arch case)');
+
+    const missPostOp: string[] = [];
+    ['post_op_radiograph', 'post_op_instructions', 'medications_prescribed'].forEach(k => {
+      if (typeof postOpChecklist[k] !== 'boolean') {
+        const labels: Record<string, string> = {
+          post_op_radiograph: 'Post-operative Radiograph Made (Yes/No)',
+          post_op_instructions: 'Post-operative Instructions Given (Yes/No)',
+          medications_prescribed: 'Medications Prescribed (Yes/No)',
+        };
+        missPostOp.push(labels[k]);
+      }
+    });
+
+    // Notes pill is informational — never "missing" (notes are optional).
+    return [missPreop, missSurgery, missRadiographs, missPostOp, []];
+  }, [isPreopUnlocked, flapDesign, drillingType, torqueValues, prostheticComponent,
+      prosthesisType, prosthesisTypeOther, iopaFiles, isFullArch, opgFile, postOpChecklist]);
+  const stepDone = stepMissing.map(arr => arr.length === 0);
+
   return (
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       <PhaseHeader
@@ -413,10 +482,93 @@ export default function Phase2SubmissionScreen() {
         testID="phase2-submit-header"
       />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={s.scroll} nestedScrollEnabled>
+        <ScrollView ref={scrollRef} contentContainerStyle={s.scroll} nestedScrollEnabled
+          stickyHeaderIndices={[0]} onScroll={onScrollPhase2} scrollEventThrottle={64}>
+
+          {/* iter-247: sticky 5-step progress strip — mirrors the Phase 1
+              tappable pill design. Steps 1-4 (Surgery / Radiographs /
+              Post-Op / Notes) stay greyed out & non-tappable until the
+              Pre-Op checklist is saved. Tapping an unlocked but
+              incomplete pill shows the list of missing fields, then
+              scrolls on confirm. */}
+          <View style={s.progressBar} testID="phase2-progress-strip">
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={s.progressLabel} numberOfLines={1}>
+                Step {currentStep + 1} of {PHASE2_STEP_LABELS.length} — {PHASE2_STEP_LABELS[currentStep]}
+              </Text>
+              <Text style={s.progressCount}>
+                {Math.round(((currentStep + 1) / PHASE2_STEP_LABELS.length) * 100)}%
+              </Text>
+            </View>
+            <View style={s.progressTrack}>
+              <View style={[s.progressFill, { width: `${((currentStep + 1) / PHASE2_STEP_LABELS.length) * 100}%` }]} />
+            </View>
+            <View style={s.stepPillRow}>
+              {PHASE2_STEP_LABELS.map((label, idx) => {
+                const active = idx === currentStep;
+                const done = stepDone[idx];
+                // idx 0 (Pre-Op) is always tappable. idx 1-4 are locked
+                // until Pre-Op is saved (per user choice b in iter-247).
+                const locked = idx > 0 && !isPreopUnlocked;
+                return (
+                  <TouchableOpacity
+                    key={label}
+                    onPress={() => {
+                      if (locked) return;
+                      const missing = stepMissing[idx] || [];
+                      if (missing.length === 0) { jumpToStep(idx); return; }
+                      const list = missing.slice(0, 8).map(m => `• ${m}`).join('\n');
+                      const more = missing.length > 8 ? `\n…and ${missing.length - 8} more` : '';
+                      const body = `Please complete the following before this section is marked done:\n\n${list}${more}`;
+                      if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.confirm === 'function') {
+                        if (window.confirm(`Missing: ${label}\n\n${body}\n\nTap OK to jump there, Cancel to stay here.`)) {
+                          jumpToStep(idx);
+                        }
+                        return;
+                      }
+                      Alert.alert(
+                        `Missing: ${label}`,
+                        body,
+                        [
+                          { text: 'Stay here', style: 'cancel' },
+                          { text: 'Take me there', onPress: () => jumpToStep(idx) },
+                        ]
+                      );
+                    }}
+                    style={[
+                      s.stepPill,
+                      active && s.stepPillActive,
+                      done && !active && s.stepPillDone,
+                      locked && s.stepPillLocked,
+                    ]}
+                    disabled={locked}
+                    testID={`phase2-step-pill-${idx}`}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${locked ? 'Locked — complete Pre-Op first. ' : 'Jump to '}${label}${done ? ', complete' : ''}`}
+                  >
+                    {locked ? (
+                      <Ionicons name="lock-closed" size={11} color="#B0BEC5" style={{ marginRight: 3 }} />
+                    ) : done ? (
+                      <Ionicons name="checkmark-circle" size={12} color={active ? '#FFF' : '#2E7D32'} style={{ marginRight: 3 }} />
+                    ) : (
+                      <Text style={[s.stepPillNum, active && s.stepPillTextActive]}>{idx + 1}.</Text>
+                    )}
+                    <Text style={[
+                      s.stepPillText,
+                      active && s.stepPillTextActive,
+                      done && !active && s.stepPillTextDone,
+                      locked && s.stepPillTextLocked,
+                    ]} numberOfLines={1}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
 
           {/* ── Pre-Surgical Checklist (iter-189) ── */}
-          <View style={s.section} testID="phase2-preop-checklist">
+          <View style={s.section} testID="phase2-preop-checklist" onLayout={onStepLayout(0)}>
             <TouchableOpacity
               style={s.sectionHeader}
               onPress={() => isPreopUnlocked && setPreopExpanded(v => !v)}
@@ -506,7 +658,7 @@ export default function Phase2SubmissionScreen() {
           </View>
 
           {/* ── Surgical Procedure (soft-locked until Pre-Op) ── */}
-          <View style={[s.section, !isPreopUnlocked && { opacity: 0.55 }]} pointerEvents={isPreopUnlocked ? 'auto' : 'none'}>
+          <View style={[s.section, !isPreopUnlocked && { opacity: 0.55 }]} pointerEvents={isPreopUnlocked ? 'auto' : 'none'} onLayout={onStepLayout(1)}>
             {!isPreopUnlocked && (
               <View style={{ backgroundColor: '#FFF3E0', borderLeftWidth: 4, borderLeftColor: '#FB8C00', borderRadius: 6, padding: 10, marginBottom: 10, flexDirection: 'row', gap: 8 }} testID="preop-locked-banner">
                 <Ionicons name="lock-closed-outline" size={18} color="#E65100" />
@@ -861,7 +1013,7 @@ export default function Phase2SubmissionScreen() {
           </View>
 
           {/* ── Post Surgical Radiograph(s) ── */}
-          <View style={s.section}>
+          <View style={s.section} onLayout={onStepLayout(2)}>
             <View style={s.sectionHeader}>
               <Ionicons name="images-outline" size={20} color="#1565C0" />
               <Text style={s.sectionTitle}>
@@ -992,7 +1144,7 @@ export default function Phase2SubmissionScreen() {
           </View>
 
           {/* ── Post-Operative Checklist ── */}
-          <View style={s.section}>
+          <View style={s.section} onLayout={onStepLayout(3)}>
             <View style={s.sectionHeader}>
               <Ionicons name="bandage-outline" size={20} color="#7B1FA2" />
               <Text style={s.sectionTitle}>Post-Operative Checklist <Text style={{ color: '#DC3545' }}>*</Text></Text>
@@ -1018,7 +1170,7 @@ export default function Phase2SubmissionScreen() {
           </View>
 
           {/* ── Notes ── */}
-          <View style={s.section}>
+          <View style={s.section} onLayout={onStepLayout(4)}>
             <View style={s.sectionHeader}>
               <Ionicons name="document-text-outline" size={20} color="#00695C" />
               <Text style={s.sectionTitle}>Notes</Text>
@@ -1134,4 +1286,21 @@ const s = StyleSheet.create({
   muaParamLabelText: { fontSize: 13, fontWeight: '600', color: '#01579B' },
   muaInput: { width: 80, borderWidth: 2, borderColor: '#0277BD', borderRadius: 12, padding: 10, fontSize: 18, fontWeight: '700', textAlign: 'center', backgroundColor: '#FFF', color: '#01579B' },
   muaUnit: { fontSize: 13, fontWeight: '600', color: '#888', minWidth: 30 },
+  // iter-247: sticky 5-step progress strip styles — mirror the existing
+  // Phase 1 strip in (tabs)/new-procedure.tsx for visual consistency.
+  progressBar: { backgroundColor: '#FFFFFF', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#E3F2FD', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 2 },
+  progressLabel: { fontSize: 12, fontWeight: '700', color: '#1565C0', letterSpacing: 0.3, flex: 1, marginRight: 8 },
+  progressCount: { fontSize: 12, fontWeight: '700', color: '#1565C0' },
+  progressTrack: { height: 4, backgroundColor: '#E3F2FD', borderRadius: 2, marginTop: 6, overflow: 'hidden' },
+  progressFill: { height: 4, backgroundColor: '#1565C0', borderRadius: 2 },
+  stepPillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 10 },
+  stepPill: { flexGrow: 1, flexBasis: 0, minWidth: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: '#CFD8DC', backgroundColor: '#F8FAFC' },
+  stepPillActive: { backgroundColor: '#1565C0', borderColor: '#1565C0' },
+  stepPillDone: { backgroundColor: '#E8F5E9', borderColor: '#A5D6A7' },
+  stepPillLocked: { backgroundColor: '#ECEFF1', borderColor: '#CFD8DC', opacity: 0.55 },
+  stepPillNum: { fontSize: 10, fontWeight: '700', color: '#37474F', marginRight: 4, lineHeight: 13 },
+  stepPillText: { fontSize: 10, fontWeight: '600', color: '#37474F', letterSpacing: 0.1, lineHeight: 13, flexShrink: 1 },
+  stepPillTextActive: { color: '#FFFFFF' },
+  stepPillTextDone: { color: '#2E7D32' },
+  stepPillTextLocked: { color: '#90A4AE' },
 });
