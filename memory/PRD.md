@@ -1,5 +1,38 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 247 (Feb 2026) — Phase 2 sticky 5-step progress strip
+
+### What
+Ported the proven sticky tappable progress strip from Phase 1 (`(tabs)/new-procedure.tsx`) to Phase 2 (`procedures/submit-phase2/[id].tsx`). Steps map 1-to-1 with the existing 5 logical sections of the surgical form.
+
+### 5 step pills
+| # | Label | Done when |
+|---|---|---|
+| 1 | Pre-Op | `isPreopUnlocked` (server-stamped `phase2_preop_completed_at`) |
+| 2 | Surgery | `flapDesign && drillingType && all torques 10-90 Ncm && prostheticComponent && (immediate-loading checks pass)` |
+| 3 | Radiographs | `>=1 IOPA && no pending IOPA uploads && (full-arch ? opgFile : true)` |
+| 4 | Post-Op | All 3 yes/no items answered (`post_op_radiograph`, `post_op_instructions`, `medications_prescribed`) |
+| 5 | Notes | Informational — never blocked |
+
+### Behaviour (mirrors Phase 1)
+- Strip is `stickyHeaderIndices={[0]}` so it pins to the top while scrolling.
+- Section Y positions captured via `onLayout` on each of the 5 milestone `<View>`s.
+- `onScroll` bumps the active pill as user scrolls (140-px peek offset).
+- Tap a pill → if green-tick: scroll to that section. If incomplete: show "Missing: …" popup with bulleted list, "Stay here" / "Take me there" buttons.
+- **Locking rule (per user choice in iter-247)**: pills 2-5 are greyed out + non-tappable until Pre-Op is saved. They display a lock-closed icon instead of a number/tick.
+
+### Files touched
+- `procedures/submit-phase2/[id].tsx` (+~120 LOC, 5 onLayout attachments, sticky strip JSX, completion logic, new styles `progressBar/progressLabel/progressCount/progressTrack/progressFill/stepPillRow/stepPill/stepPillActive/stepPillDone/stepPillLocked/...`).
+
+### Verification
+- Metro bundler compiled with no errors (per supervisor logs).
+- Code review confirms structural parity with the production-tested Phase 1 strip (`existingProgressBar` / `existingStepPill*` styles).
+- The user is testing via the EAS production build at `implant-app-r-1774251381.emergent.host`; changes will surface on next build.
+
+---
+
+
+
 ## Iteration 244 (Feb 2026) — Ask Implanr AI polish: input visibility, asterisk strip, real catalog grounding
 
 ### What was broken
