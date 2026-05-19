@@ -528,10 +528,8 @@ export default function TabsLayout() {
           name="dashboard"
           options={{
             title: 'Home',
-            tabBarIcon: ({ color, focused }) => (
-              <FocusedPill focused={focused}>
-                <Ionicons name="home-outline" size={24} color={color} />
-              </FocusedPill>
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="home-outline" size={24} color={color} />
             ),
           }}
         />
@@ -539,10 +537,8 @@ export default function TabsLayout() {
           name="new-procedure"
           options={{
             title: 'New Case',
-            tabBarIcon: ({ color, focused }) => (
-              <FocusedPill focused={focused}>
-                <Ionicons name="document-text-outline" size={24} color={color} />
-              </FocusedPill>
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="document-text-outline" size={24} color={color} />
             ),
             href: isNurse ? null : '/new-procedure',
           }}
@@ -551,10 +547,8 @@ export default function TabsLayout() {
           name="implant-selection"
           options={{
             title: 'Implant',
-            tabBarIcon: ({ color, focused }) => (
-              <FocusedPill focused={focused}>
-                <ImplantIcon size={28} color={color} />
-              </FocusedPill>
+            tabBarIcon: ({ color }) => (
+              <ImplantIcon size={28} color={color} />
             ),
             href: isNurse ? null : '/implant-selection',
           }}
@@ -563,10 +557,8 @@ export default function TabsLayout() {
           name="procedures"
           options={{
             title: isNurse ? 'Cases' : 'My Cases',
-            tabBarIcon: ({ color, focused }) => (
-              <FocusedPill focused={focused}>
-                <Ionicons name="folder-open-outline" size={24} color={color} />
-              </FocusedPill>
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="folder-open-outline" size={24} color={color} />
             ),
           }}
         />
@@ -574,19 +566,17 @@ export default function TabsLayout() {
           name="notifications"
           options={{
             title: 'Alerts',
-            tabBarIcon: ({ color, focused }) => (
-              <FocusedPill focused={focused}>
-                <View>
-                  <Ionicons name="notifications-outline" size={24} color={color} />
-                  {unreadCount > 0 && (
-                    <View style={badgeStyles.badge} data-testid="alerts-badge">
-                      <Text style={badgeStyles.badgeText}>
-                        {unreadCount > 99 ? '99+' : unreadCount}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </FocusedPill>
+            tabBarIcon: ({ color }) => (
+              <View>
+                <Ionicons name="notifications-outline" size={24} color={color} />
+                {unreadCount > 0 && (
+                  <View style={badgeStyles.badge} data-testid="alerts-badge">
+                    <Text style={badgeStyles.badgeText}>
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </Text>
+                  </View>
+                )}
+              </View>
             ),
           }}
           listeners={{
