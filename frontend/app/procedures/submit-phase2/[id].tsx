@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity,
-  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Switch, Image, Linking, Animated,
+  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Switch, Image, Linking, Animated, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -413,6 +413,8 @@ export default function Phase2SubmissionScreen() {
   const scrollRef = useRef<ScrollView | null>(null);
   const stepYs = useRef<number[]>([0, 0, 0, 0, 0]);
   const [currentStep, setCurrentStep] = useState(0);
+  // iter-252: Phase 2 Pre-Op checklist info-popover — mirrors Phase 1.
+  const [activeTooltip, setActiveTooltip] = useState<{ label: string; tooltip: string } | null>(null);
   const onStepLayout = (idx: number) => (e: any) => {
     const y = e?.nativeEvent?.layout?.y ?? 0;
     stepYs.current[idx] = y;
@@ -475,6 +477,7 @@ export default function Phase2SubmissionScreen() {
   const stepDone = stepMissing.map(arr => arr.length === 0);
 
   return (
+    <>
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       <PhaseHeader
         title="Phase 2 - Implant Surgery"
@@ -613,21 +616,35 @@ export default function Phase2SubmissionScreen() {
                 {sec.items.map((item: any) => {
                   const checked = !!preSurgeryChecklist[item.id];
                   return (
-                    <TouchableOpacity
-                      key={item.id}
-                      style={[s.checkRow, { paddingVertical: 8 }]}
-                      activeOpacity={0.7}
-                      disabled={isPreopUnlocked}
-                      onPress={() => setPreSurgeryChecklist(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
-                      testID={`preop-item-${item.id}`}
-                    >
-                      <View style={{ width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: checked ? '#2E7D32' : '#B0BEC5', backgroundColor: checked ? '#2E7D32' : '#FFF', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
-                        {checked && <Ionicons name="checkmark" size={14} color="#FFF" />}
-                      </View>
-                      <Text style={[s.checkLabel, { flex: 1, color: isPreopUnlocked ? '#78909C' : '#263238' }]}>
-                        {item.label}{item.mandatory ? <Text style={{ color: '#DC3545', fontWeight: '700' }}> *</Text> : null}
-                      </Text>
-                    </TouchableOpacity>
+                    <View key={item.id} style={[s.checkRow, { paddingVertical: 8 }]}>
+                      <TouchableOpacity
+                        style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
+                        activeOpacity={0.7}
+                        disabled={isPreopUnlocked}
+                        onPress={() => setPreSurgeryChecklist(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
+                        testID={`preop-item-${item.id}`}
+                      >
+                        <View style={{ width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: checked ? '#2E7D32' : '#B0BEC5', backgroundColor: checked ? '#2E7D32' : '#FFF', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                          {checked && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                        </View>
+                        <Text style={[s.checkLabel, { flex: 1, color: isPreopUnlocked ? '#78909C' : '#263238' }]}>
+                          {item.label}{item.mandatory ? <Text style={{ color: '#DC3545', fontWeight: '700' }}> *</Text> : null}
+                        </Text>
+                      </TouchableOpacity>
+                      {/* iter-252: ℹ️ tooltip — clinical protocol reminder */}
+                      {item.tooltip && (
+                        <TouchableOpacity
+                          onPress={() => setActiveTooltip({ label: item.label, tooltip: item.tooltip })}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          testID={`preop-info-${item.id}`}
+                          accessibilityLabel={`More information about ${item.label}`}
+                          accessibilityRole="button"
+                          style={{ paddingLeft: 8 }}
+                        >
+                          <Ionicons name="information-circle-outline" size={18} color="#1565C0" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   );
                 })}
               </View>
@@ -1217,6 +1234,42 @@ export default function Phase2SubmissionScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+    {/* iter-252: clinical-protocol info popover for Phase 2 Pre-Op Checklist */}
+    <Modal
+      visible={!!activeTooltip}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setActiveTooltip(null)}
+    >
+      <TouchableOpacity
+        activeOpacity={1}
+        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 }}
+        onPress={() => setActiveTooltip(null)}
+      >
+        <TouchableOpacity activeOpacity={1} onPress={() => { /* swallow taps */ }}
+          style={{ backgroundColor: '#FFFFFF', borderRadius: 16, padding: 20, maxWidth: 480, width: '100%' }}
+          testID="phase2-info-modal"
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 12 }}>
+            <Ionicons name="information-circle" size={22} color="#1565C0" style={{ marginTop: 2 }} />
+            <Text style={{ flex: 1, fontSize: 16, fontWeight: '700', color: '#0D47A1', lineHeight: 22 }}>
+              {activeTooltip?.label}
+            </Text>
+          </View>
+          <Text style={{ fontSize: 14, color: '#37474F', lineHeight: 21 }}>
+            {activeTooltip?.tooltip}
+          </Text>
+          <TouchableOpacity
+            onPress={() => setActiveTooltip(null)}
+            style={{ marginTop: 16, alignSelf: 'flex-end', paddingHorizontal: 18, paddingVertical: 9, backgroundColor: '#1565C0', borderRadius: 8 }}
+            testID="phase2-info-close"
+          >
+            <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700' }}>Got it</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+    </>
   );
 }
 
