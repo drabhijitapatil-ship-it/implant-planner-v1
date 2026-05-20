@@ -21,7 +21,7 @@ export const CHECKLIST_DATA = {
       { id: 'realguide', label: 'Virtual Implant Planning Done (Exoplan, CoDiagnostiX, RealGuide etc.)',
         tooltip: 'CBCT DICOM imported into planning software; implant position virtually placed; bone width + height + distance to vital structures verified; surgical guide designed (if guided surgery). Planning report PDF generated and uploaded.' },
       { id: 'pre_op_medication', label: 'Pre-operative Medication Prescription Completed',
-        tooltip: 'Prophylactic antibiotic (typically Amoxicillin 2 g PO 1 hour before, or Clindamycin 600 mg if penicillin-allergic). NSAID + antiseptic mouthwash (Chlorhexidine 0.12%) prescribed. Sedation if required. Allergies & contraindications cross-checked.' },
+        tooltip: 'Prophylactic antibiotic. NSAID + antiseptic mouthwash (Chlorhexidine 0.12%) prescribed. Sedation if required. Allergies & contraindications cross-checked.' },
       { id: 'payment', label: 'Full Payment Done',
         tooltip: 'Receipt issued and amount entered in the Payment Details section above. Patient / guardian briefed on package inclusions / exclusions.' },
     ],
