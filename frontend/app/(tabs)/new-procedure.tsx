@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, Alert, ActivityIndicator, Platform, AppState, Linking, Image, Animated
+  StyleSheet, Alert, ActivityIndicator, Platform, AppState, Linking, Image, Animated, Modal
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -408,6 +408,9 @@ export default function NewProcedureScreen() {
 
   // Checklist state
   const [checklistItems, setChecklistItems] = useState<Record<string, boolean>>({});
+  // iter-251: Phase 1 Checklist info-popover — clinical protocol reminders
+  // attached to each checklist item. Tap ℹ️ → modal shows the tooltip.
+  const [activeTooltip, setActiveTooltip] = useState<{ label: string; tooltip: string } | null>(null);
   const [showSupervisorPicker, setShowSupervisorPicker] = useState(false);
   const [showInchargePicker, setShowInchargePicker] = useState(false);
 
@@ -1171,6 +1174,7 @@ export default function NewProcedureScreen() {
   }, [isCompletelyBlank, pillPulse]);
 
   return (
+    <>
     <ScrollView
       ref={scrollRef}
       style={styles.container}
@@ -2212,7 +2216,21 @@ export default function NewProcedureScreen() {
         <Text style={styles.sectionTitle}>Phase 1 Checklist <Text style={{ color: '#DC3545' }}>*</Text></Text>
         {CHECKLIST_DATA.pre_surgical.items.filter(item => item.id !== 'medical_assessment').filter(item => !(isFullArch && item.id === 'oral_prophylaxis')).map(item => (
           <View key={item.id} style={styles.checklistRow}>
-            <Text style={[styles.checklistLabel, { flex: 1 }]}>{item.label}</Text>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={[styles.checklistLabel, { flex: 1 }]}>{item.label}</Text>
+              {/* iter-251: ℹ️ info popover with clinical protocol reminder */}
+              {(item as any).tooltip && (
+                <TouchableOpacity
+                  onPress={() => setActiveTooltip({ label: item.label, tooltip: (item as any).tooltip })}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  testID={`checklist-info-${item.id}`}
+                  accessibilityLabel={`More information about ${item.label}`}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="information-circle-outline" size={18} color="#1565C0" />
+                </TouchableOpacity>
+              )}
+            </View>
             <View style={{ flexDirection: 'row', gap: 6 }}>
               {['Yes', 'No'].map(opt => (
                 <TouchableOpacity key={opt}
@@ -2392,6 +2410,43 @@ export default function NewProcedureScreen() {
       )}
       </>)}
     </ScrollView>
+
+    {/* iter-251: clinical-protocol info popover for Phase 1 Checklist items */}
+    <Modal
+      visible={!!activeTooltip}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setActiveTooltip(null)}
+    >
+      <TouchableOpacity
+        activeOpacity={1}
+        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 }}
+        onPress={() => setActiveTooltip(null)}
+      >
+        <TouchableOpacity activeOpacity={1} onPress={() => { /* swallow taps on card */ }}
+          style={{ backgroundColor: '#FFFFFF', borderRadius: 16, padding: 20, maxWidth: 480, width: '100%', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.18, shadowRadius: 20, elevation: 12 }}
+          testID="checklist-info-modal"
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 12 }}>
+            <Ionicons name="information-circle" size={22} color="#1565C0" style={{ marginTop: 2 }} />
+            <Text style={{ flex: 1, fontSize: 16, fontWeight: '700', color: '#0D47A1', lineHeight: 22 }}>
+              {activeTooltip?.label}
+            </Text>
+          </View>
+          <Text style={{ fontSize: 14, color: '#37474F', lineHeight: 21 }}>
+            {activeTooltip?.tooltip}
+          </Text>
+          <TouchableOpacity
+            onPress={() => setActiveTooltip(null)}
+            style={{ marginTop: 16, alignSelf: 'flex-end', paddingHorizontal: 18, paddingVertical: 9, backgroundColor: '#1565C0', borderRadius: 8 }}
+            testID="checklist-info-close"
+          >
+            <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700' }}>Got it</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+    </>
   );
 }
 
