@@ -13,6 +13,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  Animated as RNAnimated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -245,6 +246,17 @@ export default function ProcedureDetailScreen() {
   const [aiSavingSurgical, setAiSavingSurgical] = useState(false);
   const [aiSurgicalLoading, setAiSurgicalLoading] = useState(false);
   const [aiChatVisible, setAiChatVisible] = useState(false);
+  // iter-255: gentle pulse on the case-detail AI FAB so it matches the
+  // Home Screen "Ask Implanr AI" floating bubble exactly.
+  const aiFabPulse = useRef(new RNAnimated.Value(1)).current;
+  useEffect(() => {
+    const loop = RNAnimated.loop(RNAnimated.sequence([
+      RNAnimated.timing(aiFabPulse, { toValue: 1.08, duration: 1100, useNativeDriver: true }),
+      RNAnimated.timing(aiFabPulse, { toValue: 1, duration: 1100, useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [aiFabPulse]);
   const [aiChatHistory, setAiChatHistory] = useState<any[]>([]);
   const [aiChatInput, setAiChatInput] = useState('');
   const [aiChatSending, setAiChatSending] = useState(false);
@@ -3677,16 +3689,25 @@ export default function ProcedureDetailScreen() {
         </View>
       )}
 
-      {/* Floating AI Chat Button — hidden for nurses (they don't use AI clinical tooling). */}
+      {/* iter-255: Floating AI Chat FAB — visually identical to the Home
+          Screen "Ask Implanr AI" bubble (sparkles icon, #1565C0, gentle
+          pulse). Hidden for nurses (they don't use AI clinical tooling). */}
       {procedure.status !== 'draft' && user?.role !== 'nurse' && (
-        <TouchableOpacity
-          style={{ position: 'absolute', bottom: 100, right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#0D47A1', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 8, zIndex: 999 }}
-          onPress={() => setAiChatVisible(true)}
-          testID="ai-chat-fab"
-          data-testid="ai-chat-fab"
+        <RNAnimated.View
+          style={{ position: 'absolute', bottom: 92, right: 18, zIndex: 9999, transform: [{ scale: aiFabPulse }] }}
+          pointerEvents="box-none"
         >
-          <Ionicons name="chatbubble-ellipses" size={26} color="#FFF" />
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#1565C0', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 6 }}
+            onPress={() => setAiChatVisible(true)}
+            testID="ai-chat-fab"
+            data-testid="ai-chat-fab"
+            accessibilityRole="button"
+            accessibilityLabel="Ask Implanr AI"
+          >
+            <Ionicons name="sparkles" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+        </RNAnimated.View>
       )}
 
       {/* AI Chat Modal */}
