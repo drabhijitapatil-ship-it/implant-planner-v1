@@ -10,7 +10,7 @@ export const CHECKLIST_DATA = {
       { id: 'oral_prophylaxis', label: 'Oral Prophylaxis Done' },
       { id: 'instruments', label: 'Availability of the Instruments and Equipment' },
       { id: 'medical_assessment', label: 'Medical Assessment Done' },
-      { id: 'realguide', label: 'RealGuide Planning and Report Generated' },
+      { id: 'realguide', label: 'Virtual Implant Planning Done (Exoplan, CoDiagnostiX, RealGuide etc.)' },
       { id: 'pre_op_medication', label: 'Pre-operative Medication Prescription Completed' },
       { id: 'payment', label: 'Full Payment Done' },
     ],
