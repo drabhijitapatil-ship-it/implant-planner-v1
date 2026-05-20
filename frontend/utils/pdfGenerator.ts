@@ -777,7 +777,7 @@ const getChecklistLabel = (section: string, id: string): string => {
       treatment_plan: 'Approved Treatment & Prosthetic Plan',
       payment: 'Full payment done',
       medical_assessment: 'Medical assessment done',
-      realguide: 'RealGUIDE Planning and Report',
+      realguide: 'Virtual Implant Planning Done (Exoplan, CoDiagnostiX, RealGuide etc.)',
       oral_prophylaxis: 'Oral Prophylaxis done',
       patient_consent: 'Patient Consent Taken',
     },
