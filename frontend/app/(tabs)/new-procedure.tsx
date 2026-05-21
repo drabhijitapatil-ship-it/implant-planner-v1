@@ -776,6 +776,24 @@ export default function NewProcedureScreen() {
 
   // ── Continue to Implant Selection ──
   const handleContinueToImplants = async () => {
+    // iter-260: holistic pre-flight using the per-section completion
+    // logic that drives the sticky progress strip. Surfaces ALL missing
+    // sections at once so the user doesn't have to dismiss 4 popups in
+    // a row. Field-level Alerts below remain as the authoritative
+    // messages for the last missing piece.
+    const requiredIdx = [0, 1, 2, 3];
+    const incompleteLabels = requiredIdx
+      .filter(i => !existingStepDone[i])
+      .map(i => FLOW_STEP_LABELS[i]);
+    if (incompleteLabels.length > 0) {
+      Alert.alert(
+        'Incomplete sections',
+        `Please complete the following before continuing to Implant Selection:\n\n${incompleteLabels.map(l => `• ${l}`).join('\n')}`,
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     // Sanitise all string fields before validation
     const sanitized = { ...formData };
     for (const key of Object.keys(sanitized) as (keyof typeof sanitized)[]) {
@@ -2402,22 +2420,39 @@ export default function NewProcedureScreen() {
       {/* ─── Continue Button ─── */}
       {/* iter-231: hide for Existing Implant — that flow has its own
           "Submit for Approval and Move to …" buttons inside
-          ExistingImplantSection. */}
-      {!isExistingImplantCase && (
-      <View onLayout={showFlowStrip ? onExistingStepLayout(4) : undefined}>
-      <TouchableOpacity style={styles.continueBtn} onPress={handleContinueToImplants}
-        disabled={loading} data-testid="continue-to-implants">
-        {loading ? (
-          <ActivityIndicator color="#FFF" />
-        ) : (
-          <>
-            <Text style={styles.continueBtnText}>Continue to Implant Selection</Text>
-            <Ionicons name="arrow-forward" size={20} color="#FFF" />
-          </>
-        )}
-      </TouchableOpacity>
-      </View>
-      )}
+          ExistingImplantSection.
+          iter-260: visually disabled (greyed + lock icon + helper text)
+          until all 4 sections are complete. Tap still works to surface
+          the holistic Alert listing what's missing. */}
+      {!isExistingImplantCase && (() => {
+        const canContinue = [0, 1, 2, 3].every(i => existingStepDone[i]);
+        const incompleteCount = [0, 1, 2, 3].filter(i => !existingStepDone[i]).length;
+        return (
+          <View onLayout={showFlowStrip ? onExistingStepLayout(4) : undefined}>
+            <TouchableOpacity
+              style={[styles.continueBtn, !canContinue && { backgroundColor: '#B0BEC5' }]}
+              onPress={handleContinueToImplants}
+              disabled={loading}
+              data-testid="continue-to-implants"
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <>
+                  {!canContinue && <Ionicons name="lock-closed" size={18} color="#FFF" />}
+                  <Text style={styles.continueBtnText}>Continue to Implant Selection</Text>
+                  {canContinue && <Ionicons name="arrow-forward" size={20} color="#FFF" />}
+                </>
+              )}
+            </TouchableOpacity>
+            {!canContinue && !loading && (
+              <Text style={{ marginTop: 8, textAlign: 'center', color: '#90A4AE', fontSize: 12, fontWeight: '600' }}>
+                {incompleteCount} section{incompleteCount > 1 ? 's' : ''} still incomplete — tap to see what's missing
+              </Text>
+            )}
+          </View>
+        );
+      })()}
       </>)}
     </ScrollView>
 
