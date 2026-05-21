@@ -1,5 +1,30 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+
+## Iteration 266 (Feb 2026) — "Pending Action" badge on My Cases tab
+
+### What the user asked for
+Add an iOS-style red notification badge on the bottom tab bar's "Cases" icon so faculty (Supervisor / Implant In-Charge / Administrator) can instantly see how many cases are awaiting their approval without entering the tab.
+
+### What changed
+**Frontend (`/app/frontend/app/(tabs)/_layout.tsx`)**
+- Wired up the previously-defined `pendingApprovalCount` state by:
+  - Adding `fetchPendingApprovalCount()` to the initial-load `useEffect` and the 30 s polling interval (alongside `fetchUnreadCount` / `fetchForumUnread`).
+  - Rendering the badge inside the "My Cases" / "Cases" `Tabs.Screen` icon — re-using the existing `badgeStyles.badge` style for visual parity with the Alerts badge.
+  - Adding a `tabPress` listener that re-fetches the count 1 s after the user opens the tab (catches the case where they approve a case and bounce back).
+- `fetchPendingApprovalCount` reads `/api/procedures`, filters statuses in `{pending_phase1, pending_phase2, pending_stage2_surgical, pending_phase4_step1, pending_phase4_step2}` AND where the current user is the assigned supervisor or implant in-charge. Students + nurses always see 0 (early-return).
+- Count caps at `99+` (same logic as Alerts).
+
+### Verification
+- Backend curl: Logged in as `Abhijit.patil` (Implant In-Charge) → `/api/procedures` returned 6 pending procedures assigned to this user.
+- Screenshot: Home screen showed "**6**" red badge on the "My Cases" tab; Alerts tab simultaneously showed "99+". Layout unchanged for other roles.
+
+### Files touched
+- `/app/frontend/app/(tabs)/_layout.tsx` (useEffect interval + Tabs.Screen `procedures` icon)
+
+---
+
+
 ## Iteration 249 (Feb 2026) — "Add Implant Position" locked after Phase 2
 
 ### What the user reported

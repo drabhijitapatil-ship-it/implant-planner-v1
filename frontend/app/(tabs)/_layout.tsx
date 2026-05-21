@@ -439,9 +439,14 @@ export default function TabsLayout() {
     fetchUnreadCount();
     fetchWhatsNewIndicator();
     fetchForumUnread();
-    const interval = setInterval(() => { fetchUnreadCount(); fetchForumUnread(); }, 30000);
+    fetchPendingApprovalCount();
+    const interval = setInterval(() => {
+      fetchUnreadCount();
+      fetchForumUnread();
+      fetchPendingApprovalCount();
+    }, 30000);
     return () => clearInterval(interval);
-  }, [fetchUnreadCount, fetchWhatsNewIndicator, fetchForumUnread]);
+  }, [fetchUnreadCount, fetchWhatsNewIndicator, fetchForumUnread, fetchPendingApprovalCount]);
 
   // Re-check on drawer open (catches the case where user opens What's new from
   // Profile, taps "Got it" elsewhere, then returns).
@@ -560,8 +565,20 @@ export default function TabsLayout() {
           options={{
             title: isNurse ? 'Cases' : 'My Cases',
             tabBarIcon: ({ color }) => (
-              <Ionicons name="folder-open-outline" size={24} color={color} />
+              <View>
+                <Ionicons name="folder-open-outline" size={24} color={color} />
+                {pendingApprovalCount > 0 && (
+                  <View style={badgeStyles.badge} data-testid="cases-pending-badge">
+                    <Text style={badgeStyles.badgeText}>
+                      {pendingApprovalCount > 99 ? '99+' : pendingApprovalCount}
+                    </Text>
+                  </View>
+                )}
+              </View>
             ),
+          }}
+          listeners={{
+            tabPress: () => { setTimeout(fetchPendingApprovalCount, 1000); },
           }}
         />
         <Tabs.Screen
