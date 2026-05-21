@@ -2369,40 +2369,62 @@ export default function NewProcedureScreen() {
           inside ExistingImplantSection for non-existing flows.
           iter-235: order is Phase 3 → Phase 4 Step 1 → Save Draft, with a
           tighter 6px vertical gap (per user request). */}
-      {isExistingImplantCase && existingSubmitApi?.canSubmit && (
-        <View style={[styles.section, { gap: 6 }]} testID="existing-impl-action-buttons" onLayout={onExistingStepLayout(4)}>
-          <TouchableOpacity
-            style={[styles.continueBtn, { backgroundColor: '#43A047', marginVertical: 0, marginHorizontal: 0 }, existingSubmitApi.submitting && { opacity: 0.6 }]}
-            onPress={() => existingSubmitApi.submit('phase3')}
-            disabled={existingSubmitApi.submitting}
-            data-testid="ei-move-phase3-bottom"
-          >
-            <Ionicons name="arrow-forward-circle" size={20} color="#FFF" />
-            <Text style={styles.continueBtnText} numberOfLines={2}>{existingSubmitApi.labels.phase3}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.continueBtn, { backgroundColor: '#1565C0', marginVertical: 0, marginHorizontal: 0 }, existingSubmitApi.submitting && { opacity: 0.6 }]}
-            onPress={() => existingSubmitApi.submit('phase4_step1')}
-            disabled={existingSubmitApi.submitting}
-            data-testid="ei-move-phase4-bottom"
-          >
-            {existingSubmitApi.submitting
-              ? <ActivityIndicator color="#FFF" />
-              : <><Ionicons name="arrow-forward-circle" size={20} color="#FFF" /><Text style={styles.continueBtnText} numberOfLines={2}>{existingSubmitApi.labels.phase4}</Text></>}
-          </TouchableOpacity>
-          {!existingSubmitApi.isDraftResume && (
+      {isExistingImplantCase && existingSubmitApi?.canSubmit && (() => {
+        // iter-261: same disable + holistic-guard pattern as routine Continue.
+        const canSubmit = [0, 1, 2, 3].every(i => existingStepDone[i]);
+        const incompleteCount = [0, 1, 2, 3].filter(i => !existingStepDone[i]).length;
+        const guard = (run: () => void) => {
+          if (!canSubmit) {
+            const labels = [0, 1, 2, 3].filter(i => !existingStepDone[i]).map(i => FLOW_STEP_LABELS[i]);
+            Alert.alert(
+              'Incomplete sections',
+              `Please complete the following before submitting:\n\n${labels.map(l => `• ${l}`).join('\n')}`,
+              [{ text: 'OK' }]
+            );
+            return;
+          }
+          run();
+        };
+        return (
+          <View style={[styles.section, { gap: 6 }]} testID="existing-impl-action-buttons" onLayout={onExistingStepLayout(4)}>
             <TouchableOpacity
-              style={[styles.continueBtn, { backgroundColor: '#FFF', borderWidth: 1.5, borderColor: '#CFD8DC', marginVertical: 0, marginHorizontal: 0 }, existingSubmitApi.submitting && { opacity: 0.6 }]}
-              onPress={() => existingSubmitApi.submit('draft')}
+              style={[styles.continueBtn, { backgroundColor: canSubmit ? '#43A047' : '#B0BEC5', marginVertical: 0, marginHorizontal: 0 }, existingSubmitApi.submitting && { opacity: 0.6 }]}
+              onPress={() => guard(() => existingSubmitApi.submit('phase3'))}
               disabled={existingSubmitApi.submitting}
-              data-testid="ei-save-draft-bottom"
+              data-testid="ei-move-phase3-bottom"
             >
-              <Ionicons name="save-outline" size={20} color="#37474F" />
-              <Text style={[styles.continueBtnText, { color: '#37474F' }]}>Save Draft</Text>
+              <Ionicons name={canSubmit ? 'arrow-forward-circle' : 'lock-closed'} size={20} color="#FFF" />
+              <Text style={styles.continueBtnText} numberOfLines={2}>{existingSubmitApi.labels.phase3}</Text>
             </TouchableOpacity>
-          )}
-        </View>
-      )}
+            <TouchableOpacity
+              style={[styles.continueBtn, { backgroundColor: canSubmit ? '#1565C0' : '#B0BEC5', marginVertical: 0, marginHorizontal: 0 }, existingSubmitApi.submitting && { opacity: 0.6 }]}
+              onPress={() => guard(() => existingSubmitApi.submit('phase4_step1'))}
+              disabled={existingSubmitApi.submitting}
+              data-testid="ei-move-phase4-bottom"
+            >
+              {existingSubmitApi.submitting
+                ? <ActivityIndicator color="#FFF" />
+                : <><Ionicons name={canSubmit ? 'arrow-forward-circle' : 'lock-closed'} size={20} color="#FFF" /><Text style={styles.continueBtnText} numberOfLines={2}>{existingSubmitApi.labels.phase4}</Text></>}
+            </TouchableOpacity>
+            {!canSubmit && !existingSubmitApi.submitting && (
+              <Text style={{ marginTop: 2, textAlign: 'center', color: '#90A4AE', fontSize: 12, fontWeight: '600' }}>
+                {incompleteCount} section{incompleteCount > 1 ? 's' : ''} still incomplete — tap to see what's missing
+              </Text>
+            )}
+            {!existingSubmitApi.isDraftResume && (
+              <TouchableOpacity
+                style={[styles.continueBtn, { backgroundColor: '#FFF', borderWidth: 1.5, borderColor: '#CFD8DC', marginVertical: 0, marginHorizontal: 0 }, existingSubmitApi.submitting && { opacity: 0.6 }]}
+                onPress={() => existingSubmitApi.submit('draft')}
+                disabled={existingSubmitApi.submitting}
+                data-testid="ei-save-draft-bottom"
+              >
+                <Ionicons name="save-outline" size={20} color="#37474F" />
+                <Text style={[styles.continueBtnText, { color: '#37474F' }]}>Save Draft</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        );
+      })()}
 
       {/* iter-233: resume the routine-only block for Bone Graft + Continue. */}
       {!isExistingImplantCase && (<>
