@@ -1,6 +1,26 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
 
+## Iteration 272 (Feb 2026) — Approver names on Treatment Progress timeline
+
+### What changed
+**Frontend (`/app/frontend/app/procedures/[id].tsx`)**
+- Each completed phase on the vertical Treatment Progress timeline now renders an "Approved by …" line in blue, right between the phase subtitle and the timestamp.
+- For Phases 1–4 the approver line lists both assigned faculty (`supervisor_name` + `implant_incharge_name`) — accurate because the dual-approval gate only opens once both have stamped. The "Complete" step suppresses the approver line to avoid duplicating Phase 4.
+- Added a small `withDoctorTitle()` helper that prefixes "Dr. " only when the stored name doesn't already start with `Dr./Prof./Mr./Mrs./Ms.`, preventing "Dr. Dr. <name>" stacking.
+- New `timelineApprover` style (blue, `#1565C0`, weight 600) to differentiate from the green timestamp.
+
+### Verification
+- Completed case screenshot: each of Phase 1 / Phase 2 / Phase 3 / Phase 4 shows "Approved by Dr. Paresh Gandhi & Dr. Abhijit Patil" → "Apr 03, 12:19" (or appropriate timestamp). No "Dr. Dr." duplication.
+- Existing-implant case: approver line correctly renders for the seeded Phase 1; Phase 2 row remains hidden as expected.
+
+### Files touched
+- `/app/frontend/app/procedures/[id].tsx`
+
+---
+
+
+
 ## Iteration 271 (Feb 2026) — Single Treatment Progress widget on case-detail
 
 ### What the user reported

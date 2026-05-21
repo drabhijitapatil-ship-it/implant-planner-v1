@@ -1100,30 +1100,53 @@ export default function ProcedureDetailScreen() {
               // the implant surgery already happened and is captured in
               // existing_implants[] on Phase 1.
               const isExistingImplant = procedure.case_origin === 'existing_implants';
+              // iter-272: each completed phase shows the assigned approver(s).
+              // Phase 1-4 all require sign-off from the supervisor +
+              // implant in-charge. We treat the assigned roles as the
+              // approver line — accurate because the dual-approval gate
+              // only opens once both have stamped. We avoid stacking a
+              // second "Dr." prefix when the stored name already starts
+              // with a clinical title (Dr./Prof./Mr./Mrs./Ms.).
+              const TITLE_RE = /^(dr\.?|prof\.?|mr\.?|mrs\.?|ms\.?)\s/i;
+              const withDoctorTitle = (n?: string) => {
+                if (!n) return '';
+                return TITLE_RE.test(n.trim()) ? n.trim() : `Dr. ${n.trim()}`;
+              };
+              const sup = procedure.supervisor_name?.trim();
+              const inc = procedure.implant_incharge_name?.trim();
+              const approverParts: string[] = [];
+              if (sup) approverParts.push(withDoctorTitle(sup));
+              if (inc && inc !== sup) approverParts.push(withDoctorTitle(inc));
+              const phaseApprover = approverParts.length ? `Approved by ${approverParts.join(' & ')}` : null;
               const allSteps = [
                 { key: 'phase1', label: 'Phase 1', subtitle: isExistingImplant ? 'Examination and Case Details' : 'Diagnosis and Treatment Planning',
                   done: ['phase1_approved','pending_phase2','phase2_approved','pending_stage2_surgical','stage2_surgical_approved','pending_stage2_prosthetic','completed'].includes(procedure.status),
                   active: procedure.status === 'pending_phase1',
-                  timestamp: procedure.phase1_completed_at },
+                  timestamp: procedure.phase1_completed_at,
+                  approver: phaseApprover },
                 { key: 'phase2', label: 'Phase 2', subtitle: 'Implant Surgery',
                   done: ['phase2_approved','pending_stage2_surgical','stage2_surgical_approved','pending_stage2_prosthetic','completed'].includes(procedure.status),
                   active: ['phase1_approved','pending_phase2'].includes(procedure.status),
-                  timestamp: procedure.phase2_completed_at },
+                  timestamp: procedure.phase2_completed_at,
+                  approver: phaseApprover },
                 { key: 'stage2s', label: 'Phase 3', subtitle: 'Healing and Second Stage Surgery',
                   done: ['stage2_surgical_approved','pending_stage2_prosthetic','completed'].includes(procedure.status),
                   active: ['phase2_approved','pending_stage2_surgical'].includes(procedure.status),
-                  timestamp: procedure.stage2_surgical_completed_at },
+                  timestamp: procedure.stage2_surgical_completed_at,
+                  approver: phaseApprover },
                 { key: 'stage2p', label: 'Phase 4', subtitle: 'Prosthetic Rehabilitation',
                   done: procedure.status === 'completed',
                   active: ['stage2_surgical_approved','pending_stage2_prosthetic'].includes(procedure.status),
-                  timestamp: procedure.stage2_prosthetic_completed_at },
+                  timestamp: procedure.stage2_prosthetic_completed_at,
+                  approver: phaseApprover },
                 { key: 'complete', label: 'Complete', subtitle: 'Treatment Done',
                   done: procedure.status === 'completed',
                   active: false,
-                  timestamp: procedure.treatment_completed_at },
+                  timestamp: procedure.treatment_completed_at,
+                  approver: null /* duplicate of Phase 4 — keep clean */ },
               ];
               return isExistingImplant ? allSteps.filter(s => s.key !== 'phase2') : allSteps;
-            })().map((step, index, arr) => (
+            })().map((step: any, index, arr) => (
               <View key={step.key} style={styles.timelineStep}>
                 <View style={styles.timelineNodeCol}>
                   <View style={[
@@ -1153,6 +1176,11 @@ export default function ProcedureDetailScreen() {
                     step.active && styles.timelineLabelActive,
                   ]}>{step.label}</Text>
                   <Text style={styles.timelineSubtitle}>{step.subtitle}</Text>
+                  {step.done && step.approver ? (
+                    <Text style={styles.timelineApprover} numberOfLines={2} data-testid={`timeline-approver-${step.key}`}>
+                      {step.approver}
+                    </Text>
+                  ) : null}
                   {step.timestamp && (
                     <Text style={styles.timelineTimestamp}>
                       {format(new Date(step.timestamp), 'MMM dd, HH:mm')}
@@ -4877,5 +4905,12 @@ const styles = StyleSheet.create({
     color: '#4CAF50',
     marginTop: 2,
     fontWeight: '500',
+  },
+  timelineApprover: {
+    fontSize: 11,
+    color: '#1565C0',
+    marginTop: 3,
+    fontWeight: '600',
+    letterSpacing: 0.1,
   },
 });
