@@ -1249,15 +1249,38 @@ export default function Phase2SubmissionScreen() {
             </View>
           ) : (
           <View style={{ padding: 16, paddingBottom: 32 }}>
-            <TouchableOpacity style={[s.submitBtn, loading && { opacity: 0.6 }]}
-              onPress={handleSubmit} disabled={loading} data-testid="phase2-submit-btn">
-              {loading ? <ActivityIndicator color="#FFF" /> : (
+            {/* iter-259: visually disable the submit button until all 4
+                required sections are complete (Pre-Op, Surgery,
+                Radiographs, Post-Op). Notes is optional. Button stays
+                tappable so the user gets the explanatory Alert listing
+                what's still missing — never silently inert. */}
+            {(() => {
+              const canSubmit = [0, 1, 2, 3].every(i => stepDone[i]);
+              const incompleteCount = [0, 1, 2, 3].filter(i => !stepDone[i]).length;
+              const isInchargeSelf = (user?.role === 'implant_incharge' && createdByRole === 'implant_incharge' && user?.id === createdById);
+              return (
                 <>
-                  <Ionicons name="checkmark-circle" size={22} color="#FFF" />
-                  <Text style={s.submitText}>{(user?.role === 'implant_incharge' && createdByRole === 'implant_incharge' && user?.id === createdById) ? 'Done' : 'Submit Phase 2 for Approval'}</Text>
+                  <TouchableOpacity
+                    style={[s.submitBtn, loading && { opacity: 0.6 }, !canSubmit && { backgroundColor: '#B0BEC5' }]}
+                    onPress={handleSubmit}
+                    disabled={loading}
+                    data-testid="phase2-submit-btn"
+                  >
+                    {loading ? <ActivityIndicator color="#FFF" /> : (
+                      <>
+                        <Ionicons name={canSubmit ? 'checkmark-circle' : 'lock-closed'} size={22} color="#FFF" />
+                        <Text style={s.submitText}>{isInchargeSelf ? 'Done' : 'Submit Phase 2 for Approval'}</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                  {!canSubmit && !loading && (
+                    <Text style={{ marginTop: 8, textAlign: 'center', color: '#90A4AE', fontSize: 12, fontWeight: '600' }}>
+                      {incompleteCount} section{incompleteCount > 1 ? 's' : ''} still incomplete — tap to see what's missing
+                    </Text>
+                  )}
                 </>
-              )}
-            </TouchableOpacity>
+              );
+            })()}
           </View>
           )}
         </ScrollView>
