@@ -1,6 +1,40 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
 
+## Iteration 269 (Feb 2026) — Reschedule surgery (pre-Phase-2)
+
+### What the user asked for
+"For New Case workflow including Existing Implants, give an option to reschedule the surgery date and time. The option should be available until Phase 2 is initiated and for users who can schedule the case." Followed by clarifications: (1b) menu entry on My Cases list AND case-detail page, (2b) case creator + faculty only, (3a) mandatory reason + audit trail, (4a) push notification + in-app Alert, (5b) eligibility blocked only by status (not by elapsed-date).
+
+### What changed
+**Backend (`/app/backend/server.py`)**
+- New endpoint `POST /api/procedures/{procedure_id}/reschedule` accepting `{procedure_date, procedure_time, reason}`. Validates Sunday-block, Saturday-10:00-only, slot conflicts (skipped for existing-implant cases where the date is synthetic), no-op (same date+time), and the eligibility set `RESCHEDULE_ELIGIBLE_STATUSES = {draft, pending_phase1, rejected_phase1, phase1_approved}`.
+- Permission gate: case creator (`created_by_id` or `student_id`) OR `supervisor` / `implant_incharge` / `administrator`.
+- Persists the change to `procedure_date` + `procedure_time` and appends a fully-attributed entry to `reschedule_history` (id, from_date/time, to_date/time, reason, by_user_id/name/role, at).
+- Notifications: writes one in-app `db.notifications` entry per stakeholder (student, supervisor, implant_incharge, nurse, creator — minus the actor, deduped) AND fires a push via `send_expo_push_notifications(…, "Surgery rescheduled · {patient}", ...)`.
+
+**Frontend**
+- `/app/frontend/components/RescheduleModal.tsx` (new): shared modal with date input, two-slot time selector (10:00 AM / 2:00 PM), mandatory reason textarea, client-side mirror of server validation, and disabled-state on the Confirm CTA until everything is valid. Re-initialises on each open.
+- `/app/frontend/app/(tabs)/procedures.tsx`: imports the modal, adds `rescheduleCase` state, appends a "Reschedule" entry to `getMenuActions()` only when (a) case status ∈ eligible set AND (b) user is creator or faculty. On success, reloads the list to reflect the new date.
+- `/app/frontend/app/procedures/[id].tsx`: imports the modal, adds a pill-styled "Reschedule" button to the Schedule section header (gated by the same rules) and renders a `reschedule_history` audit trail right below the existing Date/Time rows.
+
+### Verification
+- **Backend curl (Implant In-Charge)**:
+  - ✅ Successful reschedule with audit-history persisted.
+  - ✅ Sunday blocked, Saturday-non-10:00 blocked, same-time rejected, post-Phase-2 rejected.
+  - ✅ Nurse (without creator/faculty role) blocked with 403.
+- **Frontend screenshots**: My Cases three-dot menu now shows "Reschedule" for phase1_approved cases (and hides it for phase2_approved cases). Modal opens with the correct current date/time, slot picker, and reason textarea.
+
+### Files touched
+- `/app/backend/server.py`
+- `/app/frontend/components/RescheduleModal.tsx` (new)
+- `/app/frontend/app/(tabs)/procedures.tsx`
+- `/app/frontend/app/procedures/[id].tsx`
+
+---
+
+
+
 ## Iteration 268 (Feb 2026) — Per-tab counts on "My Cases"
 
 ### What the user asked for

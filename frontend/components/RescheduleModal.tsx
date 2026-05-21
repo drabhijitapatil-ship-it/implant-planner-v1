@@ -1,0 +1,251 @@
+import React, { useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  Modal,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  Platform,
+  ScrollView,
+  Alert,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { format } from 'date-fns';
+import api from '../utils/api';
+
+// iter-269: shared modal used from both the My Cases three-dot menu
+// and the case-detail screen to reschedule a case. Validation rules
+// mirror the server: Sundays blocked, Saturdays restricted to the
+// 10:00 slot. The "reason" note is mandatory (server enforces
+// min_length=3) and the entry is appended to `reschedule_history`.
+const TIME_SLOTS: { label: string; value: string }[] = [
+  { label: '10:00 AM', value: '10:00' },
+  { label: '2:00 PM', value: '14:00' },
+];
+
+const isoToday = () => format(new Date(), 'yyyy-MM-dd');
+
+export default function RescheduleModal({
+  visible,
+  procedureId,
+  patientName,
+  currentDate,
+  currentTime,
+  onClose,
+  onRescheduled,
+}: {
+  visible: boolean;
+  procedureId: string;
+  patientName?: string;
+  currentDate?: string;
+  currentTime?: string;
+  onClose: () => void;
+  onRescheduled?: () => void;
+}) {
+  const [newDate, setNewDate] = useState<string>(currentDate || isoToday());
+  const [newTime, setNewTime] = useState<string>(currentTime || '10:00');
+  const [reason, setReason] = useState<string>('');
+  const [submitting, setSubmitting] = useState(false);
+
+  // Reset state every time the modal is re-opened so we don't carry
+  // over a half-typed reason from a previous attempt.
+  React.useEffect(() => {
+    if (visible) {
+      setNewDate(currentDate || isoToday());
+      setNewTime(currentTime || '10:00');
+      setReason('');
+      setSubmitting(false);
+    }
+  }, [visible, currentDate, currentTime]);
+
+  const dateError = useMemo(() => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
+      return 'Date must be in YYYY-MM-DD format';
+    }
+    const d = new Date(`${newDate}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return 'Enter a valid date';
+    if (d.getDay() === 0) return 'Sundays are not available for scheduling';
+    if (d.getDay() === 6 && newTime !== '10:00') return 'Saturdays only allow the 10:00 AM slot';
+    return null;
+  }, [newDate, newTime]);
+
+  const sameAsCurrent = newDate === currentDate && newTime === currentTime;
+
+  const canSubmit =
+    !!newDate && !!newTime && reason.trim().length >= 3 && !dateError && !sameAsCurrent && !submitting;
+
+  const onSubmit = async () => {
+    if (!canSubmit) return;
+    setSubmitting(true);
+    try {
+      await api.post(`/procedures/${procedureId}/reschedule`, {
+        procedure_date: newDate,
+        procedure_time: newTime,
+        reason: reason.trim(),
+      });
+      Alert.alert('Rescheduled', `${patientName || 'Case'} moved to ${newDate} at ${newTime}.`);
+      onRescheduled?.();
+      onClose();
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail || 'Failed to reschedule. Please try again.';
+      Alert.alert('Could not reschedule', String(detail));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={s.backdrop} testID="reschedule-backdrop">
+        <View style={s.sheet} testID="reschedule-modal">
+          <View style={s.header}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.title}>Reschedule surgery</Text>
+              {patientName ? <Text style={s.subtitle} numberOfLines={1}>{patientName}</Text> : null}
+            </View>
+            <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} testID="reschedule-close">
+              <Ionicons name="close" size={22} color="#546E7A" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 8 }}>
+            {currentDate ? (
+              <View style={s.currentRow}>
+                <Ionicons name="calendar-outline" size={16} color="#78909C" />
+                <Text style={s.currentTxt}>
+                  Current: <Text style={{ fontWeight: '700' }}>{currentDate} {currentTime ? `at ${currentTime}` : ''}</Text>
+                </Text>
+              </View>
+            ) : null}
+
+            <Text style={s.label}>New date</Text>
+            <TextInput
+              value={newDate}
+              onChangeText={setNewDate}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor="#B0BEC5"
+              style={[s.input, dateError && s.inputError]}
+              autoCorrect={false}
+              autoCapitalize="none"
+              keyboardType={Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'default'}
+              data-testid="reschedule-date-input"
+              testID="reschedule-date-input"
+            />
+
+            <Text style={s.label}>New time</Text>
+            <View style={s.slotRow}>
+              {TIME_SLOTS.map(slot => {
+                const active = newTime === slot.value;
+                return (
+                  <TouchableOpacity
+                    key={slot.value}
+                    style={[s.slot, active && s.slotActive]}
+                    onPress={() => setNewTime(slot.value)}
+                    testID={`reschedule-slot-${slot.value}`}
+                  >
+                    <Text style={[s.slotTxt, active && s.slotTxtActive]}>{slot.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {dateError ? (
+              <View style={s.errorRow}>
+                <Ionicons name="alert-circle" size={14} color="#C62828" />
+                <Text style={s.errorTxt}>{dateError}</Text>
+              </View>
+            ) : null}
+
+            <Text style={s.label}>Reason for reschedule <Text style={s.required}>*</Text></Text>
+            <TextInput
+              value={reason}
+              onChangeText={setReason}
+              placeholder="e.g. Patient requested due to travel, equipment delay…"
+              placeholderTextColor="#B0BEC5"
+              style={[s.input, s.textarea]}
+              multiline
+              numberOfLines={3}
+              data-testid="reschedule-reason-input"
+              testID="reschedule-reason-input"
+            />
+            <Text style={s.helper}>Visible on the case audit trail and shared with assigned stakeholders.</Text>
+          </ScrollView>
+
+          <View style={s.footer}>
+            <TouchableOpacity style={s.cancelBtn} onPress={onClose} disabled={submitting} testID="reschedule-cancel">
+              <Text style={s.cancelTxt}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.submitBtn, !canSubmit && s.submitBtnDisabled]}
+              onPress={onSubmit}
+              disabled={!canSubmit}
+              testID="reschedule-submit"
+            >
+              {submitting ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle" size={18} color="#FFF" />
+                  <Text style={s.submitTxt}>Confirm reschedule</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const s = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: 'rgba(15,25,40,0.45)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 22,
+    maxHeight: '92%',
+  },
+  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  title: { fontSize: 17, fontWeight: '800', color: '#1A2332' },
+  subtitle: { fontSize: 12, color: '#78909C', marginTop: 2 },
+  currentRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#ECEFF1', paddingHorizontal: 10, paddingVertical: 8,
+    borderRadius: 8, marginTop: 6, marginBottom: 4,
+  },
+  currentTxt: { fontSize: 12, color: '#455A64' },
+  label: { fontSize: 12, fontWeight: '700', color: '#37474F', marginTop: 14, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
+  required: { color: '#C62828' },
+  input: {
+    borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#1A2332',
+    backgroundColor: '#FAFCFF',
+  },
+  inputError: { borderColor: '#EF9A9A', backgroundColor: '#FFF5F5' },
+  textarea: { minHeight: 80, textAlignVertical: 'top' },
+  helper: { fontSize: 11, color: '#90A4AE', marginTop: 6 },
+  slotRow: { flexDirection: 'row', gap: 10 },
+  slot: {
+    flex: 1, paddingVertical: 10, alignItems: 'center',
+    borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 10, backgroundColor: '#FAFCFF',
+  },
+  slotActive: { backgroundColor: '#1565C0', borderColor: '#1565C0' },
+  slotTxt: { fontSize: 13, fontWeight: '700', color: '#37474F' },
+  slotTxtActive: { color: '#FFF' },
+  errorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
+  errorTxt: { fontSize: 12, color: '#C62828', fontWeight: '600' },
+  footer: { flexDirection: 'row', gap: 10, marginTop: 18 },
+  cancelBtn: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 10, borderWidth: 1, borderColor: '#CFD8DC' },
+  cancelTxt: { fontSize: 14, fontWeight: '700', color: '#455A64' },
+  submitBtn: {
+    flex: 1.4, paddingVertical: 12, alignItems: 'center', borderRadius: 10,
+    backgroundColor: '#1565C0', flexDirection: 'row', justifyContent: 'center', gap: 6,
+  },
+  submitBtnDisabled: { backgroundColor: '#B0BEC5' },
+  submitTxt: { fontSize: 14, fontWeight: '700', color: '#FFF' },
+});
