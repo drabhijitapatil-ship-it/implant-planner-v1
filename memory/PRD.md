@@ -1,6 +1,34 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
 
+## Iteration 267 (Feb 2026) — Unified "My Cases" filter row
+
+### What the user reported
+"In 'My Cases' there are two redundant tab rows (All/Pending/Completed/Rejected and All/Needs My Approval/In Progress/Rejected). Merge into ONE unified row using the existing top-row visual style with labels: All / In Progress / Completed / Rejected. Keep the search bar."
+
+### What changed
+**Frontend (`/app/frontend/app/(tabs)/procedures.tsx`)**
+- Removed the iter-265 second-row "pipeline chip" UI block and its `pipelineFilter` state, plus the unused `pipelineChipRow`, `pipelineChip`, `pipelineChipActive`, `pipelineChipText`, `pipelineChipTextActive` styles.
+- Reworked the primary tabs from `All / Pending / Completed / Rejected` → `All / In Progress / Completed / Rejected` (same `filterContainer` / `filterButton` visual style).
+- Filtering is now fully client-side over the cached procedure list:
+  - `in_progress` = `pending_phase{1,2}` ∪ `pending_stage2_surgical` ∪ `pending_phase4_step{1,2}` ∪ `phase{1,2}_approved` ∪ `stage2_surgical_approved` ∪ `phase4_step1_approved`.
+  - `completed` = status === `'completed'`.
+  - `rejected` = `rejected_phase{1,2}` ∪ `rejected_stage2_surgical` ∪ `rejected_phase4_step{1,2}`.
+  - Drafts continue to be excluded from My Cases (Dashboard owns them).
+- Legacy URL deep-link `?filter=pending` is auto-mapped to the new `in_progress` tab so notification taps / push payloads keep working.
+
+### Verification
+- Screenshot (`Abhijit.patil` / Implant In-Charge): Only ONE tab row visible — All / In Progress / Completed / Rejected — followed by the existing search bar.
+- "In Progress" tab correctly filters to cases that are mid-workflow (e.g. "Phase 2 Approved – Ready for Phase 3", "Phase 1 Approved – Ready for Phase 2").
+- All other tabs (All / Completed / Rejected) remain visually unchanged.
+
+### Files touched
+- `/app/frontend/app/(tabs)/procedures.tsx`
+
+---
+
+
+
 ## Iteration 266 (Feb 2026) — "Pending Action" badge on My Cases tab
 
 ### What the user asked for
