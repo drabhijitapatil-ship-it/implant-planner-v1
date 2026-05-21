@@ -1,6 +1,35 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
 
+## Iteration 273 (Feb 2026) — Reschedule modal: keyboard-safe + calendar picker
+
+### What the user reported
+"When Reschedule is clicked the box goes behind the keyboard and the Reason field becomes invisible. Also, give a calendar option to select the date rather than typing it manually."
+
+### What changed
+**Frontend (`/app/frontend/components/RescheduleModal.tsx` — full rewrite)**
+- Wrapped the modal sheet in a `KeyboardAvoidingView` with `behavior="padding"` on iOS / `"height"` on Android so the sheet lifts above the soft keyboard when the user taps into the Reason textarea. Inner `ScrollView` keeps `keyboardShouldPersistTaps="handled"`.
+- Replaced the manual `YYYY-MM-DD` text input with a tappable date pill ("Tue, May 12, 2026") that toggles an inline `react-native-calendars` `<Calendar>` picker (reusing the existing dashboard pattern). Picking a date auto-collapses the calendar.
+- Calendar configuration:
+  - `minDate = today` → blocks past dates entirely.
+  - `disabledDaysIndexes={[0]}` → blocks Sundays (matches server validation).
+  - `markedDates` → blue-filled circle on the currently-selected date.
+  - `firstDay={1}` → Monday-first week (matches the Nurse Home calendar).
+- `dateError` text updated to "Pick a valid date" since users no longer type the format.
+- Success Alert now shows the human-readable date ("moved to Tue, May 12, 2026 at 10:00") instead of raw ISO.
+
+### Verification
+- Screenshot 1 (collapsed): Date row renders as a pill with calendar icon and chevron-down; Reason textarea and Confirm button both fully visible.
+- Screenshot 2 (expanded): Tapping the date row reveals the full month-view calendar (May 2026) with past days faded, day 12 highlighted in blue.
+- The Reschedule button still works end-to-end (backend curl from iter-269 unchanged).
+
+### Files touched
+- `/app/frontend/components/RescheduleModal.tsx`
+
+---
+
+
+
 ## Iteration 272 (Feb 2026) — Approver names on Treatment Progress timeline
 
 ### What changed
