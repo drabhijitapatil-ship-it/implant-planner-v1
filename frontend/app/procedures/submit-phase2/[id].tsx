@@ -288,6 +288,25 @@ export default function Phase2SubmissionScreen() {
   };
 
   const handleSubmit = async () => {
+    // iter-258: holistic pre-flight guard using the per-step completion
+    // logic that powers the sticky progress strip. The granular
+    // field-level Alerts below still serve as the authoritative messages,
+    // but this surfaces ALL missing sections at once so students don't
+    // have to dismiss 4 popups in a row when the form is half-filled.
+    // Notes (idx 4) is informational and not required for submission.
+    const requiredIdx = [0, 1, 2, 3]; // Pre-Op, Surgery, Radiographs, Post-Op
+    const incompleteLabels = requiredIdx
+      .filter(i => !stepDone[i])
+      .map(i => PHASE2_STEP_LABELS[i]);
+    if (incompleteLabels.length > 0) {
+      Alert.alert(
+        'Incomplete sections',
+        `Please complete the following before submitting Phase 2:\n\n${incompleteLabels.map(l => `• ${l}`).join('\n')}`,
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     // iter-189: pre-op completion is now enforced server-side via
     // `phase2_preop_completed_at`. No inline checklist re-validation.
     if (!isPreopUnlocked) {
