@@ -10,16 +10,18 @@ import {
   Platform,
   ScrollView,
   Alert,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
+import { Calendar } from 'react-native-calendars';
 import api from '../utils/api';
 
-// iter-269: shared modal used from both the My Cases three-dot menu
-// and the case-detail screen to reschedule a case. Validation rules
+// iter-269 / iter-273: shared modal used from both the My Cases three-dot
+// menu and the case-detail screen to reschedule a case. Validation rules
 // mirror the server: Sundays blocked, Saturdays restricted to the
-// 10:00 slot. The "reason" note is mandatory (server enforces
-// min_length=3) and the entry is appended to `reschedule_history`.
+// 10:00 slot. iter-273: KeyboardAvoidingView so the form lifts above the
+// keyboard and the date input is now a tap-to-open inline calendar.
 const TIME_SLOTS: { label: string; value: string }[] = [
   { label: '10:00 AM', value: '10:00' },
   { label: '2:00 PM', value: '14:00' },
@@ -48,6 +50,7 @@ export default function RescheduleModal({
   const [newTime, setNewTime] = useState<string>(currentTime || '10:00');
   const [reason, setReason] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
 
   // Reset state every time the modal is re-opened so we don't carry
   // over a half-typed reason from a previous attempt.
@@ -57,15 +60,16 @@ export default function RescheduleModal({
       setNewTime(currentTime || '10:00');
       setReason('');
       setSubmitting(false);
+      setShowCalendar(false);
     }
   }, [visible, currentDate, currentTime]);
 
   const dateError = useMemo(() => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
-      return 'Date must be in YYYY-MM-DD format';
+      return 'Pick a valid date';
     }
     const d = new Date(`${newDate}T00:00:00`);
-    if (Number.isNaN(d.getTime())) return 'Enter a valid date';
+    if (Number.isNaN(d.getTime())) return 'Pick a valid date';
     if (d.getDay() === 0) return 'Sundays are not available for scheduling';
     if (d.getDay() === 6 && newTime !== '10:00') return 'Saturdays only allow the 10:00 AM slot';
     return null;
@@ -76,6 +80,24 @@ export default function RescheduleModal({
   const canSubmit =
     !!newDate && !!newTime && reason.trim().length >= 3 && !dateError && !sameAsCurrent && !submitting;
 
+  // Calendar markings: highlight current pick + grey out Sundays.
+  const markedDates = useMemo(() => {
+    const m: Record<string, any> = {};
+    if (newDate) {
+      m[newDate] = { selected: true, selectedColor: '#1565C0' };
+    }
+    return m;
+  }, [newDate]);
+
+  const minDate = isoToday();
+
+  const prettyDate = (() => {
+    if (!newDate) return 'Pick a date';
+    const d = new Date(`${newDate}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return newDate;
+    return format(d, 'EEE, MMM d, yyyy');
+  })();
+
   const onSubmit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
@@ -85,7 +107,7 @@ export default function RescheduleModal({
         procedure_time: newTime,
         reason: reason.trim(),
       });
-      Alert.alert('Rescheduled', `${patientName || 'Case'} moved to ${newDate} at ${newTime}.`);
+      Alert.alert('Rescheduled', `${patientName || 'Case'} moved to ${prettyDate} at ${newTime}.`);
       onRescheduled?.();
       onClose();
     } catch (e: any) {
@@ -98,7 +120,11 @@ export default function RescheduleModal({
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={s.backdrop} testID="reschedule-backdrop">
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={s.backdrop}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
         <View style={s.sheet} testID="reschedule-modal">
           <View style={s.header}>
             <View style={{ flex: 1 }}>
@@ -121,18 +147,41 @@ export default function RescheduleModal({
             ) : null}
 
             <Text style={s.label}>New date</Text>
-            <TextInput
-              value={newDate}
-              onChangeText={setNewDate}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor="#B0BEC5"
-              style={[s.input, dateError && s.inputError]}
-              autoCorrect={false}
-              autoCapitalize="none"
-              keyboardType={Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'default'}
-              data-testid="reschedule-date-input"
-              testID="reschedule-date-input"
-            />
+            <TouchableOpacity
+              style={[s.dateRow, dateError && s.inputError]}
+              onPress={() => setShowCalendar(v => !v)}
+              activeOpacity={0.7}
+              testID="reschedule-date-open"
+            >
+              <Ionicons name="calendar-outline" size={18} color="#1565C0" />
+              <Text style={s.dateRowTxt}>{prettyDate}</Text>
+              <Ionicons name={showCalendar ? 'chevron-up' : 'chevron-down'} size={18} color="#90A4AE" />
+            </TouchableOpacity>
+
+            {showCalendar ? (
+              <View style={s.calendarWrap} testID="reschedule-calendar">
+                <Calendar
+                  minDate={minDate}
+                  current={newDate || minDate}
+                  markedDates={markedDates}
+                  disabledDaysIndexes={[0] /* block Sundays */}
+                  onDayPress={(day: any) => {
+                    setNewDate(day.dateString);
+                    setShowCalendar(false);
+                  }}
+                  theme={{
+                    selectedDayBackgroundColor: '#1565C0',
+                    todayTextColor: '#1565C0',
+                    arrowColor: '#1565C0',
+                    textDayFontWeight: '500',
+                    textMonthFontWeight: '700',
+                    textMonthFontSize: 14,
+                    textDayHeaderFontWeight: '600',
+                  }}
+                  firstDay={1}
+                />
+              </View>
+            ) : null}
 
             <Text style={s.label}>New time</Text>
             <View style={s.slotRow}>
@@ -194,7 +243,7 @@ export default function RescheduleModal({
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -221,6 +270,19 @@ const s = StyleSheet.create({
   currentTxt: { fontSize: 12, color: '#455A64' },
   label: { fontSize: 12, fontWeight: '700', color: '#37474F', marginTop: 14, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
   required: { color: '#C62828' },
+  dateRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 12, backgroundColor: '#FAFCFF',
+  },
+  dateRowTxt: { flex: 1, fontSize: 14, color: '#1A2332', fontWeight: '600' },
+  calendarWrap: {
+    marginTop: 8,
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E0E7EE',
+  },
   input: {
     borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 10,
     paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#1A2332',
