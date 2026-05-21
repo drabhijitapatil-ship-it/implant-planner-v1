@@ -38,6 +38,10 @@ function DefaultProceduresScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState('all');
+  // iter-265: client-side pipeline filter chips that overlay on top of the
+  // server-side `filter` (status). Role-aware: faculty get
+  // "Needs my approval" chip; students get "Awaiting approval" chip.
+  const [pipelineFilter, setPipelineFilter] = useState<'all' | 'needs_review' | 'in_progress' | 'awaiting_other' | 'rejected'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [shareCase, setShareCase] = useState<{ id: string; patientName?: string } | null>(null);
@@ -244,7 +248,7 @@ function DefaultProceduresScreen() {
     { key: 'rejected', label: 'Rejected' },
   ];
 
-  const filteredProcedures = searchQuery.trim()
+  const searchFiltered = searchQuery.trim()
     ? procedures.filter((p: any) => {
         const q = searchQuery.toLowerCase();
         return (
@@ -255,6 +259,49 @@ function DefaultProceduresScreen() {
         );
       })
     : procedures;
+
+  // iter-265: pipeline filter chips — client-side overlay on the
+  // server-fetched list. Faculty see "Needs my approval"; students see
+  // "Awaiting approval". "In progress" + "Rejected" apply to both.
+  const isFaculty = user?.role === 'supervisor' || user?.role === 'implant_incharge' || user?.role === 'administrator';
+  const PENDING_STATUSES = new Set(['pending_phase1', 'pending_phase2', 'pending_stage2_surgical', 'pending_phase4_step1', 'pending_phase4_step2']);
+  const IN_PROGRESS_STATUSES = new Set(['draft', 'phase1_approved', 'phase2_approved', 'stage2_surgical_approved', 'phase4_step1_approved']);
+  const REJECTED_STATUSES = new Set(['rejected_phase1', 'rejected_phase2', 'rejected_stage2_surgical', 'rejected_phase4_step1', 'rejected_phase4_step2']);
+
+  const filteredProcedures = (() => {
+    if (pipelineFilter === 'all') return searchFiltered;
+    return searchFiltered.filter((p: any) => {
+      const s = p.status;
+      if (pipelineFilter === 'needs_review') {
+        // Faculty: cases awaiting their approval (they're the supervisor or in-charge)
+        if (!isFaculty) return false;
+        if (!PENDING_STATUSES.has(s)) return false;
+        return p.supervisor_id === user?.id || p.implant_incharge_id === user?.id;
+      }
+      if (pipelineFilter === 'awaiting_other') {
+        // Students: cases they submitted that are pending faculty approval
+        if (isFaculty) return false;
+        return PENDING_STATUSES.has(s);
+      }
+      if (pipelineFilter === 'in_progress') return IN_PROGRESS_STATUSES.has(s);
+      if (pipelineFilter === 'rejected') return REJECTED_STATUSES.has(s);
+      return true;
+    });
+  })();
+
+  const pipelineChips = isFaculty
+    ? [
+        { key: 'all', label: 'All', icon: 'apps-outline' },
+        { key: 'needs_review', label: 'Needs my approval', icon: 'paper-plane-outline' },
+        { key: 'in_progress', label: 'In progress', icon: 'pulse-outline' },
+        { key: 'rejected', label: 'Rejected', icon: 'alert-circle-outline' },
+      ]
+    : [
+        { key: 'all', label: 'All', icon: 'apps-outline' },
+        { key: 'in_progress', label: 'In progress', icon: 'pulse-outline' },
+        { key: 'awaiting_other', label: 'Awaiting approval', icon: 'paper-plane-outline' },
+        { key: 'rejected', label: 'Rejected', icon: 'alert-circle-outline' },
+      ];
 
   if (loading) {
     return (
@@ -281,6 +328,24 @@ function DefaultProceduresScreen() {
             </Text>
           </TouchableOpacity>
         ))}
+      </View>
+
+      {/* iter-265: pipeline filter chips — overlay on the status filter above. */}
+      <View style={styles.pipelineChipRow} data-testid="pipeline-chip-row">
+        {pipelineChips.map(chip => {
+          const active = pipelineFilter === chip.key;
+          return (
+            <TouchableOpacity
+              key={chip.key}
+              style={[styles.pipelineChip, active && styles.pipelineChipActive]}
+              onPress={() => setPipelineFilter(chip.key as any)}
+              testID={`pipeline-chip-${chip.key}`}
+            >
+              <Ionicons name={chip.icon as any} size={13} color={active ? '#FFFFFF' : '#1565C0'} />
+              <Text style={[styles.pipelineChipText, active && styles.pipelineChipTextActive]} numberOfLines={1}>{chip.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       <View style={styles.searchContainer} data-testid="search-bar-container">
@@ -380,6 +445,12 @@ const styles = StyleSheet.create({
   filterTextActive: {
     color: '#FFF',
   },
+  // iter-265: pipeline chips row
+  pipelineChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E5E5EA' },
+  pipelineChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, borderWidth: 1, borderColor: '#BBDEFB', backgroundColor: '#F5FAFF' },
+  pipelineChipActive: { backgroundColor: '#1565C0', borderColor: '#1565C0' },
+  pipelineChipText: { fontSize: 11, fontWeight: '700', color: '#1565C0', letterSpacing: 0.2 },
+  pipelineChipTextActive: { color: '#FFFFFF' },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
