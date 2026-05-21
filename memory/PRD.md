@@ -1,6 +1,28 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
 
+## Iteration 270 (Feb 2026) — Reschedule polish: list-card chip + HIPAA audit log
+
+### What changed
+**Backend (`/app/backend/server.py`)**
+- The `reschedule_procedure` endpoint now writes a `procedure_reschedule` entry to `access_logs` via the shared `log_access(...)` helper. The request object is captured so IP + user-agent are stored alongside `{patient_name, from_date/time, to_date/time, reason, notified_user_ids}` in `extra`. Because the existing `/admin/access-logs/export-csv` endpoint already JSON-serialises `extra`, the reason note now flows into the CSV without any further code changes.
+
+**Frontend (`/app/frontend/app/(tabs)/procedures.tsx`)**
+- Procedure list cards now show a compact amber "Rescheduled · N×" chip whenever `reschedule_history.length > 0`. Lives directly under the registration number so reviewers can spot patient-led volatility at a glance.
+- Chip styles use the existing What's-New amber palette (`#FFF3E0` bg, `#FFE0B2` border, `#E65100` text) for consistency with the rest of the audit-trail UI.
+
+### Verification
+- **Backend curl**: triggered a fresh reschedule → confirmed `GET /api/admin/access-logs?action=procedure_reschedule` returns the new entry with the full reason, before/after dates, IP, and notified user IDs.
+- **Frontend screenshot**: list card for TEST_MUA_4e0f17a0 now displays the "Rescheduled · 2×" chip alongside the new May-14 date.
+
+### Files touched
+- `/app/backend/server.py`
+- `/app/frontend/app/(tabs)/procedures.tsx`
+
+---
+
+
+
 ## Iteration 269 (Feb 2026) — Reschedule surgery (pre-Phase-2)
 
 ### What the user asked for
