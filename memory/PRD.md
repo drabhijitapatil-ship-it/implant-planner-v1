@@ -1,6 +1,34 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
 
+## Iteration 276 (Feb 2026) — Stable AI bubble + Home Screen reposition
+
+### What the user reported
+"Ask Implanr AI bubble on Home Screen — move it a little down and position same as the bubble inside Phase 2 to Phase 4. Also remove the pulse effect for both bubbles and keep it stable."
+
+### What changed
+**Frontend (`/app/frontend/components/AskImplanrAIFab.tsx`)**
+- Removed the `Animated.Value` pulse loop and its `useEffect` driver. Dropped the `Animated` import.
+- Swapped the wrapper `<Animated.View>` for a plain `<View>` — bubble is now stable.
+- Lowered the FAB from `bottom: 92` → `bottom: 24` so it sits just above the bottom tab bar (now matching the case-detail FAB's visual offset above its own export bar).
+
+**Frontend (`/app/frontend/app/procedures/[id].tsx`)**
+- Removed the `aiFabPulse` Animated.Value and its loop `useEffect`.
+- Replaced the wrapping `<RNAnimated.View>` with a plain `<View>` — keeps the same `bottom: 92, right: 18` position.
+
+### Verification
+- Home Screen screenshot: sparkle bubble now sits right above the bottom tab bar (above the Alerts/My Cases icons), no pulse.
+- Case-detail screenshot: sparkle bubble sits just above the EXPORT/PRINT + AI SUMMARY action bar, no pulse.
+- Both bubbles share the same visual proximity to their respective bottom bars.
+
+### Files touched
+- `/app/frontend/components/AskImplanrAIFab.tsx`
+- `/app/frontend/app/procedures/[id].tsx`
+
+---
+
+
+
 ## Iteration 275 (Feb 2026) — Per-slot Booked/Free tags
 
 ### What changed

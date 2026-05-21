@@ -248,17 +248,7 @@ export default function ProcedureDetailScreen() {
   const [aiSavingSurgical, setAiSavingSurgical] = useState(false);
   const [aiSurgicalLoading, setAiSurgicalLoading] = useState(false);
   const [aiChatVisible, setAiChatVisible] = useState(false);
-  // iter-255: gentle pulse on the case-detail AI FAB so it matches the
-  // Home Screen "Ask Implanr AI" floating bubble exactly.
-  const aiFabPulse = useRef(new RNAnimated.Value(1)).current;
-  useEffect(() => {
-    const loop = RNAnimated.loop(RNAnimated.sequence([
-      RNAnimated.timing(aiFabPulse, { toValue: 1.08, duration: 1100, useNativeDriver: true }),
-      RNAnimated.timing(aiFabPulse, { toValue: 1, duration: 1100, useNativeDriver: true }),
-    ]));
-    loop.start();
-    return () => loop.stop();
-  }, [aiFabPulse]);
+  // iter-276: pulse animation removed — case-detail AI FAB stays stable.
   const [aiChatHistory, setAiChatHistory] = useState<any[]>([]);
   const [aiChatInput, setAiChatInput] = useState('');
   const [aiChatSending, setAiChatSending] = useState(false);
@@ -3769,12 +3759,13 @@ export default function ProcedureDetailScreen() {
         </View>
       )}
 
-      {/* iter-255: Floating AI Chat FAB — visually identical to the Home
-          Screen "Ask Implanr AI" bubble (sparkles icon, #1565C0, gentle
-          pulse). Hidden for nurses (they don't use AI clinical tooling). */}
+      {/* iter-255 / iter-276: Floating AI Chat FAB — visually identical to the Home
+          Screen "Ask Implanr AI" bubble (sparkles icon, #1565C0). Pulse
+          removed in iter-276 — bubble stays stable for a calmer UX.
+          Hidden for nurses (they don't use AI clinical tooling). */}
       {procedure.status !== 'draft' && user?.role !== 'nurse' && (
-        <RNAnimated.View
-          style={{ position: 'absolute', bottom: 92, right: 18, zIndex: 9999, transform: [{ scale: aiFabPulse }] }}
+        <View
+          style={{ position: 'absolute', bottom: 92, right: 18, zIndex: 9999 }}
           pointerEvents="box-none"
         >
           <TouchableOpacity
@@ -3787,7 +3778,7 @@ export default function ProcedureDetailScreen() {
           >
             <Ionicons name="sparkles" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-        </RNAnimated.View>
+        </View>
       )}
 
       {/* AI Chat Modal */}
