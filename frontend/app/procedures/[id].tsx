@@ -37,11 +37,11 @@ import {
 } from '../../constants/checklist';
 import { format } from 'date-fns';
 import { generateProcedurePDF, printProcedurePDF, generateLabSlipPDF } from '../../utils/pdfGenerator';
-import CaseImplantPlanning from '../../components/CaseImplantPlanning';
-// iter-209: removed CaseCompletionBadge — its facts merged into the green
+import CaseImplantPlanning from '../../components/CaseImplantPlanning';// iter-209: removed CaseCompletionBadge — its facts merged into the green
 // Treatment Complete banner above the timeline.
 import ExportPrintMenu from '../../components/ExportPrintMenu';
 import Phase2EditModal from '../../components/Phase2EditModal';
+import RescheduleModal from '../../components/RescheduleModal';
 import CaseSubmissionStatus from '../../components/CaseSubmissionStatus';
 import AugmentationChecklist from '../../components/AugmentationChecklist';
 import PulsingDoubleArrow from '../../components/onboarding/primitives/PulsingDoubleArrow';
@@ -223,6 +223,8 @@ export default function ProcedureDetailScreen() {
   const [procedure, setProcedure] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  // iter-269: reschedule modal toggled from the Schedule section header.
+  const [showReschedule, setShowReschedule] = useState(false);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
   const [rejectionType, setRejectionType] = useState<'permanent' | 'reconsider' | null>(null);
@@ -1707,13 +1709,60 @@ export default function ProcedureDetailScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Schedule</Text>
+          <View style={resStyles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Schedule</Text>
+            {(() => {
+              // iter-269: surface a Reschedule pill in the Schedule
+              // section header when the case is still pre-Phase-2 AND
+              // the current user is either the creator or faculty.
+              const eligibleStatuses = new Set(['draft', 'pending_phase1', 'rejected_phase1', 'phase1_approved']);
+              const isCreator = procedure.created_by_id === user?.id || procedure.student_id === user?.id;
+              const isFaculty = user?.role === 'supervisor' || user?.role === 'implant_incharge' || user?.role === 'administrator';
+              if (!eligibleStatuses.has(procedure.status)) return null;
+              if (!(isCreator || isFaculty)) return null;
+              return (
+                <TouchableOpacity
+                  style={resStyles.rescheduleBtn}
+                  onPress={() => setShowReschedule(true)}
+                  testID="open-reschedule-btn"
+                  data-testid="open-reschedule-btn"
+                >
+                  <Ionicons name="calendar-outline" size={14} color="#1565C0" />
+                  <Text style={resStyles.rescheduleTxt}>Reschedule</Text>
+                </TouchableOpacity>
+              );
+            })()}
+          </View>
           <InfoRow
             icon="calendar"
             label="Date"
             value={procedure.procedure_date ? format(new Date(procedure.procedure_date), 'MMM dd, yyyy') : 'N/A'}
           />
           <InfoRow icon="time" label="Time" value={procedure.procedure_time} />
+
+          {/* iter-269: reschedule audit trail */}
+          {Array.isArray(procedure.reschedule_history) && procedure.reschedule_history.length > 0 ? (
+            <View style={resStyles.historyWrap} data-testid="reschedule-history">
+              <Text style={resStyles.historyTitle}>Reschedule history</Text>
+              {procedure.reschedule_history.map((h: any, idx: number) => (
+                <View key={h.id || idx} style={resStyles.historyItem}>
+                  <Ionicons name="swap-horizontal" size={14} color="#546E7A" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={resStyles.historyLine}>
+                      <Text style={{ fontWeight: '700' }}>{h.from_date || '—'} {h.from_time || ''}</Text>
+                      <Text> → </Text>
+                      <Text style={{ fontWeight: '700' }}>{h.to_date} {h.to_time}</Text>
+                    </Text>
+                    <Text style={resStyles.historyMeta} numberOfLines={2}>
+                      by {h.by_user_name || 'Unknown'}{h.by_user_role ? ` · ${String(h.by_user_role).replace(/_/g, ' ')}` : ''}
+                      {h.at ? ` · ${new Date(h.at).toLocaleString()}` : ''}
+                    </Text>
+                    {h.reason ? <Text style={resStyles.historyReason}>“{h.reason}”</Text> : null}
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : null}
         </View>
 
         {/* Procedure Type & Plan */}
@@ -3812,6 +3861,19 @@ export default function ProcedureDetailScreen() {
         />
       )}
 
+      {/* iter-269: Reschedule surgery date/time modal */}
+      {procedure && (
+        <RescheduleModal
+          visible={showReschedule}
+          procedureId={String(id)}
+          patientName={procedure.patient_name}
+          currentDate={procedure.procedure_date}
+          currentTime={procedure.procedure_time}
+          onClose={() => setShowReschedule(false)}
+          onRescheduled={() => { setShowReschedule(false); loadProcedure(); }}
+        />
+      )}
+
     </SafeAreaView>
     </EditContext.Provider>
   );
@@ -3969,6 +4031,49 @@ function InfoRow({ icon, label, value, fieldKey, onEdit, isEditing: isEditingPro
     </View>
   );
 }
+
+
+// iter-269: reschedule UI styles kept local to avoid bloating the global styles.
+const resStyles = StyleSheet.create({
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  rescheduleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#BBDEFB',
+    backgroundColor: '#E3F2FD',
+  },
+  rescheduleTxt: { fontSize: 11, fontWeight: '700', color: '#1565C0', letterSpacing: 0.2 },
+  historyWrap: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#ECEFF1',
+    gap: 8,
+  },
+  historyTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#546E7A',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  historyItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  historyLine: { fontSize: 13, color: '#37474F' },
+  historyMeta: { fontSize: 11, color: '#90A4AE', marginTop: 1 },
+  historyReason: { fontSize: 12, color: '#455A64', marginTop: 3, fontStyle: 'italic' },
+});
+
 
 const styles = StyleSheet.create({
   container: {

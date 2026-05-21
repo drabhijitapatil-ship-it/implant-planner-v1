@@ -22,6 +22,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import CaseSubmissionStatus from '../../components/CaseSubmissionStatus';
 import NurseCasesScreen from '../../components/NurseCasesScreen';
 import ShareToForumModal from '../../components/ShareToForumModal';
+import RescheduleModal from '../../components/RescheduleModal';
 
 export default function ProceduresScreen() {
   const { user } = useAuth();
@@ -46,6 +47,8 @@ function DefaultProceduresScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [shareCase, setShareCase] = useState<{ id: string; patientName?: string } | null>(null);
+  // iter-269: case selected for reschedule via the three-dot menu.
+  const [rescheduleCase, setRescheduleCase] = useState<{ id: string; patientName?: string; currentDate?: string; currentTime?: string } | null>(null);
   const router = useRouter();
   const params = useLocalSearchParams<{ filter?: string; phase?: string }>();
 
@@ -155,6 +158,26 @@ function DefaultProceduresScreen() {
         icon: 'chatbubbles-outline',
         color: '#1565C0',
         onPress: () => setShareCase({ id: pid, patientName: item.patient_name }),
+      });
+    }
+    // iter-269: Reschedule — case creator + faculty, only while
+    // Phase 2 has NOT been initiated. Eligibility set mirrors backend
+    // RESCHEDULE_ELIGIBLE_STATUSES.
+    const rescheduleEligible = new Set(['draft', 'pending_phase1', 'rejected_phase1', 'phase1_approved']);
+    const isCreator = item.created_by_id === user?.id || item.student_id === user?.id;
+    const isFaculty = role === 'supervisor' || role === 'implant_incharge' || role === 'administrator';
+    if (rescheduleEligible.has(item.status) && (isCreator || isFaculty)) {
+      actions.push({
+        key: 'reschedule',
+        label: 'Reschedule',
+        icon: 'calendar-outline',
+        color: '#1565C0',
+        onPress: () => setRescheduleCase({
+          id: pid,
+          patientName: item.patient_name,
+          currentDate: item.procedure_date,
+          currentTime: item.procedure_time,
+        }),
       });
     }
     return actions;
@@ -372,6 +395,17 @@ function DefaultProceduresScreen() {
           patientName={shareCase.patientName}
           onClose={() => setShareCase(null)}
           onShared={(tid) => { setShareCase(null); router.push(`/forum/${tid}` as any); }}
+        />
+      )}
+      {rescheduleCase && (
+        <RescheduleModal
+          visible={!!rescheduleCase}
+          procedureId={rescheduleCase.id}
+          patientName={rescheduleCase.patientName}
+          currentDate={rescheduleCase.currentDate}
+          currentTime={rescheduleCase.currentTime}
+          onClose={() => setRescheduleCase(null)}
+          onRescheduled={() => { setRescheduleCase(null); loadProcedures(); }}
         />
       )}
     </SafeAreaView>

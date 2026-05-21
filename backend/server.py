@@ -3199,6 +3199,163 @@ async def unarchive_procedure(procedure_id: str, current_user: dict = Depends(ge
     return {"message": "Procedure unarchived successfully"}
 
 
+# ── Reschedule surgery (iter-269) ─────────────────────────────────────────
+# Allows the case creator OR faculty (supervisor / implant_incharge /
+# administrator) to change the scheduled procedure_date + procedure_time
+# while Phase 2 has not been initiated yet. A reason note is mandatory
+# and every change is appended to `reschedule_history` for full audit.
+# All other assigned stakeholders receive a push + in-app notification.
+class RescheduleRequest(BaseModel):
+    procedure_date: str = Field(..., max_length=30)
+    procedure_time: str = Field(..., max_length=20)
+    reason: str = Field(..., min_length=3, max_length=500)
+
+
+# Statuses where Phase 2 has NOT been initiated yet — eligible to reschedule.
+RESCHEDULE_ELIGIBLE_STATUSES = {
+    "draft",
+    "pending_phase1",
+    "rejected_phase1",
+    "phase1_approved",
+}
+
+
+@api_router.post("/procedures/{procedure_id}/reschedule")
+async def reschedule_procedure(
+    procedure_id: str,
+    body: RescheduleRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    # Permission: case creator OR faculty
+    creator_id = proc.get("created_by_id") or proc.get("student_id")
+    role = current_user.get("role")
+    is_creator = creator_id == current_user["_id"]
+    is_faculty = role in ("supervisor", "implant_incharge", "administrator")
+    if not (is_creator or is_faculty):
+        raise HTTPException(
+            status_code=403,
+            detail="Only the case creator or a Supervisor / Implant In-Charge / Administrator can reschedule this case.",
+        )
+
+    # Eligibility window: Phase 2 must not have started yet.
+    if proc.get("status") not in RESCHEDULE_ELIGIBLE_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail="This case can no longer be rescheduled because Phase 2 (or a later phase) has already been initiated.",
+        )
+
+    # Validate scheduling rules (Sunday block + Saturday-only 10:00 slot).
+    try:
+        new_dt = datetime.strptime(f"{body.procedure_date} {body.procedure_time}", "%Y-%m-%d %H:%M")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date/time format. Expected YYYY-MM-DD and HH:MM.")
+
+    if new_dt.weekday() == 6:
+        raise HTTPException(status_code=400, detail="No scheduling is available on Sundays.")
+    if new_dt.weekday() == 5 and body.procedure_time != "10:00":
+        raise HTTPException(status_code=400, detail="Only 10:00 AM slot is available on Saturdays.")
+
+    # Slot conflict — skip for existing-implant cases (their date is synthetic
+    # per the create-procedure-from-existing handler).
+    is_existing_implants_case = bool(proc.get("existing_implants"))
+    if not is_existing_implants_case:
+        clash = await db.procedures.find_one({
+            "_id": {"$ne": ObjectId(procedure_id)},
+            "procedure_date": body.procedure_date,
+            "procedure_time": body.procedure_time,
+            "status": {"$ne": "draft"},
+        })
+        if clash:
+            booked_by = clash.get("created_by_name") or clash.get("student_name") or "Unknown"
+            patient = clash.get("patient_name", "Unknown")
+            slot_label = "10:00 AM" if body.procedure_time == "10:00" else body.procedure_time
+            raise HTTPException(
+                status_code=409,
+                detail=f"The {slot_label} slot on {body.procedure_date} is already booked for patient {patient} (scheduled by {booked_by}). Please choose a different time or date.",
+            )
+
+    # No-op guard
+    if proc.get("procedure_date") == body.procedure_date and proc.get("procedure_time") == body.procedure_time:
+        raise HTTPException(status_code=400, detail="New date/time is the same as the current schedule.")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    history_entry = {
+        "id": str(uuid.uuid4()),
+        "from_date": proc.get("procedure_date"),
+        "from_time": proc.get("procedure_time"),
+        "to_date": body.procedure_date,
+        "to_time": body.procedure_time,
+        "reason": body.reason.strip(),
+        "by_user_id": current_user["_id"],
+        "by_user_name": current_user.get("name") or current_user.get("username"),
+        "by_user_role": role,
+        "at": now_iso,
+    }
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {
+            "$set": {
+                "procedure_date": body.procedure_date,
+                "procedure_time": body.procedure_time,
+            },
+            "$push": {"reschedule_history": history_entry},
+        },
+    )
+
+    # Notify other assigned stakeholders (push + in-app).
+    actor_id = current_user["_id"]
+    recipient_ids = [
+        rid for rid in [
+            proc.get("student_id"),
+            proc.get("supervisor_id"),
+            proc.get("implant_incharge_id"),
+            proc.get("nurse_id"),
+            creator_id,
+        ]
+        if rid and rid != actor_id
+    ]
+    recipient_ids = list(dict.fromkeys(recipient_ids))  # dedupe, preserve order
+
+    patient_label = proc.get("patient_name") or "case"
+    msg = (
+        f"{history_entry['by_user_name']} rescheduled {patient_label} "
+        f"from {history_entry['from_date'] or '—'} {history_entry['from_time'] or ''} "
+        f"to {body.procedure_date} {body.procedure_time}. Reason: {history_entry['reason']}"
+    ).strip()
+
+    for uid in recipient_ids:
+        await db.notifications.insert_one({
+            "user_id": uid,
+            "procedure_id": procedure_id,
+            "message": msg,
+            "type": "procedure_rescheduled",
+            "read": False,
+            "created_at": datetime.utcnow(),
+        })
+    if recipient_ids:
+        await send_expo_push_notifications(
+            recipient_ids,
+            f"Surgery rescheduled · {patient_label}",
+            f"New schedule: {body.procedure_date} at {body.procedure_time}",
+            {
+                "procedure_id": procedure_id,
+                "type": "procedure_rescheduled",
+                "new_date": body.procedure_date,
+                "new_time": body.procedure_time,
+            },
+        )
+
+    return {"message": "Procedure rescheduled successfully", "entry": history_entry}
+
+
+
+
+
 # File Upload for CBCT
 ALLOWED_EXTENSIONS = {'.pdf', '.png', '.jpg', '.jpeg', '.heif', '.heic'}
 MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB
