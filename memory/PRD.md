@@ -1,6 +1,27 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
 
+## Iteration 271 (Feb 2026) — Single Treatment Progress widget on case-detail
+
+### What the user reported
+"There are two Treatment Progress sections in the case. Keep only the vertical one at the top (with phase name + completion date) and remove the horizontal 4-cell widget that sat just above Patient Information."
+
+### What changed
+**Frontend (`/app/frontend/app/procedures/[id].tsx`)**
+- Removed the in-detail render of the `CaseSubmissionStatus` widget that lived between the existing vertical Treatment Progress timeline and the Patient Information section. Replaced with a brief comment explaining the deliberate removal.
+- Dropped the now-unused `import CaseSubmissionStatus from '../../components/CaseSubmissionStatus'` from this file.
+- The component itself is preserved because the COMPACT variant is still used inside the My Cases list cards (`/app/(tabs)/procedures.tsx`).
+
+### Verification
+- Screenshot: case-detail page now flows directly from the vertical Treatment Progress timeline → status pill → consent-form buttons → Patient Information, with no redundant 4-cell widget between them.
+
+### Files touched
+- `/app/frontend/app/procedures/[id].tsx`
+
+---
+
+
+
 ## Iteration 270 (Feb 2026) — Reschedule polish: list-card chip + HIPAA audit log
 
 ### What changed

@@ -42,7 +42,6 @@ import CaseImplantPlanning from '../../components/CaseImplantPlanning';// iter-2
 import ExportPrintMenu from '../../components/ExportPrintMenu';
 import Phase2EditModal from '../../components/Phase2EditModal';
 import RescheduleModal from '../../components/RescheduleModal';
-import CaseSubmissionStatus from '../../components/CaseSubmissionStatus';
 import AugmentationChecklist from '../../components/AugmentationChecklist';
 import PulsingDoubleArrow from '../../components/onboarding/primitives/PulsingDoubleArrow';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -1646,11 +1645,10 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
-        {/* Treatment Complete + Digital Sign-Off — moved above Treatment Progress timeline */}
-
-        {/* iter-263: At-a-glance 4-cell submission status widget. Read-only
-            derivation from the persisted procedure — no API calls. */}
-        <CaseSubmissionStatus procedure={procedure} user={user} />
+        {/* iter-271: Removed the redundant 4-cell `CaseSubmissionStatus`
+            widget that used to sit here. The vertical Treatment Progress
+            timeline near the top of the page already conveys the same
+            phase-by-phase completion state. */}
 
         {/* Instruments Autoclaved Badge moved inline under PHASE 1 APPROVED button (canSubmitPhase2). */}
 
