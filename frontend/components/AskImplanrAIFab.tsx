@@ -11,10 +11,10 @@
  *   …in your screen JSX:
  *   <AskImplanrAIFab />
  */
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, Modal, TextInput, ScrollView,
-  StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, Animated,
+  StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -34,16 +34,8 @@ export default function AskImplanrAIFab() {
   const sessionRef = useRef<string | null>(null);
   const scrollRef = useRef<ScrollView | null>(null);
 
-  // Gentle pulse on the FAB itself to draw attention the first time.
-  const pulse = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    const loop = Animated.loop(Animated.sequence([
-      Animated.timing(pulse, { toValue: 1.08, duration: 1100, useNativeDriver: true }),
-      Animated.timing(pulse, { toValue: 1, duration: 1100, useNativeDriver: true }),
-    ]));
-    loop.start();
-    return () => loop.stop();
-  }, [pulse]);
+  // iter-276: pulse animation removed — FAB stays stable, matches the
+  // case-detail Phase 2-4 bubble.
 
   // iter-245: starter suggestion chips so first-time users discover what
   // the assistant can do without staring at a blank input. They render
@@ -86,7 +78,7 @@ export default function AskImplanrAIFab() {
   return (
     <>
       {/* Floating round button */}
-      <Animated.View style={[styles.fab, { transform: [{ scale: pulse }] }]} pointerEvents="box-none">
+      <View style={styles.fab} pointerEvents="box-none">
         <TouchableOpacity
           style={styles.fabBtn}
           onPress={() => setOpen(true)}
@@ -96,7 +88,7 @@ export default function AskImplanrAIFab() {
         >
           <Ionicons name="sparkles" size={24} color="#FFFFFF" />
         </TouchableOpacity>
-      </Animated.View>
+      </View>
 
       {/* Chat sheet */}
       <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
@@ -190,7 +182,11 @@ export default function AskImplanrAIFab() {
 }
 
 const styles = StyleSheet.create({
-  fab: { position: 'absolute', bottom: 92, right: 18, zIndex: 9999 },
+  // iter-276: lowered from bottom: 92 → 24 so the FAB sits just above the
+  // bottom tab bar — matching the visual offset of the case-detail FAB
+  // (which floats above its own bottom export bar). Pulse removed for
+  // a calmer, stable presentation.
+  fab: { position: 'absolute', bottom: 24, right: 18, zIndex: 9999 },
   fabBtn: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#1565C0', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 6 },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
   // iter-244: flex:1 wrapper so the inner sheet's 85% height resolves
