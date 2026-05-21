@@ -1,6 +1,29 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
 
+## Iteration 274 (Feb 2026) — Calendar booking-density dots
+
+### What changed
+**Frontend (`/app/frontend/components/RescheduleModal.tsx`)**
+- On modal open, fetch `/api/procedures` once and build a `densityMap` of slots-booked-per-date. Drafts and the case being rescheduled are excluded so the user's own existing slot doesn't make the day look fuller than it really is.
+- The calendar's `markedDates` now overlays a small dot on each date:
+  - 🟡 amber (`#F9A825`) — 1 of 2 weekday slots booked
+  - 🔴 red (`#C62828`) — both weekday slots booked, OR a Saturday with its single 10:00 slot already taken
+  - no dot — completely free
+- The currently-selected date keeps its blue fill on top of any density dot.
+- Added a compact legend strip below the calendar: "Partially booked · OT full · Free" — same colour swatches.
+
+### Verification
+- Screenshot inside the Reschedule modal calendar (May 2026) shows expected dots: 28 Apr (amber), 12 May (amber, also selected blue), 14 May (amber) — matching the procedures that exist in the test DB.
+- Selecting a date still closes the calendar and lets the user confirm the reschedule end-to-end.
+
+### Files touched
+- `/app/frontend/components/RescheduleModal.tsx`
+
+---
+
+
+
 ## Iteration 273 (Feb 2026) — Reschedule modal: keyboard-safe + calendar picker
 
 ### What the user reported

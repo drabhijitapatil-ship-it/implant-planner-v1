@@ -51,6 +51,10 @@ export default function RescheduleModal({
   const [reason, setReason] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
+  // iter-274: OT slot density map for the calendar dots.
+  //   value 0 = empty (no dot), 1 = partially booked (amber), 2 = full (red).
+  // Excludes drafts and the current case being rescheduled.
+  const [densityMap, setDensityMap] = useState<Record<string, number>>({});
 
   // Reset state every time the modal is re-opened so we don't carry
   // over a half-typed reason from a previous attempt.
@@ -63,6 +67,35 @@ export default function RescheduleModal({
       setShowCalendar(false);
     }
   }, [visible, currentDate, currentTime]);
+
+  // iter-274: fetch booking density once per open.
+  React.useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get('/procedures');
+        if (cancelled || !Array.isArray(data)) return;
+        const counts: Record<string, Set<string>> = {};
+        for (const p of data) {
+          if (!p?.procedure_date || !p?.procedure_time) continue;
+          if (p.status === 'draft') continue;
+          if (String(p.id) === String(procedureId)) continue; // exclude self
+          const set = counts[p.procedure_date] || new Set<string>();
+          set.add(String(p.procedure_time));
+          counts[p.procedure_date] = set;
+        }
+        const map: Record<string, number> = {};
+        for (const [d, set] of Object.entries(counts)) {
+          map[d] = set.size; // 1 or 2
+        }
+        setDensityMap(map);
+      } catch {
+        // best-effort — calendar still works without dots
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [visible, procedureId]);
 
   const dateError = useMemo(() => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
@@ -80,14 +113,23 @@ export default function RescheduleModal({
   const canSubmit =
     !!newDate && !!newTime && reason.trim().length >= 3 && !dateError && !sameAsCurrent && !submitting;
 
-  // Calendar markings: highlight current pick + grey out Sundays.
+  // Calendar markings: density dot + selected highlight. We compute the
+  // dot per date — 1 booking = amber (partial), 2+ = red (full). Saturdays
+  // only allow 1 slot so a single booking already saturates the day.
   const markedDates = useMemo(() => {
     const m: Record<string, any> = {};
+    for (const [date, count] of Object.entries(densityMap)) {
+      let dotColor: string | null = null;
+      const isSat = new Date(`${date}T00:00:00`).getDay() === 6;
+      if (count >= 2 || (isSat && count >= 1)) dotColor = '#C62828';
+      else if (count === 1) dotColor = '#F9A825';
+      if (dotColor) m[date] = { marked: true, dotColor };
+    }
     if (newDate) {
-      m[newDate] = { selected: true, selectedColor: '#1565C0' };
+      m[newDate] = { ...(m[newDate] || {}), selected: true, selectedColor: '#1565C0' };
     }
     return m;
-  }, [newDate]);
+  }, [densityMap, newDate]);
 
   const minDate = isoToday();
 
@@ -180,6 +222,20 @@ export default function RescheduleModal({
                   }}
                   firstDay={1}
                 />
+                <View style={s.legendRow} data-testid="reschedule-density-legend">
+                  <View style={s.legendItem}>
+                    <View style={[s.legendDot, { backgroundColor: '#F9A825' }]} />
+                    <Text style={s.legendTxt}>Partially booked</Text>
+                  </View>
+                  <View style={s.legendItem}>
+                    <View style={[s.legendDot, { backgroundColor: '#C62828' }]} />
+                    <Text style={s.legendTxt}>OT full</Text>
+                  </View>
+                  <View style={s.legendItem}>
+                    <View style={[s.legendDot, { backgroundColor: '#CFD8DC' }]} />
+                    <Text style={s.legendTxt}>Free</Text>
+                  </View>
+                </View>
               </View>
             ) : null}
 
@@ -283,6 +339,19 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E0E7EE',
   },
+  legendRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: '#F7FAFD',
+    borderTopWidth: 1,
+    borderTopColor: '#ECEFF1',
+  },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendTxt: { fontSize: 10, color: '#546E7A', fontWeight: '600' },
   input: {
     borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 10,
     paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#1A2332',
