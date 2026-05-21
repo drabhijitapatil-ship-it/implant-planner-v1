@@ -29,6 +29,21 @@ const TIME_SLOTS: { label: string; value: string }[] = [
 
 const isoToday = () => format(new Date(), 'yyyy-MM-dd');
 
+// iter-275: normalise stored time strings to a comparable 24h "HH:MM" form so
+// "10:00 AM", "10:00", "2:00 PM", "14:00" all collapse to the same key.
+const normaliseTime = (raw: string): string => {
+  if (!raw) return '';
+  const trimmed = raw.trim();
+  const m = trimmed.match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/i);
+  if (!m) return trimmed;
+  let h = parseInt(m[1], 10);
+  const mm = m[2];
+  const suffix = m[3]?.toLowerCase();
+  if (suffix === 'pm' && h < 12) h += 12;
+  if (suffix === 'am' && h === 12) h = 0;
+  return `${String(h).padStart(2, '0')}:${mm}`;
+};
+
 export default function RescheduleModal({
   visible,
   procedureId,
@@ -51,10 +66,12 @@ export default function RescheduleModal({
   const [reason, setReason] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
-  // iter-274: OT slot density map for the calendar dots.
-  //   value 0 = empty (no dot), 1 = partially booked (amber), 2 = full (red).
-  // Excludes drafts and the current case being rescheduled.
-  const [densityMap, setDensityMap] = useState<Record<string, number>>({});
+  // iter-274/275: per-date slot map — captures the actual booked times
+  // ("10:00", "14:00", or raw values like "2:00 PM") so we can both:
+  //   • compute calendar density dots (iter-274)
+  //   • show a per-slot Booked/Free tag below each time pill (iter-275).
+  // Drafts and the current case being rescheduled are excluded.
+  const [bookedSlotsMap, setBookedSlotsMap] = useState<Record<string, string[]>>({});
 
   // Reset state every time the modal is re-opened so we don't carry
   // over a half-typed reason from a previous attempt.
@@ -76,20 +93,17 @@ export default function RescheduleModal({
       try {
         const { data } = await api.get('/procedures');
         if (cancelled || !Array.isArray(data)) return;
-        const counts: Record<string, Set<string>> = {};
+        const map: Record<string, string[]> = {};
         for (const p of data) {
           if (!p?.procedure_date || !p?.procedure_time) continue;
           if (p.status === 'draft') continue;
           if (String(p.id) === String(procedureId)) continue; // exclude self
-          const set = counts[p.procedure_date] || new Set<string>();
-          set.add(String(p.procedure_time));
-          counts[p.procedure_date] = set;
+          const norm = normaliseTime(String(p.procedure_time));
+          const arr = map[p.procedure_date] || [];
+          if (!arr.includes(norm)) arr.push(norm);
+          map[p.procedure_date] = arr;
         }
-        const map: Record<string, number> = {};
-        for (const [d, set] of Object.entries(counts)) {
-          map[d] = set.size; // 1 or 2
-        }
-        setDensityMap(map);
+        setBookedSlotsMap(map);
       } catch {
         // best-effort — calendar still works without dots
       }
@@ -118,7 +132,8 @@ export default function RescheduleModal({
   // only allow 1 slot so a single booking already saturates the day.
   const markedDates = useMemo(() => {
     const m: Record<string, any> = {};
-    for (const [date, count] of Object.entries(densityMap)) {
+    for (const [date, slots] of Object.entries(bookedSlotsMap)) {
+      const count = slots.length;
       let dotColor: string | null = null;
       const isSat = new Date(`${date}T00:00:00`).getDay() === 6;
       if (count >= 2 || (isSat && count >= 1)) dotColor = '#C62828';
@@ -129,7 +144,15 @@ export default function RescheduleModal({
       m[newDate] = { ...(m[newDate] || {}), selected: true, selectedColor: '#1565C0' };
     }
     return m;
-  }, [densityMap, newDate]);
+  }, [bookedSlotsMap, newDate]);
+
+  // iter-275: helper used by each time-slot pill to show a live Booked/Free
+  // tag that reacts to the picked date.
+  const isSlotBooked = (slotValue: string): boolean => {
+    if (!newDate) return false;
+    const taken = bookedSlotsMap[newDate] || [];
+    return taken.includes(normaliseTime(slotValue));
+  };
 
   const minDate = isoToday();
 
@@ -243,14 +266,29 @@ export default function RescheduleModal({
             <View style={s.slotRow}>
               {TIME_SLOTS.map(slot => {
                 const active = newTime === slot.value;
+                const booked = isSlotBooked(slot.value);
                 return (
                   <TouchableOpacity
                     key={slot.value}
-                    style={[s.slot, active && s.slotActive]}
+                    style={[s.slot, active && s.slotActive, booked && !active && s.slotBooked]}
                     onPress={() => setNewTime(slot.value)}
                     testID={`reschedule-slot-${slot.value}`}
                   >
                     <Text style={[s.slotTxt, active && s.slotTxtActive]}>{slot.label}</Text>
+                    <View style={[
+                      s.slotStatusChip,
+                      booked ? s.slotStatusChipBooked : s.slotStatusChipFree,
+                      active && s.slotStatusChipOnActive,
+                    ]}>
+                      <View style={[
+                        s.slotStatusDot,
+                        { backgroundColor: booked ? '#C62828' : '#2E7D32' },
+                      ]} />
+                      <Text style={[
+                        s.slotStatusTxt,
+                        { color: active ? '#FFFFFF' : booked ? '#C62828' : '#2E7D32' },
+                      ]}>{booked ? 'Booked' : 'Free'}</Text>
+                    </View>
                   </TouchableOpacity>
                 );
               })}
@@ -362,12 +400,22 @@ const s = StyleSheet.create({
   helper: { fontSize: 11, color: '#90A4AE', marginTop: 6 },
   slotRow: { flexDirection: 'row', gap: 10 },
   slot: {
-    flex: 1, paddingVertical: 10, alignItems: 'center',
+    flex: 1, paddingVertical: 10, alignItems: 'center', gap: 4,
     borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 10, backgroundColor: '#FAFCFF',
   },
   slotActive: { backgroundColor: '#1565C0', borderColor: '#1565C0' },
+  slotBooked: { borderColor: '#EF9A9A', backgroundColor: '#FFF5F5' },
   slotTxt: { fontSize: 13, fontWeight: '700', color: '#37474F' },
   slotTxtActive: { color: '#FFF' },
+  slotStatusChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8,
+  },
+  slotStatusChipFree: { backgroundColor: '#E8F5E9' },
+  slotStatusChipBooked: { backgroundColor: '#FFEBEE' },
+  slotStatusChipOnActive: { backgroundColor: 'rgba(255,255,255,0.18)' },
+  slotStatusDot: { width: 6, height: 6, borderRadius: 3 },
+  slotStatusTxt: { fontSize: 10, fontWeight: '700', letterSpacing: 0.4 },
   errorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
   errorTxt: { fontSize: 12, color: '#C62828', fontWeight: '600' },
   footer: { flexDirection: 'row', gap: 10, marginTop: 18 },

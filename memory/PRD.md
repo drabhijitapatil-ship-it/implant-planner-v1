@@ -1,6 +1,29 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
 
+## Iteration 275 (Feb 2026) — Per-slot Booked/Free tags
+
+### What changed
+**Frontend (`/app/frontend/components/RescheduleModal.tsx`)**
+- Replaced the iter-274 `densityMap: Record<string, number>` with `bookedSlotsMap: Record<string, string[]>` — we now keep the actual booked times per date instead of just a count. This single state powers both the calendar density dots AND the new per-slot tags.
+- New `normaliseTime()` helper collapses "10:00", "10:00 AM", "14:00", "2:00 PM" all into a comparable 24h `HH:MM` key — handles whatever the seed/legacy data has stored.
+- Each time pill (10:00 AM / 2:00 PM) now renders a small status chip below the label:
+  - 🟢 green "Free" — slot is unbooked on the picked date
+  - 🔴 red "Booked" — another procedure already holds that slot
+  - When the pill itself is selected (blue), the chip becomes a white-on-transparent inverted variant so the contrast stays readable.
+- Booked but not-selected pills also get a faint pink border + bg (`#EF9A9A` / `#FFF5F5`) for an extra visual nudge.
+
+### Verification
+- Screenshot (Implant In-Charge, May 12 selected): 10:00 AM correctly shows "Booked" (another procedure at that slot), 2:00 PM shows "Free". Tags react instantly as the user picks different dates on the calendar.
+- Backend conflict guard still enforces correctness if a user taps a Booked slot anyway (server returns 409 with patient name) — but with these tags it should rarely happen.
+
+### Files touched
+- `/app/frontend/components/RescheduleModal.tsx`
+
+---
+
+
+
 ## Iteration 274 (Feb 2026) — Calendar booking-density dots
 
 ### What changed
