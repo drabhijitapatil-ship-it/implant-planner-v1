@@ -495,17 +495,27 @@ export default function Phase2SubmissionScreen() {
               incomplete pill shows the list of missing fields, then
               scrolls on confirm. */}
           <View style={s.progressBar} testID="phase2-progress-strip">
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={s.progressLabel} numberOfLines={1}>
-                Step {currentStep + 1} of {PHASE2_STEP_LABELS.length} — {PHASE2_STEP_LABELS[currentStep]}
-              </Text>
-              <Text style={s.progressCount}>
-                {Math.round(((currentStep + 1) / PHASE2_STEP_LABELS.length) * 100)}%
-              </Text>
-            </View>
-            <View style={s.progressTrack}>
-              <View style={[s.progressFill, { width: `${((currentStep + 1) / PHASE2_STEP_LABELS.length) * 100}%` }]} />
-            </View>
+            {/* iter-256: percentage and fill width driven by COMPLETED
+                steps (stepDone), not the current scroll index. A fresh
+                Phase 2 form starts at 0% and each completed section
+                bumps the bar by 20%. */}
+            {(() => {
+              const doneCount = stepDone.filter(Boolean).length;
+              const pct = Math.round((doneCount / PHASE2_STEP_LABELS.length) * 100);
+              return (
+                <>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={s.progressLabel} numberOfLines={1}>
+                      Step {currentStep + 1} of {PHASE2_STEP_LABELS.length} — {PHASE2_STEP_LABELS[currentStep]}
+                    </Text>
+                    <Text style={s.progressCount}>{pct}%</Text>
+                  </View>
+                  <View style={s.progressTrack}>
+                    <View style={[s.progressFill, { width: `${pct}%` }]} />
+                  </View>
+                </>
+              );
+            })()}
             <View style={s.stepPillRow}>
               {PHASE2_STEP_LABELS.map((label, idx) => {
                 const active = idx === currentStep;
