@@ -374,6 +374,11 @@ export default function TabsLayout() {
   usePushNotifications();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  // iter-266: red-dot count of cases waiting for THIS user's faculty
+  // approval (Supervisor / Implant In-Charge / Administrator). Rendered
+  // as a badge on the "Cases" tab so reviewers spot pending work
+  // without opening the tab. Refreshes alongside unread notifications.
+  const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
   // Red-dot indicator on the hamburger + "My Profile" row when the user has
   // unseen changelog entries. Cleared when they ack (/whatsnew GET returns 0).
   const [hasUnseenWhatsNew, setHasUnseenWhatsNew] = useState(false);
@@ -390,6 +395,26 @@ export default function TabsLayout() {
       setUnreadCount(res.data.count || 0);
     } catch {}
   }, []);
+
+  // iter-266: pending-approval badge count for faculty roles.
+  // Lightweight: re-uses the existing /procedures list. Filters for
+  // pending_* statuses where the current user is the assigned
+  // supervisor or implant in-charge. Skipped for nurses + students.
+  const isFaculty = role === 'supervisor' || role === 'implant_incharge' || role === 'administrator';
+  const fetchPendingApprovalCount = useCallback(async () => {
+    if (!isFaculty) { setPendingApprovalCount(0); return; }
+    try {
+      const res = await api.get('/procedures');
+      const list = Array.isArray(res.data) ? res.data : [];
+      const PENDING = new Set(['pending_phase1', 'pending_phase2', 'pending_stage2_surgical', 'pending_phase4_step1', 'pending_phase4_step2']);
+      const count = list.filter((p: any) =>
+        PENDING.has(p.status) && (p.supervisor_id === user?.id || p.implant_incharge_id === user?.id)
+      ).length;
+      setPendingApprovalCount(count);
+    } catch {
+      setPendingApprovalCount(0);
+    }
+  }, [isFaculty, user?.id]);
 
   const fetchWhatsNewIndicator = useCallback(async () => {
     try {
