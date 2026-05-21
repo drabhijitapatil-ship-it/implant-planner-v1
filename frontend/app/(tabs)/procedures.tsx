@@ -196,6 +196,14 @@ function DefaultProceduresScreen() {
           <View style={styles.headerLeft}>
             <Text style={styles.patientName}>{item.patient_name}</Text>
             <Text style={styles.registrationNumber}>#{item.registration_number}</Text>
+            {Array.isArray(item.reschedule_history) && item.reschedule_history.length > 0 ? (
+              <View style={styles.rescheduledChip} data-testid={`rescheduled-chip-${item.id}`}>
+                <Ionicons name="swap-horizontal" size={11} color="#E65100" />
+                <Text style={styles.rescheduledChipTxt}>
+                  Rescheduled{item.reschedule_history.length > 1 ? ` · ${item.reschedule_history.length}×` : ''}
+                </Text>
+              </View>
+            ) : null}
           </View>
           <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[item.status as keyof typeof STATUS_COLORS] }]}>
             <Text style={styles.statusText}>{STATUS_LABELS[item.status as keyof typeof STATUS_LABELS]}</Text>
@@ -532,6 +540,25 @@ const styles = StyleSheet.create({
   registrationNumber: {
     fontSize: 14,
     color: '#666',
+  },
+  rescheduledChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    backgroundColor: '#FFF3E0',
+    borderWidth: 1,
+    borderColor: '#FFE0B2',
+  },
+  rescheduledChipTxt: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#E65100',
+    letterSpacing: 0.3,
   },
   statusBadge: {
     paddingHorizontal: 10,

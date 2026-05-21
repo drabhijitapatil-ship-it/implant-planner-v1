@@ -3224,6 +3224,7 @@ RESCHEDULE_ELIGIBLE_STATUSES = {
 async def reschedule_procedure(
     procedure_id: str,
     body: RescheduleRequest,
+    request: Request,
     current_user: dict = Depends(get_current_user),
 ):
     proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
@@ -3349,6 +3350,25 @@ async def reschedule_procedure(
                 "new_time": body.procedure_time,
             },
         )
+
+    # iter-270: HIPAA audit — every reschedule is recorded to access_logs
+    # (and therefore the admin CSV export) with the full reason note.
+    await log_access(
+        action="procedure_reschedule",
+        resource_type="procedure",
+        resource_id=procedure_id,
+        user=current_user,
+        request=request,
+        extra={
+            "patient_name": patient_label,
+            "from_date": history_entry["from_date"],
+            "from_time": history_entry["from_time"],
+            "to_date": body.procedure_date,
+            "to_time": body.procedure_time,
+            "reason": history_entry["reason"],
+            "notified_user_ids": recipient_ids,
+        },
+    )
 
     return {"message": "Procedure rescheduled successfully", "entry": history_entry}
 
