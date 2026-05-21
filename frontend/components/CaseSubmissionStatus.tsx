@@ -28,6 +28,7 @@ type PhaseStatus = {
 interface Props {
   procedure: any;
   user: any;
+  compact?: boolean; // iter-264: compact list mode — strip-only, no header/hint/elapsed-days
 }
 
 const showInfoToast = (msg: string) => {
@@ -136,7 +137,7 @@ const STATE_META: Record<PhaseStatus['state'], { icon: string; label: string; bg
   completed:   { icon: 'trophy',           label: 'Complete',      bg: '#E8F5E9', fill: '#43A047', iconColor: '#2E7D32', textColor: '#1B5E20' },
 };
 
-export default function CaseSubmissionStatus({ procedure, user }: Props) {
+export default function CaseSubmissionStatus({ procedure, user, compact = false }: Props) {
   const router = useRouter();
   const isAdmin = user?.role === 'administrator' || user?.role === 'admin';
   const isNurse = user?.role === 'nurse';
@@ -154,7 +155,13 @@ export default function CaseSubmissionStatus({ procedure, user }: Props) {
   };
 
   const onCellPress = (idx: number, ps: PhaseStatus) => {
-    if (isNurse) return; // read-only
+    if (isNurse) return;
+    if (compact) {
+      // In list cards, tap anywhere navigates to the case detail —
+      // the parent <TouchableOpacity> wrapping the card handles that.
+      // Do not navigate from a cell here.
+      return;
+    }
     if (ps.state === 'locked') {
       showInfoToast('Locked until the previous phase is approved');
       return;
@@ -180,12 +187,14 @@ export default function CaseSubmissionStatus({ procedure, user }: Props) {
   })();
 
   return (
-    <View style={s.wrap} data-testid="case-submission-status">
-      <View style={s.header}>
-        <Text style={s.title}>Treatment Progress</Text>
-        <Text style={s.count}>{doneCount} / 4</Text>
-      </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 4 }}>
+    <View style={[s.wrap, compact && s.wrapCompact]} data-testid="case-submission-status">
+      {!compact && (
+        <View style={s.header}>
+          <Text style={s.title}>Treatment Progress</Text>
+          <Text style={s.count}>{doneCount} / 4</Text>
+        </View>
+      )}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: compact ? 6 : 8, paddingHorizontal: 4 }}>
         {phases.map((ps, idx) => {
           const meta = STATE_META[ps.state];
           const labelText = ps.state === 'in_progress'
@@ -194,27 +203,27 @@ export default function CaseSubmissionStatus({ procedure, user }: Props) {
           return (
             <TouchableOpacity
               key={idx}
-              activeOpacity={ps.state === 'in_progress' || ps.state === 'rejected' ? 0.7 : 0.9}
+              activeOpacity={!compact && (ps.state === 'in_progress' || ps.state === 'rejected') ? 0.7 : 0.9}
               onPress={() => onCellPress(idx, ps)}
-              style={[s.cell, { backgroundColor: meta.bg }]}
+              style={[s.cell, compact && s.cellCompact, { backgroundColor: meta.bg }]}
               testID={`case-status-phase-${idx + 1}`}
             >
               <View style={s.cellHead}>
-                <Text style={[s.phaseLabel, { color: meta.textColor }]}>Phase {idx + 1}</Text>
-                <Ionicons name={meta.icon as any} size={18} color={meta.iconColor} />
+                <Text style={[s.phaseLabel, compact && s.phaseLabelCompact, { color: meta.textColor }]}>P{idx + 1}</Text>
+                <Ionicons name={meta.icon as any} size={compact ? 14 : 18} color={meta.iconColor} />
               </View>
-              <Text style={[s.stateLabel, { color: meta.textColor }]} numberOfLines={1}>{labelText}</Text>
+              <Text style={[s.stateLabel, compact && s.stateLabelCompact, { color: meta.textColor }]} numberOfLines={1}>{labelText}</Text>
               <View style={s.track}>
                 <View style={[s.fill, { width: `${ps.pct}%`, backgroundColor: meta.fill }]} />
               </View>
-              {isAdmin && typeof ps.elapsedDays === 'number' && (
+              {!compact && isAdmin && typeof ps.elapsedDays === 'number' && (
                 <Text style={s.elapsed}>{ps.elapsedDays}d</Text>
               )}
             </TouchableOpacity>
           );
         })}
       </ScrollView>
-      {nextUp && (
+      {!compact && nextUp && (
         <Text style={s.nextUp} numberOfLines={2}>{nextUp}</Text>
       )}
     </View>
@@ -223,13 +232,17 @@ export default function CaseSubmissionStatus({ procedure, user }: Props) {
 
 const s = StyleSheet.create({
   wrap: { marginHorizontal: 16, marginTop: 12, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#E8EDF2' },
+  wrapCompact: { marginHorizontal: 0, marginTop: 10, padding: 0, borderWidth: 0, borderRadius: 0, backgroundColor: 'transparent' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   title: { fontSize: 14, fontWeight: '700', color: '#0D47A1', letterSpacing: 0.2 },
   count: { fontSize: 13, fontWeight: '700', color: '#1565C0' },
   cell: { minWidth: 132, flex: 1, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10 },
+  cellCompact: { minWidth: 88, paddingHorizontal: 8, paddingVertical: 6, borderRadius: 8 },
   cellHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   phaseLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
+  phaseLabelCompact: { fontSize: 10 },
   stateLabel: { fontSize: 12, fontWeight: '600', marginBottom: 6 },
+  stateLabelCompact: { fontSize: 10, marginBottom: 4 },
   track: { height: 4, backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: 2, overflow: 'hidden' },
   fill: { height: 4, borderRadius: 2 },
   elapsed: { marginTop: 4, fontSize: 10, fontWeight: '700', color: '#607D8B', textAlign: 'right' },

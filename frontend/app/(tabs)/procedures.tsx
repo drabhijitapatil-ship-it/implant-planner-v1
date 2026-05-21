@@ -19,6 +19,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { format } from 'date-fns';
 import { STATUS_COLORS, STATUS_LABELS } from '../../constants/checklist';
 import { useAuth } from '../../contexts/AuthContext';
+import CaseSubmissionStatus from '../../components/CaseSubmissionStatus';
 import NurseCasesScreen from '../../components/NurseCasesScreen';
 import ShareToForumModal from '../../components/ShareToForumModal';
 
@@ -194,6 +195,12 @@ function DefaultProceduresScreen() {
           <Ionicons name="location" size={16} color="#666" />
           <Text style={styles.detailText}>Site: {item.implant_site}</Text>
         </View>
+
+        {/* iter-264: compact 4-cell Treatment Progress strip inside each
+            list card so reviewers can spot half-finished cases without
+            opening them. The whole card is already tappable → navigates
+            to the case detail. */}
+        <CaseSubmissionStatus procedure={item} user={user} compact />
 
         {item.rejection_reason && (
           <View style={styles.rejectionContainer}>
