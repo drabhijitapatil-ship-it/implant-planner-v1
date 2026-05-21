@@ -1204,17 +1204,27 @@ export default function NewProcedureScreen() {
           Implant flows with different milestone labels. */}
       {showFlowStrip ? (
         <View style={styles.existingProgressBar} testID="existing-progress-strip">
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={styles.existingProgressLabel} numberOfLines={1}>
-              Step {currentExistingStep + 1} of {FLOW_STEP_LABELS.length} — {FLOW_STEP_LABELS[currentExistingStep]}
-            </Text>
-            <Text style={styles.existingProgressCount}>
-              {Math.round(((currentExistingStep + 1) / FLOW_STEP_LABELS.length) * 100)}%
-            </Text>
-          </View>
-          <View style={styles.existingProgressTrack}>
-            <View style={[styles.existingProgressFill, { width: `${((currentExistingStep + 1) / FLOW_STEP_LABELS.length) * 100}%` }]} />
-          </View>
+          {/* iter-256: percentage and fill width are driven by how many
+              steps are actually COMPLETE (existingStepDone), not by the
+              current scroll index. A brand-new empty form starts at 0%,
+              and each filled section bumps the bar by 20%. */}
+          {(() => {
+            const doneCount = existingStepDone.filter(Boolean).length;
+            const pct = Math.round((doneCount / FLOW_STEP_LABELS.length) * 100);
+            return (
+              <>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={styles.existingProgressLabel} numberOfLines={1}>
+                    Step {currentExistingStep + 1} of {FLOW_STEP_LABELS.length} — {FLOW_STEP_LABELS[currentExistingStep]}
+                  </Text>
+                  <Text style={styles.existingProgressCount}>{pct}%</Text>
+                </View>
+                <View style={styles.existingProgressTrack}>
+                  <View style={[styles.existingProgressFill, { width: `${pct}%` }]} />
+                </View>
+              </>
+            );
+          })()}
           {/* iter-237/238/239: tappable step pills — uniform width, green ✓ when section is complete. */}
           <View style={styles.existingStepPillRow}>
             {FLOW_STEP_LABELS.map((label, idx) => {
