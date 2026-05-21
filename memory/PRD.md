@@ -1,6 +1,29 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
 
+## Iteration 268 (Feb 2026) — Per-tab counts on "My Cases"
+
+### What the user asked for
+"Add counts next to each tab" (continuation of iter-267 unification work).
+
+### What changed
+**Frontend (`/app/frontend/app/(tabs)/procedures.tsx`)**
+- Computed a `tabCounts` map from `searchFiltered` so counts (a) mirror what's actually visible, and (b) live-update as the user types in the search bar.
+- Rendered each tab label as `Label (N)` using a nested smaller `<Text>` for the count — kept inside the same `<Text>` line so layout stays single-row.
+- Tightened `filterContainer.gap` 8→6, `filterButton.paddingHorizontal` 12→4, and `filterText.fontSize` 12→11 so all four labels with counts ("All (21)", "In Progress (16)", "Completed (4)", "Rejected (0)") fit without truncation on a 4-up bar at 420 px viewport.
+- Added muted/active count colours (`#9AA0A6` / `#E3F2FD`) so the count reads as supporting metadata, not as the primary label.
+
+### Verification (Implant In-Charge)
+- Screenshot: All (21) • In Progress (16) • Completed (4) • Rejected (0). Numbers sum to the total list minus drafts (which Dashboard owns).
+- Tab switching unchanged — counts persist across active selection with proper colour inversion.
+
+### Files touched
+- `/app/frontend/app/(tabs)/procedures.tsx`
+
+---
+
+
+
 ## Iteration 267 (Feb 2026) — Unified "My Cases" filter row
 
 ### What the user reported

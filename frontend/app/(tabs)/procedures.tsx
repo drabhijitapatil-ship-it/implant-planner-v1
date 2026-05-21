@@ -279,6 +279,15 @@ function DefaultProceduresScreen() {
   ]);
   const REJECTED_STATUSES = new Set(['rejected_phase1', 'rejected_phase2', 'rejected_stage2_surgical', 'rejected_phase4_step1', 'rejected_phase4_step2']);
 
+  // iter-268: per-tab counts so users see workload at a glance.
+  // Counts reflect the active search query (mirrors the visible list).
+  const tabCounts: Record<string, number> = {
+    all: searchFiltered.length,
+    in_progress: searchFiltered.filter((p: any) => IN_PROGRESS_STATUSES.has(p.status)).length,
+    completed: searchFiltered.filter((p: any) => p.status === 'completed').length,
+    rejected: searchFiltered.filter((p: any) => REJECTED_STATUSES.has(p.status)).length,
+  };
+
   const filteredProcedures = (() => {
     const f = String(filter);
     if (f.startsWith('phase_')) return searchFiltered; // phase deep-link
@@ -304,20 +313,23 @@ function DefaultProceduresScreen() {
     <SafeAreaView style={styles.container} edges={['bottom']}>
 
       <View style={styles.filterContainer}>
-        {filterButtons.map((btn) => (
-          <TouchableOpacity
-            key={btn.key}
-            style={[styles.filterButton, filter === btn.key && styles.filterButtonActive]}
-            onPress={() => setFilter(btn.key as any)}
-            testID={`filter-tab-${btn.key}`}
-          >
-            <Text
-              style={[styles.filterText, filter === btn.key && styles.filterTextActive]}
+        {filterButtons.map((btn) => {
+          const isActive = filter === btn.key;
+          const count = tabCounts[btn.key] ?? 0;
+          return (
+            <TouchableOpacity
+              key={btn.key}
+              style={[styles.filterButton, isActive && styles.filterButtonActive]}
+              onPress={() => setFilter(btn.key as any)}
+              testID={`filter-tab-${btn.key}`}
             >
-              {btn.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
+              <Text style={[styles.filterText, isActive && styles.filterTextActive]} numberOfLines={1}>
+                {btn.label}
+                <Text style={[styles.filterCount, isActive && styles.filterCountActive]}>{` (${count})`}</Text>
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       <View style={styles.searchContainer} data-testid="search-bar-container">
@@ -393,7 +405,7 @@ const styles = StyleSheet.create({
   filterContainer: {
     flexDirection: 'row',
     padding: 16,
-    gap: 8,
+    gap: 6,
     backgroundColor: '#FFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E5EA',
@@ -401,7 +413,7 @@ const styles = StyleSheet.create({
   filterButton: {
     flex: 1,
     paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 4,
     borderRadius: 8,
     backgroundColor: '#F5F5F5',
     alignItems: 'center',
@@ -410,12 +422,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#007AFF',
   },
   filterText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#666',
   },
   filterTextActive: {
     color: '#FFF',
+  },
+  filterCount: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#9AA0A6',
+  },
+  filterCountActive: {
+    color: '#E3F2FD',
   },
   searchContainer: {
     flexDirection: 'row',
