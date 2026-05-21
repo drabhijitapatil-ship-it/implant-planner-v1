@@ -489,14 +489,44 @@ export default function Phase4Step2Screen() {
           </View>
 
           {/* ── Submit ── */}
+          {/* iter-262: visually disabled until all required sections complete. */}
           <View style={{ padding: 16, paddingBottom: 32 }}>
-            <TouchableOpacity style={[s.submitBtn, loading && { opacity: 0.6 }]} onPress={handleSubmit}
-              disabled={loading} testID="phase4-step2-submit">
-              {loading ? <ActivityIndicator color="#FFF" /> : (
-                <><Ionicons name={isInchargeSelfCreated ? 'checkmark-circle' : 'trophy'} size={22} color="#FFF" />
-                <Text style={s.submitText}>{submitLabel}</Text></>
-              )}
-            </TouchableOpacity>
+            {(() => {
+              const uncheckedCount = TRIAL_ITEMS.filter(i => !trialChecklist[i.id]).length;
+              const imagingMissing = isFullArch
+                ? (!opgUpload ? 1 : 0)
+                : (implantPositions.length > 0 ? implantPositions.filter(pos => !iopaUploads[pos]).length : 0);
+              const validPhotos = prosthesisPhotos.filter((p): p is LabeledUpload => !!p);
+              const photosMissing = validPhotos.length < 2 ? (2 - validPhotos.length) : 0;
+              const photoLabelMissing = validPhotos.some(p => !p.label || !p.label.trim());
+              const canSubmit = uncheckedCount === 0 && confirmed && imagingMissing === 0 && photosMissing === 0 && !photoLabelMissing;
+              const missingHints: string[] = [];
+              if (uncheckedCount > 0) missingHints.push(`${uncheckedCount} trial item${uncheckedCount > 1 ? 's' : ''}`);
+              if (!confirmed) missingHints.push('delivery confirmation');
+              if (imagingMissing > 0) missingHints.push(isFullArch ? 'OPG upload' : `${imagingMissing} IOPA upload${imagingMissing > 1 ? 's' : ''}`);
+              if (photosMissing > 0) missingHints.push(`${photosMissing} more prosthesis photo${photosMissing > 1 ? 's' : ''}`);
+              if (photoLabelMissing) missingHints.push('photo labels');
+              return (
+                <>
+                  <TouchableOpacity
+                    style={[s.submitBtn, loading && { opacity: 0.6 }, !canSubmit && { backgroundColor: '#B0BEC5' }]}
+                    onPress={handleSubmit}
+                    disabled={loading}
+                    testID="phase4-step2-submit"
+                  >
+                    {loading ? <ActivityIndicator color="#FFF" /> : (
+                      <><Ionicons name={!canSubmit ? 'lock-closed' : (isInchargeSelfCreated ? 'checkmark-circle' : 'trophy')} size={22} color="#FFF" />
+                      <Text style={s.submitText}>{submitLabel}</Text></>
+                    )}
+                  </TouchableOpacity>
+                  {!canSubmit && !loading && (
+                    <Text style={{ marginTop: 8, textAlign: 'center', color: '#90A4AE', fontSize: 12, fontWeight: '600' }}>
+                      Missing: {missingHints.join(', ')} — tap to see what's missing
+                    </Text>
+                  )}
+                </>
+              );
+            })()}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

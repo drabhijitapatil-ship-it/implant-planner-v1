@@ -829,13 +829,32 @@ export default function Phase4Step1Screen() {
                 <Text style={s.labSlipText}>Generate Lab Slip</Text></>
               )}
             </TouchableOpacity>
-            <TouchableOpacity style={[s.submitBtn, loading && { opacity: 0.6 }]} onPress={handleSubmit} disabled={loading || labSlipLoading}
-              data-testid="phase4-step1-submit">
-              {loading ? <ActivityIndicator color="#FFF" /> : (
-                <><Ionicons name="checkmark-circle" size={22} color="#FFF" />
-                <Text style={s.submitText}>{(user?.role === 'implant_incharge' && procedure?.created_by_role === 'implant_incharge' && user?.id === procedure?.created_by_id) ? 'Done' : 'Submit Step 1 for Approval'}</Text></>
-              )}
-            </TouchableOpacity>
+            {/* iter-262: visually disabled when validateForm() returns a message. */}
+            {(() => {
+              const validationError = validateForm();
+              const canSubmit = validationError === null;
+              const isInchargeSelf = (user?.role === 'implant_incharge' && procedure?.created_by_role === 'implant_incharge' && user?.id === procedure?.created_by_id);
+              return (
+                <>
+                  <TouchableOpacity
+                    style={[s.submitBtn, loading && { opacity: 0.6 }, !canSubmit && { backgroundColor: '#B0BEC5' }]}
+                    onPress={handleSubmit}
+                    disabled={loading || labSlipLoading}
+                    data-testid="phase4-step1-submit"
+                  >
+                    {loading ? <ActivityIndicator color="#FFF" /> : (
+                      <><Ionicons name={canSubmit ? 'checkmark-circle' : 'lock-closed'} size={22} color="#FFF" />
+                      <Text style={s.submitText}>{isInchargeSelf ? 'Done' : 'Submit Step 1 for Approval'}</Text></>
+                    )}
+                  </TouchableOpacity>
+                  {!canSubmit && !loading && (
+                    <Text style={{ marginTop: 8, textAlign: 'center', color: '#90A4AE', fontSize: 12, fontWeight: '600' }}>
+                      Required fields missing — tap to see what's missing
+                    </Text>
+                  )}
+                </>
+              );
+            })()}
           </View>
           )}
         </ScrollView>

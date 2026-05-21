@@ -182,11 +182,26 @@ export default function Stage2SurgicalSubmissionScreen() {
   };
 
   const handleSubmit = async () => {
-    // Validate all visible checklist items answered — ISQ item is optional per product spec
-    // (user can tick Yes + enter a value, or skip entirely).
+    // iter-262: holistic pre-flight — list all missing sections at once.
+    const missing: string[] = [];
     const unanswered = CHECKLIST_ITEMS_FILTERED.filter(
       i => i.id !== 'isq_checked' && checklistState[i.id] === undefined
     );
+    if (unanswered.length > 0) missing.push(`Checklist (${unanswered.length} item${unanswered.length > 1 ? 's' : ''} unanswered)`);
+    const missingIopaCount = iopaFiles.filter(f => f === null).length;
+    if (missingIopaCount > 0) missing.push(`IOPA Radiographs (${missingIopaCount} pending)`);
+    if (missing.length > 1) {
+      Alert.alert(
+        'Incomplete sections',
+        `Please complete the following before submitting Phase 3:\n\n${missing.map(l => `• ${l}`).join('\n')}`,
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    // Single-section misses fall through to specific Alerts below.
+
+    // Validate all visible checklist items answered — ISQ item is optional per product spec
+    // (user can tick Yes + enter a value, or skip entirely).
     if (unanswered.length > 0) {
       Alert.alert('Checklist Incomplete', `Please answer: ${unanswered[0].label}`);
       return;
@@ -478,19 +493,41 @@ export default function Stage2SurgicalSubmissionScreen() {
             </View>
           ) : (
           <View style={{ padding: 16, paddingBottom: 32 }}>
-            <TouchableOpacity
-              style={[s.submitBtn, loading && { opacity: 0.6 }]}
-              onPress={handleSubmit}
-              disabled={loading}
-              data-testid="phase3-submit-btn"
-            >
-              {loading ? <ActivityIndicator color="#FFF" /> : (
+            {/* iter-262: visually disabled when checklist or IOPA uploads incomplete. */}
+            {(() => {
+              const unansweredCount = CHECKLIST_ITEMS_FILTERED.filter(
+                i => i.id !== 'isq_checked' && checklistState[i.id] === undefined
+              ).length;
+              const pendingIopa = iopaFiles.filter(f => f === null).length;
+              const canSubmit = unansweredCount === 0 && pendingIopa === 0;
+              const isInchargeSelf = (user?.role === 'implant_incharge' && createdByRole === 'implant_incharge' && user?.id === createdById);
+              return (
                 <>
-                  <Ionicons name="checkmark-circle" size={22} color="#FFF" />
-                  <Text style={s.submitText}>{(user?.role === 'implant_incharge' && createdByRole === 'implant_incharge' && user?.id === createdById) ? 'Done' : 'Submit Phase 3 for Approval'}</Text>
+                  <TouchableOpacity
+                    style={[s.submitBtn, loading && { opacity: 0.6 }, !canSubmit && { backgroundColor: '#B0BEC5', shadowOpacity: 0 }]}
+                    onPress={handleSubmit}
+                    disabled={loading}
+                    data-testid="phase3-submit-btn"
+                  >
+                    {loading ? <ActivityIndicator color="#FFF" /> : (
+                      <>
+                        <Ionicons name={canSubmit ? 'checkmark-circle' : 'lock-closed'} size={22} color="#FFF" />
+                        <Text style={s.submitText}>{isInchargeSelf ? 'Done' : 'Submit Phase 3 for Approval'}</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                  {!canSubmit && !loading && (
+                    <Text style={{ marginTop: 8, textAlign: 'center', color: '#90A4AE', fontSize: 12, fontWeight: '600' }}>
+                      {unansweredCount > 0 && pendingIopa > 0
+                        ? 'Checklist + IOPA uploads incomplete — tap to see what\'s missing'
+                        : unansweredCount > 0
+                          ? `${unansweredCount} checklist item${unansweredCount > 1 ? 's' : ''} unanswered — tap to see what's missing`
+                          : `${pendingIopa} IOPA upload${pendingIopa > 1 ? 's' : ''} pending — tap to see what's missing`}
+                    </Text>
+                  )}
                 </>
-              )}
-            </TouchableOpacity>
+              );
+            })()}
           </View>
           )}
         </ScrollView>
