@@ -917,6 +917,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
         edentulousSiteMeasurements={edentulousSiteMeasurements}
         defaultOcclusocervical={defaultOcclusocervical}
         defaultMesiodistal={defaultMesiodistal}
+        procedureStatus={procedureStatus}
       />
 
       {/* ── Bridge nudge — fired after a save reveals an implant-supported pontic ── */}
@@ -1007,7 +1008,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
 }
 
 // ── Add/Edit Implant Modal Component ───────────────────────
-function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPositions, editItem, medicalAssessment, procedureType, procedureId, allowedTeeth, presetPosition, edentulousSiteMeasurements, defaultOcclusocervical, defaultMesiodistal, missingTeeth }: {
+function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPositions, editItem, medicalAssessment, procedureType, procedureId, allowedTeeth, presetPosition, edentulousSiteMeasurements, defaultOcclusocervical, defaultMesiodistal, missingTeeth, procedureStatus }: {
   visible: boolean; onClose: () => void; onSave: (item: ImplantPlanItem) => void;
   systems: ImplantSystem[]; toothRecs: Record<string,any>; usedPositions: string[];
   editItem?: ImplantPlanItem; medicalAssessment?: Record<string, string>;
@@ -1023,9 +1024,22 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
   defaultMesiodistal?: string;
   /** Phase 1 missing teeth list — used to detect cluster status (Scenario 2). */
   missingTeeth?: string[];
+  /** iter-277: current procedure status — used to skip Risk Assessment
+      step when editing an existing implant after Phase 1 approval. */
+  procedureStatus?: string;
 }) {
   const [step, setStep] = useState(1);
   const [position, setPosition] = useState('');
+
+  // iter-277: streamlined edit flow when an EXISTING implant is being
+  // edited AFTER Phase 1 has been approved. Skips Step 4 (Risk
+  // Assessment) — the original risk score/level is preserved as-is.
+  const POST_PHASE1_APPROVED = new Set([
+    'phase1_approved', 'pending_phase2', 'phase2_approved',
+    'pending_stage2_surgical', 'stage2_surgical_approved',
+    'pending_stage2_prosthetic', 'completed',
+  ]);
+  const streamlinedEdit = !!editItem && POST_PHASE1_APPROVED.has(procedureStatus || '');
 
   // When the modal opens freshly (no editItem) with a presetPosition provided,
   // auto-fill the tooth position so the student skips the picker step.
@@ -1186,6 +1200,7 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
         procedureType={procedureType}
         procedureId={procedureId}
         allowedTeeth={allowedTeeth}
+        streamlinedEdit={streamlinedEdit}
       />
     </Modal>
   );
@@ -1202,6 +1217,7 @@ function ModalContent(props: any) {
     showAllResults, setShowAllResults,
     sProcedures, setSProcedures, handleSearch, handleCalcRisk, handleConfirm, toothInfo,
     systems, usedPositions, onSave, procedureType, procedureId, allowedTeeth,
+    streamlinedEdit,
   } = props;
 
   const BONE_TYPES = ['D1','D2','D3','D4'];
@@ -1255,7 +1271,7 @@ function ModalContent(props: any) {
             <Ionicons name="close" size={28} color="#333" />
           </TouchableOpacity>
           <Text style={ms.headerTitle}>{editItem ? 'Edit' : 'Add'} Implant Position</Text>
-          <Text style={ms.stepIndicator}>Step {step}/4</Text>
+          <Text style={ms.stepIndicator}>Step {step}/{streamlinedEdit ? 3 : 4}</Text>
         </View>
 
         {/* Single flex container */}
@@ -1859,13 +1875,23 @@ function ModalContent(props: any) {
               <View style={ms.navRow}>
                 <BackButton onPress={() => setStep(2)} />
                 <TouchableOpacity
-                  style={[ms.nextBtn, ms.nextBtnFlex, !selectedImplant && ms.btnDisabled]}
+                  style={[
+                    streamlinedEdit ? ms.confirmBtn : ms.nextBtn,
+                    ms.nextBtnFlex,
+                    !selectedImplant && ms.btnDisabled,
+                  ]}
                   disabled={!selectedImplant}
-                  onPress={() => setStep(4)}
+                  onPress={() => streamlinedEdit ? handleConfirm() : setStep(4)}
                   data-testid="step3-next"
                 >
-                  <Text style={ms.nextBtnText}>Next: Risk Assessment</Text>
-                  <Ionicons name="arrow-forward" size={20} color="#FFF" />
+                  <Text style={streamlinedEdit ? ms.confirmBtnText : ms.nextBtnText}>
+                    {streamlinedEdit ? 'Update Implant' : 'Next: Risk Assessment'}
+                  </Text>
+                  <Ionicons
+                    name={streamlinedEdit ? 'checkmark-circle' : 'arrow-forward'}
+                    size={20}
+                    color="#FFF"
+                  />
                 </TouchableOpacity>
               </View>
               </>

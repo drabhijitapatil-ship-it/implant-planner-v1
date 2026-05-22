@@ -4926,15 +4926,73 @@ async def save_implant_plan(
             "risk_score": imp.risk_score,
         })
 
-    await db.procedures.update_one(
-        {"_id": ObjectId(procedure_id)},
-        {"$set": {
+    # iter-277: track field-level edits to the implant plan once Phase 1
+    # is approved. Pre-Phase-1-approval saves are still considered part of
+    # "creating Phase 1" and are intentionally NOT logged.
+    POST_PHASE1_APPROVED = {
+        "phase1_approved", "pending_phase2", "phase2_approved",
+        "pending_stage2_surgical", "stage2_surgical_approved",
+        "pending_stage2_prosthetic", "completed",
+    }
+    history_entries: list = []
+    if proc.get("status") in POST_PHASE1_APPROVED:
+        old_by_pos = {p.get("position"): p for p in (proc.get("implant_plans") or []) if p.get("position")}
+        new_by_pos = {p["position"]: p for p in implant_docs}
+        TRACKED = ("brand", "system", "diameter", "length", "bone_width", "bone_height", "bone_type", "risk_level", "risk_score")
+        now_iso = datetime.now(timezone.utc).isoformat()
+        actor = {
+            "by_user_id": current_user["_id"],
+            "by_user_name": current_user.get("name") or current_user.get("username"),
+            "by_user_role": current_user.get("role"),
+            "at": now_iso,
+        }
+        # Edits to existing positions
+        for pos, new_imp in new_by_pos.items():
+            old_imp = old_by_pos.get(pos)
+            if not old_imp:
+                history_entries.append({
+                    "id": str(uuid.uuid4()),
+                    "position": pos,
+                    "kind": "added",
+                    "snapshot": {k: new_imp.get(k) for k in TRACKED},
+                    **actor,
+                })
+                continue
+            changes = {}
+            for f in TRACKED:
+                if (old_imp.get(f) or None) != (new_imp.get(f) or None):
+                    changes[f] = {"from": old_imp.get(f), "to": new_imp.get(f)}
+            if changes:
+                history_entries.append({
+                    "id": str(uuid.uuid4()),
+                    "position": pos,
+                    "kind": "edited",
+                    "changes": changes,
+                    **actor,
+                })
+        # Removed positions
+        for pos, old_imp in old_by_pos.items():
+            if pos not in new_by_pos:
+                history_entries.append({
+                    "id": str(uuid.uuid4()),
+                    "position": pos,
+                    "kind": "removed",
+                    "snapshot": {k: old_imp.get(k) for k in TRACKED},
+                    **actor,
+                })
+
+    update_doc: dict = {
+        "$set": {
             "implant_plans": implant_docs,
             "number_of_implants": len(implant_docs),
             "implant_site": ", ".join(sorted(set(imp["position"] for imp in implant_docs))),
-        }},
-    )
-    return {"message": "Implant plan saved", "count": len(implant_docs)}
+        },
+    }
+    if history_entries:
+        update_doc["$push"] = {"implant_edit_history": {"$each": history_entries}}
+
+    await db.procedures.update_one({"_id": ObjectId(procedure_id)}, update_doc)
+    return {"message": "Implant plan saved", "count": len(implant_docs), "history_entries": len(history_entries)}
 
 
 @api_router.get("/procedures/{procedure_id}/implant-plan")

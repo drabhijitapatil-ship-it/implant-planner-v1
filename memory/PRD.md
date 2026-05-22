@@ -1,6 +1,48 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
 
+## Iteration 277 (Feb 2026) — Streamlined implant edit + audit history (post-Phase-1)
+
+### What the user asked for
+"For Non-Existing-Implant cases: when an implant is edited via the Edit button on the Implant Selection section, currently the user is walked through the full Phase 1 wizard (bone width → bone height → risk assessment → recommendation). After Phase 1 approval the **Risk Assessment step should be skipped**. Also, every implant change vs. the original Phase 1 selection should be visible in an edit history audit trail." Clarifications:
+1a — keep bone width/height/type editable, only skip Risk Assessment.
+2a — preserve the original Phase 1 risk_score & risk_level untouched.
+3a — streamlined flow ONLY after Phase 1 approval (full wizard before).
+4a — track ANY field change.
+5a — edit history visible to anyone who can view the case.
+
+### What changed
+**Backend (`/app/backend/server.py`)**
+- `save_implant_plan` now diffs old vs new implant lists when `proc.status` ∈ `{phase1_approved, pending_phase2, phase2_approved, pending_stage2_surgical, stage2_surgical_approved, pending_stage2_prosthetic, completed}`. Pre-Phase-1-approval saves are intentionally NOT logged (they're considered part of "creating Phase 1").
+- For each tracked field (`brand`, `system`, `diameter`, `length`, `bone_width`, `bone_height`, `bone_type`, `risk_level`, `risk_score`) builds a `{from, to}` diff. Adds `kind: "edited"` entry per position with changes; also handles `kind: "added"` / `kind: "removed"` for new/deleted positions in the same window.
+- Each entry stores `id`, `position`, `kind`, `changes` (or `snapshot`), `by_user_id`, `by_user_name`, `by_user_role`, `at` (ISO timestamp).
+- Pushed via `$push: {implant_edit_history: {$each: history_entries}}` so older entries are preserved chronologically.
+
+**Frontend (`/app/frontend/components/CaseImplantPlanning.tsx`)**
+- Added `procedureStatus` prop pass-through to the `ImplantPlanModal` and a derived `streamlinedEdit` flag (`!!editItem && POST_PHASE1_APPROVED.has(procedureStatus)`).
+- Modal header shows `Step 2/3` (not `Step 2/4`) when `streamlinedEdit` is true.
+- Step 3 ("Recommended implants") footer button now switches:
+  - Default → "Next: Risk Assessment" → goes to Step 4.
+  - Streamlined → green "Update Implant" with checkmark icon → calls `handleConfirm()` directly.
+- The risk values are carried over because the existing edit-mode `useEffect` already pre-populates `riskResult` from `editItem.risk_level` / `editItem.risk_score`.
+
+**Frontend (`/app/frontend/app/procedures/[id].tsx`)**
+- New "Implant edit history" audit-trail block renders directly below the Implant Planning section when `procedure.implant_edit_history.length > 0`.
+- Per-entry UI: position chip ("Tooth #N"), kind chip (Added/Edited/Removed in green/red/amber), per-field strikethrough → bold-blue diff lines, and a "by Dr. X · role · timestamp" meta line. Most-recent entry first.
+
+### Verification
+- **Backend curl**: Saved a modified plan changing position 31 length 10.0 → 13.0. Server returned `history_entries: 1`. Subsequent GET on the procedure returned the entry with the correct `from`/`to`, `by_user_name=Dr. Abhijit Patil`, `by_user_role=implant_incharge`, ISO `at`.
+- **Frontend**: Case detail screen now displays the new "Implant edit history" card with `Tooth #31 · Edited · length: ~~10~~ → 13` and the actor meta line. Editing a different implant brings up the modal with header "Step 2/3" — Risk Assessment step skipped.
+
+### Files touched
+- `/app/backend/server.py`
+- `/app/frontend/components/CaseImplantPlanning.tsx`
+- `/app/frontend/app/procedures/[id].tsx`
+
+---
+
+
+
 ## Iteration 276 (Feb 2026) — Stable AI bubble + Home Screen reposition
 
 ### What the user reported
