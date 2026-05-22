@@ -1,6 +1,25 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
 
+## Iteration 278 (Feb 2026) — Hide drilling protocol in streamlined implant edit
+
+### What the user reported
+"When editing implant after Phase 1 approval and before Phase 2 approval, there's no need to show the drilling protocol section either" (continuation of iter-277 streamlined edit).
+
+### What changed
+**Frontend (`/app/frontend/components/CaseImplantPlanning.tsx`)**
+- The `protocolBox` (Drilling Protocol: Pilot → Twist → BL → Final preview) inside Step 2 of the implant wizard is now gated by `&& !streamlinedEdit`, so it renders only during the original Phase 1 authoring flow (and full adds). In edit-after-Phase-1-approval flow, Step 2 jumps straight from system options → bone width/height → Find Implant.
+
+### Verification
+- Screenshot inside the Edit Implant Position modal (Step 2/3): Select Implant System, Available Options summary, Bone Width / Bone Height inputs, and the "Adequate Ridge Width" validation chip remain. The previously-visible Drilling Protocol panel is gone.
+
+### Files touched
+- `/app/frontend/components/CaseImplantPlanning.tsx`
+
+---
+
+
+
 ## Iteration 277 (Feb 2026) — Streamlined implant edit + audit history (post-Phase-1)
 
 ### What the user asked for
