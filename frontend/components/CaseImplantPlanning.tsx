@@ -1391,8 +1391,10 @@ function ModalContent(props: any) {
                     </View>
                   )}
 
-                  {/* Drilling Protocol - shown after system is selected */}
-                  {selectedSystem && (
+                  {/* Drilling Protocol - shown after system is selected.
+                      iter-278: hidden in streamlined edit mode (post-Phase-1)
+                      to keep the implant size adjustment focused. */}
+                  {selectedSystem && !streamlinedEdit && (
                     <View style={ms.protocolBox} data-testid="drilling-protocol">
                       <View style={ms.protocolHeader}>
                         <Ionicons name="construct" size={18} color="#1565C0" />
