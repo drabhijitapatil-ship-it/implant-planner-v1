@@ -3466,6 +3466,54 @@ export default function ProcedureDetailScreen() {
           />
         )}
 
+        {/* iter-277: Implant edit history audit trail — visible to everyone
+            who can view the case. Only renders when there's at least one
+            edit logged (which only happens after Phase 1 approval). */}
+        {Array.isArray(procedure.implant_edit_history) && procedure.implant_edit_history.length > 0 && (
+          <View style={resStyles.editHistoryWrap} data-testid="implant-edit-history">
+            <View style={resStyles.editHistoryHeader}>
+              <Ionicons name="git-commit-outline" size={16} color="#1565C0" />
+              <Text style={resStyles.editHistoryTitle}>Implant edit history</Text>
+              <View style={resStyles.editHistoryCountChip}>
+                <Text style={resStyles.editHistoryCountTxt}>{procedure.implant_edit_history.length}</Text>
+              </View>
+            </View>
+            {procedure.implant_edit_history.slice().reverse().map((h: any, idx: number) => (
+              <View key={h.id || idx} style={resStyles.editHistoryItem}>
+                <View style={resStyles.editHistoryItemHeader}>
+                  <Text style={resStyles.editHistoryPosition}>Tooth #{h.position}</Text>
+                  <View style={[resStyles.editHistoryKindChip, h.kind === 'added' ? resStyles.kindAdded : h.kind === 'removed' ? resStyles.kindRemoved : resStyles.kindEdited]}>
+                    <Text style={resStyles.editHistoryKindTxt}>
+                      {h.kind === 'added' ? 'Added' : h.kind === 'removed' ? 'Removed' : 'Edited'}
+                    </Text>
+                  </View>
+                </View>
+                {h.kind === 'edited' && h.changes ? (
+                  <View style={resStyles.editChangesList}>
+                    {Object.entries(h.changes).map(([field, diff]: [string, any]) => (
+                      <Text key={field} style={resStyles.editChangeLine}>
+                        <Text style={{ fontWeight: '700' }}>{field.replace(/_/g, ' ')}:</Text>
+                        <Text style={resStyles.editChangeFrom}> {String(diff.from ?? '—')}</Text>
+                        <Text> → </Text>
+                        <Text style={resStyles.editChangeTo}>{String(diff.to ?? '—')}</Text>
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
+                {(h.kind === 'added' || h.kind === 'removed') && h.snapshot ? (
+                  <Text style={resStyles.editChangeLine}>
+                    {h.snapshot.brand} {h.snapshot.system} · D {h.snapshot.diameter}mm × L {h.snapshot.length}mm
+                  </Text>
+                ) : null}
+                <Text style={resStyles.editHistoryMeta} numberOfLines={2}>
+                  by {h.by_user_name || 'Unknown'}{h.by_user_role ? ` · ${String(h.by_user_role).replace(/_/g, ' ')}` : ''}
+                  {h.at ? ` · ${new Date(h.at).toLocaleString()}` : ''}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+
         {/* AI Clinical Summary Card — persistent + editable + included in PDF */}
         {(procedure.ai_case_summary || aiSummary) && !editingAiClinical ? (
           <View style={{ marginHorizontal: 16, marginBottom: 16, backgroundColor: '#E8EAF6', borderRadius: 14, padding: 16, borderLeftWidth: 4, borderLeftColor: '#3F51B5' }} testID="ai-summary-card">
@@ -4089,6 +4137,53 @@ const resStyles = StyleSheet.create({
   historyLine: { fontSize: 13, color: '#37474F' },
   historyMeta: { fontSize: 11, color: '#90A4AE', marginTop: 1 },
   historyReason: { fontSize: 12, color: '#455A64', marginTop: 3, fontStyle: 'italic' },
+  // iter-277: implant edit history audit-trail block
+  editHistoryWrap: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E0E7EE',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  editHistoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ECEFF1',
+  },
+  editHistoryTitle: { fontSize: 14, fontWeight: '700', color: '#1565C0', flex: 1 },
+  editHistoryCountChip: {
+    paddingHorizontal: 8, paddingVertical: 2,
+    backgroundColor: '#E3F2FD', borderRadius: 10,
+  },
+  editHistoryCountTxt: { fontSize: 11, fontWeight: '700', color: '#1565C0' },
+  editHistoryItem: {
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F5F7FA',
+  },
+  editHistoryItemHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  editHistoryPosition: { fontSize: 13, fontWeight: '700', color: '#37474F', flex: 1 },
+  editHistoryKindChip: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
+  kindAdded: { backgroundColor: '#E8F5E9' },
+  kindRemoved: { backgroundColor: '#FFEBEE' },
+  kindEdited: { backgroundColor: '#FFF3E0' },
+  editHistoryKindTxt: { fontSize: 10, fontWeight: '700', color: '#37474F', letterSpacing: 0.4 },
+  editChangesList: { marginTop: 2, gap: 2 },
+  editChangeLine: { fontSize: 12, color: '#455A64' },
+  editChangeFrom: { color: '#90A4AE', textDecorationLine: 'line-through' },
+  editChangeTo: { color: '#1565C0', fontWeight: '700' },
+  editHistoryMeta: { fontSize: 11, color: '#90A4AE', marginTop: 4 },
 });
 
 
