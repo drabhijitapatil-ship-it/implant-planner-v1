@@ -1,6 +1,26 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
 
+## Iteration 279 (Feb 2026) — Hide drilling protocol on Step 3 of streamlined edit
+
+### What the user reported
+"The Drilling Protocol is yet again displayed in Streamlined edit process at Step 3. Remove it from there as well."
+
+### What changed
+**Frontend (`/app/frontend/components/CaseImplantPlanning.tsx`)**
+- The Step 3 `protocolPreviewCard` (the collapsible "Drilling Protocol" preview that appears below the recommendation list once an implant is selected) is now gated by `&& !streamlinedEdit`, matching the Step 2 fix from iter-278.
+- In streamlined edit mode, Step 3 now renders just: implant recommendation list → "Show more options" toggle → "Update Implant" CTA.
+
+### Verification
+- Screenshot of Step 3/3 inside streamlined edit: clean list, no drilling protocol panel, "Update Implant" CTA visible right under the recommendation row.
+
+### Files touched
+- `/app/frontend/components/CaseImplantPlanning.tsx`
+
+---
+
+
+
 ## Iteration 278 (Feb 2026) — Hide drilling protocol in streamlined implant edit
 
 ### What the user reported
