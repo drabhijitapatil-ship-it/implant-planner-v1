@@ -1831,8 +1831,10 @@ function ModalContent(props: any) {
                 );
               })()}
 
-              {/* Drilling Protocol Preview (when implant selected) */}
-              {selectedImplant && (
+              {/* Drilling Protocol Preview (when implant selected).
+                  iter-279: hidden in streamlined edit mode (post-Phase-1)
+                  to keep the implant resize flow focused. */}
+              {selectedImplant && !streamlinedEdit && (
                 <View style={ms.protocolPreviewCard} data-testid="drilling-protocol-preview">
                   <TouchableOpacity
                     style={ms.protocolPreviewHeader}
