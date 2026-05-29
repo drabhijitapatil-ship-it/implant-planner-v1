@@ -22,6 +22,7 @@ type Tip = {
   saved?: boolean;
   dismissed_today?: boolean;
   personalised_hint?: string | null;
+  streak?: { current: number; longest: number; engaged_today: boolean } | null;
 };
 
 const EVIDENCE_COLORS: Record<string, string> = {
@@ -96,6 +97,12 @@ export default function SmartTipBanner() {
             <Text style={s.eyebrow}>Today's Smart Clinical Tip</Text>
             <Text style={s.title} numberOfLines={2}>{tip.title}</Text>
           </View>
+          {tip.streak && tip.streak.current > 0 ? (
+            <View style={s.streakChip} data-testid="smart-tip-streak">
+              <Ionicons name="flame" size={12} color="#E65100" />
+              <Text style={s.streakTxt}>{tip.streak.current}</Text>
+            </View>
+          ) : null}
           <TouchableOpacity onPress={onDismiss} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} data-testid="smart-tip-dismiss">
             <Ionicons name="close" size={18} color="#90A4AE" />
           </TouchableOpacity>
@@ -213,6 +220,13 @@ const s = StyleSheet.create({
     alignSelf: 'flex-start', maxWidth: '100%',
   },
   hintTxt: { fontSize: 10, color: '#1565C0', fontWeight: '700', letterSpacing: 0.2 },
+  streakChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingHorizontal: 8, paddingVertical: 4, marginRight: 6,
+    backgroundColor: '#FFF3E0', borderRadius: 10,
+    borderWidth: 1, borderColor: '#FFCC80',
+  },
+  streakTxt: { fontSize: 11, fontWeight: '800', color: '#E65100', letterSpacing: 0.2 },
   actionsRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
   actionBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',

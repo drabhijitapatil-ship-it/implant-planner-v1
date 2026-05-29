@@ -14332,6 +14332,53 @@ async def _pick_daily_tip_for_user(user_id: str, context: dict | None = None) ->
     return random.choice(pool), None
 
 
+async def _compute_tip_streak(user_id: str) -> dict:
+    """iter-282: compute daily-tip engagement streak for a user.
+
+    Every day the user fetches `/api/tips/daily` writes a `tip_history`
+    row, so a visit is the proxy for engagement. We walk backwards from
+    today (UTC) — if today is already engaged we start there, otherwise
+    from yesterday so the streak is still visible until midnight.
+    """
+    today = datetime.now(timezone.utc).date()
+    cutoff = (today - timedelta(days=400)).isoformat()
+    rows = await db.tip_history.find(
+        {"user_id": user_id, "shown_date": {"$gte": cutoff}},
+        {"_id": 0, "shown_date": 1},
+    ).to_list(length=500)
+    days = {r.get("shown_date") for r in rows if r.get("shown_date")}
+    engaged_today = today.isoformat() in days
+    current = 0
+    cursor = today if engaged_today else today - timedelta(days=1)
+    while cursor.isoformat() in days:
+        current += 1
+        cursor -= timedelta(days=1)
+    longest = 0
+    if days:
+        sorted_days = sorted(days)
+        run = 1
+        longest = 1
+        for i in range(1, len(sorted_days)):
+            try:
+                prev = datetime.fromisoformat(sorted_days[i - 1]).date()
+                cur = datetime.fromisoformat(sorted_days[i]).date()
+            except Exception:
+                continue
+            if (cur - prev).days == 1:
+                run += 1
+                longest = max(longest, run)
+            else:
+                run = 1
+        longest = max(longest, current)
+    return {"current": current, "longest": longest, "engaged_today": engaged_today}
+
+
+@api_router.get("/tips/streak")
+async def get_tip_streak(current_user: dict = Depends(get_current_user)):
+    """iter-282: expose tip-engagement streak (used by Profile + banner)."""
+    return await _compute_tip_streak(current_user["_id"])
+
+
 @api_router.get("/tips/daily")
 async def get_daily_tip(current_user: dict = Depends(get_current_user)):
     user_id = current_user["_id"]
@@ -14344,6 +14391,7 @@ async def get_daily_tip(current_user: dict = Depends(get_current_user)):
             tip["saved"] = bool(saved)
             tip["dismissed_today"] = bool(existing.get("dismissed_at"))
             tip["personalised_hint"] = existing.get("personalised_hint")
+            tip["streak"] = await _compute_tip_streak(user_id)
             return tip
     context = await _get_user_primary_case_context(user_id)
     picked, hint = await _pick_daily_tip_for_user(user_id, context)
@@ -14360,6 +14408,7 @@ async def get_daily_tip(current_user: dict = Depends(get_current_user)):
     picked["saved"] = bool(saved)
     picked["dismissed_today"] = False
     picked["personalised_hint"] = hint
+    picked["streak"] = await _compute_tip_streak(user_id)
     return picked
 
 
