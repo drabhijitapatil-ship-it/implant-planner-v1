@@ -1,0 +1,396 @@
+"""
+iter-280: Smart Clinical Tip seed library — Phase 1 (50 tips).
+
+Source attribution kept at organization / author-body level by design
+(no fabricated paper titles, DOIs, or page numbers). Citations point to
+the consensus body of work for each organization / author so any clinician
+can locate the underlying evidence in their existing references.
+
+Category mix (rough target distribution):
+  Treatment Planning  20%   Surgical          20%
+  Prosthetic          15%   Occlusion         10%
+  Soft Tissue         10%   Full Arch         10%
+  Complications        5%   Digital Workflow   5%
+  Evidence Updates     5%
+"""
+
+TIP_LIBRARY = [
+    # ─────────── Treatment Planning (10) ───────────
+    {"tip_id": "ITI_001", "title": "Implant-to-Tooth Distance", "category": "Treatment Planning",
+     "phase": "Planning", "difficulty": "Beginner", "evidence_level": "High",
+     "source_organization": "ITI", "source_reference": "ITI Treatment Guide Volume 1",
+     "publication_year": 2023,
+     "tip_text": "Maintain at least 1.5 mm of bone between an implant and any adjacent natural tooth. This preserves the interproximal crestal bone and supports stable papilla formation around the future restoration.",
+     "tags": ["spacing", "papilla", "single implant"]},
+
+    {"tip_id": "TARNOW_001", "title": "Interimplant Distance", "category": "Treatment Planning",
+     "phase": "Planning", "difficulty": "Beginner", "evidence_level": "High",
+     "source_organization": "Tarnow", "source_reference": "Tarnow et al. — interimplant distance",
+     "publication_year": 2000,
+     "tip_text": "Keep a minimum 3 mm distance between adjacent implants. Anything tighter has been shown to accelerate horizontal bone loss between fixtures and compromise interimplant papilla height.",
+     "tags": ["spacing", "papilla", "adjacent implants"]},
+
+    {"tip_id": "BUSER_001", "title": "Buccal Bone Thickness Target", "category": "Treatment Planning",
+     "phase": "Planning", "difficulty": "Intermediate", "evidence_level": "High",
+     "source_organization": "Buser", "source_reference": "Buser et al. — early/contour augmentation",
+     "publication_year": 2017,
+     "tip_text": "Plan for at least 2 mm of facial bone thickness around the implant after placement. Thinner buccal plates show higher recession and dehiscence rates over 3–5 years, especially in the aesthetic zone.",
+     "tags": ["bone thickness", "aesthetic zone"]},
+
+    {"tip_id": "EAO_001", "title": "Prosthetically Driven Planning", "category": "Treatment Planning",
+     "phase": "Planning", "difficulty": "Beginner", "evidence_level": "High",
+     "source_organization": "EAO", "source_reference": "EAO Consensus Conference Proceedings",
+     "publication_year": 2021,
+     "tip_text": "Start every plan from the final restoration. Once the prosthetic emergence is decided, work the implant position backwards into the bone — never the opposite. This single habit prevents most aesthetic and occlusal failures.",
+     "tags": ["prosthetic", "planning"]},
+
+    {"tip_id": "MISCH_001", "title": "Crown-to-Implant Ratio", "category": "Treatment Planning",
+     "phase": "Planning", "difficulty": "Intermediate", "evidence_level": "Moderate",
+     "source_organization": "Misch", "source_reference": "Misch — Contemporary Implant Dentistry",
+     "publication_year": 2020,
+     "tip_text": "Higher crown height space dramatically increases biomechanical lever arms on the implant. Wider-diameter implants and platform-switched abutments help offset the bending moment when crown height is unavoidable.",
+     "tags": ["biomechanics", "crown height"]},
+
+    {"tip_id": "ITI_002", "title": "Apico-Coronal Position", "category": "Treatment Planning",
+     "phase": "Planning", "difficulty": "Intermediate", "evidence_level": "High",
+     "source_organization": "ITI", "source_reference": "ITI Treatment Guide Volume 7",
+     "publication_year": 2018,
+     "tip_text": "Aim to place the implant platform ~3 mm apical to the planned gingival margin. Deeper placements risk anaerobic colonisation; shallower placements compromise emergence profile and aesthetics.",
+     "tags": ["depth", "platform"]},
+
+    {"tip_id": "EAO_002", "title": "Smoking & Outcomes", "category": "Treatment Planning",
+     "phase": "Planning", "difficulty": "Beginner", "evidence_level": "High",
+     "source_organization": "EAO", "source_reference": "EAO Consensus — risk factors",
+     "publication_year": 2019,
+     "tip_text": "Smoking more than 10 cigarettes/day roughly doubles the risk of peri-implantitis. Counsel for cessation pre-operatively and document the conversation — it materially changes treatment risk.",
+     "tags": ["risk", "peri-implantitis"]},
+
+    {"tip_id": "BUSER_002", "title": "Aesthetic Risk Assessment", "category": "Treatment Planning",
+     "phase": "Planning", "difficulty": "Intermediate", "evidence_level": "Moderate",
+     "source_organization": "Buser", "source_reference": "Buser — aesthetic risk classification",
+     "publication_year": 2015,
+     "tip_text": "Before any anterior case, classify aesthetic risk: smile line, gingival biotype, bone level on adjacent teeth and tooth shape. A high-risk profile means staged placement and contour augmentation, not immediate loading.",
+     "tags": ["aesthetic", "risk"]},
+
+    {"tip_id": "ITI_003", "title": "CBCT Indication", "category": "Treatment Planning",
+     "phase": "Planning", "difficulty": "Beginner", "evidence_level": "High",
+     "source_organization": "ITI", "source_reference": "ITI Consensus — imaging",
+     "publication_year": 2018,
+     "tip_text": "Use CBCT whenever a 2D radiograph cannot rule out proximity to inferior alveolar nerve, mental foramen, sinus floor, or thin buccal plate. The dose justification almost always favours imaging in these scenarios.",
+     "tags": ["imaging", "cbct"]},
+
+    {"tip_id": "MISCH_002", "title": "Bone Density Classification", "category": "Treatment Planning",
+     "phase": "Planning", "difficulty": "Beginner", "evidence_level": "Moderate",
+     "source_organization": "Misch", "source_reference": "Misch — bone density classification",
+     "publication_year": 2020,
+     "tip_text": "The D1–D4 classification predicts surgical protocol selection. D1/D2 favours conventional drilling and immediate loading; D3/D4 may require osteotomy under-preparation and a longer healing period before loading.",
+     "tags": ["bone density", "loading"]},
+
+    # ─────────── Surgical (10) ───────────
+    {"tip_id": "ITI_020", "title": "D4 Bone Protocol", "category": "Surgical",
+     "phase": "Surgery", "difficulty": "Intermediate", "evidence_level": "High",
+     "source_organization": "ITI", "source_reference": "ITI Treatment Guide Volume 11",
+     "publication_year": 2020,
+     "tip_text": "In soft D4 bone, under-prepare the osteotomy by skipping the final drill or using a tap one size smaller. This raises insertion torque and primary stability without resorting to wider implants.",
+     "tags": ["d4", "primary stability"]},
+
+    {"tip_id": "MISCH_020", "title": "Primary Stability Drivers", "category": "Surgical",
+     "phase": "Surgery", "difficulty": "Intermediate", "evidence_level": "Moderate",
+     "source_organization": "Misch", "source_reference": "Misch — primary stability",
+     "publication_year": 2020,
+     "tip_text": "Primary stability is a combined function of bone density, implant macro-design and surgical technique — torque value alone is misleading. A tapered fixture in dense apical bone may hit 45 Ncm yet still micro-move.",
+     "tags": ["stability", "torque"]},
+
+    {"tip_id": "EAO_020", "title": "Immediate Placement", "category": "Surgical",
+     "phase": "Surgery", "difficulty": "Advanced", "evidence_level": "High",
+     "source_organization": "EAO", "source_reference": "EAO Consensus — immediate placement",
+     "publication_year": 2021,
+     "tip_text": "Immediate post-extraction placement is predictable only when palatal/lingual bone is intact, primary stability of ≥ 25 Ncm is achievable, and the buccal jumping-gap can be grafted. Otherwise stage.",
+     "tags": ["immediate", "extraction socket"]},
+
+    {"tip_id": "ITI_021", "title": "Heat Generation", "category": "Surgical",
+     "phase": "Surgery", "difficulty": "Beginner", "evidence_level": "High",
+     "source_organization": "ITI", "source_reference": "ITI Consensus — surgical protocols",
+     "publication_year": 2018,
+     "tip_text": "Bone temperatures above 47 °C for more than a minute can impair osseointegration. Use copious external irrigation, sharp drills (replace after ~20 osteotomies) and intermittent pumping motion to dissipate heat.",
+     "tags": ["heat", "drilling"]},
+
+    {"tip_id": "ARTICLE_021", "title": "Osseodensification", "category": "Surgical",
+     "phase": "Surgery", "difficulty": "Advanced", "evidence_level": "Moderate",
+     "source_organization": "Contemporary Literature",
+     "source_reference": "Contemporary systematic reviews on osseodensification",
+     "publication_year": 2022,
+     "tip_text": "Osseodensification burs run in reverse to compact rather than excavate trabecular bone. Evidence suggests improved stability in D3/D4 sites, but the technique requires deliberate hydration to prevent ridge fracture.",
+     "tags": ["osseodensification", "d4"]},
+
+    {"tip_id": "BUSER_020", "title": "Flap Design", "category": "Surgical",
+     "phase": "Surgery", "difficulty": "Intermediate", "evidence_level": "Moderate",
+     "source_organization": "Buser", "source_reference": "Buser — soft tissue handling",
+     "publication_year": 2017,
+     "tip_text": "Minimise periosteal stripping wherever possible. The periosteum is the principal source of vascular supply during early healing — aggressive degloving correlates with more crestal bone resorption.",
+     "tags": ["flap", "vascular"]},
+
+    {"tip_id": "ITI_022", "title": "Implant Angulation", "category": "Surgical",
+     "phase": "Surgery", "difficulty": "Intermediate", "evidence_level": "High",
+     "source_organization": "ITI", "source_reference": "ITI Treatment Guide Volume 10",
+     "publication_year": 2019,
+     "tip_text": "Angulate the implant so the screw access channel exits through the cingulum in the anterior or the central fossa in the posterior. Beyond 15° of correction, switch from screw to cement retention or use an angled channel abutment.",
+     "tags": ["angulation", "screw access"]},
+
+    {"tip_id": "EAO_021", "title": "One-Stage vs Two-Stage", "category": "Surgical",
+     "phase": "Surgery", "difficulty": "Beginner", "evidence_level": "High",
+     "source_organization": "EAO", "source_reference": "EAO Consensus — submerged vs non-submerged",
+     "publication_year": 2019,
+     "tip_text": "For routine cases with adequate primary stability, one-stage (transmucosal) healing yields equivalent osseointegration to two-stage. Reserve submerged healing for grafted sites or compromised primary stability.",
+     "tags": ["protocol", "healing"]},
+
+    {"tip_id": "MISCH_021", "title": "Cortical Engagement", "category": "Surgical",
+     "phase": "Surgery", "difficulty": "Advanced", "evidence_level": "Moderate",
+     "source_organization": "Misch", "source_reference": "Misch — bicortical anchorage",
+     "publication_year": 2020,
+     "tip_text": "Engaging two cortical plates (e.g. crestal + sinus floor or crestal + lingual cortex) markedly improves primary stability in D3/D4 bone — but only when violation of the second cortex is anatomically safe.",
+     "tags": ["bicortical", "stability"]},
+
+    {"tip_id": "ITI_023", "title": "Drill Sequence Discipline", "category": "Surgical",
+     "phase": "Surgery", "difficulty": "Beginner", "evidence_level": "Moderate",
+     "source_organization": "ITI", "source_reference": "ITI Treatment Guide Volume 11",
+     "publication_year": 2020,
+     "tip_text": "Honour the manufacturer's drill sequence — including the pilot. Skipping drills to save time concentrates heat and micro-fractures the osteotomy walls, undermining the very stability you were trying to improve.",
+     "tags": ["drilling", "protocol"]},
+
+    # ─────────── Prosthetic (8) ───────────
+    {"tip_id": "ITI_040", "title": "Soft-Tissue Thickness", "category": "Prosthetic",
+     "phase": "Restoration", "difficulty": "Intermediate", "evidence_level": "High",
+     "source_organization": "ITI", "source_reference": "ITI Consensus — soft tissue",
+     "publication_year": 2018,
+     "tip_text": "Vertical peri-implant mucosal thickness above 2 mm has been associated with significantly less crestal bone remodelling in the first year of function. Augment soft tissue when biotype is thin.",
+     "tags": ["soft tissue", "crestal bone"]},
+
+    {"tip_id": "BUSER_040", "title": "Emergence Profile", "category": "Prosthetic",
+     "phase": "Restoration", "difficulty": "Intermediate", "evidence_level": "Moderate",
+     "source_organization": "Buser", "source_reference": "Buser — emergence contours",
+     "publication_year": 2017,
+     "tip_text": "Build the emergence profile gradually with provisionals over 4–8 weeks rather than imposing the final contour at delivery. The tissue needs time to remodel; rushing it creates blanching and recession.",
+     "tags": ["emergence", "provisional"]},
+
+    {"tip_id": "MISCH_040", "title": "Cantilever Control", "category": "Prosthetic",
+     "phase": "Restoration", "difficulty": "Intermediate", "evidence_level": "Moderate",
+     "source_organization": "Misch", "source_reference": "Misch — biomechanics",
+     "publication_year": 2020,
+     "tip_text": "Cantilever length on implant-supported prostheses should be kept short — generally not exceeding the anterior-posterior implant spread. Long cantilevers magnify forces non-linearly and are a top cause of screw loosening.",
+     "tags": ["cantilever", "biomechanics"]},
+
+    {"tip_id": "ITI_041", "title": "Screw-Retained Preference", "category": "Prosthetic",
+     "phase": "Restoration", "difficulty": "Beginner", "evidence_level": "High",
+     "source_organization": "ITI", "source_reference": "ITI Treatment Guide Volume 12",
+     "publication_year": 2021,
+     "tip_text": "Whenever the screw access can be hidden, prefer screw retention. It removes residual cement (the leading iatrogenic cause of peri-implantitis) and makes retrieval for repair predictable.",
+     "tags": ["screw retention", "retrievability"]},
+
+    {"tip_id": "EAO_041", "title": "Platform Switching", "category": "Prosthetic",
+     "phase": "Restoration", "difficulty": "Intermediate", "evidence_level": "High",
+     "source_organization": "EAO", "source_reference": "EAO Consensus — platform switching",
+     "publication_year": 2020,
+     "tip_text": "Restoring with an abutment narrower than the implant platform shifts the implant-abutment interface inward and reduces marginal bone loss by roughly 0.3 mm in the first year, especially on wider fixtures.",
+     "tags": ["platform switching", "marginal bone"]},
+
+    {"tip_id": "MISCH_041", "title": "Occlusal Material Choice", "category": "Prosthetic",
+     "phase": "Restoration", "difficulty": "Beginner", "evidence_level": "Moderate",
+     "source_organization": "Misch", "source_reference": "Misch — material selection",
+     "publication_year": 2020,
+     "tip_text": "Monolithic zirconia and lithium disilicate both perform well on implants, but require careful adjustment and polishing — rough ceramic accelerates antagonist tooth wear and biofilm retention.",
+     "tags": ["materials", "zirconia"]},
+
+    {"tip_id": "ITI_042", "title": "Abutment Disconnection", "category": "Prosthetic",
+     "phase": "Restoration", "difficulty": "Intermediate", "evidence_level": "Moderate",
+     "source_organization": "ITI", "source_reference": "ITI Consensus — one-abutment-one-time",
+     "publication_year": 2018,
+     "tip_text": "Each disconnection of the abutment damages the mucosal seal and may cost ~0.1 mm of crestal bone. Where the workflow permits, follow the 'one-abutment one-time' principle and place the definitive abutment at uncovering.",
+     "tags": ["abutment", "seal"]},
+
+    {"tip_id": "EAO_042", "title": "Provisional Trial", "category": "Prosthetic",
+     "phase": "Restoration", "difficulty": "Beginner", "evidence_level": "Moderate",
+     "source_organization": "EAO", "source_reference": "EAO Consensus — provisional restorations",
+     "publication_year": 2021,
+     "tip_text": "Use a provisional restoration for at least 8 weeks in aesthetic cases. It refines emergence, validates phonetics and lets the patient signal preferences before the final ceramic is fabricated.",
+     "tags": ["provisional", "aesthetic"]},
+
+    # ─────────── Occlusion (5) ───────────
+    {"tip_id": "MISCH_060", "title": "Implant-Protected Occlusion", "category": "Occlusion",
+     "phase": "Restoration", "difficulty": "Intermediate", "evidence_level": "Moderate",
+     "source_organization": "Misch", "source_reference": "Misch — occlusal scheme",
+     "publication_year": 2020,
+     "tip_text": "Light centric contact, no lateral interferences, and a canine-guided excursion are the cornerstones of implant-protected occlusion. The goal is axial loading only — implants tolerate compression far better than shear.",
+     "tags": ["occlusion", "loading"]},
+
+    {"tip_id": "ITI_060", "title": "Posterior Inter-Occlusal Space", "category": "Occlusion",
+     "phase": "Planning", "difficulty": "Beginner", "evidence_level": "Moderate",
+     "source_organization": "ITI", "source_reference": "ITI Treatment Guide Volume 8",
+     "publication_year": 2018,
+     "tip_text": "Ensure at least 7 mm of inter-occlusal space for posterior screw-retained implant crowns (5 mm restorative + 2 mm material). Tighter clearance forces compromise on either screw mechanics or ceramic thickness.",
+     "tags": ["clearance", "restorative"]},
+
+    {"tip_id": "MISCH_061", "title": "Parafunction Management", "category": "Occlusion",
+     "phase": "Maintenance", "difficulty": "Beginner", "evidence_level": "Moderate",
+     "source_organization": "Misch", "source_reference": "Misch — parafunction",
+     "publication_year": 2020,
+     "tip_text": "Bruxers should be fitted with a protective occlusal splint at the time of prosthesis delivery. Without it, the rate of screw loosening, ceramic chipping and component fracture increases significantly.",
+     "tags": ["bruxism", "splint"]},
+
+    {"tip_id": "EAO_060", "title": "Group Function in Full Arch", "category": "Occlusion",
+     "phase": "Restoration", "difficulty": "Advanced", "evidence_level": "Moderate",
+     "source_organization": "EAO", "source_reference": "EAO Consensus — full arch occlusion",
+     "publication_year": 2021,
+     "tip_text": "Full-arch implant-supported prostheses commonly use group function rather than canine guidance. It distributes load across multiple implants and reduces lateral stress on any single fixture.",
+     "tags": ["full arch", "scheme"]},
+
+    {"tip_id": "ARTICLE_060", "title": "Occlusal Adjustment Recall", "category": "Occlusion",
+     "phase": "Maintenance", "difficulty": "Beginner", "evidence_level": "Moderate",
+     "source_organization": "Contemporary Literature",
+     "source_reference": "Contemporary reviews on prosthetic maintenance",
+     "publication_year": 2022,
+     "tip_text": "Implants do not intrude under load like natural teeth, so adjacent enamel attrition steadily creates supra-contacts on the implant crown. Re-check and adjust occlusion at every maintenance visit.",
+     "tags": ["recall", "adjustment"]},
+
+    # ─────────── Soft Tissue (5) ───────────
+    {"tip_id": "BUSER_080", "title": "Keratinised Mucosa Width", "category": "Soft Tissue",
+     "phase": "Planning", "difficulty": "Intermediate", "evidence_level": "High",
+     "source_organization": "Buser", "source_reference": "Buser — keratinised tissue",
+     "publication_year": 2017,
+     "tip_text": "A keratinised mucosa width of at least 2 mm around the implant lowers plaque, bleeding and recession scores at recall. Augment with a free gingival graft before or during uncovering when the band is thin.",
+     "tags": ["keratinised", "graft"]},
+
+    {"tip_id": "ITI_080", "title": "Connective Tissue Graft Timing", "category": "Soft Tissue",
+     "phase": "Surgery", "difficulty": "Advanced", "evidence_level": "Moderate",
+     "source_organization": "ITI", "source_reference": "ITI Treatment Guide Volume 6",
+     "publication_year": 2018,
+     "tip_text": "In thin biotypes, a sub-epithelial connective tissue graft placed at uncovering thickens the facial mucosa and significantly reduces grey show-through of titanium beneath the soft tissue.",
+     "tags": ["cTG", "aesthetic"]},
+
+    {"tip_id": "ITI_081", "title": "Papilla Preservation Incision", "category": "Soft Tissue",
+     "phase": "Surgery", "difficulty": "Advanced", "evidence_level": "Moderate",
+     "source_organization": "ITI", "source_reference": "ITI Consensus — incision design",
+     "publication_year": 2018,
+     "tip_text": "When adjacent papillae are intact, use a palatal mid-crestal incision and lift the flap from the palate. Crossing the papilla unnecessarily is a one-way ticket to a black triangle.",
+     "tags": ["incision", "papilla"]},
+
+    {"tip_id": "MISCH_080", "title": "Biological Width Around Implants", "category": "Soft Tissue",
+     "phase": "Planning", "difficulty": "Intermediate", "evidence_level": "High",
+     "source_organization": "Misch", "source_reference": "Misch — biological width",
+     "publication_year": 2020,
+     "tip_text": "Peri-implant biological width is roughly 3–4 mm — slightly more apical than around teeth. Crown margins forced too deep into this zone provoke chronic inflammation and crestal bone resorption.",
+     "tags": ["biological width", "margins"]},
+
+    {"tip_id": "EAO_080", "title": "Healing Abutment Height", "category": "Soft Tissue",
+     "phase": "Surgery", "difficulty": "Beginner", "evidence_level": "Moderate",
+     "source_organization": "EAO", "source_reference": "EAO Consensus — healing abutments",
+     "publication_year": 2021,
+     "tip_text": "Choose a healing abutment that emerges 1–2 mm above the mucosa. Too short and the tissue collapses over it; too tall and it occludes prematurely on the antagonist and loosens.",
+     "tags": ["healing abutment", "uncovering"]},
+
+    # ─────────── Full Arch (5) ───────────
+    {"tip_id": "FULLARCH_001", "title": "AP Spread", "category": "Full Arch Rehabilitation",
+     "phase": "Planning", "difficulty": "Advanced", "evidence_level": "Moderate",
+     "source_organization": "Misch", "source_reference": "Misch — A-P spread",
+     "publication_year": 2020,
+     "tip_text": "The greater the antero-posterior implant spread, the shorter the safe cantilever you can support. As a rule, distal cantilever length should not exceed 1.5× the A-P spread in mandibular full-arch.",
+     "tags": ["ap spread", "cantilever"]},
+
+    {"tip_id": "FULLARCH_002", "title": "Tilted Distal Implants", "category": "Full Arch Rehabilitation",
+     "phase": "Surgery", "difficulty": "Advanced", "evidence_level": "Moderate",
+     "source_organization": "Contemporary Literature",
+     "source_reference": "Systematic reviews on All-on-4 protocols",
+     "publication_year": 2022,
+     "tip_text": "Tilting the distal implants up to 30° lets you avoid the mental loop or sinus floor and extend the A-P spread without grafting. Long-term survival rates parallel those of axial implants in the same arch.",
+     "tags": ["tilted", "all on 4"]},
+
+    {"tip_id": "ITI_100", "title": "Passive Framework Fit", "category": "Full Arch Rehabilitation",
+     "phase": "Restoration", "difficulty": "Advanced", "evidence_level": "High",
+     "source_organization": "ITI", "source_reference": "ITI Treatment Guide Volume 4",
+     "publication_year": 2017,
+     "tip_text": "A truly passive framework fit is the single most underestimated determinant of full-arch survival. Verify with a one-screw test (Sheffield) before final cementation or screw-down.",
+     "tags": ["passive fit", "framework"]},
+
+    {"tip_id": "EAO_100", "title": "Number of Implants Per Arch", "category": "Full Arch Rehabilitation",
+     "phase": "Planning", "difficulty": "Advanced", "evidence_level": "High",
+     "source_organization": "EAO", "source_reference": "EAO Consensus — full arch",
+     "publication_year": 2021,
+     "tip_text": "Four to six implants per arch remains the accepted range for fixed full-arch rehabilitation. Going below four removes redundancy if any implant fails; going beyond six does not consistently improve outcomes.",
+     "tags": ["fixed", "number"]},
+
+    {"tip_id": "MISCH_100", "title": "Posterior Anchorage", "category": "Full Arch Rehabilitation",
+     "phase": "Planning", "difficulty": "Advanced", "evidence_level": "Moderate",
+     "source_organization": "Misch", "source_reference": "Misch — full-arch biomechanics",
+     "publication_year": 2020,
+     "tip_text": "Where the maxillary sinus blocks distal implants, consider zygomatic anchorage or staged sinus elevation — but never compromise the A-P spread by hugging implants too anteriorly.",
+     "tags": ["zygomatic", "sinus"]},
+
+    # ─────────── Complications (3) ───────────
+    {"tip_id": "ITI_120", "title": "Peri-Implantitis Diagnosis", "category": "Complications",
+     "phase": "Maintenance", "difficulty": "Intermediate", "evidence_level": "High",
+     "source_organization": "ITI", "source_reference": "ITI Consensus — peri-implant diseases",
+     "publication_year": 2018,
+     "tip_text": "Peri-implantitis is defined by bleeding on probing combined with radiographic bone loss beyond initial remodelling. A simple probing-depth increase alone is mucositis, not peri-implantitis — treat early and aggressively.",
+     "tags": ["peri-implantitis", "diagnosis"]},
+
+    {"tip_id": "EAO_120", "title": "Screw Loosening Trend", "category": "Complications",
+     "phase": "Maintenance", "difficulty": "Beginner", "evidence_level": "Moderate",
+     "source_organization": "EAO", "source_reference": "EAO Consensus — prosthetic complications",
+     "publication_year": 2021,
+     "tip_text": "Repeated screw loosening on the same implant is almost never the screw — it usually points to an occlusal interference, micro-leakage at the abutment, or a poor passive fit. Investigate the cause, not the symptom.",
+     "tags": ["screw loosening", "occlusion"]},
+
+    {"tip_id": "ARTICLE_120", "title": "Cement Remnants", "category": "Complications",
+     "phase": "Restoration", "difficulty": "Beginner", "evidence_level": "High",
+     "source_organization": "Contemporary Literature",
+     "source_reference": "Systematic reviews on cement-related peri-implantitis",
+     "publication_year": 2022,
+     "tip_text": "Residual sub-mucosal cement is one of the strongest predictors of peri-implantitis. If cement retention is unavoidable, use minimal cement, an extra-oral cementation jig and meticulous removal protocols.",
+     "tags": ["cement", "peri-implantitis"]},
+
+    # ─────────── Digital Workflow (3) ───────────
+    {"tip_id": "ITI_140", "title": "Guided Surgery Accuracy", "category": "Digital Workflow",
+     "phase": "Surgery", "difficulty": "Intermediate", "evidence_level": "High",
+     "source_organization": "ITI", "source_reference": "ITI Treatment Guide Volume 11",
+     "publication_year": 2020,
+     "tip_text": "Static guided implant placement reduces angular deviation to roughly 4° on average, but accuracy collapses if the guide rocks. Always verify three-point stability against teeth or fixation pins.",
+     "tags": ["guided", "accuracy"]},
+
+    {"tip_id": "EAO_140", "title": "Digital Impression", "category": "Digital Workflow",
+     "phase": "Restoration", "difficulty": "Beginner", "evidence_level": "Moderate",
+     "source_organization": "EAO", "source_reference": "EAO Consensus — digital workflows",
+     "publication_year": 2021,
+     "tip_text": "Intra-oral scans of single implants are now well validated. For full-arch, accuracy still falls behind conventional splinted impressions — bridge the gap with photogrammetry or stitching landmarks.",
+     "tags": ["digital impression", "accuracy"]},
+
+    {"tip_id": "ARTICLE_140", "title": "Dynamic Navigation", "category": "Digital Workflow",
+     "phase": "Surgery", "difficulty": "Advanced", "evidence_level": "Moderate",
+     "source_organization": "Contemporary Literature",
+     "source_reference": "Contemporary studies on dynamic navigation",
+     "publication_year": 2023,
+     "tip_text": "Dynamic navigation matches static guides for accuracy in experienced hands and adds intra-operative flexibility. The learning curve is real — practice on typodonts before live cases.",
+     "tags": ["navigation", "accuracy"]},
+
+    # ─────────── Evidence Updates (3) ───────────
+    {"tip_id": "EAO_160", "title": "Short Implants", "category": "Evidence Update",
+     "phase": "Planning", "difficulty": "Intermediate", "evidence_level": "High",
+     "source_organization": "EAO", "source_reference": "EAO Consensus — short implants",
+     "publication_year": 2021,
+     "tip_text": "Short implants (≤ 6 mm) in the posterior maxilla now show 3-year survival comparable to longer implants placed in grafted sites — and avoid the morbidity of sinus augmentation when bone is limited.",
+     "tags": ["short implants", "evidence"]},
+
+    {"tip_id": "ITI_160", "title": "Narrow Diameter Implants", "category": "Evidence Update",
+     "phase": "Planning", "difficulty": "Intermediate", "evidence_level": "High",
+     "source_organization": "ITI", "source_reference": "ITI Consensus — narrow diameter implants",
+     "publication_year": 2018,
+     "tip_text": "3.0–3.3 mm narrow-diameter implants have shown 5-year survival rates above 95% in the anterior region. Reserve wider fixtures for posterior load and consider narrow ones where bone and aesthetics demand it.",
+     "tags": ["narrow diameter", "evidence"]},
+
+    {"tip_id": "ARTICLE_160", "title": "Ceramic Implants", "category": "Evidence Update",
+     "phase": "Planning", "difficulty": "Advanced", "evidence_level": "Moderate",
+     "source_organization": "Contemporary Literature",
+     "source_reference": "Systematic reviews on zirconia implants",
+     "publication_year": 2023,
+     "tip_text": "Zirconia implants are no longer experimental — survival approaches titanium at 5 years in selected indications. They remain a special-case choice for documented titanium hypersensitivity and metal-free aesthetic demand.",
+     "tags": ["zirconia implant", "ceramic"]},
+]

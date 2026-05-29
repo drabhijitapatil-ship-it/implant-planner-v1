@@ -14207,6 +14207,129 @@ async def ensure_chat_indexes_on_start():
     await _seed_all_staff_group()
 
 
+# ── Smart Clinical Tip engine (iter-280) ─────────────────────────────
+@app.on_event("startup")
+async def seed_smart_tips_on_startup():
+    """Idempotent seed of the curated Smart Clinical Tip library."""
+    try:
+        from tips_seed import TIP_LIBRARY
+        for t in TIP_LIBRARY:
+            await db.tips.update_one({"tip_id": t["tip_id"]}, {"$set": {**t, "active": True}}, upsert=True)
+        logging.info("smart-tips: seeded/updated %d entries", len(TIP_LIBRARY))
+    except Exception as exc:  # pragma: no cover
+        logging.warning("Smart-tip seed skipped: %s", exc)
+
+
+def _today_str() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+async def _pick_daily_tip_for_user(user_id: str) -> dict:
+    """Pick a fresh tip honouring anti-repetition rules.
+
+    - No repeat of the same tip within the last 180 days for this user.
+    - Max 2 tips of the same category in the rolling last 7 days.
+    """
+    now = datetime.now(timezone.utc)
+    cutoff_180 = (now - timedelta(days=180)).isoformat()
+    cutoff_7 = (now - timedelta(days=7)).isoformat()
+    history_180 = await db.tip_history.find({
+        "user_id": user_id, "shown_at": {"$gte": cutoff_180},
+    }).to_list(length=1000)
+    recent_tip_ids = {h.get("tip_id") for h in history_180 if h.get("tip_id")}
+    cat_counts: dict = {}
+    for h in history_180:
+        if h.get("shown_at", "") < cutoff_7:
+            continue
+        c = h.get("category")
+        if c:
+            cat_counts[c] = cat_counts.get(c, 0) + 1
+    blocked_categories = {c for c, n in cat_counts.items() if n >= 2}
+    candidates = await db.tips.find(
+        {"active": True, "tip_id": {"$nin": list(recent_tip_ids)}},
+        {"_id": 0},
+    ).to_list(length=2000)
+    pool = [t for t in candidates if t.get("category") not in blocked_categories]
+    if not pool:
+        pool = candidates
+    if not pool:
+        all_tips = await db.tips.find({"active": True}, {"_id": 0}).to_list(length=2000)
+        if not all_tips:
+            return {}
+        ages = {t["tip_id"]: "0000-00-00" for t in all_tips}
+        for h in history_180:
+            ages[h.get("tip_id", "")] = max(ages.get(h.get("tip_id", ""), ""), h.get("shown_at", ""))
+        all_tips.sort(key=lambda t: ages.get(t["tip_id"], ""))
+        return all_tips[0]
+    import random
+    return random.choice(pool)
+
+
+@api_router.get("/tips/daily")
+async def get_daily_tip(current_user: dict = Depends(get_current_user)):
+    user_id = current_user["_id"]
+    today = _today_str()
+    existing = await db.tip_history.find_one({"user_id": user_id, "shown_date": today})
+    if existing:
+        tip = await db.tips.find_one({"tip_id": existing.get("tip_id")}, {"_id": 0})
+        if tip:
+            saved = await db.tip_saves.find_one({"user_id": user_id, "tip_id": tip["tip_id"]})
+            tip["saved"] = bool(saved)
+            tip["dismissed_today"] = bool(existing.get("dismissed_at"))
+            return tip
+    picked = await _pick_daily_tip_for_user(user_id)
+    if not picked:
+        raise HTTPException(status_code=404, detail="No tips available")
+    await db.tip_history.insert_one({
+        "user_id": user_id, "tip_id": picked["tip_id"],
+        "category": picked.get("category"), "shown_date": today,
+        "shown_at": datetime.now(timezone.utc).isoformat(),
+        "dismissed_at": None,
+    })
+    saved = await db.tip_saves.find_one({"user_id": user_id, "tip_id": picked["tip_id"]})
+    picked["saved"] = bool(saved)
+    picked["dismissed_today"] = False
+    return picked
+
+
+@api_router.post("/tips/{tip_id}/save")
+async def toggle_save_tip(tip_id: str, current_user: dict = Depends(get_current_user)):
+    user_id = current_user["_id"]
+    existing = await db.tip_saves.find_one({"user_id": user_id, "tip_id": tip_id})
+    if existing:
+        await db.tip_saves.delete_one({"user_id": user_id, "tip_id": tip_id})
+        return {"saved": False}
+    await db.tip_saves.insert_one({
+        "user_id": user_id, "tip_id": tip_id,
+        "saved_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"saved": True}
+
+
+@api_router.post("/tips/{tip_id}/dismiss")
+async def dismiss_tip(tip_id: str, current_user: dict = Depends(get_current_user)):
+    user_id = current_user["_id"]
+    today = _today_str()
+    await db.tip_history.update_one(
+        {"user_id": user_id, "shown_date": today, "tip_id": tip_id},
+        {"$set": {"dismissed_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    return {"dismissed": True}
+
+
+@api_router.get("/tips/saved")
+async def list_saved_tips(current_user: dict = Depends(get_current_user)):
+    user_id = current_user["_id"]
+    saves = await db.tip_saves.find({"user_id": user_id}).sort("saved_at", -1).to_list(length=500)
+    out = []
+    for s in saves:
+        tip = await db.tips.find_one({"tip_id": s.get("tip_id")}, {"_id": 0})
+        if tip:
+            tip["saved_at"] = s.get("saved_at")
+            out.append(tip)
+    return out
+
+
 app.include_router(api_router)
 
 app.add_middleware(
@@ -14297,6 +14420,8 @@ async def seed_implant_catalog_on_start():
         await _ab_seed_if_thin()
     except Exception as exc:  # pragma: no cover — best-effort
         logging.warning("Alpha-Bio component expansion seed skipped: %s", exc)
+
+
 
 @app.on_event("startup")
 async def seed_on_startup():
