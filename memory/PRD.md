@@ -1,6 +1,27 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
 
+## Iteration 281 (Feb 2026) — Smart Clinical Tip personalization (Phase 2) — VERIFIED
+
+### What was already coded (carried over from previous job)
+- `_get_user_primary_case_context()` in `server.py` derives `case_type` (full_arch/single), `bone_density` (D1–D4) and `phase` (planning/surgery/restoration) from the user's most recently updated **active** procedure (excludes draft/completed).
+- `_pick_daily_tip_for_user()` now accepts that `context` and **biases the candidate pool** toward matching categories: full_arch → "Full Arch Rehabilitation", single → Treatment Planning/Prosthetic, D4 → Surgical, phase=surgery → Surgical+Soft Tissue, phase=restoration → Prosthetic+Occlusion. 70% chance of picking from biased pool so anti-repetition still wins long-term.
+- `GET /api/tips/daily` persists the personalization rationale on the `tip_history` row via `personalised_hint` and re-returns it on subsequent same-day fetches.
+- `SmartTipBanner.tsx` renders a `✨ Surfaced because …` hint row (testid `smart-tip-personalised-hint`) when `personalised_hint` is non-null.
+
+### Verification (this session, Feb 29 2026)
+- Backend curl with a Gaurav.pandey procedure patched to 4 implants + D4 bone density → `GET /api/tips/daily` returned `MISCH_100 — Posterior Anchorage` (Full Arch Rehabilitation) **with `personalised_hint = "Surfaced because your active case is a full-arch rehabilitation."`**
+- Frontend screenshot on the Home dashboard now displays the new sparkles + rationale row between the source attribution and the action bar (after restarting `expo` to refresh the Metro bundle).
+- Test patch reverted; `tip_history` cleared so the next rotation is clean.
+
+### Out of scope (still later)
+- Phase 3: AI Mentor (LLM-generated case-specific insights).
+- Scale tip library to 500/1500/5000.
+
+---
+
+
+
 ## Iteration 280 (Feb 2026) — Smart Clinical Tip banner (Phase 1)
 
 ### What the user asked for
