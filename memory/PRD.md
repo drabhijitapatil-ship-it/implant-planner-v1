@@ -1,7 +1,33 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
 
-## Iteration 281 (Feb 2026) — Smart Clinical Tip personalization (Phase 2) — VERIFIED
+## Iteration 282 (Feb 2026) — Smart Clinical Tip streak counter
+
+### What the user asked for
+"Implement potential improvement" — referring to the streak chip suggestion from the previous finish summary (gamified engagement metric for the daily tip).
+
+### What changed
+**Backend (`/app/backend/server.py`)**
+- New helper `_compute_tip_streak(user_id)` walks backward over `tip_history` rows (last 400 days) to compute the current consecutive-day streak ending today (or yesterday if the user hasn't engaged yet today) plus the longest streak within the window. Returns `{current, longest, engaged_today}`.
+- New endpoint `GET /api/tips/streak` exposes the streak for the Profile screen / Super Admin dashboard later.
+- `GET /api/tips/daily` now embeds the same `streak` object on the daily tip payload (both the existing-today branch and the freshly-picked branch) so the banner doesn't need a second round-trip.
+
+**Frontend (`/app/frontend/components/SmartTipBanner.tsx`)**
+- Extended the `Tip` type with `streak?: { current, longest, engaged_today }`.
+- New flame chip rendered in the banner header (between the title block and the close button) when `streak.current > 0`. Amber palette (`#FFF3E0` bg, `#FFCC80` border, `#E65100` flame + text). `data-testid="smart-tip-streak"`.
+
+### Verification (this session)
+- Backend curl: `GET /api/tips/streak` returned `{current: 0, longest: 0, engaged_today: false}` before fetching today's tip; `GET /api/tips/daily` then bumped `streak.current` to 1.
+- Seeded 5 historical `tip_history` rows for Gaurav.pandey (yesterday → 5 days ago) to simulate a multi-day streak; subsequent `/api/tips/daily` returned `streak.current = 6, longest = 6, engaged_today = true`.
+- Frontend screenshot on the dashboard confirms the **🔥 6** chip is visible in the banner header alongside the personalization hint row. Backfill rows cleaned up post-test.
+
+### Out of scope
+- Surface the longest streak / "missed yesterday" warning in the Profile screen (Phase 3 polish).
+- Server-side push notification when a user is about to lose a streak.
+
+---
+
+
 
 ### What was already coded (carried over from previous job)
 - `_get_user_primary_case_context()` in `server.py` derives `case_type` (full_arch/single), `bone_density` (D1–D4) and `phase` (planning/surgery/restoration) from the user's most recently updated **active** procedure (excludes draft/completed).
