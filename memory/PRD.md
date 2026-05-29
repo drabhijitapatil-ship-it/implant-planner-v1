@@ -1,6 +1,50 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
 
+## Iteration 280 (Feb 2026) — Smart Clinical Tip banner (Phase 1)
+
+### What the user asked for
+A daily Smart Tip banner on the Home screen — 3–4 lines of new, evidence-based clinical knowledge per day. Sources strictly ITI / EAO / Misch / Buser / Tarnow / contemporary literature. App-ready JSON schema, anti-repetition, save / share / read-more actions, and a saved-tips library. Clarifications: **Phase 1 only** (curated DB + banner + saved library, no personalisation yet); ~50 seed tips authored by me; generic source labels (no fabricated paper titles); banner placed **mid-dashboard**; share via **native share sheet**.
+
+### What changed
+**Backend**
+- New file `/app/backend/tips_seed.py` with a 50-tip curated library covering all nine categories at roughly the target distribution (Treatment Planning 20%, Surgical 20%, Prosthetic 15%, Occlusion 10%, Soft Tissue 10%, Full Arch 10%, Complications 5%, Digital Workflow 5%, Evidence Updates 5%). Source-organisation mix follows the spec (ITI ~40%, EAO ~20%, Misch ~20%, Buser ~10%, Tarnow ~5%, Contemporary Literature ~5%). Citations stay at organisation / consensus-body level — no fabricated paper titles.
+- `/app/backend/server.py` additions (placed before `app.include_router`):
+  - Idempotent startup seed via `db.tips.update_one(... upsert=True)`.
+  - `_pick_daily_tip_for_user()` enforces "no repeat within 180 days" + "max 2 of the same category per rolling 7 days" with graceful fall-back when the small library is saturated.
+  - `GET /api/tips/daily` — same tip per user per UTC day, records a `tip_history` row on first serve.
+  - `POST /api/tips/{tip_id}/save` — toggles a row in `tip_saves`.
+  - `POST /api/tips/{tip_id}/dismiss` — hides the banner until tomorrow.
+  - `GET /api/tips/saved` — joins `tip_saves` with the live tip record.
+
+**Frontend**
+- New component `/app/frontend/components/SmartTipBanner.tsx` — card with amber lightbulb icon, eyebrow "Today's Smart Clinical Tip", title, category + evidence chips (colour-coded — High = green, Moderate = amber, Low = grey), 3–4 line truncated tip text, source attribution row, and a Save / Share / Read more action bar. Read more opens a full-detail modal. Share uses `navigator.share()` on web (clipboard fallback) and `Share` API on native.
+- New screen `/app/frontend/app/saved-tips.tsx` — horizontally-scrollable category filter chip row + card list with un-save toggle.
+- Banner placed mid-dashboard in `/app/frontend/app/(tabs)/dashboard.tsx`, just before the bottom spacer.
+- Profile screen now exposes a "Learning" section with a "Saved Smart Tips" entry navigating to `/saved-tips`.
+
+### Verification
+- **Backend curl**: `GET /api/tips/daily` returned `ARTICLE_060 — Occlusal Adjustment Recall`, evidence Moderate, source Contemporary Literature. `POST /tips/.../save` flipped `saved=true`; `GET /tips/saved` returned the entry. Calling `/api/tips/daily` again returned the same tip (per-day idempotency).
+- **Frontend screenshot**: banner renders mid-dashboard with the correct icon, eyebrow, title, category + evidence chips, source line, and Save/Share/Read-more actions. "Saved" state already lit up after the prior curl-based save.
+
+### Files touched
+- `/app/backend/tips_seed.py` (new)
+- `/app/backend/server.py`
+- `/app/frontend/components/SmartTipBanner.tsx` (new)
+- `/app/frontend/app/saved-tips.tsx` (new)
+- `/app/frontend/app/(tabs)/dashboard.tsx`
+- `/app/frontend/app/(tabs)/profile.tsx`
+
+### Out of scope (later phases)
+- Layer 2 personalisation rules (case-context-aware tip selection).
+- Layer 3 AI Mentor (GPT-generated case-specific insights).
+- Auto-evidence-update engine.
+- Scale tip library to 500 → 1500 → 5000 in subsequent iterations.
+
+---
+
+
+
 ## Iteration 279 (Feb 2026) — Hide drilling protocol on Step 3 of streamlined edit
 
 ### What the user reported

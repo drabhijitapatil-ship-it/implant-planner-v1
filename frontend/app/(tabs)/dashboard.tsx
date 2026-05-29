@@ -18,6 +18,7 @@ import { NurseHomeCalendar } from '../../components/NurseHomeCalendar';
 import WhatsNewBadge from '../../components/WhatsNewBadge';
 import PulsingDoubleArrow from '../../components/onboarding/primitives/PulsingDoubleArrow';
 import AskImplanrAIFab from '../../components/AskImplanrAIFab';
+import SmartTipBanner from '../../components/SmartTipBanner';
 
 // ── Status helpers ────────────────────────────────────────
 const ACTION_NEEDED_MAP: Record<string, { label: string; icon: string; color: string }> = {
@@ -906,6 +907,10 @@ export default function DashboardScreen() {
         {!isStudent && !isSupervisor && !isInCharge && !isNurse && (
           <StudentDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
         )}
+
+        {/* iter-280: Smart Clinical Tip banner — same tip per user per day,
+            anti-repetition handled server-side. */}
+        <SmartTipBanner />
 
         <View style={{ height: 24 }} />
       </ScrollView>
