@@ -14224,11 +14224,53 @@ def _today_str() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
-async def _pick_daily_tip_for_user(user_id: str) -> dict:
+async def _get_user_primary_case_context(user_id: str) -> dict:
+    """iter-281: derive personalisation signals from the user's most
+    recently-updated active case. Returns at most:
+      - case_type:    'full_arch' | 'single' | None
+      - bone_density: 'D1' | 'D2' | 'D3' | 'D4' | None
+      - phase:        'planning' | 'surgery' | 'restoration' | None
+    The signals never leak case details — only categorical hints used to
+    bias the daily tip pool.
+    """
+    proc = await db.procedures.find_one({
+        "$or": [{"created_by_id": user_id}, {"student_id": user_id}, {"supervisor_id": user_id}, {"implant_incharge_id": user_id}],
+        "status": {"$nin": ["completed", "draft"]},
+    }, sort=[("updated_at", -1), ("created_at", -1)])
+    if not proc:
+        return {}
+    case_type = None
+    n_imp = proc.get("number_of_implants") or len(proc.get("implant_plans") or [])
+    if n_imp >= 4:
+        case_type = "full_arch"
+    elif n_imp == 1:
+        case_type = "single"
+    densities = [str(p.get("bone_type") or "").upper() for p in (proc.get("implant_plans") or []) if p.get("bone_type")]
+    bone_density = None
+    for tag in ("D4", "D3", "D2", "D1"):
+        if any(tag in d for d in densities):
+            bone_density = tag
+            break
+    phase = None
+    status = proc.get("status") or ""
+    if status.startswith("pending_phase1") or status.startswith("phase1") or status == "rejected_phase1":
+        phase = "planning"
+    elif "phase2" in status or "stage2_surgical" in status:
+        phase = "surgery"
+    elif "stage2_prosthetic" in status:
+        phase = "restoration"
+    return {"case_type": case_type, "bone_density": bone_density, "phase": phase}
+
+
+async def _pick_daily_tip_for_user(user_id: str, context: dict | None = None) -> tuple[dict, str | None]:
     """Pick a fresh tip honouring anti-repetition rules.
 
     - No repeat of the same tip within the last 180 days for this user.
     - Max 2 tips of the same category in the rolling last 7 days.
+    - iter-281: if `context` carries case_type / bone_density / phase,
+      the pool is biased toward matching categories. Returns (tip, hint)
+      where `hint` is a human-readable rationale when personalisation
+      kicked in (e.g. "Surfaced because your active case is in surgery").
     """
     now = datetime.now(timezone.utc)
     cutoff_180 = (now - timedelta(days=180)).isoformat()
@@ -14255,14 +14297,39 @@ async def _pick_daily_tip_for_user(user_id: str) -> dict:
     if not pool:
         all_tips = await db.tips.find({"active": True}, {"_id": 0}).to_list(length=2000)
         if not all_tips:
-            return {}
+            return {}, None
         ages = {t["tip_id"]: "0000-00-00" for t in all_tips}
         for h in history_180:
             ages[h.get("tip_id", "")] = max(ages.get(h.get("tip_id", ""), ""), h.get("shown_at", ""))
         all_tips.sort(key=lambda t: ages.get(t["tip_id"], ""))
-        return all_tips[0]
+        return all_tips[0], None
+
+    # iter-281: bias the pool when the user has live case context.
+    preferred_cats: list[str] = []
+    rationale: str | None = None
+    if context:
+        if context.get("case_type") == "full_arch":
+            preferred_cats.append("Full Arch Rehabilitation")
+            rationale = "Surfaced because your active case is a full-arch rehabilitation."
+        elif context.get("case_type") == "single":
+            preferred_cats.extend(["Treatment Planning", "Prosthetic"])
+            rationale = "Surfaced because your active case is a single-implant restoration."
+        if context.get("bone_density") == "D4":
+            preferred_cats.append("Surgical")
+            rationale = "Surfaced because your active case involves soft D4 bone."
+        if context.get("phase") == "surgery":
+            preferred_cats.extend(["Surgical", "Soft Tissue"])
+            rationale = rationale or "Surfaced because your active case is in the surgical phase."
+        elif context.get("phase") == "restoration":
+            preferred_cats.extend(["Prosthetic", "Occlusion"])
+            rationale = rationale or "Surfaced because your active case is in the restorative phase."
+
     import random
-    return random.choice(pool)
+    biased = [t for t in pool if t.get("category") in preferred_cats] if preferred_cats else []
+    # 70 % chance of picking from the biased pool (so anti-repetition still wins long-term).
+    if biased and random.random() < 0.7:
+        return random.choice(biased), rationale
+    return random.choice(pool), None
 
 
 @api_router.get("/tips/daily")
@@ -14276,8 +14343,10 @@ async def get_daily_tip(current_user: dict = Depends(get_current_user)):
             saved = await db.tip_saves.find_one({"user_id": user_id, "tip_id": tip["tip_id"]})
             tip["saved"] = bool(saved)
             tip["dismissed_today"] = bool(existing.get("dismissed_at"))
+            tip["personalised_hint"] = existing.get("personalised_hint")
             return tip
-    picked = await _pick_daily_tip_for_user(user_id)
+    context = await _get_user_primary_case_context(user_id)
+    picked, hint = await _pick_daily_tip_for_user(user_id, context)
     if not picked:
         raise HTTPException(status_code=404, detail="No tips available")
     await db.tip_history.insert_one({
@@ -14285,10 +14354,12 @@ async def get_daily_tip(current_user: dict = Depends(get_current_user)):
         "category": picked.get("category"), "shown_date": today,
         "shown_at": datetime.now(timezone.utc).isoformat(),
         "dismissed_at": None,
+        "personalised_hint": hint,
     })
     saved = await db.tip_saves.find_one({"user_id": user_id, "tip_id": picked["tip_id"]})
     picked["saved"] = bool(saved)
     picked["dismissed_today"] = False
+    picked["personalised_hint"] = hint
     return picked
 
 
