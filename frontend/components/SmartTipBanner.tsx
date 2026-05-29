@@ -21,6 +21,7 @@ type Tip = {
   tip_text: string;
   saved?: boolean;
   dismissed_today?: boolean;
+  personalised_hint?: string | null;
 };
 
 const EVIDENCE_COLORS: Record<string, string> = {
@@ -117,6 +118,13 @@ export default function SmartTipBanner() {
           </Text>
         </View>
 
+        {tip.personalised_hint ? (
+          <View style={s.hintRow} data-testid="smart-tip-personalised-hint">
+            <Ionicons name="sparkles" size={11} color="#1565C0" />
+            <Text style={s.hintTxt} numberOfLines={2}>{tip.personalised_hint}</Text>
+          </View>
+        ) : null}
+
         <View style={s.actionsRow}>
           <TouchableOpacity style={s.actionBtn} onPress={onToggleSave} data-testid="smart-tip-save">
             <Ionicons name={tip.saved ? 'bookmark' : 'bookmark-outline'} size={16} color={tip.saved ? '#1565C0' : '#546E7A'} />
@@ -198,6 +206,13 @@ const s = StyleSheet.create({
   tipTxt: { fontSize: 13, color: '#37474F', lineHeight: 19, marginTop: 10 },
   sourceRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 },
   sourceTxt: { fontSize: 11, color: '#78909C', flex: 1 },
+  hintRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    marginTop: 6, paddingHorizontal: 8, paddingVertical: 4,
+    backgroundColor: '#E3F2FD', borderRadius: 8,
+    alignSelf: 'flex-start', maxWidth: '100%',
+  },
+  hintTxt: { fontSize: 10, color: '#1565C0', fontWeight: '700', letterSpacing: 0.2 },
   actionsRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
   actionBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
