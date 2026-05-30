@@ -1,0 +1,73 @@
+{
+  "expo": {
+    "name": "Implanr College",
+    "slug": "implanr-college",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "implanr-college",
+    "userInterfaceStyle": "automatic",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "enabled": true,
+      "url": "https://u.expo.dev/1220f041-4b0b-4a3e-ace3-c6a92191f22a"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.implanr.college"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      },
+      "package": "com.implanr.college"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#000000"
+        }
+      ],
+      "expo-updates",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#2196F3"
+        }
+      ],
+      "./plugins/withAndroidNetworkConfig",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow access to your photo library to upload radiographs and clinical images.",
+          "cameraPermission": "Allow access to your camera to capture radiographs and clinical images."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "1220f041-4b0b-4a3e-ace3-c6a92191f22a"
+      },
+      "router": {},
+      "backendUrl": "https://api.implanr.com"
+    },
+    "owner": "abhijitapatil"
+  }
+}

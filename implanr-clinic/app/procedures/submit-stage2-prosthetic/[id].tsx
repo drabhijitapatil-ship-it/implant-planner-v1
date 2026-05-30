@@ -1,0 +1,962 @@
+import React, { useState, useEffect } from 'react';
+import {
+  View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity,
+  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Switch,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import api from '../../../utils/api';
+import { goBackOrHome } from '../../../utils/safeNav';
+import { generateLabSlipPDF } from '../../../utils/pdfGenerator';
+import { getImplantSite } from '../../../utils/implantPlan';
+import { useAuth } from '../../../contexts/AuthContext';
+import BackToDashboard from '../../../components/BackToDashboard';
+import { PhaseHeader } from '../../../components/PhaseHeader';
+import { Ionicons } from '@expo/vector-icons';
+import {
+  PHASE4_SINGLE_MULTIPLE_OPTIONS,
+  PHASE4_FULL_ARCH_OPTIONS,
+  CUSTOM_ABUTMENT_OPTIONS,
+  FP_MATERIAL_OPTIONS,
+  OVERDENTURE_ATTACHMENT_OPTIONS,
+  FULL_ARCH_GROUP,
+  SINGLE_GROUP,
+  MULTIPLE_GROUP,
+} from '../../../constants/checklist';
+
+export default function Phase4Step1Screen() {
+  const { id } = useLocalSearchParams();
+  const router = useRouter();
+  const { user } = useAuth();
+  const isFaculty = user?.role === 'dentist' || user?.role === 'chief_dentist';
+  const notesLabel = isFaculty ? "Operator's Notes" : "Student Notes";
+  const [loading, setLoading] = useState(false);
+  const [procedure, setProcedure] = useState<any>(null);
+  const [doneCompleted, setDoneCompleted] = useState(false);
+
+  // Form state
+  const [finalProsthesis, setFinalProsthesis] = useState('');
+  const [prosthesisOpen, setProsthesisOpen] = useState(false);
+  const [prostheticMaterial, setProstheticMaterial] = useState('');
+  const [materialOpen, setMaterialOpen] = useState(false);
+  const [customAbutment, setCustomAbutment] = useState('');
+  const [abutmentOpen, setAbutmentOpen] = useState(false);
+  const [overdentureAttachment, setOverdentureAttachment] = useState('');
+  const [attachmentOpen, setAttachmentOpen] = useState(false);
+  const [paymentComplete, setPaymentComplete] = useState(false);
+  const [componentsAvailable, setComponentsAvailable] = useState(false);
+  const [impressionType, setImpressionType] = useState('');
+  // iter-191: when impressionType === 'conventional', the user must pick
+  // between an open-tray and a closed-tray technique.
+  const [conventionalTrayType, setConventionalTrayType] = useState<'' | 'open_tray' | 'closed_tray'>('');
+  // iter-192: impression material — required when conventional. Three fixed options.
+  const [impressionMaterial, setImpressionMaterial] = useState<'' | 'polyether' | 'heavy_light_body' | 'putty_light_body'>('');
+  // iter-194: Shade selection
+  // - For non-full-arch: one shade text per implant (positions[i] → shadeValues[i]).
+  // - For full-arch: exactly two entries — index 0 = Anterior, 1 = Posterior.
+  // Shade entries are mandatory; the note is optional.
+  const [shadeValues, setShadeValues] = useState<string[]>([]);
+  const [shadeNotes, setShadeNotes] = useState('');
+  const [labSlipLoading, setLabSlipLoading] = useState(false);
+  // iter-197: form-level Note to the Lab — same UX as the case-detail card.
+  const [labSlipNote, setLabSlipNote] = useState('');
+  const [studentNotes, setStudentNotes] = useState('');
+
+  // iter-210: Multi-Unit Abutment override editor for Phase 4 Step 1.
+  // Phase 2 captures MUA at the time of immediate loading; the prosthodontist
+  // may need to revise angulation / cuff height at delivery (e.g. soft tissue
+  // remodelling, lab feedback). State seeded on mount from
+  // phase4_step1_data.multi_unit_abutment_details when present (the live
+  // override) and falls back to phase2_data on Copy.
+  type MuaRow = { tooth: string; angulation: string; cuff_height: string };
+  const [muaRows, setMuaRows] = useState<MuaRow[]>([]);
+  // Tracks whether the user has interacted with MUA in Phase 4. Without this
+  // flag we cannot tell "no MUA" from "haven't touched it yet" when deciding
+  // whether to fall back to Phase 2 in the Lab Slip.
+  const [muaTouched, setMuaTouched] = useState(false);
+
+  // Per-implant prosthetic plan for multiple implants (non-bridge)
+  const [perImplantPlans, setPerImplantPlans] = useState<{ prosthesis: string; material: string; openProsthesis: boolean; openMaterial: boolean }[]>([]);
+  const [implantPositions, setImplantPositions] = useState<string[]>([]);
+
+  useEffect(() => { loadProcedure(); }, []);
+
+  const loadProcedure = async () => {
+    try {
+      const [procRes, planRes] = await Promise.all([
+        api.get(`/procedures/${id}`),
+        api.get(`/procedures/${id}/implant-plan`),
+      ]);
+      setProcedure(procRes.data);
+      // iter-211: existing-implant cases (Path A) skip Phase 1 — `implant_plans`
+      // is empty. Synthesize positions from `existing_implants` so the rest
+      // of this form (per-implant prosthesis selectors, shade slots, MUA
+      // editor) still has the implant count it needs.
+      const livePlans: any[] = (planRes.data?.implant_plans || []);
+      const existingImplants: any[] = procRes.data?.existing_implants || [];
+      const fromExisting = procRes.data?.case_origin === 'existing_implants' && livePlans.length === 0 && existingImplants.length > 0;
+      const positions = fromExisting
+        ? existingImplants.map((r: any) => String(r?.tooth || '').trim())
+        : livePlans.map((p: any) => getImplantSite(p, ''));
+      setImplantPositions(positions);
+      // Initialize per-implant plans if needed
+      if (positions.length > 1) {
+        setPerImplantPlans(positions.map(() => ({ prosthesis: '', material: '', openProsthesis: false, openMaterial: false })));
+      }
+      // iter-194: hydrate shade state — full-arch always uses 2 slots, others
+      // mirror the implant count.
+      const procType = procRes.data?.implant_procedure_type || '';
+      const isFullArch = FULL_ARCH_GROUP.has(procType);
+      const slots = isFullArch ? 2 : Math.max(1, positions.length);
+      const existing: string[] = procRes.data?.phase4_step1_data?.shade_values || [];
+      setShadeValues(Array.from({ length: slots }, (_, i) => existing[i] || ''));
+      setShadeNotes(procRes.data?.phase4_step1_data?.shade_notes || '');
+
+      // iter-210: hydrate MUA override from any saved phase4_step1_data.
+      // This makes the form sticky across reloads and lets the user keep
+      // editing instead of re-typing everything.
+      const savedMua: any[] | undefined = procRes.data?.phase4_step1_data?.multi_unit_abutment_details;
+      if (Array.isArray(savedMua) && savedMua.length > 0) {
+        setMuaRows(savedMua.map((r: any) => ({
+          tooth: String(r?.tooth ?? ''),
+          angulation: String(r?.angulation ?? ''),
+          cuff_height: String(r?.cuff_height ?? ''),
+        })));
+        setMuaTouched(true);
+      }
+    } catch {}
+  };
+
+  // iter-194: helpers
+  const isFullArch = (() => {
+    if (!procedure) return false;
+    return FULL_ARCH_GROUP.has(procedure.implant_procedure_type || '');
+  })();
+
+  // Determine if per-implant mode: Multiple implants + no bridge in Phase 1 prosthetic plan
+  const isPerImplantMode = (() => {
+    if (!procedure) return false;
+    const procType = procedure.implant_procedure_type || '';
+    if (!MULTIPLE_GROUP.has(procType)) return false;
+    const plan = (procedure.prosthetic_plan || '').toLowerCase();
+    const hasBridge = plan.includes('bridge');
+    return !hasBridge && implantPositions.length > 1;
+  })();
+
+  // Crown-only options for per-implant mode (no bridge options)
+  const perImplantOptions = [
+    'Cement Retained Crown FP1',
+    'Cement Retained Crown FP2',
+    'Cement Retained Crown FP3',
+    'Screw Retained Crown FP1',
+    'Screw Retained Crown FP2',
+    'Screw Retained Crown FP3',
+  ];
+
+  const getOptions = () => {
+    if (!procedure) return [];
+    const procType = procedure.implant_procedure_type || '';
+    if (SINGLE_GROUP.has(procType) || MULTIPLE_GROUP.has(procType)) return PHASE4_SINGLE_MULTIPLE_OPTIONS;
+    if (FULL_ARCH_GROUP.has(procType)) return PHASE4_FULL_ARCH_OPTIONS;
+    return [...PHASE4_SINGLE_MULTIPLE_OPTIONS, ...PHASE4_FULL_ARCH_OPTIONS];
+  };
+
+  const showMaterial = finalProsthesis && (finalProsthesis.includes('FP1') || finalProsthesis.includes('FP2') || finalProsthesis.includes('FP3'));
+  const showOverdenture = finalProsthesis && finalProsthesis.includes('Overdenture');
+
+  // iter-194: validate shape required for both Submit and Generate-Lab-Slip paths.
+  // Returns null when valid, else a user-facing message.
+  const validateForm = (): string | null => {
+    if (isPerImplantMode) {
+      for (let i = 0; i < perImplantPlans.length; i++) {
+        if (!perImplantPlans[i].prosthesis) {
+          return `Please select prosthesis for Implant ${i + 1}${implantPositions[i] ? ` (#${implantPositions[i]})` : ''}`;
+        }
+        const showMat = perImplantPlans[i].prosthesis.includes('FP1') || perImplantPlans[i].prosthesis.includes('FP2') || perImplantPlans[i].prosthesis.includes('FP3');
+        if (showMat && !perImplantPlans[i].material) {
+          return `Please select material for Implant ${i + 1}${implantPositions[i] ? ` (#${implantPositions[i]})` : ''}`;
+        }
+      }
+    } else {
+      if (!finalProsthesis) return 'Please select Final Prosthesis';
+    }
+    if (!impressionType) return 'Please select impression type';
+    if (impressionType === 'conventional' && !conventionalTrayType) return 'Please choose Open tray or Closed tray for the conventional impression.';
+    if (impressionType === 'conventional' && !impressionMaterial) return 'Please choose an impression material (Polyether, Heavy and Light body, or Putty and Light body).';
+    // iter-194: shade is mandatory for every implant slot (or for both A/P in full arch).
+    if (isFullArch) {
+      if (!shadeValues[0]?.trim()) return 'Please enter the Anterior shade';
+      if (!shadeValues[1]?.trim()) return 'Please enter the Posterior shade';
+    } else {
+      const slots = Math.max(1, implantPositions.length || 1);
+      for (let i = 0; i < slots; i++) {
+        if (!shadeValues[i]?.trim()) {
+          const lbl = implantPositions[i] ? ` (#${implantPositions[i]})` : '';
+          return `Please enter the shade for Implant ${i + 1}${lbl}`;
+        }
+      }
+    }
+    return null;
+  };
+
+  // iter-194: assemble the POST body. Used by both Submit and Generate-Lab-Slip.
+  const buildPayload = () => {
+    const payload: any = {
+      custom_abutment: customAbutment || null,
+      overdenture_attachment: overdentureAttachment || null,
+      payment_complete: paymentComplete,
+      components_available: componentsAvailable,
+      impression_type: impressionType,
+      conventional_tray_type: impressionType === 'conventional' ? conventionalTrayType : null,
+      impression_material: impressionType === 'conventional' ? impressionMaterial : null,
+      // iter-194: shade
+      shade_values: (isFullArch ? shadeValues.slice(0, 2) : shadeValues.slice(0, Math.max(1, implantPositions.length || 1))).map(v => (v || '').trim()),
+      shade_notes: shadeNotes ? shadeNotes.trim() : null,
+      shade_layout: isFullArch ? 'full_arch' : 'per_implant',
+      student_notes: studentNotes || null,
+    };
+    if (isPerImplantMode) {
+      payload.per_implant_plans = perImplantPlans.map((p, idx) => ({
+        position: implantPositions[idx] || '',
+        prosthesis: p.prosthesis,
+        material: p.material || null,
+      }));
+      payload.final_prosthetic_plan = perImplantPlans.map((p, idx) =>
+        `#${implantPositions[idx] || idx + 1}: ${p.prosthesis}${p.material ? ' - ' + p.material : ''}`
+      ).join('; ');
+      payload.prosthetic_material = perImplantPlans.map(p => p.material).filter(Boolean).join(', ') || null;
+    } else {
+      payload.final_prosthetic_plan = finalProsthesis + (prostheticMaterial ? ` - ${prostheticMaterial}` : '');
+      payload.prosthetic_material = prostheticMaterial || null;
+    }
+    // iter-210: include the MUA override if the user touched the editor or
+    // we hydrated saved rows from a previous session. Sending null when the
+    // user explicitly cleared all rows lets the backend / Lab Slip fall
+    // back to phase2_data.
+    if (muaTouched) {
+      const cleaned = muaRows
+        .map(r => ({
+          tooth: (r.tooth ?? '').trim(),
+          angulation: (r.angulation ?? '').trim(),
+          cuff_height: (r.cuff_height ?? '').trim(),
+        }))
+        .filter(r => r.tooth || r.angulation || r.cuff_height);
+      payload.multi_unit_abutment_details = cleaned.length > 0 ? cleaned : null;
+    }
+    return payload;
+  };
+
+  const handleSubmit = async () => {
+    const err = validateForm();
+    if (err) { Alert.alert('Missing', err); return; }
+    setLoading(true);
+    try {
+      const payload = buildPayload();
+      await api.post(`/procedures/${id}/stage2/prosthetic`, payload);
+      const isInchargeSelfCreated = user?.role === 'chief_dentist' && procedure?.created_by_role === 'chief_dentist' && user?.id === procedure?.created_by_id;
+      if (isInchargeSelfCreated) {
+        try { await api.post(`/procedures/${id}/stage2/prosthetic/approve`, { action: 'approve', comment: '' }); } catch {}
+        setDoneCompleted(true);
+      } else {
+        Alert.alert('Success', 'Phase 4 Step 1 submitted! Awaiting approval.',
+          [{ text: 'OK', onPress: () => goBackOrHome() }]);
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.response?.data?.detail || 'Failed to submit');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // iter-194: Generate Lab Slip directly from the form. Soft-saves the
+  // Phase 4 Step 1 data without changing case status, then opens the slip
+  // populated with the just-saved values + earlier-phase data.
+  const handleGenerateLabSlip = async () => {
+    const err = validateForm();
+    if (err) { Alert.alert('Missing', err); return; }
+    setLabSlipLoading(true);
+    try {
+      const payload = buildPayload();
+      // ?save_only=true tells the backend to persist phase4_step1_data
+      // without flipping the workflow status.
+      await api.post(`/procedures/${id}/stage2/prosthetic?save_only=true`, payload);
+      // Re-fetch the procedure so the slip has the freshly-persisted shade
+      // and impression details alongside the earlier-phase fields.
+      const fresh = await api.get(`/procedures/${id}`);
+      // iter-197: pass the form-level Note to the Lab as a transient property.
+      await generateLabSlipPDF({ ...fresh.data, lab_slip_note: labSlipNote.trim() || null });
+    } catch (error: any) {
+      Alert.alert('Error', error.response?.data?.detail || 'Failed to generate the lab slip.');
+    } finally {
+      setLabSlipLoading(false);
+    }
+  };
+
+  const renderDropdown = (label: string, value: string, options: string[],
+    open: boolean, setOpen: (v: boolean) => void, onSelect: (v: string) => void, required = true) => (
+    <View style={s.field}>
+      <Text style={s.label}>{label} {required && <Text style={{ color: '#DC3545' }}>*</Text>}</Text>
+      <TouchableOpacity style={s.dropdown} onPress={() => setOpen(!open)}>
+        <Text style={[s.dropdownText, !value && { color: '#999' }]}>{value || `Select...`}</Text>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color="#666" />
+      </TouchableOpacity>
+      {open && (
+        <ScrollView style={s.ddList} nestedScrollEnabled>
+          {options.map(opt => (
+            <TouchableOpacity key={opt} style={[s.ddItem, value === opt && s.ddItemActive]}
+              onPress={() => { onSelect(opt); setOpen(false); }}>
+              <Text style={[s.ddItemText, value === opt && { color: '#1A73E8', fontWeight: '700' }]}>{opt}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+    </View>
+  );
+
+  return (
+    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+      <PhaseHeader
+        title="Phase 4 - Prosthetic Rehabilitation"
+        subtitle="Step 1 of 2: Prosthetic Planning"
+        testID="phase4-step1-submit-header"
+      />
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={s.scroll} nestedScrollEnabled>
+          {/* ── Final Prosthesis Selection ── */}
+          <View style={s.section}>
+            <View style={s.sectionHeader}>
+              <Ionicons name="construct-outline" size={20} color="#6A1B9A" />
+              <Text style={s.sectionTitle}>Final Prosthesis Selection</Text>
+            </View>
+            {procedure && (
+              <View style={{ alignItems: 'center', backgroundColor: '#E3F2FD', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14, marginVertical: 10, borderWidth: 1.5, borderColor: '#90CAF9' }}>
+                <Text style={{ fontSize: 11, color: '#1976D2', fontWeight: '600', letterSpacing: 0.5, marginBottom: 2 }}>PROCEDURE TYPE</Text>
+                <Text style={{ fontSize: 15, color: '#0D47A1', fontWeight: '800', textAlign: 'center' }}>
+                  {procedure.case_origin === 'existing_implants' && procedure.original_procedure_type
+                    ? procedure.original_procedure_type
+                    : procedure.implant_procedure_type}
+                </Text>
+              </View>
+            )}
+
+            {isPerImplantMode ? (
+              <>
+                <Text style={[s.helperText, { color: '#1565C0', fontWeight: '600', fontStyle: 'normal', marginBottom: 8 }]}>
+                  Each implant requires a separate prosthesis selection
+                </Text>
+                {perImplantPlans.map((plan, idx) => {
+                  const showMat = plan.prosthesis.includes('FP1') || plan.prosthesis.includes('FP2') || plan.prosthesis.includes('FP3');
+                  return (
+                    <View key={idx} style={{ backgroundColor: '#F8F9FE', borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#E0E7EE' }}>
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: '#6A1B9A', marginBottom: 8 }}>
+                        Implant {idx + 1}{implantPositions[idx] ? ` (#${implantPositions[idx]})` : ''}
+                      </Text>
+
+                      {/* Prosthesis Type */}
+                      <View style={s.field}>
+                        <Text style={s.label}>Prosthesis Type <Text style={{ color: '#DC3545' }}>*</Text></Text>
+                        <TouchableOpacity style={s.dropdown} onPress={() => {
+                          setPerImplantPlans(prev => prev.map((p, i) => i === idx ? { ...p, openProsthesis: !p.openProsthesis, openMaterial: false } : { ...p, openProsthesis: false, openMaterial: false }));
+                        }}>
+                          <Text style={[s.dropdownText, !plan.prosthesis && { color: '#999' }]}>{plan.prosthesis || 'Select...'}</Text>
+                          <Ionicons name={plan.openProsthesis ? 'chevron-up' : 'chevron-down'} size={18} color="#666" />
+                        </TouchableOpacity>
+                        {plan.openProsthesis && (
+                          <ScrollView style={s.ddList} nestedScrollEnabled>
+                            {perImplantOptions.map(opt => (
+                              <TouchableOpacity key={opt} style={[s.ddItem, plan.prosthesis === opt && s.ddItemActive]}
+                                onPress={() => {
+                                  setPerImplantPlans(prev => prev.map((p, i) => i === idx ? { ...p, prosthesis: opt, material: '', openProsthesis: false } : p));
+                                }}>
+                                <Text style={[s.ddItemText, plan.prosthesis === opt && { color: '#1A73E8', fontWeight: '700' }]}>{opt}</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </ScrollView>
+                        )}
+                      </View>
+
+                      {/* Material */}
+                      {showMat && (
+                        <View style={s.field}>
+                          <Text style={s.label}>Prosthetic Material <Text style={{ color: '#DC3545' }}>*</Text></Text>
+                          <TouchableOpacity style={s.dropdown} onPress={() => {
+                            setPerImplantPlans(prev => prev.map((p, i) => i === idx ? { ...p, openMaterial: !p.openMaterial, openProsthesis: false } : { ...p, openProsthesis: false, openMaterial: false }));
+                          }}>
+                            <Text style={[s.dropdownText, !plan.material && { color: '#999' }]}>{plan.material || 'Select...'}</Text>
+                            <Ionicons name={plan.openMaterial ? 'chevron-up' : 'chevron-down'} size={18} color="#666" />
+                          </TouchableOpacity>
+                          {plan.openMaterial && (
+                            <ScrollView style={s.ddList} nestedScrollEnabled>
+                              {FP_MATERIAL_OPTIONS.map(opt => (
+                                <TouchableOpacity key={opt} style={[s.ddItem, plan.material === opt && s.ddItemActive]}
+                                  onPress={() => {
+                                    setPerImplantPlans(prev => prev.map((p, i) => i === idx ? { ...p, material: opt, openMaterial: false } : p));
+                                  }}>
+                                  <Text style={[s.ddItemText, plan.material === opt && { color: '#1A73E8', fontWeight: '700' }]}>{opt}</Text>
+                                </TouchableOpacity>
+                              ))}
+                            </ScrollView>
+                          )}
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+              </>
+            ) : (
+              <>
+                {renderDropdown('Final Prosthesis Type', finalProsthesis, getOptions(),
+                  prosthesisOpen, setProsthesisOpen, (v) => { setFinalProsthesis(v); setProstheticMaterial(''); setOverdentureAttachment(''); })}
+
+                {showMaterial && renderDropdown('Prosthetic Material', prostheticMaterial, FP_MATERIAL_OPTIONS,
+                  materialOpen, setMaterialOpen, setProstheticMaterial)}
+
+                {showOverdenture && renderDropdown('Overdenture Attachment', overdentureAttachment, OVERDENTURE_ATTACHMENT_OPTIONS,
+                  attachmentOpen, setAttachmentOpen, setOverdentureAttachment)}
+              </>
+            )}
+
+            {renderDropdown('Custom Abutment (optional)', customAbutment, CUSTOM_ABUTMENT_OPTIONS,
+              abutmentOpen, setAbutmentOpen, setCustomAbutment, false)}
+          </View>
+
+          {/* ── Payment & Components ── */}
+          <View style={s.section}>
+            <View style={s.sectionHeader}>
+              <Ionicons name="card-outline" size={20} color="#1565C0" />
+              <Text style={s.sectionTitle}>Payment & Components <Text style={{ color: '#DC3545' }}>*</Text></Text>
+            </View>
+            <View style={s.checkRow}>
+              <Text style={[s.checkLabel, { flex: 1 }]}>Complete Payment Done</Text>
+              <View style={{ flexDirection: 'row', gap: 6 }}>
+                {['Yes', 'No'].map(opt => (
+                  <TouchableOpacity key={opt}
+                    style={[{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, borderWidth: 1.5, borderColor: '#D0DCE8', backgroundColor: '#F8FAFC', minWidth: 50, alignItems: 'center' as const },
+                      paymentComplete === true && opt === 'Yes' && { borderColor: '#4CAF50', backgroundColor: '#4CAF50' },
+                      paymentComplete === false && opt === 'No' && { borderColor: '#F44336', backgroundColor: '#F44336' }]}
+                    onPress={() => setPaymentComplete(opt === 'Yes')}>
+                    <Text style={[{ fontSize: 13, color: '#666', fontWeight: '600' as const },
+                      (paymentComplete === true && opt === 'Yes') || (paymentComplete === false && opt === 'No') ? { color: '#FFF' } : {}]}>{opt}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+            <View style={s.checkRow}>
+              <Text style={[s.checkLabel, { flex: 1 }]}>All Prosthetic Components Available</Text>
+              <View style={{ flexDirection: 'row', gap: 6 }}>
+                {['Yes', 'No'].map(opt => (
+                  <TouchableOpacity key={opt}
+                    style={[{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, borderWidth: 1.5, borderColor: '#D0DCE8', backgroundColor: '#F8FAFC', minWidth: 50, alignItems: 'center' as const },
+                      componentsAvailable === true && opt === 'Yes' && { borderColor: '#4CAF50', backgroundColor: '#4CAF50' },
+                      componentsAvailable === false && opt === 'No' && { borderColor: '#F44336', backgroundColor: '#F44336' }]}
+                    onPress={() => setComponentsAvailable(opt === 'Yes')}>
+                    <Text style={[{ fontSize: 13, color: '#666', fontWeight: '600' as const },
+                      (componentsAvailable === true && opt === 'Yes') || (componentsAvailable === false && opt === 'No') ? { color: '#FFF' } : {}]}>{opt}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </View>
+
+          {/* ── Impressions ── */}
+          <View style={s.section}>
+            <View style={s.sectionHeader}>
+              <Ionicons name="scan-outline" size={20} color="#E65100" />
+              <Text style={s.sectionTitle}>Impressions</Text>
+            </View>
+            <Text style={s.label}>Select Impression Type <Text style={{ color: '#DC3545' }}>*</Text></Text>
+            <View style={{ gap: 10 }}>
+              {[
+                { id: 'intraoral_scans', label: 'Intra-Oral Scans Made', icon: 'phone-portrait-outline' },
+                { id: 'conventional', label: 'Conventional Impressions Made', icon: 'hand-left-outline' },
+              ].map(opt => (
+                <TouchableOpacity key={opt.id} style={[s.impressionCard, impressionType === opt.id && s.impressionCardActive]}
+                  onPress={() => {
+                    setImpressionType(opt.id);
+                    // iter-191: clear tray choice if the user moves away from
+                    // 'conventional', so we never persist a stale tray-type.
+                    if (opt.id !== 'conventional') {
+                      setConventionalTrayType('');
+                      setImpressionMaterial('');
+                    }
+                  }}
+                  testID={`impression-${opt.id}`}>
+                  <Ionicons name={opt.icon as any} size={24} color={impressionType === opt.id ? '#1A73E8' : '#999'} />
+                  <Text style={[s.impressionLabel, impressionType === opt.id && { color: '#1A73E8', fontWeight: '700' }]}>{opt.label}</Text>
+                  {impressionType === opt.id && <Ionicons name="checkmark-circle" size={22} color="#1A73E8" />}
+                </TouchableOpacity>
+              ))}
+
+              {/* iter-191: Tray-type sub-choice — required when conventional is selected. */}
+              {impressionType === 'conventional' && (
+                <View style={{ marginTop: 4, paddingLeft: 10, borderLeftWidth: 3, borderLeftColor: '#FFB74D' }} testID="conventional-tray-options">
+                  <Text style={[s.label, { marginTop: 8 }]}>
+                    Tray Technique <Text style={{ color: '#DC3545' }}>*</Text>
+                  </Text>
+                  {[
+                    { id: 'open_tray', label: 'Open Tray Impression', sub: 'Direct technique — copings unscrewed through the tray' },
+                    { id: 'closed_tray', label: 'Closed Tray Impression', sub: 'Indirect technique — transfer copings reseated after pickup' },
+                  ].map(opt => {
+                    const active = conventionalTrayType === opt.id;
+                    return (
+                      <TouchableOpacity
+                        key={opt.id}
+                        style={[s.impressionCard, active && s.impressionCardActive, { marginTop: 6 }]}
+                        onPress={() => setConventionalTrayType(opt.id as any)}
+                        testID={`tray-${opt.id}`}
+                      >
+                        <Ionicons
+                          name={opt.id === 'open_tray' ? 'open-outline' : 'lock-closed-outline'}
+                          size={22}
+                          color={active ? '#1A73E8' : '#999'}
+                        />
+                        <View style={{ flex: 1, marginLeft: 10 }}>
+                          <Text style={[s.impressionLabel, active && { color: '#1A73E8', fontWeight: '700' }, { marginLeft: 0 }]}>{opt.label}</Text>
+                          <Text style={{ fontSize: 11, color: '#78909C', marginTop: 2 }}>{opt.sub}</Text>
+                        </View>
+                        {active && <Ionicons name="checkmark-circle" size={20} color="#1A73E8" />}
+                      </TouchableOpacity>
+                    );
+                  })}
+
+                  {/* iter-192: Impression material — only after tray is picked. */}
+                  {!!conventionalTrayType && (
+                    <View style={{ marginTop: 12 }} testID="impression-material-options">
+                      <Text style={[s.label, { marginTop: 0 }]}>
+                        Impression material used <Text style={{ color: '#DC3545' }}>*</Text>
+                      </Text>
+                      {[
+                        { id: 'polyether', label: 'Polyether' },
+                        { id: 'heavy_light_body', label: 'Heavy and Light body' },
+                        { id: 'putty_light_body', label: 'Putty and Light body' },
+                      ].map(opt => {
+                        const active = impressionMaterial === opt.id;
+                        return (
+                          <TouchableOpacity
+                            key={opt.id}
+                            style={[s.impressionCard, active && s.impressionCardActive, { marginTop: 6 }]}
+                            onPress={() => setImpressionMaterial(opt.id as any)}
+                            testID={`impression-material-${opt.id}`}
+                          >
+                            <Ionicons
+                              name="flask-outline"
+                              size={20}
+                              color={active ? '#1A73E8' : '#999'}
+                            />
+                            <Text style={[s.impressionLabel, active && { color: '#1A73E8', fontWeight: '700' }]}>{opt.label}</Text>
+                            {active && <Ionicons name="checkmark-circle" size={20} color="#1A73E8" />}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
+                </View>
+              )}
+            </View>
+          </View>
+
+          {/* ── iter-194: Shade Selection ── */}
+          <View style={[s.section, { borderColor: '#FFE0B2', backgroundColor: '#FFF9F0' }]} testID="shade-selection-section">
+            <View style={s.sectionHeader}>
+              <Ionicons name="color-palette-outline" size={20} color="#E65100" />
+              <Text style={[s.sectionTitle, { color: '#E65100' }]}>
+                Shade Selection <Text style={{ color: '#DC3545' }}>*</Text>
+              </Text>
+            </View>
+            <Text style={{ fontSize: 11, color: '#8D6E63', marginBottom: 12 }}>
+              {isFullArch
+                ? 'Full-arch case — record one shade for the anterior segment and one for the posterior segment.'
+                : 'Record one shade per implant. Use the natural standard (Vita Classic / Vita 3D-Master / chairside reference).'}
+            </Text>
+            {(isFullArch ? ['Anterior', 'Posterior'] : implantPositions.map((p, i) => `Implant ${i + 1}${p ? ` (#${p})` : ''}`))
+              .map((label, idx) => (
+                <View key={idx} style={s.field}>
+                  <Text style={[s.label, { color: '#5D4037' }]}>
+                    {label} Shade <Text style={{ color: '#DC3545' }}>*</Text>
+                  </Text>
+                  <TextInput
+                    style={[s.input, { borderColor: '#FFCC80', backgroundColor: '#FFFFFF' }]}
+                    value={shadeValues[idx] || ''}
+                    onChangeText={t => {
+                      const next = [...shadeValues];
+                      next[idx] = t;
+                      setShadeValues(next);
+                    }}
+                    placeholder="e.g. A2, B1, 2M2"
+                    autoCapitalize="characters"
+                    testID={`shade-input-${idx}`}
+                  />
+                </View>
+              ))}
+
+            <View style={s.field}>
+              <Text style={[s.label, { color: '#5D4037' }]}>Shade Selection Note <Text style={{ fontStyle: 'italic', color: '#A1887F' }}>(optional — for the lab)</Text></Text>
+              <TextInput
+                style={[s.input, s.textArea, { borderColor: '#FFCC80', backgroundColor: '#FFFFFF' }]}
+                value={shadeNotes}
+                onChangeText={setShadeNotes}
+                placeholder="e.g. Cervical A3, body A2, incisal B1; characterise with mamelons; matches #11."
+                multiline
+                numberOfLines={3}
+                testID="shade-notes-input"
+              />
+            </View>
+          </View>
+
+          {/* iter-210: Multi-Unit Abutment override editor — replaces the
+              earlier plain-text "Copy MUA from Phase 2" affordance. The
+              prosthodontist can adjust angulation / cuff height per tooth at
+              delivery. The Lab Slip + case-detail readback prefer this
+              override and fall back to phase2_data only when this section is
+              empty. Hidden when Phase 2 didn't capture MUA AND the user has
+              no rows yet — keeps the form minimal for non-immediate-loading cases. */}
+          {(() => {
+            const phase2Mua = procedure?.phase2_data?.multi_unit_abutment_placed;
+            const phase2Details: any[] = procedure?.phase2_data?.multi_unit_abutment_details || [];
+            const phase2HasMua = phase2Mua === 'yes' && phase2Details.length > 0;
+            // If neither Phase 2 captured MUA nor there are existing rows,
+            // do not show the editor at all.
+            if (!phase2HasMua && muaRows.length === 0) return null;
+
+            const update = (idx: number, key: keyof MuaRow, val: string) => {
+              setMuaTouched(true);
+              setMuaRows(prev => prev.map((r, i) => i === idx ? { ...r, [key]: val } : r));
+            };
+            const addRow = () => {
+              setMuaTouched(true);
+              setMuaRows(prev => [...prev, { tooth: '', angulation: '', cuff_height: '' }]);
+            };
+            const removeRow = (idx: number) => {
+              setMuaTouched(true);
+              setMuaRows(prev => prev.filter((_, i) => i !== idx));
+            };
+            const copyFromPhase2 = () => {
+              if (!phase2HasMua) return;
+              const seeded: MuaRow[] = phase2Details.map((r: any) => ({
+                tooth: String(r?.tooth ?? ''),
+                angulation: String(r?.angulation ?? ''),
+                cuff_height: String(r?.cuff_height ?? ''),
+              }));
+              setMuaRows(seeded);
+              setMuaTouched(true);
+              Alert.alert('Copied', `Multi-unit Abutment details (${seeded.length} ${seeded.length === 1 ? 'tooth' : 'teeth'}) copied from Phase 2. Edit any field below — the Lab Slip will use these values.`);
+            };
+
+            return (
+              <View style={s.section} testID="phase4-mua-section">
+                <View style={s.sectionHeader}>
+                  <Ionicons name="git-compare-outline" size={20} color="#0277BD" />
+                  <Text style={s.sectionTitle}>Multi-Unit Abutments</Text>
+                </View>
+                <Text style={s.helperText}>
+                  Override the angulation / cuff height per tooth if the prosthetic plan has changed since Phase 2. The Lab Slip will use these values.
+                </Text>
+
+                {phase2HasMua && (
+                  <TouchableOpacity
+                    style={s.copyMuaBtn}
+                    onPress={copyFromPhase2}
+                    testID="copy-mua-from-phase2-btn"
+                    /* @ts-ignore */ data-testid="copy-mua-from-phase2-btn"
+                  >
+                    <Ionicons name="copy-outline" size={16} color="#0277BD" />
+                    <Text style={s.copyMuaText}>Copy MUA from Phase 2 ({phase2Details.length})</Text>
+                  </TouchableOpacity>
+                )}
+
+                {muaRows.length === 0 ? (
+                  <View style={{ padding: 12, backgroundColor: '#F5F5F5', borderRadius: 8, alignItems: 'center' }}>
+                    <Text style={{ fontSize: 12, color: '#666', fontStyle: 'italic' }}>
+                      No MUA rows yet — tap "Copy MUA from Phase 2" or "Add MUA" below.
+                    </Text>
+                  </View>
+                ) : (
+                  muaRows.map((row, idx) => (
+                    <View key={idx} style={s.muaRow} testID={`mua-row-${idx}`}>
+                      <View style={s.muaRowHeader}>
+                        <Text style={s.muaRowTitle}>Implant {idx + 1}</Text>
+                        <TouchableOpacity
+                          onPress={() => removeRow(idx)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          testID={`mua-remove-${idx}`}
+                        >
+                          <Ionicons name="trash-outline" size={18} color="#C62828" />
+                        </TouchableOpacity>
+                      </View>
+                      <View style={s.muaInputsRow}>
+                        <View style={s.muaInputCell}>
+                          <Text style={s.muaInputLabel}>Implant Site</Text>
+                          <TextInput
+                            style={s.muaInput}
+                            value={row.tooth}
+                            onChangeText={(t) => update(idx, 'tooth', t)}
+                            placeholder="e.g. 16"
+                            placeholderTextColor="#B0BEC5"
+                            testID={`mua-tooth-${idx}`}
+                          />
+                        </View>
+                        <View style={s.muaInputCell}>
+                          <Text style={s.muaInputLabel}>Angulation</Text>
+                          <TextInput
+                            style={s.muaInput}
+                            value={row.angulation}
+                            onChangeText={(t) => update(idx, 'angulation', t)}
+                            keyboardType="numeric"
+                            placeholder="0 / 17 / 30°"
+                            placeholderTextColor="#B0BEC5"
+                            testID={`mua-angulation-${idx}`}
+                          />
+                        </View>
+                        <View style={s.muaInputCell}>
+                          <Text style={s.muaInputLabel}>Cuff Height (mm)</Text>
+                          <TextInput
+                            style={s.muaInput}
+                            value={row.cuff_height}
+                            onChangeText={(t) => update(idx, 'cuff_height', t)}
+                            keyboardType="numeric"
+                            placeholder="e.g. 2.5"
+                            placeholderTextColor="#B0BEC5"
+                            testID={`mua-cuff-${idx}`}
+                          />
+                        </View>
+                      </View>
+                    </View>
+                  ))
+                )}
+
+                <TouchableOpacity
+                  style={s.muaAddBtn}
+                  onPress={addRow}
+                  testID="mua-add-row-btn"
+                >
+                  <Ionicons name="add-circle-outline" size={18} color="#0277BD" />
+                  <Text style={s.muaAddText}>Add MUA</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          })()}
+
+          {/* ── Notes ── */}
+          <View style={s.section}>
+            <View style={s.sectionHeader}>
+              <Ionicons name="document-text-outline" size={20} color="#00695C" />
+              <Text style={s.sectionTitle}>Notes</Text>
+            </View>
+            <View style={s.field}>
+              <Text style={s.label}>{notesLabel}</Text>
+              <TextInput style={[s.input, s.textArea]} value={studentNotes} onChangeText={setStudentNotes}
+                placeholder="Treatment planning notes, special considerations..." multiline numberOfLines={3}
+                data-testid="phase4-step1-notes" />
+            </View>
+            {user?.role !== 'chief_dentist' && (
+              <Text style={s.helperText} testID="phase4-step1-approval-helper">
+                {user?.role === 'dentist'
+                  ? 'Implant In-Charge remark will be added during approval.'
+                  : 'Supervisor and In-Charge remarks added during approval.'}
+              </Text>
+            )}
+          </View>
+
+          {/* ── Submit ── */}
+          {doneCompleted ? (
+            <View style={{ padding: 16, paddingBottom: 32, alignItems: 'center' }} testID="phase4-step1-done-success">
+              <View style={{ paddingHorizontal: 28, paddingVertical: 12, borderRadius: 999, backgroundColor: '#E8F5E9', borderWidth: 1.5, borderColor: '#43A047', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="checkmark-circle" size={20} color="#1B5E20" />
+                <Text style={{ fontSize: 15, fontWeight: '800', color: '#1B5E20', letterSpacing: 0.5 }}>Approved</Text>
+              </View>
+              <TouchableOpacity onPress={() => router.replace(`/procedures/${id}`)} style={{ marginTop: 14 }} testID="phase4-step1-view-case-link">
+                <Text style={{ color: '#1565C0', fontWeight: '600', fontSize: 14, textDecorationLine: 'underline' }}>View Case</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+          <View style={{ padding: 16, paddingBottom: 32, gap: 10 }}>
+            {/* iter-197: form-level Note to the Lab — same UX as case-detail.
+                Optional, capped at 150 words. Passed into the slip generator
+                as `lab_slip_note` and rendered in the PDF's Special
+                Instructions section. */}
+            {(() => {
+              const wordCount = labSlipNote.trim() ? labSlipNote.trim().split(/\s+/).length : 0;
+              const overLimit = wordCount > 150;
+              return (
+                <View testID="form-lab-slip-note-block">
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#4A148C', marginBottom: 4 }}>
+                    Note to the Lab <Text style={{ fontStyle: 'italic', fontWeight: '500', color: '#7B1FA2' }}>(optional, up to 150 words — included in the lab slip)</Text>
+                  </Text>
+                  <TextInput
+                    multiline
+                    numberOfLines={4}
+                    value={labSlipNote}
+                    onChangeText={(t) => {
+                      const tokens = t.split(/(\s+)/);
+                      let words = 0;
+                      let out = '';
+                      for (const tok of tokens) {
+                        if (/\S/.test(tok)) {
+                          if (words >= 150) break;
+                          words += 1;
+                        }
+                        out += tok;
+                      }
+                      setLabSlipNote(out);
+                    }}
+                    placeholder="e.g. Try-in next Wednesday; emphasise palatal cusp; deliver in a Glidewell case."
+                    placeholderTextColor="#B39DDB"
+                    style={{
+                      borderWidth: 1, borderColor: overLimit ? '#C62828' : '#CE93D8',
+                      borderRadius: 8, padding: 10, minHeight: 90,
+                      backgroundColor: '#FFFFFF', color: '#1A1A1A', fontSize: 13,
+                      textAlignVertical: 'top',
+                    }}
+                    testID="form-lab-slip-note-input"
+                  />
+                  <Text style={{ fontSize: 11, color: overLimit ? '#C62828' : '#7B1FA2', marginTop: 4, textAlign: 'right' }}>
+                    {wordCount}/150 words{overLimit ? ' — trim to enable Generate' : ''}
+                  </Text>
+                </View>
+              );
+            })()}
+
+            {/* iter-194: Generate Lab Slip — soft-saves (?save_only=true) and
+                opens the slip with the freshly-saved values + form Note. */}
+            <TouchableOpacity
+              style={[s.labSlipBtn, (labSlipLoading || labSlipNote.trim().split(/\s+/).filter(Boolean).length > 150) && { opacity: 0.6 }]}
+              onPress={handleGenerateLabSlip}
+              disabled={labSlipLoading || loading || labSlipNote.trim().split(/\s+/).filter(Boolean).length > 150}
+              testID="phase4-step1-generate-lab-slip"
+            >
+              {labSlipLoading ? <ActivityIndicator color="#6A1B9A" /> : (
+                <><Ionicons name="print-outline" size={20} color="#6A1B9A" />
+                <Text style={s.labSlipText}>Generate Lab Slip</Text></>
+              )}
+            </TouchableOpacity>
+            {/* iter-262: visually disabled when validateForm() returns a message. */}
+            {(() => {
+              const validationError = validateForm();
+              const canSubmit = validationError === null;
+              const isInchargeSelf = (user?.role === 'chief_dentist' && procedure?.created_by_role === 'chief_dentist' && user?.id === procedure?.created_by_id);
+              return (
+                <>
+                  <TouchableOpacity
+                    style={[s.submitBtn, loading && { opacity: 0.6 }, !canSubmit && { backgroundColor: '#B0BEC5' }]}
+                    onPress={handleSubmit}
+                    disabled={loading || labSlipLoading}
+                    data-testid="phase4-step1-submit"
+                  >
+                    {loading ? <ActivityIndicator color="#FFF" /> : (
+                      <><Ionicons name={canSubmit ? 'checkmark-circle' : 'lock-closed'} size={22} color="#FFF" />
+                      <Text style={s.submitText}>{isInchargeSelf ? 'Done' : 'Submit Step 1 for Approval'}</Text></>
+                    )}
+                  </TouchableOpacity>
+                  {!canSubmit && !loading && (
+                    <Text style={{ marginTop: 8, textAlign: 'center', color: '#90A4AE', fontSize: 12, fontWeight: '600' }}>
+                      Required fields missing — tap to see what's missing
+                    </Text>
+                  )}
+                </>
+              );
+            })()}
+          </View>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#F5F7FA' },
+  scroll: { paddingBottom: 32 },
+  pageTitle: { fontSize: 18, fontWeight: '700', color: '#1A1A2E', textAlign: 'center', paddingVertical: 16 },
+  section: { backgroundColor: '#FFF', marginHorizontal: 16, marginBottom: 16, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#E8EDF2' },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1A1A2E' },
+  field: { marginBottom: 14 },
+  label: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 6 },
+  input: { borderWidth: 1, borderColor: '#DDD', borderRadius: 8, padding: 12, fontSize: 14, backgroundColor: '#FAFAFA', minHeight: 44 },
+  textArea: { minHeight: 80, textAlignVertical: 'top' },
+  helperText: { fontSize: 12, color: '#999', fontStyle: 'italic', marginTop: 4 },
+  dropdown: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: '#DDD', borderRadius: 8, padding: 12, backgroundColor: '#FAFAFA' },
+  dropdownText: { fontSize: 14, color: '#333', flex: 1 },
+  ddList: { maxHeight: 250, borderWidth: 1, borderColor: '#DDD', borderRadius: 8, marginTop: 4, backgroundColor: '#FFF' },
+  ddItem: { padding: 12, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  ddItemActive: { backgroundColor: '#E8F0FE' },
+  ddItemText: { fontSize: 14, color: '#333' },
+  checkRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  checkLabel: { flex: 1, fontSize: 14, color: '#333' },
+  impressionCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderWidth: 1.5, borderColor: '#DDD', borderRadius: 10, backgroundColor: '#FAFAFA' },
+  impressionCardActive: { borderColor: '#1A73E8', backgroundColor: '#E8F0FE' },
+  impressionLabel: { flex: 1, fontSize: 14, color: '#555' },
+  submitBtn: { flexDirection: 'row', backgroundColor: '#6A1B9A', borderRadius: 12, padding: 16, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  submitText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  // iter-194: Lab-slip button — outlined version of the submit button so it
+  // reads as a secondary action sitting above the primary Submit.
+  labSlipBtn: { flexDirection: 'row', backgroundColor: '#FFF', borderRadius: 12, padding: 14, alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderColor: '#6A1B9A' },
+  labSlipText: { color: '#6A1B9A', fontSize: 15, fontWeight: '700', letterSpacing: 0.3 },
+  // iter-140: Copy MUA from Phase 2 affordance (blue theme matches Phase 2 MUA card)
+  copyMuaBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: '#E1F5FE', borderColor: '#B3E5FC', borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 10 },
+  copyMuaText: { fontSize: 12, fontWeight: '700', color: '#0277BD', letterSpacing: 0.2 },
+  // iter-210: structured MUA editor cells.
+  muaRow: {
+    backgroundColor: '#F8FBFF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#BBDEFB',
+    padding: 10,
+    marginBottom: 10,
+  },
+  muaRowHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  muaRowTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#01579B',
+  },
+  muaInputsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  muaInputCell: {
+    flex: 1,
+    minWidth: 90,
+  },
+  muaInputLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#0277BD',
+    marginBottom: 4,
+  },
+  muaInput: {
+    borderWidth: 1,
+    borderColor: '#B3E5FC',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: '#1A1A1A',
+    backgroundColor: '#FFFFFF',
+  },
+  muaAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: '#B3E5FC',
+    backgroundColor: '#FFFFFF',
+    marginTop: 6,
+  },
+  muaAddText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0277BD',
+    letterSpacing: 0.2,
+  },
+});

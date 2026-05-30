@@ -1,0 +1,73 @@
+{
+  "expo": {
+    "name": "Implanr Clinic",
+    "slug": "implanr-clinic",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "implanr-clinic",
+    "userInterfaceStyle": "automatic",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "enabled": true,
+      "url": "https://u.expo.dev/38c6f06f-a7df-492b-8c66-13ff96c9f0e4"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.implanr.clinic"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      },
+      "package": "com.implanr.clinic"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#000000"
+        }
+      ],
+      "expo-updates",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#2196F3"
+        }
+      ],
+      "./plugins/withAndroidNetworkConfig",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow access to your photo library to upload radiographs and clinical images.",
+          "cameraPermission": "Allow access to your camera to capture radiographs and clinical images."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "38c6f06f-a7df-492b-8c66-13ff96c9f0e4"
+      },
+      "router": {},
+      "backendUrl": "https://api.implanr.com"
+    },
+    "owner": "abhijitapatil"
+  }
+}
