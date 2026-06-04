@@ -1,7 +1,78 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
 
-## Iteration 282 (Feb 2026) — Smart Clinical Tip streak counter
+## Iteration 283 (Feb 2026) — Straumann BLX Roxolid implant systems added
+
+### What the user asked for
+Add **Straumann** as a new implant company with **4 BLX Roxolid systems**:
+"BLX Roxolid SLActive - RB Platform", "BLX Roxolid SLActive - WB Platform",
+"BLX Roxolid SLA - RB Platform" and "BLX Roxolid SLA - WB Platform".
+User-confirmed Ø×L matrix (overrides the 2019/2020 catalogue PDF):
+  • RB Platform Ø3.5 / 4.0 / 4.5 mm — 6/8/10/12/14/16/18 mm
+  • WB Platform Ø5.0 / 5.5 / 6.0 mm — 6/8/10/12/14/16 mm
+User choices: 1b verbose naming, 2a Straumann-standard drilling protocol
+(VeloDrill ladder + Hard/Medium/Soft omission rules from the BLT guide),
+3a + 3b indications (SLActive D1-D4 + immediate + all-on-X; SLA D1-D4 +
+conventional only), 4b representative component subset, 5c full
+`testing_agent_v3_fork` regression run.
+
+### What changed
+**Backend**
+- New file `/app/backend/straumann_blx_data.py` — `SYSTEM_SIZES`,
+  `SYSTEM_META`, `INDICATIONS`, `COMPONENT_FAMILIES_BY_PLATFORM`,
+  `components_for()` and the generator `generate_blx_protocol(system,
+  diameter, length, bone)`. Bone-density branching:
+    • D1  → full VeloDrill ladder + Profile Drill + BLX Tap @ 15 rpm
+            (Ratchet manual).
+    • D2/D3 → ladder + Profile Drill (skip Tap).
+    • D4  → ladder with the last drill omitted (dynamic bone management),
+            no Profile, no Tap.
+- New file `/app/backend/_seed_straumann_blx.py` — idempotent seeder that
+  populates `implant_library` (78 rows total) and upserts `implant_catalog`
+  rich docs for the 4 systems. Mirrors the Alpha-Bio brochure seed pattern.
+- `/app/backend/server.py`:
+    - Added 4 entries to `IMPLANT_INDICATIONS` for SLActive (D1-D4 +
+      Immediate + Partial Extraction Therapy + All-on-4/6/X) and SLA
+      (D1-D4 + Single/Multiple Conventional only).
+    - Registered 4 `DRILLING_PROTOCOLS["Straumann|BLX Roxolid …"]` entries
+      with `protocol_family: "straumann_blx"`.
+    - `generate_drilling_protocol` endpoint dispatches the new family
+      (both API and regenerate paths).
+    - New `protocol_type` label + insertion-torque ("30–80 Ncm, target
+      35 Ncm") for the BLX family.
+    - Startup hook now calls `_seed_straumann_blx.main()` so fresh pods
+      auto-seed on boot.
+- `/app/backend/implant_indications.py` — added 4 BLX entries (indications
+  + features) used by the AI "Explain Recommendation" prompt.
+
+**Frontend**
+- `/app/frontend/constants/implantIndications.ts` — same 4 BLX entries
+  added for the in-app indications card.
+
+### Verification
+- Backend curl: `GET /api/implant-library/systems` now returns 4 Straumann
+  BLX entries with the exact diameter/length matrices (21 + 18 + 21 + 18
+  = 78 rows).
+- Backend curl: `POST /api/drilling-protocols/generate` produces 9-step
+  protocol for Ø4.0 × 12 mm RB SLActive in D1 (Needle → Pilot → 4 VeloDrills
+  → Profile → Tap → Implant), 8 steps in D2/D3, 6 steps in D4 (no Profile/
+  Tap, last drill dropped).
+- `testing_agent_v3_fork` (iter-283, 40/40 = 100% pass) — no critical or
+  minor backend issues. Regression on Alpha-Bio SPI, Neodent Helix GM
+  Acqua, BioHorizons Tapered Pro Conical RBT and Dentsply Sirona Ankylos
+  C/X all green. iter-282 Smart-Tip streak still functional.
+- Test fixture file: `/app/backend/tests/test_straumann_blx_iter283.py`.
+
+### Out of scope
+- Per-SKU article numbers (Art.-No.) from the catalogue.
+- Per-gingiva-height / per-abutment-height SKU explosion in component
+  catalog (kept at family-level depth — option 4b).
+- Frontend UI changes — the existing implant-library / suggest-engine /
+  drilling-protocol screens auto-discover new brands and systems.
+
+---
+
+
 
 ### What the user asked for
 "Implement potential improvement" — referring to the streak chip suggestion from the previous finish summary (gamified engagement metric for the daily tip).
