@@ -19,6 +19,7 @@ import * as Clipboard from 'expo-clipboard';
 import api from '../../utils/api';
 import DrillingProtocolScreen from '../../components/DrillingProtocol';
 import { getImplantDetails } from '../../constants/implantIndications';
+import { getImplantColor } from '../../constants/implantColors';
 import { evaluateImplantSafety, annotateImplantSafety, shortSafetyChip, type SafetyVerdict } from '../../utils/implantSafety';
 
 // ── Types ──────────────────────────────────────────────────
@@ -484,6 +485,7 @@ export default function ImplantSelectionScreen() {
                 renderItem={({ item, index: i }) => {
                   const isSel = cSystem?.brand === item.brand && cSystem?.system === item.system;
                   const isRestricted = item.restricted_teeth && cTooth && !item.restricted_teeth.includes(cTooth);
+                  const stripe = getImplantColor(item.brand, item.system);
                   return (
                     <TouchableOpacity key={`${item.brand}-${item.system}-${i}`}
                       style={[s.ddItem, isSel && s.ddItemActive, isRestricted && s.ddItemRestricted]}
@@ -492,6 +494,11 @@ export default function ImplantSelectionScreen() {
                         setCSystem(item); setShowDropdown(false); setCWidth(''); setCHeight(''); setCResult(null);
                       }}
                       activeOpacity={isRestricted ? 1 : 0.6} data-testid={`system-option-${i}`}>
+                      <View
+                        style={{ width: 4, alignSelf: 'stretch', marginRight: 10, borderRadius: 2, backgroundColor: stripe.fill, opacity: isRestricted ? 0.35 : 1 }}
+                        data-testid={`system-color-stripe-${i}`}
+                        accessibilityLabel={`Color band: ${stripe.label}`}
+                      />
                       <View style={{ flex: 1 }}>
                         <Text style={[s.ddItemTitle, isRestricted && { color: '#9E9E9E' }]}>{item.brand} – {item.system}</Text>
                         {item.indication ? <Text style={[s.ddItemInd, isRestricted && { color: '#B0BEC5' }]} numberOfLines={2}>{item.indication}</Text> : null}

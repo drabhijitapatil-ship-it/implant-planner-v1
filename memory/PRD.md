@@ -1,7 +1,50 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
 
-## Iteration 284 (Feb 2026) — Adin Dental Implants added
+## Iteration 285 (Feb 2026) — Per-brand implant color bands
+
+### What the user asked for
+"Implement potential improvement" — referring to the per-brand color-band
+suggestion from iter-284 (Adin / Straumann / Touareg-OS color codes).
+
+### What changed
+**Frontend**
+- New file `/app/frontend/constants/implantColors.ts` — single source of
+  truth for the color codes published in each manufacturer catalogue:
+    • Adin CloseFit platform: UNP silver / NP yellow / RP pink / WP blue.
+    • Adin Touareg/Swell/One diameter band: Ø3.5 yellow / 3.75 orange /
+      4.2 green / 5.0 blue / 6.0 purple (with `Number.isInteger()` fix so
+      both `5` and `5.0` map to Blue).
+    • Straumann BLX platform: RB yellow / WB blue.
+    • Brand defaults for the 11 other brands in the library (Neodent,
+      Alpha-Bio, BioHorizons, Dentsply Sirona, Cowellmedi, Bredent,
+      Osstem, MIS, B&B Dental, etc.).
+    • Neutral slate fallback for unknown brands.
+- Public helper `getImplantColor(brand, system, diameter?)` returns
+  `{ fill, label }` — `label` doubles as accessibility text.
+- `/app/frontend/app/(tabs)/implant-selection.tsx` — added a 4-px wide
+  rounded color stripe to every row in the "Select Implant System"
+  dropdown (`data-testid="system-color-stripe-{i}"`, accessibility label
+  with the published color name). The stripe is dimmed (opacity 0.35)
+  for restricted-tooth options to keep the visual hierarchy.
+
+### Verification
+- Node smoke test (`/tmp/test_colors2.mjs`) confirmed every published
+  band resolves correctly including the integer-vs-decimal Ø edge case.
+- ESLint clean (0 advisory findings) on both modified files.
+- Backend unaffected — iter-284 backend regression still 77/77 from
+  the previous run.
+
+### Out of scope
+- A11y: a visible legend / tooltip explaining the color codes (could be
+  added later as a "What do these colors mean?" mini-sheet).
+- Applying the stripe to Suggest-Me cards & Phase 1 CaseImplantPlanning
+  preview (kept this iteration focused on the implant-library dropdown
+  — same component shows in both Home tool and case planning).
+
+---
+
+
 
 ### What the user asked for
 Add **Adin** as a new implant company with all systems documented in the
