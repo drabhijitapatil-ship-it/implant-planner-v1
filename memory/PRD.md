@@ -3,6 +3,15 @@
 
 ## Iteration 283 (Feb 2026) — Straumann BLX Roxolid implant systems added
 
+### Saved for later (backlog from iter-283)
+- **P3 — "Compare Implants" side-by-side view**: pick any two systems from
+  the library (e.g., Straumann BLX SLActive RB vs Neodent Helix GM Acqua)
+  and render surface / connection / Ø-L ranges / indications / drilling-
+  ladder differences in a side-by-side card grid. Leans on the existing
+  `/api/implant-library/systems` + `/api/drilling-protocols/generate`
+  endpoints — no new data model needed.
+
+
 ### What the user asked for
 Add **Straumann** as a new implant company with **4 BLX Roxolid systems**:
 "BLX Roxolid SLActive - RB Platform", "BLX Roxolid SLActive - WB Platform",
