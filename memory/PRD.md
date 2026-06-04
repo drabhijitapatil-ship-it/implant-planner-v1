@@ -1,7 +1,43 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
 
-## Iteration 286 (Feb 2026) — Animated color-stripe glow
+## Iteration 287 (Feb 2026) — ColorStripe carried into Suggest-Me + Phase 1
+
+### What the user asked for
+"Implement" — referring to the next-polish suggestion from iter-286
+("carry the color stripe + glow over to the Suggest Me result cards
+and Phase 1 implant-planning summary").
+
+### What changed
+**Frontend**
+- `/app/frontend/app/(tabs)/implant-selection.tsx` — `SuggestResult`
+  cards now include `<ColorStripe brand={sys.brand} system={sys.system}
+  active={selectedKey?.startsWith(`${i}-`)} testID="suggest-system-stripe-{i}" />`
+  along the left edge of each `sugSysCard`. The stripe glows whenever
+  the user has selected an implant size from that system.
+- `sugSysCard` style switched to `flexDirection: 'row'` + `alignItems:
+  'stretch'` so the stripe runs the full height of the card.
+- `/app/frontend/components/CaseImplantPlanning.tsx` — Phase 1 saved-
+  implant cards (`implant-plan-{idx}`) now render a `<ColorStripe>` next
+  to the tooth-position badge with `active` permanently on, so the
+  brand colour is visible at a glance in the finalised case plan. New
+  testIDs: `implant-plan-stripe-{idx}`.
+
+### Verification
+- ESLint clean on both files.
+- Smoke screenshot: Implant tab → Suggest Me tab loads cleanly, no
+  errors, all sections render.
+- The Animated.timing config is unchanged from iter-286, so the same
+  200 ms width/glow ramp is reused everywhere.
+
+### Out of scope
+- A "What do these colors mean?" legend sheet (still parked at P2).
+- Other places that render brand+system (PDF report, audit log, etc.)
+  — kept the visual change isolated to live interactive surfaces.
+
+---
+
+
 
 ### What the user asked for
 "Implement improvement" — referring to the animated hover/press glow

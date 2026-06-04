@@ -18,6 +18,7 @@ import api from '../utils/api';
 import ExportPrintMenu from './ExportPrintMenu';
 import BackButton from './BackButton';
 import { getImplantDetails } from '../constants/implantIndications';
+import ColorStripe from './ColorStripe';
 import { evaluateImplantSafety, shortSafetyChip, type SafetyVerdict } from '../utils/implantSafety';
 import {
   validateImplantSelection,
@@ -723,6 +724,13 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
               <View style={st.positionBadge}>
                 <Text style={st.positionText}>{plan.position}</Text>
               </View>
+              <ColorStripe
+                brand={plan.brand}
+                system={plan.system}
+                diameter={plan.diameter}
+                active
+                testID={`implant-plan-stripe-${idx}`}
+              />
               <View style={st.implantInfo}>
                 <Text style={st.implantTitle}>{plan.brand} - {plan.system}</Text>
                 <Text style={st.implantSpecs}>
