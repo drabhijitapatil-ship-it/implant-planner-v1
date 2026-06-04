@@ -10014,6 +10014,47 @@ IMPLANT_INDICATIONS = {
         ],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
+    # ── Adin Dental Implants (iter-284, Feb 2026) ────────────────────────────
+    "Adin|UNP CloseFit": {
+        "indication": "Adin CloseFit Ultra-Narrow Platform (Ø2.75) with Conical Hex / Morse-taper connection and OsseoFix™ surface. Very narrow ridges, lateral incisors and mandibular incisors. D1-D4 bone types.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Adin|NP CloseFit": {
+        "indication": "Adin CloseFit Narrow Platform (Ø3.0) with Conical Hex / Morse-taper connection and OsseoFix™ surface. Narrow ridges and tight spaces. D1-D4 with immediate function.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Adin|RP CloseFit": {
+        "indication": "Adin CloseFit Regular Platform (Ø3.5) with Conical Hex / Morse-taper connection and OsseoFix™ surface. Standard ridges. D1-D4 with immediate function.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Adin|WP CloseFit": {
+        "indication": "Adin CloseFit Wide Platform (Ø4.3 / Ø5.0) with Conical Hex / Morse-taper connection and OsseoFix™ surface. Wide ridges and posterior molars. D1-D4 with immediate function and All-on-X support.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy", "All on 4", "All on 6", "All on X"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Adin|Touareg-OS": {
+        "indication": "Adin Touareg-OS — tapered self-tapping bone-condensing 2-piece implant with Standard Internal Hex connection and OsseoFix™ (Calcium-Phosphate RBM) surface. D1-D4 with immediate function. Single, multi-unit and full-arch All-on-X.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy", "All on 4", "All on 6", "All on X"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Adin|Touareg-S": {
+        "indication": "Adin Touareg-S — tapered self-tapping bone-condensing 2-piece implant with Standard Internal Hex connection and AB/AE surface. D1-D4 with immediate function. Single, multi-unit and full-arch All-on-X.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy", "All on 4", "All on 6", "All on X"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Adin|Swell": {
+        "indication": "Adin Swell — straight parallel-walled slightly tapered 2-piece implant with V-shaped thread, Standard Internal Hex connection and AB/AE surface. Accurate positioning and load distribution. D1-D4.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Adin|One": {
+        "indication": "Adin One — one-piece tapered spiral implant with AB/AE surface and integrated abutment. Narrow ridges, flapless minimally-invasive surgery, lateral/mandibular incisors. Immediate function.",
+        "indicated_procedures": ["Single Conventional Implant", "Immediate Implant"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
 }
 
 # Map Suggest Me procedure types → New Case procedure types for indication matching
@@ -11080,6 +11121,31 @@ for _blx_sys, _blx_label in (
         "material": "Roxolid",
     }
 del _blx_sys, _blx_label
+
+# ── Adin Dental Implants Drilling Protocols (iter-284, Feb 2026) ─────────
+# Shared family handled by `adin_data.generate_adin_protocol()`. The
+# generator reads explicit per-(system, Ø, bone) ladder tables verbatim
+# from the Adin product catalog (Tri-Step pilot + 3.6 / 4.2 / 4.6 / 5.2 /
+# 5.6 mm sequential twist drills with PDF-exact omission rules).
+for _adin_sys in (
+    "UNP CloseFit", "NP CloseFit", "RP CloseFit", "WP CloseFit",
+    "Touareg-OS", "Touareg-S", "Swell", "One",
+):
+    DRILLING_PROTOCOLS[f"Adin|{_adin_sys}"] = {
+        "system_name": f"Adin {_adin_sys}",
+        "protocol_family": "adin",
+        "connection": (
+            "Conical Hex" if "CloseFit" in _adin_sys
+            else "One-Piece" if _adin_sys == "One"
+            else "Internal Hex"
+        ),
+        "material": "Ti-6Al-4V ELI",
+        "surface": (
+            "OsseoFix" if (_adin_sys.endswith("CloseFit") or _adin_sys == "Touareg-OS")
+            else "AB/AE"
+        ),
+    }
+del _adin_sys
 
 def _generate_ankylos_protocol(proto, implant_diameter, implant_length, bone):
     """Generate drilling protocol for Dentsply Sirona Ankylos C/X system.
@@ -12569,6 +12635,9 @@ async def generate_drilling_protocol(
     elif proto.get("protocol_family") == "straumann_blx":
         from straumann_blx_data import generate_blx_protocol
         steps = generate_blx_protocol(system, diameter, length, bone)
+    elif proto.get("protocol_family") == "adin":
+        from adin_data import generate_adin_protocol
+        steps = generate_adin_protocol(system, diameter, length, bone)
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
@@ -12629,10 +12698,19 @@ async def generate_drilling_protocol(
             "D4": "Soft Bone Under-Preparation (Straumann BLX)",
         }
         protocol_type = f"{blx_bone_labels.get(bone, 'Standard Protocol')} — {sys_label}"
+    elif family == "adin":
+        sys_label = proto.get("system_name", system)
+        adin_bone_labels = {
+            "D1": "Hard Bone (Adin — full ladder + countersink)",
+            "D2": "Standard Protocol (Adin)",
+            "D3": "Standard Protocol (Adin)",
+            "D4": "Soft Bone Under-Preparation (Adin)",
+        }
+        protocol_type = f"{adin_bone_labels.get(bone, 'Standard Protocol')} — {sys_label}"
     else:
         protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
 
-    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else ("35-50 Ncm" if family == "mis_lance" else ("25-45 Ncm" if family in ("cowellmedi", "bredent_sky") else ("~40 Ncm" if family == "osstem" else ("≤90 Ncm" if family == "tsx" else ("30-80 Ncm (target 35 Ncm)" if family == "straumann_blx" else ("35-45 Ncm" if family in ("conical_rbt", "alpha_bio_spi", "refirm") else "35-45 Ncm")))))))
+    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else ("35-50 Ncm" if family == "mis_lance" else ("25-45 Ncm" if family in ("cowellmedi", "bredent_sky") else ("~40 Ncm" if family == "osstem" else ("≤90 Ncm" if family == "tsx" else ("30-80 Ncm (target 35 Ncm)" if family == "straumann_blx" else ("30-50 Ncm (≥35 Ncm for immediate loading)" if family == "adin" else ("35-45 Ncm" if family in ("conical_rbt", "alpha_bio_spi", "refirm") else "35-45 Ncm"))))))))
 
     # Add Ankylos series info to response
     ankylos_info = {}
@@ -12809,6 +12887,9 @@ async def export_drilling_pdf(
     elif proto.get("protocol_family") == "straumann_blx":
         from straumann_blx_data import generate_blx_protocol
         steps = generate_blx_protocol(system, diameter, length, bone)
+    elif proto.get("protocol_family") == "adin":
+        from adin_data import generate_adin_protocol
+        steps = generate_adin_protocol(system, diameter, length, bone)
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
@@ -14647,6 +14728,14 @@ async def seed_implant_catalog_on_start():
         await _blx_seed()
     except Exception as exc:  # pragma: no cover — best-effort
         logging.warning("Straumann BLX seed skipped: %s", exc)
+    # iter-284 (Feb 2026): seed Adin Dental Implants —
+    # 8 systems (UNP/NP/RP/WP CloseFit + Touareg-OS, Touareg-S, Swell, One),
+    # ~120 (Ø,L) combinations total. Idempotent.
+    try:
+        from _seed_adin import main as _adin_seed
+        await _adin_seed()
+    except Exception as exc:  # pragma: no cover — best-effort
+        logging.warning("Adin seed skipped: %s", exc)
 
 
 
