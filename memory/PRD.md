@@ -1,7 +1,83 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
 
-## Iteration 283 (Feb 2026) — Straumann BLX Roxolid implant systems added
+## Iteration 284 (Feb 2026) — Adin Dental Implants added
+
+### What the user asked for
+Add **Adin** as a new implant company with all systems documented in the
+supplied Adin product catalog. User chose ✅ Proceed against the Adin re-
+confirmation prompt (option 1a Adin / 2a as-is names / 3a faithful per-
+diameter per-bone drill ladders / 4a representative components / 5c full
+testing-agent regression).
+
+### Systems seeded (8 total, ~138 implants)
+- **CloseFit family** (Conical Hex / Morse-taper, OsseoFix surface):
+    - UNP CloseFit  → Ø2.75 (7 lengths)
+    - NP CloseFit   → Ø3.0  (6 lengths)
+    - RP CloseFit   → Ø3.5  (6 lengths)
+    - WP CloseFit   → Ø4.3 (6 L) + Ø5.0 (6 L) — 12 rows
+- **Standard Internal Hex family**:
+    - Touareg-OS → Ø3.5 / 3.75 / 4.2 / 5.0 / 6.0 (OsseoFix surface) — 31 rows
+    - Touareg-S  → Ø3.5 / 3.75 / 4.2 / 5.0 / 6.0 (AB/AE surface)   — 27 rows
+    - Swell      → Ø3.3 / 3.75 / 4.2 / 5.0 / 6.0 (AB/AE surface)   — 29 rows
+- **One-piece family**:
+    - One → Ø3.0 / 3.3 / 3.6 / 4.2 / 5.0 (AB/AE surface) — 20 rows
+
+Material: Ti-6Al-4V ELI across the entire portfolio.
+
+### What changed
+**Backend**
+- New `/app/backend/adin_data.py` — `SYSTEM_SIZES`, `SYSTEM_META`,
+  `INDICATIONS`, `COMPONENT_FAMILIES_BY_PLATFORM`, and the generator
+  `generate_adin_protocol(system, Ø, L, bone)` with **per-(system, Ø,
+  bone) drill ladder tables verbatim from the Adin catalog**. Notation
+  preserved: drills wrapped in `(x.x)` in the PDF are flagged
+  `optional=True` and emit context-aware notes (countersink in D1, under-
+  prep in D4, optional in D2/D3).
+- New `/app/backend/_seed_adin.py` — idempotent seeder; 138 implant_library
+  rows + 8 implant_catalog rich docs.
+- `server.py`:
+    - 8 entries added to `IMPLANT_INDICATIONS` (UNP/NP/RP/WP CloseFit +
+      Touareg-OS/Touareg-S/Swell/One).
+    - 8 entries registered in `DRILLING_PROTOCOLS` with
+      `protocol_family="adin"`.
+    - `generate_drilling_protocol` endpoint dispatches the family.
+    - New `protocol_type` labels per bone density (Hard / Standard / Soft
+      Under-Preparation) and insertion-torque "30-50 Ncm (≥35 Ncm for
+      immediate loading)".
+    - Startup hook now also calls `_seed_adin.main()`.
+- `/app/backend/implant_indications.py` — 8 Adin entries for AI "Explain"
+  context.
+
+**Frontend**
+- `/app/frontend/constants/implantIndications.ts` — same 8 entries.
+
+### Verification
+- Backend curl: `/api/implant-library/systems` returns all 8 Adin systems
+  with the exact Ø×L matrices documented in the PDF.
+- Backend curl: `/api/drilling-protocols/generate` for UNP CloseFit Ø2.75
+  returns 2 steps (single Pilot Drill Ø2.5 + Implant Insertion). Touareg-
+  OS Ø4.2 returns 3-step protocol with Tri-Step + Twist Drill (cortical
+  or under-prep notes per bone). Touareg-OS Ø6.0 D1 returns full ladder
+  (Tri-Step → 3.6 → 4.2 → 5.2 → 5.6 Coronal Drill → Implant).
+- `testing_agent_v3_fork` (iter-284, **77/77 = 100% pass**) with zero
+  critical issues. Regression on Straumann BLX SLActive RB, Alpha-Bio
+  SPI, Neodent Helix GM Acqua, BioHorizons Tapered Pro Conical RBT and
+  Dentsply Sirona Ankylos C/X — all green. Smart-Tip streak (iter-282)
+  still functional.
+- New test fixture: `/app/backend/tests/test_adin_implants_iter284.py`.
+
+### Out of scope
+- Per-SKU Art.-No. ISP/ID/IO codes from the catalogue (kept aggregated at
+  brand|system|Ø|L level — same depth as all other systems).
+- Per-gingival-height component SKU explosion (representative subset per
+  platform — option 4a).
+- Frontend UI changes — existing implant-library / suggest-engine /
+  drilling-protocol screens auto-discover new brands.
+
+---
+
+
 
 ### Saved for later (backlog from iter-283)
 - **P3 — "Compare Implants" side-by-side view**: pick any two systems from
