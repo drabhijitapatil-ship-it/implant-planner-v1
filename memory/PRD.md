@@ -1,7 +1,61 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
 
-## Iteration 287 (Feb 2026) — ColorStripe carried into Suggest-Me + Phase 1
+## Iteration 288 (Feb 2026) — Adin drill tables rewritten verbatim from catalog
+
+### What the user pointed out
+The iter-284 Adin drilling protocols were not faithful to the catalog —
+in particular the **parenthesised drill notation `(x.x)`** had been
+mis-interpreted as "optional / under-prep" when the catalog footnote
+actually defines it as **"drill to the depth of the cortex only"**.
+Multiple per-(system, Ø, bone) cells were also wrong (e.g. WP CloseFit
+Ø5.0 D-IV showed an under-preparation path that doesn't exist in the
+catalog; the "Hard Bone + Tap" / "Soft Bone Under-Preparation" labels
+were not the catalog's framing; Adin's catalog has no published rpm or
+insertion-torque values yet we surfaced invented ones).
+
+### What changed
+**Backend**
+- `/app/backend/adin_data.py` — fully rewritten:
+    - New schema: `PROTOCOLS[system][Ø][bone] = list of (label, Ø, cortex_only)`.
+    - Every cell encoded verbatim from the catalog tables (UNP, NP, RP, WP
+      CloseFit; Touareg-OS; Touareg-S; Swell; One — including the Swell
+      Ø3.3 D-I special case that uses a single Tri-Step rather than the
+      Pilot Ø2.0 + Ø2.8 ladder).
+    - `cortex_only=True` (catalog parens) renders as
+      `depth_mm = "Cortex only"` with a note quoting the catalog rule.
+    - Tri-Step always carries the asterisk footnote: *"For initial drilling,
+      you may use Ø2.0, Ø2.8 and Ø3.2 drills in sequence instead of the
+      Tri-Step drill."*
+    - Drill depth = implant length + 1 mm (the catalog **CAUTION** rule).
+    - RPM and insertion torque now honestly report
+      *"Not specified — refer to Adin surgical guide"* rather than
+      inventing values the catalog doesn't print.
+- `server.py`:
+    - `protocol_type` label for Adin now reads
+      "Adin Catalog Protocol — <System> (D-I/D-II-III/D-IV Bone)".
+    - `insertion_torque` for the `adin` family now reads
+      "Not specified by Adin catalog — refer to Adin surgical guide".
+
+### Verification (against the catalog tables)
+Spot-checked 11 representative cells via the live `/api/drilling-protocols/generate`
+endpoint — every output matches the catalog exactly:
+- UNP Ø2.75 all bone types → Pilot Ø2.5 only.
+- NP Ø3.0: D-I = 2.0 + 2.8 full depth; D-II/III/IV = 2.0 + (2.8) cortex.
+- Touareg-OS Ø3.5 D-I = Tri-Step + (3.2) cortex; Ø6.0 D-I = Tri-Step + 3.6 + 4.2 + 5.2 + (5.6) cortex; Ø6.0 D-IV = Tri-Step + 3.6 + 4.2 (no 5.2, no 5.6).
+- WP CloseFit Ø5.0 D-I = Tri-Step + 3.6 + 4.2 + 4.6 (all full depth); D-IV = Tri-Step + 3.6 only.
+- Swell Ø3.3 D-I = Tri-Step alone (special case); D-IV = 2.0 + (2.8) cortex.
+- One Ø3.0 D-IV = Pilot 2.0 only.
+
+### Out of scope
+- The catalog table for **Swell Ø6.0** uses ladders that go up to 4.6
+  before 5.2 and 5.6 (different from Touareg-OS). Encoded as written.
+- Indications, component matrix, system metadata and the 138 implant_library
+  rows are unchanged — only the drill engine was rewritten.
+
+---
+
+
 
 ### What the user asked for
 "Implement" — referring to the next-polish suggestion from iter-286
