@@ -19,7 +19,7 @@ import * as Clipboard from 'expo-clipboard';
 import api from '../../utils/api';
 import DrillingProtocolScreen from '../../components/DrillingProtocol';
 import { getImplantDetails } from '../../constants/implantIndications';
-import { getImplantColor } from '../../constants/implantColors';
+import ColorStripe from '../../components/ColorStripe';
 import { evaluateImplantSafety, annotateImplantSafety, shortSafetyChip, type SafetyVerdict } from '../../utils/implantSafety';
 
 // ── Types ──────────────────────────────────────────────────
@@ -482,43 +482,73 @@ export default function ImplantSelectionScreen() {
                 showsVerticalScrollIndicator
                 keyboardShouldPersistTaps="handled"
                 ListFooterComponent={<View style={{ height: 30 }} />}
-                renderItem={({ item, index: i }) => {
-                  const isSel = cSystem?.brand === item.brand && cSystem?.system === item.system;
-                  const isRestricted = item.restricted_teeth && cTooth && !item.restricted_teeth.includes(cTooth);
-                  const stripe = getImplantColor(item.brand, item.system);
-                  return (
-                    <TouchableOpacity key={`${item.brand}-${item.system}-${i}`}
-                      style={[s.ddItem, isSel && s.ddItemActive, isRestricted && s.ddItemRestricted]}
-                      onPress={() => {
-                        if (isRestricted) { Alert.alert('Not Indicated', `${item.brand} – ${item.system} is not indicated for tooth ${cTooth}.\n\n${item.indication}`); return; }
-                        setCSystem(item); setShowDropdown(false); setCWidth(''); setCHeight(''); setCResult(null);
-                      }}
-                      activeOpacity={isRestricted ? 1 : 0.6} data-testid={`system-option-${i}`}>
-                      <View
-                        style={{ width: 4, alignSelf: 'stretch', marginRight: 10, borderRadius: 2, backgroundColor: stripe.fill, opacity: isRestricted ? 0.35 : 1 }}
-                        data-testid={`system-color-stripe-${i}`}
-                        accessibilityLabel={`Color band: ${stripe.label}`}
-                      />
-                      <View style={{ flex: 1 }}>
-                        <Text style={[s.ddItemTitle, isRestricted && { color: '#9E9E9E' }]}>{item.brand} – {item.system}</Text>
-                        {item.indication ? <Text style={[s.ddItemInd, isRestricted && { color: '#B0BEC5' }]} numberOfLines={2}>{item.indication}</Text> : null}
-                        <Text style={[s.ddItemSizes, isRestricted && { color: '#B0BEC5' }]}>
-                          {item.count} sizes | D: {item.diameters[0]}–{item.diameters[item.diameters.length - 1]} mm | L: {item.lengths[0]}–{item.lengths[item.lengths.length - 1]} mm
-                        </Text>
-                        {isRestricted && (
-                          <View style={s.restrictBadge}><Ionicons name="lock-closed" size={10} color="#E53935" /><Text style={s.restrictText}>Not for tooth {cTooth}</Text></View>
-                        )}
-                      </View>
-                      {isSel && <Ionicons name="checkmark-circle" size={22} color="#1E88E5" />}
-                    </TouchableOpacity>
-                  );
-                }}
+                renderItem={({ item, index: i }) => (
+                  <SystemDropdownRow
+                    item={item}
+                    index={i}
+                    selected={cSystem?.brand === item.brand && cSystem?.system === item.system}
+                    restricted={!!(item.restricted_teeth && cTooth && !item.restricted_teeth.includes(cTooth))}
+                    cTooth={cTooth}
+                    onSelect={() => {
+                      setCSystem(item); setShowDropdown(false); setCWidth(''); setCHeight(''); setCResult(null);
+                    }}
+                  />
+                )}
               />
             </Pressable>
           </Pressable>
         </Modal>
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+// ── Animated dropdown row (iter-286): owns its own press state so the
+//    <ColorStripe> can ramp a brand-tinted glow without re-rendering the
+//    whole list.
+function SystemDropdownRow({ item, index, selected, restricted, cTooth, onSelect }: {
+  item: any; index: number; selected: boolean; restricted: boolean;
+  cTooth: string | null; onSelect: () => void;
+}) {
+  const [pressed, setPressed] = React.useState(false);
+  return (
+    <TouchableOpacity
+      key={`${item.brand}-${item.system}-${index}`}
+      style={[s.ddItem, selected && s.ddItemActive, restricted && s.ddItemRestricted]}
+      onPress={() => {
+        if (restricted) {
+          Alert.alert(
+            'Not Indicated',
+            `${item.brand} – ${item.system} is not indicated for tooth ${cTooth}.\n\n${item.indication}`
+          );
+          return;
+        }
+        onSelect();
+      }}
+      onPressIn={() => setPressed(true)}
+      onPressOut={() => setPressed(false)}
+      activeOpacity={restricted ? 1 : 0.6}
+      data-testid={`system-option-${index}`}
+    >
+      <ColorStripe
+        brand={item.brand}
+        system={item.system}
+        active={pressed || selected}
+        dimmed={restricted}
+        testID={`system-color-stripe-${index}`}
+      />
+      <View style={{ flex: 1 }}>
+        <Text style={[s.ddItemTitle, restricted && { color: '#9E9E9E' }]}>{item.brand} – {item.system}</Text>
+        {item.indication ? <Text style={[s.ddItemInd, restricted && { color: '#B0BEC5' }]} numberOfLines={2}>{item.indication}</Text> : null}
+        <Text style={[s.ddItemSizes, restricted && { color: '#B0BEC5' }]}>
+          {item.count} sizes | D: {item.diameters[0]}–{item.diameters[item.diameters.length - 1]} mm | L: {item.lengths[0]}–{item.lengths[item.lengths.length - 1]} mm
+        </Text>
+        {restricted && (
+          <View style={s.restrictBadge}><Ionicons name="lock-closed" size={10} color="#E53935" /><Text style={s.restrictText}>Not for tooth {cTooth}</Text></View>
+        )}
+      </View>
+      {selected && <Ionicons name="checkmark-circle" size={22} color="#1E88E5" />}
+    </TouchableOpacity>
   );
 }
 

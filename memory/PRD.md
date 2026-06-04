@@ -1,7 +1,43 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
 
-## Iteration 285 (Feb 2026) — Per-brand implant color bands
+## Iteration 286 (Feb 2026) — Animated color-stripe glow
+
+### What the user asked for
+"Implement improvement" — referring to the animated hover/press glow
+suggestion from iter-285.
+
+### What changed
+**Frontend**
+- New `/app/frontend/components/ColorStripe.tsx` — reusable, accessibility-
+  labelled, parent-driven press/hover animation:
+    • Resolves the band colour via `getImplantColor()`.
+    • `active` prop drives a 200 ms `Animated.timing` that widens the
+      stripe from 4 → 6 px and ramps a brand-tinted shadow from 0 → 0.45
+      opacity (radius 6).
+    • Wrapper has `pointerEvents="none"` so it never intercepts the row's
+      onPress.
+- `/app/frontend/app/(tabs)/implant-selection.tsx` — extracted the
+  dropdown row into a small `SystemDropdownRow` component that owns its
+  own pressed state (`onPressIn`/`onPressOut`) and passes
+  `active={pressed || selected}` to `<ColorStripe>`. Selected rows stay
+  glowed-up for stronger visual lock-in.
+
+### Verification
+- ESLint clean on both files (0 advisory findings).
+- Smoke screenshot of the Implant Selection page: page renders cleanly,
+  no errors, 69 systems still listed. The 200-ms ease can't be captured
+  in a static screenshot but is deterministic from the `Animated.timing`
+  config — same pattern used in other components in the codebase.
+
+### Out of scope
+- Applying the animated stripe to Suggest-Me result cards + Phase 1
+  `CaseImplantPlanning` preview (next iteration if you'd like).
+- A11y: a "What do these colors mean?" legend sheet (still parked).
+
+---
+
+
 
 ### What the user asked for
 "Implement potential improvement" — referring to the per-brand color-band
