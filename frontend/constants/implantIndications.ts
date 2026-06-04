@@ -177,6 +177,30 @@ export const IMPLANT_SYSTEM_DETAILS: Record<string, ImplantSystemDetail> = {
     features:
       'Reduced diameter implants (Ø3.0 / Ø3.4 mm). Conical-hex connection with increased implant-abutment contact area. High prosthetic stability despite narrow diameter. Self-tapping double-thread or triple-thread options based on diameter. Dedicated intuitive surgical and prosthetic protocol.',
   },
+  'straumann blx roxolid slactive - rb platform': {
+    indications:
+      'D1, D2, D3, D4 bone types. Immediate, early and conventional placement and loading. Single tooth, multi-unit bridges, full-arch / all-on-X rehabilitations and partial extraction therapy.',
+    features:
+      'Roxolid® (titanium-zirconium TiZr) alloy — higher tensile strength than commercially pure titanium. SLActive® hydrophilic surface for accelerated osseointegration (3-4 wk). Tapered bone-level body with apically self-cutting threads (dynamic bone management). Straumann TorcFit™ 15° conical-cylindrical connection. Regular Base (RB) prosthetic platform (Ø3.5 / 4.0 / 4.5).',
+  },
+  'straumann blx roxolid slactive - wb platform': {
+    indications:
+      'D1-D4 bone types. Immediate, early and conventional placement and loading. Wide ridges, posterior molars, fresh extraction sockets and full-arch all-on-X.',
+    features:
+      'Wide-Base (WB) Roxolid® bone-level tapered implant. SLActive® hydrophilic surface. Straumann TorcFit™ connection. WB prosthetic platform (Ø5.0 / 5.5 / 6.0). Greater functional surface for posterior loads.',
+  },
+  'straumann blx roxolid sla - rb platform': {
+    indications:
+      'D1-D4 bone types. Conventional delayed-loading single and multi-unit restorations.',
+    features:
+      'Roxolid® bone-level tapered implant. SLA® (sandblasted, large-grit, acid-etched) surface. Straumann TorcFit™ 15° conical-cylindrical connection. RB prosthetic platform (Ø3.5 / 4.0 / 4.5).',
+  },
+  'straumann blx roxolid sla - wb platform': {
+    indications:
+      'D1-D4 bone types. Conventional delayed-loading single and multi-unit restorations in wide ridges and posterior sites.',
+    features:
+      'Wide-Base (WB) Roxolid® bone-level tapered implant. SLA® surface. Straumann TorcFit™ connection. WB prosthetic platform (Ø5.0 / 5.5 / 6.0).',
+  },
 };
 
 /** Normalise `${brand} – ${system}` so spacing / hyphen / case variants resolve. */
