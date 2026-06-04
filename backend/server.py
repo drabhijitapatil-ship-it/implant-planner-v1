@@ -12701,16 +12701,16 @@ async def generate_drilling_protocol(
     elif family == "adin":
         sys_label = proto.get("system_name", system)
         adin_bone_labels = {
-            "D1": "Hard Bone (Adin — full ladder + countersink)",
-            "D2": "Standard Protocol (Adin)",
-            "D3": "Standard Protocol (Adin)",
-            "D4": "Soft Bone Under-Preparation (Adin)",
+            "D1": "D-I Bone",
+            "D2": "D-II/III Bone",
+            "D3": "D-II/III Bone",
+            "D4": "D-IV Bone",
         }
-        protocol_type = f"{adin_bone_labels.get(bone, 'Standard Protocol')} — {sys_label}"
+        protocol_type = f"Adin Catalog Protocol — {sys_label} ({adin_bone_labels.get(bone, 'Standard')})"
     else:
         protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
 
-    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else ("35-50 Ncm" if family == "mis_lance" else ("25-45 Ncm" if family in ("cowellmedi", "bredent_sky") else ("~40 Ncm" if family == "osstem" else ("≤90 Ncm" if family == "tsx" else ("30-80 Ncm (target 35 Ncm)" if family == "straumann_blx" else ("30-50 Ncm (≥35 Ncm for immediate loading)" if family == "adin" else ("35-45 Ncm" if family in ("conical_rbt", "alpha_bio_spi", "refirm") else "35-45 Ncm"))))))))
+    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else ("35-50 Ncm" if family == "mis_lance" else ("25-45 Ncm" if family in ("cowellmedi", "bredent_sky") else ("~40 Ncm" if family == "osstem" else ("≤90 Ncm" if family == "tsx" else ("30-80 Ncm (target 35 Ncm)" if family == "straumann_blx" else ("Not specified by Adin catalog — refer to Adin surgical guide" if family == "adin" else ("35-45 Ncm" if family in ("conical_rbt", "alpha_bio_spi", "refirm") else "35-45 Ncm"))))))))
 
     # Add Ankylos series info to response
     ankylos_info = {}
