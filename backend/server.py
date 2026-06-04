@@ -9951,6 +9951,69 @@ IMPLANT_INDICATIONS = {
         "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant"],
         "indicated_bone_types": ["D2", "D3", "D4"],
     },
+    # ── Straumann BLX Roxolid (iter-283, Feb 2026) ───────────────────────────
+    "Straumann|BLX Roxolid SLActive - RB Platform": {
+        "indication": (
+            "Roxolid® bone-level tapered implant with SLActive® hydrophilic "
+            "surface. Indicated for D1-D4 bone types. Suitable for immediate, "
+            "early and conventional placement and loading; supports all-on-4 "
+            "/ all-on-6 / all-on-X rehabilitations."
+        ),
+        "indicated_procedures": [
+            "Single Conventional Implant",
+            "Multiple Conventional Implants",
+            "Immediate Implant",
+            "Partial Extraction Therapy",
+            "All on 4",
+            "All on 6",
+            "All on X",
+        ],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Straumann|BLX Roxolid SLActive - WB Platform": {
+        "indication": (
+            "Wide-Base Roxolid® bone-level tapered implant with SLActive® "
+            "surface — posterior, wide-ridge and fresh extraction sockets. "
+            "D1-D4 bone types. Immediate, early and conventional protocols, "
+            "including full-arch all-on-X rehabilitations."
+        ),
+        "indicated_procedures": [
+            "Single Conventional Implant",
+            "Multiple Conventional Implants",
+            "Immediate Implant",
+            "Partial Extraction Therapy",
+            "All on 4",
+            "All on 6",
+            "All on X",
+        ],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Straumann|BLX Roxolid SLA - RB Platform": {
+        "indication": (
+            "Roxolid® bone-level tapered implant with conventional SLA® "
+            "(sandblasted, large-grit, acid-etched) surface. D1-D4 bone "
+            "types. Conventional delayed-loading single and multi-unit "
+            "restorations."
+        ),
+        "indicated_procedures": [
+            "Single Conventional Implant",
+            "Multiple Conventional Implants",
+        ],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Straumann|BLX Roxolid SLA - WB Platform": {
+        "indication": (
+            "Wide-Base Roxolid® bone-level tapered implant with conventional "
+            "SLA® surface for posterior and wide-ridge indications. D1-D4 "
+            "bone types, conventional delayed-loading single and multi-unit "
+            "restorations."
+        ),
+        "indicated_procedures": [
+            "Single Conventional Implant",
+            "Multiple Conventional Implants",
+        ],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
 }
 
 # Map Suggest Me procedure types → New Case procedure types for indication matching
@@ -10997,6 +11060,26 @@ DRILLING_PROTOCOLS["Dentsply Sirona|Ankylos C/X"] = {
         7.0: {"series": "D", "color": "Green", "twist_drill": 5.7},
     },
 }
+
+# ── Straumann BLX Roxolid Drilling Protocols (iter-283, Feb 2026) ────────
+# Shared family handled by `straumann_blx_data.generate_blx_protocol()` —
+# Hard (D1) → full ladder + Profile + Tap (15 rpm with Ratchet)
+# Medium (D2/D3) → ladder + Profile (skip Tap)
+# Soft (D4) → ladder with one drill omitted (dynamic bone management,
+#             skip Profile and Tap)
+for _blx_sys, _blx_label in (
+    ("BLX Roxolid SLActive - RB Platform", "Straumann BLX RB SLActive"),
+    ("BLX Roxolid SLActive - WB Platform", "Straumann BLX WB SLActive"),
+    ("BLX Roxolid SLA - RB Platform", "Straumann BLX RB SLA"),
+    ("BLX Roxolid SLA - WB Platform", "Straumann BLX WB SLA"),
+):
+    DRILLING_PROTOCOLS[f"Straumann|{_blx_sys}"] = {
+        "system_name": _blx_label,
+        "protocol_family": "straumann_blx",
+        "connection": "TorcFit",
+        "material": "Roxolid",
+    }
+del _blx_sys, _blx_label
 
 def _generate_ankylos_protocol(proto, implant_diameter, implant_length, bone):
     """Generate drilling protocol for Dentsply Sirona Ankylos C/X system.
@@ -12483,6 +12566,9 @@ async def generate_drilling_protocol(
         steps = _generate_tsx_protocol(proto, diameter, length, bone, kit="gold")
     elif proto.get("protocol_family") == "refirm":
         steps = _generate_refirm_protocol(proto, diameter, length, bone)
+    elif proto.get("protocol_family") == "straumann_blx":
+        from straumann_blx_data import generate_blx_protocol
+        steps = generate_blx_protocol(system, diameter, length, bone)
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
@@ -12534,10 +12620,19 @@ async def generate_drilling_protocol(
     elif family == "refirm":
         bone_labels = {"D1": "Dense Bone (Full Sequence)", "D2": "Moderately Dense (Countersink)", "D3": "Soft Bone (Under-Preparation)", "D4": "Very Soft Bone (Undersized)"}
         protocol_type = f"{bone_labels.get(bone, 'Standard')} Protocol (Refirm R Series)"
+    elif family == "straumann_blx":
+        sys_label = proto.get("system_name", system)
+        blx_bone_labels = {
+            "D1": "Hard Bone + Tap (Straumann BLX)",
+            "D2": "Standard Protocol (Straumann BLX)",
+            "D3": "Standard Protocol (Straumann BLX)",
+            "D4": "Soft Bone Under-Preparation (Straumann BLX)",
+        }
+        protocol_type = f"{blx_bone_labels.get(bone, 'Standard Protocol')} — {sys_label}"
     else:
         protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
 
-    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else ("35-50 Ncm" if family == "mis_lance" else ("25-45 Ncm" if family in ("cowellmedi", "bredent_sky") else ("~40 Ncm" if family == "osstem" else ("≤90 Ncm" if family == "tsx" else ("35-45 Ncm" if family in ("conical_rbt", "alpha_bio_spi", "refirm") else "35-45 Ncm"))))))
+    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else ("35-50 Ncm" if family == "mis_lance" else ("25-45 Ncm" if family in ("cowellmedi", "bredent_sky") else ("~40 Ncm" if family == "osstem" else ("≤90 Ncm" if family == "tsx" else ("30-80 Ncm (target 35 Ncm)" if family == "straumann_blx" else ("35-45 Ncm" if family in ("conical_rbt", "alpha_bio_spi", "refirm") else "35-45 Ncm")))))))
 
     # Add Ankylos series info to response
     ankylos_info = {}
@@ -12711,6 +12806,9 @@ async def export_drilling_pdf(
         steps = _generate_tsx_protocol(proto, diameter, length, bone, kit="gold")
     elif proto.get("protocol_family") == "refirm":
         steps = _generate_refirm_protocol(proto, diameter, length, bone)
+    elif proto.get("protocol_family") == "straumann_blx":
+        from straumann_blx_data import generate_blx_protocol
+        steps = generate_blx_protocol(system, diameter, length, bone)
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
@@ -14540,6 +14638,15 @@ async def seed_implant_catalog_on_start():
         await _ab_seed_if_thin()
     except Exception as exc:  # pragma: no cover — best-effort
         logging.warning("Alpha-Bio component expansion seed skipped: %s", exc)
+    # iter-283 (Feb 2026): seed Straumann BLX Roxolid systems —
+    # 4 systems (RB SLActive, RB SLA, WB SLActive, WB SLA), 78 (Ø,L)
+    # combinations total. Idempotent: only inserts missing implant_library
+    # rows and upserts implant_catalog docs.
+    try:
+        from _seed_straumann_blx import main as _blx_seed
+        await _blx_seed()
+    except Exception as exc:  # pragma: no cover — best-effort
+        logging.warning("Straumann BLX seed skipped: %s", exc)
 
 
 
