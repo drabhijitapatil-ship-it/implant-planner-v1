@@ -28,7 +28,7 @@ BRAND = "Adin"
 # ── Diameter × Length matrix per system (verbatim from Adin catalog) ──────
 SYSTEM_SIZES: Dict[str, Dict[float, List[float]]] = {
     "UNP CloseFit": {
-        2.75: [8, 10, 11.5, 13, 15, 16, 18],
+        2.75: [10, 11.5, 13, 15, 16, 18],
     },
     "NP CloseFit": {
         3.0: [8, 10, 11.5, 13, 16, 18],
@@ -181,49 +181,51 @@ def components_for(system_name: str) -> List[Dict]:
 #     (= implant length + 1 mm per catalog "CAUTION" footnote).
 
 PROTOCOLS: Dict[str, Dict[float, Dict[str, List[Tuple[str, float, bool]]]]] = {
-    # ─── UNP CloseFit Ø2.75 — single pilot for ALL bone types ───────
+    # ─── UNP CloseFit Ø2.75 — single sequential drill for ALL bone types ─
     "UNP CloseFit": {
         2.75: {
-            "D1": [("Pilot Drill", 2.5, False)],
-            "D2": [("Pilot Drill", 2.5, False)],
-            "D3": [("Pilot Drill", 2.5, False)],
-            "D4": [("Pilot Drill", 2.5, False)],
+            "D1": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.5, False)],
+            "D2": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.5, False)],
+            "D3": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.5, False)],
+            "D4": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.5, False)],
         },
     },
 
-    # ─── NP CloseFit Ø3.0 — Pilot 2.0 + 2.8 (cortex-only in D-II-IV) ──
+    # ─── NP CloseFit Ø3.0 — sequential ladder (2.0 → 2.8) ────────────
     "NP CloseFit": {
         3.0: {
             "D1": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False)],
             "D2": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, True)],
             "D3": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, True)],
-            "D4": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, True)],
+            "D4": [("Pilot Drill", 2.0, False)],
         },
     },
 
-    # ─── RP CloseFit Ø3.5 — Tri-Step + (3.2 cortex-only) D-I & D-II/III ──
+    # ─── RP CloseFit Ø3.5 — SEQUENTIAL ladder (2.0 → 2.8 → 3.2) ──────
+    # User instruction (iter-294): use sequential drilling, NOT Tri-Step.
+    # The Tri-Step alternative is exposed via TRISTEP_CLOSEFIT_PROTOCOLS.
     "RP CloseFit": {
         3.5: {
-            "D1": [("Tri-Step", 3.2, False), ("Twist Drill", 3.2, True)],
-            "D2": [("Tri-Step", 3.2, False), ("Twist Drill", 3.2, True)],
-            "D3": [("Tri-Step", 3.2, False), ("Twist Drill", 3.2, True)],
-            "D4": [("Tri-Step", 3.2, False)],
+            "D1": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False)],
+            "D2": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, True)],
+            "D3": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, True)],
+            "D4": [("Pilot Drill", 2.0, False)],
         },
     },
 
-    # ─── WP CloseFit Ø4.3 and Ø5.0 ──────────────────────────────────
+    # ─── WP CloseFit Ø4.3 and Ø5.0 — SEQUENTIAL (no Tri-Step) ────────
     "WP CloseFit": {
         4.3: {
-            "D1": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False)],
-            "D2": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, True)],
-            "D3": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, True)],
-            "D4": [("Tri-Step", 3.2, False)],
+            "D1": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False)],
+            "D2": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, True)],
+            "D3": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, True)],
+            "D4": [("Pilot Drill", 2.0, False)],
         },
         5.0: {
-            "D1": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, False)],
-            "D2": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False)],
-            "D3": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False)],
-            "D4": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False)],
+            "D1": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, False)],
+            "D2": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D3": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D4": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False)],
         },
     },
 
@@ -365,36 +367,44 @@ PROTOCOLS: Dict[str, Dict[float, Dict[str, List[Tuple[str, float, bool]]]]] = {
 }
 
 
-def generate_adin_protocol(system_name: str, implant_diameter: float,
-                           implant_length: float, bone: str) -> List[Dict]:
-    """Render the Adin drill sequence for a (system, Ø, bone) cell.
+# ── Tri-Step ALTERNATE protocols for CloseFit (iter-294) ──────────────────
+# User requested: surface sequential drilling as primary (PROTOCOLS above),
+# and Tri-Step as an OPTION. The Tri-Step drill is a single multi-step burr
+# that replaces the Ø2.0 + Ø2.8 + Ø3.2 sequence with one drill. The drill
+# table below mirrors the catalog's Tri-Step pathway for RP/WP CloseFit
+# (UNP/NP CloseFit do not have a Tri-Step in the Adin catalog — only
+# sequential drilling).
+TRISTEP_CLOSEFIT_PROTOCOLS: Dict[str, Dict[float, Dict[str, List[Tuple[str, float, bool]]]]] = {
+    "RP CloseFit": {
+        3.5: {
+            "D1": [("Tri-Step", 3.2, False)],
+            "D2": [("Tri-Step", 3.2, False)],
+            "D3": [("Tri-Step", 3.2, False)],
+            "D4": [("Tri-Step", 3.2, False)],
+        },
+    },
+    "WP CloseFit": {
+        4.3: {
+            "D1": [("Tri-Step", 3.6, False)],
+            "D2": [("Tri-Step", 3.6, False)],
+            "D3": [("Tri-Step", 3.6, False)],
+            "D4": [("Tri-Step", 3.6, False)],
+        },
+        5.0: {
+            "D1": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, False)],
+            "D2": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D3": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D4": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False)],
+        },
+    },
+}
 
-    Output schema MATCHES the working drill-protocol families (Ankylos,
-    Helix, etc.) so the frontend `DrillingProtocolScreen` can render
-    every field — `drill_type / diameter / depth / code / rpm /
-    irrigation / note`. Earlier iterations used `drill_name /
-    diameter_mm / depth_mm`, which the UI didn't recognise and
-    rendered blank.
 
-    Catalog conventions enforced:
-      • Drill depth = implant length + 1 mm ("CAUTION: drill preparation
-        is up to 1 mm longer than the implant").
-      • Cortex-only drills (parenthesised in the catalog) get
-        depth = "Cortex only" plus a note citing the catalog footnote.
-      • Tri-Step always carries the asterisk footnote: may substitute
-        Ø2.0 + Ø2.8 + Ø3.2 in sequence.
-      • RPM not printed in the Adin catalog → use the universal
-        clinical default ("800-1500 rpm with irrigation") so the UI
-        renders the row, but note the catalog silence.
-    """
-    table = PROTOCOLS.get(system_name, {}).get(implant_diameter)
-    if not table:
-        return []
-    rows = table.get(bone) or table.get("D2") or []
-
+def _render_drill_steps(rows, implant_diameter, implant_length, system_name):
+    """Render a list of (label, Ø, cortex_only) rows into the unified
+    drill-step schema with a final Implant Placement step."""
     steps: List[Dict] = []
     osteotomy_depth = float(implant_length) + 1.0
-
     for idx, (drill_label, drill_d, cortex_only) in enumerate(rows, start=1):
         note_parts: List[str] = []
         if cortex_only:
@@ -406,7 +416,7 @@ def generate_adin_protocol(system_name: str, implant_diameter: float,
             depth_value = osteotomy_depth
         if drill_label == "Tri-Step":
             note_parts.append(
-                "Tri-Step* — for initial drilling, you may use Ø2.0, Ø2.8 and Ø3.2 drills in sequence instead of the Tri-Step drill."
+                "Tri-Step* — for initial drilling, you may use Ø2.0, Ø2.8 and Ø3.2 drills in sequence instead of the Tri-Step drill (Adin catalog asterisk footnote)."
             )
         steps.append({
             "step": idx,
@@ -419,9 +429,6 @@ def generate_adin_protocol(system_name: str, implant_diameter: float,
             "irrigation": True,
             "note": " ".join(note_parts),
         })
-
-    # Final insertion step (matches Ankylos/Helix pattern: drill_type =
-    # "Implant Placement" so the UI colours and badges it correctly).
     steps.append({
         "step": len(rows) + 1,
         "drill_type": "Implant Placement",
@@ -438,3 +445,30 @@ def generate_adin_protocol(system_name: str, implant_diameter: float,
         ),
     })
     return steps
+
+
+def generate_adin_protocol(system_name: str, implant_diameter: float,
+                           implant_length: float, bone: str) -> List[Dict]:
+    """Render the PRIMARY (sequential) Adin drill sequence for a (system, Ø,
+    bone) cell — schema matches working drill-protocol families (Ankylos,
+    Helix, BLX, BLT) so the frontend renders every field.
+    """
+    table = PROTOCOLS.get(system_name, {}).get(implant_diameter)
+    if not table:
+        return []
+    rows = table.get(bone) or table.get("D2") or []
+    return _render_drill_steps(rows, implant_diameter, implant_length, system_name)
+
+
+def generate_adin_tristep_alt_protocol(system_name: str, implant_diameter: float,
+                                       implant_length: float, bone: str) -> List[Dict]:
+    """Render the ALTERNATIVE Tri-Step Adin drill sequence for CloseFit
+    (RP/WP only). Returns [] for systems that have no Tri-Step pathway.
+    The Tri-Step drill is a single multi-step burr that combines the
+    Ø2.0 + Ø2.8 + Ø3.2 sequential drills into one drill.
+    """
+    table = TRISTEP_CLOSEFIT_PROTOCOLS.get(system_name, {}).get(implant_diameter)
+    if not table:
+        return []
+    rows = table.get(bone) or table.get("D2") or []
+    return _render_drill_steps(rows, implant_diameter, implant_length, system_name)

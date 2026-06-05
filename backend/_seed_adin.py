@@ -35,6 +35,15 @@ async def main():
     client = AsyncIOMotorClient(os.environ["MONGO_URL"])
     db = client[os.environ["DB_NAME"]]
 
+    # iter-294 (Feb 2026): UNP CloseFit no longer has an 8 mm length per
+    # corrected Adin catalog. Remove any legacy row that was seeded
+    # earlier (idempotent — no-op once cleaned).
+    legacy_unp_8 = await db.implant_library.delete_many({
+        "brand": BRAND, "system": "UNP CloseFit", "length": 8.0,
+    })
+    if legacy_unp_8.deleted_count:
+        print(f"[implant_library] removed {legacy_unp_8.deleted_count} legacy UNP CloseFit L=8 row(s)")
+
     # ── 1. implant_library — one row per (Ø,L) per system ─────────────────
     inserted_rows = 0
     skipped_rows = 0

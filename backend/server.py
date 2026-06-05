@@ -12783,6 +12783,22 @@ async def generate_drilling_protocol(
         alt_steps = _generate_tsx_protocol(proto, diameter, length, bone, kit="original")
         response["alt_protocol"] = {"name": "Driva Drills (Original)", "steps": alt_steps, "total_steps": len(alt_steps)}
 
+    # iter-294 (Feb 2026): Adin CloseFit Tri-Step alternative — RP/WP only.
+    # Sequential drilling (Ø2.0 + Ø2.8 + Ø3.2 + …) is the PRIMARY protocol;
+    # the Tri-Step drill is a single multi-step burr that replaces the
+    # first three drills with one. UNP / NP CloseFit have no Tri-Step
+    # pathway in the Adin catalog.
+    if family == "adin" and system in ("RP CloseFit", "WP CloseFit"):
+        from adin_data import generate_adin_tristep_alt_protocol
+        alt_steps = generate_adin_tristep_alt_protocol(system, diameter, length, bone)
+        if alt_steps:
+            response["alt_protocol"] = {
+                "name": "Tri-Step Drill (alternative)",
+                "description": "Single multi-step burr replaces the Ø2.0 + Ø2.8 + Ø3.2 sequential drills.",
+                "steps": alt_steps,
+                "total_steps": len(alt_steps),
+            }
+
     return response
 
 @api_router.get("/drilling-protocols/available")
@@ -14797,6 +14813,15 @@ async def seed_implant_catalog_on_start():
         await _blx_comp_seed()
     except Exception as exc:  # pragma: no cover — best-effort
         logging.warning("Straumann BLX component expansion seed skipped: %s", exc)
+    # iter-294 (Feb 2026): expand Adin CloseFit prosthetic components —
+    # replaces the 13-row generic stub with the brochure-grade per-SKU
+    # matrix for UNP / NP / RP / WP CloseFit platforms (30/30/30/49 SKUs).
+    # Also drops legacy UNP CloseFit L=8 mm row (user-corrected catalog).
+    try:
+        from _seed_adin_components import seed_if_thin as _adin_comp_seed
+        await _adin_comp_seed()
+    except Exception as exc:  # pragma: no cover — best-effort
+        logging.warning("Adin CloseFit component expansion seed skipped: %s", exc)
 
 
 
