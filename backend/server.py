@@ -12783,12 +12783,15 @@ async def generate_drilling_protocol(
         alt_steps = _generate_tsx_protocol(proto, diameter, length, bone, kit="original")
         response["alt_protocol"] = {"name": "Driva Drills (Original)", "steps": alt_steps, "total_steps": len(alt_steps)}
 
-    # iter-294 (Feb 2026): Adin CloseFit Tri-Step alternative — RP/WP only.
+    # iter-294/295 (Feb 2026): Adin Tri-Step alternative drilling protocol.
     # Sequential drilling (Ø2.0 + Ø2.8 + Ø3.2 + …) is the PRIMARY protocol;
     # the Tri-Step drill is a single multi-step burr that replaces the
-    # first three drills with one. UNP / NP CloseFit have no Tri-Step
-    # pathway in the Adin catalog.
-    if family == "adin" and system in ("RP CloseFit", "WP CloseFit"):
+    # first three drills with one. Available for: RP/WP CloseFit (iter-294),
+    # Touareg-OS, Touareg-S, Swell, One (iter-295). UNP/NP CloseFit have
+    # no Tri-Step pathway in the Adin catalog.
+    if family == "adin" and system in ("RP CloseFit", "WP CloseFit",
+                                        "Touareg-OS", "Touareg-S",
+                                        "Swell", "One"):
         from adin_data import generate_adin_tristep_alt_protocol
         alt_steps = generate_adin_tristep_alt_protocol(system, diameter, length, bone)
         if alt_steps:
@@ -14822,6 +14825,14 @@ async def seed_implant_catalog_on_start():
         await _adin_comp_seed()
     except Exception as exc:  # pragma: no cover — best-effort
         logging.warning("Adin CloseFit component expansion seed skipped: %s", exc)
+    # iter-295 (Feb 2026): expand Adin Touareg-OS / Touareg-S / Swell / One
+    # prosthetic components — replaces the 16-row generic RS stub with the
+    # brochure-grade per-SKU palette (99 each for RS systems, 2 for One).
+    try:
+        from _seed_adin_rs_components import seed_if_thin as _adin_rs_comp_seed
+        await _adin_rs_comp_seed()
+    except Exception as exc:  # pragma: no cover — best-effort
+        logging.warning("Adin RS/One component expansion seed skipped: %s", exc)
 
 
 

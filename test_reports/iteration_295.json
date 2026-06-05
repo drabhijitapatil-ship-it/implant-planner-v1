@@ -1,0 +1,23 @@
+{
+  "summary": "iter-295 backend tests for Adin Touareg-OS/Touareg-S/Swell/One — 23/23 PASSED. Verified: (1) size-matrix corrections (Touareg-OS=30 rows confirms Ø3.5 6.25 removed; Touareg-S=30 with 6.25/16 in lengths; Swell=29 with Ø3.3 cohort; One=20 with 4 lengths × 5 Ø). (2) Sequential primary drilling protocol with cascading Ø2.0→2.8→3.2→3.6→4.2→5.2 ladder, cortical_only flags on D4 wide-diameter Twist/Coronal drills. (3) Tri-Step alt_protocol exposed for Touareg-OS/Touareg-S/Swell/One except Swell Ø3.3 and One Ø3.0/3.3 (absent as required). (4) Unified step schema {step, drill_type, code, diameter, depth, cortical_only, rpm, irrigation, note}. Implant Placement always last with cortical_only=False. (5) Components: 99 RS SKUs each for Touareg-OS/Touareg-S/Swell, byte-identical across the three; 2 One-piece torque drivers (RS6025/RS6026) for One. updated_by contains 'adin_rs_components_expanded:iter-295'. is_stub=false. Type breakdown exactly matches spec (cover_screw:1, healing_abutment:15, screw_retained_abutment:14, final_abutment:25, ball_attachment:10, replacement_screw:15, impression_post:11, implant_analog:4, temporary_abutment:2, burnout_coping:2 = 99). Regression: Straumann BLX 4 systems / BLT 3 systems / UNP+RP CloseFit drilling all unchanged from iter-294.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_adin_iter295.py",
+    "/app/test_reports/pytest/iter295_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is 14,983 lines — recommend modular refactor (drilling-protocols, implant-catalog, implant-library should be separate routers). Not blocking but increasingly unmaintainable.",
+    "Drilling endpoint response: top-level 'steps' is fine but inconsistent with some other protocol responses that wrap under 'protocol'. Consider standardising for FE clarity.",
+    "adin_data.py PROTOCOLS for One Ø3.0 D1 has cortical_only=False on Twist 2.8 while D2/D3/D4 are True — this matches the spec ('cortical_only=true in D2/D3/D4, false in D1') and is intentional, but consider adding a comment to the table to prevent accidental regression."
+  ],
+  "updated_files": ["/app/backend/tests/test_adin_iter295.py"],
+  "success_rate": {"backend": "100%", "frontend": "n/a"},
+  "test_credentials": "Abhijit.patil / Admin@123 (administrator)",
+  "seed_data_creation": "None — relied on startup-hook seed_if_thin() which logged: Touareg-OS=99, Touareg-S=99, Swell=99, One=2 components.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "test_adin_iter295.py is the canonical regression file for iter-295 (Touareg-OS/Touareg-S/Swell/One). Note: drilling-protocols/generate response payload returns flat 'steps' at top level (not nested under 'protocol'); body keys are {brand, system, diameter, length, bone_density} (not implant_diameter/implant_length/bone_quality). /api/implant-library/systems aggregates per (brand,system) — use 'count' field to verify matrix size.",
+  "rca of the issue": "n/a — no functional issues found. Initial test failures were test-only (wrong response-key assumptions); test file was corrected and all 23 tests pass."
+}
