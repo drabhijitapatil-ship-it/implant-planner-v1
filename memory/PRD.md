@@ -4412,6 +4412,18 @@ A comprehensive mobile application for managing dental implant procedures at the
   - Backend GET /api/procedures accepts `phase` query param (1,2,3,4,completed)
   - Procedures page supports `phase` URL param for filtered views
 
+### Feb 26, 2026 — iter-295: Adin Touareg-OS / Touareg-S / Swell / One Update (23/23 backend tests passed)
+- **Source**: Official Adin Catalogue PDF (Touareg-OS, Touareg-S, Swell, One sections).
+- **(1) Implant size-matrix corrections**: Touareg-OS Ø3.5 drops 6.25 mm (legacy DB row auto-removed by `_seed_adin.py` cleanup); Touareg-S Ø4.2 adds 6.25 mm, Ø5.0 adds 6.25 + 16 mm. Final counts: Touareg-OS=30, Touareg-S=30, Swell=29, One=20.
+- **(2) Drilling protocol → SEQUENTIAL primary** for all 4 systems, mirroring iter-294 CloseFit pattern. Cascading ladder Ø2.0 → 2.8 → 3.2 → 3.6 → 4.2 → 5.2 → Coronal 5.6 depending on implant Ø; cortical-only annotations preserved for D4 wide-diameter drills.
+- **(3) Tri-Step exposed as `alt_protocol`** for Touareg-OS / Touareg-S / Swell / One (RP/WP CloseFit unchanged). Swell Ø3.3 and One Ø3.0 / Ø3.3 correctly return no alternative (no Tri-Step in catalog).
+- **(4) Prosthetic components expanded to brochure-grade depth**:
+  - **Touareg-OS / Touareg-S / Swell** share the full **RS Standard Internal Hex palette** — **99 SKUs each**: Cover Screw (1), Healing Abutments slim/std/wide (15), Cement Abutments straight/slim/wide/esthetic/engaging/non-engaging/screw-in/angled 15°/25°/35° (25), TMA straight/angled 17°/30°/45° + auxiliaries + Flat-Connection (14), Ball Attachments + caps (10), Open/Closed-tray transfers slim+standard (11), Analogs (4), Temporary cylinders (2), Burn-out copings (2), 15 prosthetic/retaining/transfer screws (incl. RS3401 retrieval screw). Real Adin RS-prefixed catalog codes (RS3022 etc.).
+  - **One** — 2 one-piece torque-driver SKUs (RS6025 short, RS6026 long). Adin One implants ship with the abutment already integrated; no separate prosthetic SKU palette exists.
+- **Files added**: `/app/backend/adin_rs_components_expanded.py`, `/app/backend/_seed_adin_rs_components.py`. **Files modified**: `adin_data.py` (sequential PROTOCOLS for Touareg-OS/S/Swell/One + expanded TRISTEP_CLOSEFIT_PROTOCOLS), `_seed_adin.py` (Touareg-OS Ø3.5 L6.25 cleanup), `server.py` (drilling dispatcher expands Adin Tri-Step alt branch + new components startup hook).
+- **Test report**: `/app/test_reports/iteration_295.json` (100% pass — 23/23). All Straumann BLX (4 systems / 135-68 components) / BLT (3 systems) / Adin CloseFit (UNP/NP/RP/WP iter-294) regression intact.
+
+
 ### Feb 26, 2026 — iter-294: Adin CloseFit Drilling & Components Update (21/21 backend tests passed)
 - **Source**: Official Adin "Close Fit System" prosthetic components catalog PDF.
 - **(1) Implant size matrix corrected**: UNP CloseFit no longer offers 8 mm — lengths now [10, 11.5, 13, 15, 16, 18] (6 SKUs). Legacy DB row auto-removed by `_seed_adin.py` cleanup. NP/RP/WP unchanged.
