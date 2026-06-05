@@ -12692,10 +12692,10 @@ async def generate_drilling_protocol(
     elif family == "straumann_blx":
         sys_label = proto.get("system_name", system)
         blx_bone_labels = {
-            "D1": "Hard Bone + Tap (Straumann BLX)",
-            "D2": "Standard Protocol (Straumann BLX)",
-            "D3": "Standard Protocol (Straumann BLX)",
-            "D4": "Soft Bone Under-Preparation (Straumann BLX)",
+            "D1": "Hard Bone (Straumann BLX §5.2)",
+            "D2": "Medium Bone (Straumann BLX §5.2)",
+            "D3": "Soft Bone (Straumann BLX §5.2)",
+            "D4": "Soft Bone (Straumann BLX §5.2)",
         }
         protocol_type = f"{blx_bone_labels.get(bone, 'Standard Protocol')} — {sys_label}"
     elif family == "adin":

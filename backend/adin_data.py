@@ -369,16 +369,23 @@ def generate_adin_protocol(system_name: str, implant_diameter: float,
                            implant_length: float, bone: str) -> List[Dict]:
     """Render the Adin drill sequence for a (system, Ø, bone) cell.
 
+    Output schema MATCHES the working drill-protocol families (Ankylos,
+    Helix, etc.) so the frontend `DrillingProtocolScreen` can render
+    every field — `drill_type / diameter / depth / code / rpm /
+    irrigation / note`. Earlier iterations used `drill_name /
+    diameter_mm / depth_mm`, which the UI didn't recognise and
+    rendered blank.
+
     Catalog conventions enforced:
       • Drill depth = implant length + 1 mm ("CAUTION: drill preparation
         is up to 1 mm longer than the implant").
-      • Cortex-only drills (parenthesised in catalog) get
-        depth = "Cortex only" + a note explaining the catalog rule.
+      • Cortex-only drills (parenthesised in the catalog) get
+        depth = "Cortex only" plus a note citing the catalog footnote.
       • Tri-Step always carries the asterisk footnote: may substitute
         Ø2.0 + Ø2.8 + Ø3.2 in sequence.
-      • RPM and irrigation are NOT printed in the Adin catalog — surfaced
-        as "Not specified — refer to Adin surgical guide" rather than
-        inventing values.
+      • RPM not printed in the Adin catalog → use the universal
+        clinical default ("800-1500 rpm with irrigation") so the UI
+        renders the row, but note the catalog silence.
     """
     table = PROTOCOLS.get(system_name, {}).get(implant_diameter)
     if not table:
@@ -387,42 +394,46 @@ def generate_adin_protocol(system_name: str, implant_diameter: float,
 
     steps: List[Dict] = []
     osteotomy_depth = float(implant_length) + 1.0
-    rpm_default = "Not specified — refer to Adin surgical guide"
 
     for idx, (drill_label, drill_d, cortex_only) in enumerate(rows, start=1):
         note_parts: List[str] = []
         if cortex_only:
-            depth_label = "Cortex only"
+            depth_value: object = "Cortex only"
             note_parts.append(
-                "Catalog notation '(Ø{:g})' — drill to the depth of the cortex only.".format(drill_d)
+                f"Catalog notation '(Ø{drill_d:g})' — drill to the depth of the cortex only."
             )
         else:
-            depth_label = osteotomy_depth
+            depth_value = osteotomy_depth
         if drill_label == "Tri-Step":
             note_parts.append(
                 "Tri-Step* — for initial drilling, you may use Ø2.0, Ø2.8 and Ø3.2 drills in sequence instead of the Tri-Step drill."
             )
         steps.append({
             "step": idx,
-            "drill_name": drill_label,
-            "diameter_mm": drill_d,
-            "depth_mm": depth_label,
-            "rpm": rpm_default,
+            "drill_type": drill_label,
+            "code": "—",
+            "diameter": drill_d,
+            "depth": depth_value,
+            "rpm": "800-1500 (catalog does not specify)",
+            "irrigation": True,
             "note": " ".join(note_parts),
         })
 
-    # Final insertion step.
+    # Final insertion step (matches Ankylos/Helix pattern: drill_type =
+    # "Implant Placement" so the UI colours and badges it correctly).
     steps.append({
         "step": len(rows) + 1,
-        "drill_name": f"{system_name} Implant Insertion",
-        "diameter_mm": implant_diameter,
-        "depth_mm": float(implant_length),
-        "rpm": "Manual ratchet or low-speed handpiece (torque not specified by catalog)",
+        "drill_type": "Implant Placement",
+        "code": "—",
+        "diameter": implant_diameter,
+        "depth": float(implant_length),
+        "rpm": "Manual ratchet or low-speed handpiece",
+        "irrigation": False,
         "note": (
+            f"{system_name} — Ø{implant_diameter:g} × {implant_length:g} mm. "
             "Drill preparation is up to 1 mm longer than the implant length "
             "(catalog CAUTION). Insertion torque is not printed in the Adin "
-            "catalog — refer to the Adin surgical guide for site-specific "
-            "torque recommendations."
+            "catalog — refer to the Adin surgical guide."
         ),
     })
     return steps
