@@ -44,6 +44,15 @@ async def main():
     if legacy_unp_8.deleted_count:
         print(f"[implant_library] removed {legacy_unp_8.deleted_count} legacy UNP CloseFit L=8 row(s)")
 
+    # iter-295 (Feb 2026): Touareg-OS Ø3.5 no longer offers 6.25 mm length
+    # per corrected catalog. Idempotent — no-op once cleaned.
+    legacy_touareg_os = await db.implant_library.delete_many({
+        "brand": BRAND, "system": "Touareg-OS",
+        "diameter": 3.5, "length": 6.25,
+    })
+    if legacy_touareg_os.deleted_count:
+        print(f"[implant_library] removed {legacy_touareg_os.deleted_count} legacy Touareg-OS Ø3.5 L=6.25 row(s)")
+
     # ── 1. implant_library — one row per (Ø,L) per system ─────────────────
     inserted_rows = 0
     skipped_rows = 0

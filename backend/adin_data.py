@@ -41,7 +41,7 @@ SYSTEM_SIZES: Dict[str, Dict[float, List[float]]] = {
         5.0: [8, 10, 11.5, 13, 15, 16],
     },
     "Touareg-OS": {
-        3.5:  [6.25, 8, 10, 11.5, 13, 16, 18],
+        3.5:  [8, 10, 11.5, 13, 16, 18],
         3.75: [8, 10, 11.5, 13, 16, 18],
         4.2:  [6.25, 8, 10, 11.5, 13, 16, 18],
         5.0:  [6.25, 8, 10, 11.5, 13, 16],
@@ -50,8 +50,8 @@ SYSTEM_SIZES: Dict[str, Dict[float, List[float]]] = {
     "Touareg-S": {
         3.5:  [8, 10, 11.5, 13, 16, 18],
         3.75: [8, 10, 11.5, 13, 16, 18],
-        4.2:  [8, 10, 11.5, 13, 16, 18],
-        5.0:  [8, 10, 11.5, 13],
+        4.2:  [6.25, 8, 10, 11.5, 13, 16, 18],
+        5.0:  [6.25, 8, 10, 11.5, 13, 16],
         6.0:  [6.25, 8, 10, 11.5, 13],
     },
     "Swell": {
@@ -229,151 +229,159 @@ PROTOCOLS: Dict[str, Dict[float, Dict[str, List[Tuple[str, float, bool]]]]] = {
         },
     },
 
-    # ─── Touareg-OS ────────────────────────────────────────────────
+    # ─── Touareg-OS — SEQUENTIAL primary (Tri-Step alt in TRISTEP_PROTOCOLS) ─
+    # iter-295 (Feb 2026): user requested same protocol semantics as CloseFit.
+    # Catalog "Tri-Step Ø3.2" expands sequentially into Ø2.0 → Ø2.8 → Ø3.2
+    # (asterisk footnote). All higher diameters follow the same ladder.
     "Touareg-OS": {
         3.5: {
-            "D1": [("Tri-Step", 3.2, False), ("Twist Drill", 3.2, True)],
-            "D2": [("Tri-Step", 3.2, False), ("Twist Drill", 3.2, True)],
-            "D3": [("Tri-Step", 3.2, False), ("Twist Drill", 3.2, True)],
-            "D4": [("Tri-Step", 3.2, False)],
+            "D1": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False)],
+            "D2": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False)],
+            "D3": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False)],
+            "D4": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False)],
         },
         3.75: {
-            "D1": [("Tri-Step", 3.2, False), ("Twist Drill", 3.2, False)],
-            "D2": [("Tri-Step", 3.2, False), ("Twist Drill", 3.2, True)],
-            "D3": [("Tri-Step", 3.2, False), ("Twist Drill", 3.2, True)],
-            "D4": [("Tri-Step", 3.2, False)],
+            "D1": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False)],
+            "D2": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False)],
+            "D3": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False)],
+            "D4": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False)],
         },
         4.2: {
-            "D1": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, True)],
-            "D2": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, True)],
-            "D3": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, True)],
-            "D4": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, True)],
+            "D1": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False)],
+            "D2": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False)],
+            "D3": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False)],
+            "D4": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False)],
         },
         5.0: {
-            "D1": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, False)],
-            "D2": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False)],
-            "D3": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False)],
-            "D4": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False)],
+            "D1": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D2": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D3": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D4": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, True), ("Coronal Drill", 4.6, True)],
         },
         6.0: {
-            "D1": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, False), ("Coronal Drill", 5.6, True)],
-            "D2": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, False)],
-            "D3": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, False)],
-            "D4": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False)],
+            "D1": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, False), ("Coronal Drill", 5.6, True)],
+            "D2": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, False), ("Coronal Drill", 5.6, True)],
+            "D3": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, False), ("Coronal Drill", 5.6, True)],
+            "D4": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, True), ("Coronal Drill", 5.6, True)],
         },
     },
 
-    # ─── Touareg-S (mirrors Touareg-OS — same ladders) ─────────────
+    # ─── Touareg-S — SEQUENTIAL primary (mirrors Touareg-OS) ─────────────
     "Touareg-S": {
         3.5: {
-            "D1": [("Tri-Step", 3.2, False), ("Twist Drill", 3.2, True)],
-            "D2": [("Tri-Step", 3.2, False), ("Twist Drill", 3.2, True)],
-            "D3": [("Tri-Step", 3.2, False), ("Twist Drill", 3.2, True)],
-            "D4": [("Tri-Step", 3.2, False)],
+            "D1": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False)],
+            "D2": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False)],
+            "D3": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False)],
+            "D4": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False)],
         },
         3.75: {
-            "D1": [("Tri-Step", 3.2, False), ("Twist Drill", 3.2, False)],
-            "D2": [("Tri-Step", 3.2, False), ("Twist Drill", 3.2, True)],
-            "D3": [("Tri-Step", 3.2, False), ("Twist Drill", 3.2, True)],
-            "D4": [("Tri-Step", 3.2, False)],
+            "D1": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False)],
+            "D2": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False)],
+            "D3": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False)],
+            "D4": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False)],
         },
         4.2: {
-            "D1": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, True)],
-            "D2": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, True)],
-            "D3": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, True)],
-            "D4": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, True)],
+            "D1": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False)],
+            "D2": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False)],
+            "D3": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False)],
+            "D4": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False)],
         },
         5.0: {
-            "D1": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, False)],
-            "D2": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False)],
-            "D3": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False)],
-            "D4": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False)],
+            "D1": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D2": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D3": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D4": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, True), ("Coronal Drill", 4.6, True)],
         },
         6.0: {
-            "D1": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, False), ("Coronal Drill", 5.6, True)],
-            "D2": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, False)],
-            "D3": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, False)],
-            "D4": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False)],
+            "D1": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, False), ("Coronal Drill", 5.6, True)],
+            "D2": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, False), ("Coronal Drill", 5.6, True)],
+            "D3": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, False), ("Coronal Drill", 5.6, True)],
+            "D4": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, True), ("Coronal Drill", 5.6, True)],
         },
     },
 
-    # ─── Swell — uses Pilot 2.0 + 2.8 for Ø3.3 (special-case), else Tri-Step ladders ─
+    # ─── Swell — SEQUENTIAL primary ──────────────────────────────────────
+    # Special-case for Ø3.3: catalog uses only Ø2.0 + Ø2.8 (no Tri-Step).
     "Swell": {
         3.3: {
-            "D1": [("Tri-Step", 3.2, False)],
-            "D2": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, True)],
-            "D3": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, True)],
-            "D4": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, True)],
+            "D1": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False)],
+            "D2": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False)],
+            "D3": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False)],
+            "D4": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False)],
         },
         3.75: {
-            "D1": [("Tri-Step", 3.2, False), ("Twist Drill", 3.2, False)],
-            "D2": [("Tri-Step", 3.2, False), ("Twist Drill", 3.2, True)],
-            "D3": [("Tri-Step", 3.2, False), ("Twist Drill", 3.2, True)],
-            "D4": [("Tri-Step", 3.2, False)],
+            "D1": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False)],
+            "D2": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False)],
+            "D3": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False)],
+            "D4": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False)],
         },
         4.2: {
-            "D1": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False)],
-            "D2": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, True)],
-            "D3": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, True)],
-            "D4": [("Tri-Step", 3.2, False), ("Twist Drill", 3.2, False)],
+            "D1": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False)],
+            "D2": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False)],
+            "D3": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False)],
+            "D4": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False)],
         },
         5.0: {
-            "D1": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, False)],
-            "D2": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False)],
-            "D3": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False)],
-            "D4": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False)],
+            "D1": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D2": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D3": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D4": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, True), ("Coronal Drill", 4.6, True)],
         },
         6.0: {
-            "D1": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, False), ("Coronal Drill", 5.6, True)],
-            "D2": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, False), ("Coronal Drill", 5.2, False)],
-            "D3": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, False), ("Coronal Drill", 5.2, False)],
-            "D4": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, False)],
+            "D1": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, False), ("Coronal Drill", 5.6, True)],
+            "D2": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, False), ("Coronal Drill", 5.6, True)],
+            "D3": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, False), ("Coronal Drill", 5.6, True)],
+            "D4": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, True), ("Coronal Drill", 5.6, True)],
         },
     },
 
-    # ─── One (one-piece) — uses Pilot 2.0+2.8 for Ø3.0/Ø3.3, else Tri-Step ─
+    # ─── One (one-piece) — SEQUENTIAL primary ────────────────────────────
+    # Ø3.0 / Ø3.3 only use Ø2.0 + Ø2.8 (no Tri-Step in catalog).
     "One": {
         3.0: {
             "D1": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False)],
             "D2": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, True)],
             "D3": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, True)],
-            "D4": [("Pilot Drill", 2.0, False)],
+            "D4": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, True)],
         },
         3.3: {
             "D1": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False)],
             "D2": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, True)],
             "D3": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, True)],
-            "D4": [("Pilot Drill", 2.0, False)],
+            "D4": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, True)],
         },
         3.6: {
-            "D1": [("Tri-Step", 3.2, False), ("Twist Drill", 3.2, True)],
-            "D2": [("Tri-Step", 3.2, False), ("Twist Drill", 3.2, True)],
-            "D3": [("Tri-Step", 3.2, False), ("Twist Drill", 3.2, True)],
-            "D4": [("Tri-Step", 3.2, False)],
+            "D1": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False)],
+            "D2": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False)],
+            "D3": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False)],
+            "D4": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False)],
         },
         4.2: {
-            "D1": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False)],
-            "D2": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, True)],
-            "D3": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, True)],
-            "D4": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, True)],
+            "D1": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False)],
+            "D2": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False)],
+            "D3": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False)],
+            "D4": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False)],
         },
         5.0: {
-            "D1": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, False)],
-            "D2": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False)],
-            "D3": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False)],
-            "D4": [("Tri-Step", 3.2, False), ("Twist Drill", 3.6, False)],
+            "D1": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D2": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D3": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D4": [("Pilot Drill", 2.0, False), ("Twist Drill", 2.8, False), ("Twist Drill", 3.2, False), ("Twist Drill", 3.6, False), ("Twist Drill", 4.2, True), ("Coronal Drill", 4.6, True)],
         },
     },
 }
 
 
-# ── Tri-Step ALTERNATE protocols for CloseFit (iter-294) ──────────────────
+# ── Tri-Step ALTERNATE protocols (iter-294 / iter-295) ────────────────────
 # User requested: surface sequential drilling as primary (PROTOCOLS above),
 # and Tri-Step as an OPTION. The Tri-Step drill is a single multi-step burr
-# that replaces the Ø2.0 + Ø2.8 + Ø3.2 sequence with one drill. The drill
-# table below mirrors the catalog's Tri-Step pathway for RP/WP CloseFit
-# (UNP/NP CloseFit do not have a Tri-Step in the Adin catalog — only
-# sequential drilling).
+# that replaces the Ø2.0 + Ø2.8 + Ø3.2 sequence with one drill.
+#
+# Coverage:
+#   • RP / WP CloseFit  (iter-294)
+#   • Touareg-OS / Touareg-S / Swell  (iter-295) — all Ø
+#   • One  (iter-295) — only Ø3.6 / 4.2 / 5.0 (Ø3.0 and Ø3.3 catalog has no Tri-Step)
+# UNP / NP CloseFit and Swell Ø3.3 have no Tri-Step variant in the catalog.
 TRISTEP_CLOSEFIT_PROTOCOLS: Dict[str, Dict[float, Dict[str, List[Tuple[str, float, bool]]]]] = {
     "RP CloseFit": {
         3.5: {
@@ -395,6 +403,70 @@ TRISTEP_CLOSEFIT_PROTOCOLS: Dict[str, Dict[float, Dict[str, List[Tuple[str, floa
             "D2": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
             "D3": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
             "D4": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False)],
+        },
+    },
+    # ── Touareg-OS Tri-Step alternates (iter-295) ─────────────────────
+    "Touareg-OS": {
+        3.5:  {b: [("Tri-Step", 3.2, False)] for b in ("D1","D2","D3","D4")},
+        3.75: {b: [("Tri-Step", 3.2, False)] for b in ("D1","D2","D3","D4")},
+        4.2:  {b: [("Tri-Step", 3.6, False)] for b in ("D1","D2","D3","D4")},
+        5.0: {
+            "D1": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D2": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D3": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D4": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, True), ("Coronal Drill", 4.6, True)],
+        },
+        6.0: {
+            "D1": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, False), ("Coronal Drill", 5.6, True)],
+            "D2": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, False), ("Coronal Drill", 5.6, True)],
+            "D3": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, False), ("Coronal Drill", 5.6, True)],
+            "D4": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, True), ("Coronal Drill", 5.6, True)],
+        },
+    },
+    # ── Touareg-S Tri-Step (mirrors Touareg-OS) ───────────────────────
+    "Touareg-S": {
+        3.5:  {b: [("Tri-Step", 3.2, False)] for b in ("D1","D2","D3","D4")},
+        3.75: {b: [("Tri-Step", 3.2, False)] for b in ("D1","D2","D3","D4")},
+        4.2:  {b: [("Tri-Step", 3.6, False)] for b in ("D1","D2","D3","D4")},
+        5.0: {
+            "D1": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D2": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D3": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D4": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, True), ("Coronal Drill", 4.6, True)],
+        },
+        6.0: {
+            "D1": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, False), ("Coronal Drill", 5.6, True)],
+            "D2": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, False), ("Coronal Drill", 5.6, True)],
+            "D3": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, False), ("Coronal Drill", 5.6, True)],
+            "D4": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, True), ("Coronal Drill", 5.6, True)],
+        },
+    },
+    # ── Swell Tri-Step (Ø3.3 has no Tri-Step variant) ─────────────────
+    "Swell": {
+        3.75: {b: [("Tri-Step", 3.2, False)] for b in ("D1","D2","D3","D4")},
+        4.2:  {b: [("Tri-Step", 3.6, False)] for b in ("D1","D2","D3","D4")},
+        5.0: {
+            "D1": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D2": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D3": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D4": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, True), ("Coronal Drill", 4.6, True)],
+        },
+        6.0: {
+            "D1": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, False), ("Coronal Drill", 5.6, True)],
+            "D2": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, False), ("Coronal Drill", 5.6, True)],
+            "D3": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, False), ("Coronal Drill", 5.6, True)],
+            "D4": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Twist Drill", 5.2, True), ("Coronal Drill", 5.6, True)],
+        },
+    },
+    # ── One Tri-Step (Ø3.0/3.3 have no Tri-Step variant) ──────────────
+    "One": {
+        3.6: {b: [("Tri-Step", 3.2, False)] for b in ("D1","D2","D3","D4")},
+        4.2: {b: [("Tri-Step", 3.6, False)] for b in ("D1","D2","D3","D4")},
+        5.0: {
+            "D1": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D2": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D3": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, False), ("Coronal Drill", 4.6, True)],
+            "D4": [("Tri-Step", 3.6, False), ("Twist Drill", 4.2, True), ("Coronal Drill", 4.6, True)],
         },
     },
 }
