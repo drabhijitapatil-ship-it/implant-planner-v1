@@ -733,12 +733,9 @@ SYSTEMS: Dict[Tuple[str, str], List[Tuple[float, float]]] = {
         (5.5, 11.5),
         (5.5, 13.0),
     ],
-    ('Straumann', 'BLT'): [
-        (3.3, 8.0),
-        (4.1, 10.0),
-        (4.8, 12.0),
-        (6.5, 14.0),
-    ],
+    # iter-292 (Feb 2026): legacy "Straumann | BLT" 4-row stub removed —
+    # superseded by full BLT catalog seeded via _seed_straumann_blt.py
+    # (Roxolid SLActive 24 sizes + Roxolid SLA 21 sizes + Ti SLA 18 sizes).
     ('Zimmer', 'TSX'): [
         (3.1, 8.0),
         (3.1, 10.0),
