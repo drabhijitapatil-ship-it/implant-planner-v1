@@ -280,7 +280,9 @@ def generate_blx_protocol(
                 "drill_type": "Crestal Bone Drill",
                 "code": f"{label} (ref {ref})" if ref != "—" else label,
                 "diameter": drill_d,
-                "depth": f"{cortical_depth:g} mm — cortical only",
+                "depth": cortical_depth,
+                "cortical_only": True,
+                "cortical_depth_mm": cortical_depth,
                 "rpm": "800",
                 "irrigation": True,
                 "note": (
@@ -295,6 +297,7 @@ def generate_blx_protocol(
                 "code": f"{label} {drill_d} mm",
                 "diameter": drill_d,
                 "depth": "Verify alignment",
+                "cortical_only": False,
                 "rpm": "—",
                 "irrigation": False,
                 "note": "Re-check implant axis with the Ø2.8 mm Alignment Pin.",
@@ -306,6 +309,7 @@ def generate_blx_protocol(
                 "code": f"{label} (ref {ref})",
                 "diameter": drill_d,
                 "depth": osteotomy_marking,
+                "cortical_only": False,
                 "rpm": "800",
                 "irrigation": True,
                 "note": (

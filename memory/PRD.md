@@ -1,7 +1,47 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
 
-## Iteration 290 (Feb 2026) — BLX drill workflows rewritten verbatim from official surgical guide
+## Iteration 291 (Feb 2026) — Cortical-only depth badge in drilling UI
+
+### What the user asked for
+"Implement potential improvement" — referring to the **cortical-only**
+depth badge suggestion from iter-290.
+
+### What changed
+**Backend**
+- `straumann_blx_data.py` — every step now carries an explicit
+  `cortical_only: bool` flag, and cortical drills include a
+  `cortical_depth_mm: float` so the UI can render a single source-of-
+  truth depth value (no more "4 mm — cortical only" string parsing).
+  Cortical drill `depth` is now numeric (e.g. `4.0` or `6.0`) instead
+  of a string.
+- `adin_data.py` — same `cortical_only` flag added to the Adin cortex-
+  only drills for consistency, so the badge renders identically across
+  brands.
+
+**Frontend**
+- `components/DrillingProtocol.tsx`:
+  - `DrillStep` type extended: `depth` may now be `number | string`,
+    plus optional `cortical_only` / `cortical_depth_mm`.
+  - Focused-step row renders a distinct **amber "⚠ Cortical only · N mm"
+    badge** next to the depth value when `cortical_only` is true
+    (`data-testid="cortical-badge-{step}"`).
+  - The QR-code-side step strip + the printable HTML export both
+    display "cortical {N} mm" / "{N} mm — cortical only" for cortical
+    drills, full-depth otherwise.
+  - String-valued depths (e.g. "Verify alignment", "Cortex only — mark
+    site") are rendered verbatim instead of getting a stray "mm" suffix.
+
+### Verification
+- Backend curl: BLX Ø4.5 × 8 mm D1 → Drill 6 (Ø4.2) returns
+  `cortical_only: true, cortical_depth_mm: 4.0, depth: 4.0`. Long-implant
+  (≥10 mm) cortical step returns 6.0 instead. Alignment Pin rows return
+  `depth: "Verify alignment"` and no badge.
+- ESLint clean.
+
+---
+
+
 
 ### What the user pointed out
 The previous BLX drilling protocols were the **BLT** surgical sequence
