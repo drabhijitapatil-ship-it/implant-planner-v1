@@ -4412,6 +4412,17 @@ A comprehensive mobile application for managing dental implant procedures at the
   - Backend GET /api/procedures accepts `phase` query param (1,2,3,4,completed)
   - Procedures page supports `phase` URL param for filtered views
 
+### Feb 26, 2026 — iter-293: Straumann BLX Prosthetic Components Catalog (12/12 backend tests passed)
+- **Full brochure-grade prosthetic components** wired for all 4 BLX systems, replacing the 10-row per-platform stub with the complete catalog from the official Straumann BLX Catalogue PDF:
+  - RB platforms (BLX Roxolid SLActive - RB / SLA - RB) — **135 components each**
+  - WB platforms (BLX Roxolid SLActive - WB / SLA - WB) — **68 components each**
+- **23 component types** including: healing abutments (Ø4/5/6.5 RB, Ø6/7.5 WB × GH 0.75/1.5/2.5/3.5 × H 2/4), temporary abutments, anatomic Ti abutments (0°/17°), gold abutments, Variobase® Crown / Crown AS / Bridge-Bar / C-Sirona ti-bases, screw-retained abutments (0°/17°/30°), burn-out copings, impression posts (open/closed-tray at implant + abutment level), CARES® scanbodies, ScanPost S Sirona, implant analogs (repositionable + stone-model), pre-milled blanks (Medentika + CARES®), Novaloc® locator abutments (0°/15° × 6 GH heights), Novaloc retention inserts (6 colors), matrix housings, Dolder® bar profiles + matrices + tools, SRA copings (Ti / gold / burn-out / bar), Pro Arch planning guide.
+- **Article/reference numbers preserved** for every SKU (062.xxxxx, 064.xxxxx, 065.xxxxx, 023.xxxxx, 025.xxxxx, 048.xxx, 2010.xxx-STM) so the catalog can be cross-referenced against the Straumann order portal.
+- **Files added**: `/app/backend/straumann_blx_components_expanded.py` (~855 lines), `/app/backend/_seed_straumann_blx_components.py` (idempotent `seed_if_thin()` gate, same pattern as Alpha-Bio iter-205).
+- **`server.py` wiring**: startup hook added beside iter-205 Alpha-Bio components seed and iter-292 BLT seed.
+- **Test report**: `/app/test_reports/iteration_293.json` (100% pass — 12/12 tests). No regression of BLT (iter-292), BLX library (iter-283), Adin (iter-284), or Alpha-Bio components (iter-205).
+
+
 ### Feb 26, 2026 — iter-292: Straumann BLT Implant Catalog (24/24 backend tests passed)
 - **3 new Straumann BLT (Bone Level Tapered) systems** wired end-to-end:
   - `BLT Roxolid SLActive` — 24 (Ø, L) combinations (Ø2.9 / 3.3 / 4.1 / 4.8)
