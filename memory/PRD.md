@@ -4412,6 +4412,21 @@ A comprehensive mobile application for managing dental implant procedures at the
   - Backend GET /api/procedures accepts `phase` query param (1,2,3,4,completed)
   - Procedures page supports `phase` URL param for filtered views
 
+### Feb 26, 2026 — iter-294: Adin CloseFit Drilling & Components Update (21/21 backend tests passed)
+- **Source**: Official Adin "Close Fit System" prosthetic components catalog PDF.
+- **(1) Implant size matrix corrected**: UNP CloseFit no longer offers 8 mm — lengths now [10, 11.5, 13, 15, 16, 18] (6 SKUs). Legacy DB row auto-removed by `_seed_adin.py` cleanup. NP/RP/WP unchanged.
+- **(2) Drilling protocol switched to SEQUENTIAL (primary)**:
+  - UNP Ø2.75: Pilot 2.0 + Twist 2.5 (all D)
+  - NP Ø3.0: Pilot 2.0 + Twist 2.8 (D2/D3 cortical-only on Twist 2.8; D4 = Pilot 2.0 only)
+  - RP Ø3.5: Pilot 2.0 + Twist 2.8 + Twist 3.2 (D2/D3 cortical-only on Twist 3.2; D4 = Pilot 2.0 only)
+  - WP Ø4.3: 4-drill sequential (2.0 → 2.8 → 3.2 → 3.6)
+  - WP Ø5.0: 6-drill sequential (2.0 → 2.8 → 3.2 → 3.6 → 4.2 → Coronal 4.6)
+- **(3) Tri-Step exposed as `alt_protocol`** for RP/WP CloseFit only — single multi-step burr replaces the first 3 sequential drills. UNP/NP correctly return no alternative.
+- **(4) Prosthetic components expanded**: 30 SKUs per UNP/NP/RP, 49 SKUs for WP (adds TMA multi-units, flat-connection abutments, retrieval screw, MU impression posts). Component schema mirrors Straumann BLX iter-293 pattern.
+- **Files added**: `/app/backend/adin_components_expanded.py`, `/app/backend/_seed_adin_components.py`. **Files modified**: `adin_data.py` (PROTOCOLS sequential, TRISTEP_CLOSEFIT_PROTOCOLS new, refactored `_render_drill_steps()`, added `generate_adin_tristep_alt_protocol()`), `_seed_adin.py` (UNP 8mm cleanup), `server.py` (drilling dispatcher Adin Tri-Step branch + components startup hook).
+- **Test report**: `/app/test_reports/iteration_294.json` (100% pass — 21/21). All previous library + drilling regression intact across Straumann BLX/BLT, Alpha Bio, and other Adin systems (Touareg-OS/S, Swell, One).
+
+
 ### Feb 26, 2026 — iter-293: Straumann BLX Prosthetic Components Catalog (12/12 backend tests passed)
 - **Full brochure-grade prosthetic components** wired for all 4 BLX systems, replacing the 10-row per-platform stub with the complete catalog from the official Straumann BLX Catalogue PDF:
   - RB platforms (BLX Roxolid SLActive - RB / SLA - RB) — **135 components each**

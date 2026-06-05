@@ -435,6 +435,7 @@ def _render_drill_steps(rows, implant_diameter, implant_length, system_name):
         "code": "—",
         "diameter": implant_diameter,
         "depth": float(implant_length),
+        "cortical_only": False,
         "rpm": "Manual ratchet or low-speed handpiece",
         "irrigation": False,
         "note": (
