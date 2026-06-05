@@ -1,7 +1,111 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
 
-## Iteration 288 (Feb 2026) — Adin drill tables rewritten verbatim from catalog
+## Iteration 290 (Feb 2026) — BLX drill workflows rewritten verbatim from official surgical guide
+
+### What the user pointed out
+The previous BLX drilling protocols were the **BLT** surgical sequence
+(VeloDrill ladder + BLX Tap + simplistic Soft/Medium/Hard rules). BLX
+and BLT are different implant systems with different surgical guides.
+
+### What changed
+**Backend**
+- `/app/backend/straumann_blx_data.py` — replaced the BLT-style ladder
+  generator with a **per-Ø workflow table** mirroring section 5.2 of
+  the Straumann BLX Implants System surgical guide
+  (`702115-D-03-en`). For every BLX implant Ø (3.5 / 3.75 / 4.0 / 4.5 /
+  5.0 / 5.5 / 6.0 mapped to catalog 6.5 / 6.5) the generator now emits:
+    1. Mark site: **Needle Drill Ø1.6 mm** (ref 026.0056).
+    2. Pilot drilling: **Pilot Drill 1 Ø2.2 mm** (ref 066.0511) + **Alignment Pin 2.2 mm**.
+    3. Bone-density branch:
+       • Soft (D3/D4)  → Drill 2/3 to full depth.
+       • Medium (D2)   → Drill 2 → Alignment Pin 2.8 → Drill 3 / Drill 5 (cortical) / Drill 6 / Drill 7 (cortical) etc., per Ø.
+       • Hard (D1)     → full ladder ending with a cortical-only drill.
+    4. **Implant placement** at 15 rpm with Loxim® transfer piece.
+  - Cortical-only depths from the universal legend footnote:
+    **4 mm for 6-8 mm implants, 6 mm for 10-18 mm implants**.
+  - All drills at **800 rpm with copious irrigation**.
+  - Drill-tip-1mm-longer warning surfaced as a note on every full-depth
+    drill ("Drill tip extends ~1 mm beyond the marking — actual
+    osteotomy = length + 1 mm.").
+  - Drill reference numbers (066.0512 / 066.0513 / 066.0514 / 066.0515
+    / 066.0516 / 066.0517 / 066.0518 / 066.0519) preserved in the
+    `code` field so the UI can render them.
+- `server.py` — replaced the misleading
+  "Hard Bone + Tap" / "Soft Bone Under-Preparation" `protocol_type`
+  labels with the catalog framing ("Hard Bone (Straumann BLX §5.2)" /
+  "Medium Bone" / "Soft Bone"). BLX no longer uses a Tap (that was the
+  BLT engine).
+
+### Verification (raw JSON spot-checked against the user's Ø3.75 example)
+- **Ø4.0 D1** → Needle → Pilot 2.2 + AP 2.2 → Drill 2 (2.8) → Drill 3 (3.2) → Drill 4 (3.5) → Implant @ 15 rpm.
+- **Ø4.0 D2** → Needle → Pilot 2.2 + AP 2.2 → Drill 2 (2.8) → AP 2.8 → Drill 3 (3.2) → Implant @ 15 rpm.
+- **Ø4.0 D3/D4** → Needle → Pilot 2.2 + AP 2.2 → Drill 2 (2.8) → Implant @ 15 rpm.
+- **Ø4.5 D1 × 8 mm**: cortical-only Drill 6 at **4 mm** (short implant rule).
+- **Ø5.5 D2 × 10 mm**: cortical-only Drill 7 at **6 mm** (long implant rule).
+- **Ø6.0 D1 × 10 mm** (mapped to catalog Ø6.5): full ladder + Drill 9 (6.2 mm) cortical-only.
+- **Ø3.5 D3 × 16 mm**: Needle → Pilot + AP → single Soft-Bone Drill 2 → Implant.
+
+### Out of scope
+- **BLT** implant system (Roxolid SLActive / Roxolid SLA / Ti SLA) —
+  user said implement after BLX is finalised.
+- Cortical-only depth override for Ø3.5 Hard bone — the official chart
+  has no cortical step for Ø3.5 (only full-depth Drill 4), so we don't
+  render one.
+
+---
+
+
+
+### What the user reported
+"Drilling protocols are still wrong for Adin and Straumann BLX" — visible
+in **Home → Implant tool → Drilling Protocol** preview.
+
+### Root cause (real this time)
+The frontend `DrillingProtocolScreen` (compiled bundle inspected) reads
+each step as `step.drill_type / code / diameter / depth / rpm /
+irrigation`. The Adin (iter-284/288) and BLX (iter-283) generators
+emitted `drill_name / diameter_mm / depth_mm / note` — **schema
+mismatch**. Every row in the UI therefore showed blank Ø / depth / rpm
+columns and the drill-type colour fell through to a default. The drill
+data itself was correct, but the rendering pipeline never saw it.
+
+### What changed
+**Backend**
+- `/app/backend/adin_data.py` — `generate_adin_protocol()` rewritten to
+  emit the working schema: `drill_type / code / diameter / depth /
+  rpm / irrigation / note`. Cortex-only drills now render `depth =
+  "Cortex only"` with the catalog footnote quoted. Tri-Step always
+  carries the catalog asterisk footnote. RPM defaults to
+  "800-1500 (catalog does not specify)" so the column is no longer
+  blank, while still being honest about the catalog's silence.
+- `/app/backend/straumann_blx_data.py` — `generate_blx_protocol()` re-
+  written likewise. Maps Needle/VeloDrill ladder/Profile/Tap/Implant
+  Placement onto the UI's known `drill_type` palette
+  (Pilot Drill / Short Pilot Drill / Soft Bone Drill / Dense Bone
+  Drill / Crestal Bone Drill / Implant Placement) so the timeline
+  badges and colours render. The Straumann nomenclature (X Pilot
+  VeloDrill™, X VeloDrill™, BLX Profile Drill, BLX Tap, Loxim®) now
+  lives in the `code` field, which the UI shows under "Drill Code".
+
+### Verification
+Dumped raw JSON for one (brand, Ø, bone) cell per system — every row
+now has populated `drill_type / diameter / depth / rpm / irrigation /
+note` fields and the bone-density branching (D-I full ladder + Profile
++ Tap; D-II/III standard; D-IV reduced) is intact. User to spot-check
+the printed cells; tables can be corrected one-by-one once any specific
+cell is flagged as wrong.
+
+### Open question for user
+- Adin parenthesised-drill semantics (cortex-only vs omit-entirely).
+- BLX WB Ø5.5 / Ø6.5 ladders depth (currently goes through 5.2 then
+  Profile).
+- RPM column policy when the catalog doesn't print one (currently we
+  print a default with "catalog does not specify" disclaimer).
+
+---
+
+
 
 ### What the user pointed out
 The iter-284 Adin drilling protocols were not faithful to the catalog —
