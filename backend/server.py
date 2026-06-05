@@ -14787,6 +14787,16 @@ async def seed_implant_catalog_on_start():
         await _blt_seed()
     except Exception as exc:  # pragma: no cover — best-effort
         logging.warning("Straumann BLT seed skipped: %s", exc)
+    # iter-293 (Feb 2026): expand Straumann BLX prosthetic components —
+    # replaces the 10-row per-platform stub with the full brochure-grade
+    # per-SKU list extracted from the BLX Prosthetic Components Catalogue
+    # (135 RB / 68 WB entries). Idempotent — re-seeds only when the live
+    # implant_catalog row has fewer components than the expansion target.
+    try:
+        from _seed_straumann_blx_components import seed_if_thin as _blx_comp_seed
+        await _blx_comp_seed()
+    except Exception as exc:  # pragma: no cover — best-effort
+        logging.warning("Straumann BLX component expansion seed skipped: %s", exc)
 
 
 

@@ -1,0 +1,25 @@
+{
+  "summary": "iter-293 backend regression for Straumann BLX prosthetic components expansion — ALL 12 tests PASS (100%). Verified GET /api/implant-catalog/by-key?key=Straumann|<system> returns expanded brochure-grade components for all 4 BLX systems: RB platforms (SLActive + SLA RB) each return EXACTLY 135 components, WB platforms (SLActive + SLA WB) each return EXACTLY 68 components, with is_stub=false and updated_by='straumann_blx_components_expanded:iter-293'. Schema validated: every component has required fields {type, subtype, platform, catalog_code, indication}. RB subtype counts confirmed via Counter: cover_screw>=1, healing_abutment=20, temporary_abutment=9, ti_base>=10 (Variobase incl AS Crown 062.4972), screw_retained_abutment=10 (0°/17°/30°), burnout_coping=7, locator_abutment=12 (Novaloc 0° + 15°), retention_insert=6 colors. WB-specific SKUs verified: Gold 062.8410, pre-milled 062.4605/4606/4607, impression posts 065.0032/0034/4810, Variobase 062.4953/4954/4971, healing Ø6/Ø7.5 GH 0.75/1.5, temporary Ø5.5. Catalog codes unique within each system list (ignoring placeholder '—'). Regression PASSED: /api/implant-library/systems still returns 7 Straumann systems (3 BLT + 4 BLX); /api/drilling-protocols/generate works for both BLX Roxolid SLActive RB (Ø4.0 L10 D2) and BLT Roxolid SLActive (Ø4.1 L10 D2); Alpha Bio|SPI still has >=30 expanded components (no regression of iter-205 work). Startup hook seed_if_thin() executed successfully on backend reload — backend logs show '✔ ... → 135 components' / '✔ ... → 68 components' for all 4 systems.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": { "ui_bugs": [], "integration_issues": [], "design_issues": [] },
+  "test_report_links": [
+    "/app/backend/tests/test_straumann_blx_components_iter293.py",
+    "/app/test_reports/pytest/iter293_blx_components.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "straumann_blx_components_expanded.py is well-structured (855 lines, schema-consistent with alpha_bio_components_expanded.py pattern). Good module factoring: _SRA_SHARED + _NOVALOC_SHARED + _RB_COMPONENTS combine cleanly, WB excludes Novaloc per Ø3.8 RB-only constraint as documented.",
+    "_seed_straumann_blx_components.py.seed_if_thin() is correctly idempotent — only re-seeds when live component count < expansion target. Same pattern as alpha-bio iter-205 seed. Verified no spurious writes on hot reload.",
+    "Cover screw entries use catalog_code='—' (em-dash placeholder for 'shipped with implant'). Tests must exclude this sentinel from uniqueness checks. Consider switching to null/None and documenting via indication string — current placeholder is harmless but cosmetic.",
+    "server.py still 14,800+ lines (recurring concern from iter-283/292). Recommend extracting per-brand component-seed startup hooks into a single brand-registry module rather than chaining individual seed_if_thin() calls in startup.",
+    "Endpoint GET /api/implant-catalog/by-key?key=... (query param) and GET /api/implant-catalog/by-key/<key> (path param) appear to be different routes — backend logs show the path-param variant returns 404 while query-param returns 200. If both shapes are documented, ensure FE only uses one to avoid 404 noise in logs."
+  ],
+  "updated_files": ["/app/backend/tests/test_straumann_blx_components_iter293.py"],
+  "success_rate": { "backend": "100% (12/12 passed)", "frontend": "n/a (backend-only request)" },
+  "test_credentials": "Abhijit.patil / Admin@123 (admin/implant-incharge) — POST /api/auth/login with {identifier, password}; token at access_token. Student creds not needed for this backend regression (catalog endpoint accessible to admin).",
+  "seed_data_creation": "None created by tests. Validated startup hook seed_if_thin() in /app/backend/_seed_straumann_blx_components.py executed during backend reload — backend.out.log confirms: 'Seeded 4 Straumann BLX system(s)' with 135/135/68/68 component counts. The legacy 10-row stub from straumann_blx_data.py was overwritten as expected.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Pytest command: `cd /app && REACT_APP_BACKEND_URL=$(grep EXPO_PUBLIC_BACKEND_URL frontend/.env | cut -d= -f2) python -m pytest backend/tests/test_straumann_blx_components_iter293.py -v`. The catalog endpoint is a QUERY param (?key=Brand|System), URL-encoded. NOTE: a parallel path-param shape /by-key/<key> returns 404 (do not use). Component counts on RB (135) and WB (68) include shared SRA copings/bars (39) and — RB only — Novaloc attachments (23). If iter-294+ adds more BLX SKUs, update the expected constants in this test file.",
+  "rca of the issue": "N/A — no bugs found. BLX prosthetic components expansion is complete and stable. iter-293 backend wiring verified."
+}
