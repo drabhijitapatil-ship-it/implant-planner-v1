@@ -13,7 +13,10 @@ import ExportPrintMenu from './ExportPrintMenu';
 
 type DrillStep = {
   step: number; drill_type: string; code: string;
-  diameter: number; depth: number; rpm: string; irrigation: boolean;
+  diameter: number; depth: number | string; rpm: string; irrigation: boolean;
+  cortical_only?: boolean;
+  cortical_depth_mm?: number;
+  note?: string;
 };
 
 type ProtocolData = {
@@ -93,7 +96,7 @@ export default function DrillingProtocolScreen({
         <td style="padding:8px;text-align:center;font-weight:700;color:#1565C0">${s.step}</td>
         <td style="padding:8px;font-weight:600">${s.drill_type}</td>
         <td style="padding:8px;text-align:center">${s.diameter} mm</td>
-        <td style="padding:8px;text-align:center">${s.depth} mm</td>
+        <td style="padding:8px;text-align:center">${s.cortical_only ? `${s.cortical_depth_mm ?? s.depth} mm — cortical only` : (typeof s.depth === 'number' ? `${s.depth} mm` : s.depth)}</td>
         <td style="padding:8px;text-align:center">${s.code || '—'}</td>
         <td style="padding:8px;text-align:center">${s.rpm}</td>
         <td style="padding:8px;text-align:center">${s.irrigation ? 'Yes' : 'No'}</td>
@@ -201,7 +204,7 @@ export default function DrillingProtocolScreen({
             <td style="padding:8px;text-align:center;font-weight:700;color:#1565C0">${s.step}</td>
             <td style="padding:8px;font-weight:600">${s.drill_type}</td>
             <td style="padding:8px;text-align:center">${s.diameter} mm</td>
-            <td style="padding:8px;text-align:center">${s.depth} mm</td>
+            <td style="padding:8px;text-align:center">${s.cortical_only ? `${s.cortical_depth_mm ?? s.depth} mm — cortical only` : (typeof s.depth === 'number' ? `${s.depth} mm` : s.depth)}</td>
             <td style="padding:8px;text-align:center">${s.code || '—'}</td>
             <td style="padding:8px;text-align:center">${s.rpm}</td>
             <td style="padding:8px;text-align:center">${s.irrigation ? 'Yes' : 'No'}</td>
@@ -389,7 +392,22 @@ export default function DrillingProtocolScreen({
               </View>
               <View style={p.drillBody}>
                 <View style={p.drillRow}><Text style={p.drillLabel}>Diameter</Text><Text style={p.drillVal}>{step.diameter} mm</Text></View>
-                <View style={p.drillRow}><Text style={p.drillLabel}>Depth</Text><Text style={p.drillVal}>{step.depth} mm</Text></View>
+                <View style={p.drillRow}>
+                  <Text style={p.drillLabel}>Depth</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, justifyContent: 'flex-end' }}>
+                    {step.cortical_only ? (
+                      <>
+                        <Text style={p.drillVal}>{step.cortical_depth_mm ?? step.depth} mm</Text>
+                        <View style={p.cortBadge} data-testid={`cortical-badge-${step.step}`}>
+                          <Ionicons name="warning" size={11} color="#E65100" />
+                          <Text style={p.cortBadgeTxt}>Cortical only · {step.cortical_depth_mm ?? step.depth} mm</Text>
+                        </View>
+                      </>
+                    ) : (
+                      <Text style={p.drillVal}>{typeof step.depth === 'number' ? `${step.depth} mm` : step.depth}</Text>
+                    )}
+                  </View>
+                </View>
                 <View style={p.drillRow}><Text style={p.drillLabel}>Drill Code</Text><Text style={p.drillVal}>{step.code}</Text></View>
                 <View style={p.drillRow}><Text style={p.drillLabel}>Speed</Text><Text style={p.drillVal}>{step.rpm} RPM</Text></View>
                 <View style={p.drillRow}><Text style={p.drillLabel}>Irrigation</Text><Text style={[p.drillVal, { color: step.irrigation ? '#43A047' : '#E65100' }]}>{step.irrigation ? 'YES' : 'NO'}</Text></View>
@@ -428,7 +446,7 @@ export default function DrillingProtocolScreen({
                 <View key={i} style={[p.qrRow, i === currentStep && { backgroundColor: DRILL_BG[s.drill_type] || '#F5F5F5' }]}>
                   <View style={[p.qrDot, { backgroundColor: DRILL_COLORS[s.drill_type] || '#546E7A' }]} />
                   <Text style={[p.qrText, i === currentStep && { fontWeight: '700' }]}>
-                    {s.drill_type} {s.diameter} mm → {s.depth} mm
+                    {s.drill_type} {s.diameter} mm → {s.cortical_only ? `cortical ${s.cortical_depth_mm ?? s.depth} mm` : (typeof s.depth === 'number' ? `${s.depth} mm` : s.depth)}
                   </Text>
                   <Text style={p.qrRpm}>{s.rpm}</Text>
                 </View>
@@ -503,6 +521,13 @@ const p = StyleSheet.create({
   drillRow: { flexDirection: 'row', justifyContent: 'space-between' },
   drillLabel: { fontSize: 14, color: '#546E7A' },
   drillVal: { fontSize: 14, fontWeight: '700', color: '#263238' },
+  cortBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#FFF3E0',
+    borderWidth: 1, borderColor: '#FFB74D',
+    paddingHorizontal: 7, paddingVertical: 3, borderRadius: 8,
+  },
+  cortBadgeTxt: { fontSize: 11, fontWeight: '700', color: '#E65100', letterSpacing: 0.2 },
   // Next
   nextCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ECEFF1', borderRadius: 10, padding: 12, marginBottom: 14 },
   nextLabel: { fontSize: 12, color: '#78909C', fontWeight: '600' },
