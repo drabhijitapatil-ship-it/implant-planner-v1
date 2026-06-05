@@ -10055,6 +10055,22 @@ IMPLANT_INDICATIONS = {
         "indicated_procedures": ["Single Conventional Implant", "Immediate Implant"],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
+    # ── Straumann BLT (iter-292, Feb 2026) ────────────────────────────────
+    "Straumann|BLT Roxolid SLActive": {
+        "indication": "Roxolid® Bone Level Tapered implant with SLActive® hydrophilic surface. D1-D4. Immediate / early / conventional. Soft bone & fresh extraction sockets — primary stability via apical taper. CrossFit® connection (SC Ø2.9 / NC Ø3.3 / RC Ø4.1 / RC Ø4.8).",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy", "All on 4", "All on 6", "All on X"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Straumann|BLT Roxolid SLA": {
+        "indication": "Roxolid® Bone Level Tapered implant with conventional SLA® surface. D1-D4. Conventional & immediate placement, conventional loading. CrossFit® connection.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Straumann|BLT Ti SLA": {
+        "indication": "Ti Grade 4 Bone Level Tapered implant with SLA® surface. D1-D4. Conventional & immediate placement. CrossFit® connection (NC/RC).",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
 }
 
 # Map Suggest Me procedure types → New Case procedure types for indication matching
@@ -11146,6 +11162,17 @@ for _adin_sys in (
         ),
     }
 del _adin_sys
+
+# ── Straumann BLT Drilling Protocols (iter-292, Feb 2026) ────────────────
+for _blt_sys in ("BLT Roxolid SLActive", "BLT Roxolid SLA", "BLT Ti SLA"):
+    DRILLING_PROTOCOLS[f"Straumann|{_blt_sys}"] = {
+        "system_name": f"Straumann {_blt_sys}",
+        "protocol_family": "straumann_blt",
+        "connection": "CrossFit",
+        "material": "Roxolid" if "Roxolid" in _blt_sys else "Ti Grade 4",
+        "surface": "SLActive" if "SLActive" in _blt_sys else "SLA",
+    }
+del _blt_sys
 
 def _generate_ankylos_protocol(proto, implant_diameter, implant_length, bone):
     """Generate drilling protocol for Dentsply Sirona Ankylos C/X system.
@@ -12635,6 +12662,9 @@ async def generate_drilling_protocol(
     elif proto.get("protocol_family") == "straumann_blx":
         from straumann_blx_data import generate_blx_protocol
         steps = generate_blx_protocol(system, diameter, length, bone)
+    elif proto.get("protocol_family") == "straumann_blt":
+        from straumann_blt_data import generate_blt_protocol
+        steps = generate_blt_protocol(system, diameter, length, bone)
     elif proto.get("protocol_family") == "adin":
         from adin_data import generate_adin_protocol
         steps = generate_adin_protocol(system, diameter, length, bone)
@@ -12698,6 +12728,15 @@ async def generate_drilling_protocol(
             "D4": "Soft Bone (Straumann BLX §5.2)",
         }
         protocol_type = f"{blx_bone_labels.get(bone, 'Standard Protocol')} — {sys_label}"
+    elif family == "straumann_blt":
+        sys_label = proto.get("system_name", system)
+        blt_bone_labels = {
+            "D1": "Hard Bone (Straumann BLT §5.1)",
+            "D2": "Medium Bone (Straumann BLT §5.1)",
+            "D3": "Soft Bone (Straumann BLT §5.1)",
+            "D4": "Soft Bone (Straumann BLT §5.1)",
+        }
+        protocol_type = f"{blt_bone_labels.get(bone, 'Standard Protocol')} — {sys_label}"
     elif family == "adin":
         sys_label = proto.get("system_name", system)
         adin_bone_labels = {
@@ -12710,7 +12749,7 @@ async def generate_drilling_protocol(
     else:
         protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
 
-    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else ("35-50 Ncm" if family == "mis_lance" else ("25-45 Ncm" if family in ("cowellmedi", "bredent_sky") else ("~40 Ncm" if family == "osstem" else ("≤90 Ncm" if family == "tsx" else ("30-80 Ncm (target 35 Ncm)" if family == "straumann_blx" else ("Not specified by Adin catalog — refer to Adin surgical guide" if family == "adin" else ("35-45 Ncm" if family in ("conical_rbt", "alpha_bio_spi", "refirm") else "35-45 Ncm"))))))))
+    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else ("35-50 Ncm" if family == "mis_lance" else ("25-45 Ncm" if family in ("cowellmedi", "bredent_sky") else ("~40 Ncm" if family == "osstem" else ("≤90 Ncm" if family == "tsx" else ("30-80 Ncm (target 35 Ncm)" if family == "straumann_blx" else ("≤35 Ncm (target — check bed if >35 Ncm reached early)" if family == "straumann_blt" else ("Not specified by Adin catalog — refer to Adin surgical guide" if family == "adin" else ("35-45 Ncm" if family in ("conical_rbt", "alpha_bio_spi", "refirm") else "35-45 Ncm")))))))))
 
     # Add Ankylos series info to response
     ankylos_info = {}
@@ -12887,6 +12926,9 @@ async def export_drilling_pdf(
     elif proto.get("protocol_family") == "straumann_blx":
         from straumann_blx_data import generate_blx_protocol
         steps = generate_blx_protocol(system, diameter, length, bone)
+    elif proto.get("protocol_family") == "straumann_blt":
+        from straumann_blt_data import generate_blt_protocol
+        steps = generate_blt_protocol(system, diameter, length, bone)
     elif proto.get("protocol_family") == "adin":
         from adin_data import generate_adin_protocol
         steps = generate_adin_protocol(system, diameter, length, bone)
