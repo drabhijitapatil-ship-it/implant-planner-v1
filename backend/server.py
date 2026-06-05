@@ -14778,6 +14778,15 @@ async def seed_implant_catalog_on_start():
         await _adin_seed()
     except Exception as exc:  # pragma: no cover — best-effort
         logging.warning("Adin seed skipped: %s", exc)
+    # iter-292 (Feb 2026): seed Straumann BLT (Bone Level Tapered) —
+    # 3 systems (Roxolid SLActive, Roxolid SLA, Ti SLA), 67 (Ø,L)
+    # combinations total. Idempotent: removes legacy "BLT" stub rows
+    # then inserts missing implant_library rows and upserts catalog.
+    try:
+        from _seed_straumann_blt import main as _blt_seed
+        await _blt_seed()
+    except Exception as exc:  # pragma: no cover — best-effort
+        logging.warning("Straumann BLT seed skipped: %s", exc)
 
 
 

@@ -1,0 +1,24 @@
+{
+  "summary": "iter-292 backend regression for Straumann BLT (Bone Level Tapered) implant systems — ALL 24 tests PASS. Verified: 3 new BLT systems present with correct counts (Roxolid SLActive=24, Roxolid SLA=21, Ti SLA=18) and Ø lists [2.9/3.3/4.1/4.8 for Roxolid; 3.3/4.1/4.8 for Ti]; legacy ('Straumann','BLT') 4-row stub is removed; total Straumann library = exactly 7 systems (3 BLT + 4 BLX); /api/drilling-protocols/available exposes the 3 BLT systems; POST /generate for each BLT system on D1+D4 returns protocol_type containing 'Straumann BLT', steps >=6 with strict schema {step,drill_type,code,diameter,depth,cortical_only,rpm,irrigation,note}; D1 includes Profile+Tap, D4 excludes Tap and has no cortical_only Profile; invalid Ø6.5/L15 returns graceful (200 with no full protocol, not 500); BLX (4)/Adin (8)/Alpha Bio (8) brand counts intact; BLX Roxolid SLActive Ø4.0 L10 D2 and Adin Touareg-S Ø4.2 L10 D2 still generate correctly.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": { "ui_bugs": [], "integration_issues": [], "design_issues": [] },
+  "test_report_links": [
+    "/app/backend/tests/test_straumann_blt_iter292.py",
+    "/app/test_reports/pytest/iter292_blt.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is 14,937 lines — far exceeds 700-line guideline. The drilling-protocol dispatcher (12613-12790) is a deeply nested if/elif chain across 15+ protocol families. Strongly recommend extracting each family into its own dispatcher module (one per brand) with a registry pattern, similar to how straumann_blt_data.py, straumann_blx_data.py and adin_data.py are already isolated as data modules.",
+    "Generator returns an empty list [] for invalid Ø (e.g. Ø6.5) — endpoint then 200s with a body containing a single 'Implant Placement' seat step. Strictly per the request, an explicit 400/404 with a graceful message would be more correct than a 200-with-stub. Currently passes the 'not 500' bar, but consider raising HTTPException(400, 'Diameter Ø{d} not available in {system}') when generate_blt_protocol returns []. Same shortcoming likely exists in BLX and others.",
+    "Long ternary chain at server.py:12752 for insertion_torque is unreadable — flatten into a dict lookup keyed by protocol_family.",
+    "Drilling-protocols/available endpoint shape was not visible in the request files; tests handle both list-of-dict and list-of-string variants. Recommend a typed Pydantic response model for consistency."
+  ],
+  "updated_files": ["/app/backend/tests/test_straumann_blt_iter292.py"],
+  "success_rate": { "backend": "100% (24/24 passed)", "frontend": "n/a (backend-only request)" },
+  "test_credentials": "Abhijit.patil / Admin@123 (administrator); Gaurav.pandey / Student@123 (student) — both verified via POST /api/auth/login with {identifier, password} body; token returned at both 'token' and 'access_token' keys.",
+  "seed_data_creation": "None — relies on _seed_straumann_blt.main() startup hook which on this run logged: 'removed 4 legacy BLT stub rows; inserted=0 skipped(existing)=63; upserted=3 system docs' confirming idempotent seed.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Pytest must be run with REACT_APP_BACKEND_URL or EXPO_PUBLIC_BACKEND_URL exported (frontend/.env has only EXPO_PUBLIC_*; the test file accepts both). Backend logs at startup confirm BLT seed: '[implant_library] removed 4 legacy BLT stub rows / inserted=0 skipped(existing)=63 / [implant_catalog] upserted=3 system docs'. The /drilling-protocols/available endpoint shape varied across iterations — current tests support list-of-dict, list-of-string and dict-of-brand response shapes.",
+  "rca of the issue": "N/A — no bugs found. Iter-292 BLT wiring is complete and stable."
+}
