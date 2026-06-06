@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,9 @@ import {
   Alert,
   Image,
   ActivityIndicator,
+  Modal,
+  Animated,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
@@ -20,19 +23,52 @@ export default function ProfileScreen() {
   const { user, logout, updateProfilePhoto } = useAuth();
   const router = useRouter();
   const [uploading, setUploading] = useState(false);
+  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  // Fade-in animation for the modal backdrop + card
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
+  const cardScale = useRef(new Animated.Value(0.92)).current;
+
+  useEffect(() => {
+    if (logoutModalVisible) {
+      Animated.parallel([
+        Animated.timing(backdropOpacity, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: true,
+        }),
+        Animated.spring(cardScale, {
+          toValue: 1,
+          friction: 7,
+          tension: 120,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      // Reset for next open
+      backdropOpacity.setValue(0);
+      cardScale.setValue(0.92);
+    }
+  }, [logoutModalVisible]);
 
   const handleLogout = () => {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Logout',
-        style: 'destructive',
-        onPress: async () => {
-          await logout();
-          router.replace('/auth/login');
-        },
-      },
-    ]);
+    setLogoutModalVisible(true);
+  };
+
+  const confirmLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await logout();
+      setLogoutModalVisible(false);
+      router.replace('/auth/login');
+    } finally {
+      setLoggingOut(false);
+    }
+  };
+
+  const cancelLogout = () => {
+    setLogoutModalVisible(false);
   };
 
   const handlePickImage = async () => {
@@ -224,6 +260,7 @@ export default function ProfileScreen() {
             <Text style={styles.legalRowText}>How it works</Text>
             <Ionicons name="chevron-forward" size={18} color="#999" />
           </TouchableOpacity>
+          {user?.role !== 'nurse' && (
           <TouchableOpacity
             style={styles.legalRow}
             onPress={() => router.push('/whatsnew?mode=history')}
@@ -234,6 +271,7 @@ export default function ProfileScreen() {
             <Text style={styles.legalRowText}>What's new</Text>
             <Ionicons name="chevron-forward" size={18} color="#999" />
           </TouchableOpacity>
+          )}
         </View>
 
         {/* HIPAA — Compliance section. Only Implant In-Charge / Administrator
@@ -253,6 +291,20 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
         )}
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Learning</Text>
+          <TouchableOpacity
+            style={styles.legalRow}
+            onPress={() => router.push('/saved-tips' as any)}
+            data-testid="link-saved-tips"
+            testID="link-saved-tips"
+          >
+            <Ionicons name="bookmark-outline" size={22} color="#1565C0" />
+            <Text style={styles.legalRowText}>Saved Smart Tips</Text>
+            <Ionicons name="chevron-forward" size={18} color="#999" />
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Legal</Text>
@@ -280,11 +332,64 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} testID="logout-btn">
           <Ionicons name="log-out" size={24} color="#FFF" />
           <Text style={styles.logoutButtonText}>Logout</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* ── Custom Logout Confirmation Modal ── */}
+      <Modal
+        visible={logoutModalVisible}
+        transparent
+        animationType="none"
+        statusBarTranslucent
+        onRequestClose={cancelLogout}
+      >
+        <Animated.View style={[styles.modalOverlay, { opacity: backdropOpacity }]}>
+          <Pressable style={styles.modalBackdropTap} onPress={cancelLogout} />
+
+          <Animated.View style={[styles.modalCard, { transform: [{ scale: cardScale }] }]}>
+            {/* Icon badge */}
+            <View style={styles.modalIconBadge}>
+              <Ionicons name="log-out-outline" size={32} color="#DC3545" />
+            </View>
+
+            <Text style={styles.modalTitle}>Sign Out?</Text>
+            <Text style={styles.modalMessage}>
+              You'll need to sign in again to access your implant planning workspace.
+            </Text>
+
+            {/* Buttons */}
+            <View style={styles.modalButtonRow}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={cancelLogout}
+                disabled={loggingOut}
+                testID="logout-cancel-btn"
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalConfirmBtn, loggingOut && styles.modalConfirmBtnDisabled]}
+                onPress={confirmLogout}
+                disabled={loggingOut}
+                testID="logout-confirm-btn"
+              >
+                {loggingOut ? (
+                  <ActivityIndicator color="#FFF" size="small" />
+                ) : (
+                  <>
+                    <Ionicons name="log-out-outline" size={18} color="#FFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.modalConfirmText}>Sign Out</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </Animated.View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -453,5 +558,98 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#78909C',
     fontStyle: 'italic',
+  },
+
+  // ── Modal styles ──
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(10, 20, 40, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalBackdropTap: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  modalCard: {
+    width: '84%',
+    maxWidth: 360,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    paddingHorizontal: 28,
+    paddingTop: 32,
+    paddingBottom: 28,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.18,
+    shadowRadius: 40,
+    elevation: 20,
+  },
+  modalIconBadge: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#FFF0F1',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+    borderWidth: 1.5,
+    borderColor: '#FFCDD2',
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#0A1428',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  modalMessage: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 21,
+    marginBottom: 28,
+  },
+  modalButtonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  modalCancelBtn: {
+    flex: 1,
+    height: 50,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#D1D5DB',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+  },
+  modalCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  modalConfirmBtn: {
+    flex: 1,
+    height: 50,
+    borderRadius: 14,
+    backgroundColor: '#DC3545',
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+    shadowColor: '#DC3545',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  modalConfirmBtnDisabled: {
+    opacity: 0.6,
+  },
+  modalConfirmText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFF',
   },
 });

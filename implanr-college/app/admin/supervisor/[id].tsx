@@ -380,6 +380,7 @@ export default function SupervisorDrillDown() {
         onClose={() => setNudgeOpen(false)}
         studentId={id as string}
         studentName={supervisorName}
+        targetType="supervisor"
         pendingCount={k.stale_count || k.pending || 0}
         pendingCaseIds={procedures.filter(p => PENDING_STATUSES.includes(p.status)).map(p => p.id).slice(0, 10)}
       />

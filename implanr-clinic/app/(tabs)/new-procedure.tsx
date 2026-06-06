@@ -344,8 +344,8 @@ export default function NewProcedureScreen() {
     registration_number: '',
     chief_complaint: '',
     student_name: user?.role === 'dentist' ? (user?.name || '') : '',
-    supervisor_id: (user?.role === 'dentist' || user?.role === 'chief_dentist') ? (user?.id || '') : '',
-    supervisor_name: (user?.role === 'dentist' || user?.role === 'chief_dentist') ? (user?.name || '') : '',
+    supervisor_id: user?.role === 'chief_dentist' ? (user?.id || '') : '',
+    supervisor_name: user?.role === 'chief_dentist' ? (user?.name || '') : '',
     implant_incharge_id: user?.role === 'chief_dentist' ? (user?.id || '') : '',
     implant_incharge_name: user?.role === 'chief_dentist' ? (user?.name || '') : '',
     receipt_number: '',
@@ -569,8 +569,8 @@ export default function NewProcedureScreen() {
         setFormData({
           patient_name: '', age: '', sex: '', profession: '', mobile_number: '', patient_email: '',
           registration_number: '', chief_complaint: '', student_name: user?.name || '',
-          supervisor_id: (user?.role === 'dentist' || user?.role === 'chief_dentist') ? (user?.id || '') : '',
-          supervisor_name: (user?.role === 'dentist' || user?.role === 'chief_dentist') ? (user?.name || '') : '',
+          supervisor_id: user?.role === 'chief_dentist' ? (user?.id || '') : '',
+          supervisor_name: user?.role === 'chief_dentist' ? (user?.name || '') : '',
           implant_incharge_id: user?.role === 'chief_dentist' ? (user?.id || '') : '',
           implant_incharge_name: user?.role === 'chief_dentist' ? (user?.name || '') : '',
           receipt_number: '', amount_paid: '', procedure_date: '', procedure_time: '',
@@ -1120,8 +1120,7 @@ export default function NewProcedureScreen() {
   if (!formData.patient_name?.trim()) missCaseDetails.push('Patient name');
   if (!formData.registration_number?.trim()) missCaseDetails.push('Registration number');
   if (!formData.chief_complaint?.trim()) missCaseDetails.push('Chief complaint');
-  if (!formData.supervisor_id) missCaseDetails.push('Supervising faculty');
-  if (!formData.implant_incharge_id) missCaseDetails.push('Implant in-charge');
+  if (!formData.implant_incharge_id) missCaseDetails.push('Chief Dentist');
   if (!formData.receipt_number?.trim()) missCaseDetails.push('Receipt number');
   if (!formData.amount_paid) missCaseDetails.push('Amount paid');
 
@@ -1388,40 +1387,15 @@ export default function NewProcedureScreen() {
         </View>
       </View>
 
-      {/* ─── Faculty Selection ─── */}
+      {/* ─── Chief Dentist Selection (clinic: dentist submits directly to chief dentist) ─── */}
       {user?.role === 'chief_dentist' ? null : (
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Faculty Assignment</Text>
-        {user?.role === 'dentist' && (
+        <Text style={styles.sectionTitle}>Case Assignment</Text>
         <View style={styles.fieldContainer}>
-          <Text style={styles.label}>Supervising Faculty <Text style={{ color: '#DC3545' }}>*</Text></Text>
-          <TouchableOpacity style={styles.dropdown} onPress={() => setShowSupervisorPicker(!showSupervisorPicker)}>
-            <Text style={[styles.dropdownText, !formData.supervisor_name && { color: '#999' }]}>
-              {formData.supervisor_name || 'Select Supervisor'}
-            </Text>
-            <Ionicons name={showSupervisorPicker ? 'chevron-up' : 'chevron-down'} size={18} color="#666" />
-          </TouchableOpacity>
-          {showSupervisorPicker && (
-            <ScrollView style={styles.dropdownList} nestedScrollEnabled={true}>
-              {supervisors.map(s => (
-                <TouchableOpacity key={s._id || s.id} style={styles.dropdownItem}
-                  onPress={() => {
-                    updateForm('supervisor_id', s._id || s.id);
-                    updateForm('supervisor_name', s.name);
-                    setShowSupervisorPicker(false);
-                  }}>
-                  <Text style={styles.dropdownItemText}>{s.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          )}
-        </View>
-        )}
-        <View style={styles.fieldContainer}>
-          <Text style={styles.label}>Implant In-Charge <Text style={{ color: '#DC3545' }}>*</Text></Text>
+          <Text style={styles.label}>Chief Dentist <Text style={{ color: '#DC3545' }}>*</Text></Text>
           <TouchableOpacity style={styles.dropdown} onPress={() => setShowInchargePicker(!showInchargePicker)}>
             <Text style={[styles.dropdownText, !formData.implant_incharge_name && { color: '#999' }]}>
-              {formData.implant_incharge_name || 'Select Implant In-Charge'}
+              {formData.implant_incharge_name || 'Select Chief Dentist'}
             </Text>
             <Ionicons name={showInchargePicker ? 'chevron-up' : 'chevron-down'} size={18} color="#666" />
           </TouchableOpacity>
@@ -1430,8 +1404,11 @@ export default function NewProcedureScreen() {
               {incharges.map(s => (
                 <TouchableOpacity key={s._id || s.id} style={styles.dropdownItem}
                   onPress={() => {
-                    updateForm('implant_incharge_id', s._id || s.id);
+                    const id = s._id || s.id;
+                    updateForm('implant_incharge_id', id);
                     updateForm('implant_incharge_name', s.name);
+                    updateForm('supervisor_id', id);
+                    updateForm('supervisor_name', s.name);
                     setShowInchargePicker(false);
                   }}>
                   <Text style={styles.dropdownItemText}>{s.name}</Text>
@@ -1506,8 +1483,7 @@ export default function NewProcedureScreen() {
           validatePatient={() => {
             if (!formData.patient_name?.trim()) return 'Patient name is required.';
             if (!formData.registration_number?.trim()) return 'MR / Registration number is required.';
-            if (!formData.supervisor_id) return 'Please select a supervisor.';
-            if (!formData.implant_incharge_id) return 'Please select an implant in-charge.';
+            if (!formData.implant_incharge_id) return 'Please select a Chief Dentist.';
             if (!formData.receipt_number?.trim()) return 'Receipt number is required.';
             if (!formData.amount_paid) return 'Amount paid is required.';
             // iter-220: appointment date/time are irrelevant for historical

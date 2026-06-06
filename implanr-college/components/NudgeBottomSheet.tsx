@@ -24,6 +24,7 @@ type Props = {
   pendingCount?: number;
   pendingCaseIds?: string[];
   onSent?: () => void;
+  targetType?: 'student' | 'supervisor';
 };
 
 const TEMPLATES: { label: string; build: (name: string, count: number) => string }[] = [
@@ -41,7 +42,7 @@ const TEMPLATES: { label: string; build: (name: string, count: number) => string
   },
 ];
 
-export function NudgeBottomSheet({ visible, onClose, studentId, studentName, pendingCount = 0, pendingCaseIds = [], onSent }: Props) {
+export function NudgeBottomSheet({ visible, onClose, studentId, studentName, pendingCount = 0, pendingCaseIds = [], onSent, targetType = 'student' }: Props) {
   const firstName = useMemo(() => (studentName || '').replace(/^Dr\.?\s+/i, '').split(' ')[0] || '', [studentName]);
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
@@ -49,6 +50,10 @@ export function NudgeBottomSheet({ visible, onClose, studentId, studentName, pen
   const [history, setHistory] = useState<NudgeHistoryItem[]>([]);
   const [cooldownSec, setCooldownSec] = useState(0);
   const [historyLoading, setHistoryLoading] = useState(false);
+
+  const nudgeEndpoint = targetType === 'supervisor'
+    ? `/supervisors/${studentId}/nudge`
+    : `/students/${studentId}/nudge`;
 
   const loadHistory = async () => {
     setHistoryLoading(true);
@@ -86,7 +91,7 @@ export function NudgeBottomSheet({ visible, onClose, studentId, studentName, pen
     setError(null);
     setSending(true);
     try {
-      await api.post(`/students/${studentId}/nudge`, {
+      await api.post(nudgeEndpoint, {
         message: message.trim(),
         case_ids: pendingCaseIds.slice(0, 10),
       });

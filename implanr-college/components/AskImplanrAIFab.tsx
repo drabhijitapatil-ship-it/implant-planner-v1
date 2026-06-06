@@ -19,11 +19,15 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../utils/api';
+import { useAuth } from '../contexts/AuthContext';
 
 type ChatMsg = { role: 'user' | 'assistant'; content: string };
 
 export default function AskImplanrAIFab() {
+  const { user } = useAuth();
   const insets = useSafeAreaInsets();
+
+  if (user?.role === 'nurse') return null;
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);

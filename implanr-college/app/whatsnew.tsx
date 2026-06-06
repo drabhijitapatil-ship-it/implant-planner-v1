@@ -12,14 +12,25 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import CenteredHeader from '../components/CenteredHeader';
 import api from '../utils/api';
+import { useAuth } from '../contexts/AuthContext';
 
 type Entry = { version: string; date?: string; title: string; items: string[] };
 
 export default function WhatsNewScreen() {
+  const { user } = useAuth();
   const { mode } = useLocalSearchParams<{ mode?: string }>();
   const isHistory = mode === 'history';
   const [entries, setEntries] = useState<Entry[] | null>(null);
   const [busy, setBusy] = useState(false);
+
+  if (user?.role === 'nurse') {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center' }}>
+        <Ionicons name="lock-closed-outline" size={48} color="#ccc" />
+        <Text style={{ color: '#999', marginTop: 12, fontSize: 15 }}>What's New is not available for nurses.</Text>
+      </SafeAreaView>
+    );
+  }
 
   useEffect(() => {
     let alive = true;

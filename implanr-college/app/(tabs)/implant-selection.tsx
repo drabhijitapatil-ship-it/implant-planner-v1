@@ -20,6 +20,7 @@ import api from '../../utils/api';
 import DrillingProtocolScreen from '../../components/DrillingProtocol';
 import { getImplantDetails } from '../../constants/implantIndications';
 import { evaluateImplantSafety, annotateImplantSafety, shortSafetyChip, type SafetyVerdict } from '../../utils/implantSafety';
+import ColorStripe from '../../components/ColorStripe';
 
 // ── Types ──────────────────────────────────────────────────
 type ImplantSystem = {
@@ -1168,6 +1169,8 @@ function SuggestResult({ result, tooth, toothInfo, onReset, onOpenProtocol }: {
             <Text style={s.selectHint}>Tap an implant size to select it for drilling protocol</Text>
             {visibleSystems.map((sys, i) => (
               <View key={`sys-${i}`} style={s.sugSysCard} data-testid={`suggest-system-${i}`}>
+                <ColorStripe brand={sys.brand} system={sys.system} active={selectedKey?.startsWith(`${i}-`) ?? false} testID={`suggest-system-stripe-${i}`} />
+                <View style={{ flex: 1 }}>
                 <View style={s.sugSysHeader}>
                   <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
                   <Text style={s.sugSysName}>{sys.brand} – {sys.system}</Text>
@@ -1201,6 +1204,7 @@ function SuggestResult({ result, tooth, toothInfo, onReset, onOpenProtocol }: {
                       </View>
                     );
                   })}
+                </View>
                 </View>
               </View>
             ))}
@@ -1734,7 +1738,7 @@ const s = StyleSheet.create({
   impRowText: { fontSize: 14, color: '#37474F' },
 
   // Suggest Me result system cards
-  sugSysCard: { backgroundColor: '#F1F8E9', borderRadius: 12, padding: 14, marginBottom: 10 },
+  sugSysCard: { backgroundColor: '#F1F8E9', borderRadius: 12, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'stretch', gap: 10 },
   sugSysHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   sugSysName: { fontSize: 14, fontWeight: '700', color: '#263238', flex: 1 },
   sugSysInd: { fontSize: 11, color: '#1565C0', fontStyle: 'italic', marginBottom: 6, marginLeft: 28 },

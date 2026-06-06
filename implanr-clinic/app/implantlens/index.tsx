@@ -6,8 +6,9 @@ import {
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import BackButton from '../../components/BackButton';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import api from '../../utils/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface CaseItem {
   id: string;
@@ -23,8 +24,19 @@ interface CaseItem {
 }
 
 export default function ImplantLensCaseAlbum() {
+  const { user } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+
+  if (user?.role === 'dental_assistant') {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center' }}>
+        <Ionicons name="lock-closed-outline" size={48} color="#ccc" />
+        <Text style={{ color: '#999', marginTop: 12, fontSize: 15 }}>ImplantLens is not available for dental assistants.</Text>
+      </SafeAreaView>
+    );
+  }
+
   const [cases, setCases] = useState<CaseItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);

@@ -12,6 +12,15 @@ export default function ArchivedScreen() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
+  if (user?.role === 'dental_assistant') {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center' }}>
+        <Ionicons name="lock-closed-outline" size={48} color="#ccc" />
+        <Text style={{ color: '#999', marginTop: 12, fontSize: 15 }}>Archived cases are not available for dental assistants.</Text>
+      </SafeAreaView>
+    );
+  }
+
   useFocusEffect(useCallback(() => {
     loadArchived();
   }, []));

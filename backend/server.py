@@ -18,7 +18,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 import re
 from fpdf import FPDF
-from passlib.context import CryptContext
+import bcrypt as _bcrypt_lib
 import jwt
 from bson import ObjectId
 import httpx
@@ -43,7 +43,6 @@ db_name = os.environ.get('DB_NAME', 'test_database')
 db = client[db_name]
 
 # Security
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
 SECRET_KEY = os.environ.get("SECRET_KEY")
 if not SECRET_KEY:
@@ -117,10 +116,13 @@ async def expo_qr():
 
 # Helper functions
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    return _bcrypt_lib.hashpw(password.encode("utf-8"), _bcrypt_lib.gensalt()).decode("utf-8")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        return _bcrypt_lib.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
+    except Exception:
+        return False
 
 def create_access_token(data: dict) -> str:
     to_encode = data.copy()
@@ -2676,6 +2678,74 @@ async def get_recent_activity(
     return {"activities": entries, "skip": skip, "limit": limit}
 
 
+# ── In-Charge / Admin: all-students analytics overview ──
+@api_router.get("/admin/students")
+async def list_students_analytics(current_user: dict = Depends(get_current_user)):
+    """Return all students with KPI snapshot. In-Charge/Admin sees all students.
+    Supervisor sees only students from their supervised cases."""
+    role = current_user.get("role")
+    if role not in ("implant_incharge", "administrator", "supervisor"):
+        raise HTTPException(status_code=403, detail="Only Implant In-Charge / Administrator / Supervisor can view student analytics")
+
+    uid = current_user["_id"]
+
+    if role == "supervisor":
+        # Only students whose cases this supervisor supervises
+        supervised_ids = await db.procedures.distinct("student_id", {
+            "supervisor_id": uid,
+            "archived": {"$ne": True},
+        })
+        student_filter = {"_id": {"$in": [ObjectId(s) for s in supervised_ids if s]}, "role": "student"}
+    else:
+        student_filter = {"role": "student"}
+
+    students_cursor = db.users.find(student_filter, {"password_hash": 0})
+    students = []
+    async for s in students_cursor:
+        student_id = str(s["_id"])
+        base_match: Dict[str, Any] = {"student_id": student_id, "archived": {"$ne": True}}
+        if role == "supervisor":
+            base_match["supervisor_id"] = uid
+
+        kpi_pipeline = [
+            {"$match": base_match},
+            {"$group": {
+                "_id": None,
+                "total": {"$sum": 1},
+                "completed": {"$sum": {"$cond": [{"$eq": ["$status", "completed"]}, 1, 0]}},
+                "active": {"$sum": {"$cond": [{"$not": {"$in": ["$status", ["completed", "rejected", "permanently_rejected"]]}}, 1, 0]}},
+                "pending_approval": {"$sum": {"$cond": [{"$in": ["$status", ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic"]]}, 1, 0]}},
+            }},
+        ]
+        kpi_doc = None
+        async for d in db.procedures.aggregate(kpi_pipeline):
+            kpi_doc = d
+            break
+        total = (kpi_doc or {}).get("total", 0)
+        completed = (kpi_doc or {}).get("completed", 0)
+        active = (kpi_doc or {}).get("active", 0)
+        pending = (kpi_doc or {}).get("pending_approval", 0)
+        approval_rate = round((completed / total) * 100, 1) if total > 0 else None
+
+        students.append({
+            "id": student_id,
+            "name": s.get("name"),
+            "email": s.get("email"),
+            "profile_photo": s.get("profile_photo"),
+            "kpis": {
+                "total": total,
+                "completed": completed,
+                "active": active,
+                "pending_approval": pending,
+                "approval_rate": approval_rate,
+            },
+        })
+
+    # Sort: most active first, then by name
+    students.sort(key=lambda x: (-x["kpis"]["active"], x["name"] or ""))
+    return {"students": students, "total": len(students)}
+
+
 # ── In-Charge / Admin: per-student summary for the drill-down screen ──
 @api_router.get("/admin/students/{student_id}/summary")
 async def get_student_summary(student_id: str, current_user: dict = Depends(get_current_user)):
@@ -2790,6 +2860,57 @@ async def get_student_summary(student_id: str, current_user: dict = Depends(get_
         "phase_pipeline": phase_pipeline,
         "monthly_throughput": monthly,
     }
+
+
+# ── In-Charge / Admin: all-supervisors analytics overview ──
+@api_router.get("/admin/supervisors")
+async def list_supervisors_analytics(current_user: dict = Depends(get_current_user)):
+    """Return all supervisors with KPI snapshot. Implant In-Charge / Admin only."""
+    if current_user.get("role") not in ("implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Only Implant In-Charge / Administrator can view supervisor summaries")
+
+    REJECTED = ["rejected", "permanently_rejected", "stage2_surgical_rejected", "stage2_prosthetic_rejected"]
+    PENDING = ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic"]
+    stale_cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
+
+    supervisors_cursor = db.users.find({"role": "supervisor"}, {"password_hash": 0})
+    results = []
+    async for sv in supervisors_cursor:
+        sv_id = str(sv["_id"])
+        base = {"supervisor_id": sv_id, "archived": {"$ne": True}}
+
+        total = await db.procedures.count_documents(base)
+        pending = await db.procedures.count_documents({**base, "status": {"$in": PENDING}})
+        completed = await db.procedures.count_documents({**base, "status": "completed"})
+        approved = await db.procedures.count_documents({**base, "supervisor_phase1_approved": True})
+        rejected = await db.procedures.count_documents({**base, "status": {"$in": REJECTED}})
+        stale = await db.procedures.count_documents({**base, "status": {"$in": PENDING}, "created_at": {"$lt": stale_cutoff}})
+
+        decided = approved + rejected
+        approval_rate = round((approved / decided) * 100, 1) if decided else None
+
+        # Count distinct students supervised
+        student_ids = await db.procedures.distinct("student_id", base)
+        students_supervised = len([s for s in student_ids if s])
+
+        results.append({
+            "id": sv_id,
+            "name": sv.get("name"),
+            "email": sv.get("email"),
+            "profile_photo": sv.get("profile_photo"),
+            "kpis": {
+                "total": total,
+                "pending": pending,
+                "completed": completed,
+                "stale": stale,
+                "approval_rate": approval_rate,
+                "students_supervised": students_supervised,
+            },
+        })
+
+    # Sort: stale first (needs attention), then by pending desc
+    results.sort(key=lambda x: (-x["kpis"]["stale"], -x["kpis"]["pending"]))
+    return {"supervisors": results, "total": len(results)}
 
 
 # ── In-Charge / Admin: per-supervisor summary for the drill-down screen ──
@@ -3167,6 +3288,65 @@ async def get_nudge_history(
         "cooldown_minutes": NUDGE_COOLDOWN_MINUTES,
         "cooldown_seconds_remaining": cooldown_seconds_remaining,
     }
+
+
+@api_router.post("/supervisors/{supervisor_id}/nudge")
+async def nudge_supervisor(
+    supervisor_id: str,
+    payload: NudgePayload,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """In-Charge / Administrator can nudge a supervisor directly."""
+    if current_user.get("role") not in ("implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Only In-Charge / Administrator can nudge supervisors")
+
+    try:
+        target = await db.users.find_one({"_id": ObjectId(supervisor_id)})
+    except Exception:
+        target = await db.users.find_one({"_id": supervisor_id})
+    if not target:
+        raise HTTPException(status_code=404, detail="Supervisor not found")
+    if target.get("role") not in ("supervisor", "dentist"):
+        raise HTTPException(status_code=400, detail="Target user is not a supervisor")
+
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=NUDGE_COOLDOWN_MINUTES)
+    recent = await db.notifications.find_one({
+        "user_id": supervisor_id,
+        "from_user_id": current_user["_id"],
+        "type": "nudge",
+        "created_at": {"$gte": cutoff},
+    })
+    if recent:
+        ca = recent.get("created_at")
+        if ca and ca.tzinfo is None:
+            ca = ca.replace(tzinfo=timezone.utc)
+        seconds_remaining = max(0, int((ca + timedelta(minutes=NUDGE_COOLDOWN_MINUTES) - datetime.now(timezone.utc)).total_seconds())) if ca else 0
+        raise HTTPException(
+            status_code=429,
+            detail={"message": "You recently nudged this supervisor. Please wait before sending another.", "seconds_remaining": seconds_remaining},
+        )
+
+    notif = {
+        "user_id": supervisor_id,
+        "from_user_id": current_user["_id"],
+        "from_user_name": current_user.get("name"),
+        "from_user_role": current_user.get("_original_role") or current_user.get("role"),
+        "type": "nudge",
+        "message": payload.message.strip()[:NUDGE_MAX_LEN],
+        "read": False,
+        "created_at": datetime.now(timezone.utc),
+    }
+    await db.notifications.insert_one(notif)
+    await send_expo_push_notifications(
+        [supervisor_id],
+        f"Nudge from {current_user.get('name')}",
+        payload.message.strip()[:200],
+        {"type": "nudge"},
+    )
+    await log_access(action="nudge_supervisor", outcome="success", user=current_user, request=request,
+                     extra={"supervisor_id": supervisor_id})
+    return {"message": "Nudge sent"}
 
 
 @api_router.get("/procedures/{procedure_id}")
@@ -4155,7 +4335,7 @@ async def upload_consent_for_procedure(
         procedure.get("student_id") == uid or
         procedure.get("supervisor_id") == uid or
         procedure.get("implant_incharge_id") == uid or
-        role in ("nurse", "implant_incharge", "administrator", "supervisor")
+        role in ("nurse", "dental_assistant", "implant_incharge", "chief_dentist", "administrator", "supervisor", "dentist")
     )
     if not is_stakeholder:
         raise HTTPException(status_code=403, detail="Not allowed to upload consent for this case")
@@ -4557,8 +4737,8 @@ async def mark_instruments_autoclaved(
     Unknown procedure_date/time (shouldn't happen for Phase-2 cases) falls back to allowing the toggle.
     Body: { marked: bool }. Defaults to True if omitted.
     """
-    if current_user.get("role") != "nurse":
-        raise HTTPException(status_code=403, detail="Only nurses can mark instruments autoclaved")
+    if current_user.get("role") not in ("nurse", "dental_assistant"):
+        raise HTTPException(status_code=403, detail="Only nurses / dental assistants can mark instruments autoclaved")
 
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
@@ -4644,6 +4824,8 @@ async def upload_cbct_temp(
     current_user: dict = Depends(get_current_user),
 ):
     """Upload CBCT file before procedure creation. Returns a temp reference to attach later."""
+    if current_user.get("role") in ("nurse", "dental_assistant"):
+        raise HTTPException(status_code=403, detail="CBCT upload not permitted for this role")
     ext = Path(file.filename).suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=400, detail=f"File type not allowed. Allowed: {', '.join(ALLOWED_EXTENSIONS)}")
@@ -4668,8 +4850,8 @@ async def upload_media_temp(
 ):
     """Generic temp upload for Phase 4 Step 2 imaging (IOPA, OPG) and prosthesis photos.
     Returns clean field names: filename, original_name, content_type."""
-    if current_user.get("role") == "nurse":
-        raise HTTPException(status_code=403, detail="Read-only access")
+    if current_user.get("role") in ("nurse", "dental_assistant"):
+        raise HTTPException(status_code=403, detail="Photo/CBCT upload not permitted for this role")
     ext = Path(file.filename).suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=400, detail=f"File type not allowed. Allowed: {', '.join(ALLOWED_EXTENSIONS)}")
@@ -4693,6 +4875,8 @@ async def upload_cbct(
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user)
 ):
+    if current_user.get("role") in ("nurse", "dental_assistant"):
+        raise HTTPException(status_code=403, detail="CBCT upload not permitted for this role")
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
@@ -5553,7 +5737,18 @@ async def get_procedure_badge(
 
 
 # ── AI Integration (Implanr AI) ────────────────────────────────────────────
-from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+try:
+    from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+except ImportError:
+    logging.warning("emergentintegrations not installed — AI features disabled. Install package to enable.")
+    # Stub classes so server starts; AI endpoints will raise 503 at runtime
+    class _AIStub:
+        def __init__(self, *a, **kw): raise HTTPException(503, "AI features not available — emergentintegrations not installed")
+        def with_model(self, *a, **kw): return self
+        async def send_message(self, *a, **kw): raise HTTPException(503, "AI features not available")
+    class LlmChat(_AIStub): pass
+    class UserMessage(_AIStub): pass
+    class ImageContent(_AIStub): pass
 import uuid
 
 def _build_case_context(proc: dict) -> str:
@@ -5758,9 +5953,13 @@ def _get_llm_key():
     return os.environ.get("EMERGENT_LLM_KEY", "")
 
 
+_AI_BLOCKED_ROLES = {"nurse", "dental_assistant"}
+
 @api_router.post("/ai/explain-recommendation")
 async def ai_explain_recommendation(request: Request, current_user: dict = Depends(get_current_user)):
     """Generate AI explanation for implant recommendation."""
+    if current_user.get("role") in _AI_BLOCKED_ROLES:
+        raise HTTPException(status_code=403, detail="AI features not available for this role")
     body = await request.json()
     procedure_id = body.get("procedure_id")
     implant_index = body.get("implant_index", 0)
@@ -5866,6 +6065,8 @@ Provide a clinical explanation in professional scientific language. Do not menti
 @api_router.post("/ai/explain-standalone")
 async def ai_explain_standalone(request: Request, current_user: dict = Depends(get_current_user)):
     """Generate AI explanation for standalone implant selection (no procedure ID required)."""
+    if current_user.get("role") in _AI_BLOCKED_ROLES:
+        raise HTTPException(status_code=403, detail="AI features not available for this role")
     body = await request.json()
     tooth = body.get("tooth", "")
     brand = body.get("brand", "")
@@ -6513,6 +6714,8 @@ async def download_catalog_attachment(
 # never sees raw PII; tokens are de-tokenised in the response.
 @api_router.post("/ai/assistant")
 async def ai_assistant(request: Request, current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") in _AI_BLOCKED_ROLES:
+        raise HTTPException(status_code=403, detail="AI features not available for this role")
     body = await request.json()
     question = (body.get("question") or "").strip()
     history = body.get("history") or []  # list of {role: user|assistant, content: str}
@@ -6735,6 +6938,8 @@ WHERE TO FIND THINGS IN THE APP
 async def ai_ask_implanr(request: Request, current_user: dict = Depends(get_current_user)):
     """Free-form Implanr AI Q&A scoped to the implant catalog. Auto-scopes to
     a case's chosen system when procedure_id is provided."""
+    if current_user.get("role") in _AI_BLOCKED_ROLES:
+        raise HTTPException(status_code=403, detail="AI features not available for this role")
     from implant_catalog_seed import build_ai_context as _build_cat_ctx
     body = await request.json()
     question = (body.get("question") or "").strip()
@@ -6933,6 +7138,8 @@ def _detect_case_type(proc: dict) -> str:
 @api_router.post("/ai/case-summary")
 async def ai_case_summary(request: Request, current_user: dict = Depends(get_current_user)):
     """Generate AI clinical case summary — phase-aware, dynamic per case type, ITI/ICOI referenced."""
+    if current_user.get("role") in _AI_BLOCKED_ROLES:
+        raise HTTPException(status_code=403, detail="AI features not available for this role")
     body = await request.json()
     procedure_id = body.get("procedure_id")
 
@@ -7056,6 +7263,8 @@ FORMAT INSTRUCTIONS:
 @api_router.post("/ai/surgical-notes")
 async def ai_surgical_notes(request: Request, current_user: dict = Depends(get_current_user)):
     """Generate AI surgical operative notes from drilling protocol data."""
+    if current_user.get("role") in _AI_BLOCKED_ROLES:
+        raise HTTPException(status_code=403, detail="AI features not available for this role")
     body = await request.json()
     procedure_id = body.get("procedure_id")
     
@@ -7284,6 +7493,8 @@ class AIChatMessage(BaseModel):
 @api_router.post("/ai/chat")
 async def ai_chat(body: AIChatMessage, current_user: dict = Depends(get_current_user)):
     """Implanr AI chat — context-aware clinical assistant."""
+    if current_user.get("role") in _AI_BLOCKED_ROLES:
+        raise HTTPException(status_code=403, detail="AI features not available for this role")
     proc = await db.procedures.find_one({"_id": ObjectId(body.procedure_id)}, {"_id": 0})
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
@@ -7393,6 +7604,8 @@ OUTPUT RULES (strict):
 @api_router.get("/ai/chat/{procedure_id}")
 async def get_ai_chat_history(procedure_id: str, current_user: dict = Depends(get_current_user)):
     """Get chat history for a procedure."""
+    if current_user.get("role") in _AI_BLOCKED_ROLES:
+        raise HTTPException(status_code=403, detail="AI features not available for this role")
     proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0, "ai_chat_history": 1})
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
@@ -8497,6 +8710,8 @@ async def get_procedure_photos(
 @api_router.get("/implantlens/cases")
 async def get_implantlens_cases(current_user: dict = Depends(get_current_user)):
     """Get all cases with photo completion stats for ImplantLens album view."""
+    if current_user.get("role") in _AI_BLOCKED_ROLES:
+        raise HTTPException(status_code=403, detail="ImplantLens not available for this role")
     query = {}
     if current_user["role"] == "student":
         query["student_id"] = current_user["_id"]
@@ -10427,6 +10642,126 @@ IMPLANT_INDICATIONS = {
         "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant"],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
+    # ── Straumann BLX Roxolid (iter-283, Feb 2026) ───────────────────────────
+    "Straumann|BLX Roxolid SLActive - RB Platform": {
+        "indication": (
+            "Roxolid® bone-level tapered implant with SLActive® hydrophilic "
+            "surface. Indicated for D1-D4 bone types. Suitable for immediate, "
+            "early and conventional placement and loading; supports all-on-4 "
+            "/ all-on-6 / all-on-X rehabilitations."
+        ),
+        "indicated_procedures": [
+            "Single Conventional Implant",
+            "Multiple Conventional Implants",
+            "Immediate Implant",
+            "Partial Extraction Therapy",
+            "All on 4",
+            "All on 6",
+            "All on X",
+        ],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Straumann|BLX Roxolid SLActive - WB Platform": {
+        "indication": (
+            "Wide-Base Roxolid® bone-level tapered implant with SLActive® "
+            "surface — posterior, wide-ridge and fresh extraction sockets. "
+            "D1-D4 bone types. Immediate, early and conventional protocols, "
+            "including full-arch all-on-X rehabilitations."
+        ),
+        "indicated_procedures": [
+            "Single Conventional Implant",
+            "Multiple Conventional Implants",
+            "Immediate Implant",
+            "Partial Extraction Therapy",
+            "All on 4",
+            "All on 6",
+            "All on X",
+        ],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Straumann|BLX Roxolid SLA - RB Platform": {
+        "indication": (
+            "Roxolid® bone-level tapered implant with conventional SLA® "
+            "(sandblasted, large-grit, acid-etched) surface. D1-D4 bone "
+            "types. Conventional delayed-loading single and multi-unit "
+            "restorations."
+        ),
+        "indicated_procedures": [
+            "Single Conventional Implant",
+            "Multiple Conventional Implants",
+        ],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Straumann|BLX Roxolid SLA - WB Platform": {
+        "indication": (
+            "Wide-Base Roxolid® bone-level tapered implant with conventional "
+            "SLA® surface for posterior and wide-ridge indications. D1-D4 "
+            "bone types, conventional delayed-loading single and multi-unit "
+            "restorations."
+        ),
+        "indicated_procedures": [
+            "Single Conventional Implant",
+            "Multiple Conventional Implants",
+        ],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    # ── Adin Dental Implants (iter-284, Feb 2026) ────────────────────────────
+    "Adin|UNP CloseFit": {
+        "indication": "Adin CloseFit Ultra-Narrow Platform (Ø2.75) with Conical Hex / Morse-taper connection and OsseoFix™ surface. Very narrow ridges, lateral incisors and mandibular incisors. D1-D4 bone types.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Adin|NP CloseFit": {
+        "indication": "Adin CloseFit Narrow Platform (Ø3.0) with Conical Hex / Morse-taper connection and OsseoFix™ surface. Narrow ridges and tight spaces. D1-D4 with immediate function.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Adin|RP CloseFit": {
+        "indication": "Adin CloseFit Regular Platform (Ø3.5) with Conical Hex / Morse-taper connection and OsseoFix™ surface. Standard ridges. D1-D4 with immediate function.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Adin|WP CloseFit": {
+        "indication": "Adin CloseFit Wide Platform (Ø4.3 / Ø5.0) with Conical Hex / Morse-taper connection and OsseoFix™ surface. Wide ridges and posterior molars. D1-D4 with immediate function and All-on-X support.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy", "All on 4", "All on 6", "All on X"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Adin|Touareg-OS": {
+        "indication": "Adin Touareg-OS — tapered self-tapping bone-condensing 2-piece implant with Standard Internal Hex connection and OsseoFix™ (Calcium-Phosphate RBM) surface. D1-D4 with immediate function. Single, multi-unit and full-arch All-on-X.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy", "All on 4", "All on 6", "All on X"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Adin|Touareg-S": {
+        "indication": "Adin Touareg-S — tapered self-tapping bone-condensing 2-piece implant with Standard Internal Hex connection and AB/AE surface. D1-D4 with immediate function. Single, multi-unit and full-arch All-on-X.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy", "All on 4", "All on 6", "All on X"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Adin|Swell": {
+        "indication": "Adin Swell — straight parallel-walled slightly tapered 2-piece implant with V-shaped thread, Standard Internal Hex connection and AB/AE surface. Accurate positioning and load distribution. D1-D4.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Adin|One": {
+        "indication": "Adin One — one-piece tapered spiral implant with AB/AE surface and integrated abutment. Narrow ridges, flapless minimally-invasive surgery, lateral/mandibular incisors. Immediate function.",
+        "indicated_procedures": ["Single Conventional Implant", "Immediate Implant"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    # ── Straumann BLT (iter-292, Feb 2026) ────────────────────────────────
+    "Straumann|BLT Roxolid SLActive": {
+        "indication": "Roxolid® Bone Level Tapered implant with SLActive® hydrophilic surface. D1-D4. Immediate / early / conventional. Soft bone & fresh extraction sockets — primary stability via apical taper. CrossFit® connection (SC Ø2.9 / NC Ø3.3 / RC Ø4.1 / RC Ø4.8).",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy", "All on 4", "All on 6", "All on X"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Straumann|BLT Roxolid SLA": {
+        "indication": "Roxolid® Bone Level Tapered implant with conventional SLA® surface. D1-D4. Conventional & immediate placement, conventional loading. CrossFit® connection.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Straumann|BLT Ti SLA": {
+        "indication": "Ti Grade 4 Bone Level Tapered implant with SLA® surface. D1-D4. Conventional & immediate placement. CrossFit® connection (NC/RC).",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
     # ── Alpha-Bio brochure-derived systems (iter-182) ────────────────────────
     "Alpha Bio|ATID": {
         "indication": "Suitable for D1 and D2 bone types and conventional loading protocols.",
@@ -11509,6 +11844,53 @@ DRILLING_PROTOCOLS["Dentsply Sirona|Ankylos C/X"] = {
         7.0: {"series": "D", "color": "Green", "twist_drill": 5.7},
     },
 }
+
+# ── Straumann BLX Roxolid Drilling Protocols (iter-283, Feb 2026) ────────
+for _blx_sys, _blx_label in (
+    ("BLX Roxolid SLActive - RB Platform", "Straumann BLX RB SLActive"),
+    ("BLX Roxolid SLActive - WB Platform", "Straumann BLX WB SLActive"),
+    ("BLX Roxolid SLA - RB Platform", "Straumann BLX RB SLA"),
+    ("BLX Roxolid SLA - WB Platform", "Straumann BLX WB SLA"),
+):
+    DRILLING_PROTOCOLS[f"Straumann|{_blx_sys}"] = {
+        "system_name": _blx_label,
+        "protocol_family": "straumann_blx",
+        "connection": "TorcFit",
+        "material": "Roxolid",
+    }
+del _blx_sys, _blx_label
+
+# ── Adin Dental Implants Drilling Protocols (iter-284, Feb 2026) ─────────
+for _adin_sys in (
+    "UNP CloseFit", "NP CloseFit", "RP CloseFit", "WP CloseFit",
+    "Touareg-OS", "Touareg-S", "Swell", "One",
+):
+    DRILLING_PROTOCOLS[f"Adin|{_adin_sys}"] = {
+        "system_name": f"Adin {_adin_sys}",
+        "protocol_family": "adin",
+        "connection": (
+            "Conical Hex" if "CloseFit" in _adin_sys
+            else "One-Piece" if _adin_sys == "One"
+            else "Internal Hex"
+        ),
+        "material": "Ti-6Al-4V ELI",
+        "surface": (
+            "OsseoFix" if (_adin_sys.endswith("CloseFit") or _adin_sys == "Touareg-OS")
+            else "AB/AE"
+        ),
+    }
+del _adin_sys
+
+# ── Straumann BLT Drilling Protocols (iter-292, Feb 2026) ────────────────
+for _blt_sys in ("BLT Roxolid SLActive", "BLT Roxolid SLA", "BLT Ti SLA"):
+    DRILLING_PROTOCOLS[f"Straumann|{_blt_sys}"] = {
+        "system_name": f"Straumann {_blt_sys}",
+        "protocol_family": "straumann_blt",
+        "connection": "CrossFit",
+        "material": "Roxolid" if "Roxolid" in _blt_sys else "Ti Grade 4",
+        "surface": "SLActive" if "SLActive" in _blt_sys else "SLA",
+    }
+del _blt_sys
 
 def _generate_ankylos_protocol(proto, implant_diameter, implant_length, bone):
     """Generate drilling protocol for Dentsply Sirona Ankylos C/X system.
@@ -12995,6 +13377,15 @@ async def generate_drilling_protocol(
         steps = _generate_tsx_protocol(proto, diameter, length, bone, kit="gold")
     elif proto.get("protocol_family") == "refirm":
         steps = _generate_refirm_protocol(proto, diameter, length, bone)
+    elif proto.get("protocol_family") == "straumann_blx":
+        from straumann_blx_data import generate_blx_protocol
+        steps = generate_blx_protocol(system, diameter, length, bone)
+    elif proto.get("protocol_family") == "straumann_blt":
+        from straumann_blt_data import generate_blt_protocol
+        steps = generate_blt_protocol(system, diameter, length, bone)
+    elif proto.get("protocol_family") == "adin":
+        from adin_data import generate_adin_protocol
+        steps = generate_adin_protocol(system, diameter, length, bone)
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
@@ -13046,10 +13437,22 @@ async def generate_drilling_protocol(
     elif family == "refirm":
         bone_labels = {"D1": "Dense Bone (Full Sequence)", "D2": "Moderately Dense (Countersink)", "D3": "Soft Bone (Under-Preparation)", "D4": "Very Soft Bone (Undersized)"}
         protocol_type = f"{bone_labels.get(bone, 'Standard')} Protocol (Refirm R Series)"
+    elif family == "straumann_blx":
+        sys_label = proto.get("system_name", system)
+        blx_bone_labels = {"D1": "Hard Bone (Straumann BLX §5.2)", "D2": "Medium Bone (Straumann BLX §5.2)", "D3": "Soft Bone (Straumann BLX §5.2)", "D4": "Soft Bone (Straumann BLX §5.2)"}
+        protocol_type = f"{blx_bone_labels.get(bone, 'Standard Protocol')} — {sys_label}"
+    elif family == "straumann_blt":
+        sys_label = proto.get("system_name", system)
+        blt_bone_labels = {"D1": "Hard Bone (Straumann BLT §5.1)", "D2": "Medium Bone (Straumann BLT §5.1)", "D3": "Soft Bone (Straumann BLT §5.1)", "D4": "Soft Bone (Straumann BLT §5.1)"}
+        protocol_type = f"{blt_bone_labels.get(bone, 'Standard Protocol')} — {sys_label}"
+    elif family == "adin":
+        sys_label = proto.get("system_name", system)
+        adin_bone_labels = {"D1": "D-I Bone", "D2": "D-II/III Bone", "D3": "D-II/III Bone", "D4": "D-IV Bone"}
+        protocol_type = f"Adin Catalog Protocol — {sys_label} ({adin_bone_labels.get(bone, 'Standard')})"
     else:
         protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
 
-    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else ("35-50 Ncm" if family == "mis_lance" else ("25-45 Ncm" if family in ("cowellmedi", "bredent_sky") else ("~40 Ncm" if family == "osstem" else ("≤90 Ncm" if family == "tsx" else ("35-45 Ncm" if family in ("conical_rbt", "alpha_bio_spi", "refirm") else "35-45 Ncm"))))))
+    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else ("35-50 Ncm" if family == "mis_lance" else ("25-45 Ncm" if family in ("cowellmedi", "bredent_sky") else ("~40 Ncm" if family == "osstem" else ("≤90 Ncm" if family == "tsx" else ("30-80 Ncm (target 35 Ncm)" if family == "straumann_blx" else ("≤35 Ncm (target — check bed if >35 Ncm reached early)" if family == "straumann_blt" else ("Not specified by Adin catalog — refer to Adin surgical guide" if family == "adin" else ("35-45 Ncm" if family in ("conical_rbt", "alpha_bio_spi", "refirm") else "35-45 Ncm")))))))))
 
     # Add Ankylos series info to response
     ankylos_info = {}
@@ -13223,6 +13626,15 @@ async def export_drilling_pdf(
         steps = _generate_tsx_protocol(proto, diameter, length, bone, kit="gold")
     elif proto.get("protocol_family") == "refirm":
         steps = _generate_refirm_protocol(proto, diameter, length, bone)
+    elif proto.get("protocol_family") == "straumann_blx":
+        from straumann_blx_data import generate_blx_protocol
+        steps = generate_blx_protocol(system, diameter, length, bone)
+    elif proto.get("protocol_family") == "straumann_blt":
+        from straumann_blt_data import generate_blt_protocol
+        steps = generate_blt_protocol(system, diameter, length, bone)
+    elif proto.get("protocol_family") == "adin":
+        from adin_data import generate_adin_protocol
+        steps = generate_adin_protocol(system, diameter, length, bone)
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
@@ -13271,6 +13683,21 @@ async def export_drilling_pdf(
             protocol_type = f"Hard Bone + Cortical Protocol ({os_label})" if bone == "D1" else (f"Under-Preparation Protocol ({os_label})" if bone in ("D3", "D4") else f"Standard Protocol ({os_label})")
     elif family == "tsx":
         protocol_type = f"Dense Bone Protocol (ZimVie TSX)" if bone in ("D1", "D2") else f"Soft Bone Protocol (ZimVie TSX)"
+    elif family == "refirm":
+        bone_labels = {"D1": "Dense Bone (Full Sequence)", "D2": "Moderately Dense (Countersink)", "D3": "Soft Bone (Under-Preparation)", "D4": "Very Soft Bone (Undersized)"}
+        protocol_type = f"{bone_labels.get(bone, 'Standard')} Protocol (Refirm R Series)"
+    elif family == "straumann_blx":
+        sys_label = proto.get("system_name", system)
+        blx_bone_labels = {"D1": "Hard Bone (Straumann BLX §5.2)", "D2": "Medium Bone (Straumann BLX §5.2)", "D3": "Soft Bone (Straumann BLX §5.2)", "D4": "Soft Bone (Straumann BLX §5.2)"}
+        protocol_type = f"{blx_bone_labels.get(bone, 'Standard Protocol')} — {sys_label}"
+    elif family == "straumann_blt":
+        sys_label = proto.get("system_name", system)
+        blt_bone_labels = {"D1": "Hard Bone (Straumann BLT §5.1)", "D2": "Medium Bone (Straumann BLT §5.1)", "D3": "Soft Bone (Straumann BLT §5.1)", "D4": "Soft Bone (Straumann BLT §5.1)"}
+        protocol_type = f"{blt_bone_labels.get(bone, 'Standard Protocol')} — {sys_label}"
+    elif family == "adin":
+        sys_label = proto.get("system_name", system)
+        adin_bone_labels = {"D1": "D-I Bone", "D2": "D-II/III Bone", "D3": "D-II/III Bone", "D4": "D-IV Bone"}
+        protocol_type = f"Adin Catalog Protocol — {sys_label} ({adin_bone_labels.get(bone, 'Standard')})"
     else:
         protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
     buf = io.BytesIO()
@@ -13620,19 +14047,23 @@ def _serialize_thread(t: dict, viewer_id: Optional[str] = None) -> dict:
         "reply_count": t.get("reply_count", 0),
         "anonymous": t.get("anonymous", False),
         "tags": t.get("tags", []),
-        "patient_name": t.get("patient_name"),
-        "student_name": t.get("student_name"),
-        "supervisor_name": t.get("supervisor_name"),
         "implant_procedure_type": t.get("implant_procedure_type"),
         "case_status": t.get("case_status"),
         "case_supervisor_id": t.get("case_supervisor_id"),
     }
     if out["anonymous"]:
-        # Redact patient + sharer identity for non-moderators
+        # Redact patient + sharer identity — strip raw fields, expose initials only
         initials = "".join([p[0] for p in (t.get("patient_name") or "").split() if p])[:3].upper() or "A.P."
+        out["patient_name"] = None
+        out["student_name"] = None
+        out["supervisor_name"] = None
         out["patient_name_display"] = f"{initials} (anonymous)"
         out["shared_by_display"] = "Anonymous"
+        out["shared_by_id"] = None
     else:
+        out["patient_name"] = t.get("patient_name")
+        out["student_name"] = t.get("student_name")
+        out["supervisor_name"] = t.get("supervisor_name")
         out["patient_name_display"] = t.get("patient_name")
         out["shared_by_display"] = t.get("shared_by_name")
     if viewer_id:
@@ -14719,6 +15150,220 @@ async def ensure_chat_indexes_on_start():
     await _seed_all_staff_group()
 
 
+# ── Smart Clinical Tip engine (iter-280) ─────────────────────────────
+@app.on_event("startup")
+async def seed_smart_tips_on_startup():
+    """Idempotent seed of the curated Smart Clinical Tip library."""
+    try:
+        from tips_seed import TIP_LIBRARY
+        for t in TIP_LIBRARY:
+            await db.tips.update_one({"tip_id": t["tip_id"]}, {"$set": {**t, "active": True}}, upsert=True)
+        logging.info("smart-tips: seeded/updated %d entries", len(TIP_LIBRARY))
+    except Exception as exc:  # pragma: no cover
+        logging.warning("Smart-tip seed skipped: %s", exc)
+
+
+def _today_str() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+async def _get_user_primary_case_context(user_id: str) -> dict:
+    proc = await db.procedures.find_one({
+        "$or": [{"created_by_id": user_id}, {"student_id": user_id}, {"supervisor_id": user_id}, {"implant_incharge_id": user_id}],
+        "status": {"$nin": ["completed", "draft"]},
+    }, sort=[("updated_at", -1), ("created_at", -1)])
+    if not proc:
+        return {}
+    case_type = None
+    n_imp = proc.get("number_of_implants") or len(proc.get("implant_plans") or [])
+    if n_imp >= 4:
+        case_type = "full_arch"
+    elif n_imp == 1:
+        case_type = "single"
+    densities = [str(p.get("bone_type") or "").upper() for p in (proc.get("implant_plans") or []) if p.get("bone_type")]
+    bone_density = None
+    for tag in ("D4", "D3", "D2", "D1"):
+        if any(tag in d for d in densities):
+            bone_density = tag
+            break
+    phase = None
+    status = proc.get("status") or ""
+    if status.startswith("pending_phase1") or status.startswith("phase1") or status == "rejected_phase1":
+        phase = "planning"
+    elif "phase2" in status or "stage2_surgical" in status:
+        phase = "surgery"
+    elif "stage2_prosthetic" in status:
+        phase = "restoration"
+    return {"case_type": case_type, "bone_density": bone_density, "phase": phase}
+
+
+async def _pick_daily_tip_for_user(user_id: str, context: dict | None = None) -> tuple[dict, str | None]:
+    now = datetime.now(timezone.utc)
+    cutoff_180 = (now - timedelta(days=180)).isoformat()
+    cutoff_7 = (now - timedelta(days=7)).isoformat()
+    history_180 = await db.tip_history.find({
+        "user_id": user_id, "shown_at": {"$gte": cutoff_180},
+    }).to_list(length=1000)
+    recent_tip_ids = {h.get("tip_id") for h in history_180 if h.get("tip_id")}
+    cat_counts: dict = {}
+    for h in history_180:
+        if h.get("shown_at", "") < cutoff_7:
+            continue
+        c = h.get("category")
+        if c:
+            cat_counts[c] = cat_counts.get(c, 0) + 1
+    blocked_categories = {c for c, n in cat_counts.items() if n >= 2}
+    candidates = await db.tips.find(
+        {"active": True, "tip_id": {"$nin": list(recent_tip_ids)}},
+        {"_id": 0},
+    ).to_list(length=2000)
+    pool = [t for t in candidates if t.get("category") not in blocked_categories]
+    if not pool:
+        pool = candidates
+    if not pool:
+        all_tips = await db.tips.find({"active": True}, {"_id": 0}).to_list(length=2000)
+        if not all_tips:
+            return {}, None
+        ages = {t["tip_id"]: "0000-00-00" for t in all_tips}
+        for h in history_180:
+            ages[h.get("tip_id", "")] = max(ages.get(h.get("tip_id", ""), ""), h.get("shown_at", ""))
+        all_tips.sort(key=lambda t: ages.get(t["tip_id"], ""))
+        return all_tips[0], None
+    preferred_cats: list[str] = []
+    rationale: str | None = None
+    if context:
+        if context.get("case_type") == "full_arch":
+            preferred_cats.append("Full Arch Rehabilitation")
+            rationale = "Surfaced because your active case is a full-arch rehabilitation."
+        elif context.get("case_type") == "single":
+            preferred_cats.extend(["Treatment Planning", "Prosthetic"])
+            rationale = "Surfaced because your active case is a single-implant restoration."
+        if context.get("bone_density") == "D4":
+            preferred_cats.append("Surgical")
+            rationale = "Surfaced because your active case involves soft D4 bone."
+        if context.get("phase") == "surgery":
+            preferred_cats.extend(["Surgical", "Soft Tissue"])
+            rationale = rationale or "Surfaced because your active case is in the surgical phase."
+        elif context.get("phase") == "restoration":
+            preferred_cats.extend(["Prosthetic", "Occlusion"])
+            rationale = rationale or "Surfaced because your active case is in the restorative phase."
+    import random
+    biased = [t for t in pool if t.get("category") in preferred_cats] if preferred_cats else []
+    if biased and random.random() < 0.7:
+        return random.choice(biased), rationale
+    return random.choice(pool), None
+
+
+async def _compute_tip_streak(user_id: str) -> dict:
+    today = datetime.now(timezone.utc).date()
+    cutoff = (today - timedelta(days=400)).isoformat()
+    rows = await db.tip_history.find(
+        {"user_id": user_id, "shown_date": {"$gte": cutoff}},
+        {"_id": 0, "shown_date": 1},
+    ).to_list(length=500)
+    days = {r.get("shown_date") for r in rows if r.get("shown_date")}
+    engaged_today = today.isoformat() in days
+    current = 0
+    cursor = today if engaged_today else today - timedelta(days=1)
+    while cursor.isoformat() in days:
+        current += 1
+        cursor -= timedelta(days=1)
+    longest = 0
+    if days:
+        sorted_days = sorted(days)
+        run = 1
+        longest = 1
+        for i in range(1, len(sorted_days)):
+            try:
+                prev = datetime.fromisoformat(sorted_days[i - 1]).date()
+                cur = datetime.fromisoformat(sorted_days[i]).date()
+            except Exception:
+                continue
+            if (cur - prev).days == 1:
+                run += 1
+                longest = max(longest, run)
+            else:
+                run = 1
+        longest = max(longest, current)
+    return {"current": current, "longest": longest, "engaged_today": engaged_today}
+
+
+@api_router.get("/tips/streak")
+async def get_tip_streak(current_user: dict = Depends(get_current_user)):
+    return await _compute_tip_streak(current_user["_id"])
+
+
+@api_router.get("/tips/daily")
+async def get_daily_tip(current_user: dict = Depends(get_current_user)):
+    user_id = current_user["_id"]
+    today = _today_str()
+    existing = await db.tip_history.find_one({"user_id": user_id, "shown_date": today})
+    if existing:
+        tip = await db.tips.find_one({"tip_id": existing.get("tip_id")}, {"_id": 0})
+        if tip:
+            saved = await db.tip_saves.find_one({"user_id": user_id, "tip_id": tip["tip_id"]})
+            tip["saved"] = bool(saved)
+            tip["dismissed_today"] = bool(existing.get("dismissed_at"))
+            tip["personalised_hint"] = existing.get("personalised_hint")
+            tip["streak"] = await _compute_tip_streak(user_id)
+            return tip
+    context = await _get_user_primary_case_context(user_id)
+    picked, hint = await _pick_daily_tip_for_user(user_id, context)
+    if not picked:
+        raise HTTPException(status_code=404, detail="No tips available")
+    await db.tip_history.insert_one({
+        "user_id": user_id, "tip_id": picked["tip_id"],
+        "category": picked.get("category"), "shown_date": today,
+        "shown_at": datetime.now(timezone.utc).isoformat(),
+        "dismissed_at": None,
+        "personalised_hint": hint,
+    })
+    saved = await db.tip_saves.find_one({"user_id": user_id, "tip_id": picked["tip_id"]})
+    picked["saved"] = bool(saved)
+    picked["dismissed_today"] = False
+    picked["personalised_hint"] = hint
+    picked["streak"] = await _compute_tip_streak(user_id)
+    return picked
+
+
+@api_router.post("/tips/{tip_id}/save")
+async def toggle_save_tip(tip_id: str, current_user: dict = Depends(get_current_user)):
+    user_id = current_user["_id"]
+    existing = await db.tip_saves.find_one({"user_id": user_id, "tip_id": tip_id})
+    if existing:
+        await db.tip_saves.delete_one({"user_id": user_id, "tip_id": tip_id})
+        return {"saved": False}
+    await db.tip_saves.insert_one({
+        "user_id": user_id, "tip_id": tip_id,
+        "saved_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"saved": True}
+
+
+@api_router.post("/tips/{tip_id}/dismiss")
+async def dismiss_tip(tip_id: str, current_user: dict = Depends(get_current_user)):
+    user_id = current_user["_id"]
+    today = _today_str()
+    await db.tip_history.update_one(
+        {"user_id": user_id, "shown_date": today, "tip_id": tip_id},
+        {"$set": {"dismissed_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    return {"dismissed": True}
+
+
+@api_router.get("/tips/saved")
+async def list_saved_tips(current_user: dict = Depends(get_current_user)):
+    user_id = current_user["_id"]
+    saves = await db.tip_saves.find({"user_id": user_id}).sort("saved_at", -1).to_list(length=500)
+    out = []
+    for s in saves:
+        tip = await db.tips.find_one({"tip_id": s.get("tip_id")}, {"_id": 0})
+        if tip:
+            tip["saved_at"] = s.get("saved_at")
+            out.append(tip)
+    return out
+
+
 app.include_router(api_router)
 
 app.add_middleware(
@@ -14887,7 +15532,7 @@ async def seed_on_startup():
                 "name": u["name"],
                 "username": u["username"],
                 "email": u["email"],
-                "password_hash": pwd_context.hash(u["password"]),
+                "password_hash": hash_password(u["password"]),
                 "role": u["role"],
                 "profile_photo": None,
             })

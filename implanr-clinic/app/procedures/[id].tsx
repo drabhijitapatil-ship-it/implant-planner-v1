@@ -585,10 +585,7 @@ export default function ProcedureDetailScreen() {
     if (!procedure) return false;
     if (user?.role === 'dental_assistant') return false;
     if (user?.role === 'chief_dentist') return true;
-    if (user?.role === 'dentist' && user?.id === procedure.supervisor_id) return true;
-    if (user?.role === 'dentist' && user?.id === procedure.student_id && procedure.status === 'pending_phase1') {
-      return true;
-    }
+    if (user?.role === 'dentist' && (user?.id === procedure.created_by_id || user?.id === procedure.supervisor_id)) return true;
     return false;
   };
   

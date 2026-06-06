@@ -177,6 +177,62 @@ export const IMPLANT_SYSTEM_DETAILS: Record<string, ImplantSystemDetail> = {
     features:
       'Reduced diameter implants (Ø3.0 / Ø3.4 mm). Conical-hex connection with increased implant-abutment contact area. High prosthetic stability despite narrow diameter. Self-tapping double-thread or triple-thread options based on diameter. Dedicated intuitive surgical and prosthetic protocol.',
   },
+  'straumann blx roxolid slactive - rb platform': {
+    indications:
+      'D1, D2, D3, D4 bone types. Immediate, early and conventional placement and loading. Single tooth, multi-unit bridges, full-arch / all-on-X rehabilitations and partial extraction therapy.',
+    features:
+      'Roxolid® (titanium-zirconium TiZr) alloy — higher tensile strength than commercially pure titanium. SLActive® hydrophilic surface for accelerated osseointegration (3-4 wk). Tapered bone-level body with apically self-cutting threads (dynamic bone management). Straumann TorcFit™ 15° conical-cylindrical connection. Regular Base (RB) prosthetic platform (Ø3.5 / 4.0 / 4.5).',
+  },
+  'straumann blx roxolid slactive - wb platform': {
+    indications:
+      'D1-D4 bone types. Immediate, early and conventional placement and loading. Wide ridges, posterior molars, fresh extraction sockets and full-arch all-on-X.',
+    features:
+      'Wide-Base (WB) Roxolid® bone-level tapered implant. SLActive® hydrophilic surface. Straumann TorcFit™ connection. WB prosthetic platform (Ø5.0 / 5.5 / 6.0). Greater functional surface for posterior loads.',
+  },
+  'straumann blx roxolid sla - rb platform': {
+    indications:
+      'D1-D4 bone types. Conventional delayed-loading single and multi-unit restorations.',
+    features:
+      'Roxolid® bone-level tapered implant. SLA® (sandblasted, large-grit, acid-etched) surface. Straumann TorcFit™ 15° conical-cylindrical connection. RB prosthetic platform (Ø3.5 / 4.0 / 4.5).',
+  },
+  'straumann blx roxolid sla - wb platform': {
+    indications:
+      'D1-D4 bone types. Conventional delayed-loading single and multi-unit restorations in wide ridges and posterior sites.',
+    features:
+      'Wide-Base (WB) Roxolid® bone-level tapered implant. SLA® surface. Straumann TorcFit™ connection. WB prosthetic platform (Ø5.0 / 5.5 / 6.0).',
+  },
+  'adin unp closefit': {
+    indications: 'Very narrow ridges, lateral incisors, mandibular incisors. D1-D4 with immediate function.',
+    features: 'Ultra-Narrow Platform (Ø2.75). Conical Hex / Morse-taper connection. OsseoFix™ (titanium + Calcium-Phosphate RBM) surface. Ti-6Al-4V ELI alloy. Single Pilot Drill (Ø2.5) protocol.',
+  },
+  'adin np closefit': {
+    indications: 'Narrow ridges and tight spaces. D1-D4 with immediate function.',
+    features: 'Narrow Platform (Ø3.0). Conical Hex / Morse-taper connection. OsseoFix™ surface. Ti-6Al-4V ELI alloy. Tri-Step™ pilot drill.',
+  },
+  'adin rp closefit': {
+    indications: 'Standard ridges. D1-D4 with immediate function.',
+    features: 'Regular Platform (Ø3.5). Conical Hex / Morse-taper connection. OsseoFix™ surface. Ti-6Al-4V ELI alloy.',
+  },
+  'adin wp closefit': {
+    indications: 'Wide ridges and posterior molars. D1-D4 with immediate function and All-on-X.',
+    features: 'Wide Platform (Ø4.3 / Ø5.0). Conical Hex / Morse-taper connection. OsseoFix™ surface. Ti-6Al-4V ELI alloy.',
+  },
+  'adin touareg-os': {
+    indications: 'D1-D4 with immediate function. Single, multi-unit and full-arch All-on-X.',
+    features: 'Tapered self-tapping bone-condensing 2-piece implant. Standard Internal Hex connection. OsseoFix™ (Calcium-Phosphate RBM) surface. Ti-6Al-4V ELI alloy. Ø3.5 / 3.75 / 4.2 / 5.0 / 6.0.',
+  },
+  'adin touareg-s': {
+    indications: 'D1-D4 with immediate function. Single, multi-unit and full-arch All-on-X.',
+    features: 'Tapered self-tapping bone-condensing 2-piece implant. Standard Internal Hex connection. AB/AE (Alumina-Oxide Blasted + Acid-Etched) surface. Ti-6Al-4V ELI alloy. Ø3.5 / 3.75 / 4.2 / 5.0 / 6.0.',
+  },
+  'adin swell': {
+    indications: 'D1-D4 bone types. Conventional and immediate placement.',
+    features: 'Straight parallel-walled slightly tapered 2-piece implant with V-shaped thread. Standard Internal Hex connection. AB/AE surface. Ti-6Al-4V ELI alloy. Ø3.3 / 3.75 / 4.2 / 5.0 / 6.0.',
+  },
+  'adin one': {
+    indications: 'Narrow ridges, flapless minimally-invasive surgery, lateral / mandibular incisors. Immediate function.',
+    features: 'One-piece tapered spiral implant with integrated abutment. AB/AE surface. Ti-6Al-4V ELI alloy. Ø3.0 / 3.3 / 3.6 / 4.2 / 5.0.',
+  },
 };
 
 /** Normalise `${brand} – ${system}` so spacing / hyphen / case variants resolve. */

@@ -18,6 +18,7 @@ import { NurseHomeCalendar } from '../../components/NurseHomeCalendar';
 import WhatsNewBadge from '../../components/WhatsNewBadge';
 import PulsingDoubleArrow from '../../components/onboarding/primitives/PulsingDoubleArrow';
 import AskImplanrAIFab from '../../components/AskImplanrAIFab';
+import SmartTipBanner from '../../components/SmartTipBanner';
 
 // ── Status helpers ────────────────────────────────────────
 const ACTION_NEEDED_MAP: Record<string, { label: string; icon: string; color: string }> = {
@@ -412,6 +413,31 @@ function SupervisorDashboard({ stats, procedures, selectedDate, setSelectedDate,
         </View>
       )}
 
+      <View style={s.section}>
+        <View style={s.sectionHeader}>
+          <Ionicons name="apps-outline" size={18} color="#37474F" />
+          <Text style={s.sectionTitle}>Quick Actions</Text>
+        </View>
+        <View style={s.quickActions}>
+          <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/new-procedure')}>
+            <Ionicons name="add-circle-outline" size={24} color="#1A73E8" />
+            <Text style={s.quickBtnText}>New Case</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/procedures')}>
+            <Ionicons name="folder-open-outline" size={24} color="#4CAF50" />
+            <Text style={s.quickBtnText}>All Cases</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/admin/students-analytics')}>
+            <Ionicons name="bar-chart-outline" size={24} color="#1565C0" />
+            <Text style={s.quickBtnText}>My Students</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/implant-selection')}>
+            <Ionicons name="search-outline" size={24} color="#9C27B0" />
+            <Text style={s.quickBtnText}>Implants</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <ProcedureCalendar procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
       <RecentActivityWidget router={router} limit={5} />
     </>
@@ -548,6 +574,24 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
           <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/implant-selection')}>
             <Ionicons name="search-outline" size={24} color="#9C27B0" />
             <Text style={s.quickBtnText}>Implants</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={[s.quickActions, { marginTop: 10 }]}>
+          <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/admin/students-analytics')}>
+            <Ionicons name="bar-chart-outline" size={24} color="#1565C0" />
+            <Text style={s.quickBtnText}>Students</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/admin/supervisors-analytics')}>
+            <Ionicons name="people-circle-outline" size={24} color="#E65100" />
+            <Text style={s.quickBtnText}>Supervisors</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/admin/audit-log')}>
+            <Ionicons name="shield-checkmark-outline" size={24} color="#4CAF50" />
+            <Text style={s.quickBtnText}>Audit Log</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/admin/implant-catalog')}>
+            <Ionicons name="library-outline" size={24} color="#9C27B0" />
+            <Text style={s.quickBtnText}>Implant DB</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -906,6 +950,8 @@ export default function DashboardScreen() {
         {!isStudent && !isSupervisor && !isInCharge && !isNurse && (
           <StudentDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
         )}
+
+        <SmartTipBanner />
 
         <View style={{ height: 24 }} />
       </ScrollView>

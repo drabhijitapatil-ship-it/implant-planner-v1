@@ -602,13 +602,8 @@ export default function ProcedureDetailScreen() {
 
   const canViewAiSummary = () => {
     if (!procedure || procedure.status === 'draft') return false;
-    // Students: always see AI Summary for their own cases
-    if (user?.role === 'student') return true;
-    // Supervisors: see AI Summary for their own cases AND student cases under them
-    if (user?.role === 'supervisor') return true;
-    // Implant In-Charge: see AI Summary for ALL cases
-    if (user?.role === 'implant_incharge') return true;
-    return false;
+    if (user?.role === 'nurse') return false;
+    return ['student', 'supervisor', 'implant_incharge', 'administrator'].includes(user?.role || '');
   };
   
   const handleExportPDF = async () => {

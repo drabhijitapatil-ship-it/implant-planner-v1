@@ -220,6 +220,7 @@ export default function ProfileScreen() {
             <Text style={styles.legalRowText}>How it works</Text>
             <Ionicons name="chevron-forward" size={18} color="#999" />
           </TouchableOpacity>
+          {user?.role !== 'dental_assistant' && (
           <TouchableOpacity
             style={styles.legalRow}
             onPress={() => router.push('/whatsnew?mode=history')}
@@ -230,6 +231,7 @@ export default function ProfileScreen() {
             <Text style={styles.legalRowText}>What's new</Text>
             <Ionicons name="chevron-forward" size={18} color="#999" />
           </TouchableOpacity>
+          )}
         </View>
 
         {/* HIPAA — Compliance section. Only Implant In-Charge / Administrator
@@ -249,6 +251,20 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
         )}
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Learning</Text>
+          <TouchableOpacity
+            style={styles.legalRow}
+            onPress={() => router.push('/saved-tips' as any)}
+            data-testid="link-saved-tips"
+            testID="link-saved-tips"
+          >
+            <Ionicons name="bookmark-outline" size={22} color="#1565C0" />
+            <Text style={styles.legalRowText}>Saved Smart Tips</Text>
+            <Ionicons name="chevron-forward" size={18} color="#999" />
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Legal</Text>
@@ -272,7 +288,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
           <View style={styles.legalFootnote}>
             <Ionicons name="time-outline" size={12} color="#78909C" />
-            <Text style={styles.legalFootnoteText}>Auto-logout after 20 min of inactivity</Text>
+            <Text style={styles.legalFootnoteText}>Auto-logout after 15 min of inactivity</Text>
           </View>
         </View>
 
