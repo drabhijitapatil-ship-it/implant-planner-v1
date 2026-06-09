@@ -715,6 +715,27 @@ export default function NewProcedureScreen() {
     setFormData(prev => ({ ...prev, [field]: value }));
   }, []);
 
+  // iter-242 / iter-296-fix: gentle auto-pulse on the "Case Details" pill
+  // until the user types the very first field. MOVED here from below the
+  // step-2 early return — the previous position caused a "Rendered fewer
+  // hooks than expected" crash whenever the user advanced to step==='implants'
+  // (the early return at line ~963 skipped these hooks, so the next render
+  // ran fewer hooks and React aborted with a white screen).
+  const isCompletelyBlank = !formData.patient_name && !formData.registration_number && !formData.chief_complaint;
+  const pillPulse = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (!isCompletelyBlank) {
+      pillPulse.setValue(1);
+      return;
+    }
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(pillPulse, { toValue: 1.08, duration: 700, useNativeDriver: true }),
+      Animated.timing(pillPulse, { toValue: 1, duration: 700, useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [isCompletelyBlank, pillPulse]);
+
   const toggleLoading = (val: string) => {
     setFormData(prev => {
       const types = prev.loading_type.includes(val)
@@ -1197,23 +1218,11 @@ export default function NewProcedureScreen() {
   // the labels swap automatically via `FLOW_STEP_LABELS`.
   const showFlowStrip = true;
 
-  // iter-242: gentle auto-pulse on the "Case Details" pill until the user
-  // types the very first field — draws the eye toward where to start. Stops
-  // the moment any required field becomes non-empty.
-  const isCompletelyBlank = !formData.patient_name && !formData.registration_number && !formData.chief_complaint;
-  const pillPulse = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    if (!isCompletelyBlank) {
-      pillPulse.setValue(1);
-      return;
-    }
-    const loop = Animated.loop(Animated.sequence([
-      Animated.timing(pillPulse, { toValue: 1.08, duration: 700, useNativeDriver: true }),
-      Animated.timing(pillPulse, { toValue: 1, duration: 700, useNativeDriver: true }),
-    ]));
-    loop.start();
-    return () => loop.stop();
-  }, [isCompletelyBlank, pillPulse]);
+  // iter-296-fix: `isCompletelyBlank`, `pillPulse` (useRef) and the pulse-loop
+  // useEffect were MOVED to the top of the component (right after `updateForm`)
+  // so they run on every render — including when the early-return for
+  // step==='implants' fires. The previous position caused the React error
+  // "Rendered fewer hooks than expected" → blank white screen.
 
   return (
     <>
