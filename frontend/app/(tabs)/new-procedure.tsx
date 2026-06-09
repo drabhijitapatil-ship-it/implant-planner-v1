@@ -1142,17 +1142,41 @@ export default function NewProcedureScreen() {
   if (!formData.ridge_contour) missClinical.push('Ridge contour');
 
   const missMedicalOrChecklist: string[] = [];
+  // iter-296: previous logic used phantom top-level fields (`formData.diabetes`,
+  // `formData.cbct_url`, etc.) that are NEVER populated — these values
+  // actually live inside `formData.medical_assessment[<key>]` and the
+  // `cbctFiles` array state. The result was that Phase 1 Checklist could
+  // never go green, so "Continue to Implant Selection" stayed locked even
+  // when the user had completed every visible field. Re-routed against the
+  // real state stores and added validation for the 11 visible Yes/No items.
   if (isExistingImplantCase) {
-    if (!formData.diabetes) missMedicalOrChecklist.push('Diabetes');
-    if (!formData.smoking_status) missMedicalOrChecklist.push('Smoking status');
-    if (!formData.anticoagulant_therapy) missMedicalOrChecklist.push('Anticoagulant therapy');
-    if (!formData.osteoporosis_medication) missMedicalOrChecklist.push('Osteoporosis medication');
-    if (!formData.radiation_therapy) missMedicalOrChecklist.push('Radiation therapy');
+    const ma = formData.medical_assessment || {};
+    if (!ma.diabetes) missMedicalOrChecklist.push('Diabetes');
+    if (!ma.smoking) missMedicalOrChecklist.push('Smoking status');
+    if (!ma.anticoagulant) missMedicalOrChecklist.push('Anticoagulant therapy');
+    if (!ma.osteoporosis) missMedicalOrChecklist.push('Osteoporosis medication');
+    if (!ma.radiation) missMedicalOrChecklist.push('Radiation therapy');
   } else {
-    if (!formData.cbct_url) missMedicalOrChecklist.push('CBCT Report upload');
-    if (!formData.loading_type) missMedicalOrChecklist.push('Type of Loading');
-    if (!formData.diabetes) missMedicalOrChecklist.push('Diabetes (medical assessment)');
-    if (!formData.smoking_status) missMedicalOrChecklist.push('Smoking status (medical assessment)');
+    if (!cbctFiles[0] || !cbctFiles[1]) missMedicalOrChecklist.push('Both CBCT Reports');
+    if (!formData.loading_type || formData.loading_type.length === 0) missMedicalOrChecklist.push('Type of Loading');
+    const ma = formData.medical_assessment || {};
+    if (!ma.diabetes) missMedicalOrChecklist.push('Diabetes (medical assessment)');
+    if (!ma.smoking) missMedicalOrChecklist.push('Smoking status (medical assessment)');
+    if (!ma.anticoagulant) missMedicalOrChecklist.push('Anticoagulant therapy (medical assessment)');
+    if (!ma.osteoporosis) missMedicalOrChecklist.push('Osteoporosis medication (medical assessment)');
+    if (!ma.radiation) missMedicalOrChecklist.push('Radiation therapy (medical assessment)');
+    // iter-296: validate the 11 visible Phase 1 Checklist Yes/No toggles.
+    // medical_assessment is auto-marked by useEffect (line ~710) once any
+    // medical factor is set, and oral_prophylaxis is hidden for full-arch
+    // cases, so we skip both here. All remaining items must be answered.
+    const mandatoryItems = CHECKLIST_DATA.pre_surgical.items
+      .filter(it => it.id !== 'medical_assessment')
+      .filter(it => !(isFullArch && it.id === 'oral_prophylaxis'));
+    for (const it of mandatoryItems) {
+      if (typeof checklistItems[it.id] !== 'boolean') {
+        missMedicalOrChecklist.push(`${it.label} (Yes/No required)`);
+      }
+    }
   }
 
   const flowStepMissing: string[][] = [missCaseDetails, missImplantDetails, missClinical, missMedicalOrChecklist, []];
