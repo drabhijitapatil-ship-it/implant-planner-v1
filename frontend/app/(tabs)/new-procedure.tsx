@@ -524,12 +524,49 @@ export default function NewProcedureScreen() {
                 medical_risk_level: proc.medical_risk_level || '',
               }));
               // Restore checklist items if saved
+              // iter-296b: restore items with EITHER true OR false values. The
+              // previous logic (`if (item.id && item.value)`) silently dropped
+              // every "No" answer, leaving its `checklistItems[id]` undefined.
+              // That made the iter-296 strict validation reject draft resumes
+              // and locked the Continue button even though Phase 1 was complete.
               if (proc.checklist?.pre_surgical?.items) {
                 const restored: Record<string, boolean> = {};
                 proc.checklist.pre_surgical.items.forEach((item: any) => {
-                  if (item.id && item.value) restored[item.id] = true;
+                  if (item.id && typeof item.value === 'boolean') restored[item.id] = item.value;
                 });
                 setChecklistItems(restored);
+              }
+              // iter-296b: restore CBCT file slots from the backend so the
+              // validation in `missMedicalOrChecklist` recognises the saved
+              // uploads (otherwise `cbctFiles` was perpetually `[null, null]`
+              // on draft resume and the "Both CBCT Reports" guard would
+              // wrongly block the user when navigating Step 2 → Step 1).
+              if (Array.isArray(proc.cbct_files) && proc.cbct_files.length > 0) {
+                const restoredCbct: (null | { filename: string; original_name: string; content_type: string })[] = [null, null];
+                proc.cbct_files.slice(0, 2).forEach((f: any, i: number) => {
+                  if (f?.filename) restoredCbct[i] = {
+                    filename: f.filename,
+                    original_name: f.original_name || f.filename,
+                    content_type: f.content_type || '',
+                  };
+                });
+                // If only `cbct_file` (legacy single-file) was stored, lift
+                // it into slot 0 so at least one slot is populated.
+                if (!restoredCbct[0] && proc.cbct_file) {
+                  restoredCbct[0] = {
+                    filename: proc.cbct_file,
+                    original_name: proc.cbct_original_name || proc.cbct_file,
+                    content_type: proc.cbct_content_type || '',
+                  };
+                }
+                setCbctFiles(restoredCbct);
+                if (proc.cbct_files.length > 2) setExtraCbctCount(proc.cbct_files.length - 2);
+              } else if (proc.cbct_file) {
+                // Legacy drafts only stored `cbct_file` (singular) — hydrate slot 0.
+                setCbctFiles([
+                  { filename: proc.cbct_file, original_name: proc.cbct_original_name || proc.cbct_file, content_type: proc.cbct_content_type || '' },
+                  null,
+                ]);
               }
               // iter-222/224: For existing-implant drafts, the backend stored
               // `implant_procedure_type` as the underlying procedure label
@@ -1138,64 +1175,65 @@ export default function NewProcedureScreen() {
     : ['Case Details', 'Treatment Plan', 'Clinical Examination', 'Phase 1 Checklist', 'Submit'];
 
   const missCaseDetails: string[] = [];
-  if (!formData.patient_name?.trim()) missCaseDetails.push('Patient name');
-  if (!formData.registration_number?.trim()) missCaseDetails.push('Registration number');
-  if (!formData.chief_complaint?.trim()) missCaseDetails.push('Chief complaint');
-  if (!formData.supervisor_id) missCaseDetails.push('Supervising faculty');
-  if (!formData.implant_incharge_id) missCaseDetails.push('Implant in-charge');
-  if (!formData.receipt_number?.trim()) missCaseDetails.push('Receipt number');
-  if (!formData.amount_paid) missCaseDetails.push('Amount paid');
-
   const missImplantDetails: string[] = [];
-  if (isExistingImplantCase) {
-    if (!existingOrigProcedure) missImplantDetails.push('Type of Implant Procedure Done');
-    else if (FULL_ARCH_GROUP.has(existingOrigProcedure) && !formData.arch) missImplantDetails.push('Arch');
-    if ((existingImplantTeeth || []).length === 0) missImplantDetails.push('At least one tooth marked on FDI chart');
-  } else {
-    if (!formData.prosthetic_plan) missImplantDetails.push('Prosthetic Plan');
-    if (isFullArch && !formData.arch) missImplantDetails.push('Arch');
-    if (!isFullArch && (formData.missing_teeth || []).length === 0) missImplantDetails.push('At least one missing tooth on FDI chart');
-  }
-
   const missClinical: string[] = [];
-  if (!formData.occlusocervical_height) missClinical.push('Occlusocervical height');
-  if (!formData.mesiodistal_space) missClinical.push('Mesiodistal space');
-  if (!formData.ridge_contour) missClinical.push('Ridge contour');
-
   const missMedicalOrChecklist: string[] = [];
-  // iter-296: previous logic used phantom top-level fields (`formData.diabetes`,
-  // `formData.cbct_url`, etc.) that are NEVER populated — these values
-  // actually live inside `formData.medical_assessment[<key>]` and the
-  // `cbctFiles` array state. The result was that Phase 1 Checklist could
-  // never go green, so "Continue to Implant Selection" stayed locked even
-  // when the user had completed every visible field. Re-routed against the
-  // real state stores and added validation for the 11 visible Yes/No items.
-  if (isExistingImplantCase) {
-    const ma = formData.medical_assessment || {};
-    if (!ma.diabetes) missMedicalOrChecklist.push('Diabetes');
-    if (!ma.smoking) missMedicalOrChecklist.push('Smoking status');
-    if (!ma.anticoagulant) missMedicalOrChecklist.push('Anticoagulant therapy');
-    if (!ma.osteoporosis) missMedicalOrChecklist.push('Osteoporosis medication');
-    if (!ma.radiation) missMedicalOrChecklist.push('Radiation therapy');
-  } else {
-    if (!cbctFiles[0] || !cbctFiles[1]) missMedicalOrChecklist.push('Both CBCT Reports');
-    if (!formData.loading_type || formData.loading_type.length === 0) missMedicalOrChecklist.push('Type of Loading');
-    const ma = formData.medical_assessment || {};
-    if (!ma.diabetes) missMedicalOrChecklist.push('Diabetes (medical assessment)');
-    if (!ma.smoking) missMedicalOrChecklist.push('Smoking status (medical assessment)');
-    if (!ma.anticoagulant) missMedicalOrChecklist.push('Anticoagulant therapy (medical assessment)');
-    if (!ma.osteoporosis) missMedicalOrChecklist.push('Osteoporosis medication (medical assessment)');
-    if (!ma.radiation) missMedicalOrChecklist.push('Radiation therapy (medical assessment)');
-    // iter-296: validate the 11 visible Phase 1 Checklist Yes/No toggles.
-    // medical_assessment is auto-marked by useEffect (line ~710) once any
-    // medical factor is set, and oral_prophylaxis is hidden for full-arch
-    // cases, so we skip both here. All remaining items must be answered.
-    const mandatoryItems = CHECKLIST_DATA.pre_surgical.items
-      .filter(it => it.id !== 'medical_assessment')
-      .filter(it => !(isFullArch && it.id === 'oral_prophylaxis'));
-    for (const it of mandatoryItems) {
-      if (typeof checklistItems[it.id] !== 'boolean') {
-        missMedicalOrChecklist.push(`${it.label} (Yes/No required)`);
+
+  // iter-296b: For drafts RESUMED from the backend (createdProcedureId set
+  // OR isDraftResume true), skip ALL strict Phase 1 validation. The draft
+  // already exists on the server, so the user must be free to navigate
+  // Step 1 ↔ Step 2 without being re-blocked by validations that may not
+  // match the legacy save schema. Strict validation is still enforced for
+  // FRESH cases below and on the final Submit for Approval action at the
+  // end of Step 2.
+  const skipStrictPhase1 = isDraftResume || !!createdProcedureId;
+
+  if (!skipStrictPhase1) {
+    if (!formData.patient_name?.trim()) missCaseDetails.push('Patient name');
+    if (!formData.registration_number?.trim()) missCaseDetails.push('Registration number');
+    if (!formData.chief_complaint?.trim()) missCaseDetails.push('Chief complaint');
+    if (!formData.supervisor_id) missCaseDetails.push('Supervising faculty');
+    if (!formData.implant_incharge_id) missCaseDetails.push('Implant in-charge');
+    if (!formData.receipt_number?.trim()) missCaseDetails.push('Receipt number');
+    if (!formData.amount_paid) missCaseDetails.push('Amount paid');
+
+    if (isExistingImplantCase) {
+      if (!existingOrigProcedure) missImplantDetails.push('Type of Implant Procedure Done');
+      else if (FULL_ARCH_GROUP.has(existingOrigProcedure) && !formData.arch) missImplantDetails.push('Arch');
+      if ((existingImplantTeeth || []).length === 0) missImplantDetails.push('At least one tooth marked on FDI chart');
+    } else {
+      if (!formData.prosthetic_plan) missImplantDetails.push('Prosthetic Plan');
+      if (isFullArch && !formData.arch) missImplantDetails.push('Arch');
+      if (!isFullArch && (formData.missing_teeth || []).length === 0) missImplantDetails.push('At least one missing tooth on FDI chart');
+    }
+
+    if (!formData.occlusocervical_height) missClinical.push('Occlusocervical height');
+    if (!formData.mesiodistal_space) missClinical.push('Mesiodistal space');
+    if (!formData.ridge_contour) missClinical.push('Ridge contour');
+
+    if (isExistingImplantCase) {
+      const ma = formData.medical_assessment || {};
+      if (!ma.diabetes) missMedicalOrChecklist.push('Diabetes');
+      if (!ma.smoking) missMedicalOrChecklist.push('Smoking status');
+      if (!ma.anticoagulant) missMedicalOrChecklist.push('Anticoagulant therapy');
+      if (!ma.osteoporosis) missMedicalOrChecklist.push('Osteoporosis medication');
+      if (!ma.radiation) missMedicalOrChecklist.push('Radiation therapy');
+    } else {
+      if (!cbctFiles[0] || !cbctFiles[1]) missMedicalOrChecklist.push('Both CBCT Reports');
+      if (!formData.loading_type || formData.loading_type.length === 0) missMedicalOrChecklist.push('Type of Loading');
+      const ma = formData.medical_assessment || {};
+      if (!ma.diabetes) missMedicalOrChecklist.push('Diabetes (medical assessment)');
+      if (!ma.smoking) missMedicalOrChecklist.push('Smoking status (medical assessment)');
+      if (!ma.anticoagulant) missMedicalOrChecklist.push('Anticoagulant therapy (medical assessment)');
+      if (!ma.osteoporosis) missMedicalOrChecklist.push('Osteoporosis medication (medical assessment)');
+      if (!ma.radiation) missMedicalOrChecklist.push('Radiation therapy (medical assessment)');
+      const mandatoryItems = CHECKLIST_DATA.pre_surgical.items
+        .filter(it => it.id !== 'medical_assessment')
+        .filter(it => !(isFullArch && it.id === 'oral_prophylaxis'));
+      for (const it of mandatoryItems) {
+        if (typeof checklistItems[it.id] !== 'boolean') {
+          missMedicalOrChecklist.push(`${it.label} (Yes/No required)`);
+        }
       }
     }
   }
