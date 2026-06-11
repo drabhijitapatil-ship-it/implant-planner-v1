@@ -165,6 +165,50 @@ export default function ImplantCompare() {
   const hasSummary = summary.diameters.length + summary.ghHeights.length +
                      summary.angulations.length + summary.platforms.length > 0;
 
+  // iter-299: pill-filter state — tap an at-a-glance pill to narrow the
+  // comparison table to only systems whose components match the selected
+  // value. Tap the same pill again (or another pill in the same dimension)
+  // to clear / change the filter. Reset on chip change.
+  const [filter, setFilter] = useState<{ kind: 'diameter' | 'gh' | 'angulation' | 'platform'; value: number | string } | null>(null);
+  useEffect(() => { setFilter(null); }, [picked]);
+  const togglePillFilter = useCallback((kind: 'diameter' | 'gh' | 'angulation' | 'platform', value: number | string) => {
+    setFilter(prev => (prev && prev.kind === kind && prev.value === value) ? null : { kind, value });
+  }, []);
+  const componentMatchesFilter = useCallback((c: Component) => {
+    if (!filter) return true;
+    if (filter.kind === 'diameter') {
+      const dList: number[] = [];
+      if (typeof c.diameter_mm === 'number') dList.push(c.diameter_mm);
+      if (Array.isArray(c.diameters_mm)) dList.push(...c.diameters_mm);
+      return dList.includes(filter.value as number);
+    }
+    if (filter.kind === 'gh') {
+      return Array.isArray(c.gingival_heights_mm) && c.gingival_heights_mm.includes(filter.value as number);
+    }
+    if (filter.kind === 'angulation') {
+      const aList: number[] = [];
+      if (typeof c.angulation_deg === 'number') aList.push(c.angulation_deg);
+      if (Array.isArray(c.angulations_deg)) aList.push(...c.angulations_deg);
+      return aList.includes(filter.value as number);
+    }
+    if (filter.kind === 'platform') {
+      const pList: string[] = [];
+      if (typeof c.platform === 'string' && c.platform) pList.push(c.platform);
+      if (Array.isArray(c.platforms)) pList.push(...c.platforms);
+      return pList.includes(filter.value as string);
+    }
+    return true;
+  }, [filter]);
+  const filteredRows: SystemRow[] = React.useMemo(() => {
+    if (!filter) return rows;
+    const out: SystemRow[] = [];
+    for (const sys of rows) {
+      const keep = sys.components.filter(componentMatchesFilter);
+      if (keep.length > 0) out.push({ ...sys, components: keep });
+    }
+    return out;
+  }, [rows, filter, componentMatchesFilter]);
+
   return (
     <SafeAreaView style={s.safe}>
       <CenteredHeader
