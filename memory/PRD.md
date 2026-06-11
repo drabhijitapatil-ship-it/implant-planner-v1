@@ -1,5 +1,44 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 299 (Feb 2026) — Clickable filter pills in Implant Compare
+
+### What the user asked for
+"Finish the Filter by pill task" — wire the At-a-glance pills in
+`/admin/implant-compare` so tapping a pill (e.g. Ø 4.5 mm, GH 3 mm,
+15°, RP) instantly narrows the comparison table to only systems whose
+components carry that value.
+
+### What changed
+**Frontend (`app/admin/implant-compare.tsx`)**
+- `SummaryEntry` type now carries the raw `value` (number | string)
+  alongside the formatted `key` ("Ø 4.5 mm"), so the pill can pass the
+  value back without string-parsing.
+- `SummaryRow` rewritten: pills are now `TouchableOpacity`, receive
+  `kind` / `filter` / `onPick` props, render the active pill in solid
+  blue with the brand-count badge inverted (white pill on blue), and
+  expose `data-testid="compare-pill-{kind}-{value}"`.
+- Active filter renders a red **"Clear filter"** chip in the At-a-glance
+  header (`data-testid="compare-clear-filter"`) for one-tap reset.
+- Table now renders `filteredRows` (not `rows`) so the cards visibly
+  shrink to only matching systems / components.
+- Empty-state copy adapts: "No systems match the selected filter."
+- Filter resets automatically when the component-type chip changes.
+
+### Verification (screenshot tool)
+- Loaded Compare → Final Abutment chip: At-a-glance card renders with
+  8 diameters + 8 GH heights + 8 angulations + 8 platforms (32 pills,
+  all tappable).
+- Tapped **Ø 4.5 mm**: pill flips to dark blue, "Clear filter" chip
+  appears, table collapses from 55 systems → only RP CloseFit cards
+  with DIAMETER (MM) = 4.5. UNP (Ø 3.5) cards are filtered out.
+- Tapping same pill again clears the filter.
+
+### Files touched
+- `frontend/app/admin/implant-compare.tsx`
+
+---
+
+
 
 ## Iteration 291 (Feb 2026) — Cortical-only depth badge in drilling UI
 

@@ -71,11 +71,14 @@ const prettyArr = (arr?: string[]) =>
 // value (so "8 brands offer Ø3.5") regardless of how many SKUs each brand
 // has at that size. Returns the top values sorted by brand-coverage, then
 // alphabetically. Pure client-side: no backend round-trip.
+// iter-299: SummaryEntry now also carries the raw `value` (number | string)
+// so the pill can pass it back to the filter without re-parsing "Ø 3.5 mm".
+type SummaryEntry = { key: string; count: number; value: number | string };
 type AtAGlanceBuckets = {
-  diameters: { key: string; count: number }[];
-  ghHeights: { key: string; count: number }[];
-  angulations: { key: string; count: number }[];
-  platforms: { key: string; count: number }[];
+  diameters: SummaryEntry[];
+  ghHeights: SummaryEntry[];
+  angulations: SummaryEntry[];
+  platforms: SummaryEntry[];
 };
 
 const computeAtAGlance = (rows: SystemRow[]): AtAGlanceBuckets => {
@@ -120,12 +123,12 @@ const computeAtAGlance = (rows: SystemRow[]): AtAGlanceBuckets => {
       }
     }
   }
-  const toEntries = <K extends number | string>(m: Map<K, Set<string>>, fmtKey: (k: K) => string) =>
+  const toEntries = <K extends number | string>(m: Map<K, Set<string>>, fmtKey: (k: K) => string): SummaryEntry[] =>
     Array.from(m.entries())
-      .map(([k, set]) => ({ key: fmtKey(k), count: set.size, sortKey: k }))
+      .map(([k, set]) => ({ key: fmtKey(k), count: set.size, sortKey: k, value: k as number | string }))
       .sort((a, b) => b.count - a.count || (a.sortKey > b.sortKey ? 1 : -1))
       .slice(0, 8)
-      .map(({ key, count }) => ({ key, count }));
+      .map(({ key, count, value }) => ({ key, count, value }));
   return {
     diameters:   toEntries(diam, (k) => `Ø ${k} mm`),
     ghHeights:   toEntries(gh,   (k) => `GH ${k} mm`),
@@ -248,32 +251,44 @@ export default function ImplantCompare() {
           <View style={s.summaryHeader}>
             <Ionicons name="stats-chart-outline" size={16} color="#0277BD" />
             <Text style={s.summaryTitle}>At-a-glance — most common across {rows.length} system{rows.length > 1 ? 's' : ''}</Text>
+            {filter ? (
+              <TouchableOpacity
+                onPress={() => setFilter(null)}
+                style={s.clearFilterBtn}
+                testID="compare-clear-filter"
+              >
+                <Ionicons name="close-circle" size={14} color="#C62828" />
+                <Text style={s.clearFilterText}>Clear filter</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
           {summary.diameters.length > 0 ? (
-            <SummaryRow label="Diameters" entries={summary.diameters} />
+            <SummaryRow label="Diameters" entries={summary.diameters} kind="diameter" filter={filter} onPick={togglePillFilter} />
           ) : null}
           {summary.ghHeights.length > 0 ? (
-            <SummaryRow label="Gingival heights" entries={summary.ghHeights} />
+            <SummaryRow label="Gingival heights" entries={summary.ghHeights} kind="gh" filter={filter} onPick={togglePillFilter} />
           ) : null}
           {summary.angulations.length > 0 ? (
-            <SummaryRow label="Angulations" entries={summary.angulations} />
+            <SummaryRow label="Angulations" entries={summary.angulations} kind="angulation" filter={filter} onPick={togglePillFilter} />
           ) : null}
           {summary.platforms.length > 0 ? (
-            <SummaryRow label="Platforms" entries={summary.platforms} />
+            <SummaryRow label="Platforms" entries={summary.platforms} kind="platform" filter={filter} onPick={togglePillFilter} />
           ) : null}
         </View>
       ) : null}
 
       {loading ? (
         <View style={s.center}><ActivityIndicator color="#0277BD" /></View>
-      ) : rows.length === 0 ? (
+      ) : filteredRows.length === 0 ? (
         <View style={s.center}>
           <Ionicons name="information-circle-outline" size={36} color="#90A4AE" />
-          <Text style={s.emptyText}>No systems with this component on file.</Text>
+          <Text style={s.emptyText}>
+            {filter ? 'No systems match the selected filter.' : 'No systems with this component on file.'}
+          </Text>
         </View>
       ) : (
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, paddingBottom: 32 }}>
-          {rows.map(r => (
+          {filteredRows.map(r => (
             <View key={r.key} style={s.card} testID={`compare-card-${r.key}`}>
               <View style={s.cardHeader}>
                 <Text style={s.brand}>{r.brand}</Text>
@@ -341,16 +356,38 @@ const Spec = ({ label, value }: { label: string; value: string }) => (
 
 // iter-298: At-a-glance row — label + horizontally-scrollable pills,
 // each pill showing the value (e.g. "Ø 3.5 mm") and a brand-coverage badge.
-const SummaryRow = ({ label, entries }: { label: string; entries: { key: string; count: number }[] }) => (
+// iter-299: pills are now TouchableOpacity that toggle a filter for the
+// table below. The active pill is highlighted in solid blue.
+type PillKind = 'diameter' | 'gh' | 'angulation' | 'platform';
+const SummaryRow = ({
+  label, entries, kind, filter, onPick,
+}: {
+  label: string;
+  entries: SummaryEntry[];
+  kind: PillKind;
+  filter: { kind: PillKind; value: number | string } | null;
+  onPick: (kind: PillKind, value: number | string) => void;
+}) => (
   <View style={s.summaryRow}>
     <Text style={s.summaryRowLabel}>{label}</Text>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingRight: 8 }}>
-      {entries.map((e) => (
-        <View key={e.key} style={s.summaryPill}>
-          <Text style={s.summaryPillText}>{e.key}</Text>
-          <View style={s.summaryPillBadge}><Text style={s.summaryPillBadgeText}>{e.count}</Text></View>
-        </View>
-      ))}
+      {entries.map((e) => {
+        const active = !!(filter && filter.kind === kind && filter.value === e.value);
+        return (
+          <TouchableOpacity
+            key={e.key}
+            onPress={() => onPick(kind, e.value)}
+            activeOpacity={0.7}
+            style={[s.summaryPill, active && s.summaryPillActive]}
+            testID={`compare-pill-${kind}-${e.value}`}
+          >
+            <Text style={[s.summaryPillText, active && s.summaryPillTextActive]}>{e.key}</Text>
+            <View style={[s.summaryPillBadge, active && s.summaryPillBadgeActive]}>
+              <Text style={[s.summaryPillBadgeText, active && s.summaryPillBadgeTextActive]}>{e.count}</Text>
+            </View>
+          </TouchableOpacity>
+        );
+      })}
     </ScrollView>
   </View>
 );
@@ -388,7 +425,14 @@ const s = StyleSheet.create({
   summaryRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4 },
   summaryRowLabel: { minWidth: 110, fontSize: 11, fontWeight: '600', color: '#546E7A', textTransform: 'uppercase', letterSpacing: 0.4 },
   summaryPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E1F5FE', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 999, borderWidth: 1, borderColor: '#B3E5FC' },
+  summaryPillActive: { backgroundColor: '#0277BD', borderColor: '#01579B' },
   summaryPillText: { fontSize: 12, fontWeight: '600', color: '#01579B' },
+  summaryPillTextActive: { color: '#FFF' },
   summaryPillBadge: { backgroundColor: '#0277BD', marginLeft: 6, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 999, minWidth: 18, alignItems: 'center' },
+  summaryPillBadgeActive: { backgroundColor: '#FFF' },
   summaryPillBadgeText: { fontSize: 10, fontWeight: '700', color: '#FFF' },
+  summaryPillBadgeTextActive: { color: '#01579B' },
+  // iter-299 — clear-filter affordance
+  clearFilterBtn: { flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', backgroundColor: '#FFEBEE', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, borderWidth: 1, borderColor: '#FFCDD2' },
+  clearFilterText: { fontSize: 11, fontWeight: '700', color: '#C62828', marginLeft: 3 },
 });
