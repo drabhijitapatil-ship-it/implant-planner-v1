@@ -1,5 +1,46 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 300 (Feb 2026) — Multi-pill AND-stacking in Implant Compare
+
+### What the user asked for
+"Implement enhancement idea" — let clinicians stack multiple At-a-glance
+pills across different dimensions (e.g. Ø 4.5 mm + GH 3 mm + RP) so the
+table narrows to the exact SKU intersection across brands.
+
+### What changed
+**Frontend (`app/admin/implant-compare.tsx`)**
+- `filter` state migrated from a single `{ kind, value }` object to a
+  per-kind `FilterMap = Partial<Record<PillKind, value>>`. Each
+  dimension can hold at most one active value.
+- `togglePillFilter` semantics:
+  - Tap a pill in a fresh dimension → adds that filter.
+  - Tap a different pill in an already-active dimension → REPLACES
+    (since a single component carries one diameter / one platform).
+  - Tap the active pill again → clears just that dimension.
+- `componentMatchesFilter` now applies AND-logic across all active
+  dimensions; missing dimensions are simply skipped.
+- "Clear filter" chip now displays the active count, e.g. **"Clear (3)"**,
+  and the empty state copy switches to "No systems match the selected
+  filters." when stacking yields zero hits.
+- Chip-change (switching component-type) wipes the whole `FilterMap`.
+
+### Verification (screenshot tool, end-to-end)
+1. Final Abutment → tap Ø 4.5 mm + GH 3 mm → "Clear (2)" chip,
+   table = 3 RP CloseFit cards (Straight + Angled 15° + Angled 25°),
+   all with Diameter = 4.5 AND GH = 3.
+2. Add Platform RP → "Clear (3)", same result set (RP implied).
+3. Tap Ø 5.5 mm → replaces Ø 4.5; empty-state "No systems match the
+   selected filters." (RP at Ø 5.5 / GH 3 doesn't exist) — confirms
+   same-kind replace + AND-logic.
+4. Tap "Clear (3)" → full UNP CloseFit + RP CloseFit + WP CloseFit
+   list restored.
+
+### Files touched
+- `frontend/app/admin/implant-compare.tsx`
+
+---
+
+
 ## Iteration 299 (Feb 2026) — Clickable filter pills in Implant Compare
 
 ### What the user asked for

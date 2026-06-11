@@ -168,49 +168,63 @@ export default function ImplantCompare() {
   const hasSummary = summary.diameters.length + summary.ghHeights.length +
                      summary.angulations.length + summary.platforms.length > 0;
 
-  // iter-299: pill-filter state — tap an at-a-glance pill to narrow the
-  // comparison table to only systems whose components match the selected
-  // value. Tap the same pill again (or another pill in the same dimension)
-  // to clear / change the filter. Reset on chip change.
-  const [filter, setFilter] = useState<{ kind: 'diameter' | 'gh' | 'angulation' | 'platform'; value: number | string } | null>(null);
-  useEffect(() => { setFilter(null); }, [picked]);
+  // iter-299/300: pill-filter state — tap an at-a-glance pill to narrow
+  // the comparison table to only systems whose components match the
+  // selected value. iter-300 extends this to a *per-kind* map so multiple
+  // pills (e.g. Ø 4.5 mm + GH 3 mm + RP) compose with AND logic across
+  // dimensions. Within a single dimension a second tap REPLACES the value
+  // (one component can have only one diameter, etc.), and tapping the
+  // active pill again clears that one dimension. Switching component-
+  // type chip resets everything.
+  type FilterMap = Partial<Record<'diameter' | 'gh' | 'angulation' | 'platform', number | string>>;
+  const [filter, setFilter] = useState<FilterMap>({});
+  useEffect(() => { setFilter({}); }, [picked]);
   const togglePillFilter = useCallback((kind: 'diameter' | 'gh' | 'angulation' | 'platform', value: number | string) => {
-    setFilter(prev => (prev && prev.kind === kind && prev.value === value) ? null : { kind, value });
+    setFilter(prev => {
+      const next: FilterMap = { ...prev };
+      if (next[kind] === value) {
+        delete next[kind];
+      } else {
+        next[kind] = value;
+      }
+      return next;
+    });
   }, []);
+  const activeFilterCount = Object.keys(filter).length;
   const componentMatchesFilter = useCallback((c: Component) => {
-    if (!filter) return true;
-    if (filter.kind === 'diameter') {
+    if (activeFilterCount === 0) return true;
+    if (filter.diameter !== undefined) {
       const dList: number[] = [];
       if (typeof c.diameter_mm === 'number') dList.push(c.diameter_mm);
       if (Array.isArray(c.diameters_mm)) dList.push(...c.diameters_mm);
-      return dList.includes(filter.value as number);
+      if (!dList.includes(filter.diameter as number)) return false;
     }
-    if (filter.kind === 'gh') {
-      return Array.isArray(c.gingival_heights_mm) && c.gingival_heights_mm.includes(filter.value as number);
+    if (filter.gh !== undefined) {
+      if (!(Array.isArray(c.gingival_heights_mm) && c.gingival_heights_mm.includes(filter.gh as number))) return false;
     }
-    if (filter.kind === 'angulation') {
+    if (filter.angulation !== undefined) {
       const aList: number[] = [];
       if (typeof c.angulation_deg === 'number') aList.push(c.angulation_deg);
       if (Array.isArray(c.angulations_deg)) aList.push(...c.angulations_deg);
-      return aList.includes(filter.value as number);
+      if (!aList.includes(filter.angulation as number)) return false;
     }
-    if (filter.kind === 'platform') {
+    if (filter.platform !== undefined) {
       const pList: string[] = [];
       if (typeof c.platform === 'string' && c.platform) pList.push(c.platform);
       if (Array.isArray(c.platforms)) pList.push(...c.platforms);
-      return pList.includes(filter.value as string);
+      if (!pList.includes(filter.platform as string)) return false;
     }
     return true;
-  }, [filter]);
+  }, [filter, activeFilterCount]);
   const filteredRows: SystemRow[] = React.useMemo(() => {
-    if (!filter) return rows;
+    if (activeFilterCount === 0) return rows;
     const out: SystemRow[] = [];
     for (const sys of rows) {
       const keep = sys.components.filter(componentMatchesFilter);
       if (keep.length > 0) out.push({ ...sys, components: keep });
     }
     return out;
-  }, [rows, filter, componentMatchesFilter]);
+  }, [rows, activeFilterCount, componentMatchesFilter]);
 
   return (
     <SafeAreaView style={s.safe}>
@@ -251,14 +265,16 @@ export default function ImplantCompare() {
           <View style={s.summaryHeader}>
             <Ionicons name="stats-chart-outline" size={16} color="#0277BD" />
             <Text style={s.summaryTitle}>At-a-glance — most common across {rows.length} system{rows.length > 1 ? 's' : ''}</Text>
-            {filter ? (
+            {activeFilterCount > 0 ? (
               <TouchableOpacity
-                onPress={() => setFilter(null)}
+                onPress={() => setFilter({})}
                 style={s.clearFilterBtn}
                 testID="compare-clear-filter"
               >
                 <Ionicons name="close-circle" size={14} color="#C62828" />
-                <Text style={s.clearFilterText}>Clear filter</Text>
+                <Text style={s.clearFilterText}>
+                  Clear {activeFilterCount > 1 ? `(${activeFilterCount})` : 'filter'}
+                </Text>
               </TouchableOpacity>
             ) : null}
           </View>
@@ -283,7 +299,7 @@ export default function ImplantCompare() {
         <View style={s.center}>
           <Ionicons name="information-circle-outline" size={36} color="#90A4AE" />
           <Text style={s.emptyText}>
-            {filter ? 'No systems match the selected filter.' : 'No systems with this component on file.'}
+            {activeFilterCount > 0 ? 'No systems match the selected filters.' : 'No systems with this component on file.'}
           </Text>
         </View>
       ) : (
@@ -356,23 +372,25 @@ const Spec = ({ label, value }: { label: string; value: string }) => (
 
 // iter-298: At-a-glance row — label + horizontally-scrollable pills,
 // each pill showing the value (e.g. "Ø 3.5 mm") and a brand-coverage badge.
-// iter-299: pills are now TouchableOpacity that toggle a filter for the
-// table below. The active pill is highlighted in solid blue.
+// iter-299/300: pills are now TouchableOpacity that toggle a filter for
+// the table below. The active pill is highlighted in solid blue. Filter
+// is a per-kind map so multiple dimensions can stack (AND-logic).
 type PillKind = 'diameter' | 'gh' | 'angulation' | 'platform';
+type SummaryFilter = Partial<Record<PillKind, number | string>>;
 const SummaryRow = ({
   label, entries, kind, filter, onPick,
 }: {
   label: string;
   entries: SummaryEntry[];
   kind: PillKind;
-  filter: { kind: PillKind; value: number | string } | null;
+  filter: SummaryFilter;
   onPick: (kind: PillKind, value: number | string) => void;
 }) => (
   <View style={s.summaryRow}>
     <Text style={s.summaryRowLabel}>{label}</Text>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingRight: 8 }}>
       {entries.map((e) => {
-        const active = !!(filter && filter.kind === kind && filter.value === e.value);
+        const active = filter[kind] === e.value;
         return (
           <TouchableOpacity
             key={e.key}
