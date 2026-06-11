@@ -5658,11 +5658,28 @@ async def compare_implant_catalog(component_type: str, current_user: dict = Depe
         matches = [c for c in (d.get("components") or []) if c.get("type") == component_type]
         if not matches:
             continue
+        # iter-297: `connection` can legitimately be either a dict
+        # ({type, geometry, internal_hex_size_mm, …}) for older catalog
+        # rows OR a plain string ("TorcFit", "Conical Hex", "Internal Hex")
+        # for iter-283/293/294/295 brand additions (BLX, CloseFit,
+        # Touareg-OS/S, Swell). Previously this path always called
+        # `.get("type")` and crashed with 500 `'str' object has no
+        # attribute 'get'` on any compare-chip whose result set included
+        # at least one string-connection row — breaking the chips for
+        # final_abutment, healing_abutment, ti_base, screw_retained_abutment,
+        # impression_post, etc.
+        conn = d.get("connection")
+        if isinstance(conn, dict):
+            conn_type = conn.get("type")
+        elif isinstance(conn, str):
+            conn_type = conn
+        else:
+            conn_type = None
         rows.append({
             "key": d.get("key"),
             "brand": d.get("brand"),
             "name": d.get("name"),
-            "connection": (d.get("connection") or {}).get("type"),
+            "connection": conn_type,
             "platform_switching": d.get("platform_switching"),
             "components": matches,
         })
@@ -14833,6 +14850,27 @@ async def seed_implant_catalog_on_start():
         await _adin_rs_comp_seed()
     except Exception as exc:  # pragma: no cover — best-effort
         logging.warning("Adin RS/One component expansion seed skipped: %s", exc)
+    # iter-297 (Feb 2026): one-time normalization — older catalog seeds
+    # (iter-283 BLX / iter-293 BLX components / iter-294 CloseFit / iter-295
+    # Touareg-OS/S/Swell) stored `connection` as a plain string instead of
+    # the dict-shape `{type, geometry, …}` used by older catalog rows. The
+    # Compare endpoint accepts both shapes now, but normalizing here lets
+    # future consumers safely call `.get(...)` without a defensive check.
+    try:
+        ncur = db.implant_catalog.find(
+            {"connection": {"$type": "string"}},
+            {"_id": 0, "key": 1, "connection": 1},
+        )
+        nrows = await ncur.to_list(length=500)
+        for r in nrows:
+            await db.implant_catalog.update_one(
+                {"key": r["key"]},
+                {"$set": {"connection": {"type": r["connection"]}}},
+            )
+        if nrows:
+            print(f"[implant_catalog] normalised connection field on {len(nrows)} row(s)")
+    except Exception as exc:  # pragma: no cover — best-effort
+        logging.warning("Catalog connection normalization skipped: %s", exc)
 
 
 
