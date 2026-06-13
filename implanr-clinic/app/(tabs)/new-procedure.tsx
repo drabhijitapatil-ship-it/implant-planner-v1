@@ -524,12 +524,40 @@ export default function NewProcedureScreen() {
                 medical_risk_level: proc.medical_risk_level || '',
               }));
               // Restore checklist items if saved
+              // iter-296b: restore items with EITHER true OR false values. The
+              // previous logic (`if (item.id && item.value)`) silently dropped
+              // every "No" answer, leaving its `checklistItems[id]` undefined.
               if (proc.checklist?.pre_surgical?.items) {
                 const restored: Record<string, boolean> = {};
                 proc.checklist.pre_surgical.items.forEach((item: any) => {
-                  if (item.id && item.value) restored[item.id] = true;
+                  if (item.id && typeof item.value === 'boolean') restored[item.id] = item.value;
                 });
                 setChecklistItems(restored);
+              }
+              // iter-296b: restore CBCT file slots from the backend
+              if (Array.isArray(proc.cbct_files) && proc.cbct_files.length > 0) {
+                const restoredCbct: (null | { filename: string; original_name: string; content_type: string })[] = [null, null];
+                proc.cbct_files.slice(0, 2).forEach((f: any, i: number) => {
+                  if (f?.filename) restoredCbct[i] = {
+                    filename: f.filename,
+                    original_name: f.original_name || f.filename,
+                    content_type: f.content_type || '',
+                  };
+                });
+                if (!restoredCbct[0] && proc.cbct_file) {
+                  restoredCbct[0] = {
+                    filename: proc.cbct_file,
+                    original_name: proc.cbct_original_name || proc.cbct_file,
+                    content_type: proc.cbct_content_type || '',
+                  };
+                }
+                setCbctFiles(restoredCbct);
+                if (proc.cbct_files.length > 2) setExtraCbctCount(proc.cbct_files.length - 2);
+              } else if (proc.cbct_file) {
+                setCbctFiles([
+                  { filename: proc.cbct_file, original_name: proc.cbct_original_name || proc.cbct_file, content_type: proc.cbct_content_type || '' },
+                  null,
+                ]);
               }
               // iter-222/224: For existing-implant drafts, the backend stored
               // `implant_procedure_type` as the underlying procedure label
@@ -714,6 +742,23 @@ export default function NewProcedureScreen() {
   const updateForm = useCallback((field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   }, []);
+
+  // iter-242 / iter-296-fix: MOVED before step-2 early return to avoid
+  // "Rendered fewer hooks than expected" crash.
+  const isCompletelyBlankPill = !formData.patient_name && !formData.registration_number && !formData.chief_complaint;
+  const pillPulseAnim = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (!isCompletelyBlankPill) {
+      pillPulseAnim.setValue(1);
+      return;
+    }
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(pillPulseAnim, { toValue: 1.08, duration: 700, useNativeDriver: true }),
+      Animated.timing(pillPulseAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [isCompletelyBlankPill, pillPulseAnim]);
 
   const toggleLoading = (val: string) => {
     setFormData(prev => {
@@ -1117,41 +1162,46 @@ export default function NewProcedureScreen() {
     : ['Case Details', 'Treatment Plan', 'Clinical Examination', 'Phase 1 Checklist', 'Submit'];
 
   const missCaseDetails: string[] = [];
-  if (!formData.patient_name?.trim()) missCaseDetails.push('Patient name');
-  if (!formData.registration_number?.trim()) missCaseDetails.push('Registration number');
-  if (!formData.chief_complaint?.trim()) missCaseDetails.push('Chief complaint');
-  if (!formData.implant_incharge_id) missCaseDetails.push('Chief Dentist');
-  if (!formData.receipt_number?.trim()) missCaseDetails.push('Receipt number');
-  if (!formData.amount_paid) missCaseDetails.push('Amount paid');
-
   const missImplantDetails: string[] = [];
-  if (isExistingImplantCase) {
-    if (!existingOrigProcedure) missImplantDetails.push('Type of Implant Procedure Done');
-    else if (FULL_ARCH_GROUP.has(existingOrigProcedure) && !formData.arch) missImplantDetails.push('Arch');
-    if ((existingImplantTeeth || []).length === 0) missImplantDetails.push('At least one tooth marked on FDI chart');
-  } else {
-    if (!formData.prosthetic_plan) missImplantDetails.push('Prosthetic Plan');
-    if (isFullArch && !formData.arch) missImplantDetails.push('Arch');
-    if (!isFullArch && (formData.missing_teeth || []).length === 0) missImplantDetails.push('At least one missing tooth on FDI chart');
-  }
-
   const missClinical: string[] = [];
-  if (!formData.occlusocervical_height) missClinical.push('Occlusocervical height');
-  if (!formData.mesiodistal_space) missClinical.push('Mesiodistal space');
-  if (!formData.ridge_contour) missClinical.push('Ridge contour');
-
   const missMedicalOrChecklist: string[] = [];
-  if (isExistingImplantCase) {
-    if (!formData.diabetes) missMedicalOrChecklist.push('Diabetes');
-    if (!formData.smoking_status) missMedicalOrChecklist.push('Smoking status');
-    if (!formData.anticoagulant_therapy) missMedicalOrChecklist.push('Anticoagulant therapy');
-    if (!formData.osteoporosis_medication) missMedicalOrChecklist.push('Osteoporosis medication');
-    if (!formData.radiation_therapy) missMedicalOrChecklist.push('Radiation therapy');
-  } else {
-    if (!formData.cbct_url) missMedicalOrChecklist.push('CBCT Report upload');
-    if (!formData.loading_type) missMedicalOrChecklist.push('Type of Loading');
-    if (!formData.diabetes) missMedicalOrChecklist.push('Diabetes (medical assessment)');
-    if (!formData.smoking_status) missMedicalOrChecklist.push('Smoking status (medical assessment)');
+
+  const skipStrictPhase1 = isDraftResume || !!createdProcedureId;
+
+  if (!skipStrictPhase1) {
+    if (!formData.patient_name?.trim()) missCaseDetails.push('Patient name');
+    if (!formData.registration_number?.trim()) missCaseDetails.push('Registration number');
+    if (!formData.chief_complaint?.trim()) missCaseDetails.push('Chief complaint');
+    if (!formData.implant_incharge_id) missCaseDetails.push('Chief Dentist');
+    if (!formData.receipt_number?.trim()) missCaseDetails.push('Receipt number');
+    if (!formData.amount_paid) missCaseDetails.push('Amount paid');
+
+    if (isExistingImplantCase) {
+      if (!existingOrigProcedure) missImplantDetails.push('Type of Implant Procedure Done');
+      else if (FULL_ARCH_GROUP.has(existingOrigProcedure) && !formData.arch) missImplantDetails.push('Arch');
+      if ((existingImplantTeeth || []).length === 0) missImplantDetails.push('At least one tooth marked on FDI chart');
+    } else {
+      if (!formData.prosthetic_plan) missImplantDetails.push('Prosthetic Plan');
+      if (isFullArch && !formData.arch) missImplantDetails.push('Arch');
+      if (!isFullArch && (formData.missing_teeth || []).length === 0) missImplantDetails.push('At least one missing tooth on FDI chart');
+    }
+
+    if (!formData.occlusocervical_height) missClinical.push('Occlusocervical height');
+    if (!formData.mesiodistal_space) missClinical.push('Mesiodistal space');
+    if (!formData.ridge_contour) missClinical.push('Ridge contour');
+
+    if (isExistingImplantCase) {
+      if (!formData.diabetes) missMedicalOrChecklist.push('Diabetes');
+      if (!formData.smoking_status) missMedicalOrChecklist.push('Smoking status');
+      if (!formData.anticoagulant_therapy) missMedicalOrChecklist.push('Anticoagulant therapy');
+      if (!formData.osteoporosis_medication) missMedicalOrChecklist.push('Osteoporosis medication');
+      if (!formData.radiation_therapy) missMedicalOrChecklist.push('Radiation therapy');
+    } else {
+      if (!formData.cbct_url) missMedicalOrChecklist.push('CBCT Report upload');
+      if (!formData.loading_type) missMedicalOrChecklist.push('Type of Loading');
+      if (!formData.diabetes) missMedicalOrChecklist.push('Diabetes (medical assessment)');
+      if (!formData.smoking_status) missMedicalOrChecklist.push('Smoking status (medical assessment)');
+    }
   }
 
   const flowStepMissing: string[][] = [missCaseDetails, missImplantDetails, missClinical, missMedicalOrChecklist, []];
@@ -1171,24 +1221,6 @@ export default function NewProcedureScreen() {
   // routine flow's first 5 labels; once the user picks "Existing Implant"
   // the labels swap automatically via `FLOW_STEP_LABELS`.
   const showFlowStrip = true;
-
-  // iter-242: gentle auto-pulse on the "Case Details" pill until the user
-  // types the very first field — draws the eye toward where to start. Stops
-  // the moment any required field becomes non-empty.
-  const isCompletelyBlank = !formData.patient_name && !formData.registration_number && !formData.chief_complaint;
-  const pillPulse = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    if (!isCompletelyBlank) {
-      pillPulse.setValue(1);
-      return;
-    }
-    const loop = Animated.loop(Animated.sequence([
-      Animated.timing(pillPulse, { toValue: 1.08, duration: 700, useNativeDriver: true }),
-      Animated.timing(pillPulse, { toValue: 1, duration: 700, useNativeDriver: true }),
-    ]));
-    loop.start();
-    return () => loop.stop();
-  }, [isCompletelyBlank, pillPulse]);
 
   return (
     <>
@@ -1248,7 +1280,7 @@ export default function NewProcedureScreen() {
               const active = idx === currentExistingStep;
               const done = existingStepDone[idx];
               const PillWrap: any = idx === 0 ? Animated.View : View;
-              const pillWrapProps = idx === 0 ? { style: { transform: [{ scale: pillPulse }], flexGrow: 1, flexBasis: 0 } } : { style: { flexGrow: 1, flexBasis: 0 } };
+              const pillWrapProps = idx === 0 ? { style: { transform: [{ scale: pillPulseAnim }], flexGrow: 1, flexBasis: 0 } } : { style: { flexGrow: 1, flexBasis: 0 } };
               return (
                 <PillWrap key={label} {...pillWrapProps}>
                 <TouchableOpacity
