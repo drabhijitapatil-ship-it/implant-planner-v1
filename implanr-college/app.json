@@ -7,9 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "implanr-college",
     "userInterfaceStyle": "automatic",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.0.0",
     "updates": {
       "enabled": false,
       "url": "https://u.expo.dev/1220f041-4b0b-4a3e-ace3-c6a92191f22a"

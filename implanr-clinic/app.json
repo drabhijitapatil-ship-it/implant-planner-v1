@@ -2,14 +2,12 @@
   "expo": {
     "name": "Implanr Clinic",
     "slug": "implanr-clinic",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "implanr-clinic",
     "userInterfaceStyle": "automatic",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.0.0",
     "updates": {
       "enabled": true,
       "url": "https://u.expo.dev/38c6f06f-a7df-492b-8c66-13ff96c9f0e4"
@@ -23,7 +21,8 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#000000"
       },
-      "package": "com.implanr.clinic"
+      "package": "com.implanr.clinic",
+            "versionCode": 2
     },
     "web": {
       "bundler": "metro",
