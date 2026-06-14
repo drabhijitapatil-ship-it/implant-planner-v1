@@ -163,7 +163,7 @@ export default function LoginScreen() {
     >
       <SafeAreaView style={{ flex: 1 }}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={{ flex: 1 }}
         >
           <ScrollView
@@ -171,8 +171,9 @@ export default function LoginScreen() {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            {/* Soft decorative light blue wave/watermarks in background */}
-            <View style={styles.bgWaveBottom} />
+            <View style={styles.innerContainer}>
+              {/* Soft decorative light blue wave/watermarks in background */}
+              <View style={styles.bgWaveBottom} />
 
             {/* Logo Badge in clean white square card */}
             {/* <View style={styles.logoContainer}> */}
@@ -422,8 +423,9 @@ export default function LoginScreen() {
                 <Text style={styles.registerText}>Create Account</Text>
               </TouchableOpacity>
             </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
       </SafeAreaView>
     </LinearGradient>
   );
@@ -435,9 +437,13 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+  },
+  innerContainer: {
+    flexGrow: 1,
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
+    width: "100%",
   },
   bgWaveTop: {
     position: "absolute",
