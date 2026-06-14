@@ -250,14 +250,14 @@ export default function ImplantSelectionScreen() {
   const sToothInfo = sTooth ? toothRecs[sTooth] : null;
 
   if (loading) return (
-    <SafeAreaView style={s.container} edges={['bottom']}>
+    <View style={s.container}>
       <View style={s.center}><ActivityIndicator size="large" color="#1E88E5" /><Text style={s.centerText}>Loading implant data...</Text></View>
-    </SafeAreaView>
+    </View>
   );
   if (loadError) return (
-    <SafeAreaView style={s.container} edges={['bottom']}>
+    <View style={s.container}>
       <View style={s.center}><Ionicons name="alert-circle" size={48} color="#D32F2F" /><Text style={s.errText}>{loadError}</Text></View>
-    </SafeAreaView>
+    </View>
   );
 
   // Show Drilling Protocol screen as full overlay
@@ -272,7 +272,7 @@ export default function ImplantSelectionScreen() {
   }
 
   return (
-    <SafeAreaView style={s.container} edges={['bottom']}>
+    <View style={s.container}>
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={s.header}>
@@ -512,7 +512,7 @@ export default function ImplantSelectionScreen() {
           </Pressable>
         </Modal>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 

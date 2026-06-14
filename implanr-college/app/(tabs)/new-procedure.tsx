@@ -303,6 +303,7 @@ export default function NewProcedureScreen() {
   // iter-238: renamed "Implant Inventory" → "Implant Details" per user request.
   const EXISTING_STEP_LABELS = ['Case Details', 'Implant Details', 'Clinical Examination', 'Medical Assessment', 'Submit'];
   const existingStepYs = useRef<number[]>([0, 0, 0, 0, 0]);
+  const procedureInfoY = useRef<number>(0);
   const [currentExistingStep, setCurrentExistingStep] = useState(0);
   // iter-238 hotfix: `scrollRef` MUST be declared before the early return at
   // `if (step === 'implants' && createdProcedureId)` further down — otherwise
@@ -316,20 +317,40 @@ export default function NewProcedureScreen() {
   };
   const onScrollExisting = (e: any) => {
     const y = e?.nativeEvent?.contentOffset?.y ?? 0;
-    // pick the largest index whose recorded Y is below current scroll + 120px peek
-    let idx = 0;
-    for (let i = 0; i < existingStepYs.current.length; i++) {
-      if (existingStepYs.current[i] && existingStepYs.current[i] <= y + 120) idx = i;
+    
+    // We construct the step y-positions, defaulting missing/unrendered ones to the next rendered one
+    const ys = [...existingStepYs.current];
+    // Step 0 always starts at 0 scroll
+    ys[0] = 0;
+    
+    // Fill in any unrendered/0 values with the next valid value so ranges don't collapse weirdly
+    for (let i = ys.length - 2; i >= 0; i--) {
+      if (!ys[i]) {
+        ys[i] = ys[i + 1] || 0;
+      }
     }
-    if (idx !== currentExistingStep) setCurrentExistingStep(idx);
+    
+    // Find the step index: it is the largest index i where ys[i] - 120 <= y
+    let activeIdx = 0;
+    for (let i = 0; i < ys.length; i++) {
+      if (ys[i] !== undefined && y >= ys[i] - 120) {
+        activeIdx = i;
+      }
+    }
+    if (activeIdx !== currentExistingStep) setCurrentExistingStep(activeIdx);
   };
   const jumpToExistingStep = (idx: number) => {
-    const y = existingStepYs.current[idx] || 0;
+    let y = existingStepYs.current[idx] || 0;
+    if (idx > 0 && y === 0) {
+      // Step is not rendered yet, scroll to Procedure Information dropdown instead to unlock it
+      y = procedureInfoY.current || 500;
+      scrollRef.current?.scrollTo({ y: Math.max(0, y - 110), animated: true });
+      setCurrentExistingStep(0);
+      return;
+    }
     // small upward offset so the section title isn't hidden under the sticky strip
-    scrollRef.current?.scrollTo({ y: Math.max(0, y - 24), animated: true });
-    // iter-237: optimistically set the active pill so the strip gives
-    // immediate feedback — the onScroll handler will reconcile if the
-    // section's actual Y resolves differently.
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - 110), animated: true });
+    // optimistically set the active pill so the strip gives immediate feedback
     setCurrentExistingStep(idx);
   };
 
@@ -1207,16 +1228,29 @@ export default function NewProcedureScreen() {
     if (!formData.ridge_contour) missClinical.push('Ridge contour');
 
     if (isExistingImplantCase) {
-      if (!formData.diabetes) missMedicalOrChecklist.push('Diabetes');
-      if (!formData.smoking_status) missMedicalOrChecklist.push('Smoking status');
-      if (!formData.anticoagulant_therapy) missMedicalOrChecklist.push('Anticoagulant therapy');
-      if (!formData.osteoporosis_medication) missMedicalOrChecklist.push('Osteoporosis medication');
-      if (!formData.radiation_therapy) missMedicalOrChecklist.push('Radiation therapy');
+      if (!formData.medical_assessment?.diabetes) missMedicalOrChecklist.push('Diabetes');
+      if (!formData.medical_assessment?.smoking) missMedicalOrChecklist.push('Smoking status');
+      if (!formData.medical_assessment?.anticoagulant) missMedicalOrChecklist.push('Anticoagulant therapy');
+      if (!formData.medical_assessment?.osteoporosis) missMedicalOrChecklist.push('Osteoporosis medication');
+      if (!formData.medical_assessment?.radiation) missMedicalOrChecklist.push('Radiation therapy');
     } else {
-      if (!formData.cbct_url) missMedicalOrChecklist.push('CBCT Report upload');
-      if (!formData.loading_type) missMedicalOrChecklist.push('Type of Loading');
-      if (!formData.diabetes) missMedicalOrChecklist.push('Diabetes (medical assessment)');
-      if (!formData.smoking_status) missMedicalOrChecklist.push('Smoking status (medical assessment)');
+      if (!cbctFiles[0] || !cbctFiles[1]) missMedicalOrChecklist.push('CBCT Report upload');
+      if (!formData.loading_type || formData.loading_type.length === 0) missMedicalOrChecklist.push('Type of Loading');
+      if (!formData.medical_assessment?.diabetes) missMedicalOrChecklist.push('Diabetes (medical assessment)');
+      if (!formData.medical_assessment?.smoking) missMedicalOrChecklist.push('Smoking status (medical assessment)');
+      if (!formData.medical_assessment?.anticoagulant) missMedicalOrChecklist.push('Anticoagulant therapy (medical assessment)');
+      if (!formData.medical_assessment?.osteoporosis) missMedicalOrChecklist.push('Osteoporosis medication (medical assessment)');
+      if (!formData.medical_assessment?.radiation) missMedicalOrChecklist.push('Radiation therapy (medical assessment)');
+
+      // Validate all checklist items are answered (Yes or No)
+      const activeChecklist = CHECKLIST_DATA.pre_surgical.items
+        .filter(item => item.id !== 'medical_assessment')
+        .filter(item => !(isFullArch && item.id === 'oral_prophylaxis'));
+      activeChecklist.forEach(item => {
+        if (checklistItems[item.id] === undefined) {
+          missMedicalOrChecklist.push(item.label);
+        }
+      });
     }
   }
 
@@ -1291,65 +1325,72 @@ export default function NewProcedureScreen() {
             );
           })()}
           {/* iter-237/238/239: tappable step pills — uniform width, green ✓ when section is complete. */}
-          <View style={styles.existingStepPillRow}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.existingStepPillRow}
+            style={{ marginHorizontal: -16 }}
+          >
+            <View style={{ width: 16 }} />
             {FLOW_STEP_LABELS.map((label, idx) => {
               const active = idx === currentExistingStep;
               const done = existingStepDone[idx];
               const PillWrap: any = idx === 0 ? Animated.View : View;
-              const pillWrapProps = idx === 0 ? { style: { transform: [{ scale: pillPulseAnim }], flexGrow: 1, flexBasis: 0 } } : { style: { flexGrow: 1, flexBasis: 0 } };
+              const pillWrapProps = idx === 0 ? { style: { transform: [{ scale: pillPulseAnim }] } } : {};
               return (
                 <PillWrap key={label} {...pillWrapProps}>
-                <TouchableOpacity
-                  key={label}
-                  onPress={() => {
-                    // iter-240: tap pill to validate & jump. Already-green
-                    // pills just scroll; incomplete pills first show a brief
-                    // popup listing the missing fields, then scroll on
-                    // confirm. Submit pill rolls up upstream blockers.
-                    const missing = flowStepMissing[idx] || [];
-                    if (missing.length === 0) {
-                      jumpToExistingStep(idx);
-                      return;
-                    }
-                    const list = missing.slice(0, 8).map(m => `• ${m}`).join('\n');
-                    const more = missing.length > 8 ? `\n…and ${missing.length - 8} more` : '';
-                    const body = `Please complete the following before this section is marked done:\n\n${list}${more}`;
-                    // React Native Web's Alert.alert only renders the message
-                    // (buttons are no-ops). Fall back to window.confirm on web
-                    // so users still get a Stay/Go choice.
-                    if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.confirm === 'function') {
-                      if (window.confirm(`Missing: ${label}\n\n${body}\n\nTap OK to jump there, Cancel to stay here.`)) {
+                  <TouchableOpacity
+                    key={label}
+                    onPress={() => {
+                      // iter-240: tap pill to validate & jump. Already-green
+                      // pills just scroll; incomplete pills first show a brief
+                      // popup listing the missing fields, then scroll on
+                      // confirm. Submit pill rolls up upstream blockers.
+                      const missing = flowStepMissing[idx] || [];
+                      if (missing.length === 0) {
                         jumpToExistingStep(idx);
+                        return;
                       }
-                      return;
-                    }
-                    Alert.alert(
-                      `Missing: ${label}`,
-                      body,
-                      [
-                        { text: 'Stay here', style: 'cancel' },
-                        { text: 'Take me there', onPress: () => jumpToExistingStep(idx) },
-                      ]
-                    );
-                  }}
-                  style={[styles.existingStepPill, active && styles.existingStepPillActive, done && !active && styles.existingStepPillDone]}
-                  testID={`existing-step-pill-${idx}`}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Jump to ${label}${done ? ', complete' : ''}`}
-                >
-                  {done ? (
-                    <Ionicons name="checkmark-circle" size={12} color={active ? '#FFF' : '#2E7D32'} style={{ marginRight: 3 }} />
-                  ) : (
-                    <Text style={[styles.existingStepPillNum, active && styles.existingStepPillTextActive]}>{idx + 1}.</Text>
-                  )}
-                  <Text style={[styles.existingStepPillText, active && styles.existingStepPillTextActive, done && !active && styles.existingStepPillTextDone]} numberOfLines={1}>
-                    {label}
-                  </Text>
-                </TouchableOpacity>
+                      const list = missing.slice(0, 8).map(m => `• ${m}`).join('\n');
+                      const more = missing.length > 8 ? `\n…and ${missing.length - 8} more` : '';
+                      const body = `Please complete the following before this section is marked done:\n\n${list}${more}`;
+                      // React Native Web's Alert.alert only renders the message
+                      // (buttons are no-ops). Fall back to window.confirm on web
+                      // so users still get a Stay/Go choice.
+                      if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.confirm === 'function') {
+                        if (window.confirm(`Missing: ${label}\n\n${body}\n\nTap OK to jump there, Cancel to stay here.`)) {
+                          jumpToExistingStep(idx);
+                        }
+                        return;
+                      }
+                      Alert.alert(
+                        `Missing: ${label}`,
+                        body,
+                        [
+                          { text: 'Stay here', style: 'cancel' },
+                          { text: 'Take me there', onPress: () => jumpToExistingStep(idx) },
+                        ]
+                      );
+                    }}
+                    style={[styles.existingStepPill, active && styles.existingStepPillActive, done && !active && styles.existingStepPillDone]}
+                    testID={`existing-step-pill-${idx}`}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Jump to ${label}${done ? ', complete' : ''}`}
+                  >
+                    {done ? (
+                      <Ionicons name="checkmark-circle" size={12} color={active ? '#FFF' : '#2E7D32'} style={{ marginRight: 3 }} />
+                    ) : (
+                      <Text style={[styles.existingStepPillNum, active && styles.existingStepPillTextActive]}>{idx + 1}.</Text>
+                    )}
+                    <Text style={[styles.existingStepPillText, active && styles.existingStepPillTextActive, done && !active && styles.existingStepPillTextDone]}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
                 </PillWrap>
               );
             })}
-          </View>
+            <View style={{ width: 16 }} />
+          </ScrollView>
         </View>
       ) : <View />}
 
@@ -1494,7 +1535,7 @@ export default function NewProcedureScreen() {
       {/* iter-213: Procedure Information now precedes Payment Details so the
           operator picks the procedure type (which may be "Existing Implant"
           and morph the rest of the form) before entering payment info. */}
-      <View style={styles.section}>
+      <View style={styles.section} onLayout={(e) => { procedureInfoY.current = e?.nativeEvent?.layout?.y ?? 0; }}>
         <Text style={styles.sectionTitle}>Procedure Information</Text>
         <Dropdown label="Type of Implant Procedure" value={formData.implant_procedure_type}
           options={PROCEDURE_TYPES} onChange={v => { updateForm('implant_procedure_type', v); updateForm('arch', ''); }} required />
@@ -2573,26 +2614,34 @@ const styles = StyleSheet.create({
   stepIndicator: { fontSize: 13, color: '#1565C0', fontWeight: '700', marginLeft: 12, marginTop: 2, marginBottom: 12, letterSpacing: 0.3 },
   stepHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E0E7EE' },
   stepTitle: { fontSize: 18, fontWeight: '700', color: '#0D47A1', marginLeft: 12 },
-  section: { backgroundColor: '#FFF', borderRadius: 16, marginHorizontal: 16, marginBottom: 16, padding: 18, shadowColor: '#1565C0', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3, borderWidth: 1, borderColor: '#E8EDF5' },
+  section: { backgroundColor: '#FFF', borderRadius: 16, marginHorizontal: 16, marginVertical: 16, padding: 18, shadowColor: '#1565C0', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3, borderWidth: 1, borderColor: '#E8EDF5' },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1565C0', marginBottom: 14, letterSpacing: 0.3 },
   // iter-236: sticky progress strip for the Existing Implant workflow.
   existingProgressBar: { backgroundColor: '#FFFFFF', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#E3F2FD', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 2 },
   existingProgressLabel: { fontSize: 13, fontWeight: '700', color: '#0F2740', letterSpacing: 0.2, flex: 1 },
-  existingProgressCount: { fontSize: 12, fontWeight: '700', color: '#1565C0', marginLeft: 8 },
+  existingProgressCount: { fontSize: 12, fontWeight: '700', color: '#1E88E5', marginLeft: 8 },
   existingProgressTrack: { marginTop: 8, height: 6, backgroundColor: '#E3F2FD', borderRadius: 999, overflow: 'hidden' },
-  existingProgressFill: { height: 6, backgroundColor: '#1565C0', borderRadius: 999 },
+  existingProgressFill: { height: 6, backgroundColor: '#1E88E5', borderRadius: 999 },
   // iter-237: tappable step pills under the progress strip.
   // iter-238: pills now flex to fill the row evenly + render number/✓ icon
   // separately so they line up on a single tidy row.
   // iter-239: tightened paddings so the leading "2." / "3." numerals stay
   // fully inside the pill (they were clipping on narrow viewports).
-  existingStepPillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 10 },
-  existingStepPill: { flexGrow: 1, flexBasis: 0, minWidth: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: '#CFD8DC', backgroundColor: '#F8FAFC' },
-  existingStepPillActive: { backgroundColor: '#1565C0', borderColor: '#1565C0' },
+  existingStepPillRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, paddingVertical: 4 },
+  existingStepPill: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1.5, borderColor: '#CFD8DC', backgroundColor: '#F8FAFC' },
+  existingStepPillActive: {
+    backgroundColor: '#1E88E5',
+    borderColor: '#1E88E5',
+    shadowColor: '#1E88E5',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.24,
+    shadowRadius: 4,
+    elevation: 3,
+  },
   existingStepPillDone: { backgroundColor: '#E8F5E9', borderColor: '#A5D6A7' },
-  existingStepPillNum: { fontSize: 10, fontWeight: '700', color: '#37474F', marginRight: 4, lineHeight: 13 },
-  existingStepPillText: { fontSize: 10, fontWeight: '600', color: '#37474F', letterSpacing: 0.1, lineHeight: 13, flexShrink: 1 },
-  existingStepPillTextActive: { color: '#FFFFFF' },
+  existingStepPillNum: { fontSize: 11, fontWeight: '700', color: '#475569', marginRight: 4, lineHeight: 14 },
+  existingStepPillText: { fontSize: 11, fontWeight: '600', color: '#475569', letterSpacing: 0.1, lineHeight: 14 },
+  existingStepPillTextActive: { color: '#FFFFFF', fontWeight: '700' },
   existingStepPillTextDone: { color: '#2E7D32' },
   subSectionTitle: { fontSize: 14, fontWeight: '700', color: '#1565C0', marginTop: 14, marginBottom: 10, paddingBottom: 8, borderBottomWidth: 1.5, borderBottomColor: '#E3F2FD' },
   fieldContainer: { marginBottom: 14 },

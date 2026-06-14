@@ -2,7 +2,8 @@
  * Chat-style bubble that types out a static message word-by-word.
  * Pre-written sample (no live API call) — fast, deterministic, works offline.
  */
-import React, { useEffect, useState } from 'react';
+import * as React from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -46,7 +47,7 @@ export default function TypingBubble() {
 const styles = StyleSheet.create({
   wrap: { width: '100%', maxWidth: 420, alignSelf: 'center', gap: 8 },
   bubble: { borderRadius: 14, padding: 11, maxWidth: '92%' },
-  userBubble: { backgroundColor: '#1565C0', alignSelf: 'flex-end' },
+  userBubble: { backgroundColor: '#1E88E5', alignSelf: 'flex-end' },
   userText: { color: '#FFF', fontSize: 12, lineHeight: 17 },
   aiBubble: {
     backgroundColor: '#F1F5FA', alignSelf: 'flex-start',

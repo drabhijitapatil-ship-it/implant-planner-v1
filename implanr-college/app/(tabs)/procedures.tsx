@@ -341,7 +341,7 @@ function DefaultProceduresScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <View style={styles.container}>
 
       <View style={styles.filterContainer}>
         {filterButtons.map((btn) => {
@@ -416,7 +416,7 @@ function DefaultProceduresScreen() {
           onRescheduled={() => { setRescheduleCase(null); loadProcedures(); }}
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 

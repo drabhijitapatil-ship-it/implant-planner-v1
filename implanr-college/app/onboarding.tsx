@@ -5,10 +5,13 @@
  *
  * Flow:  /onboarding  →  /help-workflow  →  /(tabs)/dashboard
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import * as React from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, AccessibilityInfo,
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, AccessibilityInfo,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, {
@@ -36,7 +39,15 @@ export default function OnboardingScreen() {
   }, []);
 
   const role = (user?.role || 'student').toLowerCase();
-  const firstName = useMemo(() => (user?.name || '').split(' ')[0] || '', [user?.name]);
+  const firstName = useMemo(() => {
+    const parts = (user?.name || '').trim().split(/\s+/);
+    if (parts.length === 0) return '';
+    const first = parts[0];
+    if (/^dr\.?$/i.test(first) && parts.length > 1) {
+      return `Dr. ${parts[1]}`;
+    }
+    return first || '';
+  }, [user?.name]);
   const hero = heroFor(role);
   const recap = recapFor(role);
   const activeGate = activeGateFor(role);
@@ -51,52 +62,60 @@ export default function OnboardingScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} testID="onboarding-screen">
-      <View style={styles.topBar}>
-        <Text style={styles.step}>{idx + 1} / {SLIDES}</Text>
-        <TouchableOpacity onPress={skip} testID="onboarding-skip-btn">
-          <Text style={styles.skip}>Skip</Text>
-        </TouchableOpacity>
-      </View>
+    <LinearGradient
+      colors={['#FFFFFF', '#E3F2FD']}
+      style={styles.safe}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0, y: 1 }}
+      testID="onboarding-screen"
+    >
+      <SafeAreaView style={styles.safeInner} edges={['top', 'bottom', 'left', 'right']}>
+        <View style={styles.topBar}>
+          <Text style={styles.step}>{idx + 1} / {SLIDES}</Text>
+          <TouchableOpacity onPress={skip} testID="onboarding-skip-btn">
+            <Text style={styles.skip}>Skip</Text>
+          </TouchableOpacity>
+        </View>
 
-      <SlideContainer key={idx} reduceMotion={reduceMotion} testID={`onboarding-slide-${idx}`}>
-        {idx === 0 && <SlideWelcome firstName={firstName} hero={hero} />}
-        {idx === 1 && <SlidePhases footer={phaseFooterFor(role)} />}
-        {idx === 2 && <SlideApproval activeGate={activeGate} />}
-        {idx === 3 && <SlideDatabase />}
-        {idx === 4 && <SlideAIAndPDF />}
-        {idx === 5 && <SlideForumChatRecap recap={recap} chipLabel={hero.chipLabel} />}
-      </SlideContainer>
+        <SlideContainer key={idx} reduceMotion={reduceMotion} testID={`onboarding-slide-${idx}`}>
+          {idx === 0 && <SlideWelcome firstName={firstName} hero={hero} />}
+          {idx === 1 && <SlidePhases footer={phaseFooterFor(role)} />}
+          {idx === 2 && <SlideApproval activeGate={activeGate} />}
+          {idx === 3 && <SlideDatabase />}
+          {idx === 4 && <SlideAIAndPDF />}
+          {idx === 5 && <SlideForumChatRecap recap={recap} chipLabel={hero.chipLabel} />}
+        </SlideContainer>
 
-      <View style={styles.dots}>
-        {Array.from({ length: SLIDES }).map((_, i) => (
-          <View key={i} style={[styles.dot, i === idx && styles.dotActive]} />
-        ))}
-      </View>
+        <View style={styles.dots}>
+          {Array.from({ length: SLIDES }).map((_, i) => (
+            <View key={i} style={[styles.dot, i === idx && styles.dotActive]} />
+          ))}
+        </View>
 
-      <View style={styles.actions}>
-        <TouchableOpacity
-          style={[styles.secondary, idx === 0 && styles.invisible]}
-          disabled={idx === 0}
-          onPress={goBack}
-          testID="onboarding-back-btn"
-        >
-          <Ionicons name="chevron-back" size={18} color="#546E7A" />
-          <Text style={styles.secondaryText}>Back</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.primary} onPress={goNext} testID="onboarding-next-btn">
-          <Text style={styles.primaryText}>{isLast ? 'See the full workflow' : 'Next'}</Text>
-          <Ionicons name="chevron-forward" size={18} color="#FFF" />
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
+        <View style={styles.actions}>
+          <TouchableOpacity
+            style={[styles.secondary, idx === 0 && styles.invisible]}
+            disabled={idx === 0}
+            onPress={goBack}
+            testID="onboarding-back-btn"
+          >
+            <Ionicons name="chevron-back" size={18} color="#546E7A" />
+            <Text style={styles.secondaryText}>Back</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.primary} onPress={goNext} testID="onboarding-next-btn">
+            <Text style={styles.primaryText}>{isLast ? 'See the full workflow' : 'Next'}</Text>
+            <Ionicons name="chevron-forward" size={18} color="#FFF" />
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 /** Cross-fade + scale-up shell for each slide. Skip animations under reduce-motion. */
 function SlideContainer({
   children, reduceMotion, testID,
-}: { children: React.ReactNode; reduceMotion: boolean; testID: string }) {
+}: { children: React.ReactNode; reduceMotion: boolean; testID: string; key?: React.Key }) {
   const opacity = useSharedValue(reduceMotion ? 1 : 0);
   const scale = useSharedValue(reduceMotion ? 1 : 0.97);
   useEffect(() => {
@@ -118,15 +137,20 @@ function SlideContainer({
 function SlideWelcome({ firstName, hero }: { firstName: string; hero: ReturnType<typeof heroFor> }) {
   return (
     <View style={styles.welcomeWrap}>
-      <View style={styles.heroLogo}>
+      <LinearGradient
+        colors={['#1E88E5', '#0D47A1']}
+        style={styles.heroLogo}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
         <MaterialCommunityIcons name="tooth" size={56} color="#FFF" />
-      </View>
+      </LinearGradient>
       <View style={styles.roleChip}>
         <Ionicons name="ribbon" size={11} color="#0D47A1" />
         <Text style={styles.roleChipText}>{hero.chipLabel}</Text>
       </View>
       <Text style={styles.welcomeH1}>
-        {hero.greeting}{firstName ? `, ${firstName}` : ''}.
+        {hero.greeting}{firstName ? `, ${firstName}` : ''}{firstName && firstName.endsWith('.') ? '' : '.'}
       </Text>
       <Text style={styles.welcomeBody}>{hero.subhead}</Text>
       <Text style={styles.welcomeHint}>Six quick slides walk you through what you can do here.</Text>
@@ -142,7 +166,7 @@ function SlidePhases({ footer }: { footer: string }) {
       <Text style={styles.body}>Every implant case follows the same path.</Text>
       <AnimatedTimeline />
       <View style={styles.footerNote}>
-        <Ionicons name="person-circle-outline" size={14} color="#1565C0" />
+        <Ionicons name="person-circle-outline" size={14} color="#1E88E5" />
         <Text style={styles.footerNoteText}>{footer}</Text>
       </View>
     </View>
@@ -176,7 +200,7 @@ function SlideDatabase() {
         <FeatureCard
           icon="cube-outline"
           title="Implant Database"
-          tint="#1565C0"
+          tint="#1E88E5"
           testID="slide-feature-database"
           bullets={[
             '50+ Implant systems indexed and mapped',
@@ -269,7 +293,7 @@ function SubItem({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: s
   );
 }
 
-function RecapItem({ text }: { text: string }) {
+function RecapItem({ text }: { text: string; key?: React.Key }) {
   const opacity = useSharedValue(0);
   const tx = useSharedValue(8);
   useEffect(() => {
@@ -286,13 +310,14 @@ function RecapItem({ text }: { text: string }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F5F7FA' },
+  safe: { flex: 1 },
+  safeInner: { flex: 1 },
   topBar: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 20, paddingVertical: 12,
   },
   step: { fontSize: 13, color: '#78909C', fontWeight: '700' },
-  skip: { fontSize: 14, color: '#1565C0', fontWeight: '700' },
+  skip: { fontSize: 14, color: '#1E88E5', fontWeight: '700' },
   slide: { flex: 1 },
   scroll: { paddingHorizontal: 24, paddingBottom: 16, alignItems: 'center', flexGrow: 1, justifyContent: 'center' },
   center: { width: '100%', maxWidth: 600, alignItems: 'center' },
@@ -301,11 +326,15 @@ const styles = StyleSheet.create({
   welcomeWrap: { alignItems: 'center', paddingTop: 14 },
   heroLogo: {
     width: 110, height: 110, borderRadius: 28,
-    backgroundColor: '#0D47A1',
     alignItems: 'center', justifyContent: 'center',
-    boxShadow: '0px 18px 36px rgba(13, 71, 161, 0.30)',
+    shadowColor: '#0D47A1',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.3,
+    shadowRadius: 24,
+    elevation: 8,
     marginBottom: 22,
-  } as any,
+    overflow: 'hidden',
+  },
   roleChip: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingVertical: 5, paddingHorizontal: 12,
@@ -348,14 +377,19 @@ const styles = StyleSheet.create({
   // Footer
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 8, paddingVertical: 14 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#CFD8DC' },
-  dotActive: { backgroundColor: '#1565C0', width: 22 },
+  dotActive: { backgroundColor: '#1E88E5', width: 22 },
   actions: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 24, gap: 12 },
   secondary: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 12, paddingHorizontal: 18 },
   secondaryText: { fontSize: 14, color: '#546E7A', fontWeight: '600' },
   invisible: { opacity: 0 },
   primary: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    backgroundColor: '#1565C0', paddingVertical: 14, borderRadius: 12,
+    backgroundColor: '#1E88E5', paddingVertical: 14, borderRadius: 12,
+    shadowColor: '#1E88E5',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 3,
   },
   primaryText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
 });

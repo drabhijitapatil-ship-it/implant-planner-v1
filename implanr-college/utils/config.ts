@@ -23,7 +23,7 @@ function resolveUrl(url: string): string {
 const _rawUrl: string =
   process.env.EXPO_PUBLIC_BACKEND_URL ||
   Constants.expoConfig?.extra?.backendUrl ||
-  (Platform.OS === 'android' ? 'http://10.0.2.2:8001' : 'http://localhost:8001');
+  'https://api.implanr.com';
 
 const BACKEND_URL: string = resolveUrl(_rawUrl);
 

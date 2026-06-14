@@ -4,7 +4,8 @@
  * stagger their pulse so the eye perceives forward motion without any flashy
  * scrolling animation. Respects reduce-motion (kept at full opacity then).
  */
-import React, { useEffect } from 'react';
+import * as React from 'react';
+import { useEffect } from 'react';
 import { View, StyleSheet, ViewStyle } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming, withDelay,

@@ -1,4 +1,5 @@
 # Signup and Registration Flow
+
 ## Implanr — Dental College App and Dental Clinic App
 
 ---
@@ -30,9 +31,9 @@ The Sign In page also has a link to Sign Up in case someone lands there first.
 
 After tapping Sign Up, the person sees two large tiles.
 
-Tile 1 is for Dental College. It has an icon representing a university or academic institution. This is for colleges that have PG students, supervisors, and an implant department.
+Tile 1 is for Dental College. It has an icon representing a university or academic institution. This is for colleges that have PG students, supervisors, and an implant department. Icon: Graduation cap/university
 
-Tile 2 is for Private Dental Clinic. It has an icon representing a clinic with a tooth. This is for standalone dental practices run by one or more dentists.
+Tile 2 is for Private Dental Clinic. It has an icon representing a clinic with a tooth. This is for standalone dental practices run by one or more dentists. Icon: Clinic building with tooth
 
 The person taps the one that matches their institution. The form for that type opens.
 
@@ -76,7 +77,8 @@ State of Registration is a scrollable dropdown with all Indian states.
 
 State of Practice is a second state dropdown in case the practice state is different from the registration state.
 
-Number of People Using the App is a number selector with an info icon explaining who counts as a user, including Chief Dentists, Dentists or Consultants, and Auxiliary Staff.
+Number of People Using the App is a number selector with an info icon explaining who counts as a user, including Chief Dentists, Dentists or Consultants, and Auxiliary Staff. For Dental Clinic we need to start range from 1-5, 6-10, 11-15 etc.  
+If logo is not uploaded then generated pdf must have clinic name and if logo is uploaded then both logo and clinic name.
 
 Create Password, Confirm Password, Terms checkbox, and the button that says Create Dental Clinic Workspace.
 
@@ -107,6 +109,9 @@ The team member opens the email, taps the link, and lands on an activation page 
 Their account is now active. They can sign in with their email and password.
 
 That is the entire flow. The admin controls who joins. No one can sign up on their own and join a workspace they were not invited to.
+
+4 column one column for mobile number which will be optional, invited user can add mobile number at the time of sign up or if already added in excel then should be able to change the mobile number onlt and not the email.
+In case user has not downloaded the app then when clicked on the link will prompt or direct user to app store/play store to download the app, how this can be done? When Implanr app is already downloded then clicking on the email invite will open the app?
 
 ---
 

@@ -1,700 +1,541 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  RefreshControl,
-  ActivityIndicator,
-  Alert,
-  TextInput,
-  Modal,
-  ScrollView,
-  Image,
+  View, Text, StyleSheet, TouchableOpacity, RefreshControl,
+  ActivityIndicator, Alert, TextInput, Modal, ScrollView,
+  FlatList, Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import api from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { ROLE_OPTIONS } from '../../constants/checklist';
 
-const ROLE_COLORS: Record<string, string> = {
-  administrator: '#9C27B0',
-  supervisor: '#2196F3',
-  implant_incharge: '#FF9800',
-  student: '#4CAF50',
-  nurse: '#E91E63',
+type ActiveUser = {
+  id: string; name: string; email: string; role: string;
+  sub_role?: string; mobile?: string; disabled?: boolean; created_at?: string;
+};
+type PendingInvite = {
+  id: string; name: string; email: string; role: string;
+  sub_role?: string; token: string; expires_at: string;
 };
 
-const ROLE_DISPLAY: Record<string, string> = {
-  administrator: 'Administrator',
-  supervisor: 'Supervisor',
-  implant_incharge: 'Implant Incharge',
-  student: 'PG Student',
-  nurse: 'Nurse',
+const ROLE_META = [
+  { value: 'implant_incharge', label: 'Implant In-Charge', subRoles: [] },
+  { value: 'supervisor', label: 'Supervisor', subRoles: [] },
+  {
+    value: 'student', label: 'Student', subRoles: [
+      { value: 'pg_student', label: 'Postgraduate Student' },
+      { value: 'ug_student', label: 'Undergraduate Student' },
+      { value: 'fellow', label: 'Fellow' },
+    ]
+  },
+  {
+    value: 'nurse', label: 'Auxiliary Staff', subRoles: [
+      { value: 'hygienist', label: 'Dental Hygienist' },
+      { value: 'nurse', label: 'Nurse' },
+    ]
+  },
+  { value: 'administrator', label: 'Administrator', subRoles: [] },
+];
+
+const ROLE_COLOR: Record<string, string> = {
+  implant_incharge: '#FF6F00',
+  supervisor: '#1565C0',
+  student: '#2E7D32',
+  nurse: '#AD1457',
+  administrator: '#6A1B9A',
 };
+
+const roleLabel = (role: string, sub?: string) => {
+  const r = ROLE_META.find(x => x.value === role);
+  const base = r?.label ?? role.replace(/_/g, ' ');
+  if (!sub) return base;
+  const s = r?.subRoles.find((x: any) => x.value === sub);
+  return s ? `${s.label}` : base;
+};
+
+type Section = 'active' | 'pending' | 'disabled';
 
 export default function UserManagementScreen() {
   const { user } = useAuth();
-  const [users, setUsers] = useState<any[]>([]);
+  const isAdmin = user?.role === 'implant_incharge' || user?.role === 'administrator';
+
+  const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
+  const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filterRole, setFilterRole] = useState('all');
+  const [section, setSection] = useState<Section>('active');
 
-  // Create modal state
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'student' });
+  // Invite modal
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviting, setInviting] = useState(false);
+  const [inviteForm, setInviteForm] = useState({ name: '', email: '', mobile: '', role: '', sub_role: '' });
+  const [inviteErrors, setInviteErrors] = useState<Record<string, string>>({});
+  const [showRolePicker, setShowRolePicker] = useState(false);
+  const [showSubRolePicker, setShowSubRolePicker] = useState(false);
 
-  // Edit modal state
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editingUser, setEditingUser] = useState<any>(null);
-  const [editForm, setEditForm] = useState({ name: '', role: '', password: '' });
-  const [updating, setUpdating] = useState(false);
+  const selectedRoleMeta = ROLE_META.find(r => r.value === inviteForm.role);
+  const hasSubRoles = (selectedRoleMeta?.subRoles.length ?? 0) > 0;
 
-  const loadUsers = useCallback(async () => {
+  const loadMembers = useCallback(async () => {
     try {
-      const params: any = {};
-      if (filterRole !== 'all') params.role = filterRole;
-      const response = await api.get('/users', { params });
-      setUsers(response.data);
-    } catch (error) {
-      console.error('Failed to load users:', error);
+      const res = await api.get('/organizations/members');
+      setActiveUsers(res.data.active_users ?? []);
+      setPendingInvites(res.data.pending_invites ?? []);
+    } catch {
+      // Non-admin gets 403 — show empty
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [filterRole]);
+  }, []);
 
-  useEffect(() => { loadUsers(); }, [loadUsers]);
+  useEffect(() => { loadMembers(); }, [loadMembers]);
 
-  const onRefresh = () => { setRefreshing(true); loadUsers(); };
+  const onRefresh = () => { setRefreshing(true); loadMembers(); };
 
-  const handleCreateUser = async () => {
-    if (!newUser.name.trim() || !newUser.email.trim() || !newUser.password.trim()) {
-      Alert.alert('Error', 'Please fill in all fields');
-      return;
-    }
-    setCreating(true);
+  const validateInvite = () => {
+    const e: Record<string, string> = {};
+    if (!inviteForm.name.trim()) e.name = 'Name is required';
+    if (!inviteForm.email.trim()) e.email = 'Email is required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteForm.email)) e.email = 'Invalid email';
+    if (!inviteForm.role) e.role = 'Role is required';
+    if (hasSubRoles && !inviteForm.sub_role) e.sub_role = 'Sub-role is required';
+    setInviteErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleSendInvite = async () => {
+    if (!validateInvite()) return;
+    setInviting(true);
     try {
-      await api.post('/users', newUser);
-      Alert.alert('Success', 'User created successfully');
-      setShowCreateModal(false);
-      setNewUser({ name: '', email: '', password: '', role: 'student' });
-      loadUsers();
-    } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.detail || 'Failed to create user');
+      await api.post('/organizations/invite', {
+        name: inviteForm.name.trim(),
+        email: inviteForm.email.trim().toLowerCase(),
+        mobile: inviteForm.mobile.trim() || undefined,
+        role: inviteForm.role,
+        sub_role: hasSubRoles ? inviteForm.sub_role : undefined,
+      });
+      setShowInviteModal(false);
+      setInviteForm({ name: '', email: '', mobile: '', role: '', sub_role: '' });
+      await loadMembers();
+      Alert.alert('Invite Sent', 'The invitation email has been sent.');
+    } catch (err: any) {
+      const detail = err.response?.data?.detail;
+      Alert.alert('Failed', typeof detail === 'string' ? detail : 'Could not send invite.');
     } finally {
-      setCreating(false);
+      setInviting(false);
     }
   };
 
-  const openEditModal = (u: any) => {
-    setEditingUser(u);
-    setEditForm({ name: u.name, role: u.role, password: '' });
-    setShowEditModal(true);
-  };
-
-  const handleUpdateUser = async () => {
-    if (!editingUser) return;
-    const payload: any = {};
-    if (editForm.name.trim() && editForm.name.trim() !== editingUser.name) {
-      payload.name = editForm.name.trim();
-    }
-    if (editForm.role && editForm.role !== editingUser.role) {
-      payload.role = editForm.role;
-    }
-    if (editForm.password.trim()) {
-      payload.password = editForm.password.trim();
-    }
-    if (Object.keys(payload).length === 0) {
-      Alert.alert('No Changes', 'No fields were modified');
-      return;
-    }
-    setUpdating(true);
-    try {
-      await api.put(`/users/${editingUser.id}`, payload);
-      Alert.alert('Success', 'User updated successfully');
-      setShowEditModal(false);
-      setEditingUser(null);
-      loadUsers();
-    } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.detail || 'Failed to update user');
-    } finally {
-      setUpdating(false);
-    }
-  };
-
-  const handleDeleteUser = (userId: string, userName: string) => {
-    Alert.alert('Delete User', `Are you sure you want to delete ${userName}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete', style: 'destructive',
-        onPress: async () => {
-          try {
-            await api.delete(`/users/${userId}`);
-            Alert.alert('Success', 'User deleted');
-            loadUsers();
-          } catch (error: any) {
-            Alert.alert('Error', error.response?.data?.detail || 'Failed to delete user');
+  const handleRevoke = (invite: PendingInvite) => {
+    Alert.alert(
+      'Revoke Invite',
+      `Revoke the invite sent to ${invite.email}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Revoke', style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.delete(`/organizations/invites/${invite.id}`);
+              await loadMembers();
+            } catch (err: any) {
+              Alert.alert('Error', err.response?.data?.detail ?? 'Failed to revoke invite.');
+            }
           }
-        },
-      },
-    ]);
+        }
+      ]
+    );
   };
 
-  const isAdmin = user?.role === 'administrator' || user?.role === 'implant_incharge';
+  const handleResend = async (invite: PendingInvite) => {
+    try {
+      await api.post(`/organizations/invites/${invite.id}/resend`);
+      Alert.alert('Resent', `Invite resent to ${invite.email}.`);
+    } catch (err: any) {
+      Alert.alert('Error', err.response?.data?.detail ?? 'Failed to resend invite.');
+    }
+  };
 
-  if (!isAdmin) {
+  const handleDisable = (u: ActiveUser) => {
+    Alert.alert(
+      'Disable Account',
+      `Disable ${u.name}'s account? They won't be able to sign in.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Disable', style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.put(`/organizations/users/${u.id}/disable`);
+              await loadMembers();
+            } catch (err: any) {
+              Alert.alert('Error', err.response?.data?.detail ?? 'Failed to disable user.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleEnable = async (u: ActiveUser) => {
+    try {
+      await api.put(`/organizations/users/${u.id}/enable`);
+      await loadMembers();
+    } catch (err: any) {
+      Alert.alert('Error', err.response?.data?.detail ?? 'Failed to enable user.');
+    }
+  };
+
+  const displayedActiveUsers = activeUsers.filter(u => !u.disabled);
+  const displayedDisabledUsers = activeUsers.filter(u => u.disabled);
+
+  const sectionCount = {
+    active: displayedActiveUsers.length,
+    pending: pendingInvites.length,
+    disabled: displayedDisabledUsers.length,
+  };
+
+  if (loading) {
     return (
-      <SafeAreaView style={styles.container} edges={['bottom']}>
-        <View style={styles.accessDenied}>
-          <Ionicons name="lock-closed" size={48} color="#CCC" />
-          <Text style={styles.accessDeniedText}>Access Restricted</Text>
-          <Text style={styles.accessDeniedSubtext}>Only administrators and implant incharge can manage users</Text>
-        </View>
+      <SafeAreaView style={s.loadingContainer}>
+        <ActivityIndicator size="large" color="#1565C0" />
       </SafeAreaView>
     );
   }
 
-  const renderUser = ({ item }: any) => (
-    <TouchableOpacity
-      style={styles.userCard}
-      onPress={() => openEditModal(item)}
-      data-testid={`user-card-${item.id}`}
-    >
-      <View style={styles.userRow}>
-        {item.profile_photo ? (
-          <Image source={{ uri: item.profile_photo }} style={styles.userAvatarImage} />
-        ) : (
-          <View style={[styles.userAvatar, { backgroundColor: ROLE_COLORS[item.role] || '#757575' }]}>
-            <Text style={styles.avatarText}>
-              {item.name?.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
-            </Text>
-          </View>
-        )}
-        <View style={styles.userInfo}>
-          <Text style={styles.userName}>{item.name}</Text>
-          <Text style={styles.userEmail}>{item.email}</Text>
-          <View style={[styles.roleBadge, { backgroundColor: ROLE_COLORS[item.role] || '#757575' }]}>
-            <Text style={styles.roleText}>{ROLE_DISPLAY[item.role] || item.role}</Text>
-          </View>
-        </View>
-        <View style={styles.actionBtns}>
-          <TouchableOpacity
-            style={styles.editBtn}
-            onPress={() => openEditModal(item)}
-            data-testid={`edit-user-${item.id}`}
-          >
-            <Ionicons name="create-outline" size={20} color="#007AFF" />
-          </TouchableOpacity>
-          {item.id !== user?.id && (
-            <TouchableOpacity
-              style={styles.deleteBtn}
-              onPress={() => handleDeleteUser(item.id, item.name)}
-              data-testid={`delete-user-${item.id}`}
-            >
-              <Ionicons name="trash-outline" size={20} color="#F44336" />
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-
-  const filters = [
-    { key: 'all', label: 'All' },
-    { key: 'student', label: 'Students' },
-    { key: 'supervisor', label: 'Supervisors' },
-    { key: 'implant_incharge', label: 'Incharge' },
-    { key: 'nurse', label: 'Nurses' },
-    { key: 'administrator', label: 'Admins' },
-  ];
-
-  const renderRoleSelector = (selectedRole: string, onSelect: (role: string) => void) => (
-    <View style={styles.roleSelector}>
-      {ROLE_OPTIONS.map((option) => (
-        <TouchableOpacity
-          key={option.value}
-          style={[
-            styles.roleOption,
-            selectedRole === option.value && {
-              backgroundColor: ROLE_COLORS[option.value] || '#007AFF',
-              borderColor: ROLE_COLORS[option.value] || '#007AFF',
-            },
-          ]}
-          onPress={() => onSelect(option.value)}
-          data-testid={`role-option-${option.value}`}
-        >
-          <Text style={[
-            styles.roleOptionText,
-            selectedRole === option.value && styles.roleOptionTextActive,
-          ]}>
-            {option.label}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
-      {/* Filter Chips */}
-      <View style={styles.filterRow}>
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          data={filters}
-          keyExtractor={(item) => item.key}
-          contentContainerStyle={styles.filterList}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[styles.filterChip, filterRole === item.key && styles.filterChipActive]}
-              onPress={() => setFilterRole(item.key)}
-              data-testid={`filter-${item.key}`}
-            >
-              <Text style={[styles.filterChipText, filterRole === item.key && styles.filterChipTextActive]}>
-                {item.label}
-              </Text>
-            </TouchableOpacity>
-          )}
-        />
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#F4F8FD' }}>
+      {/* Header */}
+      <LinearGradient colors={['#1565C0', '#1976D2']} style={s.header}>
+        <Text style={s.headerTitle}>Team Members</Text>
+        {isAdmin && (
+          <TouchableOpacity style={s.addBtn} onPress={() => setShowInviteModal(true)}>
+            <Ionicons name="person-add" size={18} color="#FFF" />
+            <Text style={s.addBtnTxt}>Add User</Text>
+          </TouchableOpacity>
+        )}
+      </LinearGradient>
+
+      {/* Section Tabs */}
+      <View style={s.tabRow}>
+        {(['active', 'pending', 'disabled'] as Section[]).map(sec => (
+          <TouchableOpacity
+            key={sec}
+            style={[s.tabBtn, section === sec && s.tabBtnActive]}
+            onPress={() => setSection(sec)}
+          >
+            <Text style={[s.tabTxt, section === sec && s.tabTxtActive]}>
+              {sec === 'active' ? 'Active' : sec === 'pending' ? 'Pending' : 'Disabled'}
+              {sectionCount[sec] > 0 ? ` (${sectionCount[sec]})` : ''}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
-      {/* User List */}
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
-        </View>
-      ) : (
-        <FlatList
-          data={users}
-          renderItem={renderUser}
-          keyExtractor={(item) => item.id}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          contentContainerStyle={styles.listContent}
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Ionicons name="people-outline" size={48} color="#CCC" />
-              <Text style={styles.emptyText}>No users found</Text>
-            </View>
-          }
-          ListHeaderComponent={
-            <Text style={styles.userCount} data-testid="user-count">
-              {users.length} user{users.length !== 1 ? 's' : ''}
-            </Text>
-          }
-        />
-      )}
-
-      {/* Create User FAB */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => setShowCreateModal(true)}
-        data-testid="create-user-fab"
+      {/* List */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1565C0" />}
       >
-        <Ionicons name="person-add" size={24} color="#FFF" />
-      </TouchableOpacity>
+        {section === 'active' && (
+          displayedActiveUsers.length === 0
+            ? <EmptyState icon="people-outline" text="No active members yet. Invite your team!" />
+            : displayedActiveUsers.map(u => (
+              <ActiveUserCard key={u.id} user={u} isAdmin={isAdmin} onDisable={handleDisable} />
+            ))
+        )}
+        {section === 'pending' && (
+          !isAdmin
+            ? <EmptyState icon="lock-closed-outline" text="Only admins can view pending invites." />
+            : pendingInvites.length === 0
+              ? <EmptyState icon="mail-outline" text="No pending invites." />
+              : pendingInvites.map(inv => (
+                <PendingCard key={inv.id} invite={inv} onRevoke={handleRevoke} onResend={handleResend} />
+              ))
+        )}
+        {section === 'disabled' && (
+          displayedDisabledUsers.length === 0
+            ? <EmptyState icon="person-remove-outline" text="No disabled accounts." />
+            : displayedDisabledUsers.map(u => (
+              <ActiveUserCard key={u.id} user={u} dimmed isAdmin={isAdmin} onEnable={handleEnable} />
+            ))
+        )}
+      </ScrollView>
 
-      {/* Create User Modal */}
-      <Modal visible={showCreateModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent} data-testid="create-user-modal">
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Create New User</Text>
-                <TouchableOpacity onPress={() => setShowCreateModal(false)} data-testid="close-create-modal-btn">
-                  <Ionicons name="close" size={24} color="#666" />
-                </TouchableOpacity>
-              </View>
+      {/* Invite Modal */}
+      <Modal visible={showInviteModal} animationType="slide" transparent>
+        <View style={s.modalOverlay}>
+          <View style={s.modalSheet}>
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle}>Invite Team Member</Text>
+              <TouchableOpacity onPress={() => { setShowInviteModal(false); setInviteErrors({}); }}>
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView contentContainerStyle={s.modalBody} keyboardShouldPersistTaps="handled">
 
-              <Text style={styles.inputLabel}>Full Name</Text>
+              <Text style={s.fl}>Full Name *</Text>
               <TextInput
-                style={styles.input}
-                placeholder="Dr. John Doe"
-                placeholderTextColor="#999"
-                value={newUser.name}
-                onChangeText={(text) => setNewUser({ ...newUser, name: text })}
-                data-testid="input-name"
+                style={[s.fi, inviteErrors.name && s.fiErr]}
+                placeholder="e.g. Dr. Priya Sharma"
+                value={inviteForm.name}
+                onChangeText={v => setInviteForm(f => ({ ...f, name: v }))}
+                autoCapitalize="words"
               />
+              {inviteErrors.name ? <Text style={s.fe}>{inviteErrors.name}</Text> : null}
 
-              <Text style={styles.inputLabel}>Email</Text>
+              <Text style={s.fl}>Email *</Text>
               <TextInput
-                style={styles.input}
-                placeholder="john.doe@dental.edu"
-                placeholderTextColor="#999"
-                value={newUser.email}
-                onChangeText={(text) => setNewUser({ ...newUser, email: text })}
+                style={[s.fi, inviteErrors.email && s.fiErr]}
+                placeholder="user@dental.edu"
+                value={inviteForm.email}
+                onChangeText={v => setInviteForm(f => ({ ...f, email: v }))}
                 keyboardType="email-address"
                 autoCapitalize="none"
-                data-testid="input-email"
+                autoCorrect={false}
               />
+              {inviteErrors.email ? <Text style={s.fe}>{inviteErrors.email}</Text> : null}
 
-              <Text style={styles.inputLabel}>Password</Text>
+              <Text style={s.fl}>Mobile Number <Text style={s.optional}>(optional)</Text></Text>
               <TextInput
-                style={styles.input}
-                placeholder="Enter password"
-                placeholderTextColor="#999"
-                value={newUser.password}
-                onChangeText={(text) => setNewUser({ ...newUser, password: text })}
-                secureTextEntry
-                data-testid="input-password"
+                style={s.fi}
+                placeholder="+91 98765 43210"
+                value={inviteForm.mobile}
+                onChangeText={v => setInviteForm(f => ({ ...f, mobile: v }))}
+                keyboardType="phone-pad"
               />
 
-              <Text style={styles.inputLabel}>Role</Text>
-              {renderRoleSelector(newUser.role, (role) => setNewUser({ ...newUser, role }))}
+              <Text style={s.fl}>Role *</Text>
+              <TouchableOpacity
+                style={[s.fpicker, inviteErrors.role && s.fiErr]}
+                onPress={() => setShowRolePicker(true)}
+              >
+                <Text style={inviteForm.role ? s.fpickerVal : s.fpickerPH}>
+                  {selectedRoleMeta?.label ?? 'Select role'}
+                </Text>
+                <Ionicons name="chevron-down" size={18} color="#666" />
+              </TouchableOpacity>
+              {inviteErrors.role ? <Text style={s.fe}>{inviteErrors.role}</Text> : null}
+
+              {hasSubRoles && (
+                <>
+                  <Text style={s.fl}>Sub-role *</Text>
+                  <TouchableOpacity
+                    style={[s.fpicker, inviteErrors.sub_role && s.fiErr]}
+                    onPress={() => setShowSubRolePicker(true)}
+                  >
+                    <Text style={inviteForm.sub_role ? s.fpickerVal : s.fpickerPH}>
+                      {selectedRoleMeta?.subRoles.find((x: any) => x.value === inviteForm.sub_role)?.label ?? 'Select sub-role'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={18} color="#666" />
+                  </TouchableOpacity>
+                  {inviteErrors.sub_role ? <Text style={s.fe}>{inviteErrors.sub_role}</Text> : null}
+                </>
+              )}
 
               <TouchableOpacity
-                style={[styles.createBtn, creating && styles.btnDisabled]}
-                onPress={handleCreateUser}
-                disabled={creating}
-                data-testid="submit-create-user"
+                style={[s.sendBtn, inviting && s.btnDisabled]}
+                onPress={handleSendInvite}
+                disabled={inviting}
               >
-                {creating ? (
-                  <ActivityIndicator color="#FFF" />
-                ) : (
-                  <Text style={styles.createBtnText}>Create User</Text>
-                )}
+                {inviting
+                  ? <ActivityIndicator color="#FFF" />
+                  : <>
+                    <Ionicons name="send" size={18} color="#FFF" />
+                    <Text style={s.sendBtnTxt}>Send Invite</Text>
+                  </>
+                }
               </TouchableOpacity>
             </ScrollView>
           </View>
         </View>
       </Modal>
 
-      {/* Edit User Modal */}
-      <Modal visible={showEditModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent} data-testid="edit-user-modal">
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Edit User</Text>
-                <TouchableOpacity onPress={() => { setShowEditModal(false); setEditingUser(null); }} data-testid="close-edit-modal-btn">
-                  <Ionicons name="close" size={24} color="#666" />
-                </TouchableOpacity>
-              </View>
-
-              {editingUser && (
-                <View style={styles.editUserInfo}>
-                  <View style={[styles.editAvatar, { backgroundColor: ROLE_COLORS[editingUser.role] || '#757575' }]}>
-                    <Text style={styles.editAvatarText}>
-                      {editingUser.name?.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
-                    </Text>
-                  </View>
-                  <Text style={styles.editEmail}>{editingUser.email}</Text>
-                </View>
-              )}
-
-              <Text style={styles.inputLabel}>Full Name</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Full Name"
-                placeholderTextColor="#999"
-                value={editForm.name}
-                onChangeText={(text) => setEditForm({ ...editForm, name: text })}
-                data-testid="edit-input-name"
-              />
-
-              <Text style={styles.inputLabel}>Change Role</Text>
-              {renderRoleSelector(editForm.role, (role) => setEditForm({ ...editForm, role }))}
-
-              <Text style={styles.inputLabel}>Reset Password (leave empty to keep current)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="New password (optional)"
-                placeholderTextColor="#999"
-                value={editForm.password}
-                onChangeText={(text) => setEditForm({ ...editForm, password: text })}
-                secureTextEntry
-                data-testid="edit-input-password"
-              />
-
+      {/* Role Picker */}
+      <Modal visible={showRolePicker} animationType="fade" transparent>
+        <Pressable style={s.centeredOverlay} onPress={() => setShowRolePicker(false)}>
+          <View style={s.pickerSheet}>
+            <Text style={s.pickerSheetTitle}>Select Role</Text>
+            {ROLE_META.map(r => (
               <TouchableOpacity
-                style={[styles.updateBtn, updating && styles.btnDisabled]}
-                onPress={handleUpdateUser}
-                disabled={updating}
-                data-testid="submit-edit-user"
+                key={r.value}
+                style={[s.pickerItem, inviteForm.role === r.value && s.pickerItemSel]}
+                onPress={() => {
+                  setInviteForm(f => ({ ...f, role: r.value, sub_role: '' }));
+                  setShowRolePicker(false);
+                }}
               >
-                {updating ? (
-                  <ActivityIndicator color="#FFF" />
-                ) : (
-                  <Text style={styles.createBtnText}>Save Changes</Text>
-                )}
+                <Text style={[s.pickerItemTxt, inviteForm.role === r.value && s.pickerItemTxtSel]}>{r.label}</Text>
+                {inviteForm.role === r.value && <Ionicons name="checkmark" size={16} color="#1565C0" />}
               </TouchableOpacity>
-            </ScrollView>
+            ))}
           </View>
-        </View>
+        </Pressable>
+      </Modal>
+
+      {/* Sub-role Picker */}
+      <Modal visible={showSubRolePicker} animationType="fade" transparent>
+        <Pressable style={s.centeredOverlay} onPress={() => setShowSubRolePicker(false)}>
+          <View style={s.pickerSheet}>
+            <Text style={s.pickerSheetTitle}>Select Sub-role</Text>
+            {(selectedRoleMeta?.subRoles ?? []).map((r: any) => (
+              <TouchableOpacity
+                key={r.value}
+                style={[s.pickerItem, inviteForm.sub_role === r.value && s.pickerItemSel]}
+                onPress={() => {
+                  setInviteForm(f => ({ ...f, sub_role: r.value }));
+                  setShowSubRolePicker(false);
+                }}
+              >
+                <Text style={[s.pickerItemTxt, inviteForm.sub_role === r.value && s.pickerItemTxtSel]}>{r.label}</Text>
+                {inviteForm.sub_role === r.value && <Ionicons name="checkmark" size={16} color="#1565C0" />}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </Pressable>
       </Modal>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F5F5',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  accessDenied: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-    gap: 12,
-  },
-  accessDeniedText: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#333',
-  },
-  accessDeniedSubtext: {
-    fontSize: 14,
-    color: '#888',
-    textAlign: 'center',
-  },
-  filterRow: {
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
-  },
-  filterList: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 8,
-  },
-  filterChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: '#F0F0F0',
-    marginRight: 8,
-  },
-  filterChipActive: {
-    backgroundColor: '#007AFF',
-  },
-  filterChipText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#666',
-  },
-  filterChipTextActive: {
-    color: '#FFF',
-  },
-  listContent: {
-    padding: 16,
-    paddingBottom: 80,
-  },
-  userCount: {
-    fontSize: 13,
-    color: '#888',
-    marginBottom: 12,
-    fontWeight: '500',
-  },
-  userCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  userRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  userAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  userAvatarImage: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 2,
-    borderColor: '#1E88E5',
-  },
-  avatarText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  userInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  userName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1A1A1A',
-  },
-  userEmail: {
-    fontSize: 13,
-    color: '#888',
-    marginTop: 2,
-  },
-  roleBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    marginTop: 4,
-  },
-  roleText: {
-    fontSize: 11,
-    color: '#FFF',
-    fontWeight: '600',
-  },
-  actionBtns: {
-    flexDirection: 'row',
-    gap: 4,
-  },
-  editBtn: {
-    padding: 8,
-  },
-  deleteBtn: {
-    padding: 8,
-  },
-  emptyState: {
-    alignItems: 'center',
-    padding: 48,
-    gap: 12,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#888',
-  },
-  fab: {
-    position: 'absolute',
-    right: 20,
-    bottom: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#007AFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#007AFF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 8,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#FFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 24,
-    paddingBottom: 40,
-    maxHeight: '85%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1A1A1A',
-  },
-  editUserInfo: {
-    alignItems: 'center',
-    marginBottom: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-  },
-  editAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  editAvatarText: {
-    color: '#FFF',
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  editEmail: {
-    fontSize: 14,
-    color: '#888',
-  },
-  inputLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#555',
-    marginBottom: 6,
-    marginTop: 12,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#DDD',
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 15,
-    color: '#1A1A1A',
-    backgroundColor: '#FAFAFA',
-  },
-  roleSelector: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 4,
-  },
-  roleOption: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: '#DDD',
-    backgroundColor: '#FFF',
-  },
-  roleOptionText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#666',
-  },
-  roleOptionTextActive: {
-    color: '#FFF',
-  },
-  createBtn: {
-    backgroundColor: '#007AFF',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 24,
-  },
-  updateBtn: {
-    backgroundColor: '#4CAF50',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 24,
-  },
-  btnDisabled: {
-    opacity: 0.6,
-  },
-  createBtnText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
+function ActiveUserCard({ user, dimmed, isAdmin, onDisable, onEnable }: {
+  user: ActiveUser; dimmed?: boolean; isAdmin?: boolean;
+  onDisable?: (u: ActiveUser) => void; onEnable?: (u: ActiveUser) => void;
+}) {
+  const color = ROLE_COLOR[user.role] ?? '#607D8B';
+  return (
+    <View style={[cs.card, dimmed && cs.cardDimmed]}>
+      <View style={[cs.avatar, { backgroundColor: color + '22' }]}>
+        <Text style={[cs.avatarTxt, { color }]}>{user.name?.[0]?.toUpperCase() ?? '?'}</Text>
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={cs.name}>{user.name}</Text>
+        <Text style={cs.email}>{user.email}</Text>
+        {user.mobile ? <Text style={cs.meta}>{user.mobile}</Text> : null}
+      </View>
+      <View style={{ alignItems: 'flex-end', gap: 6 }}>
+        <View style={[cs.roleBadge, { backgroundColor: color + '18', borderColor: color + '44' }]}>
+          <Text style={[cs.roleTxt, { color }]}>{roleLabel(user.role, user.sub_role)}</Text>
+        </View>
+        {isAdmin && !dimmed && onDisable && (
+          <TouchableOpacity style={cs.disableBtn} onPress={() => onDisable(user)}>
+            <Text style={cs.disableTxt}>Disable</Text>
+          </TouchableOpacity>
+        )}
+        {isAdmin && dimmed && onEnable && (
+          <TouchableOpacity style={cs.enableBtn} onPress={() => onEnable(user)}>
+            <Text style={cs.enableTxt}>Enable</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+}
+
+function PendingCard({ invite, onRevoke, onResend }: {
+  invite: PendingInvite;
+  onRevoke: (inv: PendingInvite) => void;
+  onResend: (inv: PendingInvite) => void;
+}) {
+  const expiry = new Date(invite.expires_at);
+  const daysLeft = Math.max(0, Math.ceil((expiry.getTime() - Date.now()) / 86400000));
+  const color = ROLE_COLOR[invite.role] ?? '#607D8B';
+  return (
+    <View style={cs.card}>
+      <View style={[cs.avatar, { backgroundColor: '#FFF3E0' }]}>
+        <Ionicons name="mail-outline" size={20} color="#FF8F00" />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={cs.name}>{invite.name}</Text>
+        <Text style={cs.email}>{invite.email}</Text>
+        <Text style={cs.meta}>Expires in {daysLeft}d</Text>
+      </View>
+      <View style={{ alignItems: 'flex-end', gap: 6 }}>
+        <View style={[cs.roleBadge, { backgroundColor: color + '18', borderColor: color + '44' }]}>
+          <Text style={[cs.roleTxt, { color }]}>{roleLabel(invite.role, invite.sub_role)}</Text>
+        </View>
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          <TouchableOpacity style={cs.resendBtn} onPress={() => onResend(invite)}>
+            <Text style={cs.resendTxt}>Resend</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={cs.revokeBtn} onPress={() => onRevoke(invite)}>
+            <Text style={cs.revokeTxt}>Revoke</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function EmptyState({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: string }) {
+  return (
+    <View style={es.wrap}>
+      <Ionicons name={icon} size={44} color="#B0BEC5" />
+      <Text style={es.txt}>{text}</Text>
+    </View>
+  );
+}
+
+const s = StyleSheet.create({
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F4F8FD' },
+  header: { paddingHorizontal: 20, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerTitle: { fontSize: 20, fontWeight: '700', color: '#FFF' },
+  addBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
+  addBtnTxt: { color: '#FFF', fontWeight: '600', fontSize: 14 },
+  tabRow: { flexDirection: 'row', backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E0E0E0' },
+  tabBtn: { flex: 1, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  tabBtnActive: { borderBottomColor: '#1565C0' },
+  tabTxt: { fontSize: 13, color: '#78909C', fontWeight: '500' },
+  tabTxtActive: { color: '#1565C0', fontWeight: '700' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalSheet: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '92%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 18, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: '#1A1A2E' },
+  modalBody: { padding: 20, paddingBottom: 36 },
+  fl: { fontSize: 13, fontWeight: '600', color: '#37474F', marginBottom: 6, marginTop: 14 },
+  optional: { fontWeight: '400', color: '#90A4AE' },
+  fi: { borderWidth: 1.5, borderColor: '#CFD8DC', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: '#1A1A2E', backgroundColor: '#FAFAFA' },
+  fiErr: { borderColor: '#FF3B30' },
+  fe: { fontSize: 12, color: '#FF3B30', marginTop: 3 },
+  fpicker: { borderWidth: 1.5, borderColor: '#CFD8DC', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FAFAFA' },
+  fpickerVal: { fontSize: 15, color: '#1A1A2E' },
+  fpickerPH: { fontSize: 15, color: '#94A3B8' },
+  sendBtn: { backgroundColor: '#1565C0', borderRadius: 12, paddingVertical: 15, alignItems: 'center', marginTop: 24, flexDirection: 'row', justifyContent: 'center', gap: 8 },
+  btnDisabled: { opacity: 0.6 },
+  sendBtnTxt: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  centeredOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center' },
+  pickerSheet: { backgroundColor: '#FFF', borderRadius: 16, padding: 8, minWidth: 240, maxWidth: 320 },
+  pickerSheetTitle: { fontSize: 14, fontWeight: '700', color: '#546E7A', paddingHorizontal: 16, paddingVertical: 10 },
+  pickerItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8 },
+  pickerItemSel: { backgroundColor: '#E3F2FD' },
+  pickerItemTxt: { fontSize: 15, color: '#37474F' },
+  pickerItemTxtSel: { color: '#1565C0', fontWeight: '700' },
+});
+
+const cs = StyleSheet.create({
+  card: { backgroundColor: '#FFF', borderRadius: 14, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center', gap: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  cardDimmed: { opacity: 0.6, backgroundColor: '#F5F5F5' },
+  avatar: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
+  avatarTxt: { fontSize: 17, fontWeight: '700' },
+  name: { fontSize: 15, fontWeight: '600', color: '#1A1A2E' },
+  email: { fontSize: 13, color: '#546E7A', marginTop: 1 },
+  meta: { fontSize: 12, color: '#90A4AE', marginTop: 2 },
+  roleBadge: { borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1 },
+  roleTxt: { fontSize: 11, fontWeight: '700' },
+  resendBtn: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: '#E3F2FD' },
+  resendTxt: { fontSize: 12, color: '#1565C0', fontWeight: '600' },
+  revokeBtn: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: '#FFEBEE' },
+  revokeTxt: { fontSize: 12, color: '#C62828', fontWeight: '600' },
+  disableBtn: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: '#FFF3E0' },
+  disableTxt: { fontSize: 12, color: '#E65100', fontWeight: '600' },
+  enableBtn: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: '#E8F5E9' },
+  enableTxt: { fontSize: 12, color: '#2E7D32', fontWeight: '600' },
+});
+
+const es = StyleSheet.create({
+  wrap: { alignItems: 'center', paddingVertical: 48 },
+  txt: { marginTop: 12, fontSize: 14, color: '#90A4AE', textAlign: 'center' },
 });

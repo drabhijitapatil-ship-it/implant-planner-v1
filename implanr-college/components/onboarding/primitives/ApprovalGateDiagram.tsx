@@ -3,7 +3,8 @@
  * (the user's own role) gets a soft pulsing glow ring. Reused inside the
  * help-workflow screen to keep onboarding and help in visual sync.
  */
-import React, { useEffect } from 'react';
+import * as React from 'react';
+import { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withDelay, withTiming, withRepeat, withSequence,
@@ -14,7 +15,7 @@ import PulsingDoubleArrow from './PulsingDoubleArrow';
 type Active = 'student' | 'supervisor' | 'incharge';
 
 const TILES: { key: Active; icon: keyof typeof Ionicons.glyphMap; label: string; tint: string }[] = [
-  { key: 'student',    icon: 'person-outline',           label: 'Student',          tint: '#1565C0' },
+  { key: 'student',    icon: 'person-outline',           label: 'Student',          tint: '#1E88E5' },
   { key: 'supervisor', icon: 'people-outline',           label: 'Supervisor',       tint: '#EF6C00' },
   { key: 'incharge',   icon: 'shield-checkmark-outline', label: 'Implant\nIn-Charge', tint: '#2E7D32' },
 ];
@@ -95,7 +96,7 @@ const styles = StyleSheet.create({
     position: 'absolute', width: 76, height: 76, borderRadius: 22, borderWidth: 3,
   },
   tileLabel: { marginTop: 10, fontSize: 12, color: '#455A64', textAlign: 'center', lineHeight: 15, fontWeight: '600' },
-  youAre: { marginTop: 2, fontSize: 10, color: '#1565C0', fontWeight: '700' },
+  youAre: { marginTop: 2, fontSize: 10, color: '#1E88E5', fontWeight: '700' },
   arrowGap: {
     flex: 1,
     justifyContent: 'center',

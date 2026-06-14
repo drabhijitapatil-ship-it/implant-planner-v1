@@ -2,7 +2,7 @@
  * Reusable card with an icon, title, and bullet list. Used inside slide 4
  * (Implant Database + Selection) and inside the help-workflow Smart Tools grid.
  */
-import React from 'react';
+import * as React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -14,7 +14,7 @@ export type FeatureCardProps = {
   testID?: string;
 };
 
-export default function FeatureCard({ icon, title, bullets, tint = '#1565C0', testID }: FeatureCardProps) {
+export default function FeatureCard({ icon, title, bullets, tint = '#1E88E5', testID }: FeatureCardProps) {
   return (
     <View style={[styles.card, { borderTopColor: tint }]} testID={testID}>
       <View style={[styles.iconBubble, { backgroundColor: `${tint}1A` }]}>
@@ -38,8 +38,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     borderTopWidth: 3,
-    boxShadow: '0px 8px 16px rgba(13, 71, 161, 0.06)',
-  } as any,
+    shadowColor: '#0D47A1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
   iconBubble: {
     width: 40, height: 40, borderRadius: 20,
     alignItems: 'center', justifyContent: 'center', marginBottom: 10,

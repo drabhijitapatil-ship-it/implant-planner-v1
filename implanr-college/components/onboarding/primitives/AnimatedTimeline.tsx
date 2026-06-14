@@ -3,7 +3,8 @@
  * each pair of icons (Phase 1 → Phase 2 → … → Done) so the eye perceives
  * forward motion without any line cutting through the icons.
  */
-import React, { useEffect } from 'react';
+import * as React from 'react';
+import { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withDelay, withSequence, withSpring, withTiming,
@@ -14,7 +15,7 @@ import PulsingDoubleArrow from './PulsingDoubleArrow';
 type Node = { icon: keyof typeof Ionicons.glyphMap; label: string; tint: string };
 
 const NODES: Node[] = [
-  { icon: 'people-outline',    label: 'Phase 1\nDiagnosis',  tint: '#1565C0' },
+  { icon: 'people-outline',    label: 'Phase 1\nDiagnosis',  tint: '#1E88E5' },
   { icon: 'medkit-outline',    label: 'Phase 2\nSurgery',    tint: '#2E7D32' },
   { icon: 'bandage-outline',   label: 'Phase 3\nHealing',    tint: '#EF6C00' },
   { icon: 'construct-outline', label: 'Phase 4\nProsthesis', tint: '#8E24AA' },

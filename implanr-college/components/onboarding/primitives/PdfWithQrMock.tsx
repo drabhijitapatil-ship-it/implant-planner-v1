@@ -2,7 +2,8 @@
  * Minimal mock-up of a Drilling Protocol PDF page with an animated QR badge
  * that "stamps" onto the corner. Used on slide 5.
  */
-import React, { useEffect } from 'react';
+import * as React from 'react';
+import { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withDelay, withSequence, withTiming, withSpring,
@@ -37,7 +38,7 @@ export default function PdfWithQrMock() {
             <Text style={styles.h1}>Drilling Protocol</Text>
             <Text style={styles.h2}>Patient: J. Doe · Tooth #36</Text>
           </View>
-          <Ionicons name="document-text" size={22} color="#1565C0" />
+          <Ionicons name="document-text" size={22} color="#1E88E5" />
         </View>
         <View style={styles.divider} />
         <Row label="Implant System" value="Bredent SKY 4.0 × 11.5" />
@@ -87,9 +88,13 @@ const styles = StyleSheet.create({
     width: '100%', maxWidth: 360,
     backgroundColor: '#FFF', borderRadius: 12, padding: 16,
     borderWidth: 1, borderColor: '#E0E6EB',
-    boxShadow: '0px 12px 24px rgba(13, 71, 161, 0.10)',
+    shadowColor: '#0D47A1',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 3,
     minHeight: 240,
-  } as any,
+  },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   h1: { fontSize: 14, fontWeight: '800', color: '#0D47A1' },
   h2: { fontSize: 11, color: '#78909C', marginTop: 1 },

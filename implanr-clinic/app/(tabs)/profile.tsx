@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,18 +8,41 @@ import {
   Alert,
   Image,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import BackToDashboard from '../../components/BackToDashboard';
 import * as ImagePicker from 'expo-image-picker';
+import api from '../../utils/api';
 
 export default function ProfileScreen() {
   const { user, logout, updateProfilePhoto } = useAuth();
   const router = useRouter();
   const [uploading, setUploading] = useState(false);
+  const [crossAppStatus, setCrossAppStatus] = useState<{
+    has_cross_app_access: boolean;
+    cross_app_requested: boolean;
+  } | null>(null);
+  const [requestingAccess, setRequestingAccess] = useState(false);
+
+  useEffect(() => {
+    api.get('/auth/cross-app-status').then(r => setCrossAppStatus(r.data)).catch(() => {});
+  }, []);
+
+  const handleRequestCrossApp = async () => {
+    setRequestingAccess(true);
+    try {
+      await api.post('/auth/request-cross-app-access');
+      setCrossAppStatus(prev => prev ? { ...prev, cross_app_requested: true } : prev);
+      Alert.alert('Request Sent', 'A platform admin will review your request to access the College App.');
+    } catch (err: any) {
+      Alert.alert('Error', err.response?.data?.detail ?? 'Could not submit request.');
+    } finally {
+      setRequestingAccess(false);
+    }
+  };
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -292,6 +315,43 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* Cross-App Access */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Switch App</Text>
+          <View style={styles.crossAppRow}>
+            <View style={styles.infoIcon}>
+              <Ionicons name="school-outline" size={20} color="#1565C0" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.infoValue}>Dental College App</Text>
+              <Text style={styles.infoLabel}>Access your college workspace</Text>
+            </View>
+            {crossAppStatus?.has_cross_app_access ? (
+              <TouchableOpacity
+                style={styles.openAppBtn}
+                onPress={() => Linking.openURL('implanr-college:///')}
+              >
+                <Text style={styles.openAppTxt}>Open</Text>
+              </TouchableOpacity>
+            ) : crossAppStatus?.cross_app_requested ? (
+              <View style={styles.pendingBadge}>
+                <Text style={styles.pendingTxt}>Pending</Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={[styles.requestBtn, requestingAccess && { opacity: 0.6 }]}
+                onPress={handleRequestCrossApp}
+                disabled={requestingAccess}
+              >
+                {requestingAccess
+                  ? <ActivityIndicator size="small" color="#2E7D32" />
+                  : <Text style={styles.requestTxt}>Request Access</Text>
+                }
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Ionicons name="log-out" size={24} color="#FFF" />
           <Text style={styles.logoutButtonText}>Logout</Text>
@@ -466,4 +526,12 @@ const styles = StyleSheet.create({
     color: '#78909C',
     fontStyle: 'italic',
   },
+  // ── Cross-app ──
+  crossAppRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  openAppBtn: { backgroundColor: '#E3F2FD', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 7 },
+  openAppTxt: { fontSize: 13, color: '#1565C0', fontWeight: '700' },
+  pendingBadge: { backgroundColor: '#FFF3E0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  pendingTxt: { fontSize: 12, color: '#E65100', fontWeight: '600' },
+  requestBtn: { borderWidth: 1.5, borderColor: '#2E7D32', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  requestTxt: { fontSize: 12, color: '#2E7D32', fontWeight: '600' },
 });

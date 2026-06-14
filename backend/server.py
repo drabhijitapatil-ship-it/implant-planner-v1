@@ -1542,14 +1542,21 @@ INCHARGE_ROLES = {"implant_incharge", "chief_dentist"}
 MAX_2_ROLES = {"implant_incharge", "chief_dentist"}
 
 
-async def _send_invite_email(to_email: str, to_name: str, org_name: str, role_display: str, token: str) -> None:
+async def _send_invite_email(to_email: str, to_name: str, org_name: str, role_display: str, token: str, org_type: str = "college") -> None:
     """Send activation email via SMTP env vars. Silently logs on failure so invite still creates."""
     smtp_host = os.environ.get("SMTP_HOST")
     smtp_port = int(os.environ.get("SMTP_PORT", "587"))
     smtp_user = os.environ.get("SMTP_USER", "")
     smtp_pass = os.environ.get("SMTP_PASS", "")
     email_from = os.environ.get("EMAIL_FROM", smtp_user)
-    app_url = os.environ.get("APP_DEEP_LINK_BASE", "implanr-college://join")
+    # Use org-type-aware deep link so college invites open the college app
+    # and clinic invites open the clinic app.
+    if org_type == "clinic":
+        default_base = "implanr-clinic:///auth/activate"
+        app_url = os.environ.get("APP_DEEP_LINK_BASE_CLINIC", default_base)
+    else:
+        default_base = "implanr-college:///auth/activate"
+        app_url = os.environ.get("APP_DEEP_LINK_BASE_COLLEGE", default_base)
 
     if not smtp_host:
         logging.warning(f"[invite] SMTP_HOST not configured — skipping email to {to_email}. Token: {token}")
@@ -1650,6 +1657,7 @@ class InviteCreate(BaseModel):
 class InviteActivate(BaseModel):
     password: str = Field(..., min_length=8, max_length=128)
     name: Optional[str] = Field(None, max_length=100)
+    mobile: Optional[str] = Field(None, max_length=20)
 
 
 # ── Helper to assert index exists on startup ──
@@ -1809,6 +1817,7 @@ async def send_invite(payload: InviteCreate, current_user: dict = Depends(get_cu
         org_name=org["name"],
         role_display=_role_display_name(payload.role),
         token=token,
+        org_type=org.get("org_type", "college"),
     )
 
     return {"message": "Invite sent", "invite_id": str(result.inserted_id)}
@@ -1864,7 +1873,7 @@ async def activate_invite(token: str, payload: InviteActivate):
         "password_hash": hash_password(payload.password),
         "role": invite["role"],
         "sub_role": invite.get("sub_role"),
-        "mobile": invite.get("mobile"),
+        "mobile": payload.mobile or invite.get("mobile"),
         "org_id": invite["org_id"],
         "created_at": now,
     }
@@ -1899,7 +1908,7 @@ async def activate_invite(token: str, payload: InviteActivate):
 
 @api_router.get("/organizations/members")
 async def list_org_members(current_user: dict = Depends(get_current_user)):
-    if current_user["role"] not in ("implant_incharge", "administrator"):
+    if current_user["role"] not in ("implant_incharge", "chief_dentist", "administrator"):
         raise HTTPException(403, "Admins only")
 
     org_id = current_user.get("org_id")
@@ -1987,9 +1996,74 @@ async def resend_invite(invite_id: str, current_user: dict = Depends(get_current
         org_name=invite["org_name"],
         role_display=_role_display_name(invite["role"]),
         token=new_token,
+        org_type=invite.get("org_type", "college"),
     )
 
     return {"message": "Invite resent"}
+
+
+# ── Endpoint 8: Disable user ──
+
+@api_router.put("/organizations/users/{user_id}/disable")
+async def disable_user(user_id: str, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] not in ("implant_incharge", "chief_dentist", "administrator"):
+        raise HTTPException(403, "Admins only")
+    org_id = current_user.get("org_id")
+    try:
+        obj_id = ObjectId(user_id)
+    except Exception:
+        raise HTTPException(400, "Invalid user ID")
+    target = await db.users.find_one({"_id": obj_id, "org_id": org_id})
+    if not target:
+        raise HTTPException(404, "User not found in your organization")
+    if str(obj_id) == current_user.get("id"):
+        raise HTTPException(400, "Cannot disable your own account")
+    await db.users.update_one({"_id": obj_id}, {"$set": {"disabled": True, "disabled_at": datetime.utcnow()}})
+    return {"message": "User disabled"}
+
+
+# ── Endpoint 9: Enable user ──
+
+@api_router.put("/organizations/users/{user_id}/enable")
+async def enable_user(user_id: str, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] not in ("implant_incharge", "chief_dentist", "administrator"):
+        raise HTTPException(403, "Admins only")
+    org_id = current_user.get("org_id")
+    try:
+        obj_id = ObjectId(user_id)
+    except Exception:
+        raise HTTPException(400, "Invalid user ID")
+    target = await db.users.find_one({"_id": obj_id, "org_id": org_id})
+    if not target:
+        raise HTTPException(404, "User not found in your organization")
+    await db.users.update_one({"_id": obj_id}, {"$set": {"disabled": False}, "$unset": {"disabled_at": ""}})
+    return {"message": "User enabled"}
+
+
+# ── Endpoint 10: Cross-app access status ──
+
+@api_router.get("/auth/cross-app-status")
+async def cross_app_status(current_user: dict = Depends(get_current_user)):
+    """Return whether this user has access to the other app context."""
+    return {
+        "has_cross_app_access": bool(current_user.get("cross_app_access")),
+        "cross_app_requested": bool(current_user.get("cross_app_requested")),
+        "org_type": current_user.get("org_type", "college"),
+    }
+
+
+# ── Endpoint 11: Request cross-app access ──
+
+@api_router.post("/auth/request-cross-app-access")
+async def request_cross_app_access(current_user: dict = Depends(get_current_user)):
+    """User requests access to the opposite app (college↔clinic). Superadmin grants."""
+    if current_user.get("cross_app_access"):
+        return {"message": "Access already granted"}
+    await db.users.update_one(
+        {"_id": ObjectId(current_user["id"])},
+        {"$set": {"cross_app_requested": True, "cross_app_requested_at": datetime.utcnow()}},
+    )
+    return {"message": "Request submitted. A platform admin will review your request."}
 
 
 # ─── Prosthetic Plan Options Data ──────────────────────────────────
@@ -5740,15 +5814,59 @@ async def get_procedure_badge(
 try:
     from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
 except ImportError:
-    logging.warning("emergentintegrations not installed — AI features disabled. Install package to enable.")
-    # Stub classes so server starts; AI endpoints will raise 503 at runtime
-    class _AIStub:
-        def __init__(self, *a, **kw): raise HTTPException(503, "AI features not available — emergentintegrations not installed")
-        def with_model(self, *a, **kw): return self
-        async def send_message(self, *a, **kw): raise HTTPException(503, "AI features not available")
-    class LlmChat(_AIStub): pass
-    class UserMessage(_AIStub): pass
-    class ImageContent(_AIStub): pass
+    # Fall back to openai SDK directly (emergentintegrations not on PyPI)
+    try:
+        from openai import AsyncOpenAI as _AsyncOpenAI
+
+        class ImageContent:
+            def __init__(self, image_base64: str = "", image_url: str = ""):
+                self.image_base64 = image_base64
+                self.image_url = image_url
+
+        class UserMessage:
+            def __init__(self, text: str = "", file_contents=None):
+                self.text = text
+                self.file_contents = file_contents or []
+
+        class LlmChat:
+            def __init__(self, api_key: str = "", session_id: str = "", system_message: str = ""):  # noqa: ARG002
+                self._api_key = api_key
+                self._model = "gpt-4o"
+                self._messages: list = []
+                if system_message:
+                    self._messages = [{"role": "system", "content": system_message}]
+
+            def with_model(self, provider: str, model: str):  # noqa: ARG002
+                # Map legacy model aliases that may not exist yet
+                _alias = {"gpt-5.2": "gpt-4o", "gpt-5": "gpt-4o"}
+                self._model = _alias.get(model, model)
+                return self
+
+            async def send_message(self, message: "UserMessage") -> str:
+                client = _AsyncOpenAI(api_key=self._api_key)
+                if message.file_contents:
+                    content: list = [{"type": "text", "text": message.text}]
+                    for img in message.file_contents:
+                        if img.image_base64:
+                            content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img.image_base64}"}})
+                        elif img.image_url:
+                            content.append({"type": "image_url", "image_url": {"url": img.image_url}})
+                else:
+                    content = message.text  # type: ignore[assignment]
+                msgs = list(self._messages) + [{"role": "user", "content": content}]
+                resp = await client.chat.completions.create(model=self._model, messages=msgs)  # type: ignore[arg-type]
+                return resp.choices[0].message.content or ""
+
+        logging.info("emergentintegrations not installed — using openai SDK directly.")
+    except ImportError:
+        logging.warning("Neither emergentintegrations nor openai installed — AI features disabled.")
+        class _AIStub:
+            def __init__(self, *a, **kw): raise HTTPException(503, "AI features not available")
+            def with_model(self, *a, **kw): return self
+            async def send_message(self, *a, **kw): raise HTTPException(503, "AI features not available")
+        class LlmChat(_AIStub): pass  # type: ignore[no-redef]
+        class UserMessage(_AIStub): pass  # type: ignore[no-redef]
+        class ImageContent(_AIStub): pass  # type: ignore[no-redef]
 import uuid
 
 def _build_case_context(proc: dict) -> str:
@@ -5950,7 +6068,7 @@ def _build_case_context(proc: dict) -> str:
 
 
 def _get_llm_key():
-    return os.environ.get("EMERGENT_LLM_KEY", "")
+    return os.environ.get("OPENAI_API_KEY", "") or os.environ.get("EMERGENT_LLM_KEY", "")
 
 
 _AI_BLOCKED_ROLES = {"nurse", "dental_assistant"}
@@ -15604,3 +15722,365 @@ async def seed_on_startup():
         )
     except Exception as e:
         logging.error(f"Implant library idempotent seed FAILED: {e}")
+
+
+# ── Dental Colleges ───────────────────────────────────────────────────────────
+
+DENTAL_COLLEGES_DATA = [
+    {"name": "Anil Neerukonda Institute of Dental Sciences, Visakhapatnam", "state": "Andhra Pradesh", "type": "Private"},
+    {"name": "CKS Theja Institute of Dental Sciences & Research, Tirupati", "state": "Andhra Pradesh", "type": "Private"},
+    {"name": "Dr. NTR University of Health Sciences, Vijayawada (Dental Wing)", "state": "Andhra Pradesh", "type": "Govt"},
+    {"name": "GSL Dental College & Hospital, Rajahmundry", "state": "Andhra Pradesh", "type": "Private"},
+    {"name": "Gitam Dental College & Hospital, Visakhapatnam", "state": "Andhra Pradesh", "type": "Private"},
+    {"name": "Government Dental College & Hospital, Vijayawada", "state": "Andhra Pradesh", "type": "Govt"},
+    {"name": "Lenora Institute of Dental Sciences, Rajahmundry", "state": "Andhra Pradesh", "type": "Private"},
+    {"name": "Narayana Dental College & Hospital, Nellore", "state": "Andhra Pradesh", "type": "Private"},
+    {"name": "NDRMF Institute of Dental Sciences, Nellore", "state": "Andhra Pradesh", "type": "Private"},
+    {"name": "Rajiv Gandhi Institute of Medical Sciences (Dental Wing), Kadapa", "state": "Andhra Pradesh", "type": "Govt"},
+    {"name": "Rangaraya Medical College (Dental Wing), Kakinada", "state": "Andhra Pradesh", "type": "Govt"},
+    {"name": "Sibar Institute of Dental Sciences, Guntur", "state": "Andhra Pradesh", "type": "Private"},
+    {"name": "Sri Sai College of Dental Surgery, Vikarabad", "state": "Andhra Pradesh", "type": "Private"},
+    {"name": "Sri Venkateswara Dental College & Hospital, Tirupati", "state": "Andhra Pradesh", "type": "Private"},
+    {"name": "SVS Institute of Dental Sciences, Mahabubnagar", "state": "Andhra Pradesh", "type": "Private"},
+    {"name": "Vishnu Dental College, Bhimavaram", "state": "Andhra Pradesh", "type": "Private"},
+    {"name": "VRS & YRN Dental College & Hospital, Chirala", "state": "Andhra Pradesh", "type": "Private"},
+    {"name": "Gauhati Medical College & Hospital (Dental Wing), Guwahati", "state": "Assam", "type": "Govt"},
+    {"name": "Regional Dental College, Guwahati", "state": "Assam", "type": "Govt"},
+    {"name": "Tezpur Dental College & Hospital, Tezpur", "state": "Assam", "type": "Private"},
+    {"name": "Buddha Institute of Dental Sciences & Hospital, Patna", "state": "Bihar", "type": "Private"},
+    {"name": "Government Dental College & Hospital, Patna", "state": "Bihar", "type": "Govt"},
+    {"name": "Patna Dental College & Hospital, Patna", "state": "Bihar", "type": "Govt"},
+    {"name": "Sardar Patel Medical College (Dental Wing), Bikaner", "state": "Bihar", "type": "Govt"},
+    {"name": "Vananchal Dental College & Hospital, Faraka", "state": "Bihar", "type": "Private"},
+    {"name": "Dr. Harvansh Singh Judge Institute of Dental Sciences, Chandigarh", "state": "Chandigarh", "type": "Govt"},
+    {"name": "Chhattisgarh Dental College & Research Institute, Rajnandgaon", "state": "Chhattisgarh", "type": "Private"},
+    {"name": "Government Dental College, Raipur", "state": "Chhattisgarh", "type": "Govt"},
+    {"name": "New Government Dental College & Hospital, Raipur", "state": "Chhattisgarh", "type": "Govt"},
+    {"name": "RKDF Dental College & Research Centre, Bhopal", "state": "Chhattisgarh", "type": "Private"},
+    {"name": "Rungta College of Dental Sciences & Research, Bhilai", "state": "Chhattisgarh", "type": "Private"},
+    {"name": "Shri Shankaracharya Institute of Medical Sciences (Dental Wing), Bhilai", "state": "Chhattisgarh", "type": "Private"},
+    {"name": "Trinity Institute of Dental Sciences & Research, Gariyaband", "state": "Chhattisgarh", "type": "Private"},
+    {"name": "Shri Bhausaheb Hire Government Medical College (Dental Wing), Dhule", "state": "Dadra & Nagar Haveli and Daman & Diu", "type": "Private"},
+    {"name": "Army College of Dental Sciences, New Delhi", "state": "Delhi", "type": "Govt"},
+    {"name": "Faculty of Dentistry, Jamia Millia Islamia, New Delhi", "state": "Delhi", "type": "Govt"},
+    {"name": "Government Dental College & Hospital, New Delhi", "state": "Delhi", "type": "Govt"},
+    {"name": "I.T.S Centre for Dental Studies & Research, Ghaziabad", "state": "Delhi", "type": "Private"},
+    {"name": "Indira Gandhi Government Dental College & Hospital, Jammu", "state": "Delhi", "type": "Govt"},
+    {"name": "Maulana Azad Institute of Dental Sciences, New Delhi", "state": "Delhi", "type": "Govt"},
+    {"name": "Goa Dental College & Hospital, Panaji", "state": "Goa", "type": "Govt"},
+    {"name": "Ahmedabad Dental College & Hospital, Ahmedabad", "state": "Gujarat", "type": "Private"},
+    {"name": "College of Dental Sciences & Research Centre, Ahmedabad", "state": "Gujarat", "type": "Private"},
+    {"name": "Government Dental College & Hospital, Ahmedabad", "state": "Gujarat", "type": "Govt"},
+    {"name": "Government Dental College & Hospital, Jamnagar", "state": "Gujarat", "type": "Govt"},
+    {"name": "K M Shah Dental College & Hospital, Vadodara", "state": "Gujarat", "type": "Private"},
+    {"name": "Karnavati School of Dentistry, Gandhinagar", "state": "Gujarat", "type": "Private"},
+    {"name": "Manubhai Patel Dental College & Hospital, Vadodara", "state": "Gujarat", "type": "Private"},
+    {"name": "Narsinhbhai Patel Dental College & Hospital, Visnagar", "state": "Gujarat", "type": "Private"},
+    {"name": "Pacific Dental College & Hospital, Udaipur", "state": "Gujarat", "type": "Private"},
+    {"name": "Pramukh Swami Medical College (Dental Wing), Karamsad", "state": "Gujarat", "type": "Private"},
+    {"name": "Rajasthan Dental College & Hospital, Jaipur", "state": "Gujarat", "type": "Private"},
+    {"name": "Saurashtra University Dental College, Rajkot", "state": "Gujarat", "type": "Private"},
+    {"name": "Sumandeep Vidyapeeth Dental College & Hospital, Vadodara", "state": "Gujarat", "type": "Private"},
+    {"name": "Bhojia Dental College & Hospital, Baddi", "state": "Haryana", "type": "Private"},
+    {"name": "D.A.V. Centenary Dental College, Yamunanagar", "state": "Haryana", "type": "Private"},
+    {"name": "Faculty of Dental Sciences, SGT University, Gurugram", "state": "Haryana", "type": "Private"},
+    {"name": "Haryana Kalpana Chawla Government Medical College (Dental Wing), Karnal", "state": "Haryana", "type": "Govt"},
+    {"name": "Jan Nayak Ch. Devi Lal Dental College, Sirsa", "state": "Haryana", "type": "Private"},
+    {"name": "Maharishi Markandeshwar College of Dental Sciences & Research, Ambala", "state": "Haryana", "type": "Private"},
+    {"name": "PDM Dental College & Research Institute, Bahadurgarh", "state": "Haryana", "type": "Private"},
+    {"name": "Post Graduate Institute of Dental Sciences, Rohtak", "state": "Haryana", "type": "Govt"},
+    {"name": "SGT Dental College Hospital & Research Institute, Gurugram", "state": "Haryana", "type": "Private"},
+    {"name": "Sudha Rustagi College of Dental Sciences & Research, Faridabad", "state": "Haryana", "type": "Private"},
+    {"name": "H.P. Government Dental College & Hospital, Shimla", "state": "Himachal Pradesh", "type": "Govt"},
+    {"name": "Himachal Pradesh Government Dental College, Shimla", "state": "Himachal Pradesh", "type": "Govt"},
+    {"name": "M.N.D.A.V. Dental College & Hospital, Solan", "state": "Himachal Pradesh", "type": "Private"},
+    {"name": "Himachal Dental College, Sundernagar", "state": "Himachal Pradesh", "type": "Private"},
+    {"name": "Bhojia Dental College & Hospital, Baddi", "state": "Himachal Pradesh", "type": "Private"},
+    {"name": "Government Dental College, Srinagar", "state": "Jammu & Kashmir", "type": "Govt"},
+    {"name": "Indira Gandhi Government Dental College & Hospital, Jammu", "state": "Jammu & Kashmir", "type": "Govt"},
+    {"name": "Institute of Dental Sciences, Sehora, Jammu", "state": "Jammu & Kashmir", "type": "Private"},
+    {"name": "Hazaribag College of Dental Sciences & Hospital, Hazaribag", "state": "Jharkhand", "type": "Private"},
+    {"name": "Dental Institute, Rajendra Institute of Medical Sciences, Ranchi", "state": "Jharkhand", "type": "Govt"},
+    {"name": "Awadh Dental College & Hospital, Jamshedpur", "state": "Jharkhand", "type": "Private"},
+    {"name": "Vananchal Dental College & Hospital, Garhwa", "state": "Jharkhand", "type": "Private"},
+    {"name": "A.J. Institute of Dental Sciences, Mangaluru", "state": "Karnataka", "type": "Private"},
+    {"name": "A.M.E's Dental College & Hospital, Raichur", "state": "Karnataka", "type": "Private"},
+    {"name": "Al-Badar Rural Dental College & Hospital, Kalaburagi", "state": "Karnataka", "type": "Private"},
+    {"name": "Al-Ameen Dental College & Hospital, Bijapur", "state": "Karnataka", "type": "Private"},
+    {"name": "Bapuji Dental College & Hospital, Davangere", "state": "Karnataka", "type": "Private"},
+    {"name": "College of Dental Sciences, Davangere", "state": "Karnataka", "type": "Govt"},
+    {"name": "Coorg Institute of Dental Sciences, Virajpet", "state": "Karnataka", "type": "Private"},
+    {"name": "Dayananda Sagar College of Dental Sciences, Bengaluru", "state": "Karnataka", "type": "Private"},
+    {"name": "Faculty of Dental Sciences, M.S. Ramaiah University, Bengaluru", "state": "Karnataka", "type": "Private"},
+    {"name": "Farooqia Dental College & Hospital, Mysuru", "state": "Karnataka", "type": "Private"},
+    {"name": "Government Dental College & Research Institute, Bengaluru", "state": "Karnataka", "type": "Govt"},
+    {"name": "H.K.E. Society's S. Nijalingappa Institute of Dental Sciences & Research, Kalaburagi", "state": "Karnataka", "type": "Private"},
+    {"name": "JSS Dental College & Hospital, Mysuru", "state": "Karnataka", "type": "Private"},
+    {"name": "K.L.E. Institute of Dental Sciences, Bengaluru", "state": "Karnataka", "type": "Private"},
+    {"name": "K.L.E.V.K. Institute of Dental Sciences, Belagavi", "state": "Karnataka", "type": "Private"},
+    {"name": "K.L.E. Society's Institute of Dental Sciences, Hubli", "state": "Karnataka", "type": "Private"},
+    {"name": "Kannur Dental College, Anjarakandy", "state": "Karnataka", "type": "Private"},
+    {"name": "Karnataka Lingayat Education Society's Institute of Dental Sciences, Belagavi", "state": "Karnataka", "type": "Private"},
+    {"name": "M.R. Ambedkar Dental College & Hospital, Bengaluru", "state": "Karnataka", "type": "Private"},
+    {"name": "Manipal College of Dental Sciences, Mangaluru", "state": "Karnataka", "type": "Private"},
+    {"name": "Manipal College of Dental Sciences, Manipal", "state": "Karnataka", "type": "Private"},
+    {"name": "Maratha Mandal's N.G.H. Institute of Dental Sciences & Research Centre, Belagavi", "state": "Karnataka", "type": "Private"},
+    {"name": "Navodaya Dental College & Hospital, Raichur", "state": "Karnataka", "type": "Private"},
+    {"name": "Nitte (Deemed to be University) AB Shetty Memorial Institute of Dental Sciences, Mangaluru", "state": "Karnataka", "type": "Private"},
+    {"name": "Oxford Dental College, Bengaluru", "state": "Karnataka", "type": "Private"},
+    {"name": "P.M.N.M. Dental College & Hospital, Bagalkot", "state": "Karnataka", "type": "Private"},
+    {"name": "Rajarajeswari Dental College & Hospital, Bengaluru", "state": "Karnataka", "type": "Private"},
+    {"name": "S.B. Patil Dental College & Hospital, Bidar", "state": "Karnataka", "type": "Private"},
+    {"name": "S.D.M. College of Dental Sciences, Dharwad", "state": "Karnataka", "type": "Private"},
+    {"name": "Srinivas Institute of Dental Sciences, Mangaluru", "state": "Karnataka", "type": "Private"},
+    {"name": "Sri Rajiv Gandhi College of Dental Sciences & Hospital, Bengaluru", "state": "Karnataka", "type": "Private"},
+    {"name": "Sri Siddhartha Dental College, Tumkur", "state": "Karnataka", "type": "Private"},
+    {"name": "SRM Institute of Dental Sciences and Hospital, Bengaluru", "state": "Karnataka", "type": "Private"},
+    {"name": "Subbaiah Institute of Dental Sciences, Shivamogga", "state": "Karnataka", "type": "Private"},
+    {"name": "The Oxford Dental College & Hospital, Bengaluru", "state": "Karnataka", "type": "Private"},
+    {"name": "Vokkaligara Sangha Dental College & Hospital, Bengaluru", "state": "Karnataka", "type": "Private"},
+    {"name": "Vydehi Institute of Dental Sciences & Research Centre, Bengaluru", "state": "Karnataka", "type": "Private"},
+    {"name": "Yenepoya Dental College, Mangaluru", "state": "Karnataka", "type": "Private"},
+    {"name": "Azeezia College of Dental Sciences & Research, Kollam", "state": "Kerala", "type": "Private"},
+    {"name": "Century International Institute of Dental Science & Research Centre, Kasaragod", "state": "Kerala", "type": "Private"},
+    {"name": "Cooperative Dental College, Calicut", "state": "Kerala", "type": "Private"},
+    {"name": "De Paul Institute of Science & Technology (Dental Wing), Angamaly", "state": "Kerala", "type": "Private"},
+    {"name": "Educare Institute of Dental Sciences, Malappuram", "state": "Kerala", "type": "Private"},
+    {"name": "Government Dental College, Alappuzha", "state": "Kerala", "type": "Govt"},
+    {"name": "Government Dental College, Calicut", "state": "Kerala", "type": "Govt"},
+    {"name": "Government Dental College, Kottayam", "state": "Kerala", "type": "Govt"},
+    {"name": "Government Dental College, Thrissur", "state": "Kerala", "type": "Govt"},
+    {"name": "Government Dental College, Thiruvananthapuram", "state": "Kerala", "type": "Govt"},
+    {"name": "Indira Gandhi Institute of Dental Sciences, Puducherry", "state": "Kerala", "type": "Private"},
+    {"name": "Mar Baselios Dental College, Kothamangalam", "state": "Kerala", "type": "Private"},
+    {"name": "MES Dental College, Malappuram", "state": "Kerala", "type": "Private"},
+    {"name": "Noorul Islam College of Dental Sciences, Thiruvananthapuram", "state": "Kerala", "type": "Private"},
+    {"name": "P.S.M. College of Dental Science & Research, Akkikavu", "state": "Kerala", "type": "Private"},
+    {"name": "PMS College of Dental Science & Research, Thiruvananthapuram", "state": "Kerala", "type": "Private"},
+    {"name": "Pushpagiri College of Dental Sciences, Tiruvalla", "state": "Kerala", "type": "Private"},
+    {"name": "Royal Dental College, Palakkad", "state": "Kerala", "type": "Private"},
+    {"name": "Sree Anjaneya Institute of Dental Sciences, Calicut", "state": "Kerala", "type": "Private"},
+    {"name": "Sree Mookambika Institute of Dental Sciences, Kanyakumari", "state": "Kerala", "type": "Private"},
+    {"name": "St. Gregorious Dental College & Research Centre, Kothamangalam", "state": "Kerala", "type": "Private"},
+    {"name": "Travancore Dental College, Kollam", "state": "Kerala", "type": "Private"},
+    {"name": "Vasan Dental College & Hospital, Ernakulam", "state": "Kerala", "type": "Private"},
+    {"name": "Annoor Dental College & Hospital, Ernakulam", "state": "Kerala", "type": "Private"},
+    {"name": "Amrita School of Dentistry, Ernakulam", "state": "Kerala", "type": "Private"},
+    {"name": "College of Dental Sciences, Davangere", "state": "Madhya Pradesh", "type": "Govt"},
+    {"name": "Government College of Dentistry, Indore", "state": "Madhya Pradesh", "type": "Govt"},
+    {"name": "Hitkarini Dental College & Hospital, Jabalpur", "state": "Madhya Pradesh", "type": "Private"},
+    {"name": "Index Institute of Dental Sciences, Indore", "state": "Madhya Pradesh", "type": "Private"},
+    {"name": "Mandsaur Institute of Dental Science & Research, Mandsaur", "state": "Madhya Pradesh", "type": "Private"},
+    {"name": "Modern Dental College & Research Centre, Indore", "state": "Madhya Pradesh", "type": "Private"},
+    {"name": "People's Dental Academy, Bhopal", "state": "Madhya Pradesh", "type": "Private"},
+    {"name": "Peoples College of Dental Sciences & Research Centre, Bhopal", "state": "Madhya Pradesh", "type": "Private"},
+    {"name": "R.K.D.F. Dental College & Research Centre, Bhopal", "state": "Madhya Pradesh", "type": "Private"},
+    {"name": "Rishiraj College of Dental Sciences & Research Centre, Bhopal", "state": "Madhya Pradesh", "type": "Private"},
+    {"name": "Saraswati Dhanwantari Dental College & Hospital, Palghar", "state": "Madhya Pradesh", "type": "Private"},
+    {"name": "School of Dental Sciences, Peoples University, Bhopal", "state": "Madhya Pradesh", "type": "Private"},
+    {"name": "Shyam Shah Medical College (Dental Wing), Rewa", "state": "Madhya Pradesh", "type": "Govt"},
+    {"name": "Sri Aurobindo College of Dentistry, Indore", "state": "Madhya Pradesh", "type": "Private"},
+    {"name": "A. Nair Hospital Dental College, Mumbai", "state": "Maharashtra", "type": "Govt"},
+    {"name": "Bharati Vidyapeeth Dental College & Hospital, Pune", "state": "Maharashtra", "type": "Private"},
+    {"name": "Bharati Vidyapeeth Deemed University Dental College & Hospital, Navi Mumbai", "state": "Maharashtra", "type": "Private"},
+    {"name": "Bharati Vidyapeeth Deemed University Dental College & Hospital, Sangli", "state": "Maharashtra", "type": "Private"},
+    {"name": "Chettinad Dental College & Research Institute, Kanchipuram", "state": "Maharashtra", "type": "Private"},
+    {"name": "D.Y. Patil Dental College & Hospital, Kolhapur", "state": "Maharashtra", "type": "Private"},
+    {"name": "D.Y. Patil University School of Dentistry, Navi Mumbai", "state": "Maharashtra", "type": "Private"},
+    {"name": "Dr. D.Y. Patil Dental College & Hospital, Pune", "state": "Maharashtra", "type": "Private"},
+    {"name": "Dr. Hedgewar Smruti Rugna Seva Mandal's Dental College & Hospital, Hingoli", "state": "Maharashtra", "type": "Private"},
+    {"name": "Dr. Rajesh Ramdasji Kambe Dental College & Hospital, Akola", "state": "Maharashtra", "type": "Private"},
+    {"name": "Government Dental College & Hospital, Aurangabad", "state": "Maharashtra", "type": "Govt"},
+    {"name": "Government Dental College & Hospital, Mumbai", "state": "Maharashtra", "type": "Govt"},
+    {"name": "Government Dental College & Hospital, Nagpur", "state": "Maharashtra", "type": "Govt"},
+    {"name": "K.B.H. Dental College & Hospital, Nashik", "state": "Maharashtra", "type": "Private"},
+    {"name": "M.A. Rangoonwala College of Dental Sciences & Research Centre, Pune", "state": "Maharashtra", "type": "Private"},
+    {"name": "M.G.M. Dental College & Hospital, Navi Mumbai", "state": "Maharashtra", "type": "Private"},
+    {"name": "Mahatma Gandhi Mission's Dental College & Hospital, Aurangabad", "state": "Maharashtra", "type": "Private"},
+    {"name": "Mahatma Gandhi Vidyamandir's Dental College & Research Institute, Nashik", "state": "Maharashtra", "type": "Private"},
+    {"name": "Maharashtra Institute of Dental Sciences & Research, Latur", "state": "Maharashtra", "type": "Private"},
+    {"name": "Nair Hospital Dental College, Mumbai", "state": "Maharashtra", "type": "Govt"},
+    {"name": "P.D.M. Dental College & Research Institute, Bahadurgarh", "state": "Maharashtra", "type": "Private"},
+    {"name": "Padmashree Dr. D.Y. Patil Dental College & Hospital, Pune", "state": "Maharashtra", "type": "Private"},
+    {"name": "Pravara Institute of Medical Sciences Dental College & Hospital, Ahmednagar", "state": "Maharashtra", "type": "Private"},
+    {"name": "Rural Dental College, Loni", "state": "Maharashtra", "type": "Private"},
+    {"name": "S.M.B.T. Dental College & Hospital, Nashik", "state": "Maharashtra", "type": "Private"},
+    {"name": "Saraswati Dhanwantari Dental College & Hospital, Nandurbar", "state": "Maharashtra", "type": "Private"},
+    {"name": "School of Dental Sciences, Krishna Institute of Medical Sciences, Karad", "state": "Maharashtra", "type": "Private"},
+    {"name": "Seth G.S. Medical College (Dental Wing), Mumbai", "state": "Maharashtra", "type": "Govt"},
+    {"name": "Sharad Pawar Dental College, Wardha", "state": "Maharashtra", "type": "Private"},
+    {"name": "Sinhgad Dental College & Hospital, Pune", "state": "Maharashtra", "type": "Private"},
+    {"name": "Swargiya Dadasaheb Kalmegh Smruti Dental College & Hospital, Nagpur", "state": "Maharashtra", "type": "Private"},
+    {"name": "Tatyasaheb Kore Dental College & Research Centre, Kolhapur", "state": "Maharashtra", "type": "Private"},
+    {"name": "Terna Dental College & Hospital, Navi Mumbai", "state": "Maharashtra", "type": "Private"},
+    {"name": "Vasantdada Patil Dental College & Hospital, Sangli", "state": "Maharashtra", "type": "Private"},
+    {"name": "Vidarbha Youth Welfare Society's Dental College & Hospital, Amravati", "state": "Maharashtra", "type": "Private"},
+    {"name": "YMT Dental College & Hospital, Navi Mumbai", "state": "Maharashtra", "type": "Private"},
+    {"name": "Dental College, Regional Institute of Medical Sciences, Imphal", "state": "Manipur", "type": "Govt"},
+    {"name": "Shija Academy of Health Sciences (Dental Wing), Imphal", "state": "Manipur", "type": "Private"},
+    {"name": "Hi Tech Dental College & Hospital, Bhubaneswar", "state": "Odisha", "type": "Private"},
+    {"name": "Institute of Dental Sciences, Bhubaneswar", "state": "Odisha", "type": "Private"},
+    {"name": "SCB Dental College & Hospital, Cuttack", "state": "Odisha", "type": "Govt"},
+    {"name": "Kalinga Institute of Dental Sciences, Bhubaneswar", "state": "Odisha", "type": "Private"},
+    {"name": "Chettinad Dental College, Kanchipuram", "state": "Puducherry", "type": "Private"},
+    {"name": "Indira Gandhi Institute of Dental Sciences, Sri Balaji Vidyapeeth, Puducherry", "state": "Puducherry", "type": "Private"},
+    {"name": "Mahatma Gandhi Post Graduate Institute of Dental Sciences, Puducherry", "state": "Puducherry", "type": "Govt"},
+    {"name": "Sri Venkateshwaraa Dental College, Puducherry", "state": "Puducherry", "type": "Private"},
+    {"name": "Adesh Institute of Dental Sciences & Research, Bathinda", "state": "Punjab", "type": "Private"},
+    {"name": "Baba Jaswant Singh Dental College, Hospital & Research Institute, Ludhiana", "state": "Punjab", "type": "Private"},
+    {"name": "Christian Dental College, Ludhiana", "state": "Punjab", "type": "Private"},
+    {"name": "Desh Bhagat Dental College & Hospital, Mandi Gobindgarh", "state": "Punjab", "type": "Private"},
+    {"name": "Genesis Institute of Dental Sciences & Research, Ferozepur", "state": "Punjab", "type": "Private"},
+    {"name": "Gian Sagar Dental College & Hospital, Patiala", "state": "Punjab", "type": "Private"},
+    {"name": "Guru Nanak Dev Dental College & Research Institute, Sunam", "state": "Punjab", "type": "Private"},
+    {"name": "ITS Dental College, Greater Noida", "state": "Punjab", "type": "Private"},
+    {"name": "Laxmi Bai Dental College & Hospital, Patiala", "state": "Punjab", "type": "Private"},
+    {"name": "National Dental College & Hospital, Derabassi", "state": "Punjab", "type": "Private"},
+    {"name": "Punjab Government Dental College & Hospital, Amritsar", "state": "Punjab", "type": "Govt"},
+    {"name": "Rayat Bahra Dental College & Hospital, Mohali", "state": "Punjab", "type": "Private"},
+    {"name": "Sri Guru Ram Das Institute of Dental Sciences & Research, Amritsar", "state": "Punjab", "type": "Private"},
+    {"name": "Sukh Sagar Medical College & Hospital (Dental Wing), Jalandhar", "state": "Punjab", "type": "Private"},
+    {"name": "Swami Devi Dyal Hospital & Dental College, Panchkula", "state": "Punjab", "type": "Private"},
+    {"name": "Bhojia Dental College & Hospital, Bhud", "state": "Punjab", "type": "Private"},
+    {"name": "Daswani Dental College & Research Centre, Kota", "state": "Rajasthan", "type": "Private"},
+    {"name": "Darshan Dental College & Hospital, Udaipur", "state": "Rajasthan", "type": "Private"},
+    {"name": "Dr. B.R. Ambedkar Government Dental College, Shimla", "state": "Rajasthan", "type": "Govt"},
+    {"name": "Eklavya Dental College & Hospital, Jaipur", "state": "Rajasthan", "type": "Private"},
+    {"name": "Geetanjali Dental & Research Institute, Udaipur", "state": "Rajasthan", "type": "Private"},
+    {"name": "Government Dental College, Jaipur", "state": "Rajasthan", "type": "Govt"},
+    {"name": "Government Dental College, Jodhpur", "state": "Rajasthan", "type": "Govt"},
+    {"name": "Government Dental College, Kota", "state": "Rajasthan", "type": "Govt"},
+    {"name": "Jaipur Dental College, Jaipur", "state": "Rajasthan", "type": "Private"},
+    {"name": "Jodhpur Dental College General Hospital, Jodhpur", "state": "Rajasthan", "type": "Private"},
+    {"name": "Maharaj Vinayak Global University, Faculty of Dental Sciences, Jaipur", "state": "Rajasthan", "type": "Private"},
+    {"name": "Maharishi Arvind Dental College & Hospital, Jaipur", "state": "Rajasthan", "type": "Private"},
+    {"name": "Pacific Dental College & Hospital, Udaipur", "state": "Rajasthan", "type": "Private"},
+    {"name": "RUHS College of Dental Sciences, Jaipur", "state": "Rajasthan", "type": "Govt"},
+    {"name": "Rajasthan Dental College & Hospital, Jaipur", "state": "Rajasthan", "type": "Private"},
+    {"name": "Surendra Dental College & Research Institute, Sri Ganganagar", "state": "Rajasthan", "type": "Private"},
+    {"name": "Vyas Dental College & Hospital, Jodhpur", "state": "Rajasthan", "type": "Private"},
+    {"name": "Yogiraj Dental College & Hospital, Bikaner", "state": "Rajasthan", "type": "Private"},
+    {"name": "Adhiparasakthi Dental College & Hospital, Melmaruvathur", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "ACS Dental College & Hospital, Chennai", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "Best Dental Science College, Madurai", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "Chettinad Dental College & Research Institute, Kanchipuram", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "CSI College of Dental Sciences & Research, Madurai", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "Dhanalakshmi Srinivasan Dental College & Hospital, Perambalur", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "Dr. Subramanian Chettiar Dental College, Tirunelveli", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "Asan Memorial Dental College & Hospital, Kanchipuram", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "Indira Gandhi Institute of Dental Sciences, Puducherry", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "J.K.K. Nattraja Dental College & Hospital, Namakkal", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "Karpaga Vinayaga Institute of Dental Sciences, Kanchipuram", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "K.S.R. Institute of Dental Science and Research, Namakkal", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "Marundeeswarar Institute of Dental Sciences, Chennai", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "Meenakshi Ammal Dental College & Hospital, Chennai", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "Meenakshi Academy of Higher Education & Research (Dental College), Chennai", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "Penang International Dental College, Chennai", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "R.V.S. Dental College & Hospital, Coimbatore", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "Ragas Dental College & Hospital, Chennai", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "S.R.M. Dental College, Chennai", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "Saveetha Dental College & Hospital, Chennai", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "Sri Ramachandra Institute of Higher Education & Research (Dental College), Chennai", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "Sri Ramakrishna Dental College & Hospital, Coimbatore", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "Sri Venkateswara Dental College & Hospital, Chennai", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "SRM Dental College, Ramapuram, Chennai", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "Tamil Nadu Government Dental College & Hospital, Chennai", "state": "Tamil Nadu", "type": "Govt"},
+    {"name": "Thai Moogambigai Dental College & Hospital, Chennai", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "Tamilnadu Dr. M.G.R. Medical University (Dental Wing), Chennai", "state": "Tamil Nadu", "type": "Govt"},
+    {"name": "Vivekanandha Dental College for Women, Namakkal", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "Vinayaka Mission's Sankarachariyar Dental College, Salem", "state": "Tamil Nadu", "type": "Private"},
+    {"name": "Rajiv Gandhi Institute of Medical Sciences, Adilabad (Dental Wing)", "state": "Telangana", "type": "Govt"},
+    {"name": "Govt. Dental College & Hospital, Hyderabad", "state": "Telangana", "type": "Govt"},
+    {"name": "Kamineni Institute of Dental Sciences, Nalgonda", "state": "Telangana", "type": "Private"},
+    {"name": "MNR Dental College & Hospital, Sangareddy", "state": "Telangana", "type": "Private"},
+    {"name": "Mamata Dental College, Khammam", "state": "Telangana", "type": "Private"},
+    {"name": "Meghna Institute of Dental Sciences, Nizamabad", "state": "Telangana", "type": "Private"},
+    {"name": "Malla Reddy Dental College for Women, Hyderabad", "state": "Telangana", "type": "Private"},
+    {"name": "Panineeya Mahavidyalaya Institute of Dental Sciences & Research Centre, Hyderabad", "state": "Telangana", "type": "Private"},
+    {"name": "Penang International Dental College, Hyderabad", "state": "Telangana", "type": "Private"},
+    {"name": "Sri Sai College of Dental Surgery, Vikarabad", "state": "Telangana", "type": "Private"},
+    {"name": "Sri Venkata Sai Institute of Medical Sciences & Research (Dental), Mahabubnagar", "state": "Telangana", "type": "Private"},
+    {"name": "SVS Institute of Dental Sciences, Mahabubnagar", "state": "Telangana", "type": "Private"},
+    {"name": "Tirumala Dental College & Hospital, Nizamabad", "state": "Telangana", "type": "Private"},
+    {"name": "Vishnu Dental College, Bhimavaram", "state": "Telangana", "type": "Private"},
+    {"name": "Tripura Dental College & MK Ct Hospital, Agartala", "state": "Tripura", "type": "Govt"},
+    {"name": "Babu Banarasi Das College of Dental Sciences, Lucknow", "state": "Uttar Pradesh", "type": "Private"},
+    {"name": "Buddha Institute of Dental Sciences & Hospital, Patna", "state": "Uttar Pradesh", "type": "Private"},
+    {"name": "Career Institute of Dental Sciences & Hospital, Lucknow", "state": "Uttar Pradesh", "type": "Private"},
+    {"name": "Chandra Dental College & Hospital, Safedabad, Barabanki", "state": "Uttar Pradesh", "type": "Private"},
+    {"name": "Dental College & Hospital, M.L.N. Medical College, Allahabad", "state": "Uttar Pradesh", "type": "Govt"},
+    {"name": "Dr. Ram Manohar Lohia Institute of Medical Sciences (Dental Wing), Lucknow", "state": "Uttar Pradesh", "type": "Govt"},
+    {"name": "Era's Lucknow Medical College & Hospital (Dental Wing), Lucknow", "state": "Uttar Pradesh", "type": "Private"},
+    {"name": "Faculty of Dental Sciences, C.S.M. Medical University, Lucknow", "state": "Uttar Pradesh", "type": "Govt"},
+    {"name": "G.S.V.M. Medical College (Dental Wing), Kanpur", "state": "Uttar Pradesh", "type": "Govt"},
+    {"name": "Government Dental College, Azamgarh", "state": "Uttar Pradesh", "type": "Govt"},
+    {"name": "Hind Institute of Medical Sciences (Dental Wing), Lucknow", "state": "Uttar Pradesh", "type": "Private"},
+    {"name": "I.T.S. Centre for Dental Studies & Research, Muradnagar, Ghaziabad", "state": "Uttar Pradesh", "type": "Private"},
+    {"name": "Inderprastha Dental College & Hospital, Ghaziabad", "state": "Uttar Pradesh", "type": "Private"},
+    {"name": "Institute of Dental Sciences, Bareilly", "state": "Uttar Pradesh", "type": "Private"},
+    {"name": "Kalka Dental College, Meerut", "state": "Uttar Pradesh", "type": "Private"},
+    {"name": "Kothiwal Dental College & Research Centre, Moradabad", "state": "Uttar Pradesh", "type": "Private"},
+    {"name": "Maharana Pratap Dental College & Hospital, Kanpur", "state": "Uttar Pradesh", "type": "Private"},
+    {"name": "Nehru Dental College & Hospital, Faridabad", "state": "Uttar Pradesh", "type": "Private"},
+    {"name": "NIMS Institute of Dental Sciences & Research, Jaipur", "state": "Uttar Pradesh", "type": "Private"},
+    {"name": "Rama Dental College Hospital & Research Centre, Kanpur", "state": "Uttar Pradesh", "type": "Private"},
+    {"name": "Saraswati Dental College & Hospital, Lucknow", "state": "Uttar Pradesh", "type": "Private"},
+    {"name": "School of Dental Sciences, Sharda University, Greater Noida", "state": "Uttar Pradesh", "type": "Private"},
+    {"name": "Seema Dental College & Hospital, Rishikesh", "state": "Uttar Pradesh", "type": "Private"},
+    {"name": "Subharti Dental College & Hospital, Meerut", "state": "Uttar Pradesh", "type": "Private"},
+    {"name": "Teerthankar Mahaveer Dental College & Research Centre, Moradabad", "state": "Uttar Pradesh", "type": "Private"},
+    {"name": "UP Rural Institute of Medical Sciences & Research (Dental Wing), Saifai, Etawah", "state": "Uttar Pradesh", "type": "Govt"},
+    {"name": "Uttarakhand Dental College & Research Institute, Dehradun", "state": "Uttarakhand", "type": "Private"},
+    {"name": "Himgiri Zee University, Faculty of Dental Sciences, Dehradun", "state": "Uttarakhand", "type": "Private"},
+    {"name": "Calcutta National Medical College (Dental Wing), Kolkata", "state": "West Bengal", "type": "Govt"},
+    {"name": "Dr. R. Ahmed Dental College & Hospital, Kolkata", "state": "West Bengal", "type": "Govt"},
+    {"name": "Guru Nanak Institute of Dental Sciences & Research, Kolkata", "state": "West Bengal", "type": "Private"},
+    {"name": "North Bengal Dental College & Hospital, Darjeeling", "state": "West Bengal", "type": "Private"},
+    {"name": "Sardar Patel Dental College & Hospital, Lucknow", "state": "West Bengal", "type": "Private"},
+    {"name": "Haldia Institute of Dental Sciences & Research, Haldia", "state": "West Bengal", "type": "Private"},
+    {"name": "Raiganj Government Medical College (Dental Wing), Raiganj", "state": "West Bengal", "type": "Govt"},
+]
+
+
+async def _seed_dental_colleges():
+    """Idempotent: populate dental_colleges collection from DCI list (AY 2025-26). Skips if already seeded."""
+    count = await db.dental_colleges.count_documents({})
+    if count >= len(DENTAL_COLLEGES_DATA):
+        logging.info(f"Dental colleges already seeded ({count} docs). Skipping.")
+        return
+    await db.dental_colleges.delete_many({})
+    await db.dental_colleges.insert_many(DENTAL_COLLEGES_DATA)
+    await db.dental_colleges.create_index([("name", "text"), ("state", "text")])
+    await db.dental_colleges.create_index("state")
+    logging.info(f"Dental colleges seeded: {len(DENTAL_COLLEGES_DATA)} records.")
+
+
+@app.on_event("startup")
+async def seed_dental_colleges_on_start():
+    await _seed_dental_colleges()
+
+
+@api_router.get("/dental-colleges")
+async def get_dental_colleges(
+    q: Optional[str] = Query(None, description="Search term for name or state"),
+    state: Optional[str] = Query(None, description="Filter by state"),
+    college_type: Optional[str] = Query(None, alias="type", description="Govt or Private"),
+):
+    """Public endpoint — returns list of DCI-recognised dental colleges."""
+    mongo_filter: Dict[str, Any] = {}
+
+    if q and q.strip():
+        mongo_filter["$or"] = [
+            {"name": {"$regex": q.strip(), "$options": "i"}},
+            {"state": {"$regex": q.strip(), "$options": "i"}},
+        ]
+
+    if state and state.strip():
+        mongo_filter["state"] = {"$regex": f"^{state.strip()}$", "$options": "i"}
+
+    if college_type and college_type.strip():
+        mongo_filter["type"] = college_type.strip()
+
+    cursor = db.dental_colleges.find(mongo_filter, {"_id": 0}).sort("name", 1)
+    results = await cursor.to_list(length=500)
+    return {"colleges": results, "total": len(results)}

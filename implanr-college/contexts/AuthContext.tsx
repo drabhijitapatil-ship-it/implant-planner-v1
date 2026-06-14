@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect, useRef, useCallback } from 'react';
 import { Alert } from 'react-native';
+import { router } from 'expo-router';
 import api, { getToken, setToken, removeToken, setOnAuthFailure, setOnActivity } from '../utils/api';
 import { BACKEND_URL } from '../utils/config';
 
@@ -84,7 +85,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         logout().then(() => {
           Alert.alert(
             'Session Expired',
-            'You have been logged out after 15 minutes of inactivity. Please log in again.'
+            'You have been logged out after 15 minutes of inactivity. Please log in again.',
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  router.replace('/auth/login');
+                },
+              },
+            ]
           );
         });
       }
