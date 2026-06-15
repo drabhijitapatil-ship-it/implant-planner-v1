@@ -1,5 +1,73 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 303 (Feb 2026) — Straumann BLT NC (Ø 3.3 mm) prosthetic catalog
+
+### What the user asked for
+Add the full **NC (Ø 3.3 mm — Narrow CrossFit)** prosthetic library from
+the user-uploaded "Straumann NC Prosthetic Components" PDF to all 3 BLT
+systems, with **impression posts, lab analogs, and scan bodies
+explicitly split between Implant-Level (Level A) and Abutment-Level /
+SRA (Level B)** workflows.
+
+### What changed
+**Backend — new files**
+- `backend/straumann_nc_components_expanded.py` — **105 NC SKUs across
+  17 categories**:
+  - 9 healing abutments
+  - 9 impression posts (5 implant-level + 4 abutment-level)
+  - 6 lab analogs (2 implant-level + 4 abutment-level Crown/Bridge × Ø3.5/4.6)
+  - 3 scan bodies (1 implant-level CARES Mono + 2 abutment-level for SRA Ø3.5/4.6)
+  - 2 temporary abutments (TAN Crown + Bridge)
+  - 14 final cementable abutments (Anatomic + Cementable straight + angled 15°)
+  - 11 Variobase for Crown (Ø3.8 straight/17° + Ø4.1 straight/15° + AS 25°)
+  - 5 Variobase for Bridge/Bar (cylindrical + 2× SRA-level cylindrical)
+  - 14 SRA / Multi-Base (straight + 17°/30° Type A/B, both Ø3.5 and Ø4.6)
+  - 5 burn-out copings
+  - 10 Gold + Final + Temporary Titanium copings (Crown/Bridge × Ø3.5/4.6)
+  - 4 plastic copings for cementable abutments
+  - 5 prosthetic / lab screws
+  - 5 SRA protective caps
+  - 2 pre-milled blanks + 1 wax-up sleeve
+- `backend/_seed_straumann_nc_components.py` — idempotent. Only NC rows
+  are replaced; SC (iter-301) and future RC entries are preserved.
+
+**Workflow-level field**
+A new optional `workflow_level: "implant" | "abutment"` discriminator is
+attached to impression posts / lab analogs / scan bodies / SRA-tied
+copings. The printed subtype text also calls out the level explicitly
+("Implant-level — closed tray, engaging", "Abutment-level (SRA Ø 4.6)
+— open tray", etc.) so the existing card UI surfaces it without
+schema-side changes.
+
+**Backend — startup wiring (`server.py`)**
+- Added `seed_if_thin()` call (iter-303 block) right after the SC seed
+  gate. Re-seeds only when NC count is below 105.
+
+**REF accuracy**
+- 99 of the 105 SKUs carry REFs reproduced verbatim from the PDF.
+- 4 SKUs (impression post "open tray long", abutment-level analogs Ø3.5
+  / Ø4.6 crowns) carry `ref_to_verify: true` because the source PDF's
+  OCR yielded ambiguous REFs at those rows. Admin can correct via the
+  catalog editor.
+
+### Verification (live UI)
+1. Login → Implant Database → Straumann → BLT Roxolid SLActive.
+2. Platform picker now lists: SC 2.9 mm · **17 components**, NC 3.3 mm
+   · **105 components**, RC 4.1 mm · no components yet, RC 4.8 mm · no
+   components yet.
+3. Pick NC 3.3 mm → header reads **"Components — NC 3.3 mm (105)"** and
+   the first healing abutment card (024.22225) is visible.
+4. Same behavior verified for BLT Roxolid SLA and BLT Ti SLA.
+5. Mongo audit: each BLT system reports total=122 (17 SC + 105 NC).
+
+### Files touched
+- `backend/straumann_nc_components_expanded.py` (new)
+- `backend/_seed_straumann_nc_components.py` (new)
+- `backend/server.py` (startup hook)
+
+---
+
+
 ## Iteration 302 (Feb 2026) — Platform dropdown for Straumann BLT systems
 
 ### What the user asked for
