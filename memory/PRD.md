@@ -1,5 +1,59 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 301 (Feb 2026) — Straumann BLT SC (Ø 2.9 mm) prosthetic components
+
+### What the user asked for
+Add the prosthetic-component library for the **SC (Ø 2.9 mm)** platform
+from the user-supplied "Straumann SC Prosthetic Components" PDF, applied
+to all three Straumann BLT implant systems that share the same prosthetic
+stack:
+  - BLT Roxolid SLActive
+  - BLT Roxolid SLA
+  - BLT Ti SLA
+
+### What changed
+**Backend — new files**
+- `backend/straumann_blt_components_expanded.py` — 17 SC SKUs across 7
+  categories (healing_abutment, impression_post, implant_analog,
+  scan_body, variobase_crown, burnout_coping, prosthetic_screw).
+- `backend/_seed_straumann_blt_components.py` — idempotent seed.
+  Drops the legacy 10-row thin stub, replaces any prior SC entries,
+  preserves any NC/RC entries already on the doc (future-proof).
+
+**Backend — startup wiring (`server.py`)**
+- Added `seed_if_thin()` call (iter-301 block) right after the Adin
+  RS/One seed gate. Only re-seeds when SC entry count is below 17.
+
+### Verification
+- Standalone `python3 _seed_straumann_blt_components.py` writes 17 SC
+  components to each of the 3 BLT systems.
+- Mongo audit: each of the 3 docs reports `total=17, platforms={'SC': 17}`
+  with the expected per-type breakdown
+  (healing 4, impression 4, analog 2, scan_body 1, variobase 3,
+  burnout 2, prosthetic_screw 1).
+- API `/api/implant-catalog/compare?component_type=healing_abutment`
+  returns 4 SC entries per BLT system with correct REF #s
+  (024.00075 / 024.00085 / 024.00095 / 024.00105).
+- Compare UI screenshot: Variobase Crown chip → SC platform pill →
+  shows the 3 SC Variobase oval SKUs with REFs 022.0038 / 0039 / 0040,
+  Ø 3.6, GH 1/2/3, Titanium, Screw+Cement, 35 Ncm.
+
+### Out-of-scope (will follow when PDFs are provided)
+- NC (Ø 3.3 mm) prosthetic library
+- RC (Ø 4.1 mm) prosthetic library
+- RC (Ø 4.8 mm) prosthetic library — same platform tag as Ø 4.1
+- SC closure / cover screws, final cementable / screw-retained
+  abutments, multi-base, Locator, Novaloc, bar abutments, CARES
+  CADCAM blanks (not on the supplied PDF page)
+
+### Files touched
+- `backend/straumann_blt_components_expanded.py` (new)
+- `backend/_seed_straumann_blt_components.py` (new)
+- `backend/server.py` (startup hook)
+
+---
+
+
 ## Iteration 300 (Feb 2026) — Multi-pill AND-stacking in Implant Compare
 
 ### What the user asked for

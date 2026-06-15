@@ -14850,6 +14850,15 @@ async def seed_implant_catalog_on_start():
         await _adin_rs_comp_seed()
     except Exception as exc:  # pragma: no cover — best-effort
         logging.warning("Adin RS/One component expansion seed skipped: %s", exc)
+    # iter-301 (Feb 2026): expand Straumann BLT (Roxolid SLActive / Roxolid
+    # SLA / Ti SLA) prosthetic components for the SC (Ø 2.9 mm) platform —
+    # 17 SKUs extracted from the user-supplied Straumann SC Prosthetic
+    # Components PDF. Future batches will add NC (Ø 3.3) and RC (Ø 4.1 / 4.8).
+    try:
+        from _seed_straumann_blt_components import seed_if_thin as _blt_comp_seed
+        await _blt_comp_seed()
+    except Exception as exc:  # pragma: no cover — best-effort
+        logging.warning("Straumann BLT SC component expansion seed skipped: %s", exc)
     # iter-297 (Feb 2026): one-time normalization — older catalog seeds
     # (iter-283 BLX / iter-293 BLX components / iter-294 CloseFit / iter-295
     # Touareg-OS/S/Swell) stored `connection` as a plain string instead of
