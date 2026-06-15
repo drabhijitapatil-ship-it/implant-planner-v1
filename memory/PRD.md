@@ -1,5 +1,58 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 302 (Feb 2026) — Platform dropdown for Straumann BLT systems
+
+### What the user asked for
+When the user picks Straumann → BLT Roxolid SLActive / BLT Roxolid SLA /
+BLT Ti SLA in the Implant Database, surface a third **Platform** dropdown
+with four options (SC 2.9 mm, NC 3.3 mm, RC 4.1 mm, RC 4.8 mm). The
+prosthetic-components section must filter to only the components belonging
+to the chosen platform.
+
+### What changed
+**Frontend (`app/admin/implant-catalog.tsx`)**
+- New module-level constants:
+  - `BLT_SYSTEMS_WITH_PLATFORM_SPLIT` (set of 3 system names).
+  - `BLT_PLATFORM_OPTIONS` (4-tuple list: label · platform-code · Ø).
+- New state `selectedBltPlatformOpt` (the printed label) — auto-resets on
+  every `selectedKey` change.
+- New derived values:
+  - `requiresBltPlatformPick` — only true for Straumann × one of the 3 BLT
+    systems.
+  - `activeBltPlatformCode` — the platform code (`SC` / `NC` / `RC`)
+    resolved from the picked label.
+  - `visibleComponents` — `selected.components` filtered by platform
+    when in BLT mode; no-op everywhere else.
+- New picker kind `blt_platform` — modal lists the 4 options with a live
+  per-platform component-count badge (e.g. "SC 2.9 mm · 17 components",
+  "NC 3.3 mm · no components yet").
+- JSX: Platform dropdown renders directly under the Variant slot (or under
+  the system chips when there's no variant). Components SectionBlock now
+  shows one of three states:
+  - BLT + no platform yet → blue info hint "Select a platform above…"
+  - BLT + platform with components → "Components — SC 2.9 mm (n)"
+  - BLT + platform without components → "Prosthetic components for X
+    haven't been added yet."
+- Non-BLT systems are unchanged (no extra dropdown, no filter).
+
+### Verification (live UI)
+1. Login → Implant Database → Brand = Straumann → System = BLT Roxolid
+   SLActive: **PLATFORM dropdown appears**, components section shows the
+   "select a platform" hint.
+2. Open Platform picker: SC 2.9 mm shows "17 components"; NC, RC 4.1,
+   RC 4.8 each show "no components yet".
+3. Pick SC 2.9 mm → "Components — SC 2.9 mm (17)" + first healing
+   abutment card visible.
+4. Switch to NC 3.3 mm → "Components — NC 3.3 mm" + empty-state hint.
+5. Confirmed Platform dropdown ALSO surfaces when user switches to BLT
+   Roxolid SLA or BLT Ti SLA via the system chips.
+
+### Files touched
+- `frontend/app/admin/implant-catalog.tsx`
+
+---
+
+
 ## Iteration 301 (Feb 2026) — Straumann BLT SC (Ø 2.9 mm) prosthetic components
 
 ### What the user asked for
