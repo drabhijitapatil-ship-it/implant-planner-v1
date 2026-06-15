@@ -14869,6 +14869,15 @@ async def seed_implant_catalog_on_start():
         await _blt_nc_seed()
     except Exception as exc:  # pragma: no cover — best-effort
         logging.warning("Straumann BLT NC component expansion seed skipped: %s", exc)
+    # iter-304 (Feb 2026): expand Straumann BLT prosthetic components for
+    # the RC (Regular CrossFit — Ø 4.1 / Ø 4.8 mm) platform — full
+    # brochure-grade catalog from the user-supplied Straumann RC Prosthetic
+    # Components PDF.  Same Implant-Level vs Abutment-Level workflow split.
+    try:
+        from _seed_straumann_rc_components import seed_if_thin as _blt_rc_seed
+        await _blt_rc_seed()
+    except Exception as exc:  # pragma: no cover — best-effort
+        logging.warning("Straumann BLT RC component expansion seed skipped: %s", exc)
     # iter-297 (Feb 2026): one-time normalization — older catalog seeds
     # (iter-283 BLX / iter-293 BLX components / iter-294 CloseFit / iter-295
     # Touareg-OS/S/Swell) stored `connection` as a plain string instead of

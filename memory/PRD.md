@@ -1,5 +1,66 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 304 (Feb 2026) — Straumann BLT RC (Ø 4.1 / Ø 4.8 mm) prosthetic catalog
+
+### What the user asked for
+Add the full **RC (Regular CrossFit)** prosthetic library from the
+user-uploaded "Straumann RC Prosthetic Components" PDF.  RC is shared
+across Ø 4.1 mm and Ø 4.8 mm BLT implants, so both Platform-dropdown
+options (`RC 4.1 mm` / `RC 4.8 mm`) must surface the same component set.
+
+### What changed
+**Backend — new files**
+- `backend/straumann_rc_components_expanded.py` — **99 RC SKUs** across
+  15 categories.
+  - 9 healing abutments (conical Ø 4.8/5/6/6.5 + bottle-shaped Ø 4.4/4.7 + customizable Ø 7)
+  - 9 impression posts (7 implant-level: closed-tray engaging/non-engaging short+long, open-tray Crown/Bridge/edentulous + 2 abutment-level open-tray Crown/Bridge for Ø 4.6 SRA)
+  - 4 lab analogs (2 implant-level closed/open-tray + 2 abutment-level Crown/Bridge for Ø 4.6 SRA)
+  - 2 scan bodies (1 implant-level CARES Mono + 1 abutment-level for SRA Ø 4.6)
+  - 3 temporary abutments (TAN Crown + TAN Bridge + TAN/PMMA)
+  - 16 final cementable abutments (Anatomic 0° + 15° GH 2/3.5 + Cementable straight GH 1/2/3 at Ø 3.5 / 4.6 / 5.5 / 6.5 shoulders)
+  - 7 Variobase Crown (Ø 4.5 straight GH 1/2/3 + Ø 4.5 high-profile GH 2/3 + AS 25° Ø 4.7)
+  - 3 Variobase Bridge/Bar (cylindrical AH 3.5 + AH 5.5 + SRA cylindrical Ø 4.6)
+  - 17 SRA / Multi-Base (straight 0° GH 1.5/2.5/3.5 + Type A and Type B at 17° across GH 1.5/2.5/3.5/4.5/5.5/6.5/7.5)
+  - 11 burn-out copings (Cementable Crown/Bridge + Variobase AS short/tall + V4 packs + Bridge/Bar cylindrical + V4 + SRA cylindrical Ø 4.6 + V4)
+  - 2 gold copings (Crown + Bridge)
+  - 5 titanium copings (Final Crown/Bridge/Bar + Temporary Crown/Bridge)
+  - 6 prosthetic / lab screws (basal × 3 variants, occlusal, lab L 20 / L 10)
+  - 4 SRA protective caps (GH 5.0 / 5.1 / 6.6 / 8.1)
+  - 1 pre-milled abutment blank
+- `backend/_seed_straumann_rc_components.py` — idempotent. Only RC rows
+  are replaced; SC (iter-301) and NC (iter-303) entries are preserved.
+
+**Backend — startup wiring (`server.py`)**
+- Added `seed_if_thin()` call (iter-304 block) right after the NC seed
+  gate. Re-seeds only when RC count is below 99.
+
+**REF accuracy**
+- 95 of 99 SKUs carry REFs reproduced verbatim from the PDF.
+- 4 SKUs flagged `ref_to_verify: true` (abutment-level analogs for
+  Ø 4.6 SRA Crown / Bridge — OCR collision with impression-post REFs).
+
+### Verification (live UI + API)
+1. Platform picker on BLT Roxolid SLActive lists:
+   - SC 2.9 mm · 17 components
+   - NC 3.3 mm · 105 components
+   - **RC 4.1 mm · 99 components**
+   - **RC 4.8 mm · 99 components**
+2. Picking **RC 4.1 mm** → header "Components — RC 4.1 mm (99)" + first
+   card visible.
+3. Picking **RC 4.8 mm** → header "Components — RC 4.8 mm (99)" + the
+   SAME 99 components surface (both diameters share `platform: "RC"`).
+4. Mongo audit: each BLT system reports total=**221** (17 SC + 105 NC + 99 RC).
+5. All 3 BLT systems (Roxolid SLActive / Roxolid SLA / Ti SLA) have the
+   identical RC catalog (verified counts).
+
+### Files touched
+- `backend/straumann_rc_components_expanded.py` (new)
+- `backend/_seed_straumann_rc_components.py` (new)
+- `backend/server.py` (startup hook)
+
+---
+
+
 ## Iteration 303 (Feb 2026) — Straumann BLT NC (Ø 3.3 mm) prosthetic catalog
 
 ### What the user asked for
