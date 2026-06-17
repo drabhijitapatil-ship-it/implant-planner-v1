@@ -1,5 +1,56 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 305 (Feb 2026) — Novaloc® Abutments for BLT (NC + RC)
+
+### What the user asked for
+Add the Straumann **Novaloc®** snap-on overdenture-retention abutments
+to the 3 BLT systems. Available only on the **NC** and **RC** platforms
+(not SC). Layout per the user-supplied catalog photo:
+  • 0° straight — GH 1/2/3/4/5/6 mm
+  • 15° angled — Type A (anti-rotation, single) and Type B (rotational,
+    splinted) — each GH 2/3/4/5/6 mm
+The 15° angulation combines with the Novaloc retentive cap to permit up
+to **20° of total path-of-insertion correction**.
+
+### What changed
+**Backend — appended SKUs to existing files** (no new modules):
+- `straumann_nc_components_expanded.py` — 16 NC Novaloc SKUs
+  (REF 022.0046–0051 · 022.0062–0066 · 022.0072–0076).
+- `straumann_rc_components_expanded.py` — 16 RC Novaloc SKUs
+  (REF 022.0052–0057 · 022.0067–0071 · 022.0077–0081).
+- New `type: "novaloc_abutment"` (separate from `screw_retained_abutment`)
+  so the Compare UI surfaces a dedicated chip (`novaloc_abutment · 96`
+  = 32 SKUs × 3 BLT systems).
+- Each card: material = Titanium + ADLC-coated, retention = Snap,
+  torque = 35 Ncm, diameter_mm = 4.0.
+
+The existing NC/RC seeds picked them up automatically because the
+`_merge_*` helpers replace all rows with `platform == "NC"` / `"RC"`
+during re-run.
+
+**REF accuracy**
+- 27 of 32 SKUs carry REFs literally printed on the photo.
+- 5 SKUs (NC 15°A GH 6, NC 15°B GH 3 & 5, RC 15°B GH 4/5/6) flagged
+  `ref_to_verify: true` — interpolated sequentially within each range
+  because the photo was slightly fuzzy on those rows.
+
+### Verification (live UI)
+- Compare → new chip "**novaloc_abutment · 96**" present.
+- At-a-glance summary: Ø 4 mm, GH 1–6 mm, Angulations 0° + 15°,
+  Platforms NC + RC. (All chips/pills filterable.)
+- First 3 cards render with PLATFORM NC, Ø 4 mm, GH 1/2/3, 0°,
+  Titanium ADLC-coated, Snap, 35 Ncm, REF 022.0046 / 0047 / 0048 ✅
+- Indication "Snap-on overdenture retention — straight" visible.
+- DB audit: each BLT system reports total=**253** (17 SC + 121 NC + 115 RC)
+  including 32 Novaloc.
+
+### Files touched
+- `backend/straumann_nc_components_expanded.py` (appended 16 SKUs)
+- `backend/straumann_rc_components_expanded.py` (appended 16 SKUs)
+
+---
+
+
 ## Iteration 304 (Feb 2026) — Straumann BLT RC (Ø 4.1 / Ø 4.8 mm) prosthetic catalog
 
 ### What the user asked for
