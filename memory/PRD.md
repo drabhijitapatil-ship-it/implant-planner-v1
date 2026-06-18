@@ -1,5 +1,50 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 308 (Feb 2026) — Echo "Number of Implants" into case summaries
+
+### What the user asked for
+Surface the new `num_implants` field everywhere the procedure type is
+already shown so a faculty reviewer can scan it from the case list /
+case detail without having to open Phase 1.
+
+### What changed
+**Frontend**
+- `app/procedures/[id].tsx`
+  - New `<InfoRow icon="layers" label="Number of Implants" .../>` row
+    rendered directly under "Procedure Type" in the Procedure Details
+    section.  Only renders when `procedure.num_implants` is truthy.
+  - `FIELD_OPTIONS.num_implants = { options: ['Single Implant',
+    'Multiple Implants'] }` so the row is editable in-place via the
+    standard tap-to-edit flow.
+  - `resolveFieldOptions()` now passes `procedure.num_implants` into
+    every `getProstheticOptions(...)` call so the in-place Prosthetic
+    Plan picker mirrors the Phase-1 logic.
+- `components/ScheduledCasesSection.tsx` — meta line now reads
+  `"<procedure_type> · <num_implants>"` when `num_implants` is set.
+- `components/PatientConsentSection.tsx` — meta line now reads
+  `"<procedure_type> · <num_implants> · <student_name>"`.
+
+**Backend (`server.py`)**
+- `/procedures/nurse/pending-consents` and
+  `/procedures/nurse/scheduled-cases` projections + response payloads
+  extended with `num_implants` so the new chip can render.
+
+### Verification (live UI)
+- Test procedure injected as Immediate Implant + Multiple Implants.
+- Opened Case Details screen → Procedure Details card shows:
+  ▸ Procedure Type: Immediate Implant
+  ▸ Number of Implants: Multiple Implants (new row, layers icon).
+- Test data rolled back.
+
+### Files touched
+- `frontend/app/procedures/[id].tsx`
+- `frontend/components/ScheduledCasesSection.tsx`
+- `frontend/components/PatientConsentSection.tsx`
+- `backend/server.py` (two listing endpoints)
+
+---
+
+
 ## Iteration 307 (Feb 2026) — "Number of Implants" sub-question + Lithium Disilicate options
 
 ### What the user asked for

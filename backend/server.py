@@ -3760,7 +3760,7 @@ async def get_pending_consents(current_user: dict = Depends(get_current_user)):
     }
     cursor = db.procedures.find(query, {
         "_id": 1, "patient_name": 1, "patient_id": 1, "student_name": 1, "created_by_name": 1,
-        "implant_procedure_type": 1, "status": 1, "created_at": 1, "supervisor_name": 1, "implant_incharge_name": 1,
+        "implant_procedure_type": 1, "num_implants": 1, "status": 1, "created_at": 1, "supervisor_name": 1, "implant_incharge_name": 1,
         "procedure_date": 1, "procedure_time": 1,
     }).sort("created_at", -1).limit(100)
     
@@ -3772,6 +3772,7 @@ async def get_pending_consents(current_user: dict = Depends(get_current_user)):
             "patient_id": doc.get("patient_id", ""),
             "student_name": doc.get("student_name") or doc.get("created_by_name", ""),
             "implant_procedure_type": doc.get("implant_procedure_type", ""),
+            "num_implants": doc.get("num_implants", ""),
             "status": doc.get("status", ""),
             "supervisor_name": doc.get("supervisor_name", ""),
             "implant_incharge_name": doc.get("implant_incharge_name", ""),
@@ -3809,7 +3810,7 @@ async def get_nurse_scheduled_cases(
     }
     cursor = db.procedures.find(query, {
         "_id": 1, "patient_name": 1, "patient_id": 1, "student_name": 1, "created_by_name": 1,
-        "implant_procedure_type": 1, "status": 1, "procedure_date": 1, "procedure_time": 1,
+        "implant_procedure_type": 1, "num_implants": 1, "status": 1, "procedure_date": 1, "procedure_time": 1,
         "supervisor_name": 1, "implant_incharge_name": 1, "created_at": 1,
         "instruments_autoclaved": 1, "patient_consent_form": 1,
     }).limit(200)
@@ -3822,6 +3823,7 @@ async def get_nurse_scheduled_cases(
             "patient_id": doc.get("patient_id", ""),
             "student_name": doc.get("student_name") or doc.get("created_by_name", ""),
             "implant_procedure_type": doc.get("implant_procedure_type", ""),
+            "num_implants": doc.get("num_implants", ""),
             "status": doc.get("status", ""),
             "procedure_date": doc.get("procedure_date", ""),
             "procedure_time": doc.get("procedure_time", ""),
