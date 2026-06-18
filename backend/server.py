@@ -365,6 +365,11 @@ class ProcedureCreate(BaseModel):
     procedure_date: str = Field(..., max_length=30)
     procedure_time: str = Field(..., max_length=20)
     implant_procedure_type: str = Field(..., max_length=100)
+    # iter-307: Number-of-Implants sub-question — only used by the 4
+    # procedure types (Immediate / PET / GBR / Guided Surgery) where it
+    # drives the prosthetic-plan options.  Empty string for every other
+    # type and for legacy drafts.
+    num_implants: Optional[str] = Field("", max_length=50)
     loading_type: List[str] = []
     prosthetic_plan: str = Field("", max_length=500)
     prosthetic_plan_other: Optional[str] = Field("", max_length=500)
@@ -456,6 +461,8 @@ class ProcedureUpdate(BaseModel):
     procedure_date: Optional[str] = Field(None, max_length=30)
     procedure_time: Optional[str] = Field(None, max_length=20)
     implant_procedure_type: Optional[str] = Field(None, max_length=100)
+    # iter-307: Number-of-Implants sub-question on the draft model too.
+    num_implants: Optional[str] = Field(None, max_length=50)
     loading_type: Optional[List[str]] = None
     prosthetic_plan: Optional[str] = Field(None, max_length=500)
     bone_graft_specifications: Optional[str] = Field(None, max_length=500)
