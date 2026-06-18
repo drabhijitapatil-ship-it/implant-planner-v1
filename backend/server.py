@@ -7355,6 +7355,9 @@ async def generate_case_report(
     add_field("Receipt Number", procedure.get("receipt_number"))
     add_field("Amount Paid", procedure.get("amount_paid"))
     add_field("Procedure Type", procedure.get("implant_procedure_type"))
+    # iter-309: surface the Number-of-Implants sub-choice in the PDF
+    # so exported case reports carry the same context shown on screen.
+    add_field("Number of Implants", procedure.get("num_implants"))
     add_field("Loading Type", ", ".join(procedure.get("loading_type", [])))
     add_field("Prosthetic Plan", prosthetic)
     add_field("Bone Graft Specifications", procedure.get("bone_graft_specifications"))
