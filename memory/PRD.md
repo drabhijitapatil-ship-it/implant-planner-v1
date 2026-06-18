@@ -1,5 +1,45 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 311b (Feb 2026) — Inline-edit cascade reaches the UI (push-notification ObjectId guard)
+
+### User report
+"Edit Mode cascade is not implemented. The Prosthetic Component and
+the child show the same as before."
+
+### Root cause
+The cascade WAS firing inside MongoDB but the `PATCH /edit-fields`
+response never reached the browser because
+`send_expo_push_notifications` (called AFTER the DB write) raised
+`bson.errors.InvalidId: 'u1' is not a valid ObjectId` whenever the
+notification fan-out hit legacy seed/test users carrying non-ObjectId
+IDs.  FastAPI returned a 500, `setProcedure(res.data)` never ran,
+and the UI continued showing stale values.
+
+### Fix (`server.py` · `send_expo_push_notifications`)
+Filter `user_ids` through `ObjectId.is_valid(uid)` before the
+`ObjectId(...)` conversion. Early-return when no valid IDs remain.
+
+### Verification
+- Direct cURL replay of the failing flow:
+  `PATCH .../edit-fields` with prosthetic_component change now
+  returns **HTTP 200** (was 500) and the response body carries
+  the cascaded child fields:
+  ```
+  prosthetic_component        = 'Cover Screw Placed'
+  healing_abutment_cuff_height = None
+  prosthesis_type             = None
+  ```
+- `setProcedure(res.data)` will now refresh the case-detail UI:
+  the old child rows vanish, the new "Tap to add" placeholder rows
+  appear under the new parent value.
+- Test data rolled back.
+
+### Files touched
+- `backend/server.py` (`send_expo_push_notifications` — guard added)
+
+---
+
+
 ## Iteration 310 (Feb 2026) — Phase 2 Prosthetic Component: confirm popup + edit-mode cascade
 
 ### What the user asked for

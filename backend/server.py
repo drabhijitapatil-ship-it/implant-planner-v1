@@ -719,11 +719,17 @@ async def send_expo_push_notifications(user_ids: List[str], title: str, body: st
     """Send push notifications to users via Expo Push API."""
     if not user_ids:
         return
+    # iter-311: legacy seed/test accounts can carry non-ObjectId IDs
+    # ("u1", etc.). Filter them out so push notification fan-out doesn't
+    # raise InvalidId and 500 the caller (e.g. the /edit-fields PATCH).
+    valid_oids = [ObjectId(uid) for uid in user_ids if ObjectId.is_valid(uid)]
+    if not valid_oids:
+        return
     tokens = []
     users = await db.users.find(
-        {"_id": {"$in": [ObjectId(uid) for uid in user_ids]}},
+        {"_id": {"$in": valid_oids}},
         {"push_token": 1}
-    ).to_list(len(user_ids))
+    ).to_list(len(valid_oids))
     for user in users:
         if user.get("push_token"):
             tokens.append(user["push_token"])
