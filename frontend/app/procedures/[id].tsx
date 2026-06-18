@@ -182,6 +182,12 @@ const FIELD_OPTIONS: Record<string, FieldOptionsConfig> = {
   'phase2_data.implant_seated_correctly': { options: ['Yes', 'No'], bool: true },
   'phase2_data.bone_graft_used': { options: ['Yes', 'No'], bool: true },
   'phase2_data.prosthetic_component': { options: PROSTHETIC_COMPONENT_OPTIONS },
+  // iter-311: child fields revealed by the prosthetic_component cascade.
+  // Free-text numeric for cuff height; dropdown for prosthesis type
+  // (options resolved dynamically — see resolveFieldOptions for the
+  // Phase-1-procedure-aware list).
+  'phase2_data.healing_abutment_cuff_height': { numeric: true } as any,
+  'phase2_data.prosthesis_type': { options: ['Fixed', 'Removable'] },
   'phase2_data.sutures_placed': { options: ['Yes', 'No'], bool: true },
   'phase2_data.hemostasis_achieved': { options: ['Yes', 'No'], bool: true },
 
@@ -2316,6 +2322,36 @@ export default function ProcedureDetailScreen() {
                     <InfoRow key={idx} icon="resize" label={`Healing Abutment Cuff Height (Implant ${idx + 1})`} value={`${val} mm`} />
                   ))
                   : <InfoRow icon="resize" label="Healing Abutment Cuff Height" value={`${procedure.phase2_data.healing_abutment_cuff_height} mm`} />
+              )}
+              {/* iter-311: empty-state placeholder rows so the operator
+                  can populate the child field after switching the parent
+                  via inline edit.  Parent change triggers backend-side
+                  cascade clearing, then these rows surface the missing
+                  child as a tap-to-add InfoRow.  Scoped per parent value:
+                    Cover Screw Placed     → no children expected
+                    Healing Abutment Placed → cuff_height
+                    Immediate Loading Done  → prosthesis_type
+                  Multi-implant Cuff Heights are handled by Phase2EditModal
+                  (richer per-implant inputs); we only fast-path the
+                  single-implant case here. */}
+              {procedure.phase2_data.prosthetic_component === 'Healing Abutment Placed'
+               && !procedure.phase2_data.healing_abutment_cuff_height
+               && (procedure.implant_plans?.length || 0) <= 1 && (
+                <InfoRow
+                  icon="resize"
+                  label="Healing Abutment Cuff Height (mm)"
+                  value="Tap to add"
+                  fieldKey="phase2_data.healing_abutment_cuff_height"
+                />
+              )}
+              {procedure.phase2_data.prosthetic_component === 'Immediate Loading Done'
+               && !procedure.phase2_data.prosthesis_type && (
+                <InfoRow
+                  icon="cube"
+                  label="Prosthesis Type"
+                  value="Tap to add"
+                  fieldKey="phase2_data.prosthesis_type"
+                />
               )}
               {/* iter-139: Multi-unit Abutment read-only summary (full-arch Immediate Loading) */}
               {(procedure.phase2_data.multi_unit_abutment_placed === 'yes' ||

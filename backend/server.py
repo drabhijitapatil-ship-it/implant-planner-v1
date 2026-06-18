@@ -2821,6 +2821,49 @@ async def edit_procedure_fields(procedure_id: str, request: Request, current_use
     fields["last_edited_by"] = editor_name
     fields["last_edited_at"] = now_iso
 
+    # iter-311: Prosthetic Component cascade — when the operator
+    # changes the parent (Cover Screw / Healing Abutment / Immediate
+    # Loading) via inline edit, also clear the now-irrelevant child
+    # fields so stale Cuff-Height / Prosthesis-Type / Access-Channel
+    # data doesn't linger on the doc.  The cleared child is logged in
+    # the edit_log so the audit trail stays honest.
+    if isinstance(fields.get("phase2_data"), dict):
+        p2 = fields["phase2_data"]
+        if "prosthetic_component" in p2:
+            existing_p2 = proc.get("phase2_data") or {}
+            old_pc = existing_p2.get("prosthetic_component")
+            new_pc = p2.get("prosthetic_component")
+            if old_pc != new_pc:
+                CASCADE_RULES = {
+                    "Cover Screw Placed": [
+                        "healing_abutment_cuff_height",
+                        "prosthesis_type", "prosthesis_type_other",
+                        "access_channel_openings",
+                        "multi_unit_abutments_placed",
+                    ],
+                    "Healing Abutment Placed": [
+                        "prosthesis_type", "prosthesis_type_other",
+                        "access_channel_openings",
+                        "multi_unit_abutments_placed",
+                    ],
+                    "Immediate Loading Done": [
+                        "healing_abutment_cuff_height",
+                    ],
+                }
+                for child in CASCADE_RULES.get(new_pc or "", []):
+                    prev = existing_p2.get(child)
+                    if prev not in (None, "", []):
+                        p2[child] = None
+                        log_entries.append({
+                            "field": f"phase2_data.{child}",
+                            "old_value": prev,
+                            "new_value": None,
+                            "edited_by": editor_name,
+                            "edited_by_role": editor_role,
+                            "edited_at": now_iso,
+                            "cascade_from": "phase2_data.prosthetic_component",
+                        })
+
     # If any clinical-finding field was touched, regenerate the augmentation
     # checklist while PRESERVING completed-state on items whose title still
     # matches (so a supervisor's ticked items aren't lost on a benign edit).

@@ -1,5 +1,76 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 310 (Feb 2026) — Phase 2 Prosthetic Component: confirm popup + edit-mode cascade
+
+### What the user asked for
+1. When Phase 1 has "Immediate Loading" in `loading_type`, picking
+   "Cover Screw Placed" or "Healing Abutment Placed" in Phase 2 must
+   pop an Alert "Immediate Loading selected in Phase 1, Please check"
+   with a "Confirm" button. Confirm applies the change; Cancel reverts.
+2. In edit-mode (Case Detail inline-edit), changing the Prosthetic
+   Component parent must (a) auto-clear the now-irrelevant child
+   fields and (b) surface a Tap-to-add row for the new child.
+
+### What changed
+**Frontend (`app/procedures/submit-phase2/[id].tsx`)**
+- Wrapped the Prosthetic Component dropdown's onChange in a guard:
+  - If Phase 1 `loading_type` contains "Immediate Loading" AND new
+    value is `Cover Screw Placed` or `Healing Abutment Placed` →
+    fire `Alert.alert` with title "Immediate Loading selected in
+    Phase 1, Please check" + Cancel / Confirm buttons.
+  - Confirm runs `setProstheticComponent(next)`. Cancel = no-op.
+
+**Frontend (`app/procedures/[id].tsx`)**
+- New FIELD_OPTIONS entries for the children:
+  `phase2_data.healing_abutment_cuff_height` (numeric input) +
+  `phase2_data.prosthesis_type` (dropdown).
+- New empty-state Tap-to-add InfoRows directly under the existing
+  Prosthetic-Component row:
+  - When parent = "Healing Abutment Placed" AND no cuff height stored
+    (single-implant fast-path) → "Healing Abutment Cuff Height (mm) —
+    Tap to add".
+  - When parent = "Immediate Loading Done" AND no prosthesis type
+    stored → "Prosthesis Type — Tap to add".
+
+**Backend (`server.py` · `/edit-fields` endpoint)**
+- New iter-311 cascade block: when the inbound `phase2_data` patch
+  contains a changed `prosthetic_component`, the handler now also
+  null-outs the irrelevant child fields according to:
+  - "Cover Screw Placed" → unset healing_abutment_cuff_height,
+    prosthesis_type, prosthesis_type_other, access_channel_openings,
+    multi_unit_abutments_placed
+  - "Healing Abutment Placed" → unset prosthesis_type,
+    prosthesis_type_other, access_channel_openings,
+    multi_unit_abutments_placed
+  - "Immediate Loading Done" → unset healing_abutment_cuff_height
+- Each cleared child writes a synthetic `edit_log` entry carrying
+  `cascade_from: "phase2_data.prosthetic_component"` so the audit
+  trail remains complete.
+
+### Verification
+- Backend cURL test: set parent = "Healing Abutment Placed" with 3
+  child values, then PATCH parent = "Cover Screw Placed". After the
+  PATCH:
+  ```
+  prosthetic_component = "Cover Screw Placed"
+  healing_abutment_cuff_height = None
+  prosthesis_type             = None
+  access_channel_openings     = None
+  ```
+  All 3 children cleared automatically + 3 cascade entries logged in
+  `edit_log`.  Test data rolled back.
+- Phase 2 popup verified by code review — Alert dialog wraps the
+  existing setProstheticComponent call with a Confirm/Cancel gate
+  controlled by `loadingType.includes('Immediate Loading')`.
+
+### Files touched
+- `frontend/app/procedures/submit-phase2/[id].tsx`
+- `frontend/app/procedures/[id].tsx`
+- `backend/server.py` (`/procedures/{id}/edit-fields`)
+
+---
+
+
 ## Iteration 309 (Feb 2026) — "Number of Implants" in exported PDF case report
 
 ### What the user asked for
