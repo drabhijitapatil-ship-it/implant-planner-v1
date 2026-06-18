@@ -82,10 +82,20 @@ export default function RadiographCompare({ procedure, iopaUploads, opgUpload }:
         if (filename) map[tooth] = String(filename);
       });
     } else {
+      // iter-306: Phase 2 stores tooth_label as "Tooth #31" (because the
+      // upload helper used `Tooth #${pos}` as the display label) but
+      // Phase 4 keys by the raw position string ("31").  Strip a leading
+      // "Tooth #" / "Tooth " prefix so a Phase-2-uploaded baseline links
+      // up with its current Phase-4 row.  Also index BOTH the raw and
+      // labelled keys so future stored shapes still resolve.
       const files: any[] = procedure?.phase2_data?.iopa_files || [];
       files.forEach(f => {
-        const tooth = String(f?.tooth_label || '');
-        if (tooth && f?.filename) map[tooth] = String(f.filename);
+        const rawLabel = String(f?.tooth_label || '').trim();
+        if (!rawLabel || !f?.filename) return;
+        const stripped = rawLabel.replace(/^Tooth\s*#?\s*/i, '').trim();
+        if (stripped) map[stripped] = String(f.filename);
+        // Keep the original key too for backwards-compat.
+        if (rawLabel && rawLabel !== stripped) map[rawLabel] = String(f.filename);
       });
     }
     return map;
@@ -112,9 +122,26 @@ export default function RadiographCompare({ procedure, iopaUploads, opgUpload }:
   const baselineLabel = isExisting ? 'Baseline — Phase 1 (intake)' : 'Baseline — Phase 2 (post-surgical)';
   const currentLabel = 'Current — Phase 4 (post-delivery)';
 
-  // Nothing to compare yet — hide entirely.
+  // iter-306: Don't silently hide when no baseline exists — a missing
+  // baseline is itself important feedback for the clinician.  Render
+  // the section and let each row show its own empty-state.  We only
+  // bail when the case carries no teeth/implants to compare at all
+  // (e.g. an All-on-4 with no OPG, or a draft with zero implants).
+  const teethCount = teeth.length;
+  const hasAnyCurrent = isFullArch
+    ? !!opgUpload?.filename
+    : Object.keys(iopaUploads).length > 0;
   const hasAnyBaseline = isFullArch ? !!baselineOpg : Object.keys(baselineByTooth).length > 0;
-  if (!hasAnyBaseline) return null;
+  if (!isFullArch && teethCount === 0) return null;
+
+  // Build the rolled-up "baseline status" tag for the badge.
+  const missingBaselineCount = isFullArch
+    ? (baselineOpg ? 0 : 1)
+    : teeth.filter(t => !baselineByTooth[t]).length;
+  const missingCurrentCount = isFullArch
+    ? (opgUpload?.filename ? 0 : 1)
+    : teeth.filter(t => !iopaUploads[t]?.filename).length;
+  const allBaselineMissing = isFullArch ? !baselineOpg : missingBaselineCount === teethCount;
 
   return (
     <View style={s.section} testID="phase4-step2-radiograph-compare">
@@ -126,7 +153,13 @@ export default function RadiographCompare({ procedure, iopaUploads, opgUpload }:
       >
         <Ionicons name="git-compare-outline" size={20} color="#1565C0" />
         <Text style={s.title}>Compare with baseline radiograph</Text>
-        <View style={s.badge}><Text style={s.badgeText}>{isFullArch ? 'OPG' : `${teeth.length} tooth`}</Text></View>
+        <View style={[s.badge, allBaselineMissing && s.badgeWarn]}>
+          <Text style={[s.badgeText, allBaselineMissing && s.badgeWarnText]}>
+            {isFullArch
+              ? (baselineOpg ? 'OPG' : 'No baseline')
+              : `${teethCount - missingBaselineCount}/${teethCount} baseline · ${teethCount - missingCurrentCount}/${teethCount} current`}
+          </Text>
+        </View>
         <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={20} color="#5A7184" />
       </TouchableOpacity>
 
@@ -137,6 +170,31 @@ export default function RadiographCompare({ procedure, iopaUploads, opgUpload }:
               ? 'Compare the original intake IOPA with the new post-delivery IOPA per implant.'
               : 'Compare the post-surgical IOPA (Phase 2) with the new post-delivery IOPA per implant.'}
           </Text>
+
+          {/* iter-306: callout when no baseline IOPA was captured at Phase 2.
+              Without this, the section used to disappear silently and users
+              thought the feature was broken. */}
+          {allBaselineMissing && (
+            <View style={s.emptyBaselineBox} testID="compare-baseline-missing">
+              <Ionicons name="information-circle" size={18} color="#E65100" />
+              <Text style={s.emptyBaselineText}>
+                {isExisting
+                  ? 'No baseline IOPA was uploaded during the original Phase 1 intake. Marginal-bone-level comparison won\'t be possible for this case until a baseline is captured.'
+                  : 'No baseline IOPA was uploaded during Phase 2 (post-surgical). The post-delivery IOPA can still be uploaded below; the marginal-bone-level comparison will become available once a Phase 2 IOPA exists for these teeth.'}
+              </Text>
+            </View>
+          )}
+
+          {/* iter-306: hint pointing to the upload section just below when
+              the user still has post-delivery IOPAs to capture. */}
+          {!isFullArch && missingCurrentCount > 0 && (
+            <View style={s.uploadHintBox} testID="compare-upload-hint">
+              <Ionicons name="arrow-down-circle" size={18} color="#0277BD" />
+              <Text style={s.uploadHintText}>
+                {missingCurrentCount} post-delivery IOPA{missingCurrentCount === 1 ? '' : 's'} still to upload — use the "Post-Delivery IOPA (per implant)" section below.
+              </Text>
+            </View>
+          )}
 
           {isFullArch ? (
             <ComparisonRow
@@ -547,7 +605,14 @@ const s = StyleSheet.create({
   title: { flex: 1, fontSize: 15, fontWeight: '700', color: '#0D47A1' },
   badge: { backgroundColor: '#E3F2FD', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3, borderWidth: 1, borderColor: '#90CAF9' },
   badgeText: { fontSize: 11, fontWeight: '700', color: '#0D47A1', letterSpacing: 0.2 },
+  badgeWarn: { backgroundColor: '#FFF3E0', borderColor: '#FFB74D' },
+  badgeWarnText: { color: '#E65100' },
   helper: { fontSize: 12, color: '#5A7184', marginTop: 8, marginBottom: 12, lineHeight: 18 },
+  // iter-306 — non-silent missing-baseline + upload-hint callouts
+  emptyBaselineBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: '#FFF8E1', borderRadius: 10, borderWidth: 1, borderColor: '#FFE082', padding: 10, marginBottom: 10 },
+  emptyBaselineText: { flex: 1, fontSize: 12, color: '#5D4037', lineHeight: 18 },
+  uploadHintBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: '#E1F5FE', borderRadius: 10, borderWidth: 1, borderColor: '#B3E5FC', padding: 10, marginBottom: 10 },
+  uploadHintText: { flex: 1, fontSize: 12, color: '#01579B', lineHeight: 18, fontWeight: '600' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   toothBadge: { backgroundColor: '#0D47A1', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, minWidth: 56, alignItems: 'center' },
   toothBadgeText: { color: '#FFF', fontWeight: '800', fontSize: 11 },
