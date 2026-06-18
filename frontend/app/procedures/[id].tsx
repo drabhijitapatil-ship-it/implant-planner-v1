@@ -2314,7 +2314,7 @@ export default function ProcedureDetailScreen() {
                 <InfoRow icon="document-text" label="Other Implant Notes" value={procedure.phase2_data.implant_other_notes} />
               )}
               {procedure.phase2_data.prosthetic_component && (
-                <InfoRow icon="cube" label="Prosthetic Component" value={procedure.phase2_data.prosthetic_component} />
+                <InfoRow icon="cube" label="Prosthetic Component" value={procedure.phase2_data.prosthetic_component} fieldKey="phase2_data.prosthetic_component" />
               )}
               {procedure.phase2_data.healing_abutment_cuff_height && (
                 Array.isArray(procedure.phase2_data.healing_abutment_cuff_height)
