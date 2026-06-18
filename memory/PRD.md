@@ -1,5 +1,36 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 311c (Feb 2026) — Final root-cause: missing `fieldKey` on Prosthetic Component row
+
+### Why the UI was still showing stale values
+After fixing the backend cascade (iter-311) and the 500 push-notification
+crash (iter-311b), the user still couldn't reach the cascade through the
+UI.  The actual reason: line 2317 of `procedures/[id].tsx` rendered the
+Prosthetic Component InfoRow **without a `fieldKey` prop**, so the
+EditContext-aware pencil-icon button never appeared in edit-mode and
+tap-to-edit was structurally unreachable.
+
+### Fix (`procedures/[id].tsx`)
+- Added `fieldKey="phase2_data.prosthetic_component"` to the
+  Prosthetic Component InfoRow.
+
+### Verification (live UI screenshot)
+- Logged in as `Abhijit.patil` (implant_incharge) and opened the case
+  with `?edit=true`.
+- Phase 2 — Implant Surgery card now shows BOTH rows with the
+  pencil ✏️ icon on the right:
+  - Prosthetic Component: Healing Abutment Placed   ✏️
+  - Healing Abutment Cuff Height: 4 mm              ✏️
+- Tapping the pencil opens the picker → choose new value → save →
+  backend cascade fires (verified earlier) → 200 OK → frontend re-renders
+  with Tap-to-add rows for the new child fields.
+
+### Files touched
+- `frontend/app/procedures/[id].tsx` (1-line: `fieldKey` prop)
+
+---
+
+
 ## Iteration 311b (Feb 2026) — Inline-edit cascade reaches the UI (push-notification ObjectId guard)
 
 ### User report
