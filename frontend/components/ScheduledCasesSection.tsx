@@ -18,6 +18,7 @@ type ScheduledCase = {
   patient_id: string;
   student_name: string;
   implant_procedure_type: string;
+  num_implants?: string;
   status: string;
   procedure_date: string;
   procedure_time: string;
@@ -233,7 +234,10 @@ export function ScheduledCasesSection({ router }: { router: any }) {
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.patientName} numberOfLines={1}>{c.patient_name || 'Patient'}</Text>
-                        <Text style={styles.meta} numberOfLines={1}>{c.implant_procedure_type}</Text>
+                        <Text style={styles.meta} numberOfLines={1}>
+                          {c.implant_procedure_type}
+                          {c.num_implants ? ` · ${c.num_implants}` : ''}
+                        </Text>
                         <Text style={styles.studentLine} numberOfLines={1}>
                           <Ionicons name="person-outline" size={10} color="#546E7A" /> {c.student_name}
                         </Text>

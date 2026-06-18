@@ -13,6 +13,7 @@ type PendingCase = {
   patient_id: string;
   student_name: string;
   implant_procedure_type: string;
+  num_implants?: string;
   status: string;
   created_at: string;
   procedure_date?: string;
@@ -115,7 +116,7 @@ export function PatientConsentSection({ router }: { router: any }) {
               <View style={{ flex: 1 }}>
                 <Text style={styles.patientName} numberOfLines={1}>{c.patient_name || 'Patient'}</Text>
                 <Text style={styles.meta} numberOfLines={1}>
-                  {c.implant_procedure_type}  ·  {c.student_name}
+                  {c.implant_procedure_type}{c.num_implants ? ` · ${c.num_implants}` : ''}  ·  {c.student_name}
                 </Text>
                 <Text style={styles.statusText} numberOfLines={1}>
                   {STATUS_LABELS[c.status] || c.status}

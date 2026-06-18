@@ -145,6 +145,8 @@ const FIELD_OPTIONS: Record<string, FieldOptionsConfig> = {
 
   // Procedure Details
   implant_procedure_type: { options: PROCEDURE_TYPES },
+  // iter-307: in-place edit for Number-of-Implants sub-choice
+  num_implants: { options: ['Single Implant', 'Multiple Implants'] },
   arch: { options: ['Maxillary', 'Mandibular'] },
   loading_type: { options: LOADING_TYPES, multi: true },
 
@@ -199,14 +201,14 @@ const FIELD_OPTIONS: Record<string, FieldOptionsConfig> = {
 
 // Resolve options at runtime for fields whose options depend on other fields
 function resolveFieldOptions(fieldKey: string, procedure: any): FieldOptionsConfig | null {
-  // Dynamic: Prosthetic Plan depends on procedure_type + loading_type
+  // Dynamic: Prosthetic Plan depends on procedure_type + loading_type + num_implants (iter-307)
   if (fieldKey === 'prosthetic_plan' && procedure?.implant_procedure_type) {
-    const opts = getProstheticOptions(procedure.implant_procedure_type, procedure.loading_type || []);
+    const opts = getProstheticOptions(procedure.implant_procedure_type, procedure.loading_type || [], procedure.num_implants || '');
     return opts.length > 0 ? { options: opts } : null;
   }
   if (fieldKey === 'final_prosthetic_plan' || fieldKey === 'phase4_step1_data.final_prosthetic_plan') {
     if (procedure?.implant_procedure_type) {
-      const opts = getProstheticOptions(procedure.implant_procedure_type, procedure.loading_type || []);
+      const opts = getProstheticOptions(procedure.implant_procedure_type, procedure.loading_type || [], procedure.num_implants || '');
       return opts.length > 0 ? { options: opts } : null;
     }
     return null;
@@ -1786,6 +1788,12 @@ export default function ProcedureDetailScreen() {
           <View style={styles.section} data-testid="procedure-type-section">
             <Text style={styles.sectionTitle}>Procedure Details</Text>
             <InfoRow icon="construct" label="Procedure Type" value={procedure.implant_procedure_type} fieldKey="implant_procedure_type" />
+            {/* iter-307: Echo the Number-of-Implants sub-choice (only set
+                for Immediate / PET / GBR / Guided Surgery) so faculty
+                can scan it from the case detail without opening Phase 1. */}
+            {procedure.num_implants && (
+              <InfoRow icon="layers" label="Number of Implants" value={procedure.num_implants} fieldKey="num_implants" />
+            )}
             {procedure.arch && (
               <InfoRow icon="tablet-landscape" label="Arch" value={procedure.arch} fieldKey="arch" />
             )}
