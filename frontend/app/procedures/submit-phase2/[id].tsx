@@ -815,9 +815,35 @@ export default function Phase2SubmissionScreen() {
                 placeholder="Additional surgical observations..." multiline data-testid="implant-other-notes" />
             </View>
 
-            {/* Prosthetic Component */}
+            {/* Prosthetic Component
+                iter-310: if Phase 1 declared "Immediate Loading" in
+                loading_type but the operator now picks Cover Screw or
+                Healing Abutment Placed (both non-loading paths), show a
+                confirmation Alert so the picker doesn't silently
+                contradict the Phase-1 plan. */}
             {renderDropdown('Prosthetic Component', prostheticComponent, PROSTHETIC_COMPONENT_OPTIONS,
-              prostheticOpen, setProstheticOpen, setProstheticComponent)}
+              prostheticOpen, setProstheticOpen, (next: string) => {
+                const phase1ImmediateLoading = Array.isArray(loadingType)
+                  ? loadingType.includes('Immediate Loading')
+                  : loadingType === 'Immediate Loading';
+                const conflicting = next === 'Cover Screw Placed' || next === 'Healing Abutment Placed';
+                if (phase1ImmediateLoading && conflicting) {
+                  Alert.alert(
+                    'Immediate Loading selected in Phase 1, Please check',
+                    `You picked "${next}" in Phase 2, but Phase 1 plans for Immediate Loading. Confirm if this is intentional.`,
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Confirm',
+                        onPress: () => setProstheticComponent(next),
+                        style: 'destructive',
+                      },
+                    ],
+                  );
+                  return;
+                }
+                setProstheticComponent(next);
+              })}
 
             {/* Healing Abutment Cuff Height - per implant
                 iter-138: when the Phase-1 attachment has a known manufacturer
