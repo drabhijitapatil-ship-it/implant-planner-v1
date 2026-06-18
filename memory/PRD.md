@@ -1,5 +1,75 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 307 (Feb 2026) — "Number of Implants" sub-question + Lithium Disilicate options
+
+### What the user asked for
+Under Phase 1 → Procedure Information, when the clinician picks one of:
+  • Immediate Implant
+  • Partial Extraction Therapy
+  • Implant Placement with Guided Bone Regeneration
+  • Guided Surgery
+show a new "Number of Implants" subheading directly below the
+Type-of-Implant-Procedure dropdown with options **Single Implant** /
+**Multiple Implants**.  The Prosthetic Plan dropdown then re-derives its
+options to match either the Single Conventional Implant set (when
+Single picked) or the Multiple Conventional Implants set (when Multiple
+picked).  Also add two new options across all multi-implant scenarios:
+**"Screw Retained Multiple Single Crowns - Lithium Disilicate"** and
+**"Cement Retained Multiple Single Crowns - Lithium Disilicate"**.
+
+### What changed
+**Frontend (`constants/checklist.ts`)**
+- Promoted `MULTIPLE_SINGLE_CROWN_OPTIONS` to a module-level export and
+  added the 2 Lithium Disilicate variants.
+- New `PROCEDURES_WITH_NUM_IMPLANTS_QUESTION` set
+  (Immediate / PET / GBR / Guided Surgery).
+- `getProstheticOptions(procedureType, loadingTypes, numImplants?)`
+  rewritten: for the 4 trigger types, returns SINGLE_CROWN_OPTIONS when
+  `numImplants === "Single Implant"`, otherwise BRIDGE + MULTIPLE_SINGLE_CROWN
+  for Multiple Implants. Empty until the sub-question is answered so the
+  Prosthetic Plan dropdown gates correctly.
+
+**Frontend (`app/(tabs)/new-procedure.tsx`)**
+- New `num_implants: ''` field on formData.
+- `<Dropdown label="Number of Implants" .../>` rendered inline right
+  under Type-of-Implant-Procedure when the trigger set hits.  Resets
+  the Prosthetic Plan whenever changed.
+- Cascading resets: changing the Type clears `num_implants` and
+  `prosthetic_plan` together.
+- Submit-time validation: blocks if sub-question unanswered; enforces
+  exactly 1 marked tooth for "Single Implant", ≥ 2 teeth for
+  "Multiple Implants".
+- Draft hydration: `num_implants` rehydrates from the procedure doc.
+- Missing-fields panel surfaces "Number of Implants" when unanswered.
+
+**Backend (`server.py`)**
+- `Phase1SubmitData.num_implants: Optional[str]` added to both the
+  submit and draft Pydantic models so the field survives Pydantic
+  validation and persists on the procedure doc.
+
+### Verification (live UI, fresh case)
+1. New Case → Phase 1 → Procedure Information.
+2. Type of Implant Procedure picker lists all 9 types including the
+   4 triggers.
+3. Picking **Immediate Implant** → **"Number of Implants *"**
+   subheading + "Select Number of Implants" dropdown appears directly
+   below.  Confirmed visually.
+4. Picking other trigger types (PET, GBR, Guided Surgery) also surfaces
+   the same sub-question.  Single Conventional Implant / Multiple
+   Conventional Implants / All-on-N / Existing Implant DO NOT surface it.
+5. After picking Single Implant, the Prosthetic Plan downstream returns
+   SINGLE_CROWN_OPTIONS; after Multiple Implants, returns BRIDGE +
+   MULTIPLE_SINGLE_CROWN_OPTIONS (now 8 multi-single-crown options
+   incl. Lithium Disilicate Screw & Cement variants).
+
+### Files touched
+- `frontend/constants/checklist.ts`
+- `frontend/app/(tabs)/new-procedure.tsx`
+- `backend/server.py` (Phase1Submit + draft model)
+
+---
+
+
 ## Iteration 306 (Feb 2026) — Fix Phase 4 Step 2 "Compare with baseline radiograph"
 
 ### Bug reported

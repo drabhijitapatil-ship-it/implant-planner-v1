@@ -17,6 +17,7 @@ import FdiAnatomicalChart from '../../components/FdiAnatomicalChart';
 import { validateImplantSelection, findMissingRuns, clusterLeader } from '../../utils/implantValidation';
 import {
   PROCEDURE_TYPES,  LOADING_TYPES,
+  PROCEDURES_WITH_NUM_IMPLANTS_QUESTION,
   CHECKLIST_DATA,
   PROCEDURE_TIME_SLOTS,
   NON_FULL_ARCH_TYPES,
@@ -353,6 +354,10 @@ export default function NewProcedureScreen() {
     procedure_date: '',
     procedure_time: '',
     implant_procedure_type: '',
+    // iter-307: New "Number of Implants" sub-question — only used for
+    // Immediate / PET / GBR / Guided Surgery procedure types.  Empty
+    // for every other type.
+    num_implants: '',
     teeth_present: [] as string[],
     missing_teeth: [] as string[],
     edentulous_site_measurements: {} as Record<string, { oc?: string; md?: string }>,
@@ -423,7 +428,7 @@ export default function NewProcedureScreen() {
   const isFullArch = FULL_ARCH_GROUP.has(effectiveProcType);
   const isNonFullArch = NON_FULL_ARCH_TYPES.has(effectiveProcType);
   const isClinicalExamGroup = CLINICAL_EXAM_GROUP.has(effectiveProcType);
-  const prostheticOptions = getProstheticOptions(formData.implant_procedure_type, formData.loading_type);
+  const prostheticOptions = getProstheticOptions(formData.implant_procedure_type, formData.loading_type, formData.num_implants);
   // When a non-full-arch procedure is paired with an Overdenture-with-Attachment
   // prosthetic plan, the case is biomechanically full-arch (the attachment
   // splints the entire arch). We therefore SKIP the FDI missing-teeth chart and
@@ -487,6 +492,7 @@ export default function NewProcedureScreen() {
                 procedure_date: proc.procedure_date || '',
                 procedure_time: proc.procedure_time || '',
                 implant_procedure_type: proc.implant_procedure_type || '',
+                num_implants: proc.num_implants || '',
                 teeth_present: Array.isArray(proc.teeth_present) ? proc.teeth_present : [],
                 missing_teeth: Array.isArray(proc.missing_teeth) ? proc.missing_teeth : [],
                 edentulous_site_measurements: (proc.edentulous_site_measurements && typeof proc.edentulous_site_measurements === 'object') ? proc.edentulous_site_measurements : {},
@@ -611,7 +617,7 @@ export default function NewProcedureScreen() {
           implant_incharge_id: user?.role === 'implant_incharge' ? (user?.id || '') : '',
           implant_incharge_name: user?.role === 'implant_incharge' ? (user?.name || '') : '',
           receipt_number: '', amount_paid: '', procedure_date: '', procedure_time: '',
-          implant_procedure_type: '', teeth_present: [] as string[], arch: '', loading_type: [] as string[],
+          implant_procedure_type: '', num_implants: '', teeth_present: [] as string[], arch: '', loading_type: [] as string[],
           prosthetic_plan: '', prosthetic_plan_other: '', attachment_type: '', attachment_type_other: '', bone_graft_specifications: '',
           edentulous_sites: [] as string[], occlusocervical_height: '', mesiodistal_space: '',
           arch_condition: '', ridge_contour: '',
@@ -886,6 +892,32 @@ export default function NewProcedureScreen() {
     )) {
       Alert.alert('Missing Field', 'Please select Periodontal Status.');
       return;
+    }
+    // iter-307: when the procedure type requires the Number-of-Implants
+    // sub-question, block submission until it's answered and enforce the
+    // expected tooth-count on the FDI chart for the chosen sub-option.
+    if (PROCEDURES_WITH_NUM_IMPLANTS_QUESTION.has(sanitized.implant_procedure_type)) {
+      if (!sanitized.num_implants) {
+        Alert.alert('Missing Field', 'Please pick "Single Implant" or "Multiple Implants" under Number of Implants.');
+        return;
+      }
+      const missingCount = (sanitized.missing_teeth || []).length;
+      if (sanitized.num_implants === 'Single Implant' && missingCount > 1) {
+        Alert.alert(
+          'Tooth Count Mismatch',
+          `You selected "Single Implant" but ${missingCount} teeth are marked on the FDI chart. ` +
+          'Please reduce the marked teeth to 1 or switch the sub-question to "Multiple Implants".'
+        );
+        return;
+      }
+      if (sanitized.num_implants === 'Multiple Implants' && missingCount < 2) {
+        Alert.alert(
+          'Tooth Count Mismatch',
+          `"Multiple Implants" requires at least 2 teeth on the FDI chart, but ${missingCount} ${missingCount === 1 ? 'is' : 'are'} marked. ` +
+          'Please mark the remaining teeth or switch the sub-question to "Single Implant".'
+        );
+        return;
+      }
     }
     if (!cbctFiles[0] || !cbctFiles[1]) {
       Alert.alert('Missing Field', 'Please upload both mandatory CBCT Reports before continuing.');
@@ -1199,6 +1231,14 @@ export default function NewProcedureScreen() {
 
     if (isExistingImplantCase) {
       if (!existingOrigProcedure) missImplantDetails.push('Type of Implant Procedure Done');
+      // iter-307: surface the new sub-question in the missing-fields panel
+      // so it's visible alongside the other Phase-1 requirements.
+      if (
+        PROCEDURES_WITH_NUM_IMPLANTS_QUESTION.has(formData.implant_procedure_type) &&
+        !formData.num_implants
+      ) {
+        missImplantDetails.push('Number of Implants');
+      }
       else if (FULL_ARCH_GROUP.has(existingOrigProcedure) && !formData.arch) missImplantDetails.push('Arch');
       if ((existingImplantTeeth || []).length === 0) missImplantDetails.push('At least one tooth marked on FDI chart');
     } else {
@@ -1521,7 +1561,35 @@ export default function NewProcedureScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Procedure Information</Text>
         <Dropdown label="Type of Implant Procedure" value={formData.implant_procedure_type}
-          options={PROCEDURE_TYPES} onChange={v => { updateForm('implant_procedure_type', v); updateForm('arch', ''); }} required />
+          options={PROCEDURE_TYPES} onChange={v => {
+            updateForm('implant_procedure_type', v);
+            updateForm('arch', '');
+            // iter-307: reset the Number-of-Implants sub-question and
+            // any previously-picked Prosthetic Plan when the procedure
+            // type changes, since both depend on the new type.
+            updateForm('num_implants', '');
+            updateForm('prosthetic_plan', '');
+            updateForm('prosthetic_plan_other', '');
+          }} required />
+
+        {/* iter-307: "Number of Implants" sub-question — only shown for
+            Immediate / PET / GBR / Guided Surgery procedure types. The
+            answer drives the Prosthetic Plan dropdown below. */}
+        {PROCEDURES_WITH_NUM_IMPLANTS_QUESTION.has(formData.implant_procedure_type) && (
+          <Dropdown
+            label="Number of Implants"
+            value={formData.num_implants}
+            options={['Single Implant', 'Multiple Implants']}
+            onChange={v => {
+              updateForm('num_implants', v);
+              // Prosthetic Plan must reset because its option set
+              // changes between Single and Multiple.
+              updateForm('prosthetic_plan', '');
+              updateForm('prosthetic_plan_other', '');
+            }}
+            required
+          />
+        )}
         {/* iter-235: hide the Arch dropdown for Existing Implant — it lives
             inside the ExistingImplantSection between Type of Implant Procedure
             Done and Implant Selection instead. */}

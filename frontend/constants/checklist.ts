@@ -353,15 +353,73 @@ const FULL_ARCH_OPTIONS = [
   'Full Arch - Peek and Zirconia Ti Base',
 ];
 
-export function getProstheticOptions(procedureType: string, loadingTypes: string[]): string[] {
+// iter-307: Multi-Single-Crown options used by `Multiple Conventional
+// Implants` AND by the 4 non-conventional procedure types when the
+// clinician picks "Multiple Implants" in the new sub-question
+// (Immediate / PET / GBR / Guided Surgery).
+// Lithium Disilicate variants (iter-307) added per user request — they
+// apply uniformly to every multi-implant scenario.
+export const MULTIPLE_SINGLE_CROWN_OPTIONS = [
+  'Screw Retained Multiple Single Crowns - Zirconia',
+  'Screw Retained Multiple Single Crowns - Metal',
+  'Screw Retained Multiple Single Crowns - Porcelain Fused to Metal',
+  'Screw Retained Multiple Single Crowns - Lithium Disilicate',
+  'Cement Retained Multiple Single Crowns - Zirconia',
+  'Cement Retained Multiple Single Crowns - Metal',
+  'Cement Retained Multiple Single Crowns - Porcelain Fused to Metal',
+  'Cement Retained Multiple Single Crowns - Lithium Disilicate',
+];
+
+// iter-307: the 4 procedure types that now carry the per-case
+// "Number of Implants" sub-question. When this sub-question is
+// answered, the prosthetic-plan dropdown re-uses the Single-Conventional
+// or Multiple-Conventional option set verbatim.
+export const PROCEDURES_WITH_NUM_IMPLANTS_QUESTION = new Set<string>([
+  'Immediate Implant',
+  'Partial Extraction Therapy',
+  'Implant Placement with Guided Bone Regeneration',
+  'Guided Surgery',
+]);
+
+export function getProstheticOptions(
+  procedureType: string,
+  loadingTypes: string[],
+  numImplants: string = '',
+): string[] {
   const options: string[] = [];
+
+  // iter-307: For the 4 affected procedure types, the option set is
+  // driven entirely by the Number-of-Implants sub-question. Gate the
+  // dropdown until the sub-question is answered.
+  if (PROCEDURES_WITH_NUM_IMPLANTS_QUESTION.has(procedureType)) {
+    if (numImplants === 'Single Implant') {
+      options.push(...SINGLE_CROWN_OPTIONS);
+    } else if (numImplants === 'Multiple Implants') {
+      for (const o of BRIDGE_OPTIONS) {
+        if (!options.includes(o)) options.push(o);
+      }
+      for (const o of MULTIPLE_SINGLE_CROWN_OPTIONS) {
+        if (!options.includes(o)) options.push(o);
+      }
+    }
+    // Loading-type extras still apply (Immediate / Delayed loading
+    // adds PMMA/temp options) — but only AFTER the sub-question is
+    // answered so we don't surface dangling PMMA options.
+    if (options.length > 0 && loadingTypes.includes('Immediate Loading')) {
+      for (const o of IMMEDIATE_LOADING_OPTIONS) {
+        if (!options.includes(o)) options.push(o);
+      }
+    }
+    if (options.length > 0 && !options.includes('Other')) options.push('Other');
+    return options;
+  }
 
   // Single Conventional Implant → Crown options
   if (procedureType === 'Single Conventional Implant') {
     options.push(...SINGLE_CROWN_OPTIONS);
   }
 
-  // Multiple, Immediate, PET, GBR → Bridge options
+  // Multiple → Bridge options
   if (MULTIPLE_GROUP.has(procedureType)) {
     for (const o of BRIDGE_OPTIONS) {
       if (!options.includes(o)) options.push(o);
@@ -370,14 +428,6 @@ export function getProstheticOptions(procedureType: string, loadingTypes: string
 
   // Multiple Conventional Implants → also add Multiple Single Crown options
   if (procedureType === 'Multiple Conventional Implants') {
-    const MULTIPLE_SINGLE_CROWN_OPTIONS = [
-      'Screw Retained Multiple Single Crowns - Zirconia',
-      'Screw Retained Multiple Single Crowns - Metal',
-      'Screw Retained Multiple Single Crowns - Porcelain Fused to Metal',
-      'Cement Retained Multiple Single Crowns - Zirconia',
-      'Cement Retained Multiple Single Crowns - Metal',
-      'Cement Retained Multiple Single Crowns - Porcelain Fused to Metal',
-    ];
     for (const o of MULTIPLE_SINGLE_CROWN_OPTIONS) {
       if (!options.includes(o)) options.push(o);
     }
