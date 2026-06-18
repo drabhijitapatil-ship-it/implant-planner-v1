@@ -1,5 +1,61 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 306 (Feb 2026) — Fix Phase 4 Step 2 "Compare with baseline radiograph"
+
+### Bug reported
+"Phase 4 Step 2 - Compare with baseline radiograph feature is not working.
+It has two options: Baseline IOPA from Phase 2 and IOPA at Phase 4
+Step 2 level for each implant to measure the marginal bone level. The
+option in Phase 4 Step 2 to show the Phase 2 IOPA of the implant and
+to upload the IOPA at Phase 4 Step 2 is not working."
+
+### Root cause — two compounding defects in `RadiographCompare.tsx`
+1. **Silent hide.** `if (!hasAnyBaseline) return null;` removed the
+   entire section the moment no Phase 2 IOPA existed. Most cases in
+   the DB had no `phase2_data.iopa_files`, so users saw nothing and
+   thought the feature was missing.
+2. **Tooth-label key mismatch.** Phase 2 stores each IOPA as
+   `{ tooth_label: "Tooth #14" }` (the display label produced by the
+   upload helper), but Phase 4 keys its lookup by the raw position
+   string `"14"` (from `implant_plans[].position`). Even when a
+   baseline existed, `baselineByTooth["14"]` returned `undefined`.
+
+### Fix (`components/RadiographCompare.tsx`)
+- **Removed the silent hide.** Section only bails when there are no
+  implants at all to compare (zero `teeth`).
+- **Live status badge.** Replaces the static "n tooth" pill with
+  `"N/M baseline · K/M current"` for routine cases, or `"OPG" / "No
+  baseline"` for full-arch. Turns orange when all baselines missing.
+- **Empty-state callout.** Yellow info box explains "No baseline IOPA
+  was uploaded during Phase 2…" with separate copy for existing-implant
+  cases ("…during the original Phase 1 intake").
+- **Upload pointer.** Blue arrow-down callout tells the user how many
+  post-delivery IOPAs still need uploading and where to do it ("use the
+  'Post-Delivery IOPA (per implant)' section below").
+- **Tooth-label normalisation.** New branch in `baselineByTooth`
+  builder strips `^Tooth\s*#?\s*` from `tooth_label` so `"Tooth #14"`
+  matches the raw `"14"` position; original key is also kept for
+  backwards-compat with anyone who already stored the raw form.
+
+### Verification (live preview, 2 cases)
+- **Full-arch / no baseline OPG**: section now renders with
+  orange "No baseline" badge + yellow empty-state callout + OPG row
+  marked "No baseline" / "Not uploaded yet". `compare-baseline-missing`
+  testID present, `compare-upload-hint` absent (full-arch path).
+- **Single Conventional Implant (Tooth 14)** with injected Phase 2 IOPA
+  stored as `tooth_label: "Tooth #14"`: section renders, badge reads
+  **"1/1 baseline · 0/1 current"**, baseline thumbnail visible labelled
+  "Baseline — Phase 2 (post-surgical)" for Tooth 14, blue upload
+  callout "1 post-delivery IOPA still to upload — use the
+  'Post-Delivery IOPA (per implant)' section below" surfaces. Confirms
+  both bugs fixed.
+
+### Files touched
+- `frontend/components/RadiographCompare.tsx`
+
+---
+
+
 ## Iteration 305 (Feb 2026) — Novaloc® Abutments for BLT (NC + RC)
 
 ### What the user asked for
