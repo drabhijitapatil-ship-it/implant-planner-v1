@@ -1,5 +1,36 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 309 (Feb 2026) — "Number of Implants" in exported PDF case report
+
+### What the user asked for
+Carry the `num_implants` sub-choice through to the PDF case report so
+board-approval / patient-record exports show the same context that's on
+screen.
+
+### What changed
+**Backend (`server.py`)**
+- `generate_case_report` PDF builder — one `add_field` line added
+  immediately under "Procedure Type":
+  `add_field("Number of Implants", procedure.get("num_implants"))`
+- Behaviour is no-op for legacy cases (when `num_implants` is empty,
+  the field is silently skipped by `add_field`'s falsy-guard).
+
+### Verification
+- Test procedure patched with `num_implants = "Multiple Implants"`.
+- `POST /api/procedures/{id}/case-report` returned a 4 469-byte PDF.
+- Parsed with `pypdf` — extracted text includes the consecutive lines:
+  ```
+  Procedure Type: Immediate Implant
+  Number of Implants: Multiple Implants
+  ```
+- Test data reverted.
+
+### Files touched
+- `backend/server.py` (1 line inside `generate_case_report`)
+
+---
+
+
 ## Iteration 308 (Feb 2026) — Echo "Number of Implants" into case summaries
 
 ### What the user asked for
