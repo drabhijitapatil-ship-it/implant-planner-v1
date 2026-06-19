@@ -1,5 +1,41 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 312 (Feb 2026) — Cross-Phase Clinical Decision Support: rule engine + Case Detail banner
+
+### What shipped
+- **Backend deterministic clinical rule engine** at `/app/backend/clinical_rules/`:
+  - `_citations.py` — 6 literature references (ITI 2023 Group 3 & 4, Misch 2020, Buser 2009, Sennerby & Meredith 2008, Naujokat 2016, Jiang 2022 SR)
+  - `_base.py` — `RuleHit` dataclass, `register_rule` decorator, exception-isolated `evaluate_case()` runner with hard_block → warning → info → rule_id ordering
+  - `rules.py` — 5 v1 rules (immediate-loading stability, ISQ low primary stability, GBR labial wall, full-arch angulation divergence, diabetic / smoking stack)
+- **API endpoint** (server.py L26 import, L2974-3015): `GET /api/procedures/{procedure_id}/clinical-evaluation` — flattens `phase2_data.implant_plans` to top-level before evaluation, returns `{procedure_id, hits[], counts:{hard_block,warning,info}, evaluated_at}`. Auth + stakeholder check + 404 on missing.
+- **Frontend banner** (`/app/frontend/components/ClinicalEvaluationBanner.tsx`) injected in `procedures/[id].tsx` directly after Patient Information. Renders top hit + severity chips + evidence take-away. Tap to open modal with every hit + full citation block. Self-hides on empty.
+- **Tests**: `/app/backend/tests/test_clinical_rules.py` (12 unit tests) + `/app/backend/tests/test_clinical_evaluation_api.py` (13 API tests added by testing agent). **25/25 pass.**
+
+### Verification
+- Backend cURL: patched a procedure with `loading_type=['Immediate Loading']`, `hba1c=8.4`, `smoker=true`, `implant_procedure_type='All on 4'`, two implants (`isq:55,angulation:5` and `isq:72,angulation:28`) → endpoint returned 4 hits with hard_block first, every hit carries citation `id/title/source/year/takeaway`.
+- Frontend: testing agent confirmed banner renders, modal opens, all 4 hits display with citations, close button works.
+- Procedure reverted to original state after testing.
+
+### Files touched
+- NEW: `/app/backend/clinical_rules/{__init__.py, _base.py, _citations.py, rules.py}`
+- NEW: `/app/backend/tests/test_clinical_rules.py`, `/app/backend/tests/test_clinical_evaluation_api.py`
+- NEW: `/app/frontend/components/ClinicalEvaluationBanner.tsx`
+- EDIT: `/app/backend/server.py` (import + 1 endpoint, ~45 lines)
+- EDIT: `/app/frontend/app/procedures/[id].tsx` (import + 1-line banner placement)
+
+### Next up
+- **P1**: Wire same `clinical-evaluation` endpoint into Phase 1 / 2 / 3 form-save flows to surface hits inline as users type, not only on Case Detail open.
+- **P1**: LLM narrative layer (`/api/case/{id}/clinical-narrative`) that takes the deterministic hits + reasoning chain and produces a 1-paragraph student-facing summary.
+- **P1**: Microsoft OAuth sign-in (`integration_playbook_expert_v2` flow, needs Azure Client ID/Secret).
+- **P1**: Swap EMERGENT_LLM_KEY for production OpenAI key (needs key).
+- **P2**: Add the next batch of rules (D1 bone protocol, sinus floor proximity, parafunction stack, single-tooth aesthetic-zone gingival biotype, axial-to-prosthesis ratio).
+- **P2**: Tablet-responsive split-view refactor.
+
+---
+
+
+# Prosthodontics Dental Implant Mobile App — PRD
+
 ## Iteration 311c (Feb 2026) — Final root-cause: missing `fieldKey` on Prosthetic Component row
 
 ### Why the UI was still showing stale values
