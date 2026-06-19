@@ -86,17 +86,17 @@ export default function ClinicalEvaluationBanner({ procedureId }: { procedureId:
         </View>
         <View style={styles.chipRow}>
           {hard_block > 0 && (
-            <View style={[styles.chip, { backgroundColor: '#B71C1C' }]} data-testid="clinical-eval-chip-hard">
+            <View style={[styles.chip, { backgroundColor: '#B71C1C' }]} testID="clinical-eval-chip-hard" data-testid="clinical-eval-chip-hard">
               <Text style={styles.chipTextLight}>{hard_block} Hard block{hard_block > 1 ? 's' : ''}</Text>
             </View>
           )}
           {warning > 0 && (
-            <View style={[styles.chip, { backgroundColor: '#E65100' }]} data-testid="clinical-eval-chip-warning">
+            <View style={[styles.chip, { backgroundColor: '#E65100' }]} testID="clinical-eval-chip-warning" data-testid="clinical-eval-chip-warning">
               <Text style={styles.chipTextLight}>{warning} Warning{warning > 1 ? 's' : ''}</Text>
             </View>
           )}
           {info > 0 && (
-            <View style={[styles.chip, { backgroundColor: '#0D47A1' }]} data-testid="clinical-eval-chip-info">
+            <View style={[styles.chip, { backgroundColor: '#0D47A1' }]} testID="clinical-eval-chip-info" data-testid="clinical-eval-chip-info">
               <Text style={styles.chipTextLight}>{info} Info</Text>
             </View>
           )}
@@ -125,7 +125,7 @@ export default function ClinicalEvaluationBanner({ procedureId }: { procedureId:
               {data.hits.map((h, i) => {
                 const s = SEV[h.severity];
                 return (
-                  <View key={h.rule_id + i} style={[styles.hit, { borderLeftColor: s.border, backgroundColor: s.bg }]} data-testid={`clinical-eval-hit-${h.rule_id}`}>
+                  <View key={h.rule_id + i} style={[styles.hit, { borderLeftColor: s.border, backgroundColor: s.bg }]} testID={`clinical-eval-hit-${h.rule_id}`} data-testid={`clinical-eval-hit-${h.rule_id}`}>
                     <View style={styles.hitHeader}>
                       <Ionicons name={s.icon as any} size={18} color={s.fg} />
                       <Text style={[styles.hitSeverity, { color: s.fg }]}>{s.label}</Text>
