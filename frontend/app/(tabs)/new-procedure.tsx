@@ -795,6 +795,45 @@ export default function NewProcedureScreen() {
     }));
   };
 
+  // ── Haematology Examination fields ─────────────────────────────────
+  // Optional pre-surgical lab values captured in Phase 1. Stored flat
+  // under `medical_assessment.{hb,tlc,bleeding_time,clotting_time,
+  // prothrombin_time,inr}` so they live alongside other Medical
+  // Assessment keys and don't disturb `calculateMedicalRisk`.
+  const HAEMATOLOGY_FIELDS: { id: string; label: string; placeholder: string; hint?: string }[] = [
+    { id: 'hb', label: 'Haemoglobin (Hb)', placeholder: 'e.g. 13.5', hint: 'g/dL' },
+    { id: 'tlc', label: 'Total Leucocyte Count', placeholder: 'e.g. 7500', hint: 'Normal 4,000 – 10,000 /cumm' },
+    { id: 'bleeding_time', label: 'Bleeding Time', placeholder: 'e.g. 2.5', hint: 'minutes' },
+    { id: 'clotting_time', label: 'Clotting Time', placeholder: 'e.g. 5.0', hint: 'minutes' },
+    { id: 'prothrombin_time', label: 'Prothrombin Time', placeholder: 'e.g. 13', hint: 'Normal 11 – 16 seconds' },
+    { id: 'inr', label: 'International Normalised Ratio (INR)', placeholder: 'e.g. 1.1', hint: 'ratio' },
+  ];
+
+  const renderHaematologySection = (testidSuffix: string) => (
+    <View style={styles.haematologyWrap} testID={`haematology-${testidSuffix}`} data-testid={`haematology-${testidSuffix}`}>
+      <Text style={styles.haematologyHeading}>Haematology Examination <Text style={styles.haematologyOptional}>(all optional)</Text></Text>
+      {HAEMATOLOGY_FIELDS.map(f => (
+        <View key={f.id} style={styles.haematologyRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.haematologyLabel}>{f.label}</Text>
+            {f.hint ? <Text style={styles.haematologyHint}>{f.hint}</Text> : null}
+          </View>
+          <TextInput
+            style={styles.haematologyInput}
+            value={formData.medical_assessment[f.id] || ''}
+            onChangeText={(t) => updateMedical(f.id, t)}
+            placeholder={f.placeholder}
+            placeholderTextColor="#90A4AE"
+            keyboardType="decimal-pad"
+            inputMode="decimal"
+            testID={`haematology-input-${f.id}-${testidSuffix}`}
+            data-testid={`haematology-input-${f.id}-${testidSuffix}`}
+          />
+        </View>
+      ))}
+    </View>
+  );
+
   // ── CBCT File Picker & Upload (Multiple) ──
   const totalCbctSlots = 2 + extraCbctCount;
 
@@ -2445,6 +2484,7 @@ export default function NewProcedureScreen() {
               )}
             </View>
           ))}
+          {renderHaematologySection('routine')}
           {Object.keys(formData.medical_assessment).length > 0 && (() => {
             const risk = calculateMedicalRisk(formData.medical_assessment);
             return (
@@ -2511,6 +2551,7 @@ export default function NewProcedureScreen() {
                 )}
               </View>
             ))}
+            {renderHaematologySection('existing')}
             {Object.keys(formData.medical_assessment).length > 0 && (() => {
               const risk = calculateMedicalRisk(formData.medical_assessment);
               return (
@@ -2748,6 +2789,13 @@ const styles = StyleSheet.create({
   hba1cLabel: { fontSize: 13, color: '#37474F', fontWeight: '600', marginBottom: 6 },
   hba1cOptional: { fontSize: 11, color: '#78909C', fontWeight: '400' },
   hba1cInput: { borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#263238', backgroundColor: '#FFF', maxWidth: 180 },
+  haematologyWrap: { marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#CFD8DC' },
+  haematologyHeading: { fontSize: 14, fontWeight: '700', color: '#1E3A5F', marginBottom: 10 },
+  haematologyOptional: { fontSize: 11, fontWeight: '400', color: '#78909C' },
+  haematologyRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#EEF2F7', gap: 12 },
+  haematologyLabel: { fontSize: 13, color: '#263238', fontWeight: '600' },
+  haematologyHint: { fontSize: 11, color: '#78909C', marginTop: 2 },
+  haematologyInput: { borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#263238', backgroundColor: '#FFF', minWidth: 110, textAlign: 'right' },
   yesNoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   yesNoBtn: { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, borderColor: '#D0DCE8', backgroundColor: '#FFF' },
   yesActive: { backgroundColor: '#DC3545', borderColor: '#DC3545' },
