@@ -1985,7 +1985,7 @@ export default function ProcedureDetailScreen() {
                 </View>
               )}
             </View>
-            {Object.entries(procedure.medical_assessment).map(([key, value]) => {
+            {Object.entries(procedure.medical_assessment).filter(([key]) => !['hb','tlc','bleeding_time','clotting_time','prothrombin_time','inr','hba1c'].includes(key)).map(([key, value]) => {
               const isNoRisk = (value as string) === 'No';
               const isHighRisk = ['Uncontrolled', 'Heavy (>10/day)'].some(h => (value as string).includes?.(h)) || 
                 (['osteoporosis', 'radiation'].includes(key) && (value as string) === 'Yes');
@@ -2073,6 +2073,38 @@ export default function ProcedureDetailScreen() {
                 </View>
               );
             })}
+            {/* Read-only Haematology Examination + HbA1c display block.
+                Phase-1 lab values captured at case-creation time. Not part
+                of the risk-scoring above; surfaced separately so reviewers
+                can compare to clinical thresholds (e.g. HbA1c > 9 % hard
+                blocks immediate loading via the clinical-rule engine). */}
+            {(() => {
+              const ma: any = procedure.medical_assessment || {};
+              const labRows: { id: string; label: string; suffix?: string }[] = [
+                { id: 'hba1c', label: 'HbA1c', suffix: '%' },
+                { id: 'hb', label: 'Haemoglobin (Hb)', suffix: 'g/dL' },
+                { id: 'tlc', label: 'Total Leucocyte Count', suffix: '/cumm' },
+                { id: 'bleeding_time', label: 'Bleeding Time', suffix: 'min' },
+                { id: 'clotting_time', label: 'Clotting Time', suffix: 'min' },
+                { id: 'prothrombin_time', label: 'Prothrombin Time', suffix: 'sec' },
+                { id: 'inr', label: 'International Normalised Ratio (INR)' },
+              ];
+              const present = labRows.filter(r => ma[r.id] !== undefined && ma[r.id] !== '' && ma[r.id] !== null);
+              if (present.length === 0) return null;
+              return (
+                <View style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#E0E7EE' }} testID="haematology-readonly" data-testid="haematology-readonly">
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#1E3A5F', marginBottom: 6 }}>Haematology Examination</Text>
+                  {present.map(r => (
+                    <View key={r.id} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 }} testID={`haematology-readonly-${r.id}`} data-testid={`haematology-readonly-${r.id}`}>
+                      <Text style={{ fontSize: 13, color: '#37474F' }}>{r.label}</Text>
+                      <Text style={{ fontSize: 13, color: '#1A1A1A', fontWeight: '600' }}>
+                        {String(ma[r.id])}{r.suffix ? ` ${r.suffix}` : ''}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              );
+            })()}
           </View>
         )}
 

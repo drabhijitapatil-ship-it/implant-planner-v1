@@ -1,5 +1,37 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 314 (Feb 2026) — Phase 1 Haematology Examination capture
+
+### What shipped
+- New **Haematology Examination** subsection inside Phase 1 → Medical Assessment with 6 optional decimal-input fields:
+  - `Haemoglobin (Hb)` — g/dL
+  - `Total Leucocyte Count` — hint "Normal 4,000 – 10,000 /cumm"
+  - `Bleeding Time` — minutes
+  - `Clotting Time` — minutes
+  - `Prothrombin Time` — hint "Normal 11 – 16 seconds"
+  - `International Normalised Ratio (INR)` — ratio
+- All fields persist flat under `procedures.medical_assessment.{hb,tlc,bleeding_time,clotting_time,prothrombin_time,inr}`.
+- Form: rendered in **both** routine and existing-implant medical-assessment blocks via a small `renderHaematologySection(testidSuffix)` helper to avoid duplication.
+- Case Detail (`/procedures/[id].tsx`): existing risk-factor iteration now filters out `hba1c` + haematology keys (they're labs, not risk factors). A dedicated **read-only "Haematology Examination"** block surfaces only the lab values that were actually entered, alongside HbA1c. Right-aligned values with unit suffixes for clean scanning.
+- 12 backend unit tests still pass.
+- Visually verified end-to-end (form input → DB → case-detail display).
+
+### Files touched
+- EDIT: `/app/frontend/app/(tabs)/new-procedure.tsx` — added `HAEMATOLOGY_FIELDS` const, `renderHaematologySection()` helper, 8 new styles, two call sites (routine + existing-implant).
+- EDIT: `/app/frontend/app/procedures/[id].tsx` — risk-factor filter + read-only haematology display block (≈30 lines).
+
+### Next up
+- P1: Surface clinical-evaluation hits inline on the Phase 1 save step (currently only on Case Detail open).
+- P1: LLM narrative layer over the deterministic clinical-rule hits.
+- P1: Microsoft OAuth sign-in (needs Azure Client ID/Secret).
+- P2: Add literature-anchored rules that read these new lab values (e.g. INR > 3 with planned extraction → bleed-risk hard block; Hb < 10 g/dL → defer surgery warning citing Misch).
+- P2: Add haematology values to the case-report PDF.
+
+---
+
+
+# Prosthodontics Dental Implant Mobile App — PRD
+
 ## Iteration 313 (Feb 2026) — Phase 1 HbA1c capture + clinical-rule wiring
 
 ### What shipped
