@@ -1,5 +1,40 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 315 (Feb 2026) — HbA1c risk-escalation + Haematology in case-report PDF
+
+### What shipped
+- **`calculateMedicalRisk()`** (`/app/frontend/constants/checklist.ts`) now reads `factors.hba1c` and escalates:
+  - HbA1c ≥ 9 % → force `High Risk` (red badge) + warning citing ITI 2023, mirroring the deterministic clinical-rule engine's hard-block threshold.
+  - HbA1c > 7 % → `Moderate` factor contribution + cautionary warning.
+  - HbA1c ≤ 7 % or empty / non-numeric → no effect.
+- The escalation fires in both the live Phase 1 form risk badge and the Case Detail risk badge (both consume `calculateMedicalRisk()`).
+- **Case-report PDF** (`/app/backend/server.py::generate_case_report`) now:
+  - Skips lab keys when iterating the categorical Medical Assessment factors (no more `13.5: g/dL` lines mistakenly colour-graded).
+  - Renders a dedicated **"Haematology Examination"** subsection right under the categorical factors with all 7 lab values (HbA1c, Hb, TLC, BT, CT, PT, INR) and unit suffixes.
+  - Applies red text colour when a lab crosses a clinical threshold: HbA1c ≥ 9 (red) / > 7 (orange), TLC outside 4 000–10 000, PT outside 11–16 s, INR > 1.5, Hb < 10.
+- Block is hidden in both the PDF and the Case Detail when no labs were entered.
+
+### Verification
+- UI: typing `HbA1c = 9.5` with `Diabetes = Controlled` (would otherwise be Moderate) flips the badge to **High Risk** and surfaces the warning line (confirmed via screenshot + DOM text scan).
+- PDF: cURL'd `/api/procedures/{id}/case-report` against a patched procedure with all 7 labs → extracted PDF text shows `Haematology Examination` heading followed by every lab with correct units (`HbA1c: 9.5 %`, `Haemoglobin (Hb): 11.0 g/dL`, `Total Leucocyte Count: 12500 /cumm`, `Bleeding Time: 3.0 min`, `Clotting Time: 5.5 min`, `Prothrombin Time: 18 sec`, `International Normalised Ratio: 2.1`).
+- All 12 `test_clinical_rules.py` regression tests still pass.
+
+### Files touched
+- EDIT: `/app/frontend/constants/checklist.ts` — HbA1c numeric override inside `calculateMedicalRisk()`.
+- EDIT: `/app/backend/server.py` — Medical Assessment PDF section now filters lab keys + renders Haematology subsection (≈55 lines).
+
+### Next up
+- P1: Surface clinical-evaluation hits inline on Phase 1 save (currently only on Case Detail open).
+- P1: LLM narrative layer over the deterministic clinical-rule hits.
+- P1: Microsoft OAuth sign-in (needs Azure Client ID/Secret).
+- P2: New literature-anchored rules consuming the lab values (INR > 3 + planned extraction → bleed-risk hard block; Hb < 10 g/dL → defer-surgery warning).
+- P2: Per-input inline red border + "Outside normal" hint on the haematology fields themselves.
+
+---
+
+
+# Prosthodontics Dental Implant Mobile App — PRD
+
 ## Iteration 314 (Feb 2026) — Phase 1 Haematology Examination capture
 
 ### What shipped
