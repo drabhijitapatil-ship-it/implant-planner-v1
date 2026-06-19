@@ -1,5 +1,32 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 313 (Feb 2026) — Phase 1 HbA1c capture + clinical-rule wiring
+
+### What shipped
+- **Phase 1 → Medical Assessment → Diabetes**: when the user picks `Controlled` or `Uncontrolled`, an inline non-mandatory `HbA1c Value` text input appears directly below the Diabetes row (decimal keypad, placeholder `e.g. 7.2`). Implemented in both routine and existing-implant medical-assessment blocks.
+- Persisted at `procedures.medical_assessment.hba1c` (string).
+- **Clinical-rule wiring**: the `/api/procedures/{id}/clinical-evaluation` endpoint now maps Phase-1 form keys into the rule-engine contract before evaluation:
+  - `medical_assessment.hba1c` (string) → `medical_history.hba1c` (float, gracefully skipped on parse failure / empty string)
+  - `medical_assessment.smoking != "No"` → `medical_history.smoker = true`
+  - Pre-existing `medical_history` keys take precedence (no overwrite of direct DB writes)
+- **End-to-end verified via cURL**: storing only the Phase-1 form keys (`diabetes:Uncontrolled, smoking:Light, hba1c:"8.4"`) now produces a `diabetic_stack` **warning** hit with citation `JIANG_SMOKING_SR_2022` and `context={hba1c:8.4, smoker:true}` — exactly what the rule documents.
+- **UI verified via screenshot**: form renders the HbA1c input only when diabetes∈{Controlled, Uncontrolled}, accepts `8.4`, hidden when set to `No`.
+
+### Files touched
+- EDIT: `/app/frontend/app/(tabs)/new-procedure.tsx` — two `MEDICAL_RISK_FACTORS.map(...)` blocks (routine + existing-implant) now conditionally render the HbA1c input; added 4 styles (`hba1cRow`, `hba1cLabel`, `hba1cOptional`, `hba1cInput`).
+- EDIT: `/app/backend/server.py` — `get_clinical_evaluation` endpoint now flattens `medical_assessment` into `medical_history` (hba1c parse + smoker derivation).
+- Unit suite unchanged; all 12 `test_clinical_rules.py` tests still pass.
+
+### Next up
+- Hook the same `clinical-evaluation` call into the Phase 1 save-step UI so HbA1c-triggered warnings appear inline as soon as the student saves Step 4.
+- LLM narrative layer over the deterministic hits.
+- Microsoft OAuth sign-in (Azure Client ID/Secret needed).
+
+---
+
+
+# Prosthodontics Dental Implant Mobile App — PRD
+
 ## Iteration 312 (Feb 2026) — Cross-Phase Clinical Decision Support: rule engine + Case Detail banner
 
 ### What shipped
