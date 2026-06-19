@@ -2993,6 +2993,27 @@ async def get_clinical_evaluation(
         # implant_plans live on phase2_data once Phase 2 is started; keep
         # phase1 implant_plans as a fallback for plan-only rules.
         flat["implant_plans"] = p2.get("implant_plans") or proc.get("implant_plans") or []
+    # Map the form's Phase 1 `medical_assessment` keys into the rule-engine
+    # contract `medical_history` (the rules read hba1c / smoker / tobacco_use).
+    # The form stores `diabetes` ∈ {No, Controlled, Uncontrolled}, `smoking` ∈
+    # {No, Light (<10/day), Heavy (>10/day)}, and now an optional `hba1c`
+    # numeric string when diabetes ≠ No. We preserve any pre-existing
+    # `medical_history` keys so direct DB writes still work.
+    ma = proc.get("medical_assessment") or {}
+    mh_base = proc.get("medical_history") or {}
+    mh = {**mh_base}
+    if "hba1c" not in mh:
+        raw_hba1c = ma.get("hba1c")
+        if raw_hba1c not in (None, ""):
+            try:
+                mh["hba1c"] = float(str(raw_hba1c).strip())
+            except (ValueError, TypeError):
+                pass
+    if "smoker" not in mh:
+        smoking = ma.get("smoking")
+        if smoking and smoking != "No":
+            mh["smoker"] = True
+    flat["medical_history"] = mh
     hits = evaluate_clinical_rules(flat)
     counts = {"hard_block": 0, "warning": 0, "info": 0}
     for h in hits:

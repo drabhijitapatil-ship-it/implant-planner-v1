@@ -2414,21 +2414,37 @@ export default function NewProcedureScreen() {
         <View style={styles.medicalSection}>
           <Text style={styles.subSectionTitle}>Medical Assessment</Text>
           {MEDICAL_RISK_FACTORS.map(factor => (
-            <View key={factor.id} style={styles.medicalRow}>
-              <Text style={styles.medicalLabel}>{factor.label}</Text>
-              <View style={styles.yesNoRow}>
-                {factor.options.map(opt => (
-                  <TouchableOpacity key={opt}
-                    style={[styles.yesNoBtn, formData.medical_assessment[factor.id] === opt && (opt === 'No' ? styles.noActive : styles.yesActive)]}
-                    onPress={() => updateMedical(factor.id, opt)}>
-                    <Text style={[styles.yesNoText, formData.medical_assessment[factor.id] === opt && styles.yesNoTextActive]}>{opt}</Text>
-                  </TouchableOpacity>
-                ))}
+            <View key={factor.id}>
+              <View style={styles.medicalRow}>
+                <Text style={styles.medicalLabel}>{factor.label}</Text>
+                <View style={styles.yesNoRow}>
+                  {factor.options.map(opt => (
+                    <TouchableOpacity key={opt}
+                      style={[styles.yesNoBtn, formData.medical_assessment[factor.id] === opt && (opt === 'No' ? styles.noActive : styles.yesActive)]}
+                      onPress={() => updateMedical(factor.id, opt)}>
+                      <Text style={[styles.yesNoText, formData.medical_assessment[factor.id] === opt && styles.yesNoTextActive]}>{opt}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </View>
+              {factor.id === 'diabetes' && (formData.medical_assessment.diabetes === 'Controlled' || formData.medical_assessment.diabetes === 'Uncontrolled') && (
+                <View style={styles.hba1cRow} testID="hba1c-row-routine" data-testid="hba1c-row-routine">
+                  <Text style={styles.hba1cLabel}>HbA1c Value <Text style={styles.hba1cOptional}>(optional, %)</Text></Text>
+                  <TextInput
+                    style={styles.hba1cInput}
+                    value={formData.medical_assessment.hba1c || ''}
+                    onChangeText={(t) => updateMedical('hba1c', t)}
+                    placeholder="e.g. 7.2"
+                    placeholderTextColor="#90A4AE"
+                    keyboardType="decimal-pad"
+                    inputMode="decimal"
+                    testID="hba1c-input-routine"
+                    data-testid="hba1c-input-routine"
+                  />
+                </View>
+              )}
             </View>
           ))}
-
-          {/* Auto Risk Classification with warnings */}
           {Object.keys(formData.medical_assessment).length > 0 && (() => {
             const risk = calculateMedicalRisk(formData.medical_assessment);
             return (
@@ -2464,17 +2480,35 @@ export default function NewProcedureScreen() {
           <Text style={styles.sectionTitle}>Medical Assessment <Text style={{ color: '#DC3545' }}>*</Text></Text>
           <View style={styles.medicalSection}>
             {MEDICAL_RISK_FACTORS.map(factor => (
-              <View key={factor.id} style={styles.medicalRow}>
-                <Text style={styles.medicalLabel}>{factor.label}</Text>
-                <View style={styles.yesNoRow}>
-                  {factor.options.map(opt => (
-                    <TouchableOpacity key={opt}
-                      style={[styles.yesNoBtn, formData.medical_assessment[factor.id] === opt && (opt === 'No' ? styles.noActive : styles.yesActive)]}
-                      onPress={() => updateMedical(factor.id, opt)}>
-                      <Text style={[styles.yesNoText, formData.medical_assessment[factor.id] === opt && styles.yesNoTextActive]}>{opt}</Text>
-                    </TouchableOpacity>
-                  ))}
+              <View key={factor.id}>
+                <View style={styles.medicalRow}>
+                  <Text style={styles.medicalLabel}>{factor.label}</Text>
+                  <View style={styles.yesNoRow}>
+                    {factor.options.map(opt => (
+                      <TouchableOpacity key={opt}
+                        style={[styles.yesNoBtn, formData.medical_assessment[factor.id] === opt && (opt === 'No' ? styles.noActive : styles.yesActive)]}
+                        onPress={() => updateMedical(factor.id, opt)}>
+                        <Text style={[styles.yesNoText, formData.medical_assessment[factor.id] === opt && styles.yesNoTextActive]}>{opt}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
+                {factor.id === 'diabetes' && (formData.medical_assessment.diabetes === 'Controlled' || formData.medical_assessment.diabetes === 'Uncontrolled') && (
+                  <View style={styles.hba1cRow} testID="hba1c-row-existing" data-testid="hba1c-row-existing">
+                    <Text style={styles.hba1cLabel}>HbA1c Value <Text style={styles.hba1cOptional}>(optional, %)</Text></Text>
+                    <TextInput
+                      style={styles.hba1cInput}
+                      value={formData.medical_assessment.hba1c || ''}
+                      onChangeText={(t) => updateMedical('hba1c', t)}
+                      placeholder="e.g. 7.2"
+                      placeholderTextColor="#90A4AE"
+                      keyboardType="decimal-pad"
+                      inputMode="decimal"
+                      testID="hba1c-input-existing"
+                      data-testid="hba1c-input-existing"
+                    />
+                  </View>
+                )}
               </View>
             ))}
             {Object.keys(formData.medical_assessment).length > 0 && (() => {
@@ -2710,6 +2744,10 @@ const styles = StyleSheet.create({
   medicalSection: { marginTop: 16, padding: 14, backgroundColor: '#F0F4F8', borderRadius: 12, borderWidth: 1, borderColor: '#E0E7EE' },
   medicalRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#E0E7EE' },
   medicalLabel: { fontSize: 14, color: '#333', fontWeight: '500', marginBottom: 8 },
+  hba1cRow: { paddingHorizontal: 4, paddingTop: 4, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#E0E7EE', backgroundColor: '#FAFBFD' },
+  hba1cLabel: { fontSize: 13, color: '#37474F', fontWeight: '600', marginBottom: 6 },
+  hba1cOptional: { fontSize: 11, color: '#78909C', fontWeight: '400' },
+  hba1cInput: { borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#263238', backgroundColor: '#FFF', maxWidth: 180 },
   yesNoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   yesNoBtn: { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, borderColor: '#D0DCE8', backgroundColor: '#FFF' },
   yesActive: { backgroundColor: '#DC3545', borderColor: '#DC3545' },
