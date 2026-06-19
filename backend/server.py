@@ -7537,6 +7537,10 @@ async def generate_case_report(
 
     # ── Medical Assessment ───────────────────────────────────
     med = procedure.get("medical_assessment")
+    # Phase 1 lab values (iter-314/315): captured in the same form but rendered
+    # in their own block below the risk factors. Skip them when iterating risk
+    # factors so the colour-coding heuristics don't fire on numeric strings.
+    LAB_KEYS = {"hba1c", "hb", "tlc", "bleeding_time", "clotting_time", "prothrombin_time", "inr"}
     if isinstance(med, dict) and med:
         risk = procedure.get("medical_risk_level", "")
         title = f"Medical Assessment — {risk}" if risk else "Medical Assessment"
@@ -7548,6 +7552,8 @@ async def generate_case_report(
             "Light (<10/day)": ("Moderate", (255, 152, 0)),
         }
         for key, value in med.items():
+            if key in LAB_KEYS:
+                continue
             label = key.replace("_", " ").title()
             pdf.set_font("Helvetica", "B", 10)
             pdf.cell(60, 7, safe(label + ":"), ln=False)
@@ -7568,6 +7574,54 @@ async def generate_case_report(
             pdf.set_text_color(*color)
             pdf.cell(0, 7, safe(val_str), ln=True)
             pdf.set_text_color(0, 0, 0)
+
+        # ── Haematology Examination + HbA1c (Phase 1 lab values) ─────
+        # Render only the lab values the student actually entered. Apply
+        # red text-colour when a value crosses the clinical-rule
+        # threshold so reviewers can spot deferral candidates at a glance.
+        lab_rows = [
+            ("hba1c",            "HbA1c",                              "%"),
+            ("hb",               "Haemoglobin (Hb)",                   "g/dL"),
+            ("tlc",              "Total Leucocyte Count",              "/cumm"),
+            ("bleeding_time",    "Bleeding Time",                      "min"),
+            ("clotting_time",    "Clotting Time",                      "min"),
+            ("prothrombin_time", "Prothrombin Time",                   "sec"),
+            ("inr",              "International Normalised Ratio",     ""),
+        ]
+        present_labs = [(k, lbl, unit) for (k, lbl, unit) in lab_rows
+                        if med.get(k) not in (None, "", "N/A")]
+        if present_labs:
+            pdf.ln(2)
+            pdf.set_font("Helvetica", "B", 11)
+            pdf.set_text_color(30, 58, 95)
+            pdf.cell(0, 7, safe("Haematology Examination"), ln=True)
+            pdf.set_text_color(0, 0, 0)
+            for key, label, unit in present_labs:
+                raw = med.get(key)
+                # Range-based red flagging (mirrors clinical-rule thresholds).
+                color = (0, 0, 0)
+                try:
+                    n = float(str(raw).strip())
+                    if key == "hba1c" and n >= 9:
+                        color = (244, 67, 54)  # hard-block threshold
+                    elif key == "hba1c" and n > 7:
+                        color = (255, 152, 0)
+                    elif key == "tlc" and (n < 4000 or n > 10000):
+                        color = (244, 67, 54)
+                    elif key == "prothrombin_time" and (n < 11 or n > 16):
+                        color = (244, 67, 54)
+                    elif key == "inr" and n > 1.5:
+                        color = (244, 67, 54)
+                    elif key == "hb" and n < 10:
+                        color = (244, 67, 54)
+                except (ValueError, TypeError):
+                    pass
+                pdf.set_font("Helvetica", "B", 10)
+                pdf.cell(60, 7, safe(label + ":"), ln=False)
+                pdf.set_text_color(*color)
+                val_str = f"{raw} {unit}".strip()
+                pdf.cell(0, 7, safe(val_str), ln=True)
+                pdf.set_text_color(0, 0, 0)
         pdf.ln(3)
 
     # ── Implant Planning Section ─────────────────────────────

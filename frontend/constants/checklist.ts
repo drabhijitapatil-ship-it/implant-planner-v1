@@ -286,6 +286,22 @@ export function calculateMedicalRisk(factors: Record<string, string>): { level: 
   scores.radiation = factors.radiation === 'Yes' ? 3 : 1;
   if (factors.radiation === 'Yes') warnings.push('Osteoradionecrosis risk - assess radiation dose and field');
 
+  // HbA1c numeric override (iter-315): crosses 9% → force High Risk
+  // regardless of categorical diabetes selection. Mirrors the hard-block
+  // threshold used by the deterministic clinical-rule engine
+  // (`clinical_rules/rules.py::diabetic_stack`, ITI 2023 Group 3 consensus).
+  const hba1cRaw = factors.hba1c;
+  if (hba1cRaw !== undefined && hba1cRaw !== null && String(hba1cRaw).trim() !== '') {
+    const hba1cNum = parseFloat(String(hba1cRaw));
+    if (!isNaN(hba1cNum) && hba1cNum >= 9) {
+      scores.hba1c = 3;
+      warnings.push(`HbA1c ${hba1cNum.toFixed(1)}% — uncontrolled glycaemia (≥9%); defer surgery and refer for medical optimisation (ITI 2023)`);
+    } else if (!isNaN(hba1cNum) && hba1cNum > 7) {
+      scores.hba1c = 2;
+      warnings.push(`HbA1c ${hba1cNum.toFixed(1)}% — above predictable-osseointegration threshold (>7%); proceed with caution`);
+    }
+  }
+
   // Override: force HIGH if any factor is 3
   const hasHighRiskFactor = Object.values(scores).some(s => s === 3);
   if (hasHighRiskFactor) {
