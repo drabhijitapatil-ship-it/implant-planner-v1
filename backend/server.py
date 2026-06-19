@@ -23,6 +23,7 @@ import jwt
 from bson import ObjectId
 import httpx
 from augmentation_checklist import generate_augmentation_checklist
+from clinical_rules import evaluate_case as evaluate_clinical_rules
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -2968,6 +2969,39 @@ async def get_augmentation_checklist(procedure_id: str, current_user: dict = Dep
         "items": proc.get("augmentation_checklist") or [],
         "generated_at": proc.get("augmentation_checklist_generated_at") or "",
         "generated_by": proc.get("augmentation_checklist_generated_by") or "",
+    }
+
+
+@api_router.get("/procedures/{procedure_id}/clinical-evaluation")
+async def get_clinical_evaluation(
+    procedure_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Run the deterministic clinical-rule engine over a procedure.
+    Returns ordered hits (hard_block → warning → info) so the UI can
+    render evidence-cited banners next to the affected phase."""
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Case not found")
+    if not _is_case_stakeholder(proc, current_user):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    # Flatten the nested phase2_data so rules can reach implant_plans / isq /
+    # angulations without each rule duplicating lookup logic.
+    flat = {**proc}
+    p2 = proc.get("phase2_data") or {}
+    if p2:
+        # implant_plans live on phase2_data once Phase 2 is started; keep
+        # phase1 implant_plans as a fallback for plan-only rules.
+        flat["implant_plans"] = p2.get("implant_plans") or proc.get("implant_plans") or []
+    hits = evaluate_clinical_rules(flat)
+    counts = {"hard_block": 0, "warning": 0, "info": 0}
+    for h in hits:
+        counts[h["severity"]] = counts.get(h["severity"], 0) + 1
+    return {
+        "procedure_id": procedure_id,
+        "hits": hits,
+        "counts": counts,
+        "evaluated_at": datetime.now(timezone.utc).isoformat(),
     }
 
 

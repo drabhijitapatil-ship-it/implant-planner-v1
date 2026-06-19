@@ -43,6 +43,7 @@ import ExportPrintMenu from '../../components/ExportPrintMenu';
 import Phase2EditModal from '../../components/Phase2EditModal';
 import RescheduleModal from '../../components/RescheduleModal';
 import AugmentationChecklist from '../../components/AugmentationChecklist';
+import ClinicalEvaluationBanner from '../../components/ClinicalEvaluationBanner';
 import PulsingDoubleArrow from '../../components/onboarding/primitives/PulsingDoubleArrow';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, {
@@ -1689,6 +1690,8 @@ export default function ProcedureDetailScreen() {
           <InfoRow icon="card" label="Registration Number" value={procedure.registration_number} />
           <InfoRow icon="medical" label="Implant Site" value={procedure.implant_site} />
         </View>
+
+        <ClinicalEvaluationBanner procedureId={String(id)} />
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Staff</Text>

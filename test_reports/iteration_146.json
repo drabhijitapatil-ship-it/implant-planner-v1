@@ -1,0 +1,42 @@
+{
+  "summary": "Tested the clinical-rule engine endpoint + banner end-to-end. Backend rule engine (12 unit tests) and API contract (13 API tests including auth, 404, 403, rule-firing, citation IDs, ordering, empty case) = 25/25 PASS. Frontend banner DOES render correctly when test data is injected: shows 'Clinical Decision Support' eyebrow, top hit title, chip row, evidence take-away. Tapping the banner opens the modal which lists all 4 hits with proper citations + close button works. ONE testability bug found: chip & hit View components use raw `data-testid` prop which React Native Web strips — only the banner (which has both `testID` and `data-testid`) and the close TouchableOpacity (has `testID`) are queryable by automation. Chips (clinical-eval-chip-*) and hits (clinical-eval-hit-{rule_id}) are NOT in the DOM despite rendering visually.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "ClinicalEvaluationBanner.tsx (chips + hits + close)",
+        "issue": "Inner <View> components use raw JSX prop `data-testid={...}` which React Native Web silently strips. Result: data-testid='clinical-eval-chip-hard|warning|info' and data-testid='clinical-eval-hit-{rule_id}' are NOT present in the rendered DOM. They render visually but are unfindable by automation. Fix: use React Native's `testID={...}` prop (camelCase) on every View — RN Web auto-maps that to data-testid. The banner TouchableOpacity already correctly uses both (testID + data-testid) which is why only it is queryable.",
+        "selector": "[data-testid='clinical-eval-chip-hard'], [data-testid='clinical-eval-hit-immediate_loading_stability']",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_clinical_rules.py",
+    "/app/backend/tests/test_clinical_evaluation_api.py",
+    "/app/test_reports/pytest/iteration_146_rules.xml",
+    "/app/test_reports/pytest/iteration_146_api.xml"
+  ],
+  "action_items": [
+    "Add testID prop alongside (or in place of) data-testid on the chip Views (chip-hard / chip-warning / chip-info), each hit View in the modal, and any other inner View that needs to be queryable. Example: <View testID='clinical-eval-chip-hard' data-testid='clinical-eval-chip-hard' ...>. This restores the full data-testid contract promised in the spec."
+  ],
+  "critical_code_review_comments": [
+    "Endpoint correctly flattens phase2_data.implant_plans → top-level implant_plans before evaluation; rules are exception-isolated; sort order (hard_block → warning → info, then rule_id) is enforced. Clean.",
+    "Citation switching in diabetic_stack (smoker → JIANG, non-smoker → NAUJOKAT) works as documented; HbA1c >9 escalates to hard_block — both verified against live endpoint.",
+    "Full-arch angulation correctly uses inclusive >18 warning / >30 hard_block bounds. Skipped for single-implant procedures (verified).",
+    "The component ClinicalEvaluationBanner.tsx is 194 lines, well under the 700-line guideline; clean structure.",
+    "Minor: banner shows ActivityIndicator briefly on load — could be hidden when API responds with empty hits to avoid layout flicker (currently does this correctly by returning null after load when hits=[])."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_clinical_evaluation_api.py (NEW - 13 API/integration tests covering auth, 404, 403, rule-firing for all 5 rules, ordering, empty case)"
+  ],
+  "success_rate": { "backend": "100% (25/25 tests pass)", "frontend": "Visual + functional flow verified manually; data-testid contract 2/5 queryable (banner + close OK; 3 chips + 4 hit-cards not in DOM due to RN Web prop stripping)" },
+  "test_credentials": "Used Abhijit.patil/Admin@123 (admin/owner) + Gaurav.pandey/Student@123 (non-stakeholder, returns 403 as expected). Verified from /app/memory/test_credentials.md.",
+  "seed_data_creation": "Snapshotted procedure 6a032b01473d90c8c776a586 to /tmp/proc_snapshot.json, patched it with banner-triggering data (loading_type=['Immediate Loading'], hba1c=8.4, smoker=true, implant_procedure_type='All on 4', phase2_data.implant_plans=[{position:'11',isq:55,torque:25,angulation:5},{position:'13',isq:72,torque:40,angulation:28}]) — produced exactly 4 hits (1 hard_block + 3 warnings) — then restored the snapshot. Procedure is back to its original state.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend endpoint is fully verified — 25 pytest tests pass including auth/role/404/all-rules/ordering. Frontend banner renders and modal opens correctly with all citations (visually confirmed via screenshots). The only outstanding issue is the data-testid contract on inner Views — RN Web only forwards `testID` (camelCase) to the DOM as data-testid; raw `data-testid={...}` JSX props on <View> are stripped. To use Playwright for frontend, you MUST navigate via in-app SPA navigation (window.history.pushState + popstate event) — direct page.goto() wipes the in-memory auth token (web platform uses memoryTokens, not localStorage; see /app/frontend/utils/api.ts lines 11-27).",
+  "rca of the issue": "RCA — RN Web only translates React Native's `testID` prop (camelCase) into a DOM `data-testid` attribute. When the JSX uses `<View data-testid='...'>` directly, that prop is treated as an unknown DOM-style prop and silently dropped during the RN→DOM bridge. The banner survives because it has BOTH `testID` and `data-testid`; the close button survives because it has `testID`. The chips & hit-cards only declare `data-testid={...}` so they vanish from the DOM. Mitigation: add `testID={...}` to every inner View that needs to be queryable (or replace data-testid with testID — RN Web auto-maps it)."
+}
