@@ -1,5 +1,42 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 317 (Feb 2026) — Phase 4 Step 2 IOPA upload bug fix (RN-Web FormData)
+
+### Bug
+In New Case → Phase 4 Step 2 → "Compare with baseline radiograph", the baseline IOPA rendered, but uploading the post-delivery (current) IOPA from web silently failed. Once the file did make it through, the AI marginal-bone-level comparison worked perfectly.
+
+### Root cause
+`uploadFile()` in `/app/frontend/app/procedures/submit-phase4-step2/[id].tsx` was using the React Native FormData shape:
+```js
+fp.append('file', { uri, name, type } as any);
+```
+On native this is correctly serialised to a multipart file part. On React Native Web, however, `FormData` only accepts `Blob`/`File`/`string` — it string-coerces the object to `"[object Object]"`, so the backend's `UploadFile` field never receives a file and the request fails. Identical bug existed in `submit-stage2-surgical/[id].tsx` (used to upload the baseline IOPA in Phase 2).
+
+### Fix
+Branch on `Platform.OS === 'web'`: convert the picked URI to a real Blob via `fetch(uri).then(r => r.blob())` before appending. Mobile path unchanged. Same 8-line fix applied in both files:
+- `/app/frontend/app/procedures/submit-phase4-step2/[id].tsx::uploadFile()` (Phase 4 OPG + per-implant IOPA + prosthesis photos all go through this helper)
+- `/app/frontend/app/procedures/submit-stage2-surgical/[id].tsx::pickIopaFile()` (Phase 2 post-surgical IOPA — same bug would have surfaced on web for any baseline upload)
+
+### Verification
+- Lint clean on both files.
+- Backend upload endpoint `/api/uploads/media-temp` confirmed working with a real multipart file via cURL → returns `{filename, original_name, content_type}` as expected; the fix makes the web FormData submit the same shape that cURL does.
+- 12/12 `test_clinical_rules.py` backend regression tests still pass.
+
+### Files touched
+- EDIT: `/app/frontend/app/procedures/submit-phase4-step2/[id].tsx`
+- EDIT: `/app/frontend/app/procedures/submit-stage2-surgical/[id].tsx`
+
+### Next up
+- P1: Audit the other 3 files that still use the same RN-only FormData shape (`forum/[threadId].tsx`, `forum/chat/create.tsx`, `admin/implant-catalog-edit.tsx`) — first two have a web branch already; the admin catalog edit upload would also fail on web.
+- P1: Centralise the upload helper into `/app/frontend/utils/uploads.ts` so future screens can't reintroduce this bug.
+- P1: Surface clinical-evaluation hits inline on Phase 1 save (currently only on Case Detail open).
+- P1: Microsoft OAuth sign-in (needs Azure Client ID/Secret).
+
+---
+
+
+# Prosthodontics Dental Implant Mobile App — PRD
+
 ## Iteration 316 (Feb 2026) — Phase 1 "Continue to Implant Selection" validator fix
 
 ### Bug
