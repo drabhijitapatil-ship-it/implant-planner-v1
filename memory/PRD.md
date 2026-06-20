@@ -1,5 +1,38 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 316 (Feb 2026) — Phase 1 "Continue to Implant Selection" validator fix
+
+### Bug
+After filling all Phase-1 fields including Clinical Examination in cluster mode (≥ 2 missing teeth, non-Single-Conventional, non-full-arch), the `Continue to Implant Selection` button stayed inactive with: *"Incomplete Section: Clinical Examination has missing fields"*. Full-arch cases (All on 4/6/X) were silently broken too.
+
+### Root cause
+The Phase-1 validator at `/app/frontend/app/(tabs)/new-procedure.tsx` only checked the legacy flat keys `formData.{occlusocervical_height, mesiodistal_space, ridge_contour}`. The cluster UI actually persists to `formData.edentulous_site_measurements[tooth].{oc,md}` and `formData.clinical_exam_per_site[leader].ridge_contour`, and the full-arch UI never renders oc/md at all.
+
+### Fix (validator now mirrors the UI render paths)
+- Introduced `isClusterMode = isClinicalExamGroup && !isOverdentureNonFullArch && missing_teeth.length ≥ 2 && proc !== 'Single Conventional Implant'`.
+- When in cluster mode, iterate `findMissingRuns(missing_teeth)` and validate the cluster keys per leader/tooth (md on leader, oc on every tooth, ridge_contour on leader; ridge skipped for Single Conventional).
+- When in legacy mode, only enforce the flat keys if `!isFullArch && !isOverdentureNonFullArch` (full-arch UI doesn't render oc/md inputs, so requiring them was unreachable).
+- Singleton missing-tooth runs inside a multi-missing case (two non-adjacent singletons) are correctly validated per-tooth (oc + md + ridge), matching the UI.
+
+### Verification
+- Testing agent (`/app/test_reports/iteration_147.json`) did a rigorous line-by-line trace of validator vs UI render keys: cluster-mode and single-tooth paths confirmed correct; testing agent caught the full-arch edge case which we then patched (4-char gate added). Re-traced — all 3 scenarios now pass.
+- Backend untouched; 12/12 `test_clinical_rules.py` tests still pass.
+
+### Files touched
+- EDIT: `/app/frontend/app/(tabs)/new-procedure.tsx` — ≈45 lines of validator logic around the old 3-line check (lines 1289-1332).
+
+### Next up
+- P1: Surface clinical-evaluation hits inline on Phase 1 save (currently only on Case Detail open).
+- P1: LLM narrative layer over deterministic clinical-rule hits.
+- P1: Microsoft OAuth sign-in (needs Azure Client ID/Secret).
+- P2: Split `new-procedure.tsx` (2 850 LOC) into per-step modules so validators sit next to the inputs they validate — would have prevented this drift entirely.
+- P2: Per-input red border + "Outside normal" hint on the haematology fields.
+
+---
+
+
+# Prosthodontics Dental Implant Mobile App — PRD
+
 ## Iteration 315 (Feb 2026) — HbA1c risk-escalation + Haematology in case-report PDF
 
 ### What shipped

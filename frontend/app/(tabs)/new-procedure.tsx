@@ -1325,7 +1325,7 @@ export default function NewProcedureScreen() {
           if (ridgeRequired && !perSite[t]?.ridge_contour) missClinical.push(`Ridge contour (FDI ${t})`);
         }
       }
-    } else {
+    } else if (!isFullArch && !isOverdentureNonFullArch) {
       if (!formData.occlusocervical_height) missClinical.push('Occlusocervical height');
       if (!formData.mesiodistal_space) missClinical.push('Mesiodistal space');
       if (!formData.ridge_contour) missClinical.push('Ridge contour');
