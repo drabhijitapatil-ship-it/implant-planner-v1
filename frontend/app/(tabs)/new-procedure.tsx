@@ -1286,9 +1286,50 @@ export default function NewProcedureScreen() {
       if (!isFullArch && (formData.missing_teeth || []).length === 0) missImplantDetails.push('At least one missing tooth on FDI chart');
     }
 
-    if (!formData.occlusocervical_height) missClinical.push('Occlusocervical height');
-    if (!formData.mesiodistal_space) missClinical.push('Mesiodistal space');
-    if (!formData.ridge_contour) missClinical.push('Ridge contour');
+    // iter-316: Clinical Examination validation now mirrors the UI's
+    // dual-path rendering. When the user is in the per-tooth cluster mode
+    // (≥ 2 missing teeth, not Single Conventional Implant, not full-arch),
+    // values are stored under `edentulous_site_measurements[tooth].{oc,md}`
+    // and `clinical_exam_per_site[leader].ridge_contour` — NOT in the flat
+    // legacy keys. Previously the validator only checked the flat keys, so
+    // cluster-mode cases were stuck on "Clinical Examination has missing
+    // fields" forever.
+    const missingTeeth = formData.missing_teeth || [];
+    const isClusterMode =
+      isClinicalExamGroup &&
+      !isOverdentureNonFullArch &&
+      missingTeeth.length >= 2 &&
+      formData.implant_procedure_type !== 'Single Conventional Implant';
+
+    if (isClusterMode) {
+      const runs = findMissingRuns(missingTeeth);
+      const measurements = formData.edentulous_site_measurements || {};
+      const perSite = formData.clinical_exam_per_site || {};
+      const ridgeRequired = formData.implant_procedure_type !== 'Single Conventional Implant';
+      for (const run of runs) {
+        const positions = run.positions;
+        const isCluster = positions.length >= 2;
+        const leader = clusterLeader(positions) || positions[0];
+        if (isCluster) {
+          // Shared mesiodistal span on the leader; per-tooth oc on every tooth.
+          if (!measurements[leader]?.md) { missClinical.push(`Mesiodistal span (FDI ${leader})`); }
+          for (const t of positions) {
+            if (!measurements[t]?.oc) missClinical.push(`Occlusocervical height (FDI ${t})`);
+          }
+          if (ridgeRequired && !perSite[leader]?.ridge_contour) missClinical.push(`Ridge contour (FDI ${leader})`);
+        } else {
+          // Singleton — both oc + md on the tooth; ridge per-site (if required).
+          const t = positions[0];
+          if (!measurements[t]?.oc) missClinical.push(`Occlusocervical height (FDI ${t})`);
+          if (!measurements[t]?.md) missClinical.push(`Mesiodistal space (FDI ${t})`);
+          if (ridgeRequired && !perSite[t]?.ridge_contour) missClinical.push(`Ridge contour (FDI ${t})`);
+        }
+      }
+    } else {
+      if (!formData.occlusocervical_height) missClinical.push('Occlusocervical height');
+      if (!formData.mesiodistal_space) missClinical.push('Mesiodistal space');
+      if (!formData.ridge_contour) missClinical.push('Ridge contour');
+    }
 
     if (isExistingImplantCase) {
       const ma = formData.medical_assessment || {};
