@@ -36,6 +36,7 @@ import {
   MEDICAL_RISK_FACTORS,
   calculateMedicalRisk,
   getProstheticOptions,
+  PROCEDURES_WITH_NUM_IMPLANTS_QUESTION,
   PHASE1_ATTACHMENT_TYPE_OPTIONS,
 } from '../../constants/checklist';
 
@@ -303,6 +304,7 @@ export default function NewProcedureScreen() {
   // iter-238: renamed "Implant Inventory" → "Implant Details" per user request.
   const EXISTING_STEP_LABELS = ['Case Details', 'Implant Details', 'Clinical Examination', 'Medical Assessment', 'Submit'];
   const existingStepYs = useRef<number[]>([0, 0, 0, 0, 0]);
+  const procedureInfoY = useRef<number>(0);
   const [currentExistingStep, setCurrentExistingStep] = useState(0);
   // iter-238 hotfix: `scrollRef` MUST be declared before the early return at
   // `if (step === 'implants' && createdProcedureId)` further down — otherwise
@@ -316,20 +318,28 @@ export default function NewProcedureScreen() {
   };
   const onScrollExisting = (e: any) => {
     const y = e?.nativeEvent?.contentOffset?.y ?? 0;
-    // pick the largest index whose recorded Y is below current scroll + 120px peek
-    let idx = 0;
-    for (let i = 0; i < existingStepYs.current.length; i++) {
-      if (existingStepYs.current[i] && existingStepYs.current[i] <= y + 120) idx = i;
+    // Fill gaps left by unrendered sections: propagate forward from rendered Ys.
+    const ys = [...existingStepYs.current];
+    ys[0] = 0;
+    for (let i = ys.length - 2; i >= 0; i--) {
+      if (!ys[i]) ys[i] = ys[i + 1] || 0;
     }
-    if (idx !== currentExistingStep) setCurrentExistingStep(idx);
+    let activeIdx = 0;
+    for (let i = 0; i < ys.length; i++) {
+      if (ys[i] !== undefined && y >= ys[i] - 120) activeIdx = i;
+    }
+    if (activeIdx !== currentExistingStep) setCurrentExistingStep(activeIdx);
   };
   const jumpToExistingStep = (idx: number) => {
-    const y = existingStepYs.current[idx] || 0;
-    // small upward offset so the section title isn't hidden under the sticky strip
-    scrollRef.current?.scrollTo({ y: Math.max(0, y - 24), animated: true });
-    // iter-237: optimistically set the active pill so the strip gives
-    // immediate feedback — the onScroll handler will reconcile if the
-    // section's actual Y resolves differently.
+    let y = existingStepYs.current[idx] || 0;
+    // Section not rendered yet — scroll to Procedure Information to unlock it
+    if (idx > 0 && y === 0) {
+      y = procedureInfoY.current || 500;
+      scrollRef.current?.scrollTo({ y: Math.max(0, y - 110), animated: true });
+      setCurrentExistingStep(0);
+      return;
+    }
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - 110), animated: true });
     setCurrentExistingStep(idx);
   };
 
@@ -353,6 +363,7 @@ export default function NewProcedureScreen() {
     procedure_date: '',
     procedure_time: '',
     implant_procedure_type: '',
+    num_implants: '',
     teeth_present: [] as string[],
     missing_teeth: [] as string[],
     edentulous_site_measurements: {} as Record<string, { oc?: string; md?: string }>,
@@ -423,7 +434,7 @@ export default function NewProcedureScreen() {
   const isFullArch = FULL_ARCH_GROUP.has(effectiveProcType);
   const isNonFullArch = NON_FULL_ARCH_TYPES.has(effectiveProcType);
   const isClinicalExamGroup = CLINICAL_EXAM_GROUP.has(effectiveProcType);
-  const prostheticOptions = getProstheticOptions(formData.implant_procedure_type, formData.loading_type);
+  const prostheticOptions = getProstheticOptions(formData.implant_procedure_type, formData.loading_type, formData.num_implants);
   // When a non-full-arch procedure is paired with an Overdenture-with-Attachment
   // prosthetic plan, the case is biomechanically full-arch (the attachment
   // splints the entire arch). We therefore SKIP the FDI missing-teeth chart and
@@ -487,6 +498,7 @@ export default function NewProcedureScreen() {
                 procedure_date: proc.procedure_date || '',
                 procedure_time: proc.procedure_time || '',
                 implant_procedure_type: proc.implant_procedure_type || '',
+                num_implants: proc.num_implants || '',
                 teeth_present: Array.isArray(proc.teeth_present) ? proc.teeth_present : [],
                 missing_teeth: Array.isArray(proc.missing_teeth) ? proc.missing_teeth : [],
                 edentulous_site_measurements: (proc.edentulous_site_measurements && typeof proc.edentulous_site_measurements === 'object') ? proc.edentulous_site_measurements : {},
@@ -602,7 +614,7 @@ export default function NewProcedureScreen() {
           implant_incharge_id: user?.role === 'chief_dentist' ? (user?.id || '') : '',
           implant_incharge_name: user?.role === 'chief_dentist' ? (user?.name || '') : '',
           receipt_number: '', amount_paid: '', procedure_date: '', procedure_time: '',
-          implant_procedure_type: '', teeth_present: [] as string[], arch: '', loading_type: [] as string[],
+          implant_procedure_type: '', num_implants: '', teeth_present: [] as string[], arch: '', loading_type: [] as string[],
           prosthetic_plan: '', prosthetic_plan_other: '', attachment_type: '', attachment_type_other: '', bone_graft_specifications: '',
           edentulous_sites: [] as string[], occlusocervical_height: '', mesiodistal_space: '',
           arch_condition: '', ridge_contour: '',
@@ -776,6 +788,40 @@ export default function NewProcedureScreen() {
     }));
   };
 
+  const HAEMATOLOGY_FIELDS: { id: string; label: string; placeholder: string; hint?: string }[] = [
+    { id: 'hb', label: 'Haemoglobin (Hb)', placeholder: 'e.g. 13.5', hint: 'g/dL' },
+    { id: 'tlc', label: 'Total Leucocyte Count', placeholder: 'e.g. 7500', hint: 'Normal 4,000 – 10,000 /cumm' },
+    { id: 'bleeding_time', label: 'Bleeding Time', placeholder: 'e.g. 2.5', hint: 'minutes' },
+    { id: 'clotting_time', label: 'Clotting Time', placeholder: 'e.g. 5.0', hint: 'minutes' },
+    { id: 'prothrombin_time', label: 'Prothrombin Time', placeholder: 'e.g. 13', hint: 'Normal 11 – 16 seconds' },
+    { id: 'inr', label: 'International Normalised Ratio (INR)', placeholder: 'e.g. 1.1', hint: 'ratio' },
+  ];
+
+  const renderHaematologySection = (testidSuffix: string) => (
+    <View style={styles.haematologyWrap} testID={`haematology-${testidSuffix}`} data-testid={`haematology-${testidSuffix}`}>
+      <Text style={styles.haematologyHeading}>Haematology Examination <Text style={styles.haematologyOptional}>(all optional)</Text></Text>
+      {HAEMATOLOGY_FIELDS.map(f => (
+        <View key={f.id} style={styles.haematologyRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.haematologyLabel}>{f.label}</Text>
+            {f.hint ? <Text style={styles.haematologyHint}>{f.hint}</Text> : null}
+          </View>
+          <TextInput
+            style={styles.haematologyInput}
+            value={formData.medical_assessment[f.id] || ''}
+            onChangeText={(t) => updateMedical(f.id, t)}
+            placeholder={f.placeholder}
+            placeholderTextColor="#90A4AE"
+            keyboardType="decimal-pad"
+            inputMode="decimal"
+            testID={`haematology-input-${f.id}-${testidSuffix}`}
+            data-testid={`haematology-input-${f.id}-${testidSuffix}`}
+          />
+        </View>
+      ))}
+    </View>
+  );
+
   // ── CBCT File Picker & Upload (Multiple) ──
   const totalCbctSlots = 2 + extraCbctCount;
 
@@ -862,6 +908,29 @@ export default function NewProcedureScreen() {
     if (sanitized.loading_type.length === 0) {
       Alert.alert('Missing Field', 'Please select at least one loading type.');
       return;
+    }
+    if (PROCEDURES_WITH_NUM_IMPLANTS_QUESTION.has(sanitized.implant_procedure_type)) {
+      if (!sanitized.num_implants) {
+        Alert.alert('Missing Field', 'Please pick "Single Implant" or "Multiple Implants" under Number of Implants.');
+        return;
+      }
+      const missingCount = (sanitized.missing_teeth || []).length;
+      if (sanitized.num_implants === 'Single Implant' && missingCount > 1) {
+        Alert.alert(
+          'Tooth Count Mismatch',
+          `You selected "Single Implant" but ${missingCount} teeth are marked on the FDI chart. ` +
+          'Please reduce the marked teeth to 1 or switch the sub-question to "Multiple Implants".'
+        );
+        return;
+      }
+      if (sanitized.num_implants === 'Multiple Implants' && missingCount < 2) {
+        Alert.alert(
+          'Tooth Count Mismatch',
+          `"Multiple Implants" requires at least 2 teeth on the FDI chart, but ${missingCount} ${missingCount === 1 ? 'is' : 'are'} marked. ` +
+          'Please mark the remaining teeth or switch the sub-question to "Single Implant".'
+        );
+        return;
+      }
     }
     if (!sanitized.periodontal_status && (
       sanitized.implant_procedure_type === 'Single Conventional Implant' ||
@@ -1181,14 +1250,30 @@ export default function NewProcedureScreen() {
       else if (FULL_ARCH_GROUP.has(existingOrigProcedure) && !formData.arch) missImplantDetails.push('Arch');
       if ((existingImplantTeeth || []).length === 0) missImplantDetails.push('At least one tooth marked on FDI chart');
     } else {
+      if (PROCEDURES_WITH_NUM_IMPLANTS_QUESTION.has(formData.implant_procedure_type) && !formData.num_implants) missImplantDetails.push('Number of Implants');
       if (!formData.prosthetic_plan) missImplantDetails.push('Prosthetic Plan');
       if (isFullArch && !formData.arch) missImplantDetails.push('Arch');
       if (!isFullArch && (formData.missing_teeth || []).length === 0) missImplantDetails.push('At least one missing tooth on FDI chart');
     }
 
-    if (!formData.occlusocervical_height) missClinical.push('Occlusocervical height');
-    if (!formData.mesiodistal_space) missClinical.push('Mesiodistal space');
-    if (!formData.ridge_contour) missClinical.push('Ridge contour');
+    const usingPerSiteValidation =
+      isClinicalExamGroup && !isOverdentureNonFullArch &&
+      (formData.missing_teeth || []).length >= 2 &&
+      formData.implant_procedure_type !== 'Single Conventional Implant';
+
+    if (usingPerSiteValidation) {
+      const esMeasures = formData.edentulous_site_measurements || {};
+      if (!Object.values(esMeasures).some((m: any) => m?.oc)) missClinical.push('Occlusocervical height');
+      if (!Object.values(esMeasures).some((m: any) => m?.md)) missClinical.push('Mesiodistal space');
+      const perSite = formData.clinical_exam_per_site || {};
+      if (!Object.values(perSite).some((s: any) => s?.ridge_contour)) missClinical.push('Ridge contour');
+    } else {
+      if (!isFullArch && !isOverdentureNonFullArch) {
+        if (!formData.occlusocervical_height) missClinical.push('Occlusocervical height');
+        if (!formData.mesiodistal_space) missClinical.push('Mesiodistal space');
+      }
+      if (!formData.ridge_contour) missClinical.push('Ridge contour');
+    }
 
     if (isExistingImplantCase) {
       if (!formData.diabetes) missMedicalOrChecklist.push('Diabetes');
@@ -1275,65 +1360,72 @@ export default function NewProcedureScreen() {
             );
           })()}
           {/* iter-237/238/239: tappable step pills — uniform width, green ✓ when section is complete. */}
-          <View style={styles.existingStepPillRow}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.existingStepPillRow}
+            style={{ marginHorizontal: -16 }}
+          >
+            <View style={{ width: 16 }} />
             {FLOW_STEP_LABELS.map((label, idx) => {
               const active = idx === currentExistingStep;
               const done = existingStepDone[idx];
               const PillWrap: any = idx === 0 ? Animated.View : View;
-              const pillWrapProps = idx === 0 ? { style: { transform: [{ scale: pillPulseAnim }], flexGrow: 1, flexBasis: 0 } } : { style: { flexGrow: 1, flexBasis: 0 } };
+              const pillWrapProps = idx === 0 ? { style: { transform: [{ scale: pillPulseAnim }] } } : {};
               return (
                 <PillWrap key={label} {...pillWrapProps}>
-                <TouchableOpacity
-                  key={label}
-                  onPress={() => {
-                    // iter-240: tap pill to validate & jump. Already-green
-                    // pills just scroll; incomplete pills first show a brief
-                    // popup listing the missing fields, then scroll on
-                    // confirm. Submit pill rolls up upstream blockers.
-                    const missing = flowStepMissing[idx] || [];
-                    if (missing.length === 0) {
-                      jumpToExistingStep(idx);
-                      return;
-                    }
-                    const list = missing.slice(0, 8).map(m => `• ${m}`).join('\n');
-                    const more = missing.length > 8 ? `\n…and ${missing.length - 8} more` : '';
-                    const body = `Please complete the following before this section is marked done:\n\n${list}${more}`;
-                    // React Native Web's Alert.alert only renders the message
-                    // (buttons are no-ops). Fall back to window.confirm on web
-                    // so users still get a Stay/Go choice.
-                    if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.confirm === 'function') {
-                      if (window.confirm(`Missing: ${label}\n\n${body}\n\nTap OK to jump there, Cancel to stay here.`)) {
+                  <TouchableOpacity
+                    key={label}
+                    onPress={() => {
+                      // iter-240: tap pill to validate & jump. Already-green
+                      // pills just scroll; incomplete pills first show a brief
+                      // popup listing the missing fields, then scroll on
+                      // confirm. Submit pill rolls up upstream blockers.
+                      const missing = flowStepMissing[idx] || [];
+                      if (missing.length === 0) {
                         jumpToExistingStep(idx);
+                        return;
                       }
-                      return;
-                    }
-                    Alert.alert(
-                      `Missing: ${label}`,
-                      body,
-                      [
-                        { text: 'Stay here', style: 'cancel' },
-                        { text: 'Take me there', onPress: () => jumpToExistingStep(idx) },
-                      ]
-                    );
-                  }}
-                  style={[styles.existingStepPill, active && styles.existingStepPillActive, done && !active && styles.existingStepPillDone]}
-                  testID={`existing-step-pill-${idx}`}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Jump to ${label}${done ? ', complete' : ''}`}
-                >
-                  {done ? (
-                    <Ionicons name="checkmark-circle" size={12} color={active ? '#FFF' : '#2E7D32'} style={{ marginRight: 3 }} />
-                  ) : (
-                    <Text style={[styles.existingStepPillNum, active && styles.existingStepPillTextActive]}>{idx + 1}.</Text>
-                  )}
-                  <Text style={[styles.existingStepPillText, active && styles.existingStepPillTextActive, done && !active && styles.existingStepPillTextDone]} numberOfLines={1}>
-                    {label}
-                  </Text>
-                </TouchableOpacity>
+                      const list = missing.slice(0, 8).map(m => `• ${m}`).join('\n');
+                      const more = missing.length > 8 ? `\n…and ${missing.length - 8} more` : '';
+                      const body = `Please complete the following before this section is marked done:\n\n${list}${more}`;
+                      // React Native Web's Alert.alert only renders the message
+                      // (buttons are no-ops). Fall back to window.confirm on web
+                      // so users still get a Stay/Go choice.
+                      if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.confirm === 'function') {
+                        if (window.confirm(`Missing: ${label}\n\n${body}\n\nTap OK to jump there, Cancel to stay here.`)) {
+                          jumpToExistingStep(idx);
+                        }
+                        return;
+                      }
+                      Alert.alert(
+                        `Missing: ${label}`,
+                        body,
+                        [
+                          { text: 'Stay here', style: 'cancel' },
+                          { text: 'Take me there', onPress: () => jumpToExistingStep(idx) },
+                        ]
+                      );
+                    }}
+                    style={[styles.existingStepPill, active && styles.existingStepPillActive, done && !active && styles.existingStepPillDone]}
+                    testID={`existing-step-pill-${idx}`}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Jump to ${label}${done ? ', complete' : ''}`}
+                  >
+                    {done ? (
+                      <Ionicons name="checkmark-circle" size={12} color={active ? '#FFF' : '#2E7D32'} style={{ marginRight: 3 }} />
+                    ) : (
+                      <Text style={[styles.existingStepPillNum, active && styles.existingStepPillTextActive]}>{idx + 1}.</Text>
+                    )}
+                    <Text style={[styles.existingStepPillText, active && styles.existingStepPillTextActive, done && !active && styles.existingStepPillTextDone]}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
                 </PillWrap>
               );
             })}
-          </View>
+            <View style={{ width: 16 }} />
+          </ScrollView>
         </View>
       ) : <View />}
 
@@ -1456,16 +1548,22 @@ export default function NewProcedureScreen() {
       {/* iter-213: Procedure Information now precedes Payment Details so the
           operator picks the procedure type (which may be "Existing Implant"
           and morph the rest of the form) before entering payment info. */}
-      <View style={styles.section}>
+      <View style={styles.section} onLayout={(e) => { procedureInfoY.current = e?.nativeEvent?.layout?.y ?? 0; }}>
         <Text style={styles.sectionTitle}>Procedure Information</Text>
         <Dropdown label="Type of Implant Procedure" value={formData.implant_procedure_type}
-          options={PROCEDURE_TYPES} onChange={v => { updateForm('implant_procedure_type', v); updateForm('arch', ''); }} required />
+          options={PROCEDURE_TYPES} onChange={v => { updateForm('implant_procedure_type', v); updateForm('arch', ''); updateForm('num_implants', ''); updateForm('prosthetic_plan', ''); }} required />
         {/* iter-235: hide the Arch dropdown for Existing Implant — it lives
             inside the ExistingImplantSection between Type of Implant Procedure
             Done and Implant Selection instead. */}
         {isFullArch && !isExistingImplantCase && (
           <Dropdown label="Arch" value={formData.arch}
             options={['Maxillary', 'Mandibular']} onChange={v => updateForm('arch', v)} required data-testid="arch-dropdown" />
+        )}
+        {PROCEDURES_WITH_NUM_IMPLANTS_QUESTION.has(formData.implant_procedure_type) && (
+          <Dropdown label="Number of Implants" value={formData.num_implants}
+            options={['Single Implant', 'Multiple Implants']}
+            onChange={v => { updateForm('num_implants', v); updateForm('prosthetic_plan', ''); }}
+            required />
         )}
       </View>
 
@@ -2270,6 +2368,7 @@ export default function NewProcedureScreen() {
             <View style={{ flexDirection: 'row', gap: 6 }}>
               {['Yes', 'No'].map(opt => (
                 <TouchableOpacity key={opt}
+                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                   style={[styles.yesNoBtn, checklistItems[item.id] === true && opt === 'Yes' && { backgroundColor: '#4CAF50', borderColor: '#4CAF50' }, checklistItems[item.id] === false && opt === 'No' && { backgroundColor: '#F44336', borderColor: '#F44336' }]}
                   onPress={() => setChecklistItems(prev => ({ ...prev, [item.id]: opt === 'Yes' }))}>
                   <Text style={[styles.yesNoText, (checklistItems[item.id] === true && opt === 'Yes') || (checklistItems[item.id] === false && opt === 'No') ? styles.yesNoTextActive : {}]}>{opt}</Text>
@@ -2283,19 +2382,38 @@ export default function NewProcedureScreen() {
         <View style={styles.medicalSection}>
           <Text style={styles.subSectionTitle}>Medical Assessment</Text>
           {MEDICAL_RISK_FACTORS.map(factor => (
-            <View key={factor.id} style={styles.medicalRow}>
-              <Text style={styles.medicalLabel}>{factor.label}</Text>
-              <View style={styles.yesNoRow}>
-                {factor.options.map(opt => (
-                  <TouchableOpacity key={opt}
-                    style={[styles.yesNoBtn, formData.medical_assessment[factor.id] === opt && (opt === 'No' ? styles.noActive : styles.yesActive)]}
-                    onPress={() => updateMedical(factor.id, opt)}>
-                    <Text style={[styles.yesNoText, formData.medical_assessment[factor.id] === opt && styles.yesNoTextActive]}>{opt}</Text>
-                  </TouchableOpacity>
-                ))}
+            <View key={factor.id}>
+              <View style={styles.medicalRow}>
+                <Text style={styles.medicalLabel}>{factor.label}</Text>
+                <View style={styles.yesNoRow}>
+                  {factor.options.map(opt => (
+                    <TouchableOpacity key={opt}
+                      style={[styles.yesNoBtn, formData.medical_assessment[factor.id] === opt && (opt === 'No' ? styles.noActive : styles.yesActive)]}
+                      onPress={() => updateMedical(factor.id, opt)}>
+                      <Text style={[styles.yesNoText, formData.medical_assessment[factor.id] === opt && styles.yesNoTextActive]}>{opt}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </View>
+              {factor.id === 'diabetes' && (formData.medical_assessment.diabetes === 'Controlled' || formData.medical_assessment.diabetes === 'Uncontrolled') && (
+                <View style={styles.hba1cRow} testID="hba1c-row-routine" data-testid="hba1c-row-routine">
+                  <Text style={styles.hba1cLabel}>HbA1c Value <Text style={styles.hba1cOptional}>(optional, %)</Text></Text>
+                  <TextInput
+                    style={styles.hba1cInput}
+                    value={formData.medical_assessment.hba1c || ''}
+                    onChangeText={(t) => updateMedical('hba1c', t)}
+                    placeholder="e.g. 7.2"
+                    placeholderTextColor="#90A4AE"
+                    keyboardType="decimal-pad"
+                    inputMode="decimal"
+                    testID="hba1c-input-routine"
+                    data-testid="hba1c-input-routine"
+                  />
+                </View>
+              )}
             </View>
           ))}
+          {renderHaematologySection('routine')}
 
           {/* Auto Risk Classification with warnings */}
           {Object.keys(formData.medical_assessment).length > 0 && (() => {
@@ -2333,19 +2451,38 @@ export default function NewProcedureScreen() {
           <Text style={styles.sectionTitle}>Medical Assessment <Text style={{ color: '#DC3545' }}>*</Text></Text>
           <View style={styles.medicalSection}>
             {MEDICAL_RISK_FACTORS.map(factor => (
-              <View key={factor.id} style={styles.medicalRow}>
-                <Text style={styles.medicalLabel}>{factor.label}</Text>
-                <View style={styles.yesNoRow}>
-                  {factor.options.map(opt => (
-                    <TouchableOpacity key={opt}
-                      style={[styles.yesNoBtn, formData.medical_assessment[factor.id] === opt && (opt === 'No' ? styles.noActive : styles.yesActive)]}
-                      onPress={() => updateMedical(factor.id, opt)}>
-                      <Text style={[styles.yesNoText, formData.medical_assessment[factor.id] === opt && styles.yesNoTextActive]}>{opt}</Text>
-                    </TouchableOpacity>
-                  ))}
+              <View key={factor.id}>
+                <View style={styles.medicalRow}>
+                  <Text style={styles.medicalLabel}>{factor.label}</Text>
+                  <View style={styles.yesNoRow}>
+                    {factor.options.map(opt => (
+                      <TouchableOpacity key={opt}
+                        style={[styles.yesNoBtn, formData.medical_assessment[factor.id] === opt && (opt === 'No' ? styles.noActive : styles.yesActive)]}
+                        onPress={() => updateMedical(factor.id, opt)}>
+                        <Text style={[styles.yesNoText, formData.medical_assessment[factor.id] === opt && styles.yesNoTextActive]}>{opt}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
+                {factor.id === 'diabetes' && (formData.medical_assessment.diabetes === 'Controlled' || formData.medical_assessment.diabetes === 'Uncontrolled') && (
+                  <View style={styles.hba1cRow} testID="hba1c-row-existing" data-testid="hba1c-row-existing">
+                    <Text style={styles.hba1cLabel}>HbA1c Value <Text style={styles.hba1cOptional}>(optional, %)</Text></Text>
+                    <TextInput
+                      style={styles.hba1cInput}
+                      value={formData.medical_assessment.hba1c || ''}
+                      onChangeText={(t) => updateMedical('hba1c', t)}
+                      placeholder="e.g. 7.2"
+                      placeholderTextColor="#90A4AE"
+                      keyboardType="decimal-pad"
+                      inputMode="decimal"
+                      testID="hba1c-input-existing"
+                      data-testid="hba1c-input-existing"
+                    />
+                  </View>
+                )}
               </View>
             ))}
+            {renderHaematologySection('existing')}
             {Object.keys(formData.medical_assessment).length > 0 && (() => {
               const risk = calculateMedicalRisk(formData.medical_assessment);
               return (
@@ -2539,21 +2676,21 @@ const styles = StyleSheet.create({
   // iter-236: sticky progress strip for the Existing Implant workflow.
   existingProgressBar: { backgroundColor: '#FFFFFF', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#E3F2FD', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 2 },
   existingProgressLabel: { fontSize: 13, fontWeight: '700', color: '#0F2740', letterSpacing: 0.2, flex: 1 },
-  existingProgressCount: { fontSize: 12, fontWeight: '700', color: '#1565C0', marginLeft: 8 },
+  existingProgressCount: { fontSize: 12, fontWeight: '700', color: '#1E88E5', marginLeft: 8 },
   existingProgressTrack: { marginTop: 8, height: 6, backgroundColor: '#E3F2FD', borderRadius: 999, overflow: 'hidden' },
-  existingProgressFill: { height: 6, backgroundColor: '#1565C0', borderRadius: 999 },
+  existingProgressFill: { height: 6, backgroundColor: '#1E88E5', borderRadius: 999 },
   // iter-237: tappable step pills under the progress strip.
   // iter-238: pills now flex to fill the row evenly + render number/✓ icon
   // separately so they line up on a single tidy row.
   // iter-239: tightened paddings so the leading "2." / "3." numerals stay
   // fully inside the pill (they were clipping on narrow viewports).
-  existingStepPillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 10 },
-  existingStepPill: { flexGrow: 1, flexBasis: 0, minWidth: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: '#CFD8DC', backgroundColor: '#F8FAFC' },
-  existingStepPillActive: { backgroundColor: '#1565C0', borderColor: '#1565C0' },
+  existingStepPillRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, paddingVertical: 4 },
+  existingStepPill: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1.5, borderColor: '#CFD8DC', backgroundColor: '#F8FAFC' },
+  existingStepPillActive: { backgroundColor: '#1E88E5', borderColor: '#1E88E5', shadowColor: '#1E88E5', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.24, shadowRadius: 4, elevation: 3 },
   existingStepPillDone: { backgroundColor: '#E8F5E9', borderColor: '#A5D6A7' },
-  existingStepPillNum: { fontSize: 10, fontWeight: '700', color: '#37474F', marginRight: 4, lineHeight: 13 },
-  existingStepPillText: { fontSize: 10, fontWeight: '600', color: '#37474F', letterSpacing: 0.1, lineHeight: 13, flexShrink: 1 },
-  existingStepPillTextActive: { color: '#FFFFFF' },
+  existingStepPillNum: { fontSize: 11, fontWeight: '700', color: '#475569', marginRight: 4, lineHeight: 14 },
+  existingStepPillText: { fontSize: 11, fontWeight: '600', color: '#475569', letterSpacing: 0.1, lineHeight: 14 },
+  existingStepPillTextActive: { color: '#FFFFFF', fontWeight: '700' },
   existingStepPillTextDone: { color: '#2E7D32' },
   subSectionTitle: { fontSize: 14, fontWeight: '700', color: '#1565C0', marginTop: 14, marginBottom: 10, paddingBottom: 8, borderBottomWidth: 1.5, borderBottomColor: '#E3F2FD' },
   fieldContainer: { marginBottom: 14 },
@@ -2579,6 +2716,17 @@ const styles = StyleSheet.create({
   medicalSection: { marginTop: 16, padding: 14, backgroundColor: '#F0F4F8', borderRadius: 12, borderWidth: 1, borderColor: '#E0E7EE' },
   medicalRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#E0E7EE' },
   medicalLabel: { fontSize: 14, color: '#333', fontWeight: '500', marginBottom: 8 },
+  hba1cRow: { paddingHorizontal: 4, paddingTop: 4, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#E0E7EE', backgroundColor: '#FAFBFD' },
+  hba1cLabel: { fontSize: 13, color: '#37474F', fontWeight: '600', marginBottom: 6 },
+  hba1cOptional: { fontSize: 11, color: '#78909C', fontWeight: '400' },
+  hba1cInput: { borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#263238', backgroundColor: '#FFF', maxWidth: 180 },
+  haematologyWrap: { marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#CFD8DC' },
+  haematologyHeading: { fontSize: 14, fontWeight: '700', color: '#1E3A5F', marginBottom: 10 },
+  haematologyOptional: { fontSize: 11, fontWeight: '400', color: '#78909C' },
+  haematologyRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#EEF2F7', gap: 12 },
+  haematologyLabel: { fontSize: 13, color: '#263238', fontWeight: '600' },
+  haematologyHint: { fontSize: 11, color: '#78909C', marginTop: 2 },
+  haematologyInput: { borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#263238', backgroundColor: '#FFF', minWidth: 110, textAlign: 'right' },
   yesNoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   yesNoBtn: { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, borderColor: '#D0DCE8', backgroundColor: '#FFF' },
   yesActive: { backgroundColor: '#DC3545', borderColor: '#DC3545' },

@@ -548,6 +548,7 @@ export default function TabsLayout() {
               <Ionicons name="document-text-outline" size={24} color={color} />
             ),
             href: isNurse ? null : '/new-procedure',
+            tabBarStyle: { display: 'none' },
           }}
         />
         <Tabs.Screen

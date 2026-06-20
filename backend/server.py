@@ -23,6 +23,7 @@ import jwt
 from bson import ObjectId
 import httpx
 from augmentation_checklist import generate_augmentation_checklist
+from clinical_rules import evaluate_case as evaluate_clinical_rules
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -389,6 +390,7 @@ class ProcedureCreate(BaseModel):
     procedure_date: str = Field(..., max_length=30)
     procedure_time: str = Field(..., max_length=20)
     implant_procedure_type: str = Field(..., max_length=100)
+    num_implants: Optional[str] = Field("", max_length=50)
     loading_type: List[str] = []
     prosthetic_plan: str = Field("", max_length=500)
     prosthetic_plan_other: Optional[str] = Field("", max_length=500)
@@ -408,6 +410,10 @@ class ProcedureCreate(BaseModel):
     # Per-tooth Edentulous-site measurements (keyed by FDI code) — used when 2+ teeth
     # are marked missing. Structure: { "16": { "oc": 7.5, "md": 9.0 }, "17": {...} }.
     edentulous_site_measurements: Optional[Dict[str, Dict[str, Any]]] = None
+    # Per-cluster intraoral findings (keyed by cluster-leader FDI code) — used when 2+ teeth
+    # are missing and procedure != Single Conventional Implant.
+    # Structure: { "35": { "ridge_contour": "Oval", "soft_tissue_thickness": "Thick", "keratinized_mucosa": ">2mm" } }
+    clinical_exam_per_site: Optional[Dict[str, Dict[str, Any]]] = None
     arch_condition: Optional[str] = Field("", max_length=50)
     ridge_contour: Optional[str] = Field("", max_length=50)
     soft_tissue_thickness: Optional[str] = Field("", max_length=20)
@@ -471,6 +477,7 @@ class ProcedureUpdate(BaseModel):
     teeth_present: Optional[List[str]] = None
     missing_teeth: Optional[List[str]] = None
     edentulous_site_measurements: Optional[Dict[str, Dict[str, Any]]] = None
+    clinical_exam_per_site: Optional[Dict[str, Dict[str, Any]]] = None
     supervisor_id: Optional[str] = Field(None, max_length=50)
     supervisor_name: Optional[str] = Field(None, max_length=100)
     implant_incharge_id: Optional[str] = Field(None, max_length=50)
@@ -480,6 +487,7 @@ class ProcedureUpdate(BaseModel):
     procedure_date: Optional[str] = Field(None, max_length=30)
     procedure_time: Optional[str] = Field(None, max_length=20)
     implant_procedure_type: Optional[str] = Field(None, max_length=100)
+    num_implants: Optional[str] = Field(None, max_length=50)
     loading_type: Optional[List[str]] = None
     prosthetic_plan: Optional[str] = Field(None, max_length=500)
     bone_graft_specifications: Optional[str] = Field(None, max_length=500)
@@ -736,11 +744,14 @@ async def send_expo_push_notifications(user_ids: List[str], title: str, body: st
     """Send push notifications to users via Expo Push API."""
     if not user_ids:
         return
+    valid_oids = [ObjectId(uid) for uid in user_ids if ObjectId.is_valid(uid)]
+    if not valid_oids:
+        return
     tokens = []
     users = await db.users.find(
-        {"_id": {"$in": [ObjectId(uid) for uid in user_ids]}},
+        {"_id": {"$in": valid_oids}},
         {"push_token": 1}
-    ).to_list(len(user_ids))
+    ).to_list(len(valid_oids))
     for user in users:
         if user.get("push_token"):
             tokens.append(user["push_token"])
@@ -3580,6 +3591,43 @@ async def edit_procedure_fields(procedure_id: str, request: Request, current_use
     fields["last_edited_by"] = editor_name
     fields["last_edited_at"] = now_iso
 
+    if isinstance(fields.get("phase2_data"), dict):
+        p2 = fields["phase2_data"]
+        if "prosthetic_component" in p2:
+            existing_p2 = proc.get("phase2_data") or {}
+            old_pc = existing_p2.get("prosthetic_component")
+            new_pc = p2.get("prosthetic_component")
+            if old_pc != new_pc:
+                CASCADE_RULES = {
+                    "Cover Screw Placed": [
+                        "healing_abutment_cuff_height",
+                        "prosthesis_type", "prosthesis_type_other",
+                        "access_channel_openings",
+                        "multi_unit_abutments_placed",
+                    ],
+                    "Healing Abutment Placed": [
+                        "prosthesis_type", "prosthesis_type_other",
+                        "access_channel_openings",
+                        "multi_unit_abutments_placed",
+                    ],
+                    "Immediate Loading Done": [
+                        "healing_abutment_cuff_height",
+                    ],
+                }
+                for child in CASCADE_RULES.get(new_pc or "", []):
+                    prev = existing_p2.get(child)
+                    if prev not in (None, "", []):
+                        p2[child] = None
+                        log_entries.append({
+                            "field": f"phase2_data.{child}",
+                            "old_value": prev,
+                            "new_value": None,
+                            "edited_by": editor_name,
+                            "edited_by_role": editor_role,
+                            "edited_at": now_iso,
+                            "cascade_from": "phase2_data.prosthetic_component",
+                        })
+
     # If any clinical-finding field was touched, regenerate the augmentation
     # checklist while PRESERVING completed-state on items whose title still
     # matches (so a supervisor's ticked items aren't lost on a benign edit).
@@ -3678,6 +3726,50 @@ async def get_augmentation_checklist(procedure_id: str, current_user: dict = Dep
         "items": proc.get("augmentation_checklist") or [],
         "generated_at": proc.get("augmentation_checklist_generated_at") or "",
         "generated_by": proc.get("augmentation_checklist_generated_by") or "",
+    }
+
+
+@api_router.get("/procedures/{procedure_id}/clinical-evaluation")
+async def get_clinical_evaluation(
+    procedure_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Run the deterministic clinical-rule engine over a procedure.
+    Returns ordered hits (hard_block → warning → info) so the UI can
+    render evidence-cited banners next to the affected phase."""
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Case not found")
+    if not _is_case_stakeholder(proc, current_user):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    flat = {**proc}
+    p2 = proc.get("phase2_data") or {}
+    if p2:
+        flat["implant_plans"] = p2.get("implant_plans") or proc.get("implant_plans") or []
+    ma = proc.get("medical_assessment") or {}
+    mh_base = proc.get("medical_history") or {}
+    mh = {**mh_base}
+    if "hba1c" not in mh:
+        raw_hba1c = ma.get("hba1c")
+        if raw_hba1c not in (None, ""):
+            try:
+                mh["hba1c"] = float(str(raw_hba1c).strip())
+            except (ValueError, TypeError):
+                pass
+    if "smoker" not in mh:
+        smoking = ma.get("smoking")
+        if smoking and smoking != "No":
+            mh["smoker"] = True
+    flat["medical_history"] = mh
+    hits = evaluate_clinical_rules(flat)
+    counts = {"hard_block": 0, "warning": 0, "info": 0}
+    for h in hits:
+        counts[h["severity"]] = counts.get(h["severity"], 0) + 1
+    return {
+        "procedure_id": procedure_id,
+        "hits": hits,
+        "counts": counts,
+        "evaluated_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -4519,7 +4611,7 @@ async def get_pending_consents(current_user: dict = Depends(get_current_user)):
     }
     cursor = db.procedures.find(query, {
         "_id": 1, "patient_name": 1, "patient_id": 1, "student_name": 1, "created_by_name": 1,
-        "implant_procedure_type": 1, "status": 1, "created_at": 1, "supervisor_name": 1, "implant_incharge_name": 1,
+        "implant_procedure_type": 1, "num_implants": 1, "status": 1, "created_at": 1, "supervisor_name": 1, "implant_incharge_name": 1,
         "procedure_date": 1, "procedure_time": 1,
     }).sort("created_at", -1).limit(100)
     
@@ -4531,6 +4623,7 @@ async def get_pending_consents(current_user: dict = Depends(get_current_user)):
             "patient_id": doc.get("patient_id", ""),
             "student_name": doc.get("student_name") or doc.get("created_by_name", ""),
             "implant_procedure_type": doc.get("implant_procedure_type", ""),
+            "num_implants": doc.get("num_implants", ""),
             "status": doc.get("status", ""),
             "supervisor_name": doc.get("supervisor_name", ""),
             "implant_incharge_name": doc.get("implant_incharge_name", ""),
@@ -4568,7 +4661,7 @@ async def get_nurse_scheduled_cases(
     }
     cursor = db.procedures.find(query, {
         "_id": 1, "patient_name": 1, "patient_id": 1, "student_name": 1, "created_by_name": 1,
-        "implant_procedure_type": 1, "status": 1, "procedure_date": 1, "procedure_time": 1,
+        "implant_procedure_type": 1, "num_implants": 1, "status": 1, "procedure_date": 1, "procedure_time": 1,
         "supervisor_name": 1, "implant_incharge_name": 1, "created_at": 1,
         "instruments_autoclaved": 1, "patient_consent_form": 1,
     }).limit(200)
@@ -4581,6 +4674,7 @@ async def get_nurse_scheduled_cases(
             "patient_id": doc.get("patient_id", ""),
             "student_name": doc.get("student_name") or doc.get("created_by_name", ""),
             "implant_procedure_type": doc.get("implant_procedure_type", ""),
+            "num_implants": doc.get("num_implants", ""),
             "status": doc.get("status", ""),
             "procedure_date": doc.get("procedure_date", ""),
             "procedure_time": doc.get("procedure_time", ""),
@@ -6489,11 +6583,21 @@ async def compare_implant_catalog(component_type: str, current_user: dict = Depe
         matches = [c for c in (d.get("components") or []) if c.get("type") == component_type]
         if not matches:
             continue
+        # iter-297: `connection` can be a dict ({type, ...}) for older catalog
+        # rows or a plain string for newer brand additions. Previously always
+        # called `.get("type")` and crashed with 500 on string-connection rows.
+        conn = d.get("connection")
+        if isinstance(conn, dict):
+            conn_type = conn.get("type")
+        elif isinstance(conn, str):
+            conn_type = conn
+        else:
+            conn_type = None
         rows.append({
             "key": d.get("key"),
             "brand": d.get("brand"),
             "name": d.get("name"),
-            "connection": (d.get("connection") or {}).get("type"),
+            "connection": conn_type,
             "platform_switching": d.get("platform_switching"),
             "components": matches,
         })
@@ -8172,6 +8276,7 @@ async def generate_case_report(
     add_field("Receipt Number", procedure.get("receipt_number"))
     add_field("Amount Paid", procedure.get("amount_paid"))
     add_field("Procedure Type", procedure.get("implant_procedure_type"))
+    add_field("Number of Implants", procedure.get("num_implants"))
     add_field("Loading Type", ", ".join(procedure.get("loading_type", [])))
     add_field("Prosthetic Plan", prosthetic)
     add_field("Bone Graft Specifications", procedure.get("bone_graft_specifications"))
@@ -8247,6 +8352,9 @@ async def generate_case_report(
 
     # ── Medical Assessment ───────────────────────────────────
     med = procedure.get("medical_assessment")
+    # iter-314/315: lab values captured in Phase 1 form; rendered in their own
+    # block below risk factors. Skip here so colour-coding doesn't fire on them.
+    LAB_KEYS = {"hba1c", "hb", "tlc", "bleeding_time", "clotting_time", "prothrombin_time", "inr"}
     if isinstance(med, dict) and med:
         risk = procedure.get("medical_risk_level", "")
         title = f"Medical Assessment — {risk}" if risk else "Medical Assessment"
@@ -8258,6 +8366,8 @@ async def generate_case_report(
             "Light (<10/day)": ("Moderate", (255, 152, 0)),
         }
         for key, value in med.items():
+            if key in LAB_KEYS:
+                continue
             label = key.replace("_", " ").title()
             pdf.set_font("Helvetica", "B", 10)
             pdf.cell(60, 7, safe(label + ":"), ln=False)
@@ -8278,6 +8388,50 @@ async def generate_case_report(
             pdf.set_text_color(*color)
             pdf.cell(0, 7, safe(val_str), ln=True)
             pdf.set_text_color(0, 0, 0)
+
+        # ── Haematology Examination + HbA1c (Phase 1 lab values) ─────
+        lab_rows = [
+            ("hba1c",            "HbA1c",                              "%"),
+            ("hb",               "Haemoglobin (Hb)",                   "g/dL"),
+            ("tlc",              "Total Leucocyte Count",              "/cumm"),
+            ("bleeding_time",    "Bleeding Time",                      "min"),
+            ("clotting_time",    "Clotting Time",                      "min"),
+            ("prothrombin_time", "Prothrombin Time",                   "sec"),
+            ("inr",              "International Normalised Ratio",     ""),
+        ]
+        present_labs = [(k, lbl, unit) for (k, lbl, unit) in lab_rows
+                        if med.get(k) not in (None, "", "N/A")]
+        if present_labs:
+            pdf.ln(2)
+            pdf.set_font("Helvetica", "B", 11)
+            pdf.set_text_color(30, 58, 95)
+            pdf.cell(0, 7, safe("Haematology Examination"), ln=True)
+            pdf.set_text_color(0, 0, 0)
+            for key, label, unit in present_labs:
+                raw = med.get(key)
+                color = (0, 0, 0)
+                try:
+                    n = float(str(raw).strip())
+                    if key == "hba1c" and n >= 9:
+                        color = (244, 67, 54)
+                    elif key == "hba1c" and n > 7:
+                        color = (255, 152, 0)
+                    elif key == "tlc" and (n < 4000 or n > 10000):
+                        color = (244, 67, 54)
+                    elif key == "prothrombin_time" and (n < 11 or n > 16):
+                        color = (244, 67, 54)
+                    elif key == "inr" and n > 1.5:
+                        color = (244, 67, 54)
+                    elif key == "hb" and n < 10:
+                        color = (244, 67, 54)
+                except (ValueError, TypeError):
+                    pass
+                pdf.set_font("Helvetica", "B", 10)
+                pdf.cell(60, 7, safe(label + ":"), ln=False)
+                pdf.set_text_color(*color)
+                val_str = f"{raw} {unit}".strip()
+                pdf.cell(0, 7, safe(val_str), ln=True)
+                pdf.set_text_color(0, 0, 0)
         pdf.ln(3)
 
     # ── Implant Planning Section ─────────────────────────────
@@ -13604,6 +13758,19 @@ async def generate_drilling_protocol(
         alt_steps = _generate_tsx_protocol(proto, diameter, length, bone, kit="original")
         response["alt_protocol"] = {"name": "Driva Drills (Original)", "steps": alt_steps, "total_steps": len(alt_steps)}
 
+    if family == "adin" and system in ("RP CloseFit", "WP CloseFit",
+                                        "Touareg-OS", "Touareg-S",
+                                        "Swell", "One"):
+        from adin_data import generate_adin_tristep_alt_protocol
+        alt_steps = generate_adin_tristep_alt_protocol(system, diameter, length, bone)
+        if alt_steps:
+            response["alt_protocol"] = {
+                "name": "Tri-Step Drill (alternative)",
+                "description": "Single multi-step burr replaces the Ø2.0 + Ø2.8 + Ø3.2 sequential drills.",
+                "steps": alt_steps,
+                "total_steps": len(alt_steps),
+            }
+
     return response
 
 @api_router.get("/drilling-protocols/available")
@@ -15577,6 +15744,66 @@ async def seed_implant_catalog_on_start():
         await _ab_seed_if_thin()
     except Exception as exc:  # pragma: no cover — best-effort
         logging.warning("Alpha-Bio component expansion seed skipped: %s", exc)
+    try:
+        from _seed_straumann_blx import main as _blx_seed
+        await _blx_seed()
+    except Exception as exc:  # pragma: no cover — best-effort
+        logging.warning("Straumann BLX seed skipped: %s", exc)
+    try:
+        from _seed_adin import main as _adin_seed
+        await _adin_seed()
+    except Exception as exc:  # pragma: no cover — best-effort
+        logging.warning("Adin seed skipped: %s", exc)
+    try:
+        from _seed_straumann_blt import main as _blt_seed
+        await _blt_seed()
+    except Exception as exc:  # pragma: no cover — best-effort
+        logging.warning("Straumann BLT seed skipped: %s", exc)
+    try:
+        from _seed_straumann_blx_components import seed_if_thin as _blx_comp_seed
+        await _blx_comp_seed()
+    except Exception as exc:  # pragma: no cover — best-effort
+        logging.warning("Straumann BLX component expansion seed skipped: %s", exc)
+    try:
+        from _seed_adin_components import seed_if_thin as _adin_comp_seed
+        await _adin_comp_seed()
+    except Exception as exc:  # pragma: no cover — best-effort
+        logging.warning("Adin CloseFit component expansion seed skipped: %s", exc)
+    try:
+        from _seed_adin_rs_components import seed_if_thin as _adin_rs_comp_seed
+        await _adin_rs_comp_seed()
+    except Exception as exc:  # pragma: no cover — best-effort
+        logging.warning("Adin RS/One component expansion seed skipped: %s", exc)
+    try:
+        from _seed_straumann_blt_components import seed_if_thin as _blt_comp_seed
+        await _blt_comp_seed()
+    except Exception as exc:  # pragma: no cover — best-effort
+        logging.warning("Straumann BLT SC component expansion seed skipped: %s", exc)
+    try:
+        from _seed_straumann_nc_components import seed_if_thin as _blt_nc_seed
+        await _blt_nc_seed()
+    except Exception as exc:  # pragma: no cover — best-effort
+        logging.warning("Straumann BLT NC component expansion seed skipped: %s", exc)
+    try:
+        from _seed_straumann_rc_components import seed_if_thin as _blt_rc_seed
+        await _blt_rc_seed()
+    except Exception as exc:  # pragma: no cover — best-effort
+        logging.warning("Straumann BLT RC component expansion seed skipped: %s", exc)
+    try:
+        ncur = db.implant_catalog.find(
+            {"connection": {"$type": "string"}},
+            {"_id": 0, "key": 1, "connection": 1},
+        )
+        nrows = await ncur.to_list(length=500)
+        for r in nrows:
+            await db.implant_catalog.update_one(
+                {"key": r["key"]},
+                {"$set": {"connection": {"type": r["connection"]}}},
+            )
+        if nrows:
+            print(f"[implant_catalog] normalised connection field on {len(nrows)} row(s)")
+    except Exception as exc:  # pragma: no cover — best-effort
+        logging.warning("Catalog connection normalization skipped: %s", exc)
 
 @app.on_event("startup")
 async def seed_on_startup():

@@ -353,15 +353,57 @@ const FULL_ARCH_OPTIONS = [
   'Full Arch - Peek and Zirconia Ti Base',
 ];
 
-export function getProstheticOptions(procedureType: string, loadingTypes: string[]): string[] {
+export const MULTIPLE_SINGLE_CROWN_OPTIONS = [
+  'Screw Retained Multiple Single Crowns - Zirconia',
+  'Screw Retained Multiple Single Crowns - Metal',
+  'Screw Retained Multiple Single Crowns - Porcelain Fused to Metal',
+  'Screw Retained Multiple Single Crowns - Lithium Disilicate',
+  'Cement Retained Multiple Single Crowns - Zirconia',
+  'Cement Retained Multiple Single Crowns - Metal',
+  'Cement Retained Multiple Single Crowns - Porcelain Fused to Metal',
+  'Cement Retained Multiple Single Crowns - Lithium Disilicate',
+];
+
+export const PROCEDURES_WITH_NUM_IMPLANTS_QUESTION = new Set<string>([
+  'Immediate Implant',
+  'Partial Extraction Therapy',
+  'Implant Placement with Guided Bone Regeneration',
+  'Guided Surgery',
+]);
+
+export function getProstheticOptions(
+  procedureType: string,
+  loadingTypes: string[],
+  numImplants: string = '',
+): string[] {
   const options: string[] = [];
+
+  if (PROCEDURES_WITH_NUM_IMPLANTS_QUESTION.has(procedureType)) {
+    if (numImplants === 'Single Implant') {
+      options.push(...SINGLE_CROWN_OPTIONS);
+    } else if (numImplants === 'Multiple Implants') {
+      for (const o of BRIDGE_OPTIONS) {
+        if (!options.includes(o)) options.push(o);
+      }
+      for (const o of MULTIPLE_SINGLE_CROWN_OPTIONS) {
+        if (!options.includes(o)) options.push(o);
+      }
+    }
+    if (options.length > 0 && loadingTypes.includes('Immediate Loading')) {
+      for (const o of IMMEDIATE_LOADING_OPTIONS) {
+        if (!options.includes(o)) options.push(o);
+      }
+    }
+    if (options.length > 0 && !options.includes('Other')) options.push('Other');
+    return options;
+  }
 
   // Single Conventional Implant → Crown options
   if (procedureType === 'Single Conventional Implant') {
     options.push(...SINGLE_CROWN_OPTIONS);
   }
 
-  // Multiple, Immediate, PET, GBR → Bridge options
+  // Multiple → Bridge options
   if (MULTIPLE_GROUP.has(procedureType)) {
     for (const o of BRIDGE_OPTIONS) {
       if (!options.includes(o)) options.push(o);
@@ -370,14 +412,6 @@ export function getProstheticOptions(procedureType: string, loadingTypes: string
 
   // Multiple Conventional Implants → also add Multiple Single Crown options
   if (procedureType === 'Multiple Conventional Implants') {
-    const MULTIPLE_SINGLE_CROWN_OPTIONS = [
-      'Screw Retained Multiple Single Crowns - Zirconia',
-      'Screw Retained Multiple Single Crowns - Metal',
-      'Screw Retained Multiple Single Crowns - Porcelain Fused to Metal',
-      'Cement Retained Multiple Single Crowns - Zirconia',
-      'Cement Retained Multiple Single Crowns - Metal',
-      'Cement Retained Multiple Single Crowns - Porcelain Fused to Metal',
-    ];
     for (const o of MULTIPLE_SINGLE_CROWN_OPTIONS) {
       if (!options.includes(o)) options.push(o);
     }

@@ -350,7 +350,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
           <View style={styles.legalFootnote}>
             <Ionicons name="time-outline" size={12} color="#78909C" />
-            <Text style={styles.legalFootnoteText}>Auto-logout after 20 min of inactivity</Text>
+            <Text style={styles.legalFootnoteText}>Auto-logout after 15 min of inactivity</Text>
           </View>
         </View>
 

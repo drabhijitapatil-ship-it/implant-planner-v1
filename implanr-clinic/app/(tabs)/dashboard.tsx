@@ -387,6 +387,32 @@ function SupervisorDashboard({ stats, procedures, selectedDate, setSelectedDate,
         </View>
       )}
 
+      {/* My Students */}
+      {myStudents.length > 0 && (
+        <View style={s.section}>
+          <View style={s.sectionHeader}>
+            <Ionicons name="people-outline" size={18} color="#1565C0" />
+            <Text style={[s.sectionTitle, { color: '#1565C0' }]}>My Students</Text>
+          </View>
+          {myStudents.map((st, idx) => (
+            <View key={idx} style={s.studentCard}>
+              <View style={s.studentAvatar}>
+                <Text style={s.studentAvatarText}>{st.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.studentName}>{st.name}</Text>
+                <Text style={s.studentSub}>{st.cases} cases total</Text>
+              </View>
+              {st.pending > 0 && (
+                <View style={s.pendingBadge}>
+                  <Text style={s.pendingBadgeText}>{st.pending} pending</Text>
+                </View>
+              )}
+            </View>
+          ))}
+        </View>
+      )}
+
       {/* Quick Actions */}
       <View style={s.section}>
         <View style={s.sectionHeader}>
@@ -401,6 +427,10 @@ function SupervisorDashboard({ stats, procedures, selectedDate, setSelectedDate,
           <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/procedures')}>
             <Ionicons name="folder-open-outline" size={24} color="#4CAF50" />
             <Text style={s.quickBtnText}>All Cases</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/admin/students-analytics')}>
+            <Ionicons name="bar-chart-outline" size={24} color="#1565C0" />
+            <Text style={s.quickBtnText}>My Students</Text>
           </TouchableOpacity>
           <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/implant-selection')}>
             <Ionicons name="search-outline" size={24} color="#9C27B0" />
@@ -548,12 +578,20 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
           </TouchableOpacity>
         </View>
         <View style={[s.quickActions, { marginTop: 10 }]}>
+          <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/admin/students-analytics')}>
+            <Ionicons name="bar-chart-outline" size={24} color="#1565C0" />
+            <Text style={s.quickBtnText}>Students</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/admin/supervisors-analytics')}>
+            <Ionicons name="people-circle-outline" size={24} color="#E65100" />
+            <Text style={s.quickBtnText}>Supervisors</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/admin/audit-log')}>
-            <Ionicons name="shield-outline" size={24} color="#1565C0" />
+            <Ionicons name="shield-checkmark-outline" size={24} color="#4CAF50" />
             <Text style={s.quickBtnText}>Audit Log</Text>
           </TouchableOpacity>
           <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/admin/implant-catalog')}>
-            <Ionicons name="library-outline" size={24} color="#E65100" />
+            <Ionicons name="library-outline" size={24} color="#9C27B0" />
             <Text style={s.quickBtnText}>Implant DB</Text>
           </TouchableOpacity>
         </View>

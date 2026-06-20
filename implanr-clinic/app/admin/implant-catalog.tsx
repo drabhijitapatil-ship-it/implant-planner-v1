@@ -63,6 +63,18 @@ const variantLabel = (familyName: string, fullName: string): string => {
   return v;
 };
 
+const BLT_SYSTEMS_WITH_PLATFORM_SPLIT = new Set<string>([
+  'BLT Roxolid SLActive',
+  'BLT Roxolid SLA',
+  'BLT Ti SLA',
+]);
+const BLT_PLATFORM_OPTIONS: { label: string; platform: string; diameter_mm: number }[] = [
+  { label: 'SC 2.9 mm', platform: 'SC', diameter_mm: 2.9 },
+  { label: 'NC 3.3 mm', platform: 'NC', diameter_mm: 3.3 },
+  { label: 'RC 4.1 mm', platform: 'RC', diameter_mm: 4.1 },
+  { label: 'RC 4.8 mm', platform: 'RC', diameter_mm: 4.8 },
+];
+
 export default function ImplantCatalogAdmin() {
   const { user } = useAuth();
   const _canEdit = user?.role === 'administrator' || user?.role === 'chief_dentist';
@@ -80,8 +92,9 @@ export default function ImplantCatalogAdmin() {
   const [selectedBrand, setSelectedBrand] = useState<string>('');
   const [selectedFamily, setSelectedFamily] = useState<string>('');
   const [selectedKey, setSelectedKey] = useState<string>('');
+  const [selectedBltPlatformOpt, setSelectedBltPlatformOpt] = useState<string>('');
 
-  const [pickerKind, setPickerKind] = useState<null | 'brand' | 'family' | 'variant'>(null);
+  const [pickerKind, setPickerKind] = useState<null | 'brand' | 'family' | 'variant' | 'blt_platform'>(null);
 
   const [gridOpen, setGridOpen] = useState(false);
 
@@ -298,7 +311,29 @@ export default function ImplantCatalogAdmin() {
     );
   }
 
-  // Picker option list (brand / family / variant).
+  // iter-302: Straumann BLT systems carry per-platform prosthetic catalogs.
+  const requiresBltPlatformPick = !!(
+    selected &&
+    selected.brand === 'Straumann' &&
+    BLT_SYSTEMS_WITH_PLATFORM_SPLIT.has(selected.name)
+  );
+
+  useEffect(() => { setSelectedBltPlatformOpt(''); }, [selectedKey]);
+
+  const activeBltPlatformCode: string | null = useMemo(() => {
+    if (!requiresBltPlatformPick || !selectedBltPlatformOpt) return null;
+    const opt = BLT_PLATFORM_OPTIONS.find(o => o.label === selectedBltPlatformOpt);
+    return opt?.platform ?? null;
+  }, [requiresBltPlatformPick, selectedBltPlatformOpt]);
+
+  const visibleComponents: Component[] = useMemo(() => {
+    const all = selected?.components || [];
+    if (!requiresBltPlatformPick) return all;
+    if (!activeBltPlatformCode) return [];
+    return all.filter(c => (c as any).platform === activeBltPlatformCode);
+  }, [selected, requiresBltPlatformPick, activeBltPlatformCode]);
+
+  // Picker option list (brand / family / variant / blt_platform).
   let pickerItems: { value: string; label: string; sub?: string }[] = [];
   let pickerTitle = '';
   if (pickerKind === 'brand') {
@@ -319,6 +354,20 @@ export default function ImplantCatalogAdmin() {
       value: v.key, label: variantLabel(selectedFamily, v.name) || v.name,
       sub: `${v.components?.length || 0} components`,
     }));
+  } else if (pickerKind === 'blt_platform') {
+    pickerTitle = `Platform — ${selected?.name || ''}`;
+    pickerItems = BLT_PLATFORM_OPTIONS.map(o => {
+      const matchCount = (selected?.components || []).filter(
+        c => (c as any).platform === o.platform,
+      ).length;
+      return {
+        value: o.label,
+        label: o.label,
+        sub: matchCount > 0
+          ? `${matchCount} component${matchCount === 1 ? '' : 's'}`
+          : 'no components yet',
+      };
+    });
   }
 
   const showFamilyDropdown = !!selectedBrand && familiesForBrand.length > 0;
@@ -481,6 +530,23 @@ export default function ImplantCatalogAdmin() {
           </View>
         )}
 
+        {/* iter-302: Platform dropdown — only for Straumann BLT systems */}
+        {requiresBltPlatformPick && (
+          <View style={s.dropdownGroup} testID="catalog-blt-platform-group">
+            <Text style={s.dropdownLabel}>Platform</Text>
+            <TouchableOpacity
+              style={s.dropdown}
+              onPress={() => setPickerKind('blt_platform')}
+              testID="catalog-blt-platform-dropdown"
+            >
+              <Text style={[s.dropdownValue, !selectedBltPlatformOpt && s.dropdownPlaceholder]}>
+                {selectedBltPlatformOpt || 'Select a platform (SC / NC / RC)'}
+              </Text>
+              <Ionicons name="chevron-down" size={18} color="#0277BD" />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* ── Detail card (full width) ── */}
         {selected ? (
           <View style={s.detailCard} data-testid="catalog-detail-card">
@@ -541,9 +607,9 @@ export default function ImplantCatalogAdmin() {
               </SectionBlock>
             )}
 
-            {!!selected.components?.length && (
-              <SectionBlock title={`Components (${selected.components.length})`}>
-                {selected.components.map((c, i) => <ComponentCard key={i} c={c} />)}
+            {!!visibleComponents.length && (
+              <SectionBlock title={`Components (${visibleComponents.length})`}>
+                {visibleComponents.map((c, i) => <ComponentCard key={i} c={c} />)}
               </SectionBlock>
             )}
 

@@ -43,6 +43,7 @@ import ExportPrintMenu from '../../components/ExportPrintMenu';
 import Phase2EditModal from '../../components/Phase2EditModal';
 import RescheduleModal from '../../components/RescheduleModal';
 import AugmentationChecklist from '../../components/AugmentationChecklist';
+import ClinicalEvaluationBanner from '../../components/ClinicalEvaluationBanner';
 import PulsingDoubleArrow from '../../components/onboarding/primitives/PulsingDoubleArrow';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, {
@@ -145,6 +146,7 @@ const FIELD_OPTIONS: Record<string, FieldOptionsConfig> = {
 
   // Procedure Details
   implant_procedure_type: { options: PROCEDURE_TYPES },
+  num_implants: { options: ['Single Implant', 'Multiple Implants'] },
   arch: { options: ['Maxillary', 'Mandibular'] },
   loading_type: { options: LOADING_TYPES, multi: true },
 
@@ -201,12 +203,12 @@ const FIELD_OPTIONS: Record<string, FieldOptionsConfig> = {
 function resolveFieldOptions(fieldKey: string, procedure: any): FieldOptionsConfig | null {
   // Dynamic: Prosthetic Plan depends on procedure_type + loading_type
   if (fieldKey === 'prosthetic_plan' && procedure?.implant_procedure_type) {
-    const opts = getProstheticOptions(procedure.implant_procedure_type, procedure.loading_type || []);
+    const opts = getProstheticOptions(procedure.implant_procedure_type, procedure.loading_type || [], procedure.num_implants || '');
     return opts.length > 0 ? { options: opts } : null;
   }
   if (fieldKey === 'final_prosthetic_plan' || fieldKey === 'phase4_step1_data.final_prosthetic_plan') {
     if (procedure?.implant_procedure_type) {
-      const opts = getProstheticOptions(procedure.implant_procedure_type, procedure.loading_type || []);
+      const opts = getProstheticOptions(procedure.implant_procedure_type, procedure.loading_type || [], procedure.num_implants || '');
       return opts.length > 0 ? { options: opts } : null;
     }
     return null;
@@ -1677,6 +1679,8 @@ export default function ProcedureDetailScreen() {
           <InfoRow icon="medical" label="Implant Site" value={procedure.implant_site} />
         </View>
 
+        <ClinicalEvaluationBanner procedureId={String(id)} />
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Staff</Text>
           {user?.role === 'nurse' ? (
@@ -1781,6 +1785,9 @@ export default function ProcedureDetailScreen() {
           <View style={styles.section} data-testid="procedure-type-section">
             <Text style={styles.sectionTitle}>Procedure Details</Text>
             <InfoRow icon="construct" label="Procedure Type" value={procedure.implant_procedure_type} fieldKey="implant_procedure_type" />
+            {procedure.num_implants && (
+              <InfoRow icon="layers" label="Number of Implants" value={procedure.num_implants} fieldKey="num_implants" />
+            )}
             {procedure.arch && (
               <InfoRow icon="tablet-landscape" label="Arch" value={procedure.arch} fieldKey="arch" />
             )}
@@ -1857,12 +1864,14 @@ export default function ProcedureDetailScreen() {
         )}
 
         {/* Clinical Examination */}
-        {(procedure.occlusocervical_height || procedure.mesiodistal_space || procedure.edentulous_sites?.length > 0 || procedure.edentulous_site || procedure.arch_condition || procedure.ridge_contour || procedure.soft_tissue_thickness || procedure.keratinized_mucosa) && (
+        {(procedure.occlusocervical_height || procedure.mesiodistal_space || procedure.edentulous_sites?.length > 0 || procedure.edentulous_site || procedure.arch_condition || procedure.ridge_contour || procedure.soft_tissue_thickness || procedure.keratinized_mucosa || procedure.periodontal_status || (procedure.edentulous_site_measurements && Object.keys(procedure.edentulous_site_measurements).length > 0) || (procedure.clinical_exam_per_site && Object.keys(procedure.clinical_exam_per_site).length > 0)) && (
           <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#1E88E5' }]} data-testid="clinical-examination-section">
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <Ionicons name="search" size={20} color="#1E88E5" />
               <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#1565C0' }]}>Clinical Examination</Text>
             </View>
+
+            {/* Legacy single-tooth OC/MD */}
             {(procedure.occlusocervical_height || procedure.mesiodistal_space) && (
               <View style={{ marginBottom: 6 }}>
                 <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', marginBottom: 4 }}>Edentulous Site</Text>
@@ -1874,6 +1883,48 @@ export default function ProcedureDetailScreen() {
                 )}
               </View>
             )}
+
+            {/* Per-tooth edentulous site measurements (multi-tooth cases) */}
+            {procedure.edentulous_site_measurements && Object.keys(procedure.edentulous_site_measurements).length > 0 && (
+              <View style={{ marginBottom: 8 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', marginBottom: 6 }}>Edentulous Site Measurements</Text>
+                {Object.entries(procedure.edentulous_site_measurements as Record<string, { oc?: string; md?: string }>)
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([tooth, measures]) => (
+                  <View key={tooth} style={{ backgroundColor: '#F8FAFC', borderRadius: 8, padding: 10, marginBottom: 6, borderWidth: 1, borderColor: '#E8EDF5' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                      <View style={{ backgroundColor: '#E53935', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
+                        <Text style={{ fontSize: 11, fontWeight: '800', color: '#FFF' }}>FDI {tooth}</Text>
+                      </View>
+                    </View>
+                    {measures?.oc && <InfoRow icon="resize" label="Occlusocervical Height" value={`${measures.oc} mm`} />}
+                    {measures?.md && <InfoRow icon="resize" label="Mesiodistal Space" value={`${measures.md} mm`} />}
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Per-site intraoral findings (multi-tooth cases) */}
+            {procedure.clinical_exam_per_site && Object.keys(procedure.clinical_exam_per_site).length > 0 && (
+              <View style={{ marginBottom: 8 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', marginBottom: 6 }}>Intraoral Findings (Per Site)</Text>
+                {Object.entries(procedure.clinical_exam_per_site as Record<string, { ridge_contour?: string; soft_tissue_thickness?: string; keratinized_mucosa?: string }>)
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([tooth, site]) => (
+                  <View key={tooth} style={{ backgroundColor: '#F8FAFC', borderRadius: 8, padding: 10, marginBottom: 6, borderWidth: 1, borderColor: '#E8EDF5' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                      <View style={{ backgroundColor: '#E53935', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
+                        <Text style={{ fontSize: 11, fontWeight: '800', color: '#FFF' }}>FDI {tooth}</Text>
+                      </View>
+                    </View>
+                    {site?.ridge_contour && <InfoRow icon="analytics" label="Ridge Contour" value={site.ridge_contour} />}
+                    {site?.soft_tissue_thickness && <InfoRow icon="layers" label="Soft Tissue Thickness" value={site.soft_tissue_thickness} />}
+                    {site?.keratinized_mucosa && <InfoRow icon="resize" label="Keratinized Mucosa" value={site.keratinized_mucosa} />}
+                  </View>
+                ))}
+              </View>
+            )}
+
             {procedure.edentulous_sites?.length > 0 && (
               <InfoRow icon="grid" label="Edentulous Sites" value={procedure.edentulous_sites.join(', ')} fieldKey="edentulous_sites" />
             )}
@@ -1883,6 +1934,7 @@ export default function ProcedureDetailScreen() {
             {procedure.arch_condition && (
               <InfoRow icon="ellipse" label={procedure.arch === 'Maxillary' ? 'Maxillary Arch Condition' : procedure.arch === 'Mandibular' ? 'Mandibular Arch Condition' : 'Arch Condition'} value={procedure.arch_condition} fieldKey="arch_condition" />
             )}
+            {/* Legacy single-site intraoral findings */}
             {procedure.ridge_contour && (
               <InfoRow icon="analytics" label="Ridge Contour" value={procedure.ridge_contour} fieldKey="ridge_contour" />
             )}
@@ -1891,6 +1943,9 @@ export default function ProcedureDetailScreen() {
             )}
             {procedure.keratinized_mucosa && (
               <InfoRow icon="resize" label="Keratinized Mucosa" value={procedure.keratinized_mucosa} fieldKey="keratinized_mucosa" />
+            )}
+            {procedure.periodontal_status && (
+              <InfoRow icon="medkit" label="Periodontal Status" value={procedure.periodontal_status} fieldKey="periodontal_status" />
             )}
           </View>
         )}
