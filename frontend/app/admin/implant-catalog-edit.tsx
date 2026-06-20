@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity,
-  ActivityIndicator, Alert, Switch,
+  ActivityIndicator, Alert, Switch, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -272,9 +272,16 @@ export default function CatalogEditor() {
       const picked = await showUploadPicker(['application/pdf', 'image/*']);
       if (!picked) { setUploadingAttachment(false); return; }
       const form = new FormData();
-      // RN FormData: { uri, name, type }
-      // @ts-ignore
-      form.append('file', { uri: picked.uri, name: picked.name || 'file', type: picked.type || 'application/octet-stream' });
+      // iter-317: RN-Web FormData bug — convert URI → Blob on web.
+      const filename = picked.name || 'file';
+      const mime = picked.type || 'application/octet-stream';
+      if (Platform.OS === 'web') {
+        const blob = await fetch(picked.uri).then(r => r.blob());
+        form.append('file', blob, filename);
+      } else {
+        // @ts-ignore
+        form.append('file', { uri: picked.uri, name: filename, type: mime });
+      }
       const res = await api.post(
         '/implant-catalog/by-key/attachments',
         form,

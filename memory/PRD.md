@@ -1,5 +1,33 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 318 (Feb 2026) — Phase 4 Step 2 IOPA upload — Metro cache nuked + fix re-verified
+
+### Why a second iteration on the same bug
+After iter-317 the code fix was correct, but the user still saw the upload fail. End-to-end Playwright reproduction surfaced the real reason: Expo runs with `CI=true` (`/etc/supervisor/conf.d/supervisord_expo.conf`), which disables Metro's file watcher. Restarting Expo via `supervisorctl` did **not** clear `/app/frontend/.metro-cache`, so the served lazy chunks for `/procedures/submit-phase4-step2/[id]` were still the pre-fix version.
+
+### What we did
+1. `rm -rf /app/frontend/.metro-cache /app/frontend/.expo/cache` → `supervisorctl restart expo` → forced re-bundle.
+2. Verified the new bundle contains the `RN-Web bug fix` markers and the `fetch(picked.uri)` call (3 + 2 hits respectively in `entry.bundle`).
+3. Re-ran the Playwright IOPA upload flow: login → navigate to Phase 4 Step 2 → click `iopa-upload-16` → set file `/tmp/test.png` → backend responded **HTTP 200** with `{"filename":"…","original_name":"test.png","content_type":"image/png"}`. The Post-Delivery IOPA card now shows tooth `16` + `test.png` chip. The 422 `"[object Object]"` error is gone.
+4. Applied the same `Platform.OS === 'web'` → Blob branch to the remaining file with the same pattern: `/app/frontend/app/admin/implant-catalog-edit.tsx` (catalog attachment upload). No more files in the codebase use the legacy RN-only FormData shape.
+
+### Files touched
+- EDIT: `/app/frontend/app/admin/implant-catalog-edit.tsx` (Platform import + Blob branch).
+
+### Operational tip captured for future agents
+- **Whenever a code change to `/app/frontend/**/*.tsx` isn't visible after `supervisorctl restart expo`, also delete `/app/frontend/.metro-cache`.** The `CI=true` env var disables file watching, and Metro will serve cached lazy chunks indefinitely. (This was the real recurrence trigger for "still not working" reports.)
+
+### Next up
+- P1: Centralise the multipart helper into `/app/frontend/utils/uploads.ts` so future screens cannot reintroduce the bug.
+- P1: Add a CI lint rule that fails when a `.tsx` file calls `FormData.append('file', { uri` without a `Platform.OS === 'web'` branch.
+- P1: Surface clinical-evaluation hits inline on Phase 1 save.
+- P1: Microsoft OAuth sign-in (needs Azure Client ID/Secret).
+
+---
+
+
+# Prosthodontics Dental Implant Mobile App — PRD
+
 ## Iteration 317 (Feb 2026) — Phase 4 Step 2 IOPA upload bug fix (RN-Web FormData)
 
 ### Bug
