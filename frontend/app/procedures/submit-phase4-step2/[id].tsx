@@ -95,12 +95,20 @@ export default function Phase4Step2Screen() {
   const uploadFile = async (mimeAccept: string[]): Promise<Upload | null> => {
     const picked = await showUploadPicker(mimeAccept);
     if (!picked) return null;
+    // iter-317: RN-Web bug fix.  On web, FormData rejects the
+    // `{ uri, name, type }` shape that mobile recognises — it just
+    // string-coerces it to "[object Object]", so the backend never sees
+    // a file and silently 422s.  Convert the picked URI to a real Blob
+    // before appending (same pattern as `/forum/[threadId].tsx`).
     const fp = new FormData();
-    fp.append('file', {
-      uri: picked.uri,
-      name: picked.name || 'upload.jpg',
-      type: picked.mimeType || 'application/octet-stream',
-    } as any);
+    const filename = picked.name || 'upload.jpg';
+    const mime = picked.type || 'application/octet-stream';
+    if (Platform.OS === 'web') {
+      const blob = await fetch(picked.uri).then(r => r.blob());
+      fp.append('file', blob, filename);
+    } else {
+      fp.append('file', { uri: picked.uri, name: filename, type: mime } as any);
+    }
     const res = await api.post('/uploads/media-temp', fp, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });

@@ -160,10 +160,17 @@ export default function Stage2SurgicalSubmissionScreen() {
       const picked = await showUploadPicker(['image/png', 'image/jpeg', 'image/heic', 'image/heif', 'application/pdf']);
       if (!picked) return;
       setUploadingIdx(idx);
+      // iter-317: RN-Web FormData rejects the `{uri,name,type}` shape mobile
+      // recognises — convert URI → Blob on web before appending.
       const formPayload = new FormData();
-      formPayload.append('file', {
-        uri: picked.uri, name: picked.name || 'iopa.jpg', type: picked.type || 'image/jpeg',
-      } as any);
+      const filename = picked.name || 'iopa.jpg';
+      const mime = picked.type || 'image/jpeg';
+      if (Platform.OS === 'web') {
+        const blob = await fetch(picked.uri).then(r => r.blob());
+        formPayload.append('file', blob, filename);
+      } else {
+        formPayload.append('file', { uri: picked.uri, name: filename, type: mime } as any);
+      }
       const res = await api.post('/uploads/cbct-temp', formPayload, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
