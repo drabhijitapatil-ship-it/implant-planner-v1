@@ -95,12 +95,18 @@ export default function Phase4Step2Screen() {
   const uploadFile = async (mimeAccept: string[]): Promise<Upload | null> => {
     const picked = await showUploadPicker(mimeAccept);
     if (!picked) return null;
+    // iter-317: Web FormData rejects the { uri, name, type } object shape —
+    // it string-coerces to "[object Object]" so the backend never sees a file.
+    // Convert to a real Blob on web; keep the RN shape on native.
     const fp = new FormData();
-    fp.append('file', {
-      uri: picked.uri,
-      name: picked.name || 'upload.jpg',
-      type: picked.mimeType || 'application/octet-stream',
-    } as any);
+    const filename = picked.name || 'upload.jpg';
+    const mime = picked.type || 'application/octet-stream';
+    if (Platform.OS === 'web') {
+      const blob = await fetch(picked.uri).then(r => r.blob());
+      fp.append('file', blob, filename);
+    } else {
+      fp.append('file', { uri: picked.uri, name: filename, type: mime } as any);
+    }
     const res = await api.post('/uploads/media-temp', fp, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
@@ -321,8 +327,8 @@ export default function Phase4Step2Screen() {
                 {opgUpload ? (
                   <>
                     <TouchableOpacity style={s.viewBtn}
-                      onPress={() => {
-                        const url = getAuthFileUrl(`/uploads/${opgUpload.filename}`);
+                      onPress={async () => {
+                        const url = await getAuthFileUrl(opgUpload.filename);
                         if (Platform.OS === 'web') window.open(url, '_blank');
                       }}
                       testID="opg-view-btn">
@@ -357,8 +363,8 @@ export default function Phase4Step2Screen() {
                       {up ? (
                         <>
                           <TouchableOpacity style={[s.viewBtn, { flex: 1 }]}
-                            onPress={() => {
-                              const url = getAuthFileUrl(`/uploads/${up.filename}`);
+                            onPress={async () => {
+                              const url = await getAuthFileUrl(up.filename);
                               if (Platform.OS === 'web') window.open(url, '_blank');
                             }}
                             testID={`iopa-view-${pos}`}>
@@ -406,8 +412,8 @@ export default function Phase4Step2Screen() {
                 {p ? (
                   <>
                     <TouchableOpacity style={[s.viewBtn, { maxWidth: 110 }]}
-                      onPress={() => {
-                        const url = getAuthFileUrl(`/uploads/${p.filename}`);
+                      onPress={async () => {
+                        const url = await getAuthFileUrl(p.filename);
                         if (Platform.OS === 'web') window.open(url, '_blank');
                       }}
                       testID={`photo-view-${idx}`}>
