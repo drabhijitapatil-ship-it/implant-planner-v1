@@ -706,7 +706,7 @@ export default function ProcedureDetailScreen() {
     <EditContext.Provider value={canEditField() ? { isEditMode, editingField, editValues, saving, procedure, startEdit, saveField, cancelEdit, setEditValues } : null}>
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.pageHeader} data-testid="case-detail-header">
-        <BackButton testID="case-detail-back-btn" />
+        <BackButton testID="case-detail-back-btn" onPress={() => router.replace('/(tabs)/procedures')} />
         <Text style={styles.pageHeaderTitle} numberOfLines={1}>Case Details</Text>
         <View style={{ width: 44 }} />
       </View>
@@ -3577,7 +3577,7 @@ export default function ProcedureDetailScreen() {
               {user?.role !== 'dental_assistant' && procedure.ai_case_summary && (
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <TouchableOpacity
-                    onPress={() => { setAiClinicalDraft(procedure.ai_case_summary || ''); setEditingAiClinical(true); }}
+                    onPress={() => { setAiClinicalDraft((procedure.ai_case_summary || '').replace(/\*\*(.*?)\*\*/g, '$1').replace(/(?<!\w)\*(.+?)\*(?!\w)/g, '$1')); setEditingAiClinical(true); }}
                     style={{ padding: 4 }}
                     testID="ai-clinical-edit-btn"
                   >
@@ -3586,7 +3586,7 @@ export default function ProcedureDetailScreen() {
                 </View>
               )}
             </View>
-            <Text style={{ fontSize: 13, color: '#37474F', lineHeight: 20 }}>{procedure.ai_case_summary || aiSummary}</Text>
+            <Text style={{ fontSize: 13, color: '#37474F', lineHeight: 20 }}>{(procedure.ai_case_summary || aiSummary || '').replace(/\*\*(.*?)\*\*/g, '$1').replace(/(?<!\w)\*(.+?)\*(?!\w)/g, '$1')}</Text>
           </View>
         ) : null}
 

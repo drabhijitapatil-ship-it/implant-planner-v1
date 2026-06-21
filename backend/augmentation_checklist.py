@@ -115,10 +115,21 @@ def generate_augmentation_checklist(proc: dict[str, Any]) -> list[dict[str, Any]
 
     # Per-cluster sites (preferred) — map keyed by leader-tooth.
     per_site = proc.get("clinical_exam_per_site") or {}
+    arch_label = "global" if not proc.get("arch") else f"{proc['arch'].lower()} arch"
     if isinstance(per_site, dict) and per_site:
         for leader, findings in per_site.items():
             if isinstance(findings, dict):
                 items.extend(_items_for_site(str(leader), findings))
+
+        # Per-site data may lack soft_tissue_thickness. If no biotype items were
+        # produced, fall back to the global gingival_biotype from Phase 1.
+        has_biotype = any(i.get("category") == "biotype" for i in items)
+        if not has_biotype:
+            global_biotype = proc.get("gingival_biotype") or ""
+            if global_biotype:
+                for item in _items_for_site(arch_label, {"soft_tissue_thickness": global_biotype}):
+                    if item.get("category") == "biotype":
+                        items.append(item)
 
     # Global findings fallback (full-arch / single-tooth flows that don't
     # populate the per-site map). Emit "global" items only when no per-site
@@ -127,11 +138,11 @@ def generate_augmentation_checklist(proc: dict[str, Any]) -> list[dict[str, Any]
     if not per_site:
         legacy = {
             "ridge_contour": proc.get("ridge_contour") or "",
-            "soft_tissue_thickness": proc.get("soft_tissue_thickness") or "",
+            # gingival_biotype (Phase 1 dropdown) maps to soft_tissue_thickness
+            "soft_tissue_thickness": proc.get("soft_tissue_thickness") or proc.get("gingival_biotype") or "",
             "keratinized_mucosa": proc.get("keratinized_mucosa") or "",
         }
         if any(legacy.values()):
-            arch_label = "global" if not proc.get("arch") else f"{proc['arch'].lower()} arch"
             items.extend(_items_for_site(arch_label, legacy))
 
     return items

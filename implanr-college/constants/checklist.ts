@@ -286,6 +286,22 @@ export function calculateMedicalRisk(factors: Record<string, string>): { level: 
   scores.radiation = factors.radiation === 'Yes' ? 3 : 1;
   if (factors.radiation === 'Yes') warnings.push('Osteoradionecrosis risk - assess radiation dose and field');
 
+  // HbA1c numeric override (iter-315): crosses 9% → force High Risk
+  // regardless of categorical diabetes selection. Mirrors the hard-block
+  // threshold used by the deterministic clinical-rule engine
+  // (`clinical_rules/rules.py::diabetic_stack`, ITI 2023 Group 3 consensus).
+  const hba1cRaw = factors.hba1c;
+  if (hba1cRaw !== undefined && hba1cRaw !== null && String(hba1cRaw).trim() !== '') {
+    const hba1cNum = parseFloat(String(hba1cRaw));
+    if (!isNaN(hba1cNum) && hba1cNum >= 9) {
+      scores.hba1c = 3;
+      warnings.push(`HbA1c ${hba1cNum.toFixed(1)}% — uncontrolled glycaemia (≥9%); defer surgery and refer for medical optimisation (ITI 2023)`);
+    } else if (!isNaN(hba1cNum) && hba1cNum > 7) {
+      scores.hba1c = 2;
+      warnings.push(`HbA1c ${hba1cNum.toFixed(1)}% — above predictable-osseointegration threshold (>7%); proceed with caution`);
+    }
+  }
+
   // Override: force HIGH if any factor is 3
   const hasHighRiskFactor = Object.values(scores).some(s => s === 3);
   if (hasHighRiskFactor) {
@@ -353,6 +369,12 @@ const FULL_ARCH_OPTIONS = [
   'Full Arch - Peek and Zirconia Ti Base',
 ];
 
+// iter-307: Multi-Single-Crown options used by `Multiple Conventional
+// Implants` AND by the 4 non-conventional procedure types when the
+// clinician picks "Multiple Implants" in the new sub-question
+// (Immediate / PET / GBR / Guided Surgery).
+// Lithium Disilicate variants (iter-307) added per user request — they
+// apply uniformly to every multi-implant scenario.
 export const MULTIPLE_SINGLE_CROWN_OPTIONS = [
   'Screw Retained Multiple Single Crowns - Zirconia',
   'Screw Retained Multiple Single Crowns - Metal',
@@ -364,6 +386,10 @@ export const MULTIPLE_SINGLE_CROWN_OPTIONS = [
   'Cement Retained Multiple Single Crowns - Lithium Disilicate',
 ];
 
+// iter-307: the 4 procedure types that now carry the per-case
+// "Number of Implants" sub-question. When this sub-question is
+// answered, the prosthetic-plan dropdown re-uses the Single-Conventional
+// or Multiple-Conventional option set verbatim.
 export const PROCEDURES_WITH_NUM_IMPLANTS_QUESTION = new Set<string>([
   'Immediate Implant',
   'Partial Extraction Therapy',
@@ -378,6 +404,9 @@ export function getProstheticOptions(
 ): string[] {
   const options: string[] = [];
 
+  // iter-307: For the 4 affected procedure types, the option set is
+  // driven entirely by the Number-of-Implants sub-question. Gate the
+  // dropdown until the sub-question is answered.
   if (PROCEDURES_WITH_NUM_IMPLANTS_QUESTION.has(procedureType)) {
     if (numImplants === 'Single Implant') {
       options.push(...SINGLE_CROWN_OPTIONS);
@@ -389,6 +418,9 @@ export function getProstheticOptions(
         if (!options.includes(o)) options.push(o);
       }
     }
+    // Loading-type extras still apply (Immediate / Delayed loading
+    // adds PMMA/temp options) — but only AFTER the sub-question is
+    // answered so we don't surface dangling PMMA options.
     if (options.length > 0 && loadingTypes.includes('Immediate Loading')) {
       for (const o of IMMEDIATE_LOADING_OPTIONS) {
         if (!options.includes(o)) options.push(o);

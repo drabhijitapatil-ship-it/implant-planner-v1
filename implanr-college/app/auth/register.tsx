@@ -36,7 +36,7 @@ export default function CollegeRegisterScreen() {
   const [showSuccess, setShowSuccess] = useState(false);
 
   const [showPrefixPicker, setShowPrefixPicker] = useState(false);
-  const [infoModal, setInfoModal] = useState<'incharge' | 'users' | null>(null);
+  const [infoModal, setInfoModal] = useState<'incharge' | 'users' | 'email' | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const collegeName = useManual ? manualCollegeName : (selectedCollege?.name ?? '');
@@ -209,7 +209,12 @@ export default function CollegeRegisterScreen() {
               {errors.inchargeName ? <Text style={s.err}>{errors.inchargeName}</Text> : null}
 
               {/* ── Email ── */}
-              <Text style={s.label}>Email *</Text>
+              <View style={s.labelRow}>
+                <Text style={s.label}>Email *</Text>
+                <TouchableOpacity onPress={() => setInfoModal('email')}>
+                  <Ionicons name="information-circle-outline" size={19} color="#1565C0" />
+                </TouchableOpacity>
+              </View>
               <TextInput
                 style={[s.input, errors.email && s.inputErr]}
                 placeholder="official@dental.edu"
@@ -395,6 +400,13 @@ export default function CollegeRegisterScreen() {
                 <Text style={s.infoTitle}>About Implant In-Charge</Text>
                 <Text style={s.infoBody}>
                   The Implant In-Charge is the primary admin of your college workspace. They have full access to all cases, reports, and user management. They can add supervisors, students, and auxiliary staff. A maximum of 2 Implant In-Charges are allowed per college.
+                </Text>
+              </>
+            ) : infoModal === 'email' ? (
+              <>
+                <Text style={s.infoTitle}>Which Email to Use</Text>
+                <Text style={s.infoBody}>
+                  Official institutional email is preferred. Use the email of the person who will be the Implant In-Charge.
                 </Text>
               </>
             ) : (

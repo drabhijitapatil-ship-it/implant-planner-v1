@@ -33,6 +33,7 @@ interface Thread {
   bookmarked?: boolean;
   watching?: boolean;
   anonymous: boolean;
+  is_my_thread?: boolean;
   reply_count: number;
 }
 
@@ -356,13 +357,18 @@ export default function ForumThreadScreen() {
           <View style={s.tagsRow}>
             {thread.tags.map(t => <View key={t} style={s.tag}><Text style={s.tagTxt}>{t}</Text></View>)}
           </View>
-          <View style={s.summaryActionsRow}>
-            <TouchableOpacity style={s.summaryBtn} onPress={() => router.push(`/procedures/${thread.procedure_id}` as any)} data-testid="forum-open-case-btn">
-              <Ionicons name="document-text" size={14} color="#1565C0" />
-              <Text style={s.summaryBtnTxt}>Open Full Case Report</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={s.sharedBy}>Shared by {thread.shared_by_display || 'Unknown'} • {thread.shared_by_role}</Text>
+          {(!thread.anonymous || thread.is_my_thread) && (
+            <View style={s.summaryActionsRow}>
+              <TouchableOpacity style={s.summaryBtn} onPress={() => router.push(`/procedures/${thread.procedure_id}` as any)} data-testid="forum-open-case-btn">
+                <Ionicons name="document-text" size={14} color="#1565C0" />
+                <Text style={s.summaryBtnTxt}>Open Full Case Report</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          <Text style={s.sharedBy}>
+            Shared by {thread.shared_by_display || 'Unknown'}
+            {!thread.anonymous && thread.shared_by_role ? ` • ${thread.shared_by_role}` : ''}
+          </Text>
         </View>
 
         {thread.status === 'closed' && (

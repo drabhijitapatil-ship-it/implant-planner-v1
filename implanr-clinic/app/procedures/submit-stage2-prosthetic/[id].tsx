@@ -61,6 +61,8 @@ export default function Phase4Step1Screen() {
   // iter-197: form-level Note to the Lab — same UX as the case-detail card.
   const [labSlipNote, setLabSlipNote] = useState('');
   const [studentNotes, setStudentNotes] = useState('');
+  const [customProsthesisText, setCustomProsthesisText] = useState('');
+  const [customAbutmentText, setCustomAbutmentText] = useState('');
 
   // iter-210: Multi-Unit Abutment override editor for Phase 4 Step 1.
   // Phase 2 captures MUA at the time of immediate loading; the prosthodontist
@@ -156,9 +158,9 @@ export default function Phase4Step1Screen() {
   const getOptions = () => {
     if (!procedure) return [];
     const procType = procedure.implant_procedure_type || '';
-    if (SINGLE_GROUP.has(procType) || MULTIPLE_GROUP.has(procType)) return PHASE4_SINGLE_MULTIPLE_OPTIONS;
-    if (FULL_ARCH_GROUP.has(procType)) return PHASE4_FULL_ARCH_OPTIONS;
-    return [...PHASE4_SINGLE_MULTIPLE_OPTIONS, ...PHASE4_FULL_ARCH_OPTIONS];
+    if (SINGLE_GROUP.has(procType) || MULTIPLE_GROUP.has(procType)) return [...PHASE4_SINGLE_MULTIPLE_OPTIONS, 'Other'];
+    if (FULL_ARCH_GROUP.has(procType)) return [...PHASE4_FULL_ARCH_OPTIONS, 'Other'];
+    return [...PHASE4_SINGLE_MULTIPLE_OPTIONS, ...PHASE4_FULL_ARCH_OPTIONS, 'Other'];
   };
 
   const showMaterial = finalProsthesis && (finalProsthesis.includes('FP1') || finalProsthesis.includes('FP2') || finalProsthesis.includes('FP3'));
@@ -179,6 +181,7 @@ export default function Phase4Step1Screen() {
       }
     } else {
       if (!finalProsthesis) return 'Please select Final Prosthesis';
+      if (finalProsthesis === 'Other' && !customProsthesisText.trim()) return 'Please specify the prosthesis type';
     }
     if (!impressionType) return 'Please select impression type';
     if (impressionType === 'conventional' && !conventionalTrayType) return 'Please choose Open tray or Closed tray for the conventional impression.';
@@ -202,7 +205,7 @@ export default function Phase4Step1Screen() {
   // iter-194: assemble the POST body. Used by both Submit and Generate-Lab-Slip.
   const buildPayload = () => {
     const payload: any = {
-      custom_abutment: customAbutment || null,
+      custom_abutment: customAbutment === 'Other' ? (customAbutmentText.trim() || 'Other') : (customAbutment || null),
       overdenture_attachment: overdentureAttachment || null,
       payment_complete: paymentComplete,
       components_available: componentsAvailable,
@@ -226,7 +229,8 @@ export default function Phase4Step1Screen() {
       ).join('; ');
       payload.prosthetic_material = perImplantPlans.map(p => p.material).filter(Boolean).join(', ') || null;
     } else {
-      payload.final_prosthetic_plan = finalProsthesis + (prostheticMaterial ? ` - ${prostheticMaterial}` : '');
+      const effectiveProsthesis = finalProsthesis === 'Other' ? (customProsthesisText.trim() || 'Other') : finalProsthesis;
+      payload.final_prosthetic_plan = effectiveProsthesis + (prostheticMaterial ? ` - ${prostheticMaterial}` : '');
       payload.prosthetic_material = prostheticMaterial || null;
     }
     // iter-210: include the MUA override if the user touched the editor or
@@ -406,7 +410,20 @@ export default function Phase4Step1Screen() {
             ) : (
               <>
                 {renderDropdown('Final Prosthesis Type', finalProsthesis, getOptions(),
-                  prosthesisOpen, setProsthesisOpen, (v) => { setFinalProsthesis(v); setProstheticMaterial(''); setOverdentureAttachment(''); })}
+                  prosthesisOpen, setProsthesisOpen, (v) => { setFinalProsthesis(v); setProstheticMaterial(''); setOverdentureAttachment(''); setCustomProsthesisText(''); })}
+
+                {finalProsthesis === 'Other' && (
+                  <View style={s.field}>
+                    <Text style={s.label}>Specify Prosthesis Type <Text style={{ color: '#DC3545' }}>*</Text></Text>
+                    <TextInput
+                      style={s.input}
+                      value={customProsthesisText}
+                      onChangeText={setCustomProsthesisText}
+                      placeholder="Describe the prosthesis type..."
+                      autoCapitalize="words"
+                    />
+                  </View>
+                )}
 
                 {showMaterial && renderDropdown('Prosthetic Material', prostheticMaterial, FP_MATERIAL_OPTIONS,
                   materialOpen, setMaterialOpen, setProstheticMaterial)}
@@ -417,7 +434,20 @@ export default function Phase4Step1Screen() {
             )}
 
             {renderDropdown('Custom Abutment (optional)', customAbutment, CUSTOM_ABUTMENT_OPTIONS,
-              abutmentOpen, setAbutmentOpen, setCustomAbutment, false)}
+              abutmentOpen, setAbutmentOpen, (v) => { setCustomAbutment(v); setCustomAbutmentText(''); }, false)}
+
+            {customAbutment === 'Other' && (
+              <View style={s.field}>
+                <Text style={s.label}>Specify Custom Abutment</Text>
+                <TextInput
+                  style={s.input}
+                  value={customAbutmentText}
+                  onChangeText={setCustomAbutmentText}
+                  placeholder="Describe the custom abutment..."
+                  autoCapitalize="words"
+                />
+              </View>
+            )}
           </View>
 
           {/* ── Payment & Components ── */}
@@ -736,51 +766,19 @@ export default function Phase4Step1Screen() {
             );
           })()}
 
-          {/* ── Notes ── */}
+          {/* ── Note to the Lab ── */}
           <View style={s.section}>
             <View style={s.sectionHeader}>
-              <Ionicons name="document-text-outline" size={20} color="#00695C" />
-              <Text style={s.sectionTitle}>Notes</Text>
+              <Ionicons name="mail-outline" size={20} color="#6A1B9A" />
+              <Text style={s.sectionTitle}>Note to the Lab</Text>
             </View>
-            <View style={s.field}>
-              <Text style={s.label}>{notesLabel}</Text>
-              <TextInput style={[s.input, s.textArea]} value={studentNotes} onChangeText={setStudentNotes}
-                placeholder="Treatment planning notes, special considerations..." multiline numberOfLines={3}
-                data-testid="phase4-step1-notes" />
-            </View>
-            {user?.role !== 'chief_dentist' && (
-              <Text style={s.helperText} testID="phase4-step1-approval-helper">
-                {user?.role === 'dentist'
-                  ? 'Implant In-Charge remark will be added during approval.'
-                  : 'Supervisor and In-Charge remarks added during approval.'}
-              </Text>
-            )}
-          </View>
-
-          {/* ── Submit ── */}
-          {doneCompleted ? (
-            <View style={{ padding: 16, paddingBottom: 32, alignItems: 'center' }} testID="phase4-step1-done-success">
-              <View style={{ paddingHorizontal: 28, paddingVertical: 12, borderRadius: 999, backgroundColor: '#E8F5E9', borderWidth: 1.5, borderColor: '#43A047', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Ionicons name="checkmark-circle" size={20} color="#1B5E20" />
-                <Text style={{ fontSize: 15, fontWeight: '800', color: '#1B5E20', letterSpacing: 0.5 }}>Approved</Text>
-              </View>
-              <TouchableOpacity onPress={() => router.replace(`/procedures/${id}`)} style={{ marginTop: 14 }} testID="phase4-step1-view-case-link">
-                <Text style={{ color: '#1565C0', fontWeight: '600', fontSize: 14, textDecorationLine: 'underline' }}>View Case</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-          <View style={{ padding: 16, paddingBottom: 32, gap: 10 }}>
-            {/* iter-197: form-level Note to the Lab — same UX as case-detail.
-                Optional, capped at 150 words. Passed into the slip generator
-                as `lab_slip_note` and rendered in the PDF's Special
-                Instructions section. */}
             {(() => {
               const wordCount = labSlipNote.trim() ? labSlipNote.trim().split(/\s+/).length : 0;
               const overLimit = wordCount > 150;
               return (
                 <View testID="form-lab-slip-note-block">
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#4A148C', marginBottom: 4 }}>
-                    Note to the Lab <Text style={{ fontStyle: 'italic', fontWeight: '500', color: '#7B1FA2' }}>(optional, up to 150 words — included in the lab slip)</Text>
+                  <Text style={{ fontSize: 12, color: '#7B1FA2', marginBottom: 8, fontStyle: 'italic' }}>
+                    Optional, up to 150 words — included in the lab slip
                   </Text>
                   <TextInput
                     multiline
@@ -815,7 +813,42 @@ export default function Phase4Step1Screen() {
                 </View>
               );
             })()}
+          </View>
 
+          {/* ── Notes ── */}
+          <View style={s.section}>
+            <View style={s.sectionHeader}>
+              <Ionicons name="document-text-outline" size={20} color="#00695C" />
+              <Text style={s.sectionTitle}>Notes</Text>
+            </View>
+            <View style={s.field}>
+              <Text style={s.label}>{notesLabel}</Text>
+              <TextInput style={[s.input, s.textArea]} value={studentNotes} onChangeText={setStudentNotes}
+                placeholder="Treatment planning notes, special considerations..." multiline numberOfLines={3}
+                data-testid="phase4-step1-notes" />
+            </View>
+            {user?.role !== 'chief_dentist' && (
+              <Text style={s.helperText} testID="phase4-step1-approval-helper">
+                {user?.role === 'dentist'
+                  ? 'Implant In-Charge remark will be added during approval.'
+                  : 'Supervisor and In-Charge remarks added during approval.'}
+              </Text>
+            )}
+          </View>
+
+          {/* ── Submit ── */}
+          {doneCompleted ? (
+            <View style={{ padding: 16, paddingBottom: 32, alignItems: 'center' }} testID="phase4-step1-done-success">
+              <View style={{ paddingHorizontal: 28, paddingVertical: 12, borderRadius: 999, backgroundColor: '#E8F5E9', borderWidth: 1.5, borderColor: '#43A047', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="checkmark-circle" size={20} color="#1B5E20" />
+                <Text style={{ fontSize: 15, fontWeight: '800', color: '#1B5E20', letterSpacing: 0.5 }}>Approved</Text>
+              </View>
+              <TouchableOpacity onPress={() => router.replace(`/procedures/${id}`)} style={{ marginTop: 14 }} testID="phase4-step1-view-case-link">
+                <Text style={{ color: '#1565C0', fontWeight: '600', fontSize: 14, textDecorationLine: 'underline' }}>View Case</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+          <View style={{ padding: 16, paddingBottom: 32, gap: 10 }}>
             {/* iter-194: Generate Lab Slip — soft-saves (?save_only=true) and
                 opens the slip with the freshly-saved values + form Note. */}
             <TouchableOpacity

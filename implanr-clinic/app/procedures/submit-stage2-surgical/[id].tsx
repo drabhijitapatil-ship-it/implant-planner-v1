@@ -20,7 +20,7 @@ export default function Stage2SurgicalSubmissionScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const { user } = useAuth();
-  const isFaculty = user?.role === 'dentist' || user?.role === 'chief_dentist';
+  const isFaculty = user?.role === 'supervisor' || user?.role === 'implant_incharge';
   const notesLabel = isFaculty ? "Operator's Notes" : "Student Notes";
   const [loading, setLoading] = useState(false);
 
@@ -73,7 +73,7 @@ export default function Stage2SurgicalSubmissionScreen() {
   const [editFieldsSel, setEditFieldsSel] = useState<Record<string, boolean>>({});
   const [editNote, setEditNote] = useState('');
   const [editSubmitting, setEditSubmitting] = useState(false);
-  const isOwner = !!user && user.role === 'dentist';
+  const isOwner = !!user && user.role === 'student';
 
   useEffect(() => { loadImplantPlan(); }, []);
 
@@ -160,10 +160,17 @@ export default function Stage2SurgicalSubmissionScreen() {
       const picked = await showUploadPicker(['image/png', 'image/jpeg', 'image/heic', 'image/heif', 'application/pdf']);
       if (!picked) return;
       setUploadingIdx(idx);
+      // iter-317: RN-Web FormData rejects the `{uri,name,type}` shape mobile
+      // recognises — convert URI → Blob on web before appending.
       const formPayload = new FormData();
-      formPayload.append('file', {
-        uri: picked.uri, name: picked.name || 'iopa.jpg', type: picked.type || 'image/jpeg',
-      } as any);
+      const filename = picked.name || 'iopa.jpg';
+      const mime = picked.type || 'image/jpeg';
+      if (Platform.OS === 'web') {
+        const blob = await fetch(picked.uri).then(r => r.blob());
+        formPayload.append('file', blob, filename);
+      } else {
+        formPayload.append('file', { uri: picked.uri, name: filename, type: mime } as any);
+      }
       const res = await api.post('/uploads/cbct-temp', formPayload, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
@@ -227,7 +234,7 @@ export default function Stage2SurgicalSubmissionScreen() {
         })),
         student_notes: studentNotes || null,
       });
-      const isInchargeSelfCreated = user?.role === 'chief_dentist' && createdByRole === 'chief_dentist' && user?.id === createdById;
+      const isInchargeSelfCreated = user?.role === 'implant_incharge' && createdByRole === 'implant_incharge' && user?.id === createdById;
       if (isInchargeSelfCreated) {
         try { await api.post(`/procedures/${id}/stage2/surgical/approve`, { action: 'approve', comment: '' }); } catch {}
         setDoneCompleted(true);
@@ -471,9 +478,9 @@ export default function Stage2SurgicalSubmissionScreen() {
               />
             </View>
 
-            {user?.role !== 'chief_dentist' && (
+            {user?.role !== 'implant_incharge' && (
               <Text style={s.helperText} testID="phase3-approval-helper">
-                {user?.role === 'dentist'
+                {user?.role === 'supervisor'
                   ? 'Implant In-Charge remark will be added during approval.'
                   : 'Supervisor and In-Charge remarks will be added during approval.'}
               </Text>
@@ -500,7 +507,7 @@ export default function Stage2SurgicalSubmissionScreen() {
               ).length;
               const pendingIopa = iopaFiles.filter(f => f === null).length;
               const canSubmit = unansweredCount === 0 && pendingIopa === 0;
-              const isInchargeSelf = (user?.role === 'chief_dentist' && createdByRole === 'chief_dentist' && user?.id === createdById);
+              const isInchargeSelf = (user?.role === 'implant_incharge' && createdByRole === 'implant_incharge' && user?.id === createdById);
               return (
                 <>
                   <TouchableOpacity

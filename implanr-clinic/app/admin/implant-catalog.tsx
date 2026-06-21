@@ -303,14 +303,6 @@ export default function ImplantCatalogAdmin() {
     );
   }, [systems, selectedBrand, load]);
 
-  if (loading) {
-    return (
-      <SafeAreaView style={s.container}>
-        <View style={s.center}><ActivityIndicator size="large" color="#0277BD" /></View>
-      </SafeAreaView>
-    );
-  }
-
   // iter-302: Straumann BLT systems carry per-platform prosthetic catalogs.
   const requiresBltPlatformPick = !!(
     selected &&
@@ -332,6 +324,14 @@ export default function ImplantCatalogAdmin() {
     if (!activeBltPlatformCode) return [];
     return all.filter(c => (c as any).platform === activeBltPlatformCode);
   }, [selected, requiresBltPlatformPick, activeBltPlatformCode]);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={s.container}>
+        <View style={s.center}><ActivityIndicator size="large" color="#0277BD" /></View>
+      </SafeAreaView>
+    );
+  }
 
   // Picker option list (brand / family / variant / blt_platform).
   let pickerItems: { value: string; label: string; sub?: string }[] = [];

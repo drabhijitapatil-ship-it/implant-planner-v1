@@ -63,6 +63,9 @@ const variantLabel = (familyName: string, fullName: string): string => {
   return v;
 };
 
+// iter-302: Straumann BLT family-name → per-platform prosthetic catalog.
+// All three BLT systems (Roxolid SLActive / Roxolid SLA / Ti SLA) share the
+// same 4-platform split. Order matters — picker renders in this order.
 const BLT_SYSTEMS_WITH_PLATFORM_SPLIT = new Set<string>([
   'BLT Roxolid SLActive',
   'BLT Roxolid SLA',
@@ -92,6 +95,11 @@ export default function ImplantCatalogAdmin() {
   const [selectedBrand, setSelectedBrand] = useState<string>('');
   const [selectedFamily, setSelectedFamily] = useState<string>('');
   const [selectedKey, setSelectedKey] = useState<string>('');
+  // iter-302: Straumann BLT systems carry per-platform prosthetic catalogs
+  // (SC 2.9 / NC 3.3 / RC 4.1 / RC 4.8). The user must pick a platform
+  // before the relevant components show. Stored as the 4-tuple option label
+  // (e.g. "SC 2.9 mm") because RC 4.1 and RC 4.8 share the same platform
+  // code ("RC") and so we can't disambiguate by code alone.
   const [selectedBltPlatformOpt, setSelectedBltPlatformOpt] = useState<string>('');
 
   const [pickerKind, setPickerKind] = useState<null | 'brand' | 'family' | 'variant' | 'blt_platform'>(null);
@@ -234,6 +242,39 @@ export default function ImplantCatalogAdmin() {
     [systems, selectedKey]
   );
 
+  // iter-302: only Straumann BLT (Roxolid SLActive / Roxolid SLA / Ti SLA)
+  // requires a platform pick. For every other system the components panel
+  // renders unfiltered as before.
+  const requiresBltPlatformPick = !!(
+    selected &&
+    selected.brand === 'Straumann' &&
+    BLT_SYSTEMS_WITH_PLATFORM_SPLIT.has(selected.name)
+  );
+
+  // Reset platform whenever the user moves to a different variant.
+  useEffect(() => {
+    setSelectedBltPlatformOpt('');
+  }, [selectedKey]);
+
+  // Look up the active platform code (e.g. "SC", "NC", "RC") from the
+  // label we stored in state. Returns null when not in BLT mode or before
+  // the user has picked a platform.
+  const activeBltPlatformCode: string | null = useMemo(() => {
+    if (!requiresBltPlatformPick || !selectedBltPlatformOpt) return null;
+    const opt = BLT_PLATFORM_OPTIONS.find(o => o.label === selectedBltPlatformOpt);
+    return opt?.platform ?? null;
+  }, [requiresBltPlatformPick, selectedBltPlatformOpt]);
+
+  // Filtered component list shown in the detail card. For non-BLT systems
+  // this is a no-op; for BLT systems we hide everything until the user
+  // picks a platform, then narrow to that platform.
+  const visibleComponents: Component[] = useMemo(() => {
+    const all = selected?.components || [];
+    if (!requiresBltPlatformPick) return all;
+    if (!activeBltPlatformCode) return [];
+    return all.filter(c => (c as any).platform === activeBltPlatformCode);
+  }, [selected, requiresBltPlatformPick, activeBltPlatformCode]);
+
   const ask = useCallback(async () => {
     if (!question.trim()) return;
     setAiLoading(true); setAiAnswer(null);
@@ -311,29 +352,7 @@ export default function ImplantCatalogAdmin() {
     );
   }
 
-  // iter-302: Straumann BLT systems carry per-platform prosthetic catalogs.
-  const requiresBltPlatformPick = !!(
-    selected &&
-    selected.brand === 'Straumann' &&
-    BLT_SYSTEMS_WITH_PLATFORM_SPLIT.has(selected.name)
-  );
-
-  useEffect(() => { setSelectedBltPlatformOpt(''); }, [selectedKey]);
-
-  const activeBltPlatformCode: string | null = useMemo(() => {
-    if (!requiresBltPlatformPick || !selectedBltPlatformOpt) return null;
-    const opt = BLT_PLATFORM_OPTIONS.find(o => o.label === selectedBltPlatformOpt);
-    return opt?.platform ?? null;
-  }, [requiresBltPlatformPick, selectedBltPlatformOpt]);
-
-  const visibleComponents: Component[] = useMemo(() => {
-    const all = selected?.components || [];
-    if (!requiresBltPlatformPick) return all;
-    if (!activeBltPlatformCode) return [];
-    return all.filter(c => (c as any).platform === activeBltPlatformCode);
-  }, [selected, requiresBltPlatformPick, activeBltPlatformCode]);
-
-  // Picker option list (brand / family / variant / blt_platform).
+  // Picker option list (brand / family / variant).
   let pickerItems: { value: string; label: string; sub?: string }[] = [];
   let pickerTitle = '';
   if (pickerKind === 'brand') {
@@ -530,7 +549,9 @@ export default function ImplantCatalogAdmin() {
           </View>
         )}
 
-        {/* iter-302: Platform dropdown — only for Straumann BLT systems */}
+        {/* iter-302: Platform dropdown — only for Straumann BLT systems
+            (Roxolid SLActive / Roxolid SLA / Ti SLA). Splits the prosthetic
+            catalog by implant Ø → connection family (SC / NC / RC). */}
         {requiresBltPlatformPick && (
           <View style={s.dropdownGroup} testID="catalog-blt-platform-group">
             <Text style={s.dropdownLabel}>Platform</Text>
@@ -538,6 +559,7 @@ export default function ImplantCatalogAdmin() {
               style={s.dropdown}
               onPress={() => setPickerKind('blt_platform')}
               testID="catalog-blt-platform-dropdown"
+              data-testid="catalog-blt-platform-dropdown"
             >
               <Text style={[s.dropdownValue, !selectedBltPlatformOpt && s.dropdownPlaceholder]}>
                 {selectedBltPlatformOpt || 'Select a platform (SC / NC / RC)'}
@@ -607,10 +629,36 @@ export default function ImplantCatalogAdmin() {
               </SectionBlock>
             )}
 
-            {!!visibleComponents.length && (
-              <SectionBlock title={`Components (${visibleComponents.length})`}>
-                {visibleComponents.map((c, i) => <ComponentCard key={i} c={c} />)}
-              </SectionBlock>
+            {!!selected.components?.length && (
+              requiresBltPlatformPick && !activeBltPlatformCode ? (
+                <SectionBlock title="Components">
+                  <View style={s.platformHintBox} testID="catalog-blt-platform-hint">
+                    <Ionicons name="information-circle-outline" size={18} color="#0277BD" />
+                    <Text style={s.platformHintText}>
+                      Select a platform above (SC 2.9 / NC 3.3 / RC 4.1 / RC 4.8) to view the matching prosthetic components.
+                    </Text>
+                  </View>
+                </SectionBlock>
+              ) : visibleComponents.length > 0 ? (
+                <SectionBlock
+                  title={
+                    requiresBltPlatformPick
+                      ? `Components — ${selectedBltPlatformOpt} (${visibleComponents.length})`
+                      : `Components (${visibleComponents.length})`
+                  }
+                >
+                  {visibleComponents.map((c, i) => <ComponentCard key={i} c={c} />)}
+                </SectionBlock>
+              ) : requiresBltPlatformPick && activeBltPlatformCode ? (
+                <SectionBlock title={`Components — ${selectedBltPlatformOpt}`}>
+                  <View style={s.platformHintBox} testID="catalog-blt-platform-empty">
+                    <Ionicons name="cube-outline" size={18} color="#90A4AE" />
+                    <Text style={s.platformHintText}>
+                      Prosthetic components for {selectedBltPlatformOpt} haven't been added yet. They will appear here once the {activeBltPlatformCode} catalog is seeded.
+                    </Text>
+                  </View>
+                </SectionBlock>
+              ) : null
             )}
 
             {!!selected.compatibility_notes && (
@@ -733,7 +781,8 @@ export default function ImplantCatalogAdmin() {
                 const active =
                   (pickerKind === 'brand' && item.value === selectedBrand) ||
                   (pickerKind === 'family' && item.value === selectedFamily) ||
-                  (pickerKind === 'variant' && item.value === selectedKey);
+                  (pickerKind === 'variant' && item.value === selectedKey) ||
+                  (pickerKind === 'blt_platform' && item.value === selectedBltPlatformOpt);
                 return (
                   <View style={[s.pickerRow, active && s.pickerRowActive]}>
                     <TouchableOpacity
@@ -742,6 +791,7 @@ export default function ImplantCatalogAdmin() {
                         if (pickerKind === 'brand') setSelectedBrand(item.value);
                         else if (pickerKind === 'family') setSelectedFamily(item.value);
                         else if (pickerKind === 'variant') setSelectedKey(item.value);
+                        else if (pickerKind === 'blt_platform') setSelectedBltPlatformOpt(item.value);
                         setPickerKind(null);
                         setAiAnswer(null);
                       }}
@@ -909,6 +959,9 @@ const s = StyleSheet.create({
   compTitle: { fontSize: 13, fontWeight: '700', color: '#01579B', marginBottom: 6, textTransform: 'capitalize' },
   compNotes: { fontSize: 12, color: '#546E7A', fontStyle: 'italic', marginTop: 6 },
   notesText: { fontSize: 13, color: '#263238', lineHeight: 19 },
+  // iter-302 — BLT platform hint / empty-state
+  platformHintBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: '#E1F5FE', borderRadius: 10, borderWidth: 1, borderColor: '#B3E5FC', padding: 12 },
+  platformHintText: { flex: 1, fontSize: 13, color: '#01579B', lineHeight: 19 },
   // Ask Implanr AI panel
   aiPanel: { backgroundColor: '#E1F5FE', borderColor: '#0277BD', borderWidth: 1.5, borderRadius: 14, padding: 14, marginTop: 8 },
   aiHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },

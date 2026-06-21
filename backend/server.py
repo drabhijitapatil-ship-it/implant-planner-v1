@@ -3631,7 +3631,7 @@ async def edit_procedure_fields(procedure_id: str, request: Request, current_use
     # If any clinical-finding field was touched, regenerate the augmentation
     # checklist while PRESERVING completed-state on items whose title still
     # matches (so a supervisor's ticked items aren't lost on a benign edit).
-    finding_keys = {"clinical_exam_per_site", "ridge_contour", "soft_tissue_thickness", "keratinized_mucosa", "arch", "missing_teeth"}
+    finding_keys = {"clinical_exam_per_site", "ridge_contour", "soft_tissue_thickness", "keratinized_mucosa", "arch", "missing_teeth", "gingival_biotype"}
     if finding_keys & set(fields.keys()):
         merged_proc = {**proc, **fields}
         new_items = generate_augmentation_checklist(merged_proc)
@@ -7431,7 +7431,7 @@ IMPORTANT GUIDELINES:
 - Base your reasoning on established scientific literature, standard implantology textbooks, and recognized consensus guidelines — but DO NOT cite or name any specific references, organizations, journals, or guideline names in the output.
 - Write in professional scientific clinical language.
 - Generate a DYNAMIC summary tailored to this specific case — do not produce a generic template.
-- Make section headings **bold** and descriptions in regular type.
+- Write section headings as plain uppercase text (no bold, no asterisks).
 {case_type_instruction}
 
 Case Data:
@@ -7444,8 +7444,9 @@ Generate the summary covering ONLY the following sections (as the case is curren
 {sections_to_include}
 
 FORMAT INSTRUCTIONS:
-- Use the section letters and titles as headings in **bold** (e.g., "**A. Patient Information & Chief Complaint**")
-- Under each heading, write 2-4 sentences with specific clinical details from the case data in regular (non-bold) type
+- NEVER use markdown — no asterisks (no **bold**, no *italics*), no hashes, no backticks. Output plain text only.
+- Use the section letters and titles as plain uppercase headings (e.g., "A. PATIENT INFORMATION & CHIEF COMPLAINT")
+- Under each heading, write 2-4 sentences with specific clinical details from the case data
 - Do NOT mention or cite any specific guidelines, organizations, textbooks, or journal references in the text
 - Skip any section where no relevant data is available, but note it briefly as "Data pending for this phase"
 - Make the summary clinically meaningful and specific to THIS patient — avoid boilerplate language"""
@@ -7473,6 +7474,13 @@ FORMAT INSTRUCTIONS:
     ).with_model("openai", "gpt-5.2")
 
     response = await chat.send_message(UserMessage(text=prompt))
+
+    # Strip residual markdown asterisks / underscores — defense-in-depth
+    # (matches the stripping already applied in the chat assistant endpoint).
+    import re as _re_md_cs
+    response = _re_md_cs.sub(r"\*\*(.*?)\*\*", r"\1", response)
+    response = _re_md_cs.sub(r"(?<!\w)\*(.+?)\*(?!\w)", r"\1", response)
+    response = _re_md_cs.sub(r"(?<!\w)_(.+?)_(?!\w)", r"\1", response)
 
     await db.procedures.update_one(
         {"_id": ObjectId(procedure_id)},
@@ -7531,6 +7539,12 @@ Write a concise operative note (4-6 sentences) in standard surgical documentatio
     ).with_model("openai", "gpt-5.2")
     
     response = await chat.send_message(UserMessage(text=prompt))
+
+    # Strip residual markdown asterisks / underscores — defense-in-depth.
+    import re as _re_md_sn
+    response = _re_md_sn.sub(r"\*\*(.*?)\*\*", r"\1", response)
+    response = _re_md_sn.sub(r"(?<!\w)\*(.+?)\*(?!\w)", r"\1", response)
+    response = _re_md_sn.sub(r"(?<!\w)_(.+?)_(?!\w)", r"\1", response)
     
     await db.procedures.update_one(
         {"_id": ObjectId(procedure_id)},
@@ -14344,6 +14358,8 @@ def _serialize_thread(t: dict, viewer_id: Optional[str] = None) -> dict:
         out["supervisor_name"] = None
         out["patient_name_display"] = f"{initials} (anonymous)"
         out["shared_by_display"] = "Anonymous"
+        out["shared_by_name"] = None
+        out["shared_by_role"] = None
         out["shared_by_id"] = None
     else:
         out["patient_name"] = t.get("patient_name")
@@ -14351,6 +14367,10 @@ def _serialize_thread(t: dict, viewer_id: Optional[str] = None) -> dict:
         out["supervisor_name"] = t.get("supervisor_name")
         out["patient_name_display"] = t.get("patient_name")
         out["shared_by_display"] = t.get("shared_by_name")
+    # is_my_thread: true only for the original sharer so the owner can still
+    # open their own case details even when shared anonymously.
+    real_sharer_id = str(t.get("shared_by_id") or "")
+    out["is_my_thread"] = bool(viewer_id and real_sharer_id and viewer_id == real_sharer_id)
     if viewer_id:
         out["bookmarked"] = viewer_id in (t.get("bookmarks") or [])
         out["watching"] = viewer_id in (t.get("watchers") or [])
@@ -14520,6 +14540,15 @@ async def forum_get_thread(thread_id: str, request: Request, current_user: dict 
     uid = str(current_user.get("_id") or current_user.get("id"))
     await log_access(action="forum_view_thread", outcome="success", user=current_user, request=request,
                      resource_type="forum_thread", resource_id=thread_id)
+    # For anonymous threads, strip all patient / operator PII from the procedure
+    # snapshot so other members cannot identify the patient or sharer.
+    if thread.get("anonymous") and procedure:
+        _PII_KEYS = (
+            "patient_name", "patient_id", "patient_phone", "patient_email",
+            "age", "student_name", "student_id", "created_by_name", "created_by_id",
+            "supervisor_name", "supervisor_id", "instructor_name",
+        )
+        procedure = {k: v for k, v in procedure.items() if k not in _PII_KEYS}
     return {
         "thread": _serialize_thread(thread, viewer_id=uid),
         "procedure": procedure,
