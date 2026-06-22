@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, ActivityIndicator } from 'react-native';
+import { View, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../utils/api';
 
@@ -16,6 +16,7 @@ type Option = {
   implant_count: number;
   kind: string;
   description: string;
+  description_short?: string;
 };
 type ClassResult = {
   ok: boolean;
@@ -23,6 +24,7 @@ type ClassResult = {
   anterior_definition?: string;
   posterior_definition?: string;
   treatment_options?: Option[];
+  decision_aid?: string[];
   loading_recommendation?: string;
   augmentation_note?: string;
   source_reference?: string;
@@ -41,6 +43,7 @@ const COLORS: Record<string, { bg: string; fg: string; border: string }> = {
 export const AtrophyClassificationChip: React.FC<Props> = (p) => {
   const [result, setResult] = useState<ClassResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const debounceRef = useRef<any>(null);
 
   const ah = parseFloat(p.anterior_height);
@@ -99,28 +102,62 @@ export const AtrophyClassificationChip: React.FC<Props> = (p) => {
         ) : null}
       </View>
 
+      {/* ── Decision aid (helps the student choose between the 3 options) ── */}
+      {result.decision_aid && result.decision_aid.length > 0 ? (
+        <View style={{ backgroundColor: '#F1F8E9', borderColor: '#7CB342', borderLeftWidth: 3, borderRadius: 8, padding: 10, marginBottom: 8 }} data-testid={`atrophy-decision-aid-${p.arch}`}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+            <Ionicons name="bulb-outline" size={14} color="#33691E" />
+            <Text style={{ fontSize: 12, fontWeight: '700', color: '#33691E' }}>How to choose between these options</Text>
+          </View>
+          {result.decision_aid.map((line, i) => (
+            <Text key={i} style={{ fontSize: 12, color: '#33691E', lineHeight: 17, marginBottom: i === result.decision_aid!.length - 1 ? 0 : 4 }}>
+              • {line}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+
       {result.treatment_options && result.treatment_options.length > 0 && (
         <View style={{ backgroundColor: '#FFFFFF', borderRadius: 8, padding: 10, borderLeftWidth: 3, borderLeftColor: palette.border }}>
-          {result.treatment_options.map((opt, i) => (
-            <View
-              key={i}
-              style={{
-                marginBottom: i === result.treatment_options!.length - 1 ? 0 : 10,
-                paddingTop: i === 0 ? 0 : 10,
-                borderTopWidth: i === 0 ? 0 : 1,
-                borderTopColor: '#E1E7F0',
-              }}
-              testID={`atrophy-option-${p.arch}-${i}`}
-              data-testid={`atrophy-option-${p.arch}-${i}`}
-            >
-              <Text style={{ fontSize: 13, fontWeight: '700', color: palette.fg }}>
-                {opt.headline}
-              </Text>
-              <Text style={{ fontSize: 12, color: '#37474F', marginTop: 4, lineHeight: 17 }}>
-                {opt.description}
-              </Text>
-            </View>
-          ))}
+          {result.treatment_options.map((opt, i) => {
+            const isOpen = !!expanded[i];
+            const shortTxt = opt.description_short || opt.description;
+            const hasMore = !!opt.description_short && opt.description_short !== opt.description;
+            return (
+              <View
+                key={i}
+                style={{
+                  marginBottom: i === result.treatment_options!.length - 1 ? 0 : 10,
+                  paddingTop: i === 0 ? 0 : 10,
+                  borderTopWidth: i === 0 ? 0 : 1,
+                  borderTopColor: '#E1E7F0',
+                }}
+                testID={`atrophy-option-${p.arch}-${i}`}
+                data-testid={`atrophy-option-${p.arch}-${i}`}
+              >
+                <Text style={{ fontSize: 13, fontWeight: '700', color: palette.fg }}>
+                  {opt.headline}
+                </Text>
+                <Text style={{ fontSize: 12, color: '#37474F', marginTop: 4, lineHeight: 17 }}>
+                  {isOpen ? opt.description : shortTxt}
+                </Text>
+                {hasMore ? (
+                  <TouchableOpacity
+                    onPress={() => setExpanded(prev => ({ ...prev, [i]: !prev[i] }))}
+                    style={{ marginTop: 4, flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                    testID={`atrophy-option-toggle-${p.arch}-${i}`}
+                    data-testid={`atrophy-option-toggle-${p.arch}-${i}`}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  >
+                    <Text style={{ fontSize: 11, color: palette.fg, fontWeight: '600' }}>
+                      {isOpen ? 'Show less' : 'Read full description'}
+                    </Text>
+                    <Ionicons name={isOpen ? 'chevron-up' : 'chevron-down'} size={12} color={palette.fg} />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            );
+          })}
           {result.loading_recommendation ? (
             <Text style={{ fontSize: 11, color: '#455A64', marginTop: 10, fontStyle: 'italic' }}>
               Loading: {result.loading_recommendation}

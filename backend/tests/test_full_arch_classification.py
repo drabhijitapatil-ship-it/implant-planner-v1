@@ -102,3 +102,38 @@ def test_missing_inputs_return_safe_error():
 def test_invalid_arch_returns_safe_error():
     out = classify_full_arch("upper", 17, 13)
     assert out["ok"] is False
+
+
+def test_decision_aid_present_for_every_class_and_arch():
+    """Each (arch, class) combination must surface exactly 3 short bullets to
+    help the student choose between the verbatim treatment options."""
+    cases = [
+        (17, 13, 7, 7),   # CCI
+        (17, 10, 7, 7),   # CCII
+        (14, 6,  7, 7),   # CCIII
+        (10, 3,  7, 7),   # CCIV
+        (6,  3,  7, 7),   # CCV
+    ]
+    for arch in ("maxilla", "mandible"):
+        for ant_h, post_h, ant_w, post_w in cases:
+            out = classify_full_arch(arch, ant_h, post_h, ant_w, post_w)
+            aid = out.get("decision_aid")
+            assert isinstance(aid, list) and len(aid) == 3, f"{arch} {ant_h}/{post_h}: decision_aid shape wrong: {aid}"
+            for line in aid:
+                assert 30 <= len(line) <= 220, f"bullet length out of range ({len(line)}): {line!r}"
+                # no banned labels in the decision aid either
+                for tok in ("CC I", "CC II", "CC III", "Option A", "Option B"):
+                    assert tok not in line, f"decision_aid leaked '{tok}': {line}"
+
+
+def test_description_short_is_smaller_than_full_description():
+    """Every option must expose a `description_short` that is at most as long
+    as the full description (so the UI can collapse the long paragraph)."""
+    out = classify_full_arch("maxilla", 14, 6, 7, 7)
+    for opt in out["treatment_options"]:
+        assert "description_short" in opt
+        assert opt["description_short"]
+        # short summary must always fit on roughly one screen line.
+        assert len(opt["description_short"]) <= 160, opt["description_short"]
+        # short must be a prefix or end with "..."
+        assert opt["description"].startswith(opt["description_short"].rstrip(".").rstrip("...")) or opt["description_short"] == opt["description"]

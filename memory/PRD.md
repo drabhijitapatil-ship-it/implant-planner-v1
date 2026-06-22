@@ -1,5 +1,37 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 320 (Feb 2026) — Atrophy Assessment: decision aid + collapsed verbatim text
+
+### What shipped
+- **`decision_aid: string[]`** — new array of 3 short bullets per (arch × class) injected at the top of the recommendation panel. Each bullet is ≤ 220 chars and explicitly references a real decision dimension (opposing-arch dentition / occlusal scheme / budget / patient preference / surgeon-skill). Example for maxilla CC III:
+  > * *"Want to avoid distal cantilever and have funds/healing time for short posterior implants → choose the 6-implant scheme."*
+  > * *"Want a graftless single-stage workflow → 4-implant tilted scheme; accept up to a 14 mm distal cantilever."*
+  > * *"Limited inter-antral distance or patient wants a removable solution → overdenture scheme."*
+- **`description_short`** — first-sentence summary returned alongside every option's verbatim `description`. The UI now shows only `description_short` by default; a *"Read full description"* link (Ionicons chevron) expands the full Carameˆs paragraph in place.
+- Both the live Phase 1 chip (`AtrophyClassificationChip.tsx`) and the Case Detail block (`procedures/[id].tsx`) consume the new fields. The decision aid lives in a green `bulb-outline` callout above the option cards (visually distinct from the verbatim panel so students recognise it as guidance rather than literature text).
+- All previous behaviours preserved: verbatim definitions still rendered, "Reference: The Carames Classification" still at the bottom, no CC I/II/III/IV/V or Option A/B/C labels anywhere in user-facing surfaces.
+
+### Verification
+- `cd /app/backend && pytest tests/test_full_arch_classification.py tests/test_clinical_rules.py` → **21/21 pass** (2 new tests added: `test_decision_aid_present_for_every_class_and_arch`, `test_description_short_is_smaller_than_full_description`). The new tests assert decision-aid shape (= 3 bullets), length (30–220 chars), no banned labels, and that `description_short` is always a prefix of the full description.
+- Live API smoke-test for maxilla CC III + mandible CC I confirms the decision aid is context-appropriate (cantilever / opposing-arch dentition / budget references) and the short descriptions are exactly one sentence each (41 / 93 / 64 chars for CC III).
+- Metro cache cleared; new strings (`How to choose between these options`, `Read full description`, `description_short`) confirmed present in the served web bundle (6 hits across the chip + procedure-detail chunks).
+
+### Files touched
+- EDIT: `/app/backend/full_arch_classification.py` (+ `_DECISION_AID` table, `_description_short()` helper, two new fields in the API payload).
+- EDIT: `/app/backend/tests/test_full_arch_classification.py` (+2 tests).
+- EDIT: `/app/frontend/components/AtrophyClassificationChip.tsx` (decision-aid callout + per-option expand/collapse toggle).
+- EDIT: `/app/frontend/app/procedures/[id].tsx` (same callout + short-text fallback in the Case Detail block).
+
+### Next up
+- P1: Surface clinical-evaluation hits inline on Phase 1 save.
+- P1: Microsoft OAuth sign-in (needs Azure Client ID/Secret).
+- P1: Centralise multipart upload helper into `/app/frontend/utils/uploads.ts`.
+
+---
+
+
+# Prosthodontics Dental Implant Mobile App — PRD
+
 ## Iteration 319 (Feb 2026) — Atrophy Assessment now surfaces verbatim Carames text
 
 ### What shipped

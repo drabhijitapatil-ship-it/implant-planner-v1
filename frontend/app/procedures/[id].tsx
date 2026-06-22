@@ -1856,13 +1856,25 @@ export default function ProcedureDetailScreen() {
                     Measurements — Anterior: {a.inputs?.anterior_height_mm ?? '—'} mm height, {a.inputs?.anterior_width_mm ?? '—'} mm width  ·
                     Posterior: {a.inputs?.posterior_height_mm ?? '—'} mm height, {a.inputs?.posterior_width_mm ?? '—'} mm width
                   </Text>
+                  {/* Decision aid (how to choose between the three options) */}
+                  {Array.isArray(a.decision_aid) && a.decision_aid.length > 0 && (
+                    <View style={{ backgroundColor: '#F1F8E9', borderColor: '#7CB342', borderLeftWidth: 3, borderRadius: 8, padding: 10, marginBottom: 8 }} data-testid={`atrophy-detail-decision-aid-${arch}`}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                        <Ionicons name="bulb-outline" size={14} color="#33691E" />
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: '#33691E' }}>How to choose between these options</Text>
+                      </View>
+                      {a.decision_aid.map((line: string, i: number) => (
+                        <Text key={i} style={{ fontSize: 12, color: '#33691E', lineHeight: 17, marginBottom: i === a.decision_aid.length - 1 ? 0 : 4 }}>• {line}</Text>
+                      ))}
+                    </View>
+                  )}
                   {(a.treatment_options || []).map((opt: any, i: number) => (
                     <View key={i} style={{ marginBottom: i === a.treatment_options.length - 1 ? 0 : 10, paddingTop: i === 0 ? 0 : 10, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: '#E1E7F0' }} data-testid={`atrophy-detail-option-${arch}-${i}`}>
                       <Text style={{ fontSize: 13, fontWeight: '700', color: p.fg }}>
                         {opt.headline || `${opt.implant_count} implants (${opt.kind})`}
                       </Text>
                       <Text style={{ fontSize: 12, color: '#37474F', marginTop: 4, lineHeight: 17 }}>
-                        {opt.description || opt.placement}
+                        {opt.description_short || opt.description || opt.placement}
                       </Text>
                     </View>
                   ))}
