@@ -137,3 +137,44 @@ def test_description_short_is_smaller_than_full_description():
         assert len(opt["description_short"]) <= 160, opt["description_short"]
         # short must be a prefix or end with "..."
         assert opt["description"].startswith(opt["description_short"].rstrip(".").rstrip("...")) or opt["description_short"] == opt["description"]
+
+
+def test_recommendation_natural_dentition_picks_six_implant_scheme():
+    """Opposing arch = natural dentition → recommend the 6-implant fixed
+    scheme (option index 0 for most classes) to extend the occlusal table
+    without a distal cantilever."""
+    out = classify_full_arch("maxilla", 17, 13, 7, 7, context={"opposing_arch": "Natural Dentition"})
+    assert out["recommended_option_index"] == 0
+    assert "natural dentition" in out["recommendation_reason"].lower()
+
+
+def test_recommendation_removable_opposing_picks_four_implant_scheme():
+    """Removable/edentulous opposing arch → less invasive 4-implant scheme."""
+    out = classify_full_arch("maxilla", 17, 13, 7, 7, context={"opposing_arch": "Edentulous"})
+    assert out["recommended_option_index"] == 1
+    assert "removable" in out["recommendation_reason"].lower()
+
+
+def test_recommendation_graft_risk_picks_graftless_option_maxilla_cciv():
+    """Heavy smoker / poor glycaemia + CC IV maxilla → steer to the
+    pterygoid graftless scheme (option index 1)."""
+    out = classify_full_arch("maxilla", 10, 3, 7, 7, context={
+        "opposing_arch": "Natural Dentition",
+        "smoker_heavy": True,
+    })
+    assert out["class"] == "CCIV"
+    assert out["recommended_option_index"] == 1
+    assert "graft" in out["recommendation_reason"].lower()
+
+
+def test_recommendation_graft_risk_picks_interforaminal_mandible_cciv():
+    out = classify_full_arch("mandible", 10, 3, 7, 7, context={"hba1c": 8.5})
+    assert out["class"] == "CCIV"
+    assert out["recommended_option_index"] == 0
+    assert "graft" in out["recommendation_reason"].lower()
+
+
+def test_recommendation_absent_when_no_context():
+    out = classify_full_arch("maxilla", 17, 13, 7, 7)
+    assert out["recommended_option_index"] is None
+    assert out["recommendation_reason"] is None

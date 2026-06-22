@@ -315,12 +315,57 @@ def _option_headline(kind: str, implant_count: int) -> str:
     return f"Fixed prosthesis - {implant_count} implants"
 
 
+def _choose_option(arch: str, cls: str, ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Pick the best-fit option index for THIS patient using context the form
+    already collects (opposing arch dentition, smoking status, glycaemic
+    control). Returns `{index, reason}` or `None` if no signal is strong
+    enough. Bullets in `_DECISION_AID` are ordered parallel to options so the
+    same index also points at the matching bullet."""
+    opposing = (ctx.get("opposing_arch") or "").strip()
+    smoker_heavy = ctx.get("smoker_heavy") is True
+    hba1c = ctx.get("hba1c")
+    poor_glycaemia = isinstance(hba1c, (int, float)) and hba1c >= 7
+    graft_risk = smoker_heavy or poor_glycaemia
+
+    # Highest priority: patient is a poor graft candidate → steer toward
+    # graftless / less-invasive option for the high-class cases.
+    if graft_risk and cls in ("CCIV", "CCV"):
+        if arch == "maxilla" and cls == "CCIV":
+            return {"index": 1, "reason": "Graft-risk profile (heavy smoking or HbA1c >= 7) — the pterygoid scheme avoids sinus elevation."}
+        if arch == "maxilla" and cls == "CCV":
+            return {"index": 1, "reason": "Graft-risk profile (heavy smoking or HbA1c >= 7) — the zygomatic scheme avoids grafting and allows immediate loading."}
+        if arch == "mandible":
+            return {"index": 0, "reason": "Graft-risk profile (heavy smoking or HbA1c >= 7) — the interforaminal scheme avoids posterior grafting."}
+
+    # Opposing-arch signals
+    if opposing == "Natural Dentition":
+        # CC IV/V mandible: option 0 is the interforaminal scheme (no posterior graft).
+        if arch == "mandible" and cls in ("CCIV", "CCV"):
+            return {"index": 0, "reason": "Opposing arch has natural dentition — the interforaminal scheme matches the occlusal table without posterior grafting."}
+        return {"index": 0, "reason": "Opposing arch has natural dentition — the 6-implant fixed scheme extends to the molar without a distal cantilever."}
+
+    if opposing in ("Removable Prosthesis", "Edentulous"):
+        # Reduced occlusal load → less invasive option is sufficient.
+        if arch == "mandible" and cls in ("CCIV", "CCV"):
+            return {"index": 0, "reason": "Opposing arch is removable/edentulous — the interforaminal scheme is sufficient and least invasive."}
+        return {"index": 1, "reason": "Opposing arch is removable/edentulous — the 4-implant scheme is sufficient and less invasive; a cantilever is acceptable here."}
+
+    if opposing in ("Fixed Partial Denture", "Fixed Implant Prosthesis"):
+        # Fixed opposing dentition has occlusal forces close to natural dentition.
+        if arch == "mandible" and cls in ("CCIV", "CCV"):
+            return {"index": 0, "reason": "Opposing arch is a fixed prosthesis — the interforaminal scheme matches the occlusal load safely."}
+        return {"index": 0, "reason": "Opposing arch is a fixed prosthesis — occlusal forces approach natural dentition, so the 6-implant fixed scheme is preferred."}
+
+    return None
+
+
 def classify_full_arch(
     arch: str,
     anterior_height: Optional[float],
     posterior_height: Optional[float],
     anterior_width: Optional[float] = None,
     posterior_width: Optional[float] = None,
+    context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Classify a full-arch atrophy case and return the verbatim Caram\u00ea s
     treatment options.  Returns `{ok: False, error: ...}` on missing inputs."""
@@ -356,6 +401,9 @@ def classify_full_arch(
 
     definition = _DEFINITIONS[arch][cls]
 
+    # Patient-context aware "Recommended for this patient" pick.
+    chosen = _choose_option(arch, cls, context or {})
+
     return {
         "ok": True,
         "arch": arch,
@@ -374,6 +422,8 @@ def classify_full_arch(
         },
         "treatment_options": options,
         "decision_aid": _DECISION_AID[arch][cls],
+        "recommended_option_index": chosen["index"] if chosen else None,
+        "recommendation_reason": chosen["reason"] if chosen else None,
         "loading_recommendation": loading,
         "augmentation_note": _AUGMENTATION_NOTES[cls],
         "source_reference": SOURCE_REFERENCE,

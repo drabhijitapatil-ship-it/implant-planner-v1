@@ -6840,6 +6840,26 @@ class AtrophyInputs(BaseModel):
     posterior_height: Optional[float] = None
     anterior_width: Optional[float] = None
     posterior_width: Optional[float] = None
+    # Patient context used to highlight the best-fit option for THIS case.
+    opposing_arch: Optional[str] = None
+    smoking: Optional[str] = None  # "No" | "Light (<10/day)" | "Heavy (>10/day)"
+    hba1c: Optional[float] = None
+
+
+def _build_atrophy_context(
+    opposing_arch: Optional[str],
+    smoking: Optional[str],
+    hba1c: Optional[float],
+) -> Dict[str, Any]:
+    """Normalise raw form fields into the context shape the classifier reads."""
+    ctx: Dict[str, Any] = {}
+    if opposing_arch:
+        ctx["opposing_arch"] = opposing_arch
+    if smoking and "Heavy" in smoking:
+        ctx["smoker_heavy"] = True
+    if isinstance(hba1c, (int, float)) and hba1c > 0:
+        ctx["hba1c"] = float(hba1c)
+    return ctx
 
 
 @api_router.post("/full-arch-classify")
@@ -6852,6 +6872,7 @@ async def full_arch_classify(payload: AtrophyInputs, current_user: dict = Depend
         payload.posterior_height,
         payload.anterior_width,
         payload.posterior_width,
+        context=_build_atrophy_context(payload.opposing_arch, payload.smoking, payload.hba1c),
     )
 
 
@@ -6871,6 +6892,15 @@ async def save_atrophy_assessment(procedure_id: str, request: Request, current_u
         raise HTTPException(status_code=404, detail="Procedure not found")
 
     body = await request.json()
+    # Derive patient context once, from the persisted procedure document, so
+    # the recommendation reflects the most current opposing-arch + medical
+    # assessment values regardless of what the caller sends.
+    ma = proc.get("medical_assessment") or {}
+    try:
+        hba1c_val = float(ma.get("hba1c")) if ma.get("hba1c") not in (None, "") else None
+    except (TypeError, ValueError):
+        hba1c_val = None
+    ctx = _build_atrophy_context(proc.get("opposing_arch"), ma.get("smoking"), hba1c_val)
     out: Dict[str, Any] = {}
     for arch_key in ("maxilla", "mandible"):
         a = body.get(arch_key)
@@ -6882,6 +6912,7 @@ async def save_atrophy_assessment(procedure_id: str, request: Request, current_u
             a.get("posterior_height"),
             a.get("anterior_width"),
             a.get("posterior_width"),
+            context=ctx,
         )
         if result.get("ok"):
             out[arch_key] = result
