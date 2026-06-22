@@ -254,19 +254,21 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Learning</Text>
-          <TouchableOpacity
-            style={styles.legalRow}
-            onPress={() => router.push('/saved-tips' as any)}
-            data-testid="link-saved-tips"
-            testID="link-saved-tips"
-          >
-            <Ionicons name="bookmark-outline" size={22} color="#1565C0" />
-            <Text style={styles.legalRowText}>Saved Smart Tips</Text>
-            <Ionicons name="chevron-forward" size={18} color="#999" />
-          </TouchableOpacity>
-        </View>
+        {(user?.role || '').toLowerCase() !== 'nurse' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Learning</Text>
+            <TouchableOpacity
+              style={styles.legalRow}
+              onPress={() => router.push('/saved-tips' as any)}
+              data-testid="link-saved-tips"
+              testID="link-saved-tips"
+            >
+              <Ionicons name="bookmark-outline" size={22} color="#1565C0" />
+              <Text style={styles.legalRowText}>Saved Smart Tips</Text>
+              <Ionicons name="chevron-forward" size={18} color="#999" />
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Legal</Text>

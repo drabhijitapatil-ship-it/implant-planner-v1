@@ -91,11 +91,15 @@ export function recapFor(role: string): string[] {
   return ROLE_RECAP[key] ?? ROLE_RECAP.student;
 }
 
-/** Slide 3 (approval gates) — which tile glows for this role. */
-export function activeGateFor(role: string): 'student' | 'supervisor' | 'incharge' {
+/** Slide 3 (approval gates) — which tile glows for this role.
+ * Returns 'none' for roles outside the surgical approval chain
+ * (e.g. nurse, whose prep work happens before Phase 2 but who
+ * does not vote at any gate). */
+export function activeGateFor(role: string): 'student' | 'supervisor' | 'incharge' | 'none' {
   const k = (role || 'student').toLowerCase();
   if (k === 'supervisor') return 'supervisor';
   if (k === 'implant_incharge' || k === 'administrator') return 'incharge';
+  if (k === 'nurse') return 'none';
   return 'student';
 }
 

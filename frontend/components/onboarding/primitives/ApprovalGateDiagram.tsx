@@ -11,7 +11,7 @@ import Animated, {
 import { Ionicons } from '@expo/vector-icons';
 import PulsingDoubleArrow from './PulsingDoubleArrow';
 
-type Active = 'student' | 'supervisor' | 'incharge';
+type Active = 'student' | 'supervisor' | 'incharge' | 'none';
 
 const TILES: { key: Active; icon: keyof typeof Ionicons.glyphMap; label: string; tint: string }[] = [
   { key: 'student',    icon: 'person-outline',           label: 'Student',          tint: '#1565C0' },
