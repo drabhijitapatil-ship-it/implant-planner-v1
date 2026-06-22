@@ -1519,13 +1519,6 @@ function NarrowRidgeProtocol({ evaluation }: { evaluation: any }) {
           ))}
         </View>
       )}
-      {evaluation.recommendation?.drilling_protocol_label && (
-        <View style={nrS.row}>
-          <Ionicons name="construct" size={16} color="#37474F" />
-          <Text style={nrS.rowLabel}>Drilling: </Text>
-          <Text style={nrS.rowValue}>{evaluation.recommendation.drilling_protocol_label}</Text>
-        </View>
-      )}
       {evaluation.recommendation?.label && (
         <View style={nrS.recommendBox}>
           <Ionicons name="bulb" size={16} color="#1565C0" />

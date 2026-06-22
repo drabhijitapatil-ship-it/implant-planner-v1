@@ -3355,24 +3355,6 @@ function ModalContent(props: any) {
                         </View>
                       )}
 
-                      {/* Bone Density Drilling Protocol */}
-                      {result.narrow_ridge_evaluation.recommendation
-                        ?.drilling_protocol_label && (
-                        <View style={ms.treatmentRow}>
-                          <Ionicons
-                            name="construct"
-                            size={16}
-                            color="#37474F"
-                          />
-                          <Text style={ms.treatmentRowLabel}>Drilling: </Text>
-                          <Text style={ms.treatmentRowValue}>
-                            {
-                              result.narrow_ridge_evaluation.recommendation
-                                .drilling_protocol_label
-                            }
-                          </Text>
-                        </View>
-                      )}
 
                       {/* Clinical Recommendation */}
                       {result.narrow_ridge_evaluation.recommendation?.label && (

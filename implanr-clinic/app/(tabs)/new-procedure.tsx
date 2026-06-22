@@ -2126,6 +2126,9 @@ export default function NewProcedureScreen() {
                     posterior_height={formData.atrophy_max_post_h}
                     anterior_width={formData.atrophy_max_ant_w}
                     posterior_width={formData.atrophy_max_post_w}
+                    opposing_arch={formData.opposing_arch}
+                    smoking={formData.medical_assessment?.smoking}
+                    hba1c={formData.medical_assessment?.hba1c}
                   />
                 </View>
               )}
@@ -2163,6 +2166,9 @@ export default function NewProcedureScreen() {
                     posterior_height={formData.atrophy_man_post_h}
                     anterior_width={formData.atrophy_man_ant_w}
                     posterior_width={formData.atrophy_man_post_w}
+                    opposing_arch={formData.opposing_arch}
+                    smoking={formData.medical_assessment?.smoking}
+                    hba1c={formData.medical_assessment?.hba1c}
                   />
                 </View>
               )}

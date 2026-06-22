@@ -314,6 +314,7 @@ export default function ProfileScreen() {
           </View>
         )}
 
+        {user?.role !== 'nurse' && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Learning</Text>
           <TouchableOpacity
@@ -327,6 +328,7 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={18} color="#999" />
           </TouchableOpacity>
         </View>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Legal</Text>

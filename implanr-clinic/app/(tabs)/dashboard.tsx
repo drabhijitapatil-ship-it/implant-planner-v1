@@ -952,7 +952,7 @@ export default function DashboardScreen() {
           <StudentDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
         )}
 
-        <SmartTipBanner />
+        {!isNurse && <SmartTipBanner />}
 
         <View style={{ height: 24 }} />
       </ScrollView>
