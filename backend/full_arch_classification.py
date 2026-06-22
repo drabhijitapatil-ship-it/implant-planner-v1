@@ -232,6 +232,81 @@ _AUGMENTATION_NOTES: Dict[str, str] = {
 }
 
 
+# ── Decision aid: short, class-specific bullets that help a student
+# choose between the three verbatim treatment options on this case.
+# Each bullet is <= ~110 chars so it fits one line on a phone screen.
+_DECISION_AID: Dict[str, Dict[str, List[str]]] = {
+    "maxilla": {
+        "CCI": [
+            "Opposing arch fully dentate with functional second molar → choose the 6-implant fixed scheme to enable second-molar occlusion without cantilever.",
+            "Routine cases with adequate budget and good oral hygiene → 4-implant fixed scheme is sufficient and less invasive.",
+            "Reduced manual dexterity, lower budget or patient prefers a removable solution → choose the overdenture scheme.",
+        ],
+        "CCII": [
+            "If primary stability >35 Ncm is achievable on every implant → the 6-implant straight scheme allows immediate loading.",
+            "If sinus floor proximity makes a straight posterior implant unsafe → choose the 4-implant tilted (All-on-4) scheme.",
+            "Patient prefers a removable prosthesis → overdenture scheme; expect ridge resorption to continue under the denture base.",
+        ],
+        "CCIII": [
+            "Want to avoid distal cantilever and have funds/healing time for short posterior implants → choose the 6-implant scheme.",
+            "Want a graftless single-stage workflow → 4-implant tilted scheme; accept up to a 14 mm distal cantilever.",
+            "Limited inter-antral distance or patient wants a removable solution → overdenture scheme.",
+        ],
+        "CCIV": [
+            "Patient accepts sinus elevation + extended healing → 6-implant straight scheme with bilateral sinus lift gives best long-term outcome.",
+            "Wants to avoid sinus grafting and surgeon is trained in pterygoid placement → choose the pterygoid/tuberosity 6-implant scheme.",
+            "Patient cannot tolerate fixed full-arch surgery or wants a budget option → premaxilla overdenture scheme.",
+        ],
+        "CCV": [
+            "Patient accepts a long staged graft + healing (>= 6 months) → choose the sinus-lift + horizontal-regeneration scheme.",
+            "Wants immediate loading and surgeon is experienced in zygomatic implants → choose the zygomatic-anchored scheme; reserve for cases where grafts have failed or are declined.",
+            "Patient prefers the least invasive route → overdenture supported by short or augmented premaxilla implants.",
+        ],
+    },
+    "mandible": {
+        "CCI": [
+            "Opposing arch has a functional second molar → 6-implant scheme (extends occlusal table to the molar).",
+            "Standard interforaminal case with healthy ridge → 4-implant fixed scheme is sufficient and less invasive.",
+            "Elderly patient or limited budget → 2-4 implant overdenture scheme.",
+        ],
+        "CCII": [
+            "Strong primary stability achievable on every implant → 6-implant straight scheme; uses short posterior implants.",
+            "Want to avoid posterior surgery in the mandibular nerve zone → 4-implant tilted scheme; accept a 10-14 mm distal cantilever.",
+            "Patient prefers removable → overdenture scheme (same as previous class).",
+        ],
+        "CCIII": [
+            "Adequate primary stability + acceptance of short posterior implants → 6-implant scheme avoids the cantilever.",
+            "Want a graftless single-stage approach → 4-implant tilted scheme; entry at first-premolar, plan for a distal cantilever.",
+            "Reduced implant length and removable preference → overdenture scheme.",
+        ],
+        "CCIV": [
+            "Patient declines posterior grafting → 4-implant interforaminal tilted scheme is the default first choice.",
+            "Patient accepts vertical bone grafting + extended healing → 6-implant scheme with posterior 6-8 mm implants.",
+            "Patient cannot tolerate fixed surgery → overdenture scheme.",
+        ],
+        "CCV": [
+            "Minimal-invasive preference and surgeon comfortable with short implants → 4-implant short straight scheme in the interforaminal region.",
+            "Patient accepts an extraoral autogenous graft → 4-6 implant scheme after major augmentation; lengthy multi-stage protocol.",
+            "Want the lowest morbidity option → overdenture supported by 2-4 short implants.",
+        ],
+    },
+}
+
+
+def _description_short(description: str, limit: int = 120) -> str:
+    """Return the first sentence (or first `limit` chars) of a verbatim option
+    paragraph — for the collapsed UI state. The full text remains available
+    via `description` for the expanded state."""
+    if not description:
+        return ""
+    # Take everything up to the first period followed by space (end of sentence)
+    idx = description.find(". ")
+    if idx == -1 or idx > limit + 40:
+        # No early period — hard-truncate at limit and add ellipsis.
+        return description if len(description) <= limit else description[:limit].rstrip() + "..."
+    return description[: idx + 1]
+
+
 def _option_headline(kind: str, implant_count: int) -> str:
     """User-facing headline derived from the option's kind + implant count.
     No Roman-numeral or A/B/C labels — purely descriptive."""
@@ -266,6 +341,7 @@ def classify_full_arch(
             "implant_count": opt["implant_count"],
             "kind": opt["kind"],
             "description": opt["description"],
+            "description_short": _description_short(opt["description"]),
         }
         for opt in raw_options
     ]
@@ -297,6 +373,7 @@ def classify_full_arch(
             "posterior_width_mm": posterior_width,
         },
         "treatment_options": options,
+        "decision_aid": _DECISION_AID[arch][cls],
         "loading_recommendation": loading,
         "augmentation_note": _AUGMENTATION_NOTES[cls],
         "source_reference": SOURCE_REFERENCE,
