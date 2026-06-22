@@ -5238,7 +5238,9 @@ def _build_case_context(proc: dict) -> str:
                 from full_arch_classification import render_for_ai_context
                 parts.append(render_for_ai_context(a))
             except Exception:
-                parts.append(f"Atrophy class for the {arch_key}: {a.get('class')} ({a.get('severity_label','')})")
+                # Fallback never references the internal CC-class or
+                # Option A/B/C labels (user-facing surfaces must stay clean).
+                parts.append(f"Atrophy assessment for the {arch_key}: anterior {a.get('anterior_severity','?')} resorption, posterior {a.get('posterior_severity','?')} resorption.")
 
     # Medical assessment
     if proc.get('medical_assessment'):

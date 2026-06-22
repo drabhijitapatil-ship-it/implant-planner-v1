@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import api from '../utils/api';
 
 type Props = {
@@ -10,16 +11,25 @@ type Props = {
   posterior_width: string;
 };
 
+type Option = {
+  headline: string;
+  implant_count: number;
+  kind: string;
+  description: string;
+};
 type ClassResult = {
   ok: boolean;
   class?: string;
-  severity_label?: string;
-  treatment_options?: Array<{ label: string; implant_count: number; kind: string; placement: string; tilt?: string; augmentation?: string }>;
+  anterior_definition?: string;
+  posterior_definition?: string;
+  treatment_options?: Option[];
   loading_recommendation?: string;
   augmentation_note?: string;
+  source_reference?: string;
   error?: string;
 };
 
+// Internal palette key only — the `class` value (CCI…CCV) is never shown to users.
 const COLORS: Record<string, { bg: string; fg: string; border: string }> = {
   CCI:   { bg: '#E8F5E9', fg: '#1B5E20', border: '#43A047' },
   CCII:  { bg: '#E3F2FD', fg: '#0D47A1', border: '#1E88E5' },
@@ -66,7 +76,7 @@ export const AtrophyClassificationChip: React.FC<Props> = (p) => {
   if (loading) return (
     <View style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
       <ActivityIndicator size="small" color="#1565C0" />
-      <Text style={{ fontSize: 12, color: '#5C6BC0' }}>Classifying…</Text>
+      <Text style={{ fontSize: 12, color: '#5C6BC0' }}>Analysing atrophy assessment…</Text>
     </View>
   );
   if (!result?.ok || !result.class) return null;
@@ -74,35 +84,65 @@ export const AtrophyClassificationChip: React.FC<Props> = (p) => {
   const palette = COLORS[result.class] || COLORS.CCI;
 
   return (
-    <View style={{ marginTop: 12 }} testID={`atrophy-result-${p.arch}`}>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-        <View style={{ backgroundColor: palette.bg, borderColor: palette.border, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999 }}>
-          <Text style={{ fontSize: 12, fontWeight: '700', color: palette.fg }}>{result.severity_label}</Text>
-        </View>
+    <View style={{ marginTop: 12 }} testID={`atrophy-result-${p.arch}`} data-testid={`atrophy-result-${p.arch}`}>
+      {/* ── Verbatim bone definition (replaces the old severity pill) ── */}
+      <View style={{ backgroundColor: palette.bg, borderColor: palette.border, borderLeftWidth: 4, borderRadius: 8, padding: 10, marginBottom: 8 }}>
+        {result.anterior_definition ? (
+          <Text style={{ fontSize: 12, color: palette.fg, fontWeight: '600', marginBottom: 4 }}>
+            {result.anterior_definition}
+          </Text>
+        ) : null}
+        {result.posterior_definition ? (
+          <Text style={{ fontSize: 12, color: palette.fg, fontWeight: '600' }}>
+            {result.posterior_definition}
+          </Text>
+        ) : null}
       </View>
+
       {result.treatment_options && result.treatment_options.length > 0 && (
         <View style={{ backgroundColor: '#FFFFFF', borderRadius: 8, padding: 10, borderLeftWidth: 3, borderLeftColor: palette.border }}>
           {result.treatment_options.map((opt, i) => (
-            <View key={i} style={{ marginBottom: i === result.treatment_options!.length - 1 ? 0 : 8 }}>
-              <Text style={{ fontSize: 12, fontWeight: '700', color: palette.fg }}>
-                Treatment Option {i + 1}: {opt.implant_count} implants ({opt.kind})
+            <View
+              key={i}
+              style={{
+                marginBottom: i === result.treatment_options!.length - 1 ? 0 : 10,
+                paddingTop: i === 0 ? 0 : 10,
+                borderTopWidth: i === 0 ? 0 : 1,
+                borderTopColor: '#E1E7F0',
+              }}
+              testID={`atrophy-option-${p.arch}-${i}`}
+              data-testid={`atrophy-option-${p.arch}-${i}`}
+            >
+              <Text style={{ fontSize: 13, fontWeight: '700', color: palette.fg }}>
+                {opt.headline}
               </Text>
-              <Text style={{ fontSize: 11, color: '#37474F', marginTop: 2 }}>{opt.placement}</Text>
-              {opt.tilt && opt.tilt !== '—' && (
-                <Text style={{ fontSize: 10, color: '#5C6BC0', marginTop: 2, fontStyle: 'italic' }}>Tilt: {opt.tilt}</Text>
-              )}
-              {opt.augmentation && (
-                <Text style={{ fontSize: 10, color: '#C62828', marginTop: 2, fontStyle: 'italic' }}>Augmentation: {opt.augmentation}</Text>
-              )}
+              <Text style={{ fontSize: 12, color: '#37474F', marginTop: 4, lineHeight: 17 }}>
+                {opt.description}
+              </Text>
             </View>
           ))}
-          {result.loading_recommendation && (
-            <Text style={{ fontSize: 10, color: '#455A64', marginTop: 8, fontStyle: 'italic' }}>
+          {result.loading_recommendation ? (
+            <Text style={{ fontSize: 11, color: '#455A64', marginTop: 10, fontStyle: 'italic' }}>
               Loading: {result.loading_recommendation}
             </Text>
-          )}
+          ) : null}
+          {result.augmentation_note ? (
+            <Text style={{ fontSize: 11, color: '#455A64', marginTop: 4, fontStyle: 'italic' }}>
+              Augmentation guidance: {result.augmentation_note}
+            </Text>
+          ) : null}
         </View>
       )}
+
+      {/* ── Source reference row (mirrors Smart Clinical Tip styling) ── */}
+      {result.source_reference ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 }} data-testid={`atrophy-source-${p.arch}`}>
+          <Ionicons name="book-outline" size={12} color="#78909C" />
+          <Text style={{ fontSize: 11, color: '#78909C', flex: 1 }} numberOfLines={1}>
+            Reference: {result.source_reference}
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 };

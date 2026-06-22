@@ -1,5 +1,44 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 319 (Feb 2026) — Atrophy Assessment now surfaces verbatim Carames text
+
+### What shipped
+- Replaced every paraphrased / cryptic atrophy output with the **verbatim text** of *The Carames Classification* (PDF supplied by the user):
+  - **Backend** (`/app/backend/full_arch_classification.py`) rewritten with new fields `anterior_definition` / `posterior_definition` (verbatim PDF wording) and per-option `description` (full paragraph, no paraphrase) + a derived headline (`"Fixed prosthesis - N implants"` / `"Removable overdenture - N implants"`). The internal `class` key (`CCI`…`CCV`) is preserved **only** as a frontend palette key — never displayed.
+  - **Reference field** `source_reference = "The Carames Classification"` returned by the API, rendered with a book-icon styling that mirrors Smart Clinical Tip.
+  - **AI Explain context** (`render_for_ai_context` + `server.py` ai-prompt builder fallback) instructs the AI to *quote the verbatim sentences when recommending*; never emits `CC II` / `Option A`.
+- **Frontend**:
+  - `AtrophyClassificationChip.tsx` rewritten: the old severity-pill is replaced by a colour-banded panel showing both verbatim definitions; options stack with their derived headlines and full paragraphs; reference row at the bottom (`book-outline` icon + "Reference: The Carames Classification").
+  - Case Detail block in `/app/frontend/app/procedures/[id].tsx::atrophy-treatment-plan-section` mirrors the new layout and reference.
+
+### Verification
+- `cd /app/backend && pytest tests/test_full_arch_classification.py tests/test_clinical_rules.py` → **19/19 pass**.
+  - Includes `test_no_classification_label_leaks_into_user_facing_fields` which iterates all 5 classes × 2 arches and asserts none of `CC I/II/III/IV/V/Option A/B/C` appears in any user-facing field, definition, description, headline, loading guidance or augmentation guidance.
+  - `test_render_for_ai_context_quotes_definitions_and_options` locks the AI-prompt content to verbatim PDF sentences.
+- Live API smoke-test: `POST /api/full-arch-classify {arch:"maxilla", anterior_height:14, posterior_height:6, anterior_width:7, posterior_width:7}` → returns verbatim CC III text + `source_reference: "The Carames Classification"`.
+- Metro cache nuked + bundle re-built; new strings (`Fixed prosthesis - `, `Removable overdenture`, `Reference: `) confirmed present in the served chunks.
+
+### Files touched
+- REWRITE: `/app/backend/full_arch_classification.py` (verbatim text + headline derivation + reference).
+- EDIT:    `/app/backend/server.py` (Atrophy fallback in AI-prompt builder — strips CC labels).
+- NEW:     `/app/backend/tests/test_full_arch_classification.py` (7 tests).
+- REWRITE: `/app/frontend/components/AtrophyClassificationChip.tsx` (verbatim panel + headline + reference row).
+- EDIT:    `/app/frontend/app/procedures/[id].tsx` Case Detail atrophy block.
+
+### Operational note
+- Backwards compatibility: stored procedures persisted before this iteration carry `severity_label` + `placement` (paraphrased) fields. The new Case Detail block falls back gracefully (`opt.description || opt.placement`). When the case is re-saved (any Phase 1 edit), `save_atrophy_assessment` will re-run `classify_full_arch()` and rewrite the stored shape into the new verbatim form.
+
+### Next up
+- P1: Surface clinical-evaluation hits inline on Phase 1 save.
+- P1: Microsoft OAuth sign-in (needs Azure Client ID/Secret).
+- P1: Centralise the multipart upload helper into `/app/frontend/utils/uploads.ts`.
+- P2: Carames also publishes severity labels per class — could optionally show "Anterior simple / Posterior moderate" as a sub-line when user hovers/long-presses the verbatim block (purely cosmetic, no PDF wording change).
+
+---
+
+
+# Prosthodontics Dental Implant Mobile App — PRD
+
 ## Iteration 318 (Feb 2026) — Phase 4 Step 2 IOPA upload — Metro cache nuked + fix re-verified
 
 ### Why a second iteration on the same bug
