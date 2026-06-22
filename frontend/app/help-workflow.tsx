@@ -185,10 +185,14 @@ export default function HelpWorkflowScreen() {
         <View style={styles.gatesCard} testID="help-approval-gates">
           <ApprovalGateDiagram active={activeGateFor(user?.role || '')} />
           <Text style={styles.gatesNote}>
-            A phase only unlocks after both the Supervisor and the Implant In-Charge approve.
+            {(user?.role || '').toLowerCase() === 'nurse'
+              ? 'Your prep work (consent uploads, autoclave stamps) happens before Phase 2 — you do not vote at any approval gate.'
+              : 'A phase only unlocks after both the Supervisor and the Implant In-Charge approve.'}
           </Text>
         </View>
 
+        {(user?.role || '').toLowerCase() !== 'nurse' && (
+          <>
         <Text style={styles.sectionTitle}>Smart tools you'll use every day</Text>
         <View style={styles.toolsGrid} testID="help-smart-tools">
           <View style={styles.toolsRow}>
@@ -236,6 +240,8 @@ export default function HelpWorkflowScreen() {
             <View style={{ flex: 1 }} />
           </View>
         </View>
+          </>
+        )}
 
         <TouchableOpacity onPress={replayOnboarding} style={styles.replayBtn} testID="help-replay-onboarding">
           <Ionicons name="play-circle-outline" size={16} color="#1565C0" />

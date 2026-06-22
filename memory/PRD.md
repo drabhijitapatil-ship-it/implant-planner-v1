@@ -1,5 +1,40 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 322 (Feb 2026) — Nurse-role UI cleanup
+
+### What shipped
+- **Approval gates at a glance** (Help → How-it-works): `activeGateFor()` now returns `'none'` for the nurse role (previously fell through to `'student'`, which mis-highlighted the nurse on the Student tile). The diagram supports the new value: no tile glows for nurses, and the gates note swaps to *"Your prep work (consent uploads, autoclave stamps) happens before Phase 2 — you do not vote at any approval gate."*
+- **Smart tools you'll use every day** (Help → How-it-works): entire FeatureCard grid (Implant Database, Smart Selection, Drilling Protocol PDF, Implanr AI, Discussion Forum, Group Chat, HIPAA Safeguards) hidden for the nurse role.
+- **Today's Smart Clinical Tip** banner on the dashboard: hidden for the nurse role.
+- **Saved Smart Tips** row on the Profile screen: hidden for the nurse role.
+
+### Verification (live preview, end-to-end)
+- Logged in as `nurse.1@dental.edu` / `Nurse@123`:
+  - Dashboard contains "Smart Clinical Tip": **False** ✓
+  - Profile contains "Saved Smart Tips": **False** ✓
+  - Help contains "Smart tools you'll use every day": **False** ✓
+  - Help contains "Your prep work … you do not vote at any approval gate": **True** ✓
+  - Approval gate diagram visible but no tile highlighted (screenshot confirmed)
+- Logged in as `Abhijit.patil` / `Admin@123` (regression):
+  - Help still contains "Smart tools you'll use every day": **True** ✓
+
+### Files touched
+- EDIT: `/app/frontend/components/onboarding/content/onboardingContent.ts` — `activeGateFor()` adds `'none'` for nurse.
+- EDIT: `/app/frontend/components/onboarding/primitives/ApprovalGateDiagram.tsx` — `Active` type accepts `'none'`.
+- EDIT: `/app/frontend/app/help-workflow.tsx` — nurse-specific gate note + full smart-tools section gated.
+- EDIT: `/app/frontend/app/(tabs)/dashboard.tsx` — `<SmartTipBanner />` only renders when `!isNurse`.
+- EDIT: `/app/frontend/app/(tabs)/profile.tsx` — Learning / Saved-Smart-Tips section only renders when role ≠ nurse.
+
+### Next up
+- P1: Surface clinical-evaluation hits inline on Phase 1 save.
+- P1: Microsoft OAuth sign-in (needs Azure Client ID/Secret).
+- P1: Centralise multipart upload helper into `/app/frontend/utils/uploads.ts`.
+
+---
+
+
+# Prosthodontics Dental Implant Mobile App — PRD
+
 ## Iteration 321 (Feb 2026) — Atrophy Assessment: patient-context aware recommendation
 
 ### What shipped

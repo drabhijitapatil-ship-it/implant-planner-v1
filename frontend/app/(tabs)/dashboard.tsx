@@ -908,9 +908,9 @@ export default function DashboardScreen() {
           <StudentDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
         )}
 
-        {/* iter-280: Smart Clinical Tip banner — same tip per user per day,
-            anti-repetition handled server-side. */}
-        <SmartTipBanner />
+        {/* iter-280: Smart Clinical Tip banner — hidden for nurses (they
+            don't drive the surgical workflow, so daily clinical tips add noise). */}
+        {!isNurse && <SmartTipBanner />}
 
         <View style={{ height: 24 }} />
       </ScrollView>
