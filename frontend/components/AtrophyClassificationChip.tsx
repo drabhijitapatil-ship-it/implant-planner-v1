@@ -9,6 +9,11 @@ type Props = {
   posterior_height: string;
   anterior_width: string;
   posterior_width: string;
+  // Patient context — when provided, the backend highlights the best-fit
+  // option for THIS patient and bolds the matching decision-aid bullet.
+  opposing_arch?: string;
+  smoking?: string;
+  hba1c?: string;
 };
 
 type Option = {
@@ -25,6 +30,8 @@ type ClassResult = {
   posterior_definition?: string;
   treatment_options?: Option[];
   decision_aid?: string[];
+  recommended_option_index?: number | null;
+  recommendation_reason?: string | null;
   loading_recommendation?: string;
   augmentation_note?: string;
   source_reference?: string;
@@ -64,6 +71,9 @@ export const AtrophyClassificationChip: React.FC<Props> = (p) => {
           posterior_height: ph,
           anterior_width: aw,
           posterior_width: pw,
+          opposing_arch: p.opposing_arch || null,
+          smoking: p.smoking || null,
+          hba1c: p.hba1c ? parseFloat(p.hba1c) : null,
         });
         setResult(res.data);
       } catch {
@@ -73,7 +83,7 @@ export const AtrophyClassificationChip: React.FC<Props> = (p) => {
       }
     }, 400);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [p.arch, p.anterior_height, p.posterior_height, p.anterior_width, p.posterior_width]);
+  }, [p.arch, p.anterior_height, p.posterior_height, p.anterior_width, p.posterior_width, p.opposing_arch, p.smoking, p.hba1c]);
 
   if (!ready) return null;
   if (loading) return (
@@ -109,11 +119,24 @@ export const AtrophyClassificationChip: React.FC<Props> = (p) => {
             <Ionicons name="bulb-outline" size={14} color="#33691E" />
             <Text style={{ fontSize: 12, fontWeight: '700', color: '#33691E' }}>How to choose between these options</Text>
           </View>
-          {result.decision_aid.map((line, i) => (
-            <Text key={i} style={{ fontSize: 12, color: '#33691E', lineHeight: 17, marginBottom: i === result.decision_aid!.length - 1 ? 0 : 4 }}>
-              • {line}
-            </Text>
-          ))}
+          {result.decision_aid.map((line, i) => {
+            const isRec = result.recommended_option_index === i;
+            return (
+              <Text
+                key={i}
+                style={{
+                  fontSize: 12,
+                  color: '#33691E',
+                  lineHeight: 17,
+                  marginBottom: i === result.decision_aid!.length - 1 ? 0 : 4,
+                  fontWeight: isRec ? '800' : '400',
+                }}
+                data-testid={`atrophy-decision-bullet-${p.arch}-${i}${isRec ? '-recommended' : ''}`}
+              >
+                {isRec ? '✓ ' : '• '}{line}
+              </Text>
+            );
+          })}
         </View>
       ) : null}
 
@@ -123,6 +146,7 @@ export const AtrophyClassificationChip: React.FC<Props> = (p) => {
             const isOpen = !!expanded[i];
             const shortTxt = opt.description_short || opt.description;
             const hasMore = !!opt.description_short && opt.description_short !== opt.description;
+            const isRec = result.recommended_option_index === i;
             return (
               <View
                 key={i}
@@ -131,13 +155,37 @@ export const AtrophyClassificationChip: React.FC<Props> = (p) => {
                   paddingTop: i === 0 ? 0 : 10,
                   borderTopWidth: i === 0 ? 0 : 1,
                   borderTopColor: '#E1E7F0',
+                  // Subtle highlight ring for the recommended card.
+                  ...(isRec ? {
+                    backgroundColor: '#F1F8E9',
+                    borderLeftWidth: 3,
+                    borderLeftColor: '#33691E',
+                    borderRadius: 6,
+                    paddingLeft: 8,
+                    paddingRight: 8,
+                    paddingTop: 8,
+                    paddingBottom: 8,
+                    marginLeft: -8,
+                  } : {}),
                 }}
-                testID={`atrophy-option-${p.arch}-${i}`}
-                data-testid={`atrophy-option-${p.arch}-${i}`}
+                testID={`atrophy-option-${p.arch}-${i}${isRec ? '-recommended' : ''}`}
+                data-testid={`atrophy-option-${p.arch}-${i}${isRec ? '-recommended' : ''}`}
               >
-                <Text style={{ fontSize: 13, fontWeight: '700', color: palette.fg }}>
-                  {opt.headline}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: palette.fg }}>
+                    {opt.headline}
+                  </Text>
+                  {isRec ? (
+                    <View style={{ backgroundColor: '#33691E', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 }}>
+                      <Text style={{ fontSize: 10, color: '#FFFFFF', fontWeight: '800' }}>RECOMMENDED FOR THIS PATIENT</Text>
+                    </View>
+                  ) : null}
+                </View>
+                {isRec && result.recommendation_reason ? (
+                  <Text style={{ fontSize: 11, color: '#33691E', marginTop: 4, fontStyle: 'italic' }} data-testid={`atrophy-recommendation-reason-${p.arch}`}>
+                    Why: {result.recommendation_reason}
+                  </Text>
+                ) : null}
                 <Text style={{ fontSize: 12, color: '#37474F', marginTop: 4, lineHeight: 17 }}>
                   {isOpen ? opt.description : shortTxt}
                 </Text>

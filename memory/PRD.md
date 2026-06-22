@@ -1,5 +1,51 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 321 (Feb 2026) — Atrophy Assessment: patient-context aware recommendation
+
+### What shipped
+- The Atrophy panel now picks ONE of the three Carameˆs options as **"Recommended for this patient"** using context the form already collects: `opposing_arch` (Phase 1 Clinical Examination dropdown) + `medical_assessment.smoking` + `medical_assessment.hba1c`. The recommendation:
+  - **Opposing arch = Natural Dentition / Fixed prosthesis** → 6-implant fixed scheme (extends to molar without cantilever).
+  - **Opposing arch = Removable / Edentulous** → 4-implant scheme (less invasive; cantilever acceptable).
+  - **Heavy smoker (>10/day) OR HbA1c ≥ 7** → for CC IV/V, override to the graftless option (pterygoid maxilla / zygomatic maxilla / interforaminal mandible) regardless of opposing arch.
+  - No matching signal → no highlight (silent fallback).
+- New API fields on `/api/full-arch-classify` and persisted in `procedures.atrophy_assessment`:
+  - `recommended_option_index: int | null` — the option card to highlight.
+  - `recommendation_reason: str | null` — the human-readable rationale shown under the badge.
+- Frontend (`AtrophyClassificationChip.tsx` + Case Detail `/procedures/[id].tsx`):
+  - The recommended option card gets a green left-border outline + green-filled "RECOMMENDED FOR THIS PATIENT" pill + a "Why: …" italic caption.
+  - The matching decision-aid bullet gets bolded and a `✓` glyph (other bullets stay `•`).
+  - Highlight is hidden cleanly when no recommendation context is available.
+- Save endpoint `/api/procedures/{id}/atrophy-assessment` now derives the context server-side from the persisted procedure document (opposing_arch + medical_assessment), so the saved recommendation stays in sync with the latest Phase 1 form values.
+- AI Explain prompt builder unchanged — still quotes the verbatim Carameˆs paragraphs and avoids CC/Option labels.
+
+### Verification
+- `cd /app/backend && pytest tests/test_full_arch_classification.py tests/test_clinical_rules.py` → **26/26 pass** (5 new recommendation tests: natural-dentition, removable-opposing, graft-risk maxilla CC IV, graft-risk mandible CC IV, no-context).
+- Live API smoke-test for maxilla CC IV across 5 contexts confirms the priority order works correctly:
+  - Natural Dentition → opt 0 (6-impl fixed).
+  - Removable Prosthesis → opt 1 (4-impl tilted).
+  - Edentulous + Heavy smoking → opt 1 (pterygoid graftless — graft-risk overrides occlusal-load signal).
+  - Fixed Implant + HbA1c 8.5 → opt 1 (pterygoid — same override).
+  - No context → null (no highlight).
+- Metro cache nuked; bundle confirms 10 hits of `RECOMMENDED FOR THIS PATIENT` / `recommendation_reason` / `recommended_option_index`.
+
+### Files touched
+- EDIT: `/app/backend/full_arch_classification.py` (+ `_choose_option()` heuristic; context param on `classify_full_arch`; two new fields on the API payload).
+- EDIT: `/app/backend/server.py` (AtrophyInputs gains `opposing_arch / smoking / hba1c`; save endpoint derives context from the persisted procedure).
+- EDIT: `/app/backend/tests/test_full_arch_classification.py` (+5 tests).
+- EDIT: `/app/frontend/components/AtrophyClassificationChip.tsx` (3 new props; recommended-card highlight; decision-bullet bolding; passes context to the API).
+- EDIT: `/app/frontend/app/(tabs)/new-procedure.tsx` (both AtrophyClassificationChip call sites now forward opposing_arch + smoking + hba1c).
+- EDIT: `/app/frontend/app/procedures/[id].tsx` (Case Detail block now shows the recommendation badge + bolded bullet).
+
+### Next up
+- P1: Surface clinical-evaluation hits inline on Phase 1 save.
+- P1: Microsoft OAuth sign-in (needs Azure Client ID/Secret).
+- P1: Centralise multipart upload helper into `/app/frontend/utils/uploads.ts`.
+
+---
+
+
+# Prosthodontics Dental Implant Mobile App — PRD
+
 ## Iteration 320 (Feb 2026) — Atrophy Assessment: decision aid + collapsed verbatim text
 
 ### What shipped

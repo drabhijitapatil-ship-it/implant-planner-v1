@@ -1863,21 +1863,39 @@ export default function ProcedureDetailScreen() {
                         <Ionicons name="bulb-outline" size={14} color="#33691E" />
                         <Text style={{ fontSize: 12, fontWeight: '700', color: '#33691E' }}>How to choose between these options</Text>
                       </View>
-                      {a.decision_aid.map((line: string, i: number) => (
-                        <Text key={i} style={{ fontSize: 12, color: '#33691E', lineHeight: 17, marginBottom: i === a.decision_aid.length - 1 ? 0 : 4 }}>• {line}</Text>
-                      ))}
+                      {a.decision_aid.map((line: string, i: number) => {
+                        const isRec = a.recommended_option_index === i;
+                        return (
+                          <Text key={i} style={{ fontSize: 12, color: '#33691E', lineHeight: 17, marginBottom: i === a.decision_aid.length - 1 ? 0 : 4, fontWeight: isRec ? '800' : '400' }}>
+                            {isRec ? '✓ ' : '• '}{line}
+                          </Text>
+                        );
+                      })}
                     </View>
                   )}
-                  {(a.treatment_options || []).map((opt: any, i: number) => (
-                    <View key={i} style={{ marginBottom: i === a.treatment_options.length - 1 ? 0 : 10, paddingTop: i === 0 ? 0 : 10, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: '#E1E7F0' }} data-testid={`atrophy-detail-option-${arch}-${i}`}>
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: p.fg }}>
-                        {opt.headline || `${opt.implant_count} implants (${opt.kind})`}
-                      </Text>
-                      <Text style={{ fontSize: 12, color: '#37474F', marginTop: 4, lineHeight: 17 }}>
-                        {opt.description_short || opt.description || opt.placement}
-                      </Text>
-                    </View>
-                  ))}
+                  {(a.treatment_options || []).map((opt: any, i: number) => {
+                    const isRec = a.recommended_option_index === i;
+                    return (
+                      <View key={i} style={{ marginBottom: i === a.treatment_options.length - 1 ? 0 : 10, paddingTop: i === 0 ? 0 : 10, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: '#E1E7F0', ...(isRec ? { backgroundColor: '#F1F8E9', borderLeftWidth: 3, borderLeftColor: '#33691E', borderRadius: 6, padding: 8, marginLeft: -8 } : {}) }} data-testid={`atrophy-detail-option-${arch}-${i}${isRec ? '-recommended' : ''}`}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: p.fg }}>
+                            {opt.headline || `${opt.implant_count} implants (${opt.kind})`}
+                          </Text>
+                          {isRec ? (
+                            <View style={{ backgroundColor: '#33691E', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 }}>
+                              <Text style={{ fontSize: 10, color: '#FFFFFF', fontWeight: '800' }}>RECOMMENDED FOR THIS PATIENT</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        {isRec && a.recommendation_reason ? (
+                          <Text style={{ fontSize: 11, color: '#33691E', marginTop: 4, fontStyle: 'italic' }}>Why: {a.recommendation_reason}</Text>
+                        ) : null}
+                        <Text style={{ fontSize: 12, color: '#37474F', marginTop: 4, lineHeight: 17 }}>
+                          {opt.description_short || opt.description || opt.placement}
+                        </Text>
+                      </View>
+                    );
+                  })}
                   {a.loading_recommendation && (
                     <Text style={{ fontSize: 11, color: '#455A64', marginTop: 10, fontStyle: 'italic' }}>
                       Loading: {a.loading_recommendation}
