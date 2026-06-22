@@ -1837,41 +1837,53 @@ export default function ProcedureDetailScreen() {
               };
               const p = palette[a.class] || palette.CCI;
               return (
-                <View key={arch} style={{ marginBottom: 14, padding: 12, backgroundColor: '#FAFCFF', borderRadius: 10 }}>
+                <View key={arch} style={{ marginBottom: 14, padding: 12, backgroundColor: '#FAFCFF', borderRadius: 10 }} data-testid={`atrophy-detail-${arch}`}>
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 8 }}>
                     <Text style={{ fontSize: 13, fontWeight: '700', color: '#0D47A1', textTransform: 'capitalize' }}>{arch}</Text>
-                    <View style={{ backgroundColor: p.bg, borderColor: p.border, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 999 }}>
-                      <Text style={{ fontSize: 12, fontWeight: '700', color: p.fg }}>{a.severity_label}</Text>
-                    </View>
                   </View>
+                  {/* Verbatim Carames bone definition */}
+                  {(a.anterior_definition || a.posterior_definition) && (
+                    <View style={{ backgroundColor: p.bg, borderColor: p.border, borderLeftWidth: 4, borderRadius: 8, padding: 10, marginBottom: 8 }} data-testid={`atrophy-definition-${arch}`}>
+                      {a.anterior_definition ? (
+                        <Text style={{ fontSize: 12, color: p.fg, fontWeight: '600', marginBottom: 4 }}>{a.anterior_definition}</Text>
+                      ) : null}
+                      {a.posterior_definition ? (
+                        <Text style={{ fontSize: 12, color: p.fg, fontWeight: '600' }}>{a.posterior_definition}</Text>
+                      ) : null}
+                    </View>
+                  )}
                   <Text style={{ fontSize: 11, color: '#5C6BC0', marginBottom: 6 }}>
-                    Anterior: {a.inputs?.anterior_height_mm ?? '—'} mm height, {a.inputs?.anterior_width_mm ?? '—'} mm width  ·
+                    Measurements — Anterior: {a.inputs?.anterior_height_mm ?? '—'} mm height, {a.inputs?.anterior_width_mm ?? '—'} mm width  ·
                     Posterior: {a.inputs?.posterior_height_mm ?? '—'} mm height, {a.inputs?.posterior_width_mm ?? '—'} mm width
                   </Text>
                   {(a.treatment_options || []).map((opt: any, i: number) => (
-                    <View key={i} style={{ marginBottom: i === a.treatment_options.length - 1 ? 0 : 8, paddingTop: i === 0 ? 0 : 8, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: '#E1E7F0' }}>
-                      <Text style={{ fontSize: 12, fontWeight: '700', color: p.fg }}>
-                        Treatment Option {i + 1}: {opt.implant_count} implants ({opt.kind})
+                    <View key={i} style={{ marginBottom: i === a.treatment_options.length - 1 ? 0 : 10, paddingTop: i === 0 ? 0 : 10, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: '#E1E7F0' }} data-testid={`atrophy-detail-option-${arch}-${i}`}>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: p.fg }}>
+                        {opt.headline || `${opt.implant_count} implants (${opt.kind})`}
                       </Text>
-                      <Text style={{ fontSize: 11, color: '#37474F', marginTop: 2, lineHeight: 16 }}>{opt.placement}</Text>
-                      {opt.tilt && opt.tilt !== '—' && (
-                        <Text style={{ fontSize: 10, color: '#5C6BC0', marginTop: 2, fontStyle: 'italic' }}>Tilt: {opt.tilt}</Text>
-                      )}
-                      {opt.augmentation && (
-                        <Text style={{ fontSize: 10, color: '#C62828', marginTop: 2, fontStyle: 'italic' }}>Augmentation: {opt.augmentation}</Text>
-                      )}
+                      <Text style={{ fontSize: 12, color: '#37474F', marginTop: 4, lineHeight: 17 }}>
+                        {opt.description || opt.placement}
+                      </Text>
                     </View>
                   ))}
                   {a.loading_recommendation && (
-                    <Text style={{ fontSize: 10, color: '#455A64', marginTop: 8, fontStyle: 'italic' }}>
+                    <Text style={{ fontSize: 11, color: '#455A64', marginTop: 10, fontStyle: 'italic' }}>
                       Loading: {a.loading_recommendation}
                     </Text>
                   )}
                   {a.augmentation_note && (
-                    <Text style={{ fontSize: 10, color: '#455A64', marginTop: 4, fontStyle: 'italic' }}>
+                    <Text style={{ fontSize: 11, color: '#455A64', marginTop: 4, fontStyle: 'italic' }}>
                       Augmentation guidance: {a.augmentation_note}
                     </Text>
                   )}
+                  {a.source_reference ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 }} data-testid={`atrophy-detail-source-${arch}`}>
+                      <Ionicons name="book-outline" size={12} color="#78909C" />
+                      <Text style={{ fontSize: 11, color: '#78909C', flex: 1 }} numberOfLines={1}>
+                        Reference: {a.source_reference}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
               );
             })}
