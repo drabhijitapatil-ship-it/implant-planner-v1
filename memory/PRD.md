@@ -1,5 +1,26 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 323 (Feb 2026) — Atrophy Assessment: removed "Reference: The Carames Classification" row
+
+### What shipped
+- Removed the Smart-Tip-styled `book-outline` "Reference: The Carames Classification" row from the bottom of the Atrophy panel.
+  - Frontend chip (`AtrophyClassificationChip.tsx`).
+  - Case Detail block in `/app/frontend/app/procedures/[id].tsx`.
+- Backend still returns `source_reference` on the API response — preserved intentionally for downstream consumers (case-report PDF, AI Explain context).
+
+### Verification
+- Metro cache cleared; web bundle confirms `0` hits for `"Reference: "` and `0` hits for the `atrophy-source-…` / `atrophy-detail-source-…` testIDs.
+- 26/26 backend regression tests still pass (no API contract change).
+
+### Files touched
+- EDIT: `/app/frontend/components/AtrophyClassificationChip.tsx`
+- EDIT: `/app/frontend/app/procedures/[id].tsx`
+
+---
+
+
+# Prosthodontics Dental Implant Mobile App — PRD
+
 ## Iteration 322 (Feb 2026) — Nurse-role UI cleanup
 
 ### What shipped
