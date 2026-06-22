@@ -1,5 +1,42 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 324 (Feb 2026) — Atrophy Assessment: per-region severity now reflects measured value (bug fix)
+
+### Bug
+For any anterior height in the moderate band (12–16 mm), the Atrophy panel rendered *"Posterior — Advanced resorption (4–8 mm)"* regardless of the user's actual posterior measurement. The same class-leakage occurred for several other anterior/posterior combinations. Reported by user with screenshot referencing the Carames PDF Figure 4 (colour-coded anterior/posterior atrophy scale).
+
+### Root cause
+`classify_full_arch()` selected a single CC class (CC I–V) and then read the displayed anterior + posterior sentences from a `_DEFINITIONS[class]` lookup table that hard-coded only the 5 *diagonal* Carames combinations (simple/simple, simple/moderate, moderate/advanced, advanced/severe, severe/severe). When the measured (ant, post) severities fell off this diagonal — e.g. moderate-anterior + simple-posterior — the canned sentence for the chosen class (CC III, *"advanced posterior"*) overrode the user's actual posterior measurement.
+
+### Fix
+Decoupled the two outputs:
+1. **Displayed severity sentence per region** — derived directly from the measured severity bin per Figure 4 of the Carames PDF, via a new `_REGION_DEFINITIONS[arch][region][severity]` table. The user-facing anterior + posterior sentences now always reflect what the user typed.
+2. **Treatment-option class selection** — `_resolve_class` rewritten to pick the WORSE of the two measured severities → CC class. So an off-diagonal moderate/simple case still surfaces the appropriate worse-region treatment options (CC II for moderate-dominant, CC III for advanced-dominant, …), matching clinical practice ("plan for the worse-affected region").
+3. The internal `class` key remains as a colour-palette + treatment-option selector. It is never displayed.
+4. The single-band card per region is unchanged (per user's "default" choice on point C).
+
+### Verification
+- **32/32 pytest tests pass** (6 new regression tests + 26 prior).
+- Live cURL on the exact user scenario `{ant_h:14, post_h:15, ant_w:7, post_w:7}`:
+  - anterior_definition: *"Anterior — Moderate resorption (height >12 mm and <16 mm; width >6 mm)"* ✓
+  - posterior_definition: *"Posterior — Available bone (height >12 mm; width >6 mm)"* ✓ (was wrongly "Advanced" before)
+  - class: `CCII` (worse=moderate)
+- New tests lock down: each posterior height band → correct sentence regardless of anterior; each anterior band → correct sentence regardless of posterior; width < 6 mm forces severe in the matching region only; worse-region-dominates class selection.
+
+### Files touched
+- EDIT: `/app/backend/full_arch_classification.py` — `_REGION_DEFINITIONS` table; `_resolve_class` rewritten; result builder reads region-keyed sentences. ~30 LOC change.
+- EDIT: `/app/backend/tests/test_full_arch_classification.py` — 6 new regression tests + 1 wording tweak.
+
+### Next up
+- P1: Surface clinical-evaluation hits inline on Phase 1 save.
+- P1: Microsoft OAuth sign-in (needs Azure Client ID/Secret).
+- P1: Centralise multipart upload helper into `/app/frontend/utils/uploads.ts`.
+
+---
+
+
+# Prosthodontics Dental Implant Mobile App — PRD
+
 ## Iteration 323 (Feb 2026) — Atrophy Assessment: removed "Reference: The Carames Classification" row
 
 ### What shipped

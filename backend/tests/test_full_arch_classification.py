@@ -75,9 +75,9 @@ def test_render_for_ai_context_quotes_definitions_and_options():
     txt = render_for_ai_context(out)
     # Must cite the source by name
     assert "The Carames Classification" in txt
-    # Must contain the verbatim definitions
-    assert "moderate resorption: height >12 mm and <16 mm" in txt
-    assert "advanced resorption: height >4 mm and <8 mm" in txt
+    # Must contain the verbatim definitions for the measured severities.
+    assert "Moderate resorption (height >12 mm and <16 mm" in txt
+    assert "Advanced resorption (height >4 mm and <8 mm" in txt
     # Must contain at least one verbatim option paragraph
     assert "distally tilted implants in the premolar position" in txt
     # No banned labels
@@ -178,3 +178,66 @@ def test_recommendation_absent_when_no_context():
     out = classify_full_arch("maxilla", 17, 13, 7, 7)
     assert out["recommended_option_index"] is None
     assert out["recommendation_reason"] is None
+
+
+# ── Iter-324 regression: the displayed posterior definition must reflect
+# the MEASURED posterior height/width, not the class's canned sentence.
+# Previously a moderate-anterior + simple-posterior case (e.g. ant=14,
+# post=15) was forced to CC III and rendered "advanced posterior atrophy".
+def test_posterior_definition_reflects_measured_value_not_class_canned_text():
+    out = classify_full_arch("maxilla", 14, 15, 7, 7)  # ant=moderate, post=simple
+    assert out["ok"] is True
+    assert "Available bone" in out["posterior_definition"], out["posterior_definition"]
+    assert "Advanced" not in out["posterior_definition"]
+    assert "Moderate resorption" in out["anterior_definition"]
+
+
+def test_simple_posterior_high_value_does_not_show_advanced():
+    """User-reported scenario: entering posterior_height=15 should NEVER show
+    'Advanced posterior atrophy' regardless of anterior value."""
+    for ant in (17, 14, 10, 6):
+        out = classify_full_arch("maxilla", ant, 15, 7, 7)
+        assert "Available bone" in out["posterior_definition"], f"ant={ant}: {out['posterior_definition']}"
+        assert "Advanced" not in out["posterior_definition"], f"ant={ant} leaked Advanced"
+
+
+def test_each_posterior_band_renders_correct_sentence():
+    """Walk through Figure 4's posterior bands and verify the rendered text."""
+    cases = [
+        (15, "Available bone"),         # > 12 mm -> simple
+        (10, "Moderate resorption"),    # 8-12 mm
+        (6,  "Advanced resorption"),    # 4-8 mm
+        (3,  "Severe resorption"),      # < 4 mm
+    ]
+    for post_h, expected in cases:
+        out = classify_full_arch("maxilla", 17, post_h, 7, 7)
+        assert expected in out["posterior_definition"], f"post_h={post_h}: got {out['posterior_definition']}"
+
+
+def test_each_anterior_band_renders_correct_sentence():
+    cases = [
+        (18, "Available bone"),         # > 16 mm -> simple
+        (14, "Moderate resorption"),    # 12-16 mm
+        (10, "Advanced resorption"),    # 8-12 mm
+        (6,  "Severe resorption"),      # < 8 mm
+    ]
+    for ant_h, expected in cases:
+        out = classify_full_arch("maxilla", ant_h, 13, 7, 7)
+        assert expected in out["anterior_definition"], f"ant_h={ant_h}: got {out['anterior_definition']}"
+
+
+def test_width_under_6_forces_severe_in_either_region():
+    out = classify_full_arch("maxilla", 17, 13, 5, 7)  # ant width=5 → severe ant
+    assert "Severe resorption" in out["anterior_definition"]
+    out2 = classify_full_arch("maxilla", 17, 13, 7, 5)  # post width=5 → severe post
+    assert "Severe resorption" in out2["posterior_definition"]
+
+
+def test_worse_region_dominates_class_selection():
+    """When the two regions disagree, the worse one picks the treatment class."""
+    # ant=simple, post=advanced (4-8 mm) → worse=advanced → CC III
+    out = classify_full_arch("maxilla", 17, 6, 7, 7)
+    assert out["class"] == "CCIII"
+    # ant=moderate, post=simple → worse=moderate → CC II
+    out = classify_full_arch("maxilla", 14, 15, 7, 7)
+    assert out["class"] == "CCII"

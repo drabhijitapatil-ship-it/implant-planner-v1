@@ -63,71 +63,65 @@ def _classify_region(height: float, width: float, region: str) -> str:
 
 
 def _resolve_class(ant_sev: str, post_sev: str) -> str:
-    """Combine anterior + posterior severity into the 5-class internal key.
-    The key is used only for palette colour selection — it is never
-    surfaced to users."""
-    if ant_sev == "severe":
+    """Iter-324: pick the treatment-option class from the WORSE of the two
+    measured regions. This matches the Carames PDF table where each class
+    represents a step-diagonal pair (simple/simple, simple/moderate,
+    moderate/advanced, advanced/severe, severe/severe). When the user's
+    measurements don't fall on that exact diagonal we surgically plan for
+    the worse-affected region.
+
+    The displayed anterior/posterior severity sentences are now derived
+    independently from each region's measurement (see `_REGION_DEFINITIONS`),
+    so this class key never overrides what the user actually entered.
+    The key remains an internal palette + treatment-option selector."""
+    if ant_sev == "severe" and post_sev == "severe":
         return "CCV"
-    if post_sev == "severe":
-        if ant_sev in ("simple", "moderate"):
-            return "CCIV"
+    if "severe" in (ant_sev, post_sev):
         return "CCIV"
-    if ant_sev == "advanced":
-        return "CCIV" if post_sev in ("advanced", "severe") else "CCIII"
-    if ant_sev == "moderate":
+    if "advanced" in (ant_sev, post_sev):
         return "CCIII"
-    if post_sev == "simple":
-        return "CCI"
-    return "CCII"
+    if "moderate" in (ant_sev, post_sev):
+        return "CCII"
+    return "CCI"
 
 
-# ── Verbatim Carames text (anterior + posterior definitions per class) ──
-_DEFINITIONS: Dict[str, Dict[str, Dict[str, str]]] = {
+# ── Verbatim Carames text (anterior + posterior definitions per severity) ──
+# Iter-324 redesign: definitions are now keyed by the MEASURED severity bin
+# (per Figure 4 of the Carames PDF) rather than by class.  This decouples the
+# user-facing severity sentence (which must always reflect the values the
+# user typed) from the treatment-option class (which is picked from the
+# worse-affected region — see `_resolve_class`).
+_REGION_DEFINITIONS: Dict[str, Dict[str, Dict[str, str]]] = {
     "maxilla": {
-        "CCI": {
-            "anterior":  "Anterior - Available bone (height >16 mm; width >6 mm)",
-            "posterior": "Posterior - Available bone (height >12 mm; width >6 mm)",
+        "anterior": {
+            "simple":   "Anterior - Available bone (height >16 mm; width >6 mm)",
+            "moderate": "Anterior - Moderate resorption (height >12 mm and <16 mm; width >6 mm)",
+            "advanced": "Anterior - Advanced resorption (height >8 mm and <12 mm; width >6 mm)",
+            "severe":   "Anterior - Severe resorption (height <8 mm or width <6 mm)",
         },
-        "CCII": {
-            "anterior":  "Anterior - available bone: height >16 mm; width >6 mm",
-            "posterior": "Posterior - moderate resorption: height >8 mm and <12 mm; width >6 mm",
-        },
-        "CCIII": {
-            "anterior":  "Anterior - moderate resorption: height >12 mm and <16 mm; width >6 mm",
-            "posterior": "Posterior - advanced resorption: height >4 mm and <8 mm; width >6 mm",
-        },
-        "CCIV": {
-            "anterior":  "Anterior - advanced resorption: height >8 mm and <12 mm; width >6 mm",
-            "posterior": "Posterior - severe resorption: height <4 mm or width <6 mm",
-        },
-        "CCV": {
-            "anterior":  "Anterior - severe resorption: height <8 mm or width <6 mm",
-            "posterior": "Posterior - severe resorption: height <4 mm or width <6 mm",
+        "posterior": {
+            "simple":   "Posterior - Available bone (height >12 mm; width >6 mm)",
+            "moderate": "Posterior - Moderate resorption (height >8 mm and <12 mm; width >6 mm)",
+            "advanced": "Posterior - Advanced resorption (height >4 mm and <8 mm; width >6 mm)",
+            "severe":   "Posterior - Severe resorption (height <4 mm or width <6 mm)",
         },
     },
     "mandible": {
-        "CCI": {
-            "anterior":  "Anterior - Available bone (height >16 mm; width >6 mm)",
-            "posterior": "Posterior - Available bone (height >12 mm; width >6 mm)",
+        "anterior": {
+            "simple":   "Anterior - Available bone (height >16 mm; width >6 mm)",
+            "moderate": "Anterior - Moderate resorption (height >12 mm and <16 mm; width >6 mm)",
+            "advanced": "Anterior - Advanced resorption (height >8 mm and <12 mm; width >6 mm)",
+            "severe":   "Anterior - Severe resorption (height <8 mm or width <6 mm)",
         },
-        "CCII": {
-            "anterior":  "Anterior - Available bone (height >16 mm; width >6 mm)",
-            "posterior": "Posterior - Moderate resorption (height >8 mm and <12 mm; width >6 mm)",
-        },
-        "CCIII": {
-            "anterior":  "Anterior - Moderate resorption (height >12 mm and <16 mm; width >6 mm)",
-            "posterior": "Posterior - Advanced resorption (height >4 mm and <8 mm; width >6 mm)",
-        },
-        "CCIV": {
-            "anterior":  "Anterior - Advanced resorption (height >8 mm and <12 mm; width >6 mm)",
-            "posterior": "Posterior - Severe resorption (height <4 mm or width <6 mm)",
-        },
-        "CCV": {
-            "anterior":  "Anterior - Severe resorption (height <8 mm or width <6 mm)",
-            "posterior": "Posterior - Severe resorption (height <4 mm or width <6 mm)",
+        "posterior": {
+            "simple":   "Posterior - Available bone (height >12 mm; width >6 mm)",
+            "moderate": "Posterior - Moderate resorption (height >8 mm and <12 mm; width >6 mm)",
+            "advanced": "Posterior - Advanced resorption (height >4 mm and <8 mm; width >6 mm)",
+            "severe":   "Posterior - Severe resorption (height <4 mm or width <6 mm)",
         },
     },
 }
+
 
 
 # ── Verbatim Carames treatment options ────────────────────────────────
@@ -399,7 +393,11 @@ def classify_full_arch(
     else:
         loading = "Immediate loading is acceptable when primary stability >30 N\u00b7cm is achieved on every implant; otherwise use delayed loading."
 
-    definition = _DEFINITIONS[arch][cls]
+    # iter-324: definitions are now derived from the MEASURED severity bin
+    # per region (not from the class table) so the displayed anterior /
+    # posterior sentence always reflects what the user actually entered.
+    anterior_definition = _REGION_DEFINITIONS[arch]["anterior"][ant_sev]
+    posterior_definition = _REGION_DEFINITIONS[arch]["posterior"][post_sev]
 
     # Patient-context aware "Recommended for this patient" pick.
     chosen = _choose_option(arch, cls, context or {})
@@ -410,8 +408,8 @@ def classify_full_arch(
         # `class` is kept as an internal palette key only — the frontend
         # uses it for colour selection and never displays it.
         "class": cls,
-        "anterior_definition": definition["anterior"],
-        "posterior_definition": definition["posterior"],
+        "anterior_definition": anterior_definition,
+        "posterior_definition": posterior_definition,
         "anterior_severity": ant_sev,
         "posterior_severity": post_sev,
         "inputs": {
