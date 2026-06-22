@@ -1906,14 +1906,6 @@ export default function ProcedureDetailScreen() {
                       Augmentation guidance: {a.augmentation_note}
                     </Text>
                   )}
-                  {a.source_reference ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 }} data-testid={`atrophy-detail-source-${arch}`}>
-                      <Ionicons name="book-outline" size={12} color="#78909C" />
-                      <Text style={{ fontSize: 11, color: '#78909C', flex: 1 }} numberOfLines={1}>
-                        Reference: {a.source_reference}
-                      </Text>
-                    </View>
-                  ) : null}
                 </View>
               );
             })}

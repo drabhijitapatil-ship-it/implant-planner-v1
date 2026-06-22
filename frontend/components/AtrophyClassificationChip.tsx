@@ -219,15 +219,9 @@ export const AtrophyClassificationChip: React.FC<Props> = (p) => {
         </View>
       )}
 
-      {/* ── Source reference row (mirrors Smart Clinical Tip styling) ── */}
-      {result.source_reference ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 }} data-testid={`atrophy-source-${p.arch}`}>
-          <Ionicons name="book-outline" size={12} color="#78909C" />
-          <Text style={{ fontSize: 11, color: '#78909C', flex: 1 }} numberOfLines={1}>
-            Reference: {result.source_reference}
-          </Text>
-        </View>
-      ) : null}
+      {/* iter-323: source-reference row removed per request — keep `source_reference`
+          in the API response for downstream use (PDFs, AI context) but
+          don't surface it under the Atrophy panel anymore. */}
     </View>
   );
 };
