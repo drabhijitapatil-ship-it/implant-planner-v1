@@ -28,6 +28,8 @@ type ClassResult = {
   class?: string;
   anterior_definition?: string;
   posterior_definition?: string;
+  anterior_severity?: string;
+  posterior_severity?: string;
   treatment_options?: Option[];
   decision_aid?: string[];
   recommended_option_index?: number | null;
@@ -46,6 +48,63 @@ const COLORS: Record<string, { bg: string; fg: string; border: string }> = {
   CCIV:  { bg: '#FFEBEE', fg: '#B71C1C', border: '#E53935' },
   CCV:   { bg: '#FCE4EC', fg: '#880E4F', border: '#C2185B' },
 };
+
+// ── Carames Figure-4 severity strip ─────────────────────────────────
+// Re-creates the colour-coded vertical bone-atrophy scale from the
+// Carames PDF (anterior thresholds 16/12/8 mm; posterior 12/8/4 mm).
+// The user's measured value is pinned on the matching band so students
+// can see exactly where their case falls relative to clinical thresholds.
+const SEVERITY_BANDS = [
+  { key: 'simple',   label: 'AVAILABLE', bg: '#43A047', anteriorTop: '>16', posteriorTop: '>12' },
+  { key: 'moderate', label: 'MODERATE',  bg: '#FBC02D', anteriorTop: '12–16', posteriorTop: '8–12' },
+  { key: 'advanced', label: 'ADVANCED',  bg: '#F57C00', anteriorTop: '8–12',  posteriorTop: '4–8' },
+  { key: 'severe',   label: 'SEVERE',    bg: '#E53935', anteriorTop: '<8 or width <6', posteriorTop: '<4 or width <6' },
+];
+
+export const CaramesSeverityStrip: React.FC<{
+  region: 'anterior' | 'posterior';
+  severity: string;
+  measuredHeight: string;
+  measuredWidth: string;
+  testIdSuffix: string;
+}> = ({ region, severity, measuredHeight, measuredWidth, testIdSuffix }) => (
+  <View style={{ marginTop: 6, marginBottom: 8 }} data-testid={`severity-strip-${testIdSuffix}`}>
+    {SEVERITY_BANDS.map(b => {
+      const active = b.key === severity;
+      const thresholdLabel = region === 'anterior' ? b.anteriorTop : b.posteriorTop;
+      return (
+        <View
+          key={b.key}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: b.bg,
+            paddingVertical: active ? 7 : 4,
+            paddingHorizontal: 8,
+            borderWidth: active ? 2 : 0,
+            borderColor: '#263238',
+            opacity: active ? 1 : 0.55,
+          }}
+          data-testid={`severity-band-${testIdSuffix}-${b.key}${active ? '-active' : ''}`}
+        >
+          <Text style={{ fontSize: 10, fontWeight: '800', color: '#FFFFFF', letterSpacing: 0.5, flex: 1 }}>
+            {b.label}
+          </Text>
+          <Text style={{ fontSize: 10, color: '#FFFFFF', fontWeight: '700' }}>
+            {thresholdLabel} mm
+          </Text>
+          {active ? (
+            <View style={{ marginLeft: 8, backgroundColor: '#FFFFFF', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 }}>
+              <Text style={{ fontSize: 10, color: '#263238', fontWeight: '800' }}>
+                ← {measuredHeight || '?'} mm{measuredWidth ? ` / w ${measuredWidth}` : ''}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      );
+    })}
+  </View>
+);
 
 export const AtrophyClassificationChip: React.FC<Props> = (p) => {
   const [result, setResult] = useState<ClassResult | null>(null);
@@ -101,14 +160,36 @@ export const AtrophyClassificationChip: React.FC<Props> = (p) => {
       {/* ── Verbatim bone definition (replaces the old severity pill) ── */}
       <View style={{ backgroundColor: palette.bg, borderColor: palette.border, borderLeftWidth: 4, borderRadius: 8, padding: 10, marginBottom: 8 }}>
         {result.anterior_definition ? (
-          <Text style={{ fontSize: 12, color: palette.fg, fontWeight: '600', marginBottom: 4 }}>
-            {result.anterior_definition}
-          </Text>
+          <>
+            <Text style={{ fontSize: 12, color: palette.fg, fontWeight: '600', marginBottom: 4 }}>
+              {result.anterior_definition}
+            </Text>
+            {result.anterior_severity ? (
+              <CaramesSeverityStrip
+                region="anterior"
+                severity={result.anterior_severity}
+                measuredHeight={p.anterior_height}
+                measuredWidth={p.anterior_width}
+                testIdSuffix={`${p.arch}-anterior`}
+              />
+            ) : null}
+          </>
         ) : null}
         {result.posterior_definition ? (
-          <Text style={{ fontSize: 12, color: palette.fg, fontWeight: '600' }}>
-            {result.posterior_definition}
-          </Text>
+          <>
+            <Text style={{ fontSize: 12, color: palette.fg, fontWeight: '600' }}>
+              {result.posterior_definition}
+            </Text>
+            {result.posterior_severity ? (
+              <CaramesSeverityStrip
+                region="posterior"
+                severity={result.posterior_severity}
+                measuredHeight={p.posterior_height}
+                measuredWidth={p.posterior_width}
+                testIdSuffix={`${p.arch}-posterior`}
+              />
+            ) : null}
+          </>
         ) : null}
       </View>
 

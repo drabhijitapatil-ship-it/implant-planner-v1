@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import api, { getAuthFileUrl, getToken } from '../../utils/api';
+import { CaramesSeverityStrip } from '../../components/AtrophyClassificationChip';
 import { useAuth } from '../../contexts/AuthContext';
 import { showUploadPicker } from '../../utils/uploadPicker';
 import { downloadConsentTemplate, printConsentTemplate } from '../../utils/consentPdf';
@@ -1845,10 +1846,32 @@ export default function ProcedureDetailScreen() {
                   {(a.anterior_definition || a.posterior_definition) && (
                     <View style={{ backgroundColor: p.bg, borderColor: p.border, borderLeftWidth: 4, borderRadius: 8, padding: 10, marginBottom: 8 }} data-testid={`atrophy-definition-${arch}`}>
                       {a.anterior_definition ? (
-                        <Text style={{ fontSize: 12, color: p.fg, fontWeight: '600', marginBottom: 4 }}>{a.anterior_definition}</Text>
+                        <>
+                          <Text style={{ fontSize: 12, color: p.fg, fontWeight: '600', marginBottom: 4 }}>{a.anterior_definition}</Text>
+                          {a.anterior_severity ? (
+                            <CaramesSeverityStrip
+                              region="anterior"
+                              severity={a.anterior_severity}
+                              measuredHeight={String(a.inputs?.anterior_height_mm ?? '')}
+                              measuredWidth={String(a.inputs?.anterior_width_mm ?? '')}
+                              testIdSuffix={`detail-${arch}-anterior`}
+                            />
+                          ) : null}
+                        </>
                       ) : null}
                       {a.posterior_definition ? (
-                        <Text style={{ fontSize: 12, color: p.fg, fontWeight: '600' }}>{a.posterior_definition}</Text>
+                        <>
+                          <Text style={{ fontSize: 12, color: p.fg, fontWeight: '600' }}>{a.posterior_definition}</Text>
+                          {a.posterior_severity ? (
+                            <CaramesSeverityStrip
+                              region="posterior"
+                              severity={a.posterior_severity}
+                              measuredHeight={String(a.inputs?.posterior_height_mm ?? '')}
+                              measuredWidth={String(a.inputs?.posterior_width_mm ?? '')}
+                              testIdSuffix={`detail-${arch}-posterior`}
+                            />
+                          ) : null}
+                        </>
                       ) : null}
                     </View>
                   )}

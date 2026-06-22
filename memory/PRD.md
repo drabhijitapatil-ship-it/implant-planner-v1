@@ -1,5 +1,33 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 325 (Feb 2026) — Carames Figure-4 colour strip under each region
+
+### What shipped
+- New **`CaramesSeverityStrip`** component (exported from `AtrophyClassificationChip.tsx`) that visually re-creates the Carames PDF Figure-4 colour-coded bone-atrophy scale:
+  - 4 stacked rows: 🟢 **AVAILABLE** (>16 / >12 mm) · 🟡 **MODERATE** (12-16 / 8-12 mm) · 🟠 **ADVANCED** (8-12 / 4-8 mm) · 🔴 **SEVERE** (<8 / <4 mm or width <6 mm).
+  - The row matching the user's measured severity is rendered fully opaque + thick black border + a white "← X mm / w Y" pinned label; the other 3 rows render at 55% opacity. Anterior and posterior thresholds are displayed in different right-side labels (16/12/8 vs 12/8/4).
+- Strip is rendered immediately under each region's verbatim sentence in **both** the live Phase 1 chip and the Case Detail block, so the visual relationship between *measured value → severity sentence → colour band* is always one glance away.
+- Backend untouched — the strip reads the existing `anterior_severity` / `posterior_severity` + `inputs.*_height_mm/*_width_mm` fields already returned by the API.
+- 32/32 backend regression tests still pass.
+
+### Files touched
+- EDIT: `/app/frontend/components/AtrophyClassificationChip.tsx` — added & exported `CaramesSeverityStrip` (≈55 LOC inline); chip now renders one strip per region.
+- EDIT: `/app/frontend/app/procedures/[id].tsx` — imports `CaramesSeverityStrip`; Case Detail block renders one strip per region under each definition sentence.
+
+### Verification
+- Metro cache nuked + bundle inspected: **31 strip markers** present (`CaramesSeverityStrip`, `AVAILABLE`, `severity-band-…`, `severity-strip-…` testIDs).
+- Strip uses RN's `testID` and `data-testid` per band, so frontend tests can assert which band is active (e.g. `severity-band-maxilla-posterior-simple-active` when post_h=15).
+
+### Next up
+- P1: Surface clinical-evaluation hits inline on Phase 1 save.
+- P1: Microsoft OAuth sign-in (needs Azure Client ID/Secret).
+- P1: Centralise multipart upload helper into `/app/frontend/utils/uploads.ts`.
+
+---
+
+
+# Prosthodontics Dental Implant Mobile App — PRD
+
 ## Iteration 324 (Feb 2026) — Atrophy Assessment: per-region severity now reflects measured value (bug fix)
 
 ### Bug
