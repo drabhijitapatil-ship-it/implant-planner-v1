@@ -21,10 +21,10 @@ function resolveUrl(url: string): string {
 }
 
 const _rawUrl: string =
-  process.env.EXPO_PUBLIC_BACKEND_URL ||
-  Constants.expoConfig?.extra?.backendUrl ||
-  // 'http://localhost:8001';
-  'https://api.implanr.com';
+  // process.env.EXPO_PUBLIC_BACKEND_URL ||
+  // Constants.expoConfig?.extra?.backendUrl ||
+  'http://localhost:8001';
+  // 'https://api.implanr.com';
 
 const BACKEND_URL: string = resolveUrl(_rawUrl);
 

@@ -2986,7 +2986,7 @@ export default function ProcedureDetailScreen() {
         )}
 
         {/* ═══════════ PHASE 4 STEP 1: PROSTHETIC PROTOCOL - Full Data Display ═══════════ */}
-        {user?.role !== 'dental_assistant' && (procedure.phase4_step1_data || procedure.stage2_prosthetic_remark || procedure.phase4_step1_student_notes) && (
+        {user?.role !== 'dental_assistant' && (procedure.phase4_step1_data || procedure.stage2_prosthetic_remark || procedure.phase4_step1_student_notes || procedure.stage2_prosthetic_incharge_remark || procedure.phase4_step1_incharge_notes) && (
           <View
             style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#FF6F00' }]}
             testID="phase4-step1-full-data-section"

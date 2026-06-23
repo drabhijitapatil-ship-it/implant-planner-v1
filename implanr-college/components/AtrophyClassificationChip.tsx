@@ -9,8 +9,6 @@ type Props = {
   posterior_height: string;
   anterior_width: string;
   posterior_width: string;
-  // Patient context — when provided, the backend highlights the best-fit
-  // option for THIS patient and bolds the matching decision-aid bullet.
   opposing_arch?: string;
   smoking?: string;
   hba1c?: string;
@@ -28,6 +26,8 @@ type ClassResult = {
   class?: string;
   anterior_definition?: string;
   posterior_definition?: string;
+  anterior_severity?: string;
+  posterior_severity?: string;
   treatment_options?: Option[];
   decision_aid?: string[];
   recommended_option_index?: number | null;
@@ -38,7 +38,6 @@ type ClassResult = {
   error?: string;
 };
 
-// Internal palette key only — the `class` value (CCI…CCV) is never shown to users.
 const COLORS: Record<string, { bg: string; fg: string; border: string }> = {
   CCI:   { bg: '#E8F5E9', fg: '#1B5E20', border: '#43A047' },
   CCII:  { bg: '#E3F2FD', fg: '#0D47A1', border: '#1E88E5' },
@@ -46,6 +45,80 @@ const COLORS: Record<string, { bg: string; fg: string; border: string }> = {
   CCIV:  { bg: '#FFEBEE', fg: '#B71C1C', border: '#E53935' },
   CCV:   { bg: '#FCE4EC', fg: '#880E4F', border: '#C2185B' },
 };
+
+const BAND_COLORS: Record<string, { active: string; dim: string; activeFg: string; dimFg: string }> = {
+  simple:   { active: '#2E7D32', dim: '#C8E6C9', activeFg: '#FFFFFF', dimFg: '#2E7D32' },
+  moderate: { active: '#F9A825', dim: '#FFF9C4', activeFg: '#FFFFFF', dimFg: '#827717' },
+  advanced: { active: '#E65100', dim: '#FFE0B2', activeFg: '#FFFFFF', dimFg: '#BF360C' },
+  severe:   { active: '#C62828', dim: '#FFCDD2', activeFg: '#FFFFFF', dimFg: '#B71C1C' },
+};
+
+const ANT_BANDS = [
+  { label: 'AVAILABLE', range: '>16 mm',           sev: 'simple'   },
+  { label: 'MODERATE',  range: '12-16 mm',          sev: 'moderate' },
+  { label: 'ADVANCED',  range: '8-12 mm',           sev: 'advanced' },
+  { label: 'SEVERE',    range: '<8 or width <6 mm', sev: 'severe'   },
+];
+
+const POST_BANDS = [
+  { label: 'AVAILABLE', range: '>12 mm',            sev: 'simple'   },
+  { label: 'MODERATE',  range: '8-12 mm',           sev: 'moderate' },
+  { label: 'ADVANCED',  range: '4-8 mm',            sev: 'advanced' },
+  { label: 'SEVERE',    range: '<4 or width <6 mm', sev: 'severe'   },
+];
+
+const SeverityBands: React.FC<{
+  definition: string;
+  bands: typeof ANT_BANDS;
+  severity: string;
+  value: number | null;
+  defColor: string;
+}> = ({ definition, bands, severity, value, defColor }) => (
+  <View style={{ marginBottom: 10 }}>
+    <Text style={{ fontSize: 12, fontWeight: '600', color: defColor, marginBottom: 6 }}>
+      {definition}
+    </Text>
+    {bands.map((b) => {
+      const isActive = b.sev === severity;
+      const c = BAND_COLORS[b.sev];
+      return (
+        <View
+          key={b.sev}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: isActive ? c.active : c.dim,
+            borderRadius: 4,
+            paddingVertical: 5,
+            paddingHorizontal: 10,
+            marginBottom: 2,
+            opacity: isActive ? 1 : 0.6,
+          }}
+        >
+          <Text style={{
+            fontSize: 11,
+            fontWeight: isActive ? '800' : '600',
+            color: isActive ? c.activeFg : c.dimFg,
+            flex: 1,
+          }}>
+            {b.label}
+          </Text>
+          <Text style={{
+            fontSize: 11,
+            color: isActive ? c.activeFg : c.dimFg,
+          }}>
+            {b.range}
+          </Text>
+          {isActive && value !== null ? (
+            <View style={{ backgroundColor: '#FFFFFF', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, marginLeft: 8 }}>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: c.active }}>← {value} mm</Text>
+            </View>
+          ) : null}
+        </View>
+      );
+    })}
+  </View>
+);
 
 export const AtrophyClassificationChip: React.FC<Props> = (p) => {
   const [result, setResult] = useState<ClassResult | null>(null);
@@ -98,21 +171,29 @@ export const AtrophyClassificationChip: React.FC<Props> = (p) => {
 
   return (
     <View style={{ marginTop: 12 }} testID={`atrophy-result-${p.arch}`} data-testid={`atrophy-result-${p.arch}`}>
-      {/* ── Verbatim bone definition (replaces the old severity pill) ── */}
-      <View style={{ backgroundColor: palette.bg, borderColor: palette.border, borderLeftWidth: 4, borderRadius: 8, padding: 10, marginBottom: 8 }}>
+      {/* ── Severity band visualiser ── */}
+      <View style={{ backgroundColor: '#FAFCFF', borderRadius: 10, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: '#E3EAF5' }}>
         {result.anterior_definition ? (
-          <Text style={{ fontSize: 12, color: palette.fg, fontWeight: '600', marginBottom: 4 }}>
-            {result.anterior_definition}
-          </Text>
+          <SeverityBands
+            definition={result.anterior_definition}
+            bands={ANT_BANDS}
+            severity={result.anterior_severity || ''}
+            value={Number.isFinite(ah) ? ah : null}
+            defColor={palette.fg}
+          />
         ) : null}
         {result.posterior_definition ? (
-          <Text style={{ fontSize: 12, color: palette.fg, fontWeight: '600' }}>
-            {result.posterior_definition}
-          </Text>
+          <SeverityBands
+            definition={result.posterior_definition}
+            bands={POST_BANDS}
+            severity={result.posterior_severity || ''}
+            value={Number.isFinite(ph) ? ph : null}
+            defColor={palette.fg}
+          />
         ) : null}
       </View>
 
-      {/* ── Decision aid (helps the student choose between the 3 options) ── */}
+      {/* ── Decision aid ── */}
       {result.decision_aid && result.decision_aid.length > 0 ? (
         <View style={{ backgroundColor: '#F1F8E9', borderColor: '#7CB342', borderLeftWidth: 3, borderRadius: 8, padding: 10, marginBottom: 8 }} data-testid={`atrophy-decision-aid-${p.arch}`}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
@@ -140,6 +221,7 @@ export const AtrophyClassificationChip: React.FC<Props> = (p) => {
         </View>
       ) : null}
 
+      {/* ── Treatment options ── */}
       {result.treatment_options && result.treatment_options.length > 0 && (
         <View style={{ backgroundColor: '#FFFFFF', borderRadius: 8, padding: 10, borderLeftWidth: 3, borderLeftColor: palette.border }}>
           {result.treatment_options.map((opt, i) => {
@@ -155,7 +237,6 @@ export const AtrophyClassificationChip: React.FC<Props> = (p) => {
                   paddingTop: i === 0 ? 0 : 10,
                   borderTopWidth: i === 0 ? 0 : 1,
                   borderTopColor: '#E1E7F0',
-                  // Subtle highlight ring for the recommended card.
                   ...(isRec ? {
                     backgroundColor: '#F1F8E9',
                     borderLeftWidth: 3,
@@ -218,10 +299,6 @@ export const AtrophyClassificationChip: React.FC<Props> = (p) => {
           ) : null}
         </View>
       )}
-
-      {/* iter-323: source-reference row removed per request — keep `source_reference`
-          in the API response for downstream use (PDFs, AI context) but
-          don't surface it under the Atrophy panel anymore. */}
     </View>
   );
 };

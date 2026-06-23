@@ -177,14 +177,12 @@ export default function LoginScreen() {
 
             {/* Logo Badge in clean white square card */}
             {/* <View style={styles.logoContainer}> */}
-              <View style={styles.logoBadge}>
                 <Image
                   source={require("../../assets/images/icon.png")}
                   style={[styles.logo]}
                   resizeMode="contain"
                   data-testid="hero-image"
                 />
-              </View>
             {/* </View> */}
 
             {/* Branding headers */}
@@ -472,20 +470,14 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 24,
-    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 5,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.8)",
+ 
   },
   logo: {
-    width: 90,
-    height: 90,
+    width: 120,
+    height: 120,
+    borderRadius:30
   },
   appName: {
     fontSize: 42,

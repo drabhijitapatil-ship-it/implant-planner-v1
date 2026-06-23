@@ -6605,7 +6605,9 @@ export default function ProcedureDetailScreen() {
           {user?.role !== "nurse" &&
             (procedure.phase4_step1_data ||
               procedure.stage2_prosthetic_remark ||
-              procedure.phase4_step1_student_notes) && (
+              procedure.phase4_step1_student_notes ||
+              procedure.stage2_prosthetic_incharge_remark ||
+              procedure.phase4_step1_incharge_notes) && (
               <View
                 style={[
                   styles.section,
