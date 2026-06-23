@@ -22,8 +22,8 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState("Abhijit.patil@dental.edu");
-  const [password, setPassword] = useState("Admin@123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   // Focus States
