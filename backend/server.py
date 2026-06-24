@@ -5471,12 +5471,150 @@ async def _build_smart_tips_block(proc: dict, max_tips: int = 3) -> str:
 
 
 async def _build_case_context_full(proc: dict, current_user: Optional[dict]) -> str:
-    """`_build_case_context` augmented with role/phase + Smart Tips blocks.
-    Returns the full string to feed into the Implanr AI prompt."""
+    """`_build_case_context` augmented with role/phase + Smart Tips + program
+    stats + implant alternatives + workflow-graph blocks.  Returns the full
+    string to feed into the Implanr AI prompt."""
     base = _build_case_context(proc)
     role_block = _build_role_and_phase_block(proc, current_user)
     tips_block = await _build_smart_tips_block(proc)
-    return "\n".join(s for s in (base, role_block, tips_block) if s)
+    stats_block = await _build_program_stats_block(proc)
+    alts_block = await _build_implant_alternatives_block(proc)
+    graph_block = _WORKFLOW_GRAPH_BLOCK
+    return "\n".join(s for s in (base, role_block, tips_block, stats_block, alts_block, graph_block) if s)
+
+
+# ── iter-327: 3 more AI context blocks ────────────────────────────────
+# (3) program-stats   - aggregate ISQ / failure rate / top implants at sites
+# (4) implant-alts    - 5 catalog alternatives matching the chosen system
+# (6) workflow-graph  - tiny static knowledge graph of the 4 phases + gates
+
+async def _build_program_stats_block(proc: dict, max_sites: int = 4) -> str:
+    """Aggregate ISQ averages, complication rates, and top implant choices
+    across all CLOSED-OR-ADVANCED procedures in the database at the same
+    FDI positions as the current case. Scoped per-program will be a no-op
+    until multi-tenancy lands (then add `tenant_id` to the match stage)."""
+    try:
+        plans = proc.get("implant_plans") or (proc.get("phase2_data") or {}).get("implant_plans") or []
+        sites = [str(p.get("position") or "").strip() for p in plans if p.get("position")]
+        sites = [s for s in sites if s][:max_sites]
+        if not sites:
+            return ""
+        current_id = proc.get("_id")
+        # Pipeline: unwind implants, match site positions, aggregate.
+        pipeline = [
+            {"$match": {
+                "_id": {"$ne": current_id},
+                "status": {"$in": ["phase2_approved", "phase3_approved",
+                                   "stage2_prosthetic_step1_approved",
+                                   "phase4_approved", "completed"]},
+            }},
+            {"$project": {
+                "plans": {"$ifNull": ["$phase2_data.implant_plans", "$implant_plans"]},
+                "complications": {"$ifNull": ["$complications", []]},
+            }},
+            {"$unwind": "$plans"},
+            {"$match": {"plans.position": {"$in": sites}}},
+            {"$group": {
+                "_id": "$plans.position",
+                "n": {"$sum": 1},
+                "isq_avg": {"$avg": "$plans.isq"},
+                "torque_avg": {"$avg": "$plans.insertion_torque_ncm"},
+                "complication_count": {"$sum": {"$cond": [{"$gt": [{"$size": "$complications"}, 0]}, 1, 0]}},
+                "top_systems": {"$push": {
+                    "brand": "$plans.brand", "system": "$plans.system",
+                    "diameter": "$plans.diameter", "length": "$plans.length",
+                }},
+            }},
+        ]
+        rows = await db.procedures.aggregate(pipeline).to_list(length=20)
+        if not rows:
+            return ""
+        from collections import Counter
+        lines = ["", "--- Program Statistics at this Case's Sites (closed cases, anonymised) ---"]
+        for r in rows:
+            site = r["_id"]
+            n = r["n"]
+            isq = f"{r['isq_avg']:.0f}" if r.get("isq_avg") is not None else "—"
+            torque = f"{r['torque_avg']:.0f}" if r.get("torque_avg") is not None else "—"
+            comp_rate = f"{(r['complication_count'] / n * 100):.0f}%" if n else "—"
+            top_combos = Counter(
+                f"{x.get('brand','?')} {x.get('system','?')} {x.get('diameter','?')}x{x.get('length','?')}"
+                for x in r.get("top_systems", []) if x.get("brand")
+            ).most_common(3)
+            top_str = "; ".join(f"{combo} ({cnt})" for combo, cnt in top_combos) or "—"
+            lines.append(
+                f"  - FDI {site}: n={n}  ·  avg ISQ {isq}  ·  avg torque {torque} Ncm  ·  complications {comp_rate}  ·  top choices: {top_str}"
+            )
+        return "\n".join(lines)
+    except Exception as exc:
+        logging.warning("program-stats context build skipped: %s", exc)
+        return ""
+
+
+async def _build_implant_alternatives_block(proc: dict, max_per_site: int = 5) -> str:
+    """For each planned implant in the case, surface up to `max_per_site`
+    alternative implants from the broader catalog that match the same
+    platform/diameter band, so the AI can compare options instead of being
+    limited to the case's pre-chosen system."""
+    try:
+        plans = proc.get("implant_plans") or (proc.get("phase2_data") or {}).get("implant_plans") or []
+        if not plans:
+            return ""
+        lines = ["", "--- Catalog Alternatives (for the AI to compare options) ---"]
+        seen_sites = 0
+        for p in plans[:4]:
+            brand = p.get("brand")
+            diameter = p.get("diameter")
+            length = p.get("length")
+            position = p.get("position")
+            if not (brand and diameter):
+                continue
+            try:
+                d_val = float(str(diameter).replace("mm", "").strip())
+            except (TypeError, ValueError):
+                continue
+            cursor = db.implant_library.find({
+                "diameter": {"$gte": d_val - 0.4, "$lte": d_val + 0.4},
+                "$or": [{"brand": {"$ne": brand}}, {"system": {"$ne": p.get("system")}}],
+            }, {"_id": 0, "brand": 1, "system": 1, "diameter": 1, "length": 1,
+                "platform": 1, "surface": 1, "material": 1})
+            alts = await cursor.to_list(length=max_per_site)
+            if not alts:
+                continue
+            seen_sites += 1
+            lines.append(f"  FDI {position} (planned {brand} {p.get('system','')} {diameter}x{length}):")
+            for a in alts:
+                lines.append(
+                    f"    · {a.get('brand','?')} {a.get('system','?')} {a.get('diameter','?')}x{a.get('length','?')} "
+                    f"[{a.get('platform','?')} / {a.get('surface','?')} / {a.get('material','?')}]"
+                )
+        return "\n".join(lines) if seen_sites else ""
+    except Exception as exc:
+        logging.warning("implant-alternatives context build skipped: %s", exc)
+        return ""
+
+
+# (6) Static workflow graph - injected once per AI call so the LLM can answer
+# meta-questions ("which gate is pending?", "can the student edit Phase 2 after
+# Supervisor approval?") without ever guessing.
+_WORKFLOW_GRAPH_BLOCK = """
+--- Implanr Workflow Reference (so AI can answer meta-questions about the app) ---
+The case progresses through 4 phases, gated by approvals:
+  Phase 1: Planning & Consent        Student drafts -> Supervisor approves -> Implant In-Charge approves
+  Phase 2: Surgical Placement        Student submits -> Supervisor approves -> Implant In-Charge approves
+  Phase 3: Healing & Uncovery        Student submits -> Supervisor approves -> Implant In-Charge approves
+  Phase 4 (Step 1): Prosthesis Design  Student submits -> Supervisor approves -> Implant In-Charge approves
+  Phase 4 (Step 2): Final Delivery   Student submits -> Supervisor approves -> Implant In-Charge approves -> case closed (PDF auto-generated)
+Approval rule: a phase unlocks ONLY after BOTH the Supervisor and the Implant In-Charge have approved.
+Roles and permissions:
+  - Student:          drafts and submits each phase; cannot vote at any gate; can request an edit on an approved phase.
+  - Supervisor:       clinically approves each phase before the Implant In-Charge sign-off; cannot override the in-charge.
+  - Implant In-Charge: final sign-off on implant selection, materials, and prosthesis delivery; can override safety blocks (logged).
+  - Nurse:            pre-Phase 2 prep only (consent uploads, autoclave stamps, instrument trays); does NOT vote at any gate.
+  - Administrator:    platform-wide access; manages users, exports audit logs, overrides any gate (logged).
+Edit-after-approval: once a phase is approved, the student must submit a 'request edit' that the In-Charge resolves; the original data and the edit reason are both kept in the audit log.
+HIPAA-style safeguards (active app-wide): 15-min auto-logout, screen-capture blocking on Android, append-only access log.
+"""
 
 
 def _get_llm_key():

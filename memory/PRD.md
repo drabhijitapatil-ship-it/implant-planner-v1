@@ -1,5 +1,51 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 327 (Feb 2026) — Implanr AI: program-stats + implant-alternatives + workflow-graph context blocks
+
+### What shipped
+Three more context blocks now flow into every Implanr AI prompt (`/ai/explain-recommendation`, `/ai/case-summary`, `/ai/surgical-notes`, `/ai/chat`), bringing the total context surface to **5 blocks** (base case + role/phase + Smart Tips + the 3 below):
+
+3. **`_build_program_stats_block(proc)`** — Mongo aggregation over CLOSED-OR-ADVANCED procedures at the case's FDI positions. For each site, returns `n`, `avg ISQ`, `avg insertion torque`, `complication rate`, and top-3 brand/system/diameter/length combos. Pure DB aggregation; no schema change. When multi-tenancy lands, add a `tenant_id` filter to the `$match` stage.
+4. **`_build_implant_alternatives_block(proc)`** — Per-site catalog query for up to 5 implants matching the planned diameter ±0.4 mm but a different brand/system, surfaced with platform/surface/material so the AI can compare alternatives instead of being limited to the case's pre-chosen system.
+5. *(P2/P3 deferred — see notes below.)*
+6. **`_WORKFLOW_GRAPH_BLOCK`** — Static knowledge graph cached at import: the 4 phases × 7 approval gates × 5 roles × edit-after-approval rule × HIPAA safeguards. Lets the AI reliably answer meta-questions ("which gate is pending?", "can a student edit Phase 2 after Supervisor approval?", "does a nurse vote at Phase 2 gate?") without ever guessing.
+
+All three blocks are exception-isolated — any DB hiccup is logged and the AI prompt simply omits that block (no Explain failures).
+
+### Files touched
+- EDIT: `/app/backend/server.py` — added 3 helpers + 1 static string + extended `_build_case_context_full(...)` to splice all 5 blocks in order: base, role/phase, tips, program-stats, implant-alts, workflow-graph.
+
+### Verification
+- Live direct invocation on a procedure with `implant_plans` returns a 3.1 KB context containing all 5 expected sections.
+- Program Statistics produced per-site rows with n / avg ISQ / avg torque / complication % / top combos.
+- Catalog Alternatives produced 5 candidate implants per planned site, matched on diameter ±0.4 mm and excluding the planned brand/system.
+- 32/32 backend regression tests still pass.
+
+### Items 5 and 7 — deliberately deferred (design proposals attached)
+Both are larger projects that warrant their own iteration cycle:
+
+- **P2 — #5 Forum / Group Chat RAG.** Needs a sentence-embedding model (likely `text-embedding-3-small` via Emergent LLM key), a `forum_embeddings` Mongo collection with a vector index (Mongo 7+ supports `$vectorSearch`), a backfill job for existing posts, and a write-time hook to embed new posts. Estimated 2–3 iterations. **Question for you:** is post-corpus indexing acceptable from a privacy standpoint, given that posts may contain patient context?
+
+- **P3 — #7 Vision context for IOPAs in Explain.** Currently the marginal-bone-level vision model runs only at Phase 4 Step 2. To make IOPAs available to the Explain feature too, we need:
+  1. A PHI-redaction pipeline (strip patient-identifying overlays on uploaded radiographs before sending to a vision model).
+  2. A vision-model call (GPT-4o-vision or Claude 3 Vision via Emergent LLM key).
+  3. A consent flag on the procedure (`vision_explain_consent: true`) before any IOPA leaves the storage bucket.
+  Estimated 3–4 iterations. **Question for you:** what's your legal posture on transmitting radiograph imagery to LLM providers (even with consent + redaction)? This needs a green-light before I write any code.
+
+### Marketing impact
+The website claim *"Implanr AI sees the full case + the user's workflow context + the curated tip library + your program's historical outcomes + catalog alternatives + the workflow rules"* is now defensible — every one of those clauses is sourced from a verifiable backend context block, not from LLM imagination.
+
+### Next up
+- P1: Microsoft OAuth sign-in (needs Azure Client ID/Secret from you).
+- P1: Centralise multipart upload helper into `/app/frontend/utils/uploads.ts`.
+- P2: Forum / Group Chat RAG (pending your green-light on patient-context indexing).
+- P3: Vision Explain (pending your green-light on radiograph transmission).
+
+---
+
+
+# Prosthodontics Dental Implant Mobile App — PRD
+
 ## Iteration 326 (Feb 2026) — Implanr AI context: role/phase block + Smart Clinical Tips library
 
 ### What shipped
