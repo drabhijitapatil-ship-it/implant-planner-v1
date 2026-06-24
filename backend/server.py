@@ -5357,6 +5357,128 @@ def _build_case_context(proc: dict) -> str:
     return "\n".join(parts)
 
 
+# ── iter-326: AI context enrichment (role+phase + Smart Tips) ────────
+# Inject the viewer's role / phase permissions and a small batch of
+# phase-matched Smart Clinical Tips so Implanr AI can answer meta-questions
+# ("why can't I edit this?") and ground its narrative in the curated tip
+# library — without the LLM ever having to invent that context.
+_STATUS_TO_PHASE_TAG = {
+    "draft":                              "Planning",
+    "submitted":                          "Planning",
+    "phase1_approved":                    "Planning",
+    "phase2_pending":                     "Surgical",
+    "phase2_submitted":                   "Surgical",
+    "phase2_approved":                    "Surgical",
+    "phase3_pending":                     "Healing",
+    "phase3_submitted":                   "Healing",
+    "phase3_approved":                    "Healing",
+    "stage2_prosthetic_step1_pending":    "Prosthetic",
+    "stage2_prosthetic_step1_submitted":  "Prosthetic",
+    "stage2_prosthetic_step1_approved":   "Prosthetic",
+    "phase4_pending":                     "Prosthetic",
+    "phase4_submitted":                   "Prosthetic",
+    "phase4_approved":                    "Prosthetic",
+    "completed":                          "Prosthetic",
+}
+
+_ROLE_PHASE_PERMISSIONS = {
+    # role  →  (can_edit, can_approve, viewer_note)
+    "student":          (True,  False, "drafts and submits each phase; cannot vote at approval gates"),
+    "supervisor":       (False, True,  "clinically approves each phase before the Implant In-Charge sign-off"),
+    "implant_incharge": (False, True,  "final sign-off on implant selection, materials, and prosthesis delivery"),
+    "administrator":    (True,  True,  "platform-wide access; can override and export audit logs"),
+    "nurse":            (False, False, "pre-Phase 2 prep (consent uploads, autoclave stamps); does not vote at approval gates"),
+}
+
+
+def _build_role_and_phase_block(proc: dict, current_user: Optional[dict]) -> str:
+    """Render a tiny role + phase context block for the AI prompt."""
+    if not current_user:
+        return ""
+    role = (current_user.get("role") or "").lower()
+    perm = _ROLE_PHASE_PERMISSIONS.get(role)
+    status = proc.get("status") or "draft"
+    phase = _STATUS_TO_PHASE_TAG.get(status, "Planning")
+    lines = [
+        "",
+        "--- Viewer Context (so AI explanations match what this user can act on) ---",
+        f"Viewer role: {role or 'unknown'}",
+        f"Case status: {status}  (active phase: {phase})",
+    ]
+    if perm:
+        can_edit, can_approve, note = perm
+        lines.append(f"Viewer permissions: {note}.")
+        lines.append(f"Can edit case data: {'yes' if can_edit else 'no'}  ·  Can approve gate: {'yes' if can_approve else 'no'}.")
+    # Outstanding approvals on the active phase
+    pending = []
+    for gate in ("supervisor_approval", "in_charge_approval", "phase2_supervisor_approval", "phase2_in_charge_approval",
+                 "phase3_supervisor_approval", "phase3_in_charge_approval", "phase4_supervisor_approval", "phase4_in_charge_approval"):
+        v = proc.get(gate)
+        if v and isinstance(v, dict) and not v.get("approved"):
+            pending.append(gate.replace("_", " "))
+    if pending:
+        lines.append(f"Outstanding approvals on this case: {', '.join(pending)}.")
+    return "\n".join(lines)
+
+
+async def _build_smart_tips_block(proc: dict, max_tips: int = 3) -> str:
+    """Pull up to `max_tips` Smart Clinical Tips matching the case's active
+    phase (and a soft category bias from the procedure's flags) so the AI
+    can cite the curated tip library when it summarises the recommendation."""
+    try:
+        status = proc.get("status") or "draft"
+        phase = _STATUS_TO_PHASE_TAG.get(status, "Planning")
+        # Build a small category bias from procedure flags so tips feel relevant.
+        ma = proc.get("medical_assessment") or {}
+        category_hints: List[str] = []
+        if ma.get("smoking") in ("Light (<10/day)", "Heavy (>10/day)"):
+            category_hints.append("Treatment Planning")
+        if (proc.get("implant_procedure_type") or "").lower().startswith("all on"):
+            category_hints.append("Full Arch")
+        if (proc.get("phase2_data") or {}).get("flap_design"):
+            category_hints.append("Soft Tissue")
+        # Query: active tips matching the phase, prefer hinted categories.
+        query: Dict[str, Any] = {"active": True, "phase": phase}
+        cursor = db.tips.find(query, {"_id": 0, "tip_id": 1, "title": 1, "category": 1,
+                                       "tip_text": 1, "source_organization": 1,
+                                       "source_reference": 1, "publication_year": 1})
+        candidates = await cursor.to_list(length=50)
+        if not candidates:
+            return ""
+        # Re-order: hinted-category tips first, then alphabetical for determinism.
+        def _key(t: Dict[str, Any]) -> tuple:
+            hint_score = 0 if t.get("category") in category_hints else 1
+            return (hint_score, t.get("tip_id", ""))
+        candidates.sort(key=_key)
+        chosen = candidates[:max_tips]
+        if not chosen:
+            return ""
+        lines = ["", f"--- Relevant Smart Clinical Tips (curated library; quote when applicable) ---"]
+        for t in chosen:
+            cite = ""
+            org = t.get("source_organization")
+            ref = t.get("source_reference")
+            yr  = t.get("publication_year")
+            if org and ref:
+                cite = f" [{org} — {ref}{', ' + str(yr) if yr else ''}]"
+            elif org:
+                cite = f" [{org}{', ' + str(yr) if yr else ''}]"
+            lines.append(f"  - {t.get('title','')}: {t.get('tip_text','')}{cite}")
+        return "\n".join(lines)
+    except Exception as exc:  # never break AI Explain on a tips-table hiccup
+        logging.warning("smart-tips context build skipped: %s", exc)
+        return ""
+
+
+async def _build_case_context_full(proc: dict, current_user: Optional[dict]) -> str:
+    """`_build_case_context` augmented with role/phase + Smart Tips blocks.
+    Returns the full string to feed into the Implanr AI prompt."""
+    base = _build_case_context(proc)
+    role_block = _build_role_and_phase_block(proc, current_user)
+    tips_block = await _build_smart_tips_block(proc)
+    return "\n".join(s for s in (base, role_block, tips_block) if s)
+
+
 def _get_llm_key():
     return os.environ.get("EMERGENT_LLM_KEY", "")
 
@@ -5375,7 +5497,7 @@ async def ai_explain_recommendation(request: Request, current_user: dict = Depen
     plans = proc.get("implant_plans") or []
     plan = plans[implant_index] if implant_index < len(plans) else (plans[0] if plans else {})
     
-    context = _build_case_context(proc)
+    context = await _build_case_context_full(proc, current_user)
     # ── Inject institutional Indications & Features for grounded reasoning ──
     from implant_indications import get_details as _get_implant_details
     inst = _get_implant_details(plan.get("brand"), plan.get("system"))
@@ -6562,7 +6684,7 @@ async def ai_case_summary(request: Request, current_user: dict = Depends(get_cur
 
     current_phase = _detect_case_phase(proc)
     case_type = _detect_case_type(proc)
-    context = _build_case_context(proc)
+    context = await _build_case_context_full(proc, current_user)
 
     # ---------- Build phase-specific section instructions ----------
     phase1_sections = """
@@ -6683,7 +6805,7 @@ async def ai_surgical_notes(request: Request, current_user: dict = Depends(get_c
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
     
-    context = _build_case_context(proc)
+    context = await _build_case_context_full(proc, current_user)
     phase2 = proc.get("phase2_data") or {}
     
     # Get torque values from correct location
@@ -6939,7 +7061,7 @@ async def ai_chat(body: AIChatMessage, current_user: dict = Depends(get_current_
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
     
-    context = _build_case_context(proc)
+    context = await _build_case_context_full(proc, current_user)
 
     # iter-147: Implant Catalog awareness for the floating Ask Implanr AI bubble.
     # Inject catalog blocks for EVERY distinct (brand, system) used in the case

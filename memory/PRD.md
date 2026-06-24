@@ -1,5 +1,43 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 326 (Feb 2026) — Implanr AI context: role/phase block + Smart Clinical Tips library
+
+### What shipped
+Two new context blocks now flow into every Implanr AI prompt (Explain Recommendation, Case Summary, Surgical Notes, Ask Implanr Chat):
+
+1. **Viewer Context block** — surfaces the viewing user's role, case status → active phase tag (`Planning` / `Surgical` / `Healing` / `Prosthetic`), human-readable permissions ("final sign-off on implant selection, materials, and prosthesis delivery"), edit/approve flags, and any outstanding approvals on the active phase. The AI can now answer meta-questions like *"why can't I edit this?"* or *"who still has to approve?"* correctly.
+2. **Relevant Smart Clinical Tips block** — pulls up to 3 active tips from the curated `db.tips` library that match the active phase, with a soft category bias (smoking, full-arch, soft-tissue, …). Each tip is included with full citation (`title — source_organization — source_reference, year`). The AI now has the curated 200+ tip library at its disposal whenever it summarises a recommendation.
+
+### Why
+The previous AI context only saw the case's clinical data. It could not answer workflow questions ("can I approve this now?") and never quoted the curated tip library. These two blocks close both gaps with ~150 LOC of pure backend additions — no new tables, no schema change, no LLM change.
+
+### Files touched
+- EDIT: `/app/backend/server.py`
+  - New helpers `_build_role_and_phase_block(proc, user)` and `async _build_smart_tips_block(proc)` + an `async _build_case_context_full(proc, user)` aggregator.
+  - All 4 AI endpoints (`/ai/explain-recommendation`, `/ai/case-summary`, `/ai/surgical-notes`, `/ai/chat`) now `await _build_case_context_full(...)` instead of `_build_case_context(proc)`.
+- No frontend change.
+
+### Verification
+- Backend reloaded cleanly; uvicorn watcher picked up the change without errors.
+- Direct invocation of `_build_case_context_full(proc, user)` on an existing draft case returns a 1.3 KB context containing both the **"Viewer Context"** and **"Relevant Smart Clinical Tips"** sections with correct role (`implant_incharge`), active phase (`Planning`), permissions text, and 3 curated tips with citations.
+- The AI endpoint reaches the LLM call successfully — any failure now happens inside the LLM SDK (unrelated to this change; gated by the operator's `OPENAI_API_KEY` / Emergent LLM key configuration).
+- 32/32 backend regression tests still pass.
+
+### Operational note
+- All AI endpoints are `async def` and already had `current_user: dict = Depends(get_current_user)` in scope; no signature change required at the route level.
+- The Smart Tips fetch is exception-isolated — a tips-collection hiccup never breaks AI Explain.
+
+### Next up
+- P1: Surface clinical-evaluation hits inline on Phase 1 save.
+- P1: Microsoft OAuth sign-in (needs Azure Client ID/Secret).
+- P1: Centralise multipart upload helper into `/app/frontend/utils/uploads.ts`.
+- P1: Add a `program-stats` context block (aggregate ISQ averages, failure rates, common implant choices scoped to the user's program).
+
+---
+
+
+# Prosthodontics Dental Implant Mobile App — PRD
+
 ## Iteration 325 (Feb 2026) — Carames Figure-4 colour strip under each region
 
 ### What shipped
