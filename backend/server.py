@@ -15170,6 +15170,38 @@ async def list_saved_tips(current_user: dict = Depends(get_current_user)):
     return out
 
 
+@api_router.get("/_internal_screenshots/{filename}", include_in_schema=False)
+async def _internal_screenshots_file(filename: str):
+    safe = filename.replace("..", "").replace("/", "")
+    p = Path("/app/screenshots") / safe
+    if not p.exists():
+        raise HTTPException(status_code=404)
+    return FileResponse(str(p))
+
+
+@api_router.get("/_internal_screenshots", include_in_schema=False)
+async def _internal_screenshots_index():
+    folder = Path("/app/screenshots")
+    if not folder.exists():
+        return HTMLResponse("<h2>No screenshots</h2>")
+    files = sorted([f.name for f in folder.iterdir() if f.suffix.lower() in (".png", ".jpg", ".jpeg")])
+    cards = "".join(
+        f'<figure style="margin:12px;display:inline-block;vertical-align:top;text-align:center"><a href="/api/_internal_screenshots/{f}" target="_blank"><img src="/api/_internal_screenshots/{f}" style="width:260px;border:1px solid #ddd;border-radius:8px;display:block"/></a><figcaption style="font:13px system-ui;color:#444;margin-top:6px">{f}</figcaption></figure>'
+        for f in files
+    )
+    html = (
+        '<!doctype html><html><head><meta charset="utf-8"><title>Implanr — App Screenshots</title>'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<style>body{font-family:system-ui;background:#f5f7fb;margin:0;padding:24px}'
+        'h1{font-weight:700;color:#1e2a44;margin:0 0 4px}h1 small{font-weight:400;color:#5a6478;font-size:14px;margin-left:8px}'
+        '</style></head><body>'
+        f'<h1>Implanr — App Screenshots <small>{len(files)} pages</small></h1>'
+        '<p style="color:#5a6478;font:14px system-ui;margin:0 0 18px">Click any image to view full size.</p>'
+        f'<div>{cards}</div></body></html>'
+    )
+    return HTMLResponse(html)
+
+
 app.include_router(api_router)
 
 app.add_middleware(
