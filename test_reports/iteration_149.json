@@ -1,0 +1,33 @@
+{
+  "summary": "Backend-only verification of 76-JPG screenshot gallery delivery + role-content uniqueness. All 49 pytest assertions passed (100%). Critical MD5 uniqueness on onb_<role>_slide6.jpg confirmed: 4 distinct hashes matching expected prefixes (student=3cebd0d7, supervisor=98c3e840, incharge=b6bf875b, nurse=2883f07c) — the prior 'all roles show Student content' bug is fixed. Per-role Help screenshots also have 4 unique MD5s. All 24 onboarding slides, 9 student views, 4 nurse views, 6 In-Charge views, 7 deep case screens reachable as image/jpeg with valid FF D8 FF magic bytes and >1KB content. Static assets serve anonymously (no auth/cookie).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_screenshot_assets_iter149.py",
+    "/app/test_reports/pytest/iter149_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Web auth tokens stored only in module-level memoryTokens dict in utils/api.ts — survives soft navigation but is wiped on hard reload. Acceptable for screenshot capture workflows now, but consider migrating to localStorage/sessionStorage to make web sessions survive accidental refreshes."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_screenshot_assets_iter149.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (49/49)",
+    "frontend": "N/A (backend-only review)"
+  },
+  "test_credentials": "None required — public static assets",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Asset gallery now serves exactly 76 unique JPGs at https://dental-workflow-18.preview.emergentagent.com/shots/. Role-specific content verified by MD5. If new screenshots are added, update the 76-count assertion in TestGalleryIndex.test_references_exactly_76_unique_jpgs and the expected MD5 prefixes in TestOnboardingSlides.test_slide6_md5_four_distinct_values.",
+  "rca_of_the_issue": "Previous capture used Playwright page.goto() which forces a hard reload in Expo Router web. utils/api.ts (lines 11-27) stores web auth tokens in a module-level memoryTokens dict (NOT localStorage), so reloads dropped the auth context and onboarding.tsx fell back to its 'student' role default (line 38), making every role-specific screenshot identical to Student. Main agent's fix: capture via soft navigation (history.pushState + popstate) which preserves AuthContext state. Verified by MD5 uniqueness on slide6 of each role."
+}
