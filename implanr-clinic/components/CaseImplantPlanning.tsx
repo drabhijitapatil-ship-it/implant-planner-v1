@@ -920,7 +920,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
         medicalAssessment={medicalAssessment}
         procedureType={procedureType}
         procedureId={procedureId}
-        allowedTeeth={missingTeeth}
+        allowedTeeth={(['All on 4', 'All on 6', 'All on X'].includes(procedureType || '')) ? undefined : missingTeeth}
         missingTeeth={missingTeeth}
         edentulousSiteMeasurements={edentulousSiteMeasurements}
         defaultOcclusocervical={defaultOcclusocervical}
@@ -1396,46 +1396,6 @@ function ModalContent(props: any) {
                         </View>
                       </View>
                       <Text style={ms.systemOptionsCount}>{selectedSystem.count} size combinations available</Text>
-                    </View>
-                  )}
-
-                  {/* Drilling Protocol - shown after system is selected.
-                      iter-278: hidden in streamlined edit mode (post-Phase-1)
-                      to keep the implant size adjustment focused. */}
-                  {selectedSystem && !streamlinedEdit && (
-                    <View style={ms.protocolBox} data-testid="drilling-protocol">
-                      <View style={ms.protocolHeader}>
-                        <Ionicons name="construct" size={18} color="#1565C0" />
-                        <Text style={ms.protocolTitle}>Drilling Protocol: {selectedSystem.brand} {selectedSystem.system}</Text>
-                      </View>
-                      <Text style={ms.protocolSubtitle}>
-                        Diameters: {selectedSystem.diameters.join(', ')}mm | Lengths: {selectedSystem.lengths.join(', ')}mm
-                      </Text>
-                      {selectedSystem.diameters.length > 0 && (
-                        <>
-                          <Text style={ms.protocolDiameterLabel}>
-                            Sequence for {selectedSystem.diameters[0]}mm (Bone: {boneType || 'D2'})
-                          </Text>
-                          {generateDrillingProtocol(selectedSystem.brand, selectedSystem.system, selectedSystem.diameters[0], boneType || 'D2', selectedSystem.lengths?.[0]).map((p, idx) => (
-                            p.step === 0 ? (
-                              <View key={`kit-${idx}`} style={ms.kitSeparator}>
-                                <Text style={ms.kitSeparatorText}>{p.drill}</Text>
-                              </View>
-                            ) : (
-                            <View key={`step-${idx}`} style={ms.protocolStep}>
-                              <View style={ms.protocolStepNum}>
-                                <Text style={ms.protocolStepNumText}>{p.step}</Text>
-                              </View>
-                              <View style={{ flex: 1 }}>
-                                <Text style={ms.protocolDrill}>{p.drill}</Text>
-                                <Text style={ms.protocolDetail}>{p.speed} | {p.depth}</Text>
-                                <Text style={ms.protocolNote}>{p.note}</Text>
-                              </View>
-                            </View>
-                            )
-                          ))}
-                        </>
-                      )}
                     </View>
                   )}
 

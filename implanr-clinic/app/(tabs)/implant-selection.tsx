@@ -12,6 +12,7 @@ import {
   Pressable,
   Alert,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -273,7 +274,12 @@ export default function ImplantSelectionScreen() {
 
   return (
     <SafeAreaView style={s.container} edges={['bottom']}>
-      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
+      >
+      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* Header */}
         <View style={s.header}>
           <Ionicons name="medical" size={26} color="#1E88E5" />
@@ -512,6 +518,7 @@ export default function ImplantSelectionScreen() {
           </Pressable>
         </Modal>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -545,7 +552,11 @@ function BoneInputs({ width, height, setWidth, setHeight, enabled, tooth }: {
     <>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <Text style={s.inputLabel}>Bone Width (mm)</Text>
-        {widthInfo ? <Ionicons name="information-circle" size={18} color="#1565C0" /> : null}
+        {widthInfo ? (
+          <TouchableOpacity onPress={() => Alert.alert('Bone Width', widthInfo)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="information-circle" size={18} color="#1565C0" />
+          </TouchableOpacity>
+        ) : null}
       </View>
       {widthInfo && !widthFocused ? <Text style={{ fontSize: 11, color: '#1565C0', marginBottom: 4, marginLeft: 2, fontStyle: 'italic' }}>{widthInfo}</Text> : null}
       <View style={s.inputRow}>
@@ -558,7 +569,11 @@ function BoneInputs({ width, height, setWidth, setHeight, enabled, tooth }: {
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <Text style={s.inputLabel}>Bone Height (mm)</Text>
-        {heightInfo ? <Ionicons name="information-circle" size={18} color="#1565C0" /> : null}
+        {heightInfo ? (
+          <TouchableOpacity onPress={() => Alert.alert('Bone Height', heightInfo)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="information-circle" size={18} color="#1565C0" />
+          </TouchableOpacity>
+        ) : null}
       </View>
       {heightInfo && !heightFocused ? <Text style={{ fontSize: 11, color: '#1565C0', marginBottom: 4, marginLeft: 2, fontStyle: 'italic' }}>{heightInfo}</Text> : null}
       <View style={s.inputRow}>
@@ -1595,7 +1610,7 @@ const nrS = StyleSheet.create({
 // ── Styles ─────────────────────────────────────────────────
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5FAFF' },
-  scroll: { padding: 16, paddingBottom: 40 },
+  scroll: { padding: 16, paddingBottom: 120 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
   centerText: { fontSize: 15, color: '#546E7A' },
   errText: { fontSize: 14, color: '#D32F2F', textAlign: 'center', marginTop: 8 },
