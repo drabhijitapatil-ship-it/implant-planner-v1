@@ -150,16 +150,13 @@ export const PROCEDURE_TYPES = [
   'Single Conventional Implant',
   'Multiple Conventional Implants',
   'Immediate Implant',
+  // iter-329: per user feedback, Sinus Lift sits between Immediate
+  // Implant and Partial Extraction Therapy in the picker — places
+  // grafting-heavy adjunctive procedures together in the list.
+  'Sinus Lift',
   'Partial Extraction Therapy',
   'Implant Placement with Guided Bone Regeneration',
   'Guided Surgery',
-  // iter-328: "Sinus Lift" — maxillary-posterior-only procedure
-  // that adds vertical bone via direct (lateral window) or indirect
-  // (osteotome) sinus floor elevation. Cascades three required
-  // sub-fields (Type of Sinus Lift, Number of Implant, Bone Graft
-  // Material Details) and then re-uses the GBR-style num_implants →
-  // prosthetic-plan logic for the rest of the form.
-  'Sinus Lift',
   'All on 4',
   'All on 6',
   'All on X',
