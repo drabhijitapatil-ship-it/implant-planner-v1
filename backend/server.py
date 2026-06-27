@@ -1542,11 +1542,11 @@ PROCEDURE_TYPES = [
     "Single Conventional Implant",
     "Multiple Conventional Implants",
     "Immediate Implant",
+    # iter-329 — reordered between Immediate Implant and PET
+    "Sinus Lift",
     "Partial Extraction Therapy",
     "Implant Placement with Guided Bone Regeneration",
     "Guided Surgery",
-    # iter-328
-    "Sinus Lift",
     "All on 4",
     "All on 6",
     "All on X",
