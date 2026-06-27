@@ -1,0 +1,41 @@
+{
+  "summary": "iter-329 Sinus Lift Pre-Op Briefing PDF + procedure-type reorder — 17/17 backend tests PASS (7 new in test_preop_briefing.py + 10 existing in test_sinus_lift.py after reorder assertion update). PDF generation works end-to-end: 200 application/pdf, attachment; filename=\\\"PreOp_SinusLift_*\\\", >3KB body, %PDF- magic OK. PDF text (via pypdf) contains: 'Pre-Operative Briefing', patient name, age, sex, sinus_lift_type, bone-graft text, supervisor name, in-charge name, 'upper back teeth', '60 to 90', 'Do not blow your nose', 'Healing timeline', 'urgently', 'Cost & next steps' — and is correctly free of any 'signature' string. Direct variant contains 'tiny window on the side of your cheekbone' + 'less than about 5 mm' and NOT 'gentler approach'; Indirect contains 'about 5 - 8 mm'/'gentler approach' and NOT the Direct phrases. Negative paths: non-Sinus-Lift returns 400 with the exact spec detail; unknown id returns 404; no Authorization header returns 401/403. Audit log entry pdf_export/preop_briefing recorded with correct resource_id. GET /api/case-form-options procedure_types matches the new exact order (Sinus Lift between Immediate Implant and Partial Extraction Therapy). Case-report PDF for the same Sinus Lift case still passes — no regression.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Case Detail action row on freshly-created (Draft) cases",
+        "issue": "PRE-OP BRIEFING button (data-testid='preop-briefing-btn') is NOT in the DOM on a fresh Draft-state Sinus Lift case. The sibling EXPORT/PRINT button (data-testid='case-report-export-print-btn') is ALSO not in the DOM on the same draft case — so the entire action row is gated by case status, not by the new conditional. This is the EXISTING app behaviour (canExportPDF() / draft gating), not a regression from iter-329. The new button's conditional (`procedure.implant_procedure_type === 'Sinus Lift' && canExportPDF()`) is wired the same way as EXPORT/PRINT, so once a case is past Draft and the action row renders, the button will inherit the same visibility correctly (main agent already verified this manually). Could not progress a Draft case past Phase 1 via API alone within this run.",
+        "affected_selectors": ["[data-testid='preop-briefing-btn']", "[data-testid='case-report-export-print-btn']"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_preop_briefing.py",
+    "/app/backend/tests/test_sinus_lift.py",
+    "/app/test_reports/pytest/iteration_151.xml"
+  ],
+  "action_items": [
+    "Main agent self-test: open an existing non-Draft Sinus Lift case (or one that has been submitted past Phase 1) as Abhijit.patil and confirm visually that the green PRE-OP BRIEFING button appears alongside EXPORT/PRINT and that it does NOT appear on a non-Sinus-Lift case in the same status — main agent already reported manual confirmation.",
+    "Optional: lower the gating so the PRE-OP BRIEFING button is visible from Draft state, since the briefing is intended to be 'handed to the patient at scheduling' — currently the patient cannot get the briefing until the case advances past Draft. This is a product-decision call, not a bug."
+  ],
+  "critical_code_review_comments": [
+    "server.py:8361-8602 — generate_preop_briefing endpoint is well structured: 404→400→audit_log→PDF; attachment Content-Disposition correct; explicit pdf.set_x(15) in kv_row/bullet guards against fpdf2 x-cursor drift after multi_cell (confirmed by 7/7 PDF tests).",
+    "server.py:1541-1553 PROCEDURE_TYPES order matches spec exactly.",
+    "frontend/app/procedures/[id].tsx:3925 conditional `procedure.implant_procedure_type === 'Sinus Lift' && canExportPDF()` correctly gates the button at the JSX level; data-testid='preop-briefing-btn' present.",
+    "Suggested but optional: the briefing should arguably also be available in Draft (for handing to the patient at booking) — gating via canExportPDF may delay availability."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_preop_briefing.py (new — 7 pytest cases)",
+    "/app/backend/tests/test_sinus_lift.py (updated procedure_types order assertion to match iter-329 reorder)"
+  ],
+  "success_rate": { "backend": "100% (17/17)", "frontend": "Conditional logic verified at code-level; runtime UI not reproducible on Draft state (existing app gating)" },
+  "test_credentials": "Implant In-Charge Abhijit.patil/Admin@123, Student Gaurav.pandey/Student@123, Supervisor Paresh.gandhi/Supervisor@123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "All test procedures are TEST_*-prefixed and deleted in finally blocks via the in-charge token. Audit log entries from the audit test remain (no public DELETE endpoint for /api/admin/access-logs).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Reuse /app/backend/tests/test_preop_briefing.py for any future Pre-Op Briefing regression. test_sinus_lift.py procedure_types ordering assertion was updated for iter-329 — the new expected list is in TestCaseFormOptions. For UI verification of the PRE-OP BRIEFING button, you must use a NON-Draft Sinus Lift case (advance the case beyond Phase 1) — Draft-state cases hide the entire EXPORT action row, including PRE-OP BRIEFING.",
+  "rca of the issue": "No backend or PDF bug. The UI button could not be observed via Playwright because freshly-created procedures via POST /api/procedures land in Draft state, and the Case Detail screen hides the action row (which contains both EXPORT/PRINT and PRE-OP BRIEFING) until the case is past Draft. This is existing app behaviour predating iter-329. The new button's conditional is correctly wired in the same gated container as EXPORT/PRINT and was already manually verified by the main agent on a non-Draft case."
+}

@@ -38,6 +38,7 @@ import {
 } from '../../constants/checklist';
 import { format } from 'date-fns';
 import { generateProcedurePDF, printProcedurePDF, generateLabSlipPDF } from '../../utils/pdfGenerator';
+import { downloadPreopBriefing } from '../../utils/preopBriefingPdf';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';// iter-209: removed CaseCompletionBadge — its facts merged into the green
 // Treatment Complete banner above the timeline.
 import ExportPrintMenu from '../../components/ExportPrintMenu';
@@ -238,6 +239,9 @@ export default function ProcedureDetailScreen() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [rejectionType, setRejectionType] = useState<'permanent' | 'reconsider' | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  // iter-329: Pre-Op Briefing PDF (Sinus Lift only) — local spinner so
+  // the button doesn't fight with the Case Report's pdfLoading state.
+  const [preopLoading, setPreopLoading] = useState(false);
   // iter-196: free-text note entered on case-detail right before the
   // Generate-Lab-Slip click. Optional. Limited to 150 words. Passed
   // into the slip generator as `lab_slip_note` so the PDF can render it.
@@ -3913,6 +3917,32 @@ export default function ProcedureDetailScreen() {
                 }}
                 onExport={handleExportPDF}
               />
+            )}
+            {/* iter-329: Sinus Lift Pre-Op Briefing — one-tap PDF the
+                student hands the patient at scheduling. Button only
+                renders for Sinus Lift cases and is open to anyone who
+                can see the case (matches canExportPDF). */}
+            {procedure.implant_procedure_type === 'Sinus Lift' && canExportPDF() && (
+              <TouchableOpacity
+                style={[styles.barButtonCompact, { backgroundColor: '#2E7D32' }, preopLoading && styles.buttonDisabled]}
+                disabled={preopLoading}
+                onPress={async () => {
+                  setPreopLoading(true);
+                  try {
+                    await downloadPreopBriefing(procedure.id || procedure._id);
+                  } finally { setPreopLoading(false); }
+                }}
+                data-testid="preop-briefing-btn"
+              >
+                {preopLoading ? (
+                  <ActivityIndicator color="#FFF" size="small" />
+                ) : (
+                  <>
+                    <Ionicons name="document-text" size={14} color="#FFF" />
+                    <Text style={styles.barButtonTextCompact}>PRE-OP BRIEFING</Text>
+                  </>
+                )}
+              </TouchableOpacity>
             )}
             {canViewAiSummary() && (
               <TouchableOpacity
