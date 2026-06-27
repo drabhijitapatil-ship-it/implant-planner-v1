@@ -46,6 +46,12 @@ export type SafetyArgs = {
   boneHeightMm?: number | null;
   implantDiameterMm?: number | null;
   implantLengthMm?: number | null;
+  /** iter-328: When the case's procedure type is "Sinus Lift",
+   *  Rule 2 (posterior length block) is intentionally skipped — the
+   *  lift procedure (direct lateral window or indirect osteotome)
+   *  adds vertical bone via graft material, so longer implants than
+   *  the measured residual bone height are clinically appropriate. */
+  procedureType?: string | null;
 };
 
 /**
@@ -54,10 +60,12 @@ export type SafetyArgs = {
  * see it before they can address a softer width warning.
  */
 export function evaluateImplantSafety(args: SafetyArgs): SafetyVerdict {
-  const { toothPosition, boneWidthMm, boneHeightMm, implantDiameterMm, implantLengthMm } = args;
+  const { toothPosition, boneWidthMm, boneHeightMm, implantDiameterMm, implantLengthMm, procedureType } = args;
 
-  // Rule 2 — posterior length
-  if (isPosteriorTooth(toothPosition) && boneHeightMm != null && implantLengthMm != null) {
+  const isSinusLift = procedureType === 'Sinus Lift';
+
+  // Rule 2 — posterior length (skipped for Sinus Lift; see SafetyArgs note)
+  if (!isSinusLift && isPosteriorTooth(toothPosition) && boneHeightMm != null && implantLengthMm != null) {
     const shortBy = boneHeightMm - implantLengthMm;
     if (shortBy < 1.5) {
       const isMax = isMaxillaryPosterior(toothPosition);
@@ -92,7 +100,7 @@ export function evaluateImplantSafety(args: SafetyArgs): SafetyVerdict {
  */
 export function annotateImplantSafety<T extends { diameter?: number; length?: number }>(
   implants: T[],
-  ctx: { toothPosition?: string | null; boneWidthMm?: number | null; boneHeightMm?: number | null },
+  ctx: { toothPosition?: string | null; boneWidthMm?: number | null; boneHeightMm?: number | null; procedureType?: string | null },
 ): Array<T & { _safety: SafetyVerdict }> {
   return implants.map(imp => ({
     ...imp,
@@ -102,6 +110,7 @@ export function annotateImplantSafety<T extends { diameter?: number; length?: nu
       boneHeightMm: ctx.boneHeightMm,
       implantDiameterMm: imp.diameter,
       implantLengthMm: imp.length,
+      procedureType: ctx.procedureType,
     }),
   }));
 }

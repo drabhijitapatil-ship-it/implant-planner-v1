@@ -1723,6 +1723,7 @@ function ModalContent(props: any) {
                     boneHeightMm: parseFloat(boneHeight) || null,
                     implantDiameterMm: imp.diameter,
                     implantLengthMm: imp.length,
+                    procedureType,
                   });
                   if (v.kind === 'length_block') return -Infinity;
                   if (v.kind === 'width_warning') return v.marginMm;
@@ -1762,6 +1763,7 @@ function ModalContent(props: any) {
                         boneHeightMm: parseFloat(boneHeight) || null,
                         implantDiameterMm: imp.diameter,
                         implantLengthMm: imp.length,
+                        procedureType,
                       });
                       const blocked = verdict.kind === 'length_block';
                       const warning = verdict.kind === 'width_warning';
