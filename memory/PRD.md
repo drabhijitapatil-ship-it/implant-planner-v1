@@ -1,5 +1,34 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+
+## Iteration 328 (Feb 2026) — Phase 1 "Sinus Lift" procedure type + maxillary-posterior gate + Step 2 height-block relaxation
+
+### What shipped
+1. **New procedure type** "Sinus Lift" added to Phase 1 → Step 1 → Type of Implant Procedure, sitting between "Guided Surgery" and "All on 4".
+2. **Three cascading required sub-fields** appear immediately under it:
+   - **Type of Sinus Lift** dropdown (Direct Sinus Lift · Indirect Sinus Lift)
+   - **Number of Implants** dropdown (Single Implant · Multiple Implants) — reuses the existing `num_implants` field, so Prosthetic-Plan re-derivation behaves exactly like GBR / Immediate / PET / Guided Surgery.
+   - **Details of Bone Graft Material** multiline input — soft cap 150 chars with live counter; required to submit.
+3. **Tooth validation (hard block).** Sinus Lift is only valid for maxillary posteriors (FDI 14, 15, 16, 17, 24, 25, 26, 27). Selecting any mandibular tooth OR any maxillary anterior fires the popup `"Sinus Lift procedure selected, choose appropriate tooth/teeth"` and blocks both Continue and the missing-fields panel.
+4. **Step 2 implant-selection relaxation.** `evaluateImplantSafety()` and `annotateImplantSafety()` accept a `procedureType` argument; when it's `"Sinus Lift"`, Rule 2 (posterior length hard-block) is skipped — longer implants are clinically appropriate because the lift adds vertical bone. Width (Rule 1) still applies.
+5. **PDF case report.** When the case is Sinus Lift, the report now surfaces two extra rows: `Type of Sinus Lift: …` and `Bone Graft Material Details: …` (alongside the existing Procedure Type and Number of Implants rows).
+6. **Backend hardening.** `valid_procedure_types` updated; new validation block on `POST /api/procedures` returns 400 for missing sinus_lift_type, missing bone_graft_material_details, or any invalid FDI code with the exact spec message.
+
+### Files touched
+- EDIT `/app/frontend/constants/checklist.ts` — added `Sinus Lift` to `PROCEDURE_TYPES`, added it to `PROCEDURES_WITH_NUM_IMPLANTS_QUESTION`, exported new `SINUS_LIFT_VALID_TEETH` set + `getInvalidSinusLiftTeeth()` helper.
+- EDIT `/app/frontend/utils/implantSafety.ts` — `SafetyArgs.procedureType`; Rule 2 length-block short-circuits when procedureType === 'Sinus Lift'.
+- EDIT `/app/frontend/app/(tabs)/new-procedure.tsx` — new fields in `formData`, cascade UI under the procedure type dropdown, validation block in `handleSubmit`, missing-fields panel additions, draft hydration.
+- EDIT `/app/frontend/components/CaseImplantPlanning.tsx` — both `evaluateImplantSafety` call sites now forward `procedureType`.
+- EDIT `/app/backend/server.py` — `Phase1SubmitData` + `Phase1DraftData` now carry `sinus_lift_type` and `bone_graft_material_details`; new validation block in `create_procedure`; `PROCEDURE_TYPES` list updated; case-report PDF adds two extra `add_field` calls.
+- NEW `/app/backend/tests/test_sinus_lift.py` — pytest regression with 10 scenarios (created by testing agent).
+
+### Verification
+- 10 / 10 backend regression tests pass (`/app/backend/tests/test_sinus_lift.py`).
+- Frontend UI smoke + dropdown cascade verified for Student `Gaurav.pandey`.
+- PDF case report extracted text confirms both new rows render.
+- Non-Sinus Lift flows unaffected (stray sinus fields ignored when procedure type isn't Sinus Lift).
+
+
 ## Iteration 327 (Feb 2026) — Implanr AI: program-stats + implant-alternatives + workflow-graph context blocks
 
 ### What shipped
