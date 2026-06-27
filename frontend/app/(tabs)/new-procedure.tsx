@@ -18,6 +18,7 @@ import { validateImplantSelection, findMissingRuns, clusterLeader } from '../../
 import {
   PROCEDURE_TYPES,  LOADING_TYPES,
   PROCEDURES_WITH_NUM_IMPLANTS_QUESTION,
+  getInvalidSinusLiftTeeth,
   CHECKLIST_DATA,
   PROCEDURE_TIME_SLOTS,
   NON_FULL_ARCH_TYPES,
@@ -355,9 +356,14 @@ export default function NewProcedureScreen() {
     procedure_time: '',
     implant_procedure_type: '',
     // iter-307: New "Number of Implants" sub-question — only used for
-    // Immediate / PET / GBR / Guided Surgery procedure types.  Empty
-    // for every other type.
+    // Immediate / PET / GBR / Guided Surgery / Sinus Lift procedure
+    // types.  Empty for every other type.
     num_implants: '',
+    // iter-328: Sinus Lift specific sub-fields, only used when
+    // implant_procedure_type === 'Sinus Lift'. The first two are
+    // dropdowns; the third is a multiline note (≤150 char soft limit).
+    sinus_lift_type: '',
+    bone_graft_material_details: '',
     teeth_present: [] as string[],
     missing_teeth: [] as string[],
     edentulous_site_measurements: {} as Record<string, { oc?: string; md?: string }>,
@@ -493,6 +499,8 @@ export default function NewProcedureScreen() {
                 procedure_time: proc.procedure_time || '',
                 implant_procedure_type: proc.implant_procedure_type || '',
                 num_implants: proc.num_implants || '',
+                sinus_lift_type: proc.sinus_lift_type || '',
+                bone_graft_material_details: proc.bone_graft_material_details || '',
                 teeth_present: Array.isArray(proc.teeth_present) ? proc.teeth_present : [],
                 missing_teeth: Array.isArray(proc.missing_teeth) ? proc.missing_teeth : [],
                 edentulous_site_measurements: (proc.edentulous_site_measurements && typeof proc.edentulous_site_measurements === 'object') ? proc.edentulous_site_measurements : {},
@@ -927,7 +935,8 @@ export default function NewProcedureScreen() {
       sanitized.implant_procedure_type === 'Immediate Implant' ||
       sanitized.implant_procedure_type === 'Partial Extraction Therapy' ||
       sanitized.implant_procedure_type === 'Implant Placement with Guided Bone Regeneration' ||
-      sanitized.implant_procedure_type === 'Guided Surgery'
+      sanitized.implant_procedure_type === 'Guided Surgery' ||
+      sanitized.implant_procedure_type === 'Sinus Lift'
     )) {
       Alert.alert('Missing Field', 'Please select Periodontal Status.');
       return;
@@ -954,6 +963,29 @@ export default function NewProcedureScreen() {
           'Tooth Count Mismatch',
           `"Multiple Implants" requires at least 2 teeth on the FDI chart, but ${missingCount} ${missingCount === 1 ? 'is' : 'are'} marked. ` +
           'Please mark the remaining teeth or switch the sub-question to "Single Implant".'
+        );
+        return;
+      }
+    }
+    // iter-328: Sinus Lift gates — Type of Sinus Lift + bone graft
+    // material details are both required when Sinus Lift is selected,
+    // and every marked tooth must be in the maxillary posterior set
+    // (14-17 / 24-27).
+    if (sanitized.implant_procedure_type === 'Sinus Lift') {
+      if (!sanitized.sinus_lift_type) {
+        Alert.alert('Missing Field', 'Please select Type of Sinus Lift (Direct or Indirect).');
+        return;
+      }
+      if (!sanitized.bone_graft_material_details?.trim()) {
+        Alert.alert('Missing Field', 'Please enter Details of Bone Graft Material.');
+        return;
+      }
+      const invalid = getInvalidSinusLiftTeeth(sanitized.missing_teeth || []);
+      if (invalid.length > 0) {
+        Alert.alert(
+          'Sinus Lift procedure selected, choose appropriate tooth/teeth',
+          `Sinus Lift is only applicable to the maxillary posterior teeth (14, 15, 16, 17, 24, 25, 26, 27). ` +
+          `These selected teeth are not eligible: ${invalid.join(', ')}.`
         );
         return;
       }
@@ -1284,6 +1316,13 @@ export default function NewProcedureScreen() {
       if (!formData.prosthetic_plan) missImplantDetails.push('Prosthetic Plan');
       if (isFullArch && !formData.arch) missImplantDetails.push('Arch');
       if (!isFullArch && (formData.missing_teeth || []).length === 0) missImplantDetails.push('At least one missing tooth on FDI chart');
+      // iter-328: Sinus Lift extras surfaced in the missing-fields panel
+      if (formData.implant_procedure_type === 'Sinus Lift') {
+        if (!formData.sinus_lift_type) missImplantDetails.push('Type of Sinus Lift');
+        if (!formData.bone_graft_material_details?.trim()) missImplantDetails.push('Details of Bone Graft Material');
+        const invalid = getInvalidSinusLiftTeeth(formData.missing_teeth || []);
+        if (invalid.length > 0) missImplantDetails.push(`Sinus Lift requires maxillary posterior teeth (invalid: ${invalid.join(', ')})`);
+      }
     }
 
     // iter-316: Clinical Examination validation now mirrors the UI's
@@ -1650,11 +1689,30 @@ export default function NewProcedureScreen() {
             updateForm('num_implants', '');
             updateForm('prosthetic_plan', '');
             updateForm('prosthetic_plan_other', '');
+            // iter-328: also reset Sinus Lift sub-fields whenever the
+            // top-level procedure type changes so leftover values don't
+            // persist into a non-sinus-lift case.
+            updateForm('sinus_lift_type', '');
+            updateForm('bone_graft_material_details', '');
           }} required />
 
+        {/* iter-328: Sinus Lift cascade — Type of Sinus Lift dropdown
+            renders directly under the procedure-type picker and only
+            when Sinus Lift is the chosen type. Required. */}
+        {formData.implant_procedure_type === 'Sinus Lift' && (
+          <Dropdown
+            label="Type of Sinus Lift"
+            value={formData.sinus_lift_type}
+            options={['Direct Sinus Lift', 'Indirect Sinus Lift']}
+            onChange={v => updateForm('sinus_lift_type', v)}
+            required
+            data-testid="sinus-lift-type-dropdown"
+          />
+        )}
+
         {/* iter-307: "Number of Implants" sub-question — only shown for
-            Immediate / PET / GBR / Guided Surgery procedure types. The
-            answer drives the Prosthetic Plan dropdown below. */}
+            Immediate / PET / GBR / Guided Surgery / Sinus Lift procedure
+            types. The answer drives the Prosthetic Plan dropdown below. */}
         {PROCEDURES_WITH_NUM_IMPLANTS_QUESTION.has(formData.implant_procedure_type) && (
           <Dropdown
             label="Number of Implants"
@@ -1669,6 +1727,30 @@ export default function NewProcedureScreen() {
             }}
             required
           />
+        )}
+
+        {/* iter-328: Bone graft material details — multiline note
+            (≤150 char soft limit) collected on every Sinus Lift case.
+            Required. Counter sits beneath the input for clear UX. */}
+        {formData.implant_procedure_type === 'Sinus Lift' && (
+          <View style={styles.fieldContainer}>
+            <Text style={styles.label}>
+              Details of Bone Graft Material <Text style={{ color: '#DC3545' }}>*</Text>
+            </Text>
+            <TextInput
+              style={[styles.input, { minHeight: 80, textAlignVertical: 'top' }]}
+              value={formData.bone_graft_material_details}
+              onChangeText={v => updateForm('bone_graft_material_details', v.slice(0, 150))}
+              placeholder="e.g. Bio-Oss xenograft 0.5 g + autogenous bone shavings, covered with collagen membrane"
+              multiline
+              numberOfLines={3}
+              maxLength={150}
+              data-testid="bone-graft-material-details-input"
+            />
+            <Text style={{ fontSize: 11, color: '#78909C', marginTop: 4, textAlign: 'right' }}>
+              {(formData.bone_graft_material_details || '').length} / 150
+            </Text>
+          </View>
         )}
         {/* iter-235: hide the Arch dropdown for Existing Implant — it lives
             inside the ExistingImplantSection between Type of Implant Procedure

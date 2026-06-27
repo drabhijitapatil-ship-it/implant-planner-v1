@@ -371,6 +371,10 @@ class ProcedureCreate(BaseModel):
     # drives the prosthetic-plan options.  Empty string for every other
     # type and for legacy drafts.
     num_implants: Optional[str] = Field("", max_length=50)
+    # iter-328: Sinus Lift sub-fields, only populated when
+    # implant_procedure_type == "Sinus Lift".
+    sinus_lift_type: Optional[str] = Field("", max_length=50)
+    bone_graft_material_details: Optional[str] = Field("", max_length=200)
     loading_type: List[str] = []
     prosthetic_plan: str = Field("", max_length=500)
     prosthetic_plan_other: Optional[str] = Field("", max_length=500)
@@ -464,6 +468,9 @@ class ProcedureUpdate(BaseModel):
     implant_procedure_type: Optional[str] = Field(None, max_length=100)
     # iter-307: Number-of-Implants sub-question on the draft model too.
     num_implants: Optional[str] = Field(None, max_length=50)
+    # iter-328: Sinus Lift sub-fields on the draft model.
+    sinus_lift_type: Optional[str] = Field(None, max_length=50)
+    bone_graft_material_details: Optional[str] = Field(None, max_length=200)
     loading_type: Optional[List[str]] = None
     prosthetic_plan: Optional[str] = Field(None, max_length=500)
     bone_graft_specifications: Optional[str] = Field(None, max_length=500)
@@ -1538,6 +1545,8 @@ PROCEDURE_TYPES = [
     "Partial Extraction Therapy",
     "Implant Placement with Guided Bone Regeneration",
     "Guided Surgery",
+    # iter-328
+    "Sinus Lift",
     "All on 4",
     "All on 6",
     "All on X",
@@ -1875,10 +1884,31 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
         "Single Conventional Implant", "Multiple Conventional Implants",
         "Immediate Implant", "Partial Extraction Therapy",
         "Implant Placement with Guided Bone Regeneration", "Guided Surgery",
+        # iter-328: Sinus Lift — maxillary-posterior-only adjunctive
+        # procedure that grafts bone via the sinus floor.
+        "Sinus Lift",
         "All on 4", "All on 6", "All on X",
     ]
     if procedure.implant_procedure_type not in valid_procedure_types:
         raise HTTPException(status_code=400, detail=f"Invalid implant procedure type: {procedure.implant_procedure_type}")
+
+    # iter-328: Sinus Lift gates — validate the cascading sub-fields and
+    # restrict the tooth set to the maxillary posterior (14-17, 24-27).
+    if procedure.implant_procedure_type == "Sinus Lift":
+        if procedure.sinus_lift_type not in ("Direct Sinus Lift", "Indirect Sinus Lift"):
+            raise HTTPException(status_code=400, detail="Sinus Lift requires a Type of Sinus Lift (Direct or Indirect).")
+        if not (procedure.bone_graft_material_details or "").strip():
+            raise HTTPException(status_code=400, detail="Sinus Lift requires Details of Bone Graft Material.")
+        _SINUS_LIFT_VALID = {"14", "15", "16", "17", "24", "25", "26", "27"}
+        invalid = [t for t in (procedure.missing_teeth or []) if str(t) not in _SINUS_LIFT_VALID]
+        if invalid:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Sinus Lift procedure selected, choose appropriate tooth/teeth. "
+                    f"Eligible only for maxillary posteriors (14-17, 24-27). Invalid: {', '.join(invalid)}."
+                ),
+            )
 
     valid_loading = {"Immediate Loading", "Early Loading", "Delayed Loading"}
     if procedure.loading_type:
@@ -3576,6 +3606,11 @@ async def generate_consent_template(
         ["Implant In-Charge:", procedure.get("implant_incharge_name") or "____________________"],
         ["Scheduled Date:", f"{procedure.get('procedure_date','__________')} at {procedure.get('procedure_time','______')}"],
     ]
+    # iter-328: Sinus Lift surfaces two extra rows in the planned-procedure
+    # block — Type of Sinus Lift and the bone-graft material note.
+    if (procedure.get("implant_procedure_type") or "") == "Sinus Lift":
+        proc_rows.insert(1, ["Type of Sinus Lift:", procedure.get("sinus_lift_type") or "____________________"])
+        proc_rows.insert(2, ["Bone Graft Material:", procedure.get("bone_graft_material_details") or "____________________"])
     prt = Table(proc_rows, colWidths=[40*mm, 142*mm])
     prt.setStyle(TableStyle([
         ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
@@ -7755,6 +7790,11 @@ async def generate_case_report(
     # iter-309: surface the Number-of-Implants sub-choice in the PDF
     # so exported case reports carry the same context shown on screen.
     add_field("Number of Implants", procedure.get("num_implants"))
+    # iter-328: Sinus Lift extras — only render when relevant so other
+    # procedure types are unaffected.
+    if (procedure.get("implant_procedure_type") or "") == "Sinus Lift":
+        add_field("Type of Sinus Lift", procedure.get("sinus_lift_type"))
+        add_field("Bone Graft Material Details", procedure.get("bone_graft_material_details"))
     add_field("Loading Type", ", ".join(procedure.get("loading_type", [])))
     add_field("Prosthetic Plan", prosthetic)
     add_field("Bone Graft Specifications", procedure.get("bone_graft_specifications"))

@@ -153,6 +153,13 @@ export const PROCEDURE_TYPES = [
   'Partial Extraction Therapy',
   'Implant Placement with Guided Bone Regeneration',
   'Guided Surgery',
+  // iter-328: "Sinus Lift" — maxillary-posterior-only procedure
+  // that adds vertical bone via direct (lateral window) or indirect
+  // (osteotome) sinus floor elevation. Cascades three required
+  // sub-fields (Type of Sinus Lift, Number of Implant, Bone Graft
+  // Material Details) and then re-uses the GBR-style num_implants →
+  // prosthetic-plan logic for the rest of the form.
+  'Sinus Lift',
   'All on 4',
   'All on 6',
   'All on X',
@@ -163,6 +170,21 @@ export const PROCEDURE_TYPES = [
   // component, prosthetic history, radiographs, phase-routing).
   'Existing Implant',
 ];
+
+// iter-328: FDI codes where Sinus Lift is clinically appropriate
+// (maxillary posterior only). The procedure adds bone via the
+// maxillary sinus floor — irrelevant for the mandible or maxillary
+// anterior. Mark-on-FDI charting blocks progression when any tooth
+// outside this set is selected together with Sinus Lift.
+export const SINUS_LIFT_VALID_TEETH = new Set<string>([
+  '14', '15', '16', '17', '24', '25', '26', '27',
+]);
+
+/** Returns the offending FDI codes, or [] if every marked tooth is sinus-lift-appropriate. */
+export function getInvalidSinusLiftTeeth(teeth: string[] | undefined | null): string[] {
+  if (!teeth || teeth.length === 0) return [];
+  return teeth.filter(t => !SINUS_LIFT_VALID_TEETH.has(String(t)));
+}
 
 // Group A: Shows Edentulous Site in clinical exam
 export const CLINICAL_EXAM_GROUP = new Set([
@@ -395,6 +417,10 @@ export const PROCEDURES_WITH_NUM_IMPLANTS_QUESTION = new Set<string>([
   'Partial Extraction Therapy',
   'Implant Placement with Guided Bone Regeneration',
   'Guided Surgery',
+  // iter-328: Sinus Lift cascades a Number-of-Implant sub-question
+  // identical in shape to the four procedures above (the answer
+  // drives Prosthetic Plan re-derivation).
+  'Sinus Lift',
 ]);
 
 export function getProstheticOptions(
