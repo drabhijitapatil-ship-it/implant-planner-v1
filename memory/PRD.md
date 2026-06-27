@@ -1,6 +1,29 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
 
+
+## Iteration 329 (Feb 2026) — Sinus Lift dropdown reorder + Pre-Op Briefing PDF
+
+### What shipped
+1. **Reorder**: "Sinus Lift" now sits between "Immediate Implant" and "Partial Extraction Therapy" in the Type of Implant Procedure dropdown (was previously between Guided Surgery and All on 4). Reflected in `frontend/constants/checklist.ts`, `backend/server.py:PROCEDURE_TYPES`, and `GET /api/case-form-options`.
+2. **New Pre-Op Briefing PDF** — a friendly, lay-language A4 patient handout for Sinus Lift cases:
+   - Endpoint `POST /api/procedures/{id}/preop-briefing` returns a multi-page PDF (header, "Your appointment at a glance" card with patient + procedure + surgeon + supervisor, plain-words explanation of what a sinus lift is, the chosen Direct/Indirect approach paragraph, before-procedure checklist with smoking warning, during-procedure expectations, recovery instructions split into 48 hours / first 2 weeks sinus precautions, healing timeline, "When to call us urgently" red-flag list, cost & next steps, footer disclaimer). No signature block. English only.
+   - 400 if the case is not a Sinus Lift; 404 if the case doesn't exist; 401 if unauthenticated.
+   - Audit-logged as `action=pdf_export, resource_type=preop_briefing`.
+3. **Frontend button** — green pill `PRE-OP BRIEFING` (testID `preop-briefing-btn`) in the Case Detail bottom action bar; available from the moment the case is created (Draft included, since the briefing is intended to be handed at scheduling). Hidden for nurses and on non-Sinus-Lift cases.
+4. **Backend regression** — 17/17 tests pass: 7 new in `/app/backend/tests/test_preop_briefing.py` + 10 existing in `/app/backend/tests/test_sinus_lift.py` (with the new procedure_types order assertion).
+5. **Bug fixes during build**:
+   - Two fpdf2 layout bugs (x-cursor drift after `multi_cell` causing "Not enough horizontal space" errors) — fixed by explicit `pdf.set_x(15)` resets at the start of both `kv_row` and `bullet`.
+   - Initial button gating was too strict (required `canExportPDF()` which is false on Draft) — relaxed so the briefing is reachable from the moment the case is scheduled.
+
+### Files touched
+- EDIT `/app/frontend/constants/checklist.ts` — PROCEDURE_TYPES reordered.
+- EDIT `/app/backend/server.py` — PROCEDURE_TYPES reordered; new `generate_preop_briefing` endpoint with FPDF-based renderer + audit logging; `valid_procedure_types` already includes Sinus Lift from iter-328.
+- EDIT `/app/frontend/app/procedures/[id].tsx` — new green PRE-OP BRIEFING button, `preopLoading` state, parent gate widened to include Sinus Lift cases on Draft.
+- NEW `/app/frontend/utils/preopBriefingPdf.ts` — `downloadPreopBriefing(procedureId)` web/native blob handler with error decoding.
+- NEW `/app/backend/tests/test_preop_briefing.py` — 7 pytest cases (PDF generation + content assertions + Direct/Indirect variant differentiation + negative paths + audit-log integration).
+
+
 ## Iteration 328 (Feb 2026) — Phase 1 "Sinus Lift" procedure type + maxillary-posterior gate + Step 2 height-block relaxation
 
 ### What shipped
