@@ -3894,7 +3894,7 @@ export default function ProcedureDetailScreen() {
       </Modal>
 
       {/* Fixed bottom bar — compact centered action buttons */}
-      {(canExportPDF() || canViewAiSummary()) && (
+      {(canExportPDF() || canViewAiSummary() || procedure.implant_procedure_type === 'Sinus Lift') && (
         <View style={styles.bottomBar}>
           <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10, paddingHorizontal: 30 }}>
             {canExportPDF() && (
@@ -3919,10 +3919,11 @@ export default function ProcedureDetailScreen() {
               />
             )}
             {/* iter-329: Sinus Lift Pre-Op Briefing — one-tap PDF the
-                student hands the patient at scheduling. Button only
-                renders for Sinus Lift cases and is open to anyone who
-                can see the case (matches canExportPDF). */}
-            {procedure.implant_procedure_type === 'Sinus Lift' && canExportPDF() && (
+                student hands the patient at scheduling. Available from
+                the moment the case is created (Draft included) so the
+                patient can take it home with their booking slip. Only
+                rule: the case must actually be a Sinus Lift. */}
+            {procedure.implant_procedure_type === 'Sinus Lift' && user?.role !== 'nurse' && (
               <TouchableOpacity
                 style={[styles.barButtonCompact, { backgroundColor: '#2E7D32' }, preopLoading && styles.buttonDisabled]}
                 disabled={preopLoading}
@@ -3933,6 +3934,7 @@ export default function ProcedureDetailScreen() {
                   } finally { setPreopLoading(false); }
                 }}
                 data-testid="preop-briefing-btn"
+                testID="preop-briefing-btn"
               >
                 {preopLoading ? (
                   <ActivityIndicator color="#FFF" size="small" />
