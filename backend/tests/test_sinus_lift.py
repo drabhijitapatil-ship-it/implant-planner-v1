@@ -121,12 +121,20 @@ class TestCaseFormOptions:
         assert r.status_code == 200, r.text
         types = r.json().get("procedure_types", [])
         assert "Sinus Lift" in types, f"'Sinus Lift' missing in procedure_types: {types}"
-        i_guided = types.index("Guided Surgery")
-        i_sinus = types.index("Sinus Lift")
-        i_all4 = types.index("All on 4")
-        assert i_guided < i_sinus < i_all4, (
-            f"Sinus Lift must be between Guided Surgery and All on 4. Got order: {types}"
-        )
+        # iter-329: Sinus Lift moved between Immediate Implant and Partial Extraction Therapy
+        expected = [
+            "Single Conventional Implant",
+            "Multiple Conventional Implants",
+            "Immediate Implant",
+            "Sinus Lift",
+            "Partial Extraction Therapy",
+            "Implant Placement with Guided Bone Regeneration",
+            "Guided Surgery",
+            "All on 4",
+            "All on 6",
+            "All on X",
+        ]
+        assert types == expected, f"procedure_types order mismatch.\nGot:      {types}\nExpected: {expected}"
 
 
 # -------------------- 2. Validation gates --------------------
