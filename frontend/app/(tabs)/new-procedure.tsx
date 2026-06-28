@@ -893,13 +893,21 @@ export default function NewProcedureScreen() {
     // a row. Field-level Alerts below remain as the authoritative
     // messages for the last missing piece.
     const requiredIdx = [0, 1, 2, 3];
-    const incompleteLabels = requiredIdx
+    // iter-330b: enrich the popup so each incomplete section also lists
+    // the EXACT field names that are outstanding. The previous popup
+    // only named the section ("Treatment Plan") which left users
+    // hunting for the missing field — especially painful when a
+    // dropdown was reset by a cascading change.
+    const sectionDetail: Array<{label: string; fields: string[]}> = requiredIdx
       .filter(i => !existingStepDone[i])
-      .map(i => FLOW_STEP_LABELS[i]);
-    if (incompleteLabels.length > 0) {
+      .map(i => ({ label: FLOW_STEP_LABELS[i], fields: flowStepMissing[i] }));
+    if (sectionDetail.length > 0) {
+      const body = sectionDetail
+        .map(s => `• ${s.label}${s.fields.length ? `\n   - ${s.fields.join('\n   - ')}` : ''}`)
+        .join('\n\n');
       Alert.alert(
         'Incomplete sections',
-        `Please complete the following before continuing to Implant Selection:\n\n${incompleteLabels.map(l => `• ${l}`).join('\n')}`,
+        `Please complete the following before continuing to Implant Selection:\n\n${body}`,
         [{ text: 'OK' }]
       );
       return;
@@ -1313,6 +1321,20 @@ export default function NewProcedureScreen() {
       else if (FULL_ARCH_GROUP.has(existingOrigProcedure) && !formData.arch) missImplantDetails.push('Arch');
       if ((existingImplantTeeth || []).length === 0) missImplantDetails.push('At least one tooth marked on FDI chart');
     } else {
+      // iter-330b: Sinus Lift / Immediate / PET / GBR / Guided Surgery all
+      // surface a Number-of-Implants sub-question in the Treatment Plan
+      // section. It was being validated only for the Existing Implant
+      // branch — which meant that for a fresh Sinus Lift case the user
+      // could leave the dropdown empty, see no error, but still be
+      // gated by the prosthetic-plan dropdown that won't render until
+      // num_implants is picked. Add it here so the missing-fields panel
+      // calls it out explicitly.
+      if (
+        PROCEDURES_WITH_NUM_IMPLANTS_QUESTION.has(formData.implant_procedure_type) &&
+        !formData.num_implants
+      ) {
+        missImplantDetails.push('Number of Implants');
+      }
       if (!formData.prosthetic_plan) missImplantDetails.push('Prosthetic Plan');
       if (isFullArch && !formData.arch) missImplantDetails.push('Arch');
       if (!isFullArch && (formData.missing_teeth || []).length === 0) missImplantDetails.push('At least one missing tooth on FDI chart');
