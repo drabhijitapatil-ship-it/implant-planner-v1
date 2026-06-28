@@ -2235,7 +2235,12 @@ export default function NewProcedureScreen() {
             formData.implant_procedure_type === 'Immediate Implant' ||
             formData.implant_procedure_type === 'Partial Extraction Therapy' ||
             formData.implant_procedure_type === 'Implant Placement with Guided Bone Regeneration' ||
-            formData.implant_procedure_type === 'Guided Surgery') && (
+            formData.implant_procedure_type === 'Guided Surgery' ||
+            // iter-330c: Sinus Lift also requires Periodontal Status — the
+            // submit validator demanded it but the render gate was missing
+            // it, leaving the user stuck at a "Please select Periodontal
+            // Status" popup with no dropdown visible to fill.
+            formData.implant_procedure_type === 'Sinus Lift') && (
           <>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, marginBottom: 2 }}>
             <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0' }}>Periodontal Status <Text style={{ color: '#DC3545' }}>*</Text></Text>
