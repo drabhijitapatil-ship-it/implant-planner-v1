@@ -191,6 +191,12 @@ export const CLINICAL_EXAM_GROUP = new Set([
   'Guided Surgery',
   'Immediate Implant',
   'Partial Extraction Therapy',
+  // iter-330: Sinus Lift is a non-full-arch grafting procedure that
+  // ALSO requires the standard Edentulous Site clinical exam (oc/md
+  // span + ridge contour) — same as Immediate / PET / GBR. Omitting
+  // it caused the Step 1 "Continue" button to deadlock because the
+  // validator demanded clinical-exam fields whose UI never rendered.
+  'Sinus Lift',
 ]);
 
 // Procedure type groupings for conditional UI
@@ -224,6 +230,11 @@ export const NON_FULL_ARCH_TYPES = new Set([
   'Partial Extraction Therapy',
   'Implant Placement with Guided Bone Regeneration',
   'Guided Surgery',
+  // iter-330: Sinus Lift is also a non-full-arch procedure — it lifts
+  // the sinus floor for a localised group of maxillary posterior teeth,
+  // never the entire arch. Keeping this consistent ensures Occlusal
+  // Analysis + Aesthetic Risk sections behave identically.
+  'Sinus Lift',
 ]);
 
 // ─── Clinical Examination Dropdowns ───────────────────
