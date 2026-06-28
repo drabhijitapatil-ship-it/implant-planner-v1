@@ -1,0 +1,28 @@
+{
+  "summary": "iter-331 PRE-OP BRIEFING button relocation VERIFIED. The button is now correctly rendered inline to the right of the 'Procedure Details' section title (Sinus Lift only, non-nurse only) and has been removed from the fixed bottom action bar. All 5 in-scope frontend scenarios PASS, layout assertion (y-diff=6px ≤ 20, btn x=1023 > title x+w=892) confirms same-row right-aligned placement, and all 17 backend tests (test_sinus_lift.py + test_preop_briefing.py) PASS.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_sinus_lift.py",
+    "/app/backend/tests/test_preop_briefing.py",
+    "/app/test_reports/pytest/iteration_155.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Stale-bundle false alarm during initial run: Expo Metro is started with CI=true (see /var/log/supervisor/expo.out.log -> 'Metro is running in CI mode, reloads are disabled'). Hot-reload is therefore disabled and a manual `sudo supervisorctl restart expo` was required to pick up the iter-331 edit before the new layout actually rendered. This will likely bite future iterations. RECOMMEND: either drop CI=true from the expo supervisor env or document that the main agent must trigger an expo restart after every frontend edit.",
+    "/app/frontend/app/procedures/[id].tsx is 5178 lines — well above the 700-line guideline. Repeated edits to this file (iter-329, 331) keep amplifying review effort and accidental drift between sections. Strongly recommend splitting into per-section components (e.g., ProcedureTypeSection, TreatmentProgressSection, BottomActionBar).",
+    "RN-Web does NOT serialize the `data-testid` prop on plain <View> elements — only TouchableOpacity/Text render it via testID. The 'procedure-type-section' attribute we set on the parent View was therefore not present in the DOM, making the section non-queryable from Playwright. To make this asserttion-friendly, either move the data-testid to a child Touchable OR add a matching testID prop on the View (RN-Web maps testID -> data-testid on the rendered div for TouchableOpacity/Text but not always for View). Not a functional bug, just a testability nit."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "100% (17/17)", "frontend": "100% (5/5 scenarios)" },
+  "test_credentials": "Implant In-Charge: Abhijit.patil / Admin@123 ; Student: Gaurav.pandey / Student@123 ; Supervisor: Paresh.gandhi / Supervisor@123 ; Nurse: nurse.1@dental.edu / Nurse@123 — all verified working",
+  "seed_data_creation": "Created two temporary procedures via POST /api/procedures (Sinus Lift draft and Single Conventional draft). Flipped Sinus draft status to 'phase1_approved' via direct Mongo update for the approved-state test. BOTH PROCEDURES DELETED AT END OF RUN (HTTP 200 on DELETE) — no test leakage.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "(1) Expo is in CI mode (no hot reload) — after any frontend edit run `sudo supervisorctl restart expo` then curl the public URL once to trigger Metro to rebundle (~7s) before opening Playwright. Otherwise you will be testing a STALE bundle and see iter-330 behaviour. (2) Use soft navigation: history.pushState + window.dispatchEvent(new PopStateEvent('popstate')). page.goto() destroys the in-memory auth token on Expo Web. (3) Login button text is literally 'Login' (use page.get_by_text('Login', exact=True).click(force=True)). Login lives at the root path '/', NOT '/login' (/login → 'Unmatched Route'). (4) For DOM-walked element-by-text lookups in RN-Web, prefer document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT) — naive querySelector('[textContent=...]') and `el.children.length === 0` filters fail because RN-Web nests Text inside multiple wrapper divs. (5) procedure-type-section data-testid is NOT in the DOM (RN-Web View limitation) — use the layout/spatial assertion via parentElement of the matching text node instead.",
+  "rca of the issue": "No bug. The iter-331 layout move was implemented correctly in a single contiguous block at /app/frontend/app/procedures/[id].tsx lines 1800-1859 — the original bottom-bar TouchableOpacity is gone (only one grep hit on 'PRE-OP BRIEFING' in the whole codebase), and the bottom-bar render gate at line 3932 is correctly reverted to (canExportPDF() || canViewAiSummary()). Approved Sinus Lift case in screenshot shows: green PRE-OP BRIEFING pill inline right of 'Procedure Details' title, and EXPORT/PRINT + AI SUMMARY two-button bottom bar properly spaced (no longer cramped). Initial scary-looking 'btnInAbsolutePositionedAncestor=true' detection was a Playwright-side false-positive caused by ANY RN-Web ScrollView wrapper higher up the chain reporting position:absolute — confirmed false-positive because the button rect (y=1337) is in the middle of the page next to the title (y=1337, y-diff=6px), NOT at the bottom-bar y=3961 position which it would have occupied if the gate had failed. Layout assertion x=1023 > title-right=892 confirms right-alignment in same row."
+}

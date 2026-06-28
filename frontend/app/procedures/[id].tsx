@@ -1800,7 +1800,42 @@ export default function ProcedureDetailScreen() {
         {/* Procedure Type & Plan */}
         {procedure.implant_procedure_type && (
           <View style={styles.section} data-testid="procedure-type-section">
-            <Text style={styles.sectionTitle}>Procedure Details</Text>
+            {/* iter-331: Procedure Details title row with optional inline
+                PRE-OP BRIEFING button (Sinus Lift only). Moved here from
+                the bottom action bar so the EXPORT/PRINT pill is no
+                longer cramped, and so the briefing — which is generated
+                exclusively for sinus cases — lives next to the Sinus
+                Lift fields it documents. */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+              <Text style={styles.sectionTitle}>Procedure Details</Text>
+              {procedure.implant_procedure_type === 'Sinus Lift' && user?.role !== 'nurse' && (
+                <TouchableOpacity
+                  style={{
+                    flexDirection: 'row', alignItems: 'center', gap: 6,
+                    backgroundColor: '#2E7D32', paddingHorizontal: 12, paddingVertical: 7,
+                    borderRadius: 18, opacity: preopLoading ? 0.6 : 1,
+                  }}
+                  disabled={preopLoading}
+                  onPress={async () => {
+                    setPreopLoading(true);
+                    try {
+                      await downloadPreopBriefing(procedure.id || procedure._id);
+                    } finally { setPreopLoading(false); }
+                  }}
+                  data-testid="preop-briefing-btn"
+                  testID="preop-briefing-btn"
+                >
+                  {preopLoading ? (
+                    <ActivityIndicator color="#FFF" size="small" />
+                  ) : (
+                    <>
+                      <Ionicons name="document-text" size={14} color="#FFF" />
+                      <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '800', letterSpacing: 0.3 }}>PRE-OP BRIEFING</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
             <InfoRow icon="construct" label="Procedure Type" value={procedure.implant_procedure_type} fieldKey="implant_procedure_type" />
             {/* iter-307: Echo the Number-of-Implants sub-choice (only set
                 for Immediate / PET / GBR / Guided Surgery) so faculty
@@ -3894,7 +3929,7 @@ export default function ProcedureDetailScreen() {
       </Modal>
 
       {/* Fixed bottom bar — compact centered action buttons */}
-      {(canExportPDF() || canViewAiSummary() || procedure.implant_procedure_type === 'Sinus Lift') && (
+      {(canExportPDF() || canViewAiSummary()) && (
         <View style={styles.bottomBar}>
           <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10, paddingHorizontal: 30 }}>
             {canExportPDF() && (
@@ -3917,34 +3952,6 @@ export default function ProcedureDetailScreen() {
                 }}
                 onExport={handleExportPDF}
               />
-            )}
-            {/* iter-329: Sinus Lift Pre-Op Briefing — one-tap PDF the
-                student hands the patient at scheduling. Available from
-                the moment the case is created (Draft included) so the
-                patient can take it home with their booking slip. Only
-                rule: the case must actually be a Sinus Lift. */}
-            {procedure.implant_procedure_type === 'Sinus Lift' && user?.role !== 'nurse' && (
-              <TouchableOpacity
-                style={[styles.barButtonCompact, { backgroundColor: '#2E7D32' }, preopLoading && styles.buttonDisabled]}
-                disabled={preopLoading}
-                onPress={async () => {
-                  setPreopLoading(true);
-                  try {
-                    await downloadPreopBriefing(procedure.id || procedure._id);
-                  } finally { setPreopLoading(false); }
-                }}
-                data-testid="preop-briefing-btn"
-                testID="preop-briefing-btn"
-              >
-                {preopLoading ? (
-                  <ActivityIndicator color="#FFF" size="small" />
-                ) : (
-                  <>
-                    <Ionicons name="document-text" size={14} color="#FFF" />
-                    <Text style={styles.barButtonTextCompact}>PRE-OP BRIEFING</Text>
-                  </>
-                )}
-              </TouchableOpacity>
             )}
             {canViewAiSummary() && (
               <TouchableOpacity
