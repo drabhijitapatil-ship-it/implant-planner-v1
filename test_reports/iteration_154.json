@@ -1,0 +1,36 @@
+{
+  "summary": "Verified iter-330c Periodontal Status render-gate fix for Sinus Lift. Static code inspection confirms the fix is correctly in place at /app/frontend/app/(tabs)/new-procedure.tsx lines 2233-2243 — the render gate now includes 'Sinus Lift' alongside the other 6 procedure types, mirroring the submit validator at lines 940-947. Backend regression (17 tests) PASSES. Full E2E DOM-level Playwright assertion was attempted but blocked by selector-discovery overhead on the Expo Router + RN-Web custom Dropdown components in the multi-step form (Procedure Type lives in Step 2 / Treatment tab, Periodontal Status in Step 3 / Clinical Exam tab; the full path requires extensive form-fill before reaching the Clinical Exam tab). Recommend main agent run a manual sanity click-through OR the next testing agent picks up the E2E with a longer budget using the documented selectors below.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_sinus_lift.py",
+    "/app/backend/tests/test_preop_briefing.py",
+    "/app/test_reports/pytest/iteration_154.xml"
+  ],
+  "action_items": [
+    "Optional: Add data-testid attributes to the Procedure Type Dropdown trigger and to dropdown options (e.g., data-testid='dropdown-procedure-type', data-testid='dropdown-option-Sinus-Lift') to make multi-step E2E tests reliable — the current RN-Web Dropdown has no roles or testids on its trigger button, forcing brittle text-based selectors.",
+    "Optional: Main agent can self-verify with a quick manual click-through (login as Gaurav.pandey → New Case → fill minimal patient info → Tab 2 'Treatment' → pick 'Sinus Lift' / Direct / Single Implant → Tab 3 'Clinical Examination' → confirm 'Periodontal Status *' label + info-button + 'Select periodontal status' dropdown are rendered)."
+  ],
+  "critical_code_review_comments": [
+    "Fix at lines 2233-2243 of new-procedure.tsx is the correct, minimal change — single line added to the existing inline procedure-type whitelist. Matches the exact same pattern used in CLINICAL_EXAM_GROUP (iter-330) and num_implants (iter-330b). However, this is the THIRD asymmetric render-vs-validator bug in three iterations driven by *inline hard-coded* procedure-type whitelists rather than reusing the canonical sets in /app/frontend/constants/checklist.ts (e.g., NON_FULL_ARCH_TYPES already contains the exact same 7 types). STRONG RECOMMENDATION: refactor the render gate at line 2233 to use the `NON_FULL_ARCH_TYPES` Set directly — would have prevented all three iter-330x bugs and prevents future drift. The submit validator at lines 940-947 should also reference the same Set.",
+    "Multiple inline whitelists across new-procedure.tsx (2973 lines) make it very easy to introduce asymmetric render/validator gates. The file is significantly over the 700-line guideline and should be split into smaller per-section components (e.g., ClinicalExamSection, ProcedureInfoSection)."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "code-verified (no E2E click-through completed within budget)"
+  },
+  "test_credentials": "Gaurav.pandey / Student@123 (Student) — login confirmed working, dashboard loads, /new-procedure route reachable via 'New Case' bottom-nav tab",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Login page placeholders: 'Login ID (e.g. Name.surname@dental.edu)' + 'Password'. Login button text is 'Login' (not 'Sign In') — use page.get_by_text('Login', exact=True).click(force=True), NOT get_by_role('button'). Bottom-nav tab is labeled 'New Case' (NOT 'New Procedure'). Once on /new-procedure, the form is a 5-tab wizard: '1. Case Det...', '2. Treatmen...', '3. Clinical E...', '4. Phase 1...', '5. Submit'. The Procedure Type dropdown lives in Tab 2 (Treatment), Periodontal Status in Tab 3 (Clinical Examination). Tabs appear clickable as pills at the top of the form (data-testid likely absent). The custom Dropdown component renders as plain Text/Touchable in RN-Web — no select/option DOM elements; options appear as TouchableOpacity rows in a modal-like overlay when the trigger is tapped. To assert DOM-level presence of 'Periodontal Status': page.evaluate(\"() => /Periodontal Status/.test(document.body.innerText)\") works AFTER reaching Tab 3. Render-gate code is at /app/frontend/app/(tabs)/new-procedure.tsx lines 2232-2267 (fix confirmed at line 2243).",
+  "rca of the issue": "Original RCA per main agent is correct and consistent with iter-330/330b pattern: render gate at lines 2233-2238 had hard-coded whitelist of 6 procedure types but EXCLUDED 'Sinus Lift', while the submit validator at lines 940-947 (added iter-328) DEMANDED Periodontal Status for Sinus Lift. User got a deadlock — validator demands a field whose dropdown never renders. Fix at line 2243 adds Sinus Lift to the render gate. Single-line change verified via view_file. Reproduction is no longer possible since the gate now matches the validator. Mitigation already applied. Long-term mitigation: replace the inline whitelist with the `NON_FULL_ARCH_TYPES` Set from constants/checklist.ts."
+}
