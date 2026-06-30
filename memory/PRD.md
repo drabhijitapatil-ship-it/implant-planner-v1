@@ -2,6 +2,41 @@
 
 
 
+## Iteration 332 (Feb 2026) — Treatment Timeline ("Done On" dates) complete
+
+### What shipped
+1. **Clinical "Done On" dates** are now captured at every phase submission (Phase 2 / Phase 3 / Phase 4 Step 1 / Phase 4 Step 2). `DoneDatePicker` was already wired into the first three forms; **iter-332** finished the wiring for Phase 4 Step 2 and added the missing render block in Phase 4 Step 1 (`submit-stage2-prosthetic/[id].tsx` had the import + state but never rendered the picker).
+2. **Case Detail "Treatment Progress" rebuilt** (`/app/frontend/app/procedures/[id].tsx`):
+   - 5-step timeline (Phase 1 / Phase 2 / Phase 3 / Phase 4 Step 1 / Phase 4 Step 2) instead of the old 5-step bureaucratic timeline (which doubled up Phase 4 as "Complete").
+   - Each step shows the clinical "Done on MMM dd, yyyy" line in bold green (testID `timeline-done-{key}`); falls back to the legacy approval timestamp for pre-iter-332 cases.
+   - "Approved by Dr. X & Dr. Y" line still renders but is now visually demoted to muted italic so the clinical date reads first.
+   - **Total Treatment Duration pill** (data-testid `treatment-duration-pill`) in the card header renders whenever ≥2 dates exist: "12 days", "3 weeks", "4 months (122 days)".
+3. **Case Report PDF** (`generate_case_report` in `/app/backend/server.py`) now includes a "Treatment Timeline" section on page 1 directly under the Status line, with all 5 rows and a "Total Treatment Duration: X" footnote. Wrapped in a try/except so timeline rendering never blocks the PDF.
+4. **Admin Backfill UI for legacy cases** (`/app/frontend/app/admin/backfill-timeline.tsx`):
+   - New screen accessible from **Profile → "Backfill treatment timeline"** (data-testid `link-backfill-timeline`). Visible only to Administrator / Implant In-Charge.
+   - Lists every legacy procedure where at least one clinical Done-On date is missing.
+   - Per-card inputs for all 5 dates with HTML5 date pickers on web, native YYYY-MM-DD on iOS/Android. Highlights missing fields in red.
+5. **Backend Backfill endpoints**:
+   - `GET /api/admin/cases-missing-timeline` → 200 with `items[]` for Admin / Implant In-Charge; 403 for Student.
+   - `PATCH /api/admin/procedures/{id}/timeline` → accepts partial date updates. Validation: ISO format (400), no future dates (400), each phase ≥ previous phase (400). The 30-day back-date cap from phase-submission flow is intentionally **relaxed** for backfill (legacy cases can be years old). Audit-logged as `action=timeline_backfill`. Invalid ObjectId returns 400 (not 500).
+6. **Backend regression** — 8/8 pytest cases pass (`/app/backend/tests/test_treatment_timeline_iter156.py`). PDF text extraction (pypdf) confirms the Treatment Timeline section is present with the "Total Treatment Duration" line on freshly-generated PDFs.
+
+### Files touched
+- EDIT `/app/backend/server.py` — new `TimelineBackfillBody` model, `GET /api/admin/cases-missing-timeline`, `PATCH /api/admin/procedures/{id}/timeline`, Treatment Timeline section in `generate_case_report`.
+- EDIT `/app/frontend/app/procedures/[id].tsx` — rebuilt Treatment Progress timeline + duration pill + new `timelineDoneOn` / `timelineApproverSecondary` / `durationPill` styles.
+- EDIT `/app/frontend/app/procedures/submit-phase4-step2/[id].tsx` — DoneDatePicker import / state / render / payload.
+- EDIT `/app/frontend/app/procedures/submit-stage2-prosthetic/[id].tsx` — DoneDatePicker render block (was imported but never rendered).
+- EDIT `/app/frontend/app/_layout.tsx` — registered `admin/backfill-timeline` screen.
+- EDIT `/app/frontend/app/(tabs)/profile.tsx` — link to Backfill timeline screen in Compliance section.
+- NEW `/app/frontend/app/admin/backfill-timeline.tsx` — admin UI.
+- NEW `/app/backend/tests/test_treatment_timeline_iter156.py` — 8 pytest cases (validation, RBAC, PDF content, backfill flow).
+
+### Test status — iter156 / 156.json
+- Backend: **8 / 8 pass** (`/app/backend/tests/test_treatment_timeline_iter156.py`).
+- Frontend: testing_agent_v3_fork verified login, profile link, Phase 4 Step 1 / Step 2 DoneDatePicker render, Admin Backfill flow and Student blocking. Initial Metro CI-mode cache miss flagged & fixed mid-run (`supervisorctl restart expo`).
+
+
+
 ## Iteration 329 (Feb 2026) — Sinus Lift dropdown reorder + Pre-Op Briefing PDF
 
 ### What shipped
