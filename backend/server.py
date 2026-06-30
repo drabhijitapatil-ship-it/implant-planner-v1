@@ -4259,7 +4259,11 @@ async def admin_backfill_timeline(
     Validates ISO format, no future dates, and chronological order across phases."""
     if current_user.get("role") not in ("administrator", "implant_incharge"):
         raise HTTPException(status_code=403, detail="Administrator or Implant In-Charge role required")
-    procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    try:
+        proc_oid = ObjectId(procedure_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid procedure id")
+    procedure = await db.procedures.find_one({"_id": proc_oid})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
 
@@ -4320,7 +4324,7 @@ async def admin_backfill_timeline(
     update_data["timeline_backfilled_by"] = current_user.get("name") or current_user.get("_id")
     update_data["timeline_backfilled_at"] = datetime.utcnow()
 
-    await db.procedures.update_one({"_id": ObjectId(procedure_id)}, {"$set": update_data})
+    await db.procedures.update_one({"_id": proc_oid}, {"$set": update_data})
     await log_access(
         action="timeline_backfill",
         outcome="success",
