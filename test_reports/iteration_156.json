@@ -1,0 +1,36 @@
+{
+  "summary": "Treatment Timeline (Done On dates) feature — iter-332/iter156 — backend + frontend verified. All 8 pytest cases pass. Admin RBAC + Backfill UI + Student blocking + Phase 4 Step 1/2 DoneDatePicker wiring all confirmed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Admin opens backfilled case detail (REG-APPR-001, id 69cfb036a19e1d1819e0f6fd)", "issue": "GET /api/procedures/{id} returned 403 to Administrator (page shows 'Procedure not found'). Admin _can_ generate PDF and PATCH timeline for same id, so this looks like an ACL gap on the regular GET route — not strictly part of iter-332 but blocks visual verification of Case Detail Treatment Progress + duration pill UI as Admin. Verify whether Administrator should be able to read any procedure (likely yes).", "affected_selectors": ["[data-testid='treatment-duration-pill']", "[data-testid^='timeline-done-']"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_treatment_timeline_iter156.py",
+    "/app/test_reports/pytest/iter156_timeline.xml"
+  ],
+  "action_items": [
+    "Investigate Administrator 403 on GET /api/procedures/{id} so case detail Treatment Progress UI (duration pill, timeline-done-{key} rows, 'Approved by' muted italic) can be visually verified end-to-end. Backend pytest already confirms PATCH/backfill, PDF and validation work."
+  ],
+  "critical_code_review_comments": [
+    "/app/backend/server.py line ~4262: ObjectId(procedure_id) is not wrapped in try/except — a malformed id triggers bson InvalidId 500. Wrap or validate to return 400.",
+    "/app/backend/server.py line ~4320: timeline_backfilled_by stores user name OR _id (mixed type). Consider always storing user.id and a separate _by_name field to keep audit fields type-stable.",
+    "/app/frontend/app/admin/backfill-timeline.tsx imports api util and renders without an in-page role gate; the 'You don't have permission' message comes from a generic layout guard. Add an explicit role check at the top of the screen for defense-in-depth."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_treatment_timeline_iter156.py"
+  ],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "~85% (5/6 covered scenarios verified; case-detail timeline UI not visually verified due to 403)"},
+  "test_credentials": "Admin Abhijit.patil / Admin@123 ; Student Gaurav.pandey / Student@123 (per /app/memory/test_credentials.md)",
+  "seed_data_creation": "None. Used existing backfilled procedure 69cfb036a19e1d1819e0f6fd and live backfill list (8 legacy cases).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend tests live at /app/backend/tests/test_treatment_timeline_iter156.py — reuse for regression. Use pypdf (already installed) to extract text from /api/procedures/{id}/case-report PDFs. Admin's regular GET /api/procedures/{id} returned 403 for an existing case — flagged for main agent. Expo bundle needed a full supervisor restart after recent changes; if data-testids appear missing despite being in source, run `sudo supervisorctl restart expo` and wait ~30s.",
+  "rca of the issue": "Initial frontend run showed link-backfill-timeline missing on /profile while link-audit-log (same conditional block) was present. Root cause: stale Metro bundle (Metro is configured with CI=true so no watch reloads). After `sudo supervisorctl restart expo`, the data-testid appeared and the entire flow worked. No code change required."
+}

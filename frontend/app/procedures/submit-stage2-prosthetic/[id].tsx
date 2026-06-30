@@ -12,6 +12,7 @@ import { getImplantSite } from '../../../utils/implantPlan';
 import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
 import { PhaseHeader } from '../../../components/PhaseHeader';
+import DoneDatePicker, { todayIso } from '../../../components/DoneDatePicker';
 import { Ionicons } from '@expo/vector-icons';
 import {
   PHASE4_SINGLE_MULTIPLE_OPTIONS,
@@ -31,6 +32,8 @@ export default function Phase4Step1Screen() {
   const isFaculty = user?.role === 'supervisor' || user?.role === 'implant_incharge';
   const notesLabel = isFaculty ? "Operator's Notes" : "Student Notes";
   const [loading, setLoading] = useState(false);
+  // iter-332: actual date Phase 4 Step 1 was performed
+  const [doneDate, setDoneDate] = useState<string>(todayIso());
   const [procedure, setProcedure] = useState<any>(null);
   const [doneCompleted, setDoneCompleted] = useState(false);
 
@@ -202,6 +205,8 @@ export default function Phase4Step1Screen() {
   // iter-194: assemble the POST body. Used by both Submit and Generate-Lab-Slip.
   const buildPayload = () => {
     const payload: any = {
+      // iter-332: actual date Phase 4 Step 1 (impression / try-in) was done
+      done_date: doneDate || null,
       custom_abutment: customAbutment || null,
       overdenture_attachment: overdentureAttachment || null,
       payment_complete: paymentComplete,
@@ -829,6 +834,14 @@ export default function Phase4Step1Screen() {
                 <Text style={s.labSlipText}>Generate Lab Slip</Text></>
               )}
             </TouchableOpacity>
+            {/* iter-332: actual date Phase 4 Step 1 (impression / try-in) was done. */}
+            <DoneDatePicker
+              label="Done On (Phase 4 Step 1 — Impressions / Try-In)"
+              value={doneDate}
+              onChange={setDoneDate}
+              testID="phase4-step1-done-date"
+              helperText="Pick the date you actually performed this step. Defaults to today; back-date up to 30 days; future dates not allowed."
+            />
             {/* iter-262: visually disabled when validateForm() returns a message. */}
             {(() => {
               const validationError = validateForm();

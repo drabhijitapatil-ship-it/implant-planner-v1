@@ -251,6 +251,16 @@ export default function ProfileScreen() {
               <Text style={styles.legalRowText}>Audit log</Text>
               <Ionicons name="chevron-forward" size={18} color="#999" />
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.legalRow}
+              onPress={() => router.push('/admin/backfill-timeline' as any)}
+              data-testid="link-backfill-timeline"
+              testID="link-backfill-timeline"
+            >
+              <Ionicons name="calendar-outline" size={22} color="#1565C0" />
+              <Text style={styles.legalRowText}>Backfill treatment timeline</Text>
+              <Ionicons name="chevron-forward" size={18} color="#999" />
+            </TouchableOpacity>
           </View>
         )}
 

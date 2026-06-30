@@ -568,6 +568,9 @@ class Phase2Submit(BaseModel):
     # Legacy fields
     checklist_surgical: Optional[ChecklistSection] = None
     remark: Optional[str] = None
+    # iter-332: actual surgery date (may differ from procedure_date if the
+    # case slipped a day or two). Defaults to procedure_date on the client.
+    actual_done_date: Optional[str] = Field(None, max_length=10)
 
 class Phase2PreOpSubmit(BaseModel):
     # iter-189: Pre-Surgical Checklist as a separate, day-of submission.
@@ -591,6 +594,8 @@ class Stage2SurgicalSubmit(BaseModel):
     # Legacy
     checklist: Optional[ChecklistSection] = None
     remark: Optional[str] = None
+    # iter-332: actual date Phase 3 (second-stage surgery / healing abutment) was done
+    done_date: Optional[str] = Field(None, max_length=10)
 
 class Stage2ProstheticSubmit(BaseModel):
     # Step 1: Final Prosthesis + Impressions
@@ -624,6 +629,8 @@ class Stage2ProstheticSubmit(BaseModel):
     remark: Optional[str] = None
     faculty_remark: Optional[str] = None
     incharge_remark: Optional[str] = None
+    # iter-332: actual date Phase 4 Step 1 (impression / try-in) was done
+    done_date: Optional[str] = Field(None, max_length=10)
 
 class Phase4Step2Submit(BaseModel):
     # Step 2: Trial & Delivery
@@ -638,6 +645,40 @@ class Phase4Step2Submit(BaseModel):
     opg_upload: Optional[Dict[str, str]] = None
     # Final intraoral prosthesis photos with editable labels
     prosthesis_photos: Optional[List[Dict[str, str]]] = None
+    # iter-332: actual date this step was performed (YYYY-MM-DD).
+    done_date: Optional[str] = Field(None, max_length=10)
+
+
+# ── Treatment Timeline (iter-332) ────────────────────────────────────
+# Each phase / step now captures the date the work was ACTUALLY done
+# (not the date faculty approved it). Defaults to today on the client
+# but is editable so students can back-date short delays. Server-side
+# validator below enforces: not in future, not before previous phase,
+# not more than 30 days back. Stored as ISO YYYY-MM-DD strings.
+def _validate_done_date(d, prev_date, label):
+    """Return validated YYYY-MM-DD date or raise HTTPException."""
+    from datetime import date as _date, timedelta as _td
+    if not d:
+        return _date.today().isoformat()
+    try:
+        parsed = _date.fromisoformat(d)
+    except Exception:
+        raise HTTPException(status_code=400, detail=f"{label}: invalid date format, expected YYYY-MM-DD")
+    today = _date.today()
+    if parsed > today:
+        raise HTTPException(status_code=400, detail=f"{label}: date cannot be in the future")
+    if parsed < today - _td(days=30):
+        raise HTTPException(status_code=400, detail=f"{label}: cannot be more than 30 days in the past")
+    if prev_date:
+        try:
+            prev = _date.fromisoformat(prev_date)
+            if parsed < prev:
+                raise HTTPException(status_code=400, detail=f"{label}: cannot be before the previous phase ({prev_date})")
+        except (ValueError, TypeError):
+            pass
+    return parsed.isoformat()
+
+
 
 class ImplantPlanItem(BaseModel):
     position: str  # FDI tooth number e.g. "14"
@@ -4148,6 +4189,148 @@ async def admin_export_access_logs_csv(
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ── Treatment Timeline Backfill (iter-332) ─────────────────────────
+# Lets the Implant In-Charge / Administrator retroactively fill in the
+# clinical "Done On" dates on legacy cases that were submitted before
+# iter-332 shipped. Cross-phase chronological order is enforced, but the
+# normal 30-day back-date guard is relaxed because legacy cases can be
+# arbitrarily old. Future dates are still rejected.
+
+class TimelineBackfillBody(BaseModel):
+    procedure_date: Optional[str] = Field(None, max_length=10)            # Phase 1 done-on
+    phase2_actual_done_date: Optional[str] = Field(None, max_length=10)   # Phase 2 done-on
+    phase3_done_date: Optional[str] = Field(None, max_length=10)          # Phase 3 done-on
+    phase4_step1_done_date: Optional[str] = Field(None, max_length=10)    # Phase 4 Step 1 done-on
+    phase4_step2_done_date: Optional[str] = Field(None, max_length=10)    # Phase 4 Step 2 done-on
+
+
+@api_router.get("/admin/cases-missing-timeline")
+async def admin_cases_missing_timeline(current_user: dict = Depends(get_current_user)):
+    """List procedures that have at least one missing clinical Done-On date.
+    Caller must be Implant In-Charge or Administrator."""
+    if current_user.get("role") not in ("administrator", "implant_incharge"):
+        raise HTTPException(status_code=403, detail="Administrator or Implant In-Charge role required")
+    fields = [
+        "phase2_actual_done_date",
+        "phase3_done_date",
+        "phase4_step1_done_date",
+        "phase4_step2_done_date",
+    ]
+    # A case "needs backfill" if it has reached at least Phase 2 (i.e. status
+    # implies surgery completed) AND at least one done-date is empty.
+    cursor = db.procedures.find(
+        {
+            "status": {"$in": [
+                "phase2_approved", "pending_stage2_surgical", "stage2_surgical_approved",
+                "pending_stage2_prosthetic", "stage2_prosthetic_step1_approved",
+                "pending_final_delivery", "completed",
+            ]},
+            "archived": {"$ne": True},
+        },
+        {
+            "patient_name": 1, "registration_number": 1, "status": 1, "student_name": 1,
+            "procedure_date": 1, "procedure_time": 1, "implant_procedure_type": 1,
+            "phase2_actual_done_date": 1, "phase3_done_date": 1,
+            "phase4_step1_done_date": 1, "phase4_step2_done_date": 1,
+            "phase2_completed_at": 1, "stage2_surgical_completed_at": 1,
+            "stage2_prosthetic_completed_at": 1, "treatment_completed_at": 1,
+        },
+    ).sort("procedure_date", -1).limit(500)
+    out = []
+    async for d in cursor:
+        d["id"] = str(d.pop("_id"))
+        missing = [f for f in fields if not d.get(f)]
+        if missing:
+            d["missing_fields"] = missing
+            out.append(d)
+    return {"items": out, "count": len(out)}
+
+
+@api_router.patch("/admin/procedures/{procedure_id}/timeline")
+async def admin_backfill_timeline(
+    procedure_id: str,
+    body: TimelineBackfillBody,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Back-fill the 5 clinical Done-On dates on an existing case.
+    Validates ISO format, no future dates, and chronological order across phases."""
+    if current_user.get("role") not in ("administrator", "implant_incharge"):
+        raise HTTPException(status_code=403, detail="Administrator or Implant In-Charge role required")
+    procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    from datetime import date as _d
+    incoming = {
+        "procedure_date": body.procedure_date,
+        "phase2_actual_done_date": body.phase2_actual_done_date,
+        "phase3_done_date": body.phase3_done_date,
+        "phase4_step1_done_date": body.phase4_step1_done_date,
+        "phase4_step2_done_date": body.phase4_step2_done_date,
+    }
+    # Use existing value when the caller didn't override that field — keeps
+    # the chronological check honest even with partial updates.
+    merged: Dict[str, Optional[str]] = {}
+    today = _d.today()
+    for k, v in incoming.items():
+        chosen = v if v is not None else procedure.get(k)
+        if chosen:
+            try:
+                parsed = _d.fromisoformat(chosen)
+            except Exception:
+                raise HTTPException(status_code=400, detail=f"{k}: invalid date format, expected YYYY-MM-DD")
+            if parsed > today:
+                raise HTTPException(status_code=400, detail=f"{k}: date cannot be in the future")
+            merged[k] = parsed.isoformat()
+        else:
+            merged[k] = None
+
+    # Chronological order across phases
+    order = [
+        "procedure_date",
+        "phase2_actual_done_date",
+        "phase3_done_date",
+        "phase4_step1_done_date",
+        "phase4_step2_done_date",
+    ]
+    prev_date = None
+    prev_key = None
+    for k in order:
+        cur = merged.get(k)
+        if not cur:
+            continue
+        if prev_date and cur < prev_date:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{k} ({cur}) cannot be before {prev_key} ({prev_date}). Adjust the dates so each phase ≥ previous phase.",
+            )
+        prev_date = cur
+        prev_key = k
+
+    update_data: Dict[str, Any] = {}
+    for k, v in incoming.items():
+        if v is not None:
+            update_data[k] = merged[k]
+    if not update_data:
+        return {"updated": False, "message": "No dates supplied"}
+    update_data["updated_at"] = datetime.utcnow()
+    update_data["timeline_backfilled_by"] = current_user.get("name") or current_user.get("_id")
+    update_data["timeline_backfilled_at"] = datetime.utcnow()
+
+    await db.procedures.update_one({"_id": ObjectId(procedure_id)}, {"$set": update_data})
+    await log_access(
+        action="timeline_backfill",
+        outcome="success",
+        resource_type="procedure",
+        resource_id=procedure_id,
+        user=current_user,
+        request=request,
+        extra={"fields": list(update_data.keys()), "values": {k: v for k, v in update_data.items() if isinstance(v, str)}},
+    )
+    return {"updated": True, "fields": list(update_data.keys())}
 
 
 
@@ -7758,6 +7941,74 @@ async def generate_case_report(
     pdf.cell(0, 10, safe(f"Status: {status_text}"), ln=True, align="C")
     pdf.set_text_color(0, 0, 0)
 
+    # ── Treatment Timeline (iter-332) ──────────────────────────────
+    # The clinical execution timeline — the dates work was ACTUALLY done.
+    # Falls back to approval timestamps for legacy cases predating iter-332.
+    try:
+        from datetime import date as _d, datetime as _dt
+        def _iso_to_str(v):
+            if not v:
+                return None
+            if isinstance(v, str):
+                return v[:10]
+            if isinstance(v, (_dt, _d)):
+                return v.isoformat()[:10]
+            return None
+        tl_rows = [
+            ("Phase 1 - Planning",
+             _iso_to_str(procedure.get("procedure_date")) or _iso_to_str(procedure.get("phase1_completed_at"))),
+            ("Phase 2 - Implant Surgery",
+             _iso_to_str(procedure.get("phase2_actual_done_date")) or _iso_to_str(procedure.get("phase2_completed_at"))),
+            ("Phase 3 - Healing / 2nd-Stage",
+             _iso_to_str(procedure.get("phase3_done_date")) or _iso_to_str(procedure.get("stage2_surgical_completed_at"))),
+            ("Phase 4 Step 1 - Impressions",
+             _iso_to_str(procedure.get("phase4_step1_done_date")) or _iso_to_str(procedure.get("stage2_prosthetic_completed_at"))),
+            ("Phase 4 Step 2 - Final Delivery",
+             _iso_to_str(procedure.get("phase4_step2_done_date")) or _iso_to_str(procedure.get("treatment_completed_at"))),
+        ]
+        # Total duration (calendar days, earliest -> latest)
+        valid_dates = []
+        for _, dstr in tl_rows:
+            if dstr:
+                try:
+                    valid_dates.append(_d.fromisoformat(dstr))
+                except Exception:
+                    pass
+        duration_label = None
+        if len(valid_dates) >= 2:
+            days = max(0, (max(valid_dates) - min(valid_dates)).days)
+            if days < 7:
+                duration_label = f"{days} day{'s' if days != 1 else ''}"
+            elif days < 60:
+                w = round(days / 7)
+                duration_label = f"{w} week{'s' if w != 1 else ''}"
+            else:
+                m = round(days / 30)
+                duration_label = f"{m} month{'s' if m != 1 else ''} ({days} days)"
+
+        pdf.ln(4)
+        pdf.set_font("Helvetica", "B", 12)
+        pdf.set_text_color(13, 71, 161)
+        pdf.cell(0, 8, safe("Treatment Timeline"), ln=True, align="L")
+        pdf.set_draw_color(13, 71, 161)
+        pdf.line(pdf.get_x(), pdf.get_y(), pdf.get_x() + 190, pdf.get_y())
+        pdf.ln(2)
+        pdf.set_text_color(0, 0, 0)
+        for label, dstr in tl_rows:
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.cell(70, 6, safe(label), ln=False)
+            pdf.set_font("Helvetica", "", 10)
+            pdf.cell(0, 6, safe(dstr if dstr else "—"), ln=True)
+        if duration_label:
+            pdf.ln(1)
+            pdf.set_font("Helvetica", "BI", 10)
+            pdf.set_text_color(27, 94, 32)
+            pdf.cell(0, 6, safe(f"Total Treatment Duration: {duration_label}"), ln=True)
+            pdf.set_text_color(0, 0, 0)
+    except Exception:
+        # Never block the PDF on timeline issues.
+        pass
+
     # ── Page 2: Phase 1 banner + Patient & Treatment Details ──────
     pdf.add_page()
     # Phase 1 heading must lead the clinical section per product spec.
@@ -9475,6 +9726,14 @@ async def submit_phase2(
         update_data["phase2_supervisor_notes"] = phase2_data.supervisor_notes
     if phase2_data.incharge_notes:
         update_data["phase2_incharge_notes"] = phase2_data.incharge_notes
+    # iter-332: actual surgery date (may differ from planned procedure_date).
+    # Defaults to procedure_date on the client; validated against Phase 1
+    # creation date as the lower bound and today as the upper bound.
+    update_data["phase2_actual_done_date"] = _validate_done_date(
+        phase2_data.actual_done_date,
+        prev_date=procedure.get("procedure_date") or (procedure.get("created_at").isoformat()[:10] if procedure.get("created_at") else None),
+        label="Phase 2 Actual Done Date",
+    )
     if phase2_data.torque_values:
         update_data["torque_values"] = phase2_data.torque_values
     
@@ -9650,6 +9909,12 @@ async def submit_stage2_surgical(
         update_data["phase3_incharge_notes"] = data.incharge_notes
     if data.remark:
         update_data["stage2_surgical_remark"] = data.remark
+    # iter-332: capture & validate the actual "done on" date for Phase 3
+    update_data["phase3_done_date"] = _validate_done_date(
+        data.done_date,
+        prev_date=procedure.get("procedure_date"),
+        label="Phase 3 Done Date",
+    )
 
     await db.procedures.update_one({"_id": ObjectId(procedure_id)}, {"$set": update_data})
 
@@ -9790,6 +10055,12 @@ async def submit_stage2_prosthetic(
         update_data["stage2_prosthetic_faculty_remark"] = data.faculty_remark
     if data.incharge_remark:
         update_data["stage2_prosthetic_incharge_remark"] = data.incharge_remark
+    # iter-332: actual date Phase 4 Step 1 (impression / try-in) was done.
+    # Lower bound = phase3 done date (or Phase 2 actual / planned procedure_date).
+    _prev = procedure.get("phase3_done_date") or procedure.get("phase2_actual_done_date") or procedure.get("procedure_date")
+    update_data["phase4_step1_done_date"] = _validate_done_date(
+        data.done_date, prev_date=_prev, label="Phase 4 Step 1 Done Date",
+    )
 
     await db.procedures.update_one({"_id": ObjectId(procedure_id)}, {"$set": update_data})
 
@@ -10128,6 +10399,11 @@ async def submit_phase4_step2(
         update_data["phase4_step2_opg_upload"] = data.opg_upload
     if data.prosthesis_photos:
         update_data["phase4_step2_prosthesis_photos"] = [p for p in data.prosthesis_photos if p.get("filename")]
+    # iter-332: actual date Phase 4 Step 2 (final prosthesis delivery) was done
+    _prev2 = procedure.get("phase4_step1_done_date") or procedure.get("phase3_done_date") or procedure.get("phase2_actual_done_date") or procedure.get("procedure_date")
+    update_data["phase4_step2_done_date"] = _validate_done_date(
+        data.done_date, prev_date=_prev2, label="Phase 4 Step 2 Done Date",
+    )
 
     await db.procedures.update_one({"_id": ObjectId(procedure_id)}, {"$set": update_data})
 
