@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { CHECKLIST_DATA } from '../../../constants/checklist';
 import { showUploadPicker } from '../../../utils/uploadPicker';
 import RadiographCompare from '../../../components/RadiographCompare';
+import DoneDatePicker, { todayIso } from '../../../components/DoneDatePicker';
 
 const TRIAL_ITEMS = CHECKLIST_DATA.prosthetic_phase.step2.items;
 const FULL_ARCH_TYPES = new Set(['All on 4', 'All on 6', 'All on X']);
@@ -27,6 +28,8 @@ export default function Phase4Step2Screen() {
   const notesLabel = isFaculty ? "Operator's Notes" : "Student Notes";
   const [loading, setLoading] = useState(false);
   const [completed, setCompleted] = useState(false);
+  // iter-332: actual date Phase 4 Step 2 (trial / delivery) was performed
+  const [doneDate, setDoneDate] = useState<string>(todayIso());
 
   // Procedure context
   const [procedure, setProcedure] = useState<any>(null);
@@ -228,6 +231,8 @@ export default function Phase4Step2Screen() {
         iopa_uploads: isFullArch ? null : iopaUploads,
         opg_upload: isFullArch ? opgUpload : null,
         prosthesis_photos: validPhotos,
+        // iter-332: actual delivery date (defaults to today)
+        done_date: doneDate || null,
       });
 
       if (isInchargeSelfCreated) {
@@ -499,6 +504,14 @@ export default function Phase4Step2Screen() {
           {/* ── Submit ── */}
           {/* iter-262: visually disabled until all required sections complete. */}
           <View style={{ padding: 16, paddingBottom: 32 }}>
+            {/* iter-332: actual delivery date — defaults to today, back-date up to 30 days. */}
+            <DoneDatePicker
+              label="Done On (Phase 4 — Final Delivery)"
+              value={doneDate}
+              onChange={setDoneDate}
+              testID="phase4-step2-done-date"
+              helperText="Pick the date the prosthesis was actually delivered. Defaults to today; back-date up to 30 days; future dates not allowed."
+            />
             {(() => {
               const uncheckedCount = TRIAL_ITEMS.filter(i => !trialChecklist[i.id]).length;
               const imagingMissing = isFullArch

@@ -13,6 +13,7 @@ import BackToDashboard from '../../../components/BackToDashboard';
 import { PhaseHeader } from '../../../components/PhaseHeader';
 import { Ionicons } from '@expo/vector-icons';
 import { CHECKLIST_DATA } from '../../../constants/checklist';
+import DoneDatePicker, { todayIso } from '../../../components/DoneDatePicker';
 
 const CHECKLIST_ITEMS = CHECKLIST_DATA.second_stage.items;
 
@@ -23,6 +24,8 @@ export default function Stage2SurgicalSubmissionScreen() {
   const isFaculty = user?.role === 'supervisor' || user?.role === 'implant_incharge';
   const notesLabel = isFaculty ? "Operator's Notes" : "Student Notes";
   const [loading, setLoading] = useState(false);
+  // iter-332: actual date Phase 3 was performed (defaults to today; editable to back-date)
+  const [doneDate, setDoneDate] = useState<string>(todayIso());
 
   // ── Phase 2 context (drives the Phase 3 simplified checklist + banner per product spec) ──
   // If Phase 2 selected "Immediate Loading Done" or "Healing Abutment Placed",
@@ -233,6 +236,7 @@ export default function Stage2SurgicalSubmissionScreen() {
           tooth_label: f!.tooth_label,
         })),
         student_notes: studentNotes || null,
+        done_date: doneDate || null,
       });
       const isInchargeSelfCreated = user?.role === 'implant_incharge' && createdByRole === 'implant_incharge' && user?.id === createdById;
       if (isInchargeSelfCreated) {
@@ -500,6 +504,15 @@ export default function Stage2SurgicalSubmissionScreen() {
             </View>
           ) : (
           <View style={{ padding: 16, paddingBottom: 32 }}>
+            {/* iter-332: actual date this Phase 3 work was performed.
+                Defaults to today; up to 30 days back. */}
+            <DoneDatePicker
+              label="Done On (Phase 3 — Second-Stage Surgery / Healing Abutment)"
+              value={doneDate}
+              onChange={setDoneDate}
+              testID="phase3-done-date"
+              helperText="Pick the date you actually performed this step. Defaults to today; can back-date up to 30 days; future dates not allowed."
+            />
             {/* iter-262: visually disabled when checklist or IOPA uploads incomplete. */}
             {(() => {
               const unansweredCount = CHECKLIST_ITEMS_FILTERED.filter(

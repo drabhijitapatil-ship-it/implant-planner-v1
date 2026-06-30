@@ -11,6 +11,7 @@ import { showUploadPicker } from '../../../utils/uploadPicker';
 import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
 import { PhaseHeader } from '../../../components/PhaseHeader';
+import DoneDatePicker, { todayIso } from '../../../components/DoneDatePicker';
 import { Ionicons } from '@expo/vector-icons';
 import {
   CHECKLIST_DATA,
@@ -27,6 +28,8 @@ export default function Phase2SubmissionScreen() {
   const isFaculty = user?.role === 'supervisor' || user?.role === 'implant_incharge';
   const notesLabel = isFaculty ? "Operator's Notes" : "Student Notes";
   const [loading, setLoading] = useState(false);
+  // iter-332: actual surgery date (may differ from planned procedure_date)
+  const [phase2ActualDoneDate, setPhase2ActualDoneDate] = useState<string>(todayIso());
 
   // Pre-Surgery Checklist
   const [preSurgeryChecklist, setPreSurgeryChecklist] = useState<Record<string, boolean>>({});
@@ -343,6 +346,8 @@ export default function Phase2SubmissionScreen() {
     try {
       await api.post(`/procedures/${id}/submit-phase2`, {
         pre_surgery_checklist: preSurgeryChecklist,
+        // iter-332: actual surgery date (may differ from planned procedure_date)
+        actual_done_date: phase2ActualDoneDate || null,
         anesthesia_adequate: anesthesiaAdequate,
         anesthesia_details: anesthesiaAdequate === 'No' ? anesthesiaDetails : null,
         flap_design: flapDesign,
@@ -1286,6 +1291,16 @@ export default function Phase2SubmissionScreen() {
               const isInchargeSelf = (user?.role === 'implant_incharge' && createdByRole === 'implant_incharge' && user?.id === createdById);
               return (
                 <>
+                  {/* iter-332: actual surgery date — defaults to today,
+                      editable to back-date if it slipped from the planned
+                      procedure_date. */}
+                  <DoneDatePicker
+                    label="Actual Surgery Date (Phase 2)"
+                    value={phase2ActualDoneDate}
+                    onChange={setPhase2ActualDoneDate}
+                    testID="phase2-actual-done-date"
+                    helperText="When did the surgery actually happen? Defaults to today; back-date up to 30 days if it slipped from the planned date."
+                  />
                   <TouchableOpacity
                     style={[s.submitBtn, loading && { opacity: 0.6 }, !canSubmit && { backgroundColor: '#B0BEC5' }]}
                     onPress={handleSubmit}

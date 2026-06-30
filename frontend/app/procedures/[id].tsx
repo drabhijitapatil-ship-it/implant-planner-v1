@@ -1096,8 +1096,41 @@ export default function ProcedureDetailScreen() {
         )}
 
         {/* Treatment Timeline / Progress Tracker */}
+        {/* iter-332: now keyed on the clinical "Done On" dates the
+            student/clinician picks at each phase submission. Falls back
+            to the bureaucratic approval timestamp for legacy cases that
+            were submitted before the Done-On feature shipped. The
+            "Approved by..." line stays but is visually demoted so the
+            clinical timeline reads first. */}
         <View style={styles.timelineContainer} testID="treatment-timeline" data-testid="treatment-timeline">
-          <Text style={styles.timelineTitle}>Treatment Progress</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <Text style={styles.timelineTitle}>Treatment Progress</Text>
+            {(() => {
+              // Total treatment duration: earliest known phase date to latest.
+              const candidates = [
+                procedure.procedure_date,
+                procedure.phase2_actual_done_date,
+                procedure.phase3_done_date,
+                procedure.phase4_step1_done_date,
+                procedure.phase4_step2_done_date,
+              ].filter(Boolean) as string[];
+              if (candidates.length < 2) return null;
+              const dates = candidates.map(d => new Date(d)).filter(d => !isNaN(d.getTime()));
+              if (dates.length < 2) return null;
+              const min = new Date(Math.min(...dates.map(d => d.getTime())));
+              const max = new Date(Math.max(...dates.map(d => d.getTime())));
+              const days = Math.max(0, Math.round((max.getTime() - min.getTime()) / (1000 * 60 * 60 * 24)));
+              const label = days < 7 ? `${days} day${days === 1 ? '' : 's'}` :
+                            days < 60 ? `${Math.round(days / 7)} week${Math.round(days / 7) === 1 ? '' : 's'}` :
+                            `${Math.round(days / 30)} month${Math.round(days / 30) === 1 ? '' : 's'} (${days} days)`;
+              return (
+                <View style={styles.durationPill} testID="treatment-duration-pill" data-testid="treatment-duration-pill">
+                  <Ionicons name="time-outline" size={12} color="#1565C0" />
+                  <Text style={styles.durationPillText}>Total: {label}</Text>
+                </View>
+              );
+            })()}
+          </View>
           <View style={styles.timelineSteps}>
             {(() => {
               // iter-225: drop the Phase 2 step for existing-implant cases —
@@ -1105,12 +1138,6 @@ export default function ProcedureDetailScreen() {
               // existing_implants[] on Phase 1.
               const isExistingImplant = procedure.case_origin === 'existing_implants';
               // iter-272: each completed phase shows the assigned approver(s).
-              // Phase 1-4 all require sign-off from the supervisor +
-              // implant in-charge. We treat the assigned roles as the
-              // approver line — accurate because the dual-approval gate
-              // only opens once both have stamped. We avoid stacking a
-              // second "Dr." prefix when the stored name already starts
-              // with a clinical title (Dr./Prof./Mr./Mrs./Ms.).
               const TITLE_RE = /^(dr\.?|prof\.?|mr\.?|mrs\.?|ms\.?)\s/i;
               const withDoctorTitle = (n?: string) => {
                 if (!n) return '';
@@ -1122,34 +1149,54 @@ export default function ProcedureDetailScreen() {
               if (sup) approverParts.push(withDoctorTitle(sup));
               if (inc && inc !== sup) approverParts.push(withDoctorTitle(inc));
               const phaseApprover = approverParts.length ? `Approved by ${approverParts.join(' & ')}` : null;
+
+              // iter-332: prefer the clinical "Done On" date entered by the
+              // clinician; fall back to the legacy approval timestamp so
+              // pre-iter-332 cases still render. Date strings (YYYY-MM-DD)
+              // get formatted with date-fns, datetime ISO falls through too.
+              const fmtDone = (d?: string | Date | null) => {
+                if (!d) return null;
+                try {
+                  const obj = typeof d === 'string' ? new Date(d) : d;
+                  if (isNaN(obj.getTime())) return null;
+                  return format(obj, 'MMM dd, yyyy');
+                } catch { return null; }
+              };
+
               const allSteps = [
-                { key: 'phase1', label: 'Phase 1', subtitle: isExistingImplant ? 'Examination and Case Details' : 'Diagnosis and Treatment Planning',
+                { key: 'phase1', label: 'Phase 1', subtitle: isExistingImplant ? 'Examination & Case Details' : 'Diagnosis & Treatment Planning',
                   done: ['phase1_approved','pending_phase2','phase2_approved','pending_stage2_surgical','stage2_surgical_approved','pending_stage2_prosthetic','completed'].includes(procedure.status),
                   active: procedure.status === 'pending_phase1',
-                  timestamp: procedure.phase1_completed_at,
+                  doneOn: procedure.procedure_date,
+                  legacy: procedure.phase1_completed_at,
                   approver: phaseApprover },
                 { key: 'phase2', label: 'Phase 2', subtitle: 'Implant Surgery',
                   done: ['phase2_approved','pending_stage2_surgical','stage2_surgical_approved','pending_stage2_prosthetic','completed'].includes(procedure.status),
                   active: ['phase1_approved','pending_phase2'].includes(procedure.status),
-                  timestamp: procedure.phase2_completed_at,
+                  doneOn: procedure.phase2_actual_done_date,
+                  legacy: procedure.phase2_completed_at,
                   approver: phaseApprover },
-                { key: 'stage2s', label: 'Phase 3', subtitle: 'Healing and Second Stage Surgery',
+                { key: 'phase3', label: 'Phase 3', subtitle: 'Healing & Second-Stage Surgery',
                   done: ['stage2_surgical_approved','pending_stage2_prosthetic','completed'].includes(procedure.status),
                   active: ['phase2_approved','pending_stage2_surgical'].includes(procedure.status),
-                  timestamp: procedure.stage2_surgical_completed_at,
+                  doneOn: procedure.phase3_done_date,
+                  legacy: procedure.stage2_surgical_completed_at,
                   approver: phaseApprover },
-                { key: 'stage2p', label: 'Phase 4', subtitle: 'Prosthetic Rehabilitation',
-                  done: procedure.status === 'completed',
+                { key: 'phase4s1', label: 'Phase 4 — Step 1', subtitle: 'Impressions / Try-In',
+                  done: ['stage2_prosthetic_step1_approved','completed'].includes(procedure.status),
                   active: ['stage2_surgical_approved','pending_stage2_prosthetic'].includes(procedure.status),
-                  timestamp: procedure.stage2_prosthetic_completed_at,
+                  doneOn: procedure.phase4_step1_done_date,
+                  legacy: procedure.stage2_prosthetic_completed_at,
                   approver: phaseApprover },
-                { key: 'complete', label: 'Complete', subtitle: 'Treatment Done',
+                { key: 'phase4s2', label: 'Phase 4 — Step 2', subtitle: 'Final Prosthesis Delivery',
                   done: procedure.status === 'completed',
-                  active: false,
-                  timestamp: procedure.treatment_completed_at,
-                  approver: null /* duplicate of Phase 4 — keep clean */ },
+                  active: ['stage2_prosthetic_step1_approved','pending_final_delivery'].includes(procedure.status),
+                  doneOn: procedure.phase4_step2_done_date,
+                  legacy: procedure.treatment_completed_at,
+                  approver: phaseApprover },
               ];
-              return isExistingImplant ? allSteps.filter(s => s.key !== 'phase2') : allSteps;
+              return (isExistingImplant ? allSteps.filter(s => s.key !== 'phase2') : allSteps)
+                .map((s: any) => ({ ...s, timestamp: fmtDone(s.doneOn) || fmtDone(s.legacy), isClinical: !!s.doneOn }));
             })().map((step: any, index, arr) => (
               <View key={step.key} style={styles.timelineStep}>
                 <View style={styles.timelineNodeCol}>
@@ -1180,16 +1227,23 @@ export default function ProcedureDetailScreen() {
                     step.active && styles.timelineLabelActive,
                   ]}>{step.label}</Text>
                   <Text style={styles.timelineSubtitle}>{step.subtitle}</Text>
+                  {/* iter-332: clinical "Done on" date is the primary signal,
+                      stronger than the approval timestamp. Legacy cases that
+                      only have an approval timestamp fall through with the
+                      secondary muted style. */}
+                  {step.timestamp ? (
+                    <Text
+                      style={step.isClinical ? styles.timelineDoneOn : styles.timelineTimestamp}
+                      data-testid={`timeline-done-${step.key}`}
+                    >
+                      {step.isClinical ? 'Done on ' : ''}{step.timestamp}
+                    </Text>
+                  ) : null}
                   {step.done && step.approver ? (
-                    <Text style={styles.timelineApprover} numberOfLines={2} data-testid={`timeline-approver-${step.key}`}>
+                    <Text style={styles.timelineApproverSecondary} numberOfLines={2} data-testid={`timeline-approver-${step.key}`}>
                       {step.approver}
                     </Text>
                   ) : null}
-                  {step.timestamp && (
-                    <Text style={styles.timelineTimestamp}>
-                      {format(new Date(step.timestamp), 'MMM dd, HH:mm')}
-                    </Text>
-                  )}
                 </View>
               </View>
             ))}
@@ -5173,5 +5227,38 @@ const styles = StyleSheet.create({
     marginTop: 3,
     fontWeight: '600',
     letterSpacing: 0.1,
+  },
+  // iter-332: clinical "Done on" date — the primary signal, stronger than approval.
+  timelineDoneOn: {
+    fontSize: 12,
+    color: '#1B5E20',
+    marginTop: 4,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  // iter-332: secondary muted approver line so clinical date reads first.
+  timelineApproverSecondary: {
+    fontSize: 10,
+    color: '#90A4AE',
+    marginTop: 2,
+    fontWeight: '500',
+    fontStyle: 'italic',
+  },
+  durationPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#E3F2FD',
+    borderWidth: 1,
+    borderColor: '#90CAF9',
+  },
+  durationPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0D47A1',
+    letterSpacing: 0.2,
   },
 });
