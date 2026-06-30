@@ -1,0 +1,117 @@
+<analysis>**original_problem_statement**: A comprehensive prosthodontics mobile application for managing implant surgical case workflows across 4 phases. The user recently uploaded master documents for drilling protocols and implant indications. The current priority is ensuring the deployed Expo Go application correctly reflects these backend updates, as the user reported seeing stale data (only 45 systems instead of 49, missing protocols, and role-based access issues). Additionally, the user requested Phase 1 UI refinements and PDF export functionality.
+
+**User's preferred language**: English (INSTRUCT next agent to respond in English only)
+
+**what currently exists?**: 
+A React Native (Expo) frontend + FastAPI backend + MongoDB application. The application features a dynamic 4-phase approval workflow. The backend dynamically maps user inputs against hardcoded dictionaries in a massive  file to generate surgical protocols. The backend case report PDF generator has been updated to include all recent clinical and medical data. The deployment pipeline uses Expo Go.
+
+**Last working item**: 
+    - Last item agent was working: Fixing the Stale Data in Expo Go deployment issue. The agent discovered the deployed managed MongoDB was stuck on old seed data (45 systems) because the backend  function was using a safe upsert that didn't overwrite old data. The agent updated the seed logic to force a full collection replace if the document count does not match the latest authoritative Excel file, and added  to the frontend .
+    - Status: USER VERIFICATION PENDING
+    - Agent Testing Done: Y
+    - Which testing method agent to use?: NA (Agent successfully tested backend startup logs showing 49 systems/649 documents seeded. User needs to verify via their physical iOS device).
+    - User Testing Done: N
+
+**All Pending/In progress Issue list**: 
+  Issue 1: Expo Go App Showing Stale Data (P0)
+     - Attempted fixes: Agent updated the backend  logic in  to forcefully sync the database with  if the counts don't match. Added the required  to  as per the deployment agent's advice, and cleaned up redundant Excel files.
+     - Next debug checklist: Instruct the user to trigger a fresh redeployment and scan the new QR code. Ask the user to verify if they now see 49 implant systems, available drilling protocols, and if Supervisors can successfully navigate to New Case.
+     - Why fix this issue and what will be achieved with the fix? The user cannot verify or use the newly integrated medical data if the production/deployed database is stuck on a legacy cache.
+     - Status: USER VERIFICATION PENDING
+     - Is recurring issue? Y
+     - Should Test frontend/backend/both after fix? Frontend (User Testing via Expo Go)
+     - Blocked on other issue: None
+
+**In progress Task List**: 
+   *(None currently in progress - awaiting user verification on the deployment fix)*
+
+**Upcoming and Future Tasks**
+    Upcoming Tasks:
+    - P1: Data visibility refinement for approval workflow: Ensure all entered data is visible to Supervisor and In-Charge *before* approval, and to the student *after* approval (in ).
+    - P2: Add indications and protocols for the remaining 17 implant systems once the user provides the files for them.
+    
+    Future Tasks:
+    - P2: Backend refactoring: Decompose the massive  (>6200 lines) into modular routers and services.
+    - P2: Frontend refactoring: Modularize complex UI components like .
+    - P2: Data cleanup: Create a script to find and remove duplicate user entries from the database.
+
+**Completed work in this session**
+- Audited and fixed missing/extra steps in 3 critical drilling protocols (Alpha-Bio SPI, Neodent Helix GM, Ankylos C/X) to perfectly match the user's uploaded Word document. (DONE)
+- Updated the backend PDF case report generator () to include Clinical Examination, Medical Assessments, and new Phase 2/3/4 data structures. (DONE)
+- Verified frontend Phase 1 UI requirements:  correctly shows the Top 3 + Show More implant matching logic. (DONE)
+- Diagnosed and fixed the root cause of the stale deployment issue by updating  in  to forcefully drop and reseed the MongoDB  collection if data is outdated. (DONE)
+- Added  to frontend  to stabilize Expo Go tunneling. (DONE)
+- Removed redundant/legacy Excel files, leaving only the authoritative . (DONE)
+
+**Earlier issues found/mentioned but not fixed**
+  *(None - all previously mentioned Phase 1 UI/PDF tasks and drilling protocol audits were completed)*
+
+**Known issue recurrence from previous fork**
+  - Issue recurrence in previous fork: App showing old data / Updates are not happening in Expo Go.
+  - Recurrence count: 4
+  - Status: USER VERIFICATION PENDING (Agent implemented a backend seed replacement fix).
+
+**Code Architecture**
+
+
+**Key Technical Concepts**
+- **Frontend**: React Native, Expo Router. Complex conditional rendering based on user role (, , ).
+- **Backend**: FastAPI, MongoDB (Motor). Generates dynamic surgical protocols based on hardcoded dictionaries mapped against user inputs (bone density, dimensions). FPDF2 is used for case report PDF generation.
+
+**key DB schema**
+  - : Contains exactly 649 documents representing variant combinations, grouped under exactly 49 brand/system keys.
+  - : Complex case document containing  and nested arrays/objects for each clinical phase (, , etc.).
+
+**changes in tech stack**
+  - None
+
+**All files of reference** 
+-  (Modified seed logic, PDF generator, and drilling protocols)
+-  (Verified as the single source of truth)
+-  (Modified to include Expo tunnel subdomain)
+-  (Updated)
+
+**Areas that need refactoring**: 
+-  is critically large (>6200 lines) and contains routing, schemas, DB logic, and massive hardcoded medical dictionaries. It urgently needs to be broken down.
+
+**key api endpoints**
+-  (Generates comprehensive PDF)
+- 
+- 
+
+**Critical Info for New Agent** 
+- **Deployment State Awareness**: The user's deployed app was connecting to an Emergent-managed MongoDB that had stale seed data (45 systems instead of 49). The agent fixed the  function to forcefully overwrite the database if counts don't match the Excel file. 
+- **Immediate Action**: You MUST start by asking the user to trigger a redeployment in their platform UI, scan the new Expo QR code, and verify if the data (49 systems, visible protocols, ability for supervisors to create cases) is now correctly reflecting in their iOS Expo Go app. 
+- Do not attempt to build Android APKs; the user relies exclusively on Expo Go for iOS.
+
+**documents and test reports created in this job**
+  - 
+  -  (17/17 backend tests passed for PDF generation and protocol fixes)
+
+**Last 10 User Messages and any pending HUMAN messages** 
+1. (Latest) User states: 1. Scanning the QR code from the redeployment in emergent. 3. I see data with 45 implant systems. No drilling protocols, Supervisors and Implant In Charge cannot create a new case. 4. Yes (Status: USER VERIFICATION PENDING - Agent applied backend seed fixes to address this).
+2. User states: Still, the changes are not seen in the Expo Go app after Redeployment. The Expo Go is showing some backdated version of the app. (Status: COMPLETED - led to investigation above).
+3. User says Yes to starting the drilling protocol audit and Phase 1 UI/PDF export tasks. (Status: COMPLETED).
+
+**Project Health Check:**
+- Broken: None
+- Mocked: None
+
+**3rd Party Integrations** 
+- Expo EAS (Deployment)
+- Ngrok v3 (Local Tunneling)
+- Stripe (Payments) - requires User API Key
+
+**Testing status**
+  - Testing agent used after significant changes: YES ( was used to verify backend PDF generation and protocol logic).
+  - Troubleshoot agent used after agent stuck in loop: NO (but Deployment Agent was consulted).
+  - Test files created: 
+  - Known regressions: None currently known.
+
+**Credentials to test flow:**
+- Admin/In-Charge:  / 
+- Student:  / 
+- Supervisor:  / 
+
+**What agent forgot to execute**
+The agent completed the planned tasks, but the conversation ended immediately after applying the fix for the user's stale deployment issue. The next agent must immediately guide the user to test the fix by redeploying the app and verifying the Expo Go environment.</analysis>

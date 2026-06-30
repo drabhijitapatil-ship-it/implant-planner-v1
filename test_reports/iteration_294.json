@@ -1,0 +1,37 @@
+{
+  "summary": "iter-294 Adin CloseFit backend regression — 21/21 tests PASS (100%). Verified: (1) UNP CloseFit returns EXACTLY 6 lengths [10, 11.5, 13, 15, 16, 18] with 8mm removed; NP=6, RP=6, WP=12 SKUs across Ø4.3+Ø5.0. (2) Primary drilling protocols are now SEQUENTIAL (Pilot 2.0 + Twist 2.8 + Twist 3.2 + …) per all 4 CloseFit platforms. (3) alt_protocol='Tri-Step Drill (alternative)' present ONLY on RP/WP CloseFit — UNP/NP CloseFit correctly return alt_protocol=null. Step counts validated: RP Ø3.5 L11.5 D2 = 4 steps (3 drills + placement) / alt 2 steps; WP Ø5.0 L13 D2 = 7 steps / alt 4 steps; WP Ø4.3 L11.5 D2 = 5 steps / alt 2 steps; UNP Ø2.75 L10 D2 = 3 steps / no alt; NP Ø3.0 L11.5 D2 = 3 steps / no alt. (4) Cortical-only logic preserved: RP Ø3.5 D2 step 3 (Twist 3.2) → cortical_only=True, depth='Cortex only'; D1 step 3 → cortical_only=False, numeric depth. (5) D4 soft-bone behaviour: RP=2 steps, NP=2 steps, UNP=3 steps. (6) Step schema validated — all DRILL steps carry {step, drill_type, code, diameter, depth, cortical_only, rpm, irrigation, note}. (7) Components expanded per platform: UNP=30, NP=30, RP=30, WP=49; is_stub=false; updated_by='adin_components_expanded:iter-294'. (8) WP screw_retained_abutment breakdown verified: 15 total = TMA straight 5 + TMA 17° 4 + TMA 30° 4 + flat-connection 2. (9) Cement abutment angulations {0°, 15°, 25°} present in catalog. (10) Regression PASSED: Touareg-OS/S, Swell, One libraries+drilling unchanged; Straumann BLT (3 systems) + BLX (4 systems) library intact; BLX components still return 135 RB / 68 WB.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/drilling-protocols/generate",
+        "issue": "The terminal 'Implant Placement' step in the response is missing the 'cortical_only' key (other 8 schema fields present). Spec language is ambiguous (says 'each drill step' — placement is procedural, not a drill). For consistency with the unified-step schema, recommend adding cortical_only=False (or null) to the placement row across all Adin protocols. Test was adjusted to validate drill steps only."
+      }
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_adin_closefit_iter294.py",
+    "/app/test_reports/pytest/iter294_adin_closefit.xml"
+  ],
+  "action_items": [
+    "(Optional / minor) Normalize the 'Implant Placement' step to include cortical_only (False or null) so the unified step schema is uniform across drill+placement rows. This is cosmetic — no functional impact today."
+  ],
+  "critical_code_review_comments": [
+    "adin_data.py SYSTEM_SIZES correctly drops 8mm from UNP CloseFit (line 31); NP/RP retain 8mm baseline. PROTOCOLS now use sequential ladders for all 4 CloseFit platforms; TRISTEP_CLOSEFIT_PROTOCOLS limited to RP/WP per catalog. Clear separation between primary and alternative.",
+    "server.py drilling dispatcher (lines 12786-12800) cleanly gates the Tri-Step alt to RP/WP CloseFit only and uses the 'name=Tri-Step Drill (alternative)' label per spec. Description string included is a nice UX detail.",
+    "adin_components_expanded.py (274 lines) follows the same _build_platform palette pattern as Alpha Bio / Straumann BLX expanders. Counts 30/30/30/49 verified at import. WP SRA TMA palette (5 straight + 4×17° + 4×30° + 2 flat = 15) matches spec exactly.",
+    "_seed_adin_components.py.seed_if_thin() is idempotent (compares live count vs target_count) — verified clean re-seed on hot-reload via backend.out.log: 'Seeded 4 Adin CloseFit system(s)'.",
+    "Catalog codes use AD-CF-<plat>-* generic prefix (documented in agent_to_agent_context_note). Acceptable given the source PDF lacked per-SKU AR codes; consider revisiting when Adin publishes a canonical SKU list.",
+    "Recurring concern from iter-283/292/293: server.py is now 14,972 lines; the chain of seed_if_thin() startup hooks (alpha-bio + BLX + Adin) keeps growing. Extracting into a brand-registry loader would simplify future iterations.",
+    "Minor: placement step omits cortical_only — see backend_issues.minor above."
+  ],
+  "updated_files": ["/app/backend/tests/test_adin_closefit_iter294.py"],
+  "success_rate": {"backend": "100% (21/21 passed)", "frontend": "n/a (backend-only request)"},
+  "test_credentials": "Abhijit.patil / Admin@123 (admin) — POST /api/auth/login {identifier, password}; token at .access_token. Loaded from /app/memory/test_credentials.md.",
+  "seed_data_creation": "None created by tests. Verified the existing startup hook _seed_adin_components.seed_if_thin() executed during backend reload — backend.out.log shows: 'UNP CloseFit → 30 components, NP CloseFit → 30, RP CloseFit → 30, WP CloseFit → 49. Seeded 4 Adin CloseFit system(s).' Legacy UNP 8mm row removed by _seed_adin.py cleanup.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run: `cd /app && REACT_APP_BACKEND_URL=$(grep EXPO_PUBLIC_BACKEND_URL frontend/.env | cut -d= -f2) python -m pytest backend/tests/test_adin_closefit_iter294.py -v`. Catalog endpoint is query-param (?key=Brand|System URL-encoded). The library endpoint returns a flat list of {brand, system, diameters, lengths, count, indication, indicated_procedures, indicated_bone_types} objects; `count` is total SKUs across all diameters for that system (WP CloseFit count=12 = Ø4.3 6 + Ø5.0 6). UNP/NP CloseFit must NOT include alt_protocol; only RP/WP do. The 'Implant Placement' terminal step legitimately lacks cortical_only — test asserts schema on drill steps only.",
+  "rca of the issue": "N/A — no functional bugs. The single 'minor' finding (placement step missing cortical_only) is a schema-uniformity nit, not a defect. iter-294 backend implementation is correct and stable."
+}

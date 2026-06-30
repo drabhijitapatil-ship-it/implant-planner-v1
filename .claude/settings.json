@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(chmod +x /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/dev.sh)",
+      "Bash(mongosh --quiet --eval \"db.runCommand\\({ping:1}\\)\")",
+      "Bash(cp /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/frontend/app/auth/register-college.tsx /dev/null 2>/dev/null; echo \"ok\")",
+      "Bash(git check-ignore *)",
+      "Bash(echo \"exit:$?\")",
+      "Bash(git rm *)",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('server.py'\\).read\\(\\)\\)\")",
+      "Bash(ls -d uploads static assets)",
+      "Bash(ls *.png)",
+      "Bash(mkdir -p backend/email_assets)",
+      "Bash(sips -z 160 160 frontend/assets/images/icon.png --out backend/email_assets/logo.png)",
+      "Bash(sips -g pixelWidth -g pixelHeight icon.png splash-icon.png icon_2.png adaptive-icon.png)",
+      "Bash(python3 -c \"import PIL; print\\(PIL.__version__\\)\")",
+      "Bash(python3 -m pip install --user --quiet Pillow)",
+      "Bash(python3 -m venv venv --quiet)",
+      "Bash(./venv/bin/pip install *)",
+      "Bash(python3 -m venv venv)",
+      "Bash(/private/tmp/claude-501/-Users-prathmeshjadhav-Desktop-work-implant-planner-v1-main/b8c782d4-5f74-46e2-a14a-1e7bf136d0e3/scratchpad/venv/bin/python3)",
+      "Bash(/private/tmp/claude-501/-Users-prathmeshjadhav-Desktop-work-implant-planner-v1-main/b8c782d4-5f74-46e2-a14a-1e7bf136d0e3/scratchpad/venv/bin/pip install *)"
+    ],
+    "additionalDirectories": [
+      "/dev"
+    ]
+  }
+}

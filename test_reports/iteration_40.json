@@ -1,0 +1,89 @@
+{
+  "summary": "Iteration 40: Two-Tier Rejection System Testing - 13/13 tests PASSED (100%)",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "note": "Frontend testing skipped per request. Backend-only testing performed."
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_two_tier_rejection_iteration40.py",
+    "/app/test_reports/pytest/pytest_results_iteration40.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Feature 1 (Phase 1 permanent rejection): PASS - Sets status='permanently_rejected', stores rejection_reason, rejection_type='permanent', rejected_by, rejected_at, rejected_phase='phase1'",
+    "Feature 2 (Phase 1 reconsider rejection): PASS - Sets status='draft', stores rejection_reason, rejection_type='reconsider', resets supervisor_phase1_approved=False and implant_incharge_phase1_approved=False",
+    "Feature 3 (Phase 1 reconsider resubmit): PASS - After reconsider rejection, student can call request-phase1-approval again, status changes from draft to pending_phase1",
+    "Feature 4 (Phase 2 permanent rejection): PASS - Sets status='permanently_rejected', stores phase2_rejection_reason, phase2_rejection_type='permanent', rejected_phase='phase2'",
+    "Feature 5 (Phase 2 reconsider rejection): PASS - Sets status='phase1_approved', stores phase2_rejection_reason, phase2_rejection_type='reconsider', resets phase2 approval flags",
+    "Feature 6 (Notifications): PASS - Both rejection types send notifications to case creator. Permanent: 'permanently rejected', Reconsider: 'rejected with consideration'",
+    "Feature 7 (Full flow): PASS - Create -> Phase1 approve (both) -> Submit Phase2 -> Reconsider reject Phase2 -> Status=phase1_approved -> Resubmit Phase2 -> Status=pending_phase2",
+    "Feature 8 (Permanently rejected blocks actions): PASS - permanently_rejected status returns 400 on request-phase1-approval and approve endpoints",
+    "Feature 9 (rejection_type field): PASS - ApprovalAction model accepts rejection_type='permanent' or 'reconsider', defaults to 'permanent' when not specified"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_two_tier_rejection_iteration40.py"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13 tests passed)",
+    "frontend": "N/A (skipped per request)"
+  },
+  "test_credentials": {
+    "student": {"email": "Gaurav.pandey", "password": "Student@123", "id": "69b79409a17f36c024eb2d65"},
+    "supervisor": {"email": "Vasantha.n", "password": "Supervisor@123", "id": "69b79408a17f36c024eb2d62"},
+    "implant_incharge": {"email": "Abhijit.patil", "password": "Admin@123", "id": "69b79407a17f36c024eb2d5e"}
+  },
+  "seed_data_creation": "Created multiple test procedures during testing with prefix TEST_TwoTierRejection: P1_PERM, P1_RECON, P1_RESUB, P2_PERM, P2_RECON, NOTIF_PERM, NOTIF_RECON, FULLFLOW, BLOCK_P1, BLOCK_APPROVE, TYPE_PERM, TYPE_RECON, TYPE_DEF",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Two-tier rejection system fully verified. Key flows: 1) Phase 1 rejection: permanent->permanently_rejected, reconsider->draft with approval flags reset. 2) Phase 2 rejection: permanent->permanently_rejected, reconsider->phase1_approved with phase2 flags reset. 3) Student can resubmit after reconsider rejection by calling request-phase1-approval (Phase 1) or submit-phase2 (Phase 2). 4) permanently_rejected status blocks all further approval actions with 400 error. 5) Notifications include rejection type label ('permanently rejected' or 'rejected with consideration'). 6) rejection_type field in ApprovalAction model accepts 'permanent' or 'reconsider', defaults to 'permanent'.",
+  "tested_features": {
+    "phase1_permanent_rejection": "PASS - status=permanently_rejected with all rejection fields",
+    "phase1_reconsider_rejection": "PASS - status=draft, approval flags reset",
+    "phase1_reconsider_resubmit": "PASS - student can request-phase1-approval again",
+    "phase2_permanent_rejection": "PASS - status=permanently_rejected with phase2 rejection fields",
+    "phase2_reconsider_rejection": "PASS - status=phase1_approved, phase2 flags reset",
+    "notification_permanent": "PASS - notification contains 'permanently rejected'",
+    "notification_reconsider": "PASS - notification contains 'rejected with consideration'",
+    "full_flow_phase2_resubmit": "PASS - complete workflow verified",
+    "permanently_rejected_blocks_actions": "PASS - returns 400 on blocked actions",
+    "rejection_type_permanent_accepted": "PASS - API accepts rejection_type='permanent'",
+    "rejection_type_reconsider_accepted": "PASS - API accepts rejection_type='reconsider'",
+    "rejection_type_defaults_permanent": "PASS - defaults to 'permanent' when not specified"
+  },
+  "tested_endpoints": {
+    "POST /api/auth/login": "200 - All roles authenticate correctly",
+    "POST /api/procedures": "200 - Creates procedure in draft status",
+    "POST /api/procedures/{id}/request-phase1-approval": "200 - Changes draft to pending_phase1, 400 on wrong status",
+    "POST /api/procedures/{id}/approve (reject permanent)": "200 - Sets permanently_rejected with rejection fields",
+    "POST /api/procedures/{id}/approve (reject reconsider)": "200 - Resets status to draft (Phase1) or phase1_approved (Phase2)",
+    "POST /api/procedures/{id}/submit-phase2": "200 - Submits Phase 2 surgical checklist",
+    "GET /api/procedures/{id}": "200 - Returns procedure with all rejection fields",
+    "GET /api/notifications": "200 - Returns notifications with rejection messages"
+  },
+  "rejection_system_verification": {
+    "phase1_permanent": {
+      "status": "permanently_rejected",
+      "fields_set": ["rejection_reason", "rejection_type", "rejected_by", "rejected_at", "rejected_phase"]
+    },
+    "phase1_reconsider": {
+      "status": "draft",
+      "fields_set": ["rejection_reason", "rejection_type", "rejected_by", "rejected_at", "rejected_phase"],
+      "flags_reset": ["supervisor_phase1_approved", "implant_incharge_phase1_approved"]
+    },
+    "phase2_permanent": {
+      "status": "permanently_rejected",
+      "fields_set": ["phase2_rejection_reason", "phase2_rejection_type", "phase2_rejected_by", "phase2_rejected_at", "rejected_phase"]
+    },
+    "phase2_reconsider": {
+      "status": "phase1_approved",
+      "fields_set": ["phase2_rejection_reason", "phase2_rejection_type", "phase2_rejected_by", "phase2_rejected_at", "rejected_phase"],
+      "flags_reset": ["supervisor_phase2_approved", "implant_incharge_phase2_approved"]
+    }
+  }
+}

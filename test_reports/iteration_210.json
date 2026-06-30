@@ -1,0 +1,43 @@
+{
+  "summary": "iter-210 backend testing complete + frontend code review. The new optional `multi_unit_abutment_details` field on Stage2ProstheticSubmit round-trips correctly through POST /api/procedures/{id}/stage2/prosthetic. All 4 new tests + 24 alpha_bio regression + 7 phase4_step2_iter143 regression passed (35/35). Live frontend smoke test of the MUA editor was NOT executed because the Mongo DB currently has 0 procedures with phase2_data.multi_unit_abutment_placed='yes' — the structured editor only renders for those cases (or when a Phase-4 override already exists). Login flow + dashboard render verified in browser. Code review of all three frontend changes (case-detail Torque dedup, Phase 3 Measurements NA fallback, MUA editor + pdfGenerator override) confirms they implement the spec.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_mua_phase4_override_iter210.py",
+    "/app/test_reports/pytest/iteration_210.xml",
+    "/app/test_reports/pytest/iteration_210_full.xml"
+  ],
+  "action_items": [
+    "OPTIONAL — confirm live UI smoke: seed a procedure with phase2_data.multi_unit_abutment_placed='yes' + at least one MUA row + status='stage2_surgical_approved' (or hit /api/procedures POST flow through Phase 1+2+3). Then login as Abhijit.patil / Admin@123, navigate to /procedures/{id}/submit-stage2-prosthetic, confirm the new 'Multi-Unit Abutments' card with 'Copy MUA from Phase 2 (N)' button is rendered.",
+    "Cosmetic: pdfGenerator buildLabSlipHtml appends '°' to angulation unconditionally (line 544). If the user types '30°' into the new structured editor it will render '30°°' on the Lab Slip. Consider stripping a trailing '°' before re-appending."
+  ],
+  "critical_code_review_comments": [
+    "Backend (server.py:7901-7902): persistence uses **({} if None else {key: val}) so the key is omitted when payload is None and persisted verbatim otherwise. Round-trip verified for populated list / empty list / omitted / 422-on-malformed. ✓",
+    "Frontend submit-stage2-prosthetic/[id].tsx:227-235: when muaTouched is true and all rows are blank-trimmed empty, payload sends multi_unit_abutment_details=null (not []). Backend treats null as 'omitted' which means phase4_step1_data is rewritten WITHOUT the key — effectively the same as 'cleared' because the dict is replaced wholesale. The behavior matches the spec (PDF falls back to Phase 2). The asymmetry between frontend (null on clear) and the backend test for empty-list ([]) is fine as both result in the override being absent on subsequent reads.",
+    "Frontend procedures/[id].tsx:2304-2380: ISQ + HA filter logic correctly drops blank entries while preserving the original implant index for tooth-label mapping (idx is taken from the raw array, blanks are skipped via `if (!nonEmpty(val)) return null;`). The NA fallback renders only when at least one of the two arrays exists (truthy) but both filter to empty — matches spec.",
+    "Frontend procedures/[id].tsx:1992-1996: only the comment block remains where the duplicate Torque Values chips used to be. Standalone orange Torque Values Achieved card (rendered earlier in the readback) is now the single source of truth. ✓",
+    "Frontend utils/pdfGenerator.ts:530-538: phase4MuaOverride is preferred over phase2MuaDetails when its length>0; muaPlaced flag also ORs with the override so the section renders even when Phase 2 said 'no'. ✓",
+    "Cosmetic — pdfGenerator.ts:544: `angRaw ? \"${angRaw}°\" : \"—\"` always appends a degree sign. If the new structured editor row contains '30°', the slip prints '30°°'. Suggest `${angRaw.replace(/°+$/, '')}°` for safety.",
+    "Phase 4 form code (line 235): `payload.multi_unit_abutment_details = cleaned.length > 0 ? cleaned : null;` — sending null when cleared drops the override (good). However, if the user never opens / touches the editor (`muaTouched=false`), the field is NOT included; in the hydrate-and-resend flow this means a save that doesn't touch MUA preserves the existing override only because the frontend re-hydrates muaRows from phase4_step1_data and sets muaTouched on edit. If muaRows is hydrated but the user never edits, muaTouched stays false → field not sent → backend wholesale-replaces phase4_step1_data → override is silently lost. Worth verifying that hydration also sets muaTouched=true (or that the form always re-sends hydrated rows). [Was not verified in this run — needs browser smoke or unit check.]"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_mua_phase4_override_iter210.py (new — 4 pytest cases)"
+  ],
+  "success_rate": {
+    "backend": "100% (4/4 new + 31/31 regression)",
+    "frontend": "code-review only (UI not visually exercised — no MUA-placed procedures in DB)"
+  },
+  "test_credentials": "Admin: Abhijit.patil / Admin@123 (verified login OK, dashboard renders)",
+  "seed_data_creation": "None — used existing procedures via DB-level status mutate-then-restore fixture in the new test file.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend contract verified: POST /api/procedures/{id}/stage2/prosthetic accepts optional multi_unit_abutment_details (List[Dict]). When non-null populated → persisted into phase4_step1_data.multi_unit_abutment_details verbatim. When [] → persisted as []. When null/omitted → key is absent from phase4_step1_data (since phase4_step1_data is replaced wholesale). When malformed (list of non-dicts) → 422. The new pytest file is /app/backend/tests/test_mua_phase4_override_iter210.py (run with EXPO_PUBLIC_BACKEND_URL set). Frontend MUA editor: only renders when phase2_data.multi_unit_abutment_placed==='yes' OR phase4_step1_data.multi_unit_abutment_details exists. To exercise the UI, first seed a Phase-4-eligible case with Phase 2 MUA placed=yes (none currently exist in db). The third critical-review comment about hydrate-without-touch is the only remaining concern that warrants either a unit test or a manual UI check.",
+  "rca of the issue": "N/A — no defects found at API level. UI not visually verified due to absence of MUA-placed procedures in the seeded DB."
+}

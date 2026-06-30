@@ -1,0 +1,456 @@
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator,
+  SafeAreaView,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import api from '../../utils/api';
+import CenteredHeader from '../../components/CenteredHeader';
+
+const TYPE_LABELS: Record<string, string> = {
+  cover_screw: 'Cover Screw',
+  healing_abutment: 'Healing Abutment',
+  gingiva_former: 'Gingiva Former',
+  temporary_cylinder: 'Temporary Cylinder',
+  final_abutment: 'Final Abutment',
+  multi_unit_abutment: 'Multi-Unit Abutment',
+  ti_base: 'Ti-Base',
+  scanbody: 'Scanbody',
+  impression_coping: 'Impression Coping',
+  analog: 'Lab Analog',
+  overdenture_attachment: 'Overdenture Attachment',
+  overdenture: 'Overdenture',
+  locator: 'Locator',
+  bar_attachment: 'Bar Attachment',
+  prosthetic_screw: 'Prosthetic Screw',
+  esthetic_abutment: 'Esthetic Abutment',
+  castable_abutment: 'Castable Abutment',
+  coping: 'Coping',
+};
+
+type CompType = { type: string; count: number };
+type Component = {
+  type: string; subtype?: string; platforms?: string[];
+  // iter-298: real data shape uses SINGULAR keys for diameter/angulation/
+  // platform (and array for gingival heights). The earlier plural-only
+  // fields are kept for backward compatibility with the rare older row.
+  platform?: string;
+  diameter_mm?: number;
+  diameters_mm?: number[];
+  gingival_heights_mm?: number[];
+  heights_mm?: number[];
+  abutment_height_mm?: number;
+  angulation_deg?: number;
+  angulations_deg?: number[];
+  material?: string[]; retention?: string[]; torque_ncm?: number | string;
+  indication?: string; catalog_code?: string;
+};
+type SystemRow = {
+  key: string; brand: string; name: string;
+  connection?: string; components: Component[];
+};
+
+const fmt = (arr?: (number | string)[]) =>
+  arr && arr.length ? arr.join(', ') : '—';
+
+const titleCase = (s: string) =>
+  String(s || '')
+    .replace(/_/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map(w => (w.length <= 3 && w === w.toUpperCase() ? w : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()))
+    .join(' ');
+
+const prettyArr = (arr?: string[]) =>
+  arr && arr.length ? arr.map(titleCase).join(', ') : '—';
+
+// iter-298: At-a-glance bucket summariser. For the currently-selected
+// component type, walk every brand/system and count which diameters, GH
+// heights, and angulations appear — counting each brand only ONCE per
+// value (so "8 brands offer Ø3.5") regardless of how many SKUs each brand
+// has at that size. Returns the top values sorted by brand-coverage, then
+// alphabetically. Pure client-side: no backend round-trip.
+// iter-299: SummaryEntry now also carries the raw `value` (number | string)
+// so the pill can pass it back to the filter without re-parsing "Ø 3.5 mm".
+type SummaryEntry = { key: string; count: number; value: number | string };
+type AtAGlanceBuckets = {
+  diameters: SummaryEntry[];
+  ghHeights: SummaryEntry[];
+  angulations: SummaryEntry[];
+  platforms: SummaryEntry[];
+};
+
+const computeAtAGlance = (rows: SystemRow[]): AtAGlanceBuckets => {
+  // brand-level uniqueness — Set of brands per value
+  const diam = new Map<number, Set<string>>();
+  const gh = new Map<number, Set<string>>();
+  const ang = new Map<number, Set<string>>();
+  const plat = new Map<string, Set<string>>();
+  for (const sys of rows) {
+    const b = sys.brand;
+    for (const c of sys.components) {
+      // Diameters — accept SINGULAR (diameter_mm) and plural (diameters_mm[])
+      const dList: number[] = [];
+      if (typeof c.diameter_mm === 'number') dList.push(c.diameter_mm);
+      if (Array.isArray(c.diameters_mm)) dList.push(...c.diameters_mm);
+      for (const d of dList) {
+        if (!diam.has(d)) diam.set(d, new Set());
+        diam.get(d)!.add(b);
+      }
+      // GH heights
+      if (Array.isArray(c.gingival_heights_mm)) {
+        for (const h of c.gingival_heights_mm) {
+          if (!gh.has(h)) gh.set(h, new Set());
+          gh.get(h)!.add(b);
+        }
+      }
+      // Angulations
+      const aList: number[] = [];
+      if (typeof c.angulation_deg === 'number') aList.push(c.angulation_deg);
+      if (Array.isArray(c.angulations_deg)) aList.push(...c.angulations_deg);
+      for (const a of aList) {
+        if (!ang.has(a)) ang.set(a, new Set());
+        ang.get(a)!.add(b);
+      }
+      // Platforms
+      const pList: string[] = [];
+      if (typeof c.platform === 'string' && c.platform) pList.push(c.platform);
+      if (Array.isArray(c.platforms)) pList.push(...c.platforms);
+      for (const p of pList) {
+        if (!plat.has(p)) plat.set(p, new Set());
+        plat.get(p)!.add(b);
+      }
+    }
+  }
+  const toEntries = <K extends number | string>(m: Map<K, Set<string>>, fmtKey: (k: K) => string): SummaryEntry[] =>
+    Array.from(m.entries())
+      .map(([k, set]) => ({ key: fmtKey(k), count: set.size, sortKey: k, value: k as number | string }))
+      .sort((a, b) => b.count - a.count || (a.sortKey > b.sortKey ? 1 : -1))
+      .slice(0, 8)
+      .map(({ key, count, value }) => ({ key, count, value }));
+  return {
+    diameters:   toEntries(diam, (k) => `Ø ${k} mm`),
+    ghHeights:   toEntries(gh,   (k) => `GH ${k} mm`),
+    angulations: toEntries(ang,  (k) => `${k}°`),
+    platforms:   toEntries(plat, (k) => String(k)),
+  };
+};
+
+export default function ImplantCompare() {
+  const [types, setTypes] = useState<CompType[]>([]);
+  const [picked, setPicked] = useState<string>('healing_abutment');
+  const [rows, setRows] = useState<SystemRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await api.get('/implant-catalog/component-types');
+        setTypes(r.data?.types || []);
+      } catch (e) { /* noop */ }
+    })();
+  }, []);
+
+  const load = useCallback(async (t: string) => {
+    setLoading(true);
+    try {
+      const r = await api.get(`/implant-catalog/compare?component_type=${encodeURIComponent(t)}`);
+      setRows(r.data?.systems || []);
+    } catch (e) { setRows([]); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(picked); }, [picked, load]);
+
+  // iter-298: derive the at-a-glance summary from currently-loaded rows.
+  const summary = React.useMemo(() => computeAtAGlance(rows), [rows]);
+  const hasSummary = summary.diameters.length + summary.ghHeights.length +
+                     summary.angulations.length + summary.platforms.length > 0;
+
+  // iter-299/300: pill-filter state — tap an at-a-glance pill to narrow
+  // the comparison table to only systems whose components match the
+  // selected value. iter-300 extends this to a *per-kind* map so multiple
+  // pills (e.g. Ø 4.5 mm + GH 3 mm + RP) compose with AND logic across
+  // dimensions. Within a single dimension a second tap REPLACES the value
+  // (one component can have only one diameter, etc.), and tapping the
+  // active pill again clears that one dimension. Switching component-
+  // type chip resets everything.
+  type FilterMap = Partial<Record<'diameter' | 'gh' | 'angulation' | 'platform', number | string>>;
+  const [filter, setFilter] = useState<FilterMap>({});
+  useEffect(() => { setFilter({}); }, [picked]);
+  const togglePillFilter = useCallback((kind: 'diameter' | 'gh' | 'angulation' | 'platform', value: number | string) => {
+    setFilter(prev => {
+      const next: FilterMap = { ...prev };
+      if (next[kind] === value) {
+        delete next[kind];
+      } else {
+        next[kind] = value;
+      }
+      return next;
+    });
+  }, []);
+  const activeFilterCount = Object.keys(filter).length;
+  const componentMatchesFilter = useCallback((c: Component) => {
+    if (activeFilterCount === 0) return true;
+    if (filter.diameter !== undefined) {
+      const dList: number[] = [];
+      if (typeof c.diameter_mm === 'number') dList.push(c.diameter_mm);
+      if (Array.isArray(c.diameters_mm)) dList.push(...c.diameters_mm);
+      if (!dList.includes(filter.diameter as number)) return false;
+    }
+    if (filter.gh !== undefined) {
+      if (!(Array.isArray(c.gingival_heights_mm) && c.gingival_heights_mm.includes(filter.gh as number))) return false;
+    }
+    if (filter.angulation !== undefined) {
+      const aList: number[] = [];
+      if (typeof c.angulation_deg === 'number') aList.push(c.angulation_deg);
+      if (Array.isArray(c.angulations_deg)) aList.push(...c.angulations_deg);
+      if (!aList.includes(filter.angulation as number)) return false;
+    }
+    if (filter.platform !== undefined) {
+      const pList: string[] = [];
+      if (typeof c.platform === 'string' && c.platform) pList.push(c.platform);
+      if (Array.isArray(c.platforms)) pList.push(...c.platforms);
+      if (!pList.includes(filter.platform as string)) return false;
+    }
+    return true;
+  }, [filter, activeFilterCount]);
+  const filteredRows: SystemRow[] = React.useMemo(() => {
+    if (activeFilterCount === 0) return rows;
+    const out: SystemRow[] = [];
+    for (const sys of rows) {
+      const keep = sys.components.filter(componentMatchesFilter);
+      if (keep.length > 0) out.push({ ...sys, components: keep });
+    }
+    return out;
+  }, [rows, activeFilterCount, componentMatchesFilter]);
+
+  return (
+    <SafeAreaView style={s.safe}>
+      <CenteredHeader
+        title="Implant Systems Comparison"
+        subtitle="Compare components across different Implant Systems"
+        fallback="/admin/implant-catalog"
+      />
+
+      {/* Component-type chips */}
+      <ScrollView
+        horizontal showsHorizontalScrollIndicator={false}
+        style={s.chipBar} contentContainerStyle={{ paddingHorizontal: 12, gap: 8, paddingVertical: 8 }}
+      >
+        {types.map(t => (
+          <TouchableOpacity
+            key={t.type}
+            onPress={() => setPicked(t.type)}
+            testID={`compare-chip-${t.type}`}
+            data-testid={`compare-chip-${t.type}`}
+            style={[s.chip, picked === t.type && s.chipActive]}
+          >
+            <Text style={[s.chipText, picked === t.type && s.chipTextActive]}>
+              {TYPE_LABELS[t.type] || t.type}
+            </Text>
+            <Text style={[s.chipCount, picked === t.type && s.chipCountActive]}> {t.count}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {/* iter-298: At-a-glance summary — pure client-side aggregation of the
+          most common diameters / GH heights / angulations / platforms across
+          all brands offering this component type. Brand-count uniqueness
+          (one brand counted once per value) so the chip "Ø3.5 (8 brands)"
+          means 8 different brands offer Ø3.5, regardless of SKU count. */}
+      {!loading && hasSummary ? (
+        <View style={s.summaryCard} testID="compare-at-a-glance">
+          <View style={s.summaryHeader}>
+            <Ionicons name="stats-chart-outline" size={16} color="#0277BD" />
+            <Text style={s.summaryTitle}>At-a-glance — most common across {rows.length} system{rows.length > 1 ? 's' : ''}</Text>
+            {activeFilterCount > 0 ? (
+              <TouchableOpacity
+                onPress={() => setFilter({})}
+                style={s.clearFilterBtn}
+                testID="compare-clear-filter"
+              >
+                <Ionicons name="close-circle" size={14} color="#C62828" />
+                <Text style={s.clearFilterText}>
+                  Clear {activeFilterCount > 1 ? `(${activeFilterCount})` : 'filter'}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+          {summary.diameters.length > 0 ? (
+            <SummaryRow label="Diameters" entries={summary.diameters} kind="diameter" filter={filter} onPick={togglePillFilter} />
+          ) : null}
+          {summary.ghHeights.length > 0 ? (
+            <SummaryRow label="Gingival heights" entries={summary.ghHeights} kind="gh" filter={filter} onPick={togglePillFilter} />
+          ) : null}
+          {summary.angulations.length > 0 ? (
+            <SummaryRow label="Angulations" entries={summary.angulations} kind="angulation" filter={filter} onPick={togglePillFilter} />
+          ) : null}
+          {summary.platforms.length > 0 ? (
+            <SummaryRow label="Platforms" entries={summary.platforms} kind="platform" filter={filter} onPick={togglePillFilter} />
+          ) : null}
+        </View>
+      ) : null}
+
+      {loading ? (
+        <View style={s.center}><ActivityIndicator color="#0277BD" /></View>
+      ) : filteredRows.length === 0 ? (
+        <View style={s.center}>
+          <Ionicons name="information-circle-outline" size={36} color="#90A4AE" />
+          <Text style={s.emptyText}>
+            {activeFilterCount > 0 ? 'No systems match the selected filters.' : 'No systems with this component on file.'}
+          </Text>
+        </View>
+      ) : (
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, paddingBottom: 32 }}>
+          {filteredRows.map(r => (
+            <View key={r.key} style={s.card} testID={`compare-card-${r.key}`}>
+              <View style={s.cardHeader}>
+                <Text style={s.brand}>{r.brand}</Text>
+                <Text style={s.name}> · {r.name}</Text>
+                {r.connection ? (
+                  <Text style={s.conn}>  {r.connection}</Text>
+                ) : null}
+              </View>
+
+              {r.components.map((c, i) => (
+                <View key={i} style={s.compRow}>
+                  <Text style={s.compTitle}>
+                    {c.subtype ? titleCase(c.subtype) : (TYPE_LABELS[c.type] || titleCase(c.type))}
+                  </Text>
+                  <View style={s.specGrid}>
+                    {(c.platform || (c.platforms?.length || 0) > 0) ? (
+                      <Spec label="Platform" value={c.platform || fmt(c.platforms)} />
+                    ) : null}
+                    {(typeof c.diameter_mm === 'number' || (c.diameters_mm?.length || 0) > 0) ? (
+                      <Spec label="Diameter (mm)" value={typeof c.diameter_mm === 'number' ? String(c.diameter_mm) : fmt(c.diameters_mm)} />
+                    ) : null}
+                    {c.gingival_heights_mm?.length ? (
+                      <Spec label="GH (mm)" value={fmt(c.gingival_heights_mm)} />
+                    ) : null}
+                    {typeof c.abutment_height_mm === 'number' ? (
+                      <Spec label="Height (mm)" value={String(c.abutment_height_mm)} />
+                    ) : c.heights_mm?.length ? (
+                      <Spec label="Height (mm)" value={fmt(c.heights_mm)} />
+                    ) : null}
+                    {(typeof c.angulation_deg === 'number' || (c.angulations_deg?.length || 0) > 0) ? (
+                      <Spec label="Angulation (°)" value={typeof c.angulation_deg === 'number' ? String(c.angulation_deg) : fmt(c.angulations_deg)} />
+                    ) : null}
+                    {c.material?.length ? (
+                      <Spec label="Material" value={prettyArr(c.material)} />
+                    ) : null}
+                    {c.retention?.length ? (
+                      <Spec label="Retention" value={prettyArr(c.retention)} />
+                    ) : null}
+                    {c.torque_ncm ? (
+                      <Spec label="Torque (Ncm)" value={String(c.torque_ncm)} />
+                    ) : null}
+                    {c.catalog_code ? (
+                      <Spec label="Ref #" value={String(c.catalog_code)} />
+                    ) : null}
+                  </View>
+                  {c.indication ? (
+                    <Text style={s.ind}>{c.indication}</Text>
+                  ) : null}
+                </View>
+              ))}
+            </View>
+          ))}
+        </ScrollView>
+      )}
+    </SafeAreaView>
+  );
+}
+
+const Spec = ({ label, value }: { label: string; value: string }) => (
+  <View style={s.specCell}>
+    <Text style={s.specLabel}>{label}</Text>
+    <Text style={s.specValue}>{value}</Text>
+  </View>
+);
+
+// iter-298: At-a-glance row — label + horizontally-scrollable pills,
+// each pill showing the value (e.g. "Ø 3.5 mm") and a brand-coverage badge.
+// iter-299/300: pills are now TouchableOpacity that toggle a filter for
+// the table below. The active pill is highlighted in solid blue. Filter
+// is a per-kind map so multiple dimensions can stack (AND-logic).
+type PillKind = 'diameter' | 'gh' | 'angulation' | 'platform';
+type SummaryFilter = Partial<Record<PillKind, number | string>>;
+const SummaryRow = ({
+  label, entries, kind, filter, onPick,
+}: {
+  label: string;
+  entries: SummaryEntry[];
+  kind: PillKind;
+  filter: SummaryFilter;
+  onPick: (kind: PillKind, value: number | string) => void;
+}) => (
+  <View style={s.summaryRow}>
+    <Text style={s.summaryRowLabel}>{label}</Text>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingRight: 8 }}>
+      {entries.map((e) => {
+        const active = filter[kind] === e.value;
+        return (
+          <TouchableOpacity
+            key={e.key}
+            onPress={() => onPick(kind, e.value)}
+            activeOpacity={0.7}
+            style={[s.summaryPill, active && s.summaryPillActive]}
+            testID={`compare-pill-${kind}-${e.value}`}
+          >
+            <Text style={[s.summaryPillText, active && s.summaryPillTextActive]}>{e.key}</Text>
+            <View style={[s.summaryPillBadge, active && s.summaryPillBadgeActive]}>
+              <Text style={[s.summaryPillBadgeText, active && s.summaryPillBadgeTextActive]}>{e.count}</Text>
+            </View>
+          </TouchableOpacity>
+        );
+      })}
+    </ScrollView>
+  </View>
+);
+
+const s = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: '#F5F8FA' },
+  headerBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 12, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#ECEFF1' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: '#0E2A47' },
+  headerSub: { fontSize: 12, color: '#607D8B', marginTop: 2 },
+  chipBar: { backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#ECEFF1', maxHeight: 52 },
+  chip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: '#ECEFF1', borderWidth: 1, borderColor: '#CFD8DC' },
+  chipActive: { backgroundColor: '#0277BD', borderColor: '#0277BD' },
+  chipText: { fontSize: 13, fontWeight: '600', color: '#37474F' },
+  chipTextActive: { color: '#FFF' },
+  chipCount: { fontSize: 11, color: '#90A4AE', marginLeft: 4 },
+  chipCountActive: { color: '#E1F5FE' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  emptyText: { marginTop: 8, color: '#607D8B', fontSize: 14 },
+  card: { backgroundColor: '#FFF', borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#ECEFF1' },
+  cardHeader: { flexDirection: 'row', alignItems: 'baseline', marginBottom: 10, flexWrap: 'wrap' },
+  brand: { fontSize: 15, fontWeight: '800', color: '#0E2A47' },
+  name: { fontSize: 14, fontWeight: '600', color: '#37474F' },
+  conn: { fontSize: 11, color: '#607D8B' },
+  compRow: { paddingVertical: 8, borderTopWidth: 1, borderTopColor: '#ECEFF1' },
+  compTitle: { fontSize: 13, fontWeight: '700', color: '#0277BD', marginBottom: 6 },
+  specGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  specCell: { minWidth: 140, backgroundColor: '#F5F8FA', paddingVertical: 5, paddingHorizontal: 8, borderRadius: 6 },
+  specLabel: { fontSize: 10, color: '#607D8B', textTransform: 'uppercase', letterSpacing: 0.4 },
+  specValue: { fontSize: 13, color: '#0E2A47', fontWeight: '600', marginTop: 2 },
+  ind: { fontSize: 12, color: '#546E7A', marginTop: 6, fontStyle: 'italic' },
+  // iter-298 — At-a-glance summary
+  summaryCard: { backgroundColor: '#FFF', marginHorizontal: 12, marginTop: 8, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: '#B3E5FC' },
+  summaryHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  summaryTitle: { fontSize: 12, fontWeight: '700', color: '#0277BD', marginLeft: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
+  summaryRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4 },
+  summaryRowLabel: { minWidth: 110, fontSize: 11, fontWeight: '600', color: '#546E7A', textTransform: 'uppercase', letterSpacing: 0.4 },
+  summaryPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E1F5FE', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 999, borderWidth: 1, borderColor: '#B3E5FC' },
+  summaryPillActive: { backgroundColor: '#0277BD', borderColor: '#01579B' },
+  summaryPillText: { fontSize: 12, fontWeight: '600', color: '#01579B' },
+  summaryPillTextActive: { color: '#FFF' },
+  summaryPillBadge: { backgroundColor: '#0277BD', marginLeft: 6, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 999, minWidth: 18, alignItems: 'center' },
+  summaryPillBadgeActive: { backgroundColor: '#FFF' },
+  summaryPillBadgeText: { fontSize: 10, fontWeight: '700', color: '#FFF' },
+  summaryPillBadgeTextActive: { color: '#01579B' },
+  // iter-299 — clear-filter affordance
+  clearFilterBtn: { flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', backgroundColor: '#FFEBEE', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, borderWidth: 1, borderColor: '#FFCDD2' },
+  clearFilterText: { fontSize: 11, fontWeight: '700', color: '#C62828', marginLeft: 3 },
+});

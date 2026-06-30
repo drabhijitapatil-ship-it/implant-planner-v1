@@ -1,0 +1,92 @@
+import { useEffect } from 'react';
+import { Stack } from 'expo-router';
+import { View } from 'react-native';
+import * as SplashScreen from 'expo-splash-screen';
+import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { TabletFrame } from '../components/TabletFrame';
+import { useScreenCaptureProtection } from '../hooks/useScreenCaptureProtection';
+import AttachPickerModalRoot from '../components/AttachPickerModal';
+import CustomSplashScreen from '../components/CustomSplashScreen';
+
+// Keep the native (static-image) splash up until our custom JS splash has
+// mounted underneath it — avoids a blank-white flash between the two.
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
+/**
+ * ActivityTracker wraps the Stack and captures any touch anywhere in the app to
+ * reset the session inactivity timer used by AuthContext. Also enables the
+ * HIPAA screen-capture guard (FLAG_SECURE on Android / preventScreenCapture on
+ * iOS) while the user is authenticated, and hosts the custom JS splash screen
+ * overlay until the auth check resolves.
+ *
+ * iter-169: Touch/responder capture on the outer View doesn't fire when inner
+ * ScrollView / TextInput consume the gesture, which caused mid-session
+ * logouts. We now also record activity on every authenticated API call
+ * (via `setOnActivity` in utils/api.ts) so the 15-min idle timer only fires
+ * when the user has genuinely stopped interacting.
+ */
+function ActivityTracker({ children }: { children: React.ReactNode }) {
+  const { recordActivity, user, loading } = useAuth();
+  useScreenCaptureProtection(!!user);
+
+  useEffect(() => {
+    SplashScreen.hideAsync().catch(() => {});
+  }, []);
+
+  return (
+    <View
+      style={{ flex: 1 }}
+      onTouchStart={() => recordActivity()}
+      onStartShouldSetResponderCapture={() => { recordActivity(); return false; }}
+      onMoveShouldSetResponderCapture={() => { recordActivity(); return false; }}
+    >
+      {children}
+      <CustomSplashScreen visible={loading} />
+    </View>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthProvider>
+        <TabletFrame>
+          <ActivityTracker>
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="auth/login" />
+              <Stack.Screen name="auth/register" />
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="implantlens/index" />
+              <Stack.Screen name="implantlens/[caseId]" />
+              <Stack.Screen name="procedures/[id]" options={{ headerShown: false }} />
+              <Stack.Screen name="procedures/submit-phase2/[id]" options={{ headerShown: false }} />
+              <Stack.Screen name="procedures/submit-stage2-surgical/[id]" options={{ headerShown: false }} />
+              <Stack.Screen name="procedures/submit-stage2-prosthetic/[id]" options={{ headerShown: false }} />
+              <Stack.Screen name="procedures/submit-phase4-step2/[id]" options={{ headerShown: false }} />
+              <Stack.Screen name="legal/privacy-policy" options={{ headerShown: false }} />
+              <Stack.Screen name="legal/terms" options={{ headerShown: false }} />
+              <Stack.Screen name="onboarding" />
+              <Stack.Screen name="help-workflow" />
+              <Stack.Screen name="whatsnew" />
+              <Stack.Screen name="admin/audit-log" options={{ headerShown: false }} />
+              <Stack.Screen name="admin/implant-catalog" options={{ headerShown: false }} />
+              <Stack.Screen name="admin/implant-catalog-edit" options={{ headerShown: false }} />
+              <Stack.Screen name="admin/implant-compare" options={{ headerShown: false }} />
+              <Stack.Screen name="ask-implanr" options={{ headerShown: false }} />
+              <Stack.Screen name="admin/student/[id]" options={{ headerShown: false }} />
+              <Stack.Screen name="admin/supervisor/[id]" options={{ headerShown: false }} />
+              <Stack.Screen name="forum/index" options={{ headerShown: false }} />
+              <Stack.Screen name="forum/[threadId]" options={{ headerShown: false }} />
+              <Stack.Screen name="forum/chat/index" options={{ headerShown: false }} />
+              <Stack.Screen name="forum/chat/create" options={{ headerShown: false }} />
+              <Stack.Screen name="forum/chat/[groupId]" options={{ headerShown: false }} />
+            </Stack>
+            <AttachPickerModalRoot />
+          </ActivityTracker>
+        </TabletFrame>
+      </AuthProvider>
+    </GestureHandlerRootView>
+  );
+}

@@ -1,0 +1,33 @@
+{
+  "summary": "Iteration 95 — Nurse workflow refinements fully verified. Backend: 4 passed + 1 skipped (non-owner negative test skipped because Gaurav happens to own the known consent-uploaded case) on new test_nurse_consent_upload_iteration95.py; regression tests for iter93 (autoclave) and iter94 (consent-cases) 21/21 pass. Frontend (nurse.1@dental.edu Playwright): (1) Cases tab label reads 'Cases' ✓ — both in bottom nav (tabs present: Home/Cases/Alerts) AND as page title. (2) 'Cases' header top:20px, sitting immediately below the hamburger/status bar — the excessive gap from IMG_0357 is gone. (3) 15 nurse-case-card-* rendered for pending filter; each card contains the consent-pending pill; autoclave-toggle-* present on 3 cards (those where procedureDate+time > 1hr away OR already marked) and correctly hidden on past/imminent cases per isAutoclaveLocked logic. (4) Tapping a card body navigates to /procedures/<id>. (5) On case detail: consent-action-row, consent-upload-btn ('Upload consent form'), consent-export-print-action ('Export / Print consent form') all present with correct labels, primary blue + secondary grey styling, rendered below Treatment Progress container and above Phase Approval Status. (6) Nurse dashboard tiles (COMPLETED 2 / PENDING 15) still work, calendar + Patient Consent Forms list intact (iter-94 regression PASS).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_nurse_consent_upload_iteration95.py",
+    "/app/backend/tests/test_nurse_consent_cases_iteration94.py",
+    "/app/backend/tests/test_autoclave_iteration93.py",
+    "/app/test_reports/pytest/pytest_results_iteration95.xml"
+  ],
+  "action_items": [
+    "MINOR (testability only, not a product bug): treatment-timeline marker on the timeline container in /app/frontend/app/procedures/[id].tsx:563 uses data-testid='treatment-timeline' prop on a React-Native <View>. RN-Web's <View> does NOT forward unknown DOM attributes by default, so it never appears in the DOM. Change to testID='treatment-timeline' (RN-Web converts testID → data-testid automatically). Visual ordering is already correct in browser."
+  ],
+  "critical_code_review_comments": [
+    "AutoclaveRow.isAutoclaveLocked() parses 24h and 12h times but falls through to false when format is unrecognised — so a malformed procedure_time makes the row always visible and tappable (no locking). Low impact because data-model enforces HH:MM or HH:MM AM/PM, but worth a short comment.",
+    "upload-consent endpoint grants permission via role OR stakeholder ID, but the stakeholder check uses `current_user.get('_id')` while other endpoints use `current_user.get('id')`. Confirm the auth dependency returns _id (MongoDB ObjectId string) here — if it returns only 'id', the stakeholder-based path for students/supervisors/in-charges silently falls back to the role check. Not a security issue (role check is correct) but a latent bug for the student-owner path.",
+    "consent-action-row role guard uses `user?.id === procedure.student_id` but the backend returns student_id as a string. If the frontend user.id is also a string this is fine; verify type parity. Admin role name in backend is 'administrator' — frontend correctly checks 'administrator' (not 'admin'). Good.",
+    "NurseCasesScreen pillRow puts consent pill + AutoclaveRow side-by-side with flexWrap — confirmed 15 cards rendered correctly at 480px viewport without layout overflow.",
+    "[id].tsx file is 3338 lines — approaching ceiling; future features should consider splitting into sub-components (TreatmentProgress, ConsentActionRow, ApprovalSection, etc.)."
+  ],
+  "updated_files": ["/app/backend/tests/test_nurse_consent_upload_iteration95.py (new)"],
+  "success_rate": {"backend": "100% (4/4 executed, 1 skipped by design)", "frontend": "100% on key assertions — all new testIDs present, header tightened, filter chips working, consent action row rendered correctly for nurse"},
+  "test_credentials": "nurse.1@dental.edu / Nurse@123 — login now reliably automatable via mouse.down()+mouse.up() on the 'Login' text element (added in iter94 spec). data-testid='login-submit-btn' is declared on the RN Pressable in /app/frontend/app/auth/login.tsx but not exposed to the DOM (same RN-Web prop-forwarding issue as treatment-timeline). Clicking by visible text works.",
+  "seed_data_creation": "None — used known case 69cf9bdfdafb502718057bcd for the replace-consent test (keeps consent_uploaded=true, doesn't affect pending_count). test_mark_instruments_autoclaved_regression marks then unmarks the same case to restore state.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 95 backend contract locked in by test_nurse_consent_upload_iteration95.py. For nurse UI automation on RN-Web, remember: (a) page.goto() to an SPA route after login WILL wipe memory tokens — always navigate via in-app bottom-tab clicks (mouse.down/up, NOT .click()); (b) testID='…' on RN-Web core components forwards to data-testid, but data-testid='…' on RN-Web View does NOT forward. Prefer testID everywhere. (c) Known case 69cf9bdfdafb502718057bcd owned by Gaurav.pandey; non-owner-student negative tests need a different student account if one wants non-skip coverage.",
+  "rca of the issue": "No blocking issue. Two latent testability items reported to main agent: (1) treatment-timeline testID uses data-testid prop that RN-Web doesn't propagate — swap to testID; (2) login-submit-btn has the same issue but is already worked around in automation."
+}

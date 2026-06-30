@@ -1,0 +1,62 @@
+{
+  "summary": "Iteration 101 — RCA + reproduction attempt for reported bug 'Print/Export Drilling Protocol not working for Nurse role'. RESULT: BUG NOT REPRODUCIBLE. Print AND Export both work end-to-end for nurse.1@dental.edu on case 69cf9bdfdafb502718057bcd (MIS Lance+ 3.75x11.5 D2 at position 36). Network capture confirms: POST /api/drilling-protocols/export-pdf returns 200 application/pdf for both flows, no 'Print failed' / 'Export failed' alerts surface in the UI, no JS page errors, no unhandled rejections. Frontend helpers in /app/frontend/components/CaseImplantPlanning.tsx execute the web branch correctly (iframe print + anchor download). No fix applied because the reported symptom cannot be reproduced.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "repro_steps_executed": [
+    "1. Login https://implant-workflow-hub.preview.emergentagent.com with nurse.1@dental.edu / Nurse@123 (viewport 480x900). Redirects to /dashboard.",
+    "2. Scroll to 'Scheduled Cases' section on nurse home, click scheduled-card-69cf9bdfdafb502718057bcd.",
+    "3. URL navigates to /procedures/69cf9bdfdafb502718057bcd. Case detail loads: GET /api/procedures/69cf9bdfdafb502718057bcd → 200; GET /api/procedures/.../implant-plan → 200 with 1 implant plan (MIS Lance+ 3.75x11.5, bone D2, position 36).",
+    "4. Implant Planning card renders for the nurse (non-canEdit branch at CaseImplantPlanning.tsx L665-676) with the 'Drilling Protocol' button visible.",
+    "5. Tap 'Drilling Protocol' → the inline drill sequence renders (5 steps: Marking Drill 1.9mm → Pilot 2.4mm → Drill 3.1mm → Final Drill 3.65mm → MIS LANCE+ Implant). 'Print / Export Drilling Protocol PDF' grey button renders at bottom.",
+    "6. Tap the trigger → the blue-bordered ExportPrintMenu popover opens. Both options visible (Print drilling protocol / Export drilling protocol PDF).",
+    "7a. Tap 'Print drilling protocol' → POST /api/drilling-protocols/export-pdf 200 application/pdf. Web branch: creates hidden iframe and calls iframe.contentWindow.print(). NO ui error, no console error, no Alert.",
+    "7b. Reopen popover → tap 'Export drilling protocol PDF' → POST /api/drilling-protocols/export-pdf 200 application/pdf. Web branch: anchor.click() downloads DrillingProtocol_MIS_3.75x11.5_D2.pdf. NO ui error, no console error, no Alert."
+  ],
+  "network_capture": {
+    "print_request": "POST /api/drilling-protocols/export-pdf body={brand:'MIS',system:'Lance +',diameter:3.75,length:11.5,bone_density:'D2',tooth:'',patient_name:'Approval UI Test',procedure_date:'2026-04-25',steps:[...5 steps...]}",
+    "print_response": "200 application/pdf",
+    "export_request": "POST /api/drilling-protocols/export-pdf (same payload)",
+    "export_response": "200 application/pdf"
+  },
+  "ruled_out_root_causes": [
+    "(1) Drilling Protocol button gated for nurse — FALSE. Non-canEdit branch at L665-676 renders it; verified visible in screenshot.",
+    "(2) CaseImplantPlanning hides drilling sub-block for nurse — FALSE. expandedProtocol block at L677-723 is outside canEdit gate and renders for nurse.",
+    "(3) Web helper throws silent error — FALSE. Print/Export both succeed; no Alert surfaced.",
+    "(4) Payload key mismatch position vs tooth — CONFIRMED HARMLESS. plan.tooth is undefined → falls back to '' which backend accepts.",
+    "(5) Popup blocker — not triggered; iframe print works without opening a new window.",
+    "(6) plan.bone_type missing — FALSE. plan.bone_type='D2' is set on this plan, so the expandedProtocol block renders (not the 'Bone type not set' fallback)."
+  ],
+  "observed_noise_unrelated": [
+    "Console 'Unexpected text node: . A text node cannot be a child of a <View>' repeats on case-detail render — pre-existing from iter97, unrelated to this fix.",
+    "Initial page.goto('/procedures/{id}') before auth bootstrap races to 403 'Not authenticated' — test-harness-only race, not a product bug. Normal click-through flow works 200."
+  ],
+  "likely_user_environment_hypothesis": [
+    "User may be on an older cached bundle where the ExportPrintMenu wiring for nurse wasn't present. Iter98 added the single ExportPrintMenu inside inlineProtocol; current bundle serves it.",
+    "User's browser may block the programmatic iframe print dialog silently (some popup blockers) — UX is still successful per spec (PDF is fetched) but dialog may not appear. Consider a fallback: on web-print, also open the blob URL in a new tab if window.print() throws or is blocked.",
+    "User may have tapped the button while on a case that has plan.bone_type === undefined → the code renders the 'Bone type not set' message (L724-730) with NO ExportPrintMenu. Would appear as 'button missing'. Consider rendering the ExportPrintMenu even when bone_type is null (gated disabled) or showing a clearer CTA to set bone type."
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "NO CODE FIX APPLIED — could not reproduce. Main agent: ask user for specific case ID / steps / screenshot / console log when they hit the issue. In particular confirm the plan.bone_type value on that case (if null, the popover is intentionally hidden).",
+    "OPTIONAL UX: in CaseImplantPlanning.tsx L724-730 fallback, change the text to 'Bone type not set — set bone type to enable Drilling Protocol export' so users don't assume Print/Export is broken.",
+    "OPTIONAL DEFENSIVE: wrap window.print() in try/catch and fallback to window.open(url,'_blank') for browsers that block hidden iframe print."
+  ],
+  "critical_code_review_comments": [
+    "printDrillingProtocolPdf catch block (L82-84) silently swallows and shows a generic 'Print failed' Alert. Consider logging console.error(err) first so RCA is easier next time.",
+    "exportDrillingProtocolPdf (L114-116) same issue — swallow without logging.",
+    "plan.tooth is read at L714 and L718 but ImplantPlanItem interface declares only 'position', not 'tooth'. It silently falls back to '' so backend accepts, but type-safety is subtly broken. Either add tooth?:string to ImplantPlanItem OR use plan.position for both tooth param and backend payload.tooth.",
+    "The Modal-based popover in ExportPrintMenu dismisses itself only after await completes (finally block L85-88). A slow network will leave the popover open with its spinner. That's fine, but if onPrint throws the finally block still closes the popover before the caller's own Alert.alert shows — could be confusing. Consider setBusy(null) only, and setOpen(false) only on success."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (frontend-only testing)", "frontend": "100% — Print and Export both succeed for nurse role" },
+  "test_credentials": "nurse.1@dental.edu/Nurse@123 (login via identifier+password inputs — placeholder 'Login ID (e.g. Name.surname@dental.edu)'). data-testid login-submit-btn not used here because Login button text 'Login' is stable.",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "If user insists Print/Export is broken for nurse, request: (a) specific caseId, (b) plan.bone_type value (null blocks the popover), (c) browser name + popup-blocker state, (d) console log at time of failure. The current code path at CaseImplantPlanning.tsx L677-723 unconditionally renders ExportPrintMenu when expandedProtocol===idx AND plan.bone_type is truthy. The `api` axios instance correctly attaches Bearer token on post to /drilling-protocols/export-pdf for nurse (verified via 200 response). Do NOT use page.goto() to jump directly to /procedures/{id} in tests — it races the auth bootstrap and returns 'Not authenticated' 403. Always click through from nurse home scheduled-card or Cases tab.",
+  "rca_of_the_issue": "UNABLE TO REPRODUCE. Print and Export both work end-to-end for nurse on the specified case. No JS error, no network failure, no UI alert. Likely explanations: (A) user was on stale bundle before iter98 single-popover refactor was deployed; (B) the specific case they tried has plan.bone_type=null so the ExportPrintMenu is intentionally hidden behind the 'Bone type not set' fallback (L724-730) — this UX is misleading and should be improved; (C) browser-level popup/print blocking. Recommend main agent follow up with user for precise repro."
+}

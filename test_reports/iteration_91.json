@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration 91 — Tested nurse Scheduled-Cases section + extended Pending-Consents date/time + nurse case-detail restriction. Backend 10/10 pass. Frontend: the two sections DO render visually for nurse (after expo CI-mode restart), and PatientConsentSection correctly shows scheduled date+time line and default top-5 pagination. However most new testIDs set via `data-testid` directly on React Native <View>/<TouchableOpacity> are NOT emitted to the web DOM (same RN-web quirk as iteration 90). Nurse case-detail check blocked: backend 404s the known phase2 case id for nurse role.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "PatientConsentSection.tsx (View) + ScheduledCasesSection.tsx (View)", "issue": "`data-testid` prop placed directly on <View>/<TouchableOpacity> is dropped by react-native-web. Zero of the new testIDs (patient-consent-section, scheduled-cases-section, scheduled-group-<date>, scheduled-card-<id>, scheduled-show-more-btn, consent-show-more-btn, scheduled-refresh, consent-refresh) appear in DOM. Only TouchableOpacity instances that also carry `testID=` (e.g. consent-export-print-<id>) resolve.", "selector": "[data-testid=patient-consent-section], [data-testid=scheduled-cases-section], [data-testid^=scheduled-card-], [data-testid^=scheduled-group-], [data-testid=scheduled-show-more-btn], [data-testid=consent-show-more-btn]", "priority": "HIGH"},
+      {"component": "app/procedures/[id].tsx (nurse case-detail)", "issue": "Navigating as nurse to case id 69cfde7c356c7405230a9dbd (Phase 2/3/4 sample) renders 'Procedure not found' — backend GET /api/procedures/{id} appears to block nurse role. Therefore the nurse case-detail phase-section hide/Phase-1-still-visible flow could NOT be verified end-to-end. Confirmed in source that user?.role !== 'nurse' guard exists on phase2/3/4 sections and canExportPDF() returns false for nurse.", "selector": "n/a", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Nurse dashboard (/dashboard)", "issues": ["PatientConsentSection renders 12 cases with calendar-icon date line (e.g. 'Sun, Apr 05 · 10:00 AM') — visually correct.", "Default top-5 pagination visually correct — only 5 cases visible before a toggle is shown (body has Show more (7) text).", "Scheduled Cases section heading + 'Next 5 days · Phase 2-ready cases' subtitle render (confirmed via body text) after supervisor restart expo due to CI mode; empty-state / populated-state not deeply verified because testIDs can't be queried."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_nurse_scheduled_cases_iteration91.py",
+    "/app/test_reports/pytest/iteration91_results.xml"
+  ],
+  "action_items": [
+    "FIX (HIGH): In PatientConsentSection.tsx and ScheduledCasesSection.tsx replace every `data-testid=\"...\"` prop with the canonical RN prop `testID=\"...\"` (or add testID alongside data-testid) on every <View>, <TouchableOpacity> where a testID is expected. react-native-web auto-forwards `testID` → DOM attribute `data-testid`. This was the exact root cause fixed in iteration 90 for ExportPrintMenu backdrop. Affected props: patient-consent-section, consent-refresh, consent-show-more-btn, scheduled-cases-section, scheduled-refresh, scheduled-group-<date>, scheduled-card-<id>, scheduled-show-more-btn.",
+    "VERIFY: Whether nurse role should be able to GET /api/procedures/{id} to view the case-detail page. Currently backend returns not-found/forbidden for nurse — this blocks the entire nurse case-detail restriction UX. Either expand role guard on /api/procedures/{id} to include 'nurse', or instrument a nurse-specific read endpoint.",
+    "Optional: The outer 'Welcome back' greeting shows 'U' avatar + empty name briefly (first (tabs)/dashboard nav) before user context hydrates — not a blocker."
+  ],
+  "critical_code_review_comments": [
+    "ScheduledCasesSection.tsx is well-scoped (~220 lines), uses existing formatTime helper, good empty-state messaging and chronological grouping.",
+    "Backend endpoint correctly bounds `days` to [1,30] and falls back to 5 otherwise — covered by tests.",
+    "Role-guard on /procedures/nurse/scheduled-cases matches /pending-consents (nurse/implant_incharge/administrator/supervisor) — consistent.",
+    "canExportPDF() nurse short-circuit is correct; phase2/3/4 `user?.role !== 'nurse' &&` guards confirmed by grep at lines 1290/1501/1842/1902.",
+    "RN-web testID pitfall recurring pattern — consider a lint rule or codebase-wide search-replace to migrate `data-testid` → `testID` on native components."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "100% (10/10)", "frontend": "~55% (visual render ok, testID queryability broken, nurse case-detail blocked by backend access)" },
+  "test_credentials": "Nurse: nurse.1@dental.edu / Nurse@123 (primary); Supervisor: Paresh.gandhi/Supervisor@123; Student: Gaurav.pandey/Student@123; In-Charge: Abhijit.patil/Admin@123. All verified logging in successfully in this run.",
+  "seed_data_creation": "none — 12 phase1_approved / pending-consent cases already exist in seed; scheduled window (today..today+4) may contain 0 or more — backend test just asserts structural contract.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "1) Metro runs in CI mode — after ScheduledCasesSection/PatientConsentSection edits run `sudo supervisorctl restart expo` and wait ~2 min for tunnel+bundle. 2) Nurse lands on '/dashboard' (expo-router group rewrite of /(tabs)/dashboard). Do NOT re-navigate to /(tabs)/dashboard as that seems to fall through to an unauthenticated rendering. 3) After fix, query testIDs patient-consent-section, scheduled-cases-section, scheduled-card-<id>, scheduled-group-<YYYY-MM-DD>, scheduled-show-more-btn, consent-show-more-btn via [data-testid=...]. 4) For case-detail: once backend nurse GET access is granted, use case 69cfde7c356c7405230a9dbd (Phase 2/3+) and assert phase2-full-data-section/phase3-full-data-section/phase4-step1-full-data-section/phase4-step2-full-data-section/case-report-export-print-btn all ABSENT while 'Patient Information' heading is present. 5) Login UI: placeholder selectors work — input[placeholder^=\"Login ID\"] + input[placeholder=\"Password\"] + get_by_text(\"Login\", exact=True).first.click(force=True). The login-submit-btn testID on TouchableOpacity also doesn't emit — same RN-web issue.",
+  "rca of the issue": "React Native Web's <View> and <TouchableOpacity> forward the native RN prop `testID` to the DOM as `data-testid`, but they DO NOT forward an arbitrary `data-testid=\"...\"` prop (it's treated as unknown and dropped unless the element is a plain <div>). The developer used `data-testid=\"...\"` directly on RN components, so those attributes never reach the DOM. Fix is to rename to `testID=\"...\"` (RN canonical) — this is exactly the fix iteration 90 applied to ExportPrintMenu backdrop. Backend tests confirm data layer is fine; functionality renders; only the test-hook surface is broken. Reproduction: login as nurse, open /dashboard, evaluate `document.querySelectorAll('[data-testid=patient-consent-section]').length` → 0, while `document.body.innerText` DOES contain 'Patient Consent Forms' and 'Scheduled Cases'. Also: nurse GET /api/procedures/{id} returns not-found for a valid phase2 case — nurse case-detail route blocked until backend role guard is expanded."
+}

@@ -1,0 +1,214 @@
+/**
+ * Ask Implanr AI — floating round button + chat sheet (iter-242).
+ *
+ * Drops onto any screen. Renders a bottom-right FAB; tap to open a modal
+ * containing a simple chat UI. Each message is POSTed to /api/ai/assistant
+ * which is role-aware, tokenises patient names server-side, and logs every
+ * query to access_logs for HIPAA.
+ *
+ * Usage:
+ *   import AskImplanrAIFab from '@/components/AskImplanrAIFab';
+ *   …in your screen JSX:
+ *   <AskImplanrAIFab />
+ */
+import React, { useState, useRef } from 'react';
+import {
+  View, Text, TouchableOpacity, Modal, TextInput, ScrollView,
+  StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import api from '../utils/api';
+
+type ChatMsg = { role: 'user' | 'assistant'; content: string };
+
+export default function AskImplanrAIFab() {
+  const insets = useSafeAreaInsets();
+  const [open, setOpen] = useState(false);
+  const [input, setInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msgs, setMsgs] = useState<ChatMsg[]>([{
+    role: 'assistant',
+    content: "Hi! I'm Implanr AI — your personal assistant. Ask me about the app, your cases, implant systems, or anything else you'd like help navigating. What can I do for you?",
+  }]);
+  const sessionRef = useRef<string | null>(null);
+  const scrollRef = useRef<ScrollView | null>(null);
+
+  // iter-276: pulse animation removed — FAB stays stable, matches the
+  // case-detail Phase 2-4 bubble.
+
+  // iter-245: starter suggestion chips so first-time users discover what
+  // the assistant can do without staring at a blank input. They render
+  // under the greeting bubble and disappear after the first user message.
+  const SUGGESTIONS = [
+    'What can I do as my role here?',
+    'Show me my recent cases',
+    'List the implant systems available',
+    'How do I create a new case?',
+  ];
+
+  const sendQuestion = async (q: string) => {
+    q = q.trim();
+    if (!q || busy) return;
+    setInput('');
+    const next = [...msgs, { role: 'user' as const, content: q }];
+    setMsgs(next);
+    setBusy(true);
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
+    try {
+      const res = await api.post('/ai/assistant', {
+        question: q,
+        history: msgs.slice(-6),
+        session_id: sessionRef.current,
+      }, { timeout: 35000 });
+      const data = res.data || {};
+      sessionRef.current = data.session_id || sessionRef.current;
+      setMsgs(m => [...m, { role: 'assistant', content: data.answer || '(empty response)' }]);
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail || e?.message || 'something went wrong';
+      setMsgs(m => [...m, { role: 'assistant', content: `Sorry — ${msg}.` }]);
+    } finally {
+      setBusy(false);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
+    }
+  };
+
+  const send = () => sendQuestion(input);
+
+  return (
+    <>
+      {/* Floating round button */}
+      <View style={styles.fab} pointerEvents="box-none">
+        <TouchableOpacity
+          style={styles.fabBtn}
+          onPress={() => setOpen(true)}
+          testID="ask-implanr-fab"
+          accessibilityRole="button"
+          accessibilityLabel="Ask Implanr AI"
+        >
+          <Ionicons name="sparkles" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Chat sheet */}
+      <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={0}
+          style={styles.backdrop}
+        >
+          {/* iter-244: extra wrapper with flex: 1 + paddingTop to keep
+              the sheet tall enough that the bottom input row is always
+              visible above the device safe-area / bottom tab bar even
+              before the keyboard opens. */}
+          <View style={styles.sheetOuter}>
+          <View style={styles.sheet}>
+            <View style={styles.header}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={styles.headerIcon}>
+                  <Ionicons name="sparkles" size={18} color="#1565C0" />
+                </View>
+                <View>
+                  <Text style={styles.headerTitle}>Ask Implanr AI</Text>
+                  <Text style={styles.headerSub}>Your personal assistant</Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={() => setOpen(false)} testID="ask-implanr-close" hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+                <Ionicons name="close" size={24} color="#37474F" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView ref={scrollRef} style={styles.messages} contentContainerStyle={{ paddingVertical: 12 }}>
+              {msgs.map((m, i) => (
+                <View key={i} style={[styles.msgRow, m.role === 'user' && { justifyContent: 'flex-end' }]}>
+                  <View style={[styles.bubble, m.role === 'user' ? styles.bubbleUser : styles.bubbleAi]}>
+                    <Text style={[styles.bubbleText, m.role === 'user' && { color: '#FFFFFF' }]}>{m.content}</Text>
+                  </View>
+                </View>
+              ))}
+              {busy && (
+                <View style={styles.msgRow}>
+                  <View style={[styles.bubble, styles.bubbleAi, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+                    <ActivityIndicator size="small" color="#1565C0" />
+                    <Text style={styles.bubbleText}>Thinking…</Text>
+                  </View>
+                </View>
+              )}
+              {/* iter-245: starter chips — only when nothing's been asked yet */}
+              {msgs.length === 1 && !busy && (
+                <View style={styles.chipsWrap}>
+                  {SUGGESTIONS.map((s, i) => (
+                    <TouchableOpacity
+                      key={i}
+                      style={styles.chip}
+                      onPress={() => sendQuestion(s)}
+                      testID={`ask-implanr-chip-${i}`}
+                      accessibilityRole="button"
+                    >
+                      <Ionicons name="sparkles-outline" size={13} color="#1565C0" />
+                      <Text style={styles.chipText}>{s}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </ScrollView>
+
+            <View style={[styles.inputRow, { paddingBottom: 10 + Math.max(insets.bottom, 8) }]}>
+              <TextInput
+                style={styles.input}
+                value={input}
+                onChangeText={setInput}
+                placeholder="Ask anything about the app, your cases, or implants…"
+                placeholderTextColor="#90A4AE"
+                multiline
+                onSubmitEditing={send}
+                testID="ask-implanr-input"
+              />
+              <TouchableOpacity
+                style={[styles.sendBtn, (!input.trim() || busy) && { opacity: 0.4 }]}
+                onPress={send}
+                disabled={!input.trim() || busy}
+                testID="ask-implanr-send"
+              >
+                <Ionicons name="arrow-up-circle" size={32} color="#1565C0" />
+              </TouchableOpacity>
+            </View>
+          </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </>
+  );
+}
+
+const styles = StyleSheet.create({
+  // iter-276: lowered from bottom: 92 → 24 so the FAB sits just above the
+  // bottom tab bar — matching the visual offset of the case-detail FAB
+  // (which floats above its own bottom export bar). Pulse removed for
+  // a calmer, stable presentation.
+  fab: { position: 'absolute', bottom: 24, right: 18, zIndex: 9999 },
+  fabBtn: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#1565C0', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 6 },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  // iter-244: flex:1 wrapper so the inner sheet's 85% height resolves
+  // against the available screen height. Without this the sheet was
+  // collapsing on some platforms and the input row at the bottom got
+  // pushed below the visible area before the keyboard even opened.
+  sheetOuter: { flex: 1, justifyContent: 'flex-end' },
+  sheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, height: '85%', overflow: 'hidden' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#E3F2FD' },
+  headerIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#E3F2FD', justifyContent: 'center', alignItems: 'center' },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: '#0F2740' },
+  headerSub: { fontSize: 12, color: '#546E7A', marginTop: 2 },
+  messages: { flex: 1, paddingHorizontal: 14 },
+  msgRow: { flexDirection: 'row', marginVertical: 5 },
+  bubble: { maxWidth: '85%', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14 },
+  bubbleAi: { backgroundColor: '#F1F5F9', borderTopLeftRadius: 4 },
+  bubbleUser: { backgroundColor: '#1565C0', borderTopRightRadius: 4 },
+  bubbleText: { fontSize: 14, color: '#1A1A2E', lineHeight: 20 },
+  inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, paddingHorizontal: 18, paddingTop: 12, paddingBottom: 10, borderTopWidth: 1, borderTopColor: '#E3F2FD', backgroundColor: '#FAFAFA' },
+  input: { flex: 1, minHeight: 40, maxHeight: 120, backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#CFD8DC', paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: '#1A1A2E' },
+  sendBtn: { padding: 4 },
+  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 4, paddingTop: 8, paddingBottom: 4 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18, borderWidth: 1, borderColor: '#BBDEFB', backgroundColor: '#F5FAFF' },
+  chipText: { fontSize: 13, color: '#1565C0', fontWeight: '600' },
+});

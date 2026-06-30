@@ -1,0 +1,42 @@
+{
+  "summary": "iter-213 backend testing complete. Created /app/backend/tests/test_existing_implants_iter213.py with 10 tests covering phase_to_start routing matrix (phase3/phase4_step1/draft/default), new ExistingImplant fields (present_component, present_component_gh, present_component_angle, iopa_url), new top-level fields (original_procedure_type, radiographs.opg_url/iopas), prosthesis_history.prosthesis_stage, and original_procedure_type override of implant_procedure_type. All 10 iter-213 tests pass. Regression: iter-211 (15/15), iter-205 alpha_bio (24/24), iter-210 MUA Phase-4 override (4/4) — all green. Frontend skipped per request.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/procedures/with-existing-implants",
+        "issue": "Response payload status is hardcoded to 'pending_stage2_prosthetic' (server.py:1770) regardless of phase_to_start value. The DB document IS routed correctly (verified via GET round-trip), but clients reading status from the POST response will see stale/wrong data when phase_to_start='phase3' or 'draft'. POST response also omits current_phase. Recommend: return new_status and new_phase variables instead of the hardcoded literal."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_existing_implants_iter213.py",
+    "/app/backend/tests/test_existing_implants_iter211.py",
+    "/app/test_reports/pytest/iter213_results.xml"
+  ],
+  "action_items": [
+    "OPTIONAL/MINOR: Fix POST /api/procedures/with-existing-implants line 1770 to return the actual routed status + current_phase instead of hardcoded 'pending_stage2_prosthetic'. Suggested: `return {'id': new_id, 'case_id': case_id_resp, 'status': new_status, 'current_phase': new_phase}`. Otherwise the FE phase-routing buttons (Move to Phase 3 / Move to Phase 4 Step 1) cannot trust the POST response and must re-GET to confirm. Functional impact is low because data is correctly persisted; UX impact depends on whether FE consumes the POST response status."
+  ],
+  "critical_code_review_comments": [
+    "server.py:1770 — hardcoded response.status doesn't reflect phase_to_start routing. Inconsistent with DB write at lines 1712-1713.",
+    "server.py:13606 — file is 13.6k lines; should be split into focused modules (procedures, auth, catalog, files etc.) per code-review guideline (>700 LOC threshold). Long-term maintainability concern."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_existing_implants_iter213.py (NEW)"
+  ],
+  "success_rate": {
+    "backend": "100% (53/53 across iter-213 + iter-211 + iter-205 + iter-210)",
+    "frontend": "skipped per review request"
+  },
+  "test_credentials": "Admin Abhijit.patil/Admin@123 used; loaded from /app/memory/test_credentials.md.",
+  "seed_data_creation": "10 TEST_iter213* procedures created in DB across phase routing + field round-trip tests. Patient names prefixed with 'TEST_' for cleanup; registration_number and receipt_number include microsecond timestamps for uniqueness. No teardown applied (procedures collection retains test docs as in iter-211 pattern).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "iter-213 fully validated on backend. Run with: `cd /app && EXPO_PUBLIC_BACKEND_URL=https://dental-workflow-18.preview.emergentagent.com python -m pytest backend/tests/test_existing_implants_iter213.py backend/tests/test_existing_implants_iter211.py -v`. The test_existing_implants_iter213.py uses GET round-trip (not POST response) for status/current_phase assertions due to known POST-response issue noted above. If main agent fixes server.py:1770, the GET-based assertions will still pass; consider also adding a direct POST-response assertion for status/current_phase. Frontend (web preview SSR) deliberately skipped per request — should be tested manually via iOS Expo Go.",
+  "rca of the issue": "POST /api/procedures/with-existing-implants response payload at server.py:1770 returns `{'id': new_id, 'case_id': case_id_resp, 'status': 'pending_stage2_prosthetic'}` — a string literal — rather than the locally-computed `new_status` (line 1678/1682/1686). The MongoDB document stored at line 1743 correctly uses `new_status` and `new_phase` from the phase_to_start routing branch (1676-1688), confirmed by GET round-trip in all 4 phase-routing tests. Mitigation: change line 1770 to `return {'id': new_id, 'case_id': case_id_resp, 'status': new_status, 'current_phase': new_phase}`. No DB integrity issue — purely a response-shape inconsistency."
+}
