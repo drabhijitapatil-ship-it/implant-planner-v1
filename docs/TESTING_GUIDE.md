@@ -50,7 +50,7 @@ Open College App → tap Sign In.
 
 | Role              | Email                              | Password         |
 | ----------------- | ---------------------------------- | ---------------- |
-| Implant In-Charge | `abhijit.patil@admin.edu`          | `Implanr#2026`   |
+| Implant Admin     | `admin@implanr.com`                | `Implanr#2026`   |
 | Implant In-Charge | `Abhijit.patil@dental.edu`         | `Admin@123`      |
 | Supervisor        | `Paresh.gandhi@dental.edu`         | `Supervisor@123` |
 | Student           | `Gaurav.pandey@student.dental.edu` | `Student@123`    |
@@ -613,3 +613,9 @@ This produces an .aab (Android App Bundle) — required by Play Console. Takes ~
 
 Step 3 — Download the AAB
 After build completes, EAS gives a download link. Download the .aab file.
+
+<!-- create ios build and submit  -->
+
+eas build --platform ios --profile production
+
+eas submit --platform ios --profile production
