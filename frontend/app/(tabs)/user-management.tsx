@@ -15,9 +15,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
+import * as DocumentPicker from 'expo-document-picker';
 import api from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { ROLE_OPTIONS } from '../../constants/checklist';
+import { ROLE_OPTIONS, CLINIC_ROLE_OPTIONS } from '../../constants/checklist';
 
 const ROLE_COLORS: Record<string, string> = {
   administrator: '#9C27B0',
@@ -25,6 +29,10 @@ const ROLE_COLORS: Record<string, string> = {
   implant_incharge: '#FF9800',
   student: '#4CAF50',
   nurse: '#E91E63',
+  chief_dentist: '#FF9800',
+  dentist: '#2196F3',
+  dental_assistant: '#E91E63',
+  super_admin: '#212121',
 };
 
 const ROLE_DISPLAY: Record<string, string> = {
@@ -33,7 +41,58 @@ const ROLE_DISPLAY: Record<string, string> = {
   implant_incharge: 'Implant Incharge',
   student: 'PG Student',
   nurse: 'Nurse',
+  chief_dentist: 'Chief Dentist / Owner',
+  dentist: 'Dentist / Consultant',
+  dental_assistant: 'Dental Assistant',
+  super_admin: 'Super Admin',
 };
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function generatePassword(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+  let pw = '';
+  for (let i = 0; i < 10; i++) pw += chars[Math.floor(Math.random() * chars.length)];
+  return pw;
+}
+
+type BulkRow = { id: string; name: string; email: string; role: string };
+type BulkResult = { name: string; email: string; password: string; success: boolean; error?: string; emailSent?: boolean };
+type CsvRow = { name: string; email: string; role: string; rawRole: string; valid: boolean; error?: string };
+
+// Minimal CSV parser — handles quoted fields (so names/emails with commas inside
+// quotes survive) without pulling in a dependency for a 3-column format.
+function parseCsvText(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else inQuotes = false;
+      } else field += c;
+    } else if (c === '"') {
+      inQuotes = true;
+    } else if (c === ',') {
+      row.push(field); field = '';
+    } else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(field); field = '';
+      if (row.some((f) => f.trim() !== '')) rows.push(row);
+      row = [];
+    } else {
+      field += c;
+    }
+  }
+  if (field !== '' || row.length) {
+    row.push(field);
+    if (row.some((f) => f.trim() !== '')) rows.push(row);
+  }
+  return rows;
+}
 
 export default function UserManagementScreen() {
   const { user } = useAuth();
@@ -42,10 +101,177 @@ export default function UserManagementScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [filterRole, setFilterRole] = useState('all');
 
+  const isSuperAdmin = user?.role === 'super_admin';
+
+  // super_admin has no org of its own — every create flow needs an explicit org
+  // picked from every organization on the platform.
+  const [orgs, setOrgs] = useState<{ id: string; name: string; org_type: string }[]>([]);
+  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
+  const [showOrgPicker, setShowOrgPicker] = useState(false);
+  const selectedOrg = orgs.find((o) => o.id === selectedOrgId) || null;
+
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    api.get('/organizations').then((res) => setOrgs(res.data?.organizations || [])).catch(() => {});
+  }, [isSuperAdmin]);
+
+  const effectiveOrgType = isSuperAdmin ? selectedOrg?.org_type : user?.org_type;
+  const roleOptions = effectiveOrgType === 'clinic' ? CLINIC_ROLE_OPTIONS : ROLE_OPTIONS;
+  const defaultRole = roleOptions[0]?.value || 'student';
+
   // Create modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createMode, setCreateMode] = useState<'single' | 'multiple' | 'csv'>('single');
   const [creating, setCreating] = useState(false);
   const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'student' });
+
+  // Bulk create state
+  const [bulkRows, setBulkRows] = useState<BulkRow[]>([{ id: '1', name: '', email: '', role: 'student' }]);
+  const [bulkRolePickerRowId, setBulkRolePickerRowId] = useState<string | null>(null);
+  const [bulkCreating, setBulkCreating] = useState(false);
+  const [bulkResults, setBulkResults] = useState<BulkResult[] | null>(null);
+
+  // CSV mode state
+  const [csvRows, setCsvRows] = useState<CsvRow[]>([]);
+  const [csvFileName, setCsvFileName] = useState('');
+  const [csvBusy, setCsvBusy] = useState(false);
+
+  const openCreateModal = () => {
+    setCreateMode('single');
+    setSelectedOrgId(null);
+    setNewUser({ name: '', email: '', password: '', role: defaultRole });
+    setBulkRows([{ id: '1', name: '', email: '', role: defaultRole }]);
+    setCsvRows([]);
+    setCsvFileName('');
+    setShowCreateModal(true);
+  };
+
+  const downloadCsvTemplate = async () => {
+    const exampleRole = roleOptions[0]?.value || 'student';
+    const csv = `name,email,role\nDr. Jane Doe,jane.doe@example.com,${exampleRole}\n`;
+    setCsvBusy(true);
+    try {
+      const uri = `${FileSystem.cacheDirectory}implanr_user_template.csv`;
+      await FileSystem.writeAsStringAsync(uri, csv);
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, { mimeType: 'text/csv', dialogTitle: 'Save Implanr user template' });
+      } else {
+        Alert.alert('Template ready', `Saved to ${uri}`);
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Could not create the template file');
+    } finally {
+      setCsvBusy(false);
+    }
+  };
+
+  const handleUploadCsv = async () => {
+    try {
+      const r = await DocumentPicker.getDocumentAsync({
+        type: ['text/csv', 'text/comma-separated-values', 'application/vnd.ms-excel', '*/*'],
+        copyToCacheDirectory: true,
+      });
+      if (r.canceled || !r.assets?.length) return;
+      const asset = r.assets[0];
+      setCsvBusy(true);
+      const content = await FileSystem.readAsStringAsync(asset.uri);
+      const parsed = parseCsvText(content);
+      if (parsed.length === 0) {
+        Alert.alert('Empty CSV', 'That file has no rows.');
+        setCsvBusy(false);
+        return;
+      }
+      const header = parsed[0].map((h) => h.trim().toLowerCase());
+      const hasHeader = header.includes('name') && header.includes('email') && header.includes('role');
+      const dataRows = hasHeader ? parsed.slice(1) : parsed;
+      const nameIdx = hasHeader ? header.indexOf('name') : 0;
+      const emailIdx = hasHeader ? header.indexOf('email') : 1;
+      const roleIdx = hasHeader ? header.indexOf('role') : 2;
+      const validRoleValues = roleOptions.map((o) => o.value);
+
+      const rows: CsvRow[] = dataRows.map((cols) => {
+        const name = (cols[nameIdx] || '').trim();
+        const email = (cols[emailIdx] || '').trim();
+        const rawRole = (cols[roleIdx] || '').trim();
+        const role = rawRole.toLowerCase().replace(/\s+/g, '_');
+        let error: string | undefined;
+        if (!name) error = 'Missing name';
+        else if (!EMAIL_RE.test(email)) error = 'Invalid email';
+        else if (!validRoleValues.includes(role)) error = `Role must be one of: ${validRoleValues.join(', ')}`;
+        return { name, email, role, rawRole, valid: !error, error };
+      });
+
+      setCsvFileName(asset.name || 'uploaded.csv');
+      setCsvRows(rows);
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Could not read that CSV file');
+    } finally {
+      setCsvBusy(false);
+    }
+  };
+
+  const handleCsvCreate = () => {
+    const validRows = csvRows.filter((r) => r.valid).map((r) => ({ id: r.email, name: r.name, email: r.email, role: r.role }));
+    if (validRows.length === 0) {
+      Alert.alert('No valid rows', 'Fix the errors in your CSV and upload it again.');
+      return;
+    }
+    handleBulkCreate(validRows);
+  };
+
+  const addBulkRow = () => {
+    setBulkRows((rows) => [...rows, { id: Date.now().toString(), name: '', email: '', role: defaultRole }]);
+  };
+
+  const removeBulkRow = (id: string) => {
+    setBulkRows((rows) => (rows.length > 1 ? rows.filter((r) => r.id !== id) : rows));
+  };
+
+  const updateBulkRow = (id: string, patch: Partial<BulkRow>) => {
+    setBulkRows((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  };
+
+  const handleBulkCreate = async (rowsOverride?: BulkRow[]) => {
+    const rows = rowsOverride || bulkRows;
+    const invalidRow = rows.find((r) => !r.name.trim() || !EMAIL_RE.test(r.email.trim()));
+    if (invalidRow) {
+      Alert.alert('Error', 'Every row needs a name and a valid email');
+      return;
+    }
+    if (isSuperAdmin && !selectedOrgId) {
+      Alert.alert('Error', 'Pick an organization first');
+      return;
+    }
+    setBulkCreating(true);
+    const results: BulkResult[] = [];
+    for (const row of rows) {
+      const password = generatePassword();
+      try {
+        const payload: any = { name: row.name.trim(), email: row.email.trim(), password, role: row.role };
+        if (isSuperAdmin) payload.org_id = selectedOrgId;
+        const resp = await api.post('/users', payload);
+        results.push({ name: row.name.trim(), email: row.email.trim(), password, success: true, emailSent: !!resp.data?.email_sent });
+      } catch (error: any) {
+        results.push({
+          name: row.name.trim(),
+          email: row.email.trim(),
+          password: '',
+          success: false,
+          error: error.response?.data?.detail || 'Failed to create',
+        });
+      }
+    }
+    setBulkCreating(false);
+    setShowCreateModal(false);
+    setBulkResults(results);
+    setCsvRows([]);
+    setCsvFileName('');
+    loadUsers();
+  };
+
+  const copyToClipboard = async (text: string) => {
+    await Clipboard.setStringAsync(text);
+  };
 
   // Edit modal state
   const [showEditModal, setShowEditModal] = useState(false);
@@ -76,12 +302,23 @@ export default function UserManagementScreen() {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
+    if (isSuperAdmin && !selectedOrgId) {
+      Alert.alert('Error', 'Pick an organization first');
+      return;
+    }
     setCreating(true);
     try {
-      await api.post('/users', newUser);
-      Alert.alert('Success', 'User created successfully');
+      const payload: any = { ...newUser };
+      if (isSuperAdmin) payload.org_id = selectedOrgId;
+      const resp = await api.post('/users', payload);
+      Alert.alert(
+        'Success',
+        resp.data?.email_sent
+          ? 'User created. Login credentials have been emailed to them.'
+          : 'User created, but the credentials email could not be sent — share the password manually.'
+      );
       setShowCreateModal(false);
-      setNewUser({ name: '', email: '', password: '', role: 'student' });
+      setNewUser({ name: '', email: '', password: '', role: defaultRole });
       loadUsers();
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.detail || 'Failed to create user');
@@ -144,7 +381,7 @@ export default function UserManagementScreen() {
     ]);
   };
 
-  const isAdmin = user?.role === 'administrator' || user?.role === 'implant_incharge';
+  const isAdmin = user?.role === 'administrator' || user?.role === 'implant_incharge' || user?.role === 'super_admin';
 
   if (!isAdmin) {
     return (
@@ -214,7 +451,7 @@ export default function UserManagementScreen() {
 
   const renderRoleSelector = (selectedRole: string, onSelect: (role: string) => void) => (
     <View style={styles.roleSelector}>
-      {ROLE_OPTIONS.map((option) => (
+      {roleOptions.map((option) => (
         <TouchableOpacity
           key={option.value}
           style={[
@@ -291,7 +528,7 @@ export default function UserManagementScreen() {
       {/* Create User FAB */}
       <TouchableOpacity
         style={styles.fab}
-        onPress={() => setShowCreateModal(true)}
+        onPress={openCreateModal}
         data-testid="create-user-fab"
       >
         <Ionicons name="person-add" size={24} color="#FFF" />
@@ -309,53 +546,375 @@ export default function UserManagementScreen() {
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.inputLabel}>Full Name</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Dr. John Doe"
-                placeholderTextColor="#999"
-                value={newUser.name}
-                onChangeText={(text) => setNewUser({ ...newUser, name: text })}
-                data-testid="input-name"
-              />
+              {isSuperAdmin && (
+                <>
+                  <Text style={styles.inputLabel}>Organization</Text>
+                  <TouchableOpacity style={styles.orgPickerBtn} onPress={() => setShowOrgPicker(true)} data-testid="org-picker-btn">
+                    {selectedOrg ? (
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.orgPickerName} numberOfLines={1}>{selectedOrg.name}</Text>
+                        <Text style={styles.orgPickerType}>{selectedOrg.org_type === 'clinic' ? 'Clinic' : 'College'}</Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.orgPickerPlaceholder}>Select an organization…</Text>
+                    )}
+                    <Ionicons name="chevron-down" size={18} color="#666" />
+                  </TouchableOpacity>
+                </>
+              )}
 
-              <Text style={styles.inputLabel}>Email</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="john.doe@dental.edu"
-                placeholderTextColor="#999"
-                value={newUser.email}
-                onChangeText={(text) => setNewUser({ ...newUser, email: text })}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                data-testid="input-email"
-              />
+              <View style={styles.modeToggle}>
+                <TouchableOpacity
+                  style={[styles.modeToggleBtn, createMode === 'single' && styles.modeToggleBtnActive]}
+                  onPress={() => setCreateMode('single')}
+                  data-testid="create-mode-single"
+                >
+                  <Text style={[styles.modeToggleText, createMode === 'single' && styles.modeToggleTextActive]}>Single User</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modeToggleBtn, createMode === 'multiple' && styles.modeToggleBtnActive]}
+                  onPress={() => setCreateMode('multiple')}
+                  data-testid="create-mode-multiple"
+                >
+                  <Text style={[styles.modeToggleText, createMode === 'multiple' && styles.modeToggleTextActive]}>Multiple</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modeToggleBtn, createMode === 'csv' && styles.modeToggleBtnActive]}
+                  onPress={() => setCreateMode('csv')}
+                  data-testid="create-mode-csv"
+                >
+                  <Text style={[styles.modeToggleText, createMode === 'csv' && styles.modeToggleTextActive]}>CSV Upload</Text>
+                </TouchableOpacity>
+              </View>
 
-              <Text style={styles.inputLabel}>Password</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter password"
-                placeholderTextColor="#999"
-                value={newUser.password}
-                onChangeText={(text) => setNewUser({ ...newUser, password: text })}
-                secureTextEntry
-                data-testid="input-password"
-              />
+              {createMode === 'single' ? (
+                <>
+                  <Text style={styles.inputLabel}>Full Name</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Dr. John Doe"
+                    placeholderTextColor="#999"
+                    value={newUser.name}
+                    onChangeText={(text) => setNewUser({ ...newUser, name: text })}
+                    data-testid="input-name"
+                  />
 
-              <Text style={styles.inputLabel}>Role</Text>
-              {renderRoleSelector(newUser.role, (role) => setNewUser({ ...newUser, role }))}
+                  <Text style={styles.inputLabel}>Email</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="john.doe@dental.edu"
+                    placeholderTextColor="#999"
+                    value={newUser.email}
+                    onChangeText={(text) => setNewUser({ ...newUser, email: text })}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    data-testid="input-email"
+                  />
 
+                  <Text style={styles.inputLabel}>Password</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter password"
+                    placeholderTextColor="#999"
+                    value={newUser.password}
+                    onChangeText={(text) => setNewUser({ ...newUser, password: text })}
+                    secureTextEntry
+                    data-testid="input-password"
+                  />
+
+                  <Text style={styles.inputLabel}>Role</Text>
+                  {renderRoleSelector(newUser.role, (role) => setNewUser({ ...newUser, role }))}
+
+                  <TouchableOpacity
+                    style={[styles.createBtn, (creating || (isSuperAdmin && !selectedOrgId)) && styles.btnDisabled]}
+                    onPress={handleCreateUser}
+                    disabled={creating || (isSuperAdmin && !selectedOrgId)}
+                    data-testid="submit-create-user"
+                  >
+                    {creating ? (
+                      <ActivityIndicator color="#FFF" />
+                    ) : (
+                      <Text style={styles.createBtnText}>Create User</Text>
+                    )}
+                  </TouchableOpacity>
+                </>
+              ) : createMode === 'multiple' ? (
+                <>
+                  <Text style={styles.bulkHint}>
+                    Add one row per user. Passwords are generated automatically — you'll get a list to share after creating.
+                  </Text>
+
+                  {bulkRows.map((row, idx) => (
+                    <View key={row.id} style={styles.bulkRow} data-testid={`bulk-row-${idx}`}>
+                      <View style={styles.bulkRowHeader}>
+                        <Text style={styles.bulkRowNumber}>#{idx + 1}</Text>
+                        {bulkRows.length > 1 && (
+                          <TouchableOpacity onPress={() => removeBulkRow(row.id)} data-testid={`bulk-row-remove-${idx}`}>
+                            <Ionicons name="trash-outline" size={18} color="#F44336" />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Full name"
+                        placeholderTextColor="#999"
+                        value={row.name}
+                        onChangeText={(text) => updateBulkRow(row.id, { name: text })}
+                        data-testid={`bulk-row-name-${idx}`}
+                      />
+                      <TextInput
+                        style={[styles.input, { marginTop: 8 }]}
+                        placeholder="Email"
+                        placeholderTextColor="#999"
+                        value={row.email}
+                        onChangeText={(text) => updateBulkRow(row.id, { email: text })}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        data-testid={`bulk-row-email-${idx}`}
+                      />
+                      <TouchableOpacity
+                        style={styles.bulkRolePicker}
+                        onPress={() => setBulkRolePickerRowId(row.id)}
+                        data-testid={`bulk-row-role-${idx}`}
+                      >
+                        <View style={[styles.roleDot, { backgroundColor: ROLE_COLORS[row.role] || '#757575' }]} />
+                        <Text style={styles.bulkRolePickerText}>{ROLE_DISPLAY[row.role] || row.role}</Text>
+                        <Ionicons name="chevron-down" size={16} color="#666" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+
+                  <TouchableOpacity style={styles.addRowBtn} onPress={addBulkRow} data-testid="bulk-add-row">
+                    <Ionicons name="add-circle-outline" size={20} color="#007AFF" />
+                    <Text style={styles.addRowBtnText}>Add Another User</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.createBtn, (bulkCreating || (isSuperAdmin && !selectedOrgId)) && styles.btnDisabled]}
+                    onPress={() => handleBulkCreate()}
+                    disabled={bulkCreating || (isSuperAdmin && !selectedOrgId)}
+                    data-testid="submit-bulk-create"
+                  >
+                    {bulkCreating ? (
+                      <ActivityIndicator color="#FFF" />
+                    ) : (
+                      <Text style={styles.createBtnText}>Create {bulkRows.length} User{bulkRows.length !== 1 ? 's' : ''}</Text>
+                    )}
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <View style={styles.csvInstructions}>
+                    <View style={styles.csvInstructionsRow}>
+                      <Ionicons name="information-circle" size={16} color="#1565C0" />
+                      <Text style={styles.csvInstructionsTitle}>CSV format</Text>
+                    </View>
+                    <Text style={styles.csvInstructionsText}>
+                      Columns: <Text style={styles.csvMono}>name, email, role</Text> (header row required).{'\n'}
+                      Role must be exactly one of:{' '}
+                      <Text style={styles.csvMono}>{roleOptions.map((o) => o.value).join(', ')}</Text>.{'\n'}
+                      Rows that don't match are flagged below and skipped on create.
+                    </Text>
+                  </View>
+
+                  <View style={styles.csvActionsRow}>
+                    <TouchableOpacity
+                      style={styles.csvActionBtn}
+                      onPress={downloadCsvTemplate}
+                      disabled={csvBusy || (isSuperAdmin && !selectedOrgId)}
+                      data-testid="csv-download-template"
+                    >
+                      <Ionicons name="download-outline" size={18} color="#007AFF" />
+                      <Text style={styles.csvActionBtnText}>Download Template</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.csvActionBtn}
+                      onPress={handleUploadCsv}
+                      disabled={csvBusy || (isSuperAdmin && !selectedOrgId)}
+                      data-testid="csv-upload"
+                    >
+                      <Ionicons name="cloud-upload-outline" size={18} color="#007AFF" />
+                      <Text style={styles.csvActionBtnText}>Upload CSV</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {isSuperAdmin && !selectedOrgId && (
+                    <Text style={styles.orgRequiredHint}>Pick an organization above to enable the CSV template and upload.</Text>
+                  )}
+
+                  {csvBusy && <ActivityIndicator color="#007AFF" style={{ marginTop: 12 }} />}
+
+                  {csvRows.length > 0 && !csvBusy && (
+                    <>
+                      <View style={styles.csvSummaryRow}>
+                        <Ionicons name="document-text-outline" size={14} color="#888" />
+                        <Text style={styles.csvSummaryText} numberOfLines={1}>{csvFileName}</Text>
+                      </View>
+                      <Text style={styles.csvSummaryCount} data-testid="csv-valid-count">
+                        {csvRows.filter((r) => r.valid).length} of {csvRows.length} rows valid — will create {csvRows.filter((r) => r.valid).length} user{csvRows.filter((r) => r.valid).length !== 1 ? 's' : ''}
+                      </Text>
+
+                      {/* Preview table */}
+                      <View style={styles.csvTableHeader}>
+                        <Text style={[styles.csvTableHeaderText, { flex: 0.5 }]}>#</Text>
+                        <Text style={[styles.csvTableHeaderText, { flex: 1.4 }]}>Name</Text>
+                        <Text style={[styles.csvTableHeaderText, { flex: 1.6 }]}>Email</Text>
+                        <Text style={[styles.csvTableHeaderText, { flex: 1 }]}>Role</Text>
+                      </View>
+                      {csvRows.map((row, idx) => (
+                        <View key={idx} style={[styles.csvTableRow, !row.valid && styles.csvTableRowError]} data-testid={`csv-row-${idx}`}>
+                          <View style={styles.csvTableRowMain}>
+                            <Text style={[styles.csvTableCell, { flex: 0.5 }]}>{idx + 1}</Text>
+                            <Text style={[styles.csvTableCell, { flex: 1.4 }]} numberOfLines={1}>{row.name || '—'}</Text>
+                            <Text style={[styles.csvTableCell, { flex: 1.6 }]} numberOfLines={1}>{row.email || '—'}</Text>
+                            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+                              <Ionicons name={row.valid ? 'checkmark-circle' : 'close-circle'} size={14} color={row.valid ? '#4CAF50' : '#F44336'} />
+                              <Text style={styles.csvTableCell} numberOfLines={1}> {row.rawRole || '—'}</Text>
+                            </View>
+                          </View>
+                          {!row.valid && <Text style={styles.csvRowErrorText}>{row.error}</Text>}
+                        </View>
+                      ))}
+
+                      <TouchableOpacity
+                        style={[styles.createBtn, (bulkCreating || csvRows.filter((r) => r.valid).length === 0) && styles.btnDisabled]}
+                        onPress={handleCsvCreate}
+                        disabled={bulkCreating || csvRows.filter((r) => r.valid).length === 0}
+                        data-testid="submit-csv-create"
+                      >
+                        {bulkCreating ? (
+                          <ActivityIndicator color="#FFF" />
+                        ) : (
+                          <Text style={styles.createBtnText}>
+                            Create {csvRows.filter((r) => r.valid).length} User{csvRows.filter((r) => r.valid).length !== 1 ? 's' : ''}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Organization Picker (super_admin only) */}
+      <Modal visible={showOrgPicker} animationType="fade" transparent>
+        <TouchableOpacity
+          style={styles.pickerOverlay}
+          activeOpacity={1}
+          onPress={() => setShowOrgPicker(false)}
+          data-testid="org-picker-overlay"
+        >
+          <View style={styles.pickerSheet}>
+            <ScrollView style={{ maxHeight: 400 }}>
+              {orgs.length === 0 ? (
+                <Text style={styles.orgPickerEmpty}>No organizations found</Text>
+              ) : (
+                orgs.map((org) => (
+                  <TouchableOpacity
+                    key={org.id}
+                    style={styles.pickerItem}
+                    onPress={() => {
+                      setSelectedOrgId(org.id);
+                      setShowOrgPicker(false);
+                      setNewUser((u) => ({ ...u, role: '' }));
+                      setBulkRows([{ id: '1', name: '', email: '', role: '' }]);
+                    }}
+                    data-testid={`org-picker-option-${org.id}`}
+                  >
+                    <Ionicons name={org.org_type === 'clinic' ? 'medkit-outline' : 'school-outline'} size={18} color="#666" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.pickerItemText}>{org.name}</Text>
+                      <Text style={styles.orgPickerType}>{org.org_type === 'clinic' ? 'Clinic' : 'College'}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Bulk Role Picker */}
+      <Modal visible={!!bulkRolePickerRowId} animationType="fade" transparent>
+        <TouchableOpacity
+          style={styles.pickerOverlay}
+          activeOpacity={1}
+          onPress={() => setBulkRolePickerRowId(null)}
+          data-testid="bulk-role-picker-overlay"
+        >
+          <View style={styles.pickerSheet}>
+            {roleOptions.map((option) => (
               <TouchableOpacity
-                style={[styles.createBtn, creating && styles.btnDisabled]}
-                onPress={handleCreateUser}
-                disabled={creating}
-                data-testid="submit-create-user"
+                key={option.value}
+                style={styles.pickerItem}
+                onPress={() => {
+                  if (bulkRolePickerRowId) updateBulkRow(bulkRolePickerRowId, { role: option.value });
+                  setBulkRolePickerRowId(null);
+                }}
+                data-testid={`bulk-role-picker-option-${option.value}`}
               >
-                {creating ? (
-                  <ActivityIndicator color="#FFF" />
-                ) : (
-                  <Text style={styles.createBtnText}>Create User</Text>
-                )}
+                <View style={[styles.roleDot, { backgroundColor: ROLE_COLORS[option.value] || '#757575' }]} />
+                <Text style={styles.pickerItemText}>{option.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Bulk Create Results */}
+      <Modal visible={!!bulkResults} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent} data-testid="bulk-results-modal">
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>
+                  {(bulkResults || []).filter((r) => r.success).length}/{(bulkResults || []).length} Users Created
+                </Text>
+                <TouchableOpacity onPress={() => setBulkResults(null)} data-testid="close-bulk-results-btn">
+                  <Ionicons name="close" size={24} color="#666" />
+                </TouchableOpacity>
+              </View>
+
+              {(bulkResults || []).map((r, idx) => (
+                <View key={idx} style={[styles.resultCard, !r.success && styles.resultCardError]}>
+                  <View style={styles.resultRow}>
+                    <Ionicons
+                      name={r.success ? 'checkmark-circle' : 'close-circle'}
+                      size={18}
+                      color={r.success ? '#4CAF50' : '#F44336'}
+                    />
+                    <Text style={styles.resultName}>{r.name}</Text>
+                  </View>
+                  <Text style={styles.resultEmail}>{r.email}</Text>
+                  {r.success ? (
+                    <>
+                      <View style={styles.resultPwRow}>
+                        <Text style={styles.resultPw}>{r.password}</Text>
+                        <TouchableOpacity onPress={() => copyToClipboard(`${r.email} / ${r.password}`)} data-testid={`copy-credentials-${idx}`}>
+                          <Ionicons name="copy-outline" size={18} color="#007AFF" />
+                        </TouchableOpacity>
+                      </View>
+                      <View style={styles.resultEmailedRow}>
+                        <Ionicons
+                          name={r.emailSent ? 'mail' : 'mail-outline'}
+                          size={13}
+                          color={r.emailSent ? '#4CAF50' : '#90A4AE'}
+                        />
+                        <Text style={styles.resultEmailedText}>
+                          {r.emailSent ? 'Credentials emailed to user' : 'Email not sent — share manually'}
+                        </Text>
+                      </View>
+                    </>
+                  ) : (
+                    <Text style={styles.resultError}>{r.error}</Text>
+                  )}
+                </View>
+              ))}
+
+              <TouchableOpacity style={styles.createBtn} onPress={() => setBulkResults(null)} data-testid="done-bulk-results">
+                <Text style={styles.createBtnText}>Done</Text>
               </TouchableOpacity>
             </ScrollView>
           </View>
@@ -681,6 +1240,329 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
     marginTop: 24,
+  },
+  modeToggle: {
+    flexDirection: 'row',
+    backgroundColor: '#F0F0F0',
+    borderRadius: 10,
+    padding: 4,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  modeToggleBtn: {
+    flex: 1,
+    paddingVertical: 9,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  modeToggleBtnActive: {
+    backgroundColor: '#FFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  modeToggleText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#888',
+  },
+  modeToggleTextActive: {
+    color: '#007AFF',
+  },
+  bulkHint: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 8,
+    marginBottom: 12,
+    lineHeight: 17,
+  },
+  bulkRow: {
+    backgroundColor: '#FAFAFA',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#EAEAEA',
+    padding: 12,
+    marginBottom: 10,
+  },
+  bulkRowHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  bulkRowNumber: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#999',
+  },
+  bulkRolePicker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#DDD',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 8,
+    backgroundColor: '#FFF',
+  },
+  bulkRolePickerText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#333',
+  },
+  roleDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  addRowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1.5,
+    borderColor: '#007AFF',
+    borderStyle: 'dashed',
+    borderRadius: 10,
+    paddingVertical: 12,
+    marginTop: 4,
+  },
+  addRowBtnText: {
+    color: '#007AFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 30,
+  },
+  pickerSheet: {
+    backgroundColor: '#FFF',
+    borderRadius: 14,
+    padding: 8,
+    width: '100%',
+    maxWidth: 320,
+  },
+  pickerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 8,
+  },
+  pickerItemText: {
+    fontSize: 15,
+    color: '#333',
+  },
+  resultCard: {
+    backgroundColor: '#F1F8F1',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#C8E6C9',
+    padding: 12,
+    marginBottom: 8,
+  },
+  resultCardError: {
+    backgroundColor: '#FDECEA',
+    borderColor: '#F8C9C2',
+  },
+  resultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  resultName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  resultEmail: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+    marginLeft: 26,
+  },
+  resultPwRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFF',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginTop: 8,
+    marginLeft: 26,
+  },
+  resultPw: {
+    fontSize: 14,
+    fontFamily: 'monospace',
+    color: '#1A1A1A',
+    letterSpacing: 0.5,
+  },
+  resultEmailedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 6,
+    marginLeft: 26,
+  },
+  resultEmailedText: {
+    fontSize: 11,
+    color: '#78909C',
+  },
+  resultError: {
+    fontSize: 12,
+    color: '#C62828',
+    marginTop: 4,
+    marginLeft: 26,
+  },
+  csvInstructions: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#BBDEFB',
+    padding: 12,
+    marginTop: 12,
+  },
+  csvInstructionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  csvInstructionsTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1565C0',
+  },
+  csvInstructionsText: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#37474F',
+  },
+  csvMono: {
+    fontFamily: 'monospace',
+    fontWeight: '700',
+  },
+  csvActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+  },
+  csvActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1.5,
+    borderColor: '#007AFF',
+    borderRadius: 10,
+    paddingVertical: 12,
+  },
+  csvActionBtnText: {
+    color: '#007AFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  csvSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 18,
+  },
+  csvSummaryText: {
+    fontSize: 12,
+    color: '#888',
+    flexShrink: 1,
+  },
+  csvSummaryCount: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  csvTableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#F0F0F0',
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  csvTableHeaderText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#666',
+    textTransform: 'uppercase',
+  },
+  csvTableRow: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    backgroundColor: '#FFF',
+  },
+  csvTableRowError: {
+    backgroundColor: '#FDECEA',
+  },
+  csvTableRowMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  csvTableCell: {
+    fontSize: 12,
+    color: '#333',
+  },
+  csvRowErrorText: {
+    fontSize: 11,
+    color: '#C62828',
+    marginTop: 3,
+  },
+  orgPickerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#DDD',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: '#FAFAFA',
+  },
+  orgPickerName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1A1A1A',
+  },
+  orgPickerType: {
+    fontSize: 11,
+    color: '#888',
+    marginTop: 2,
+  },
+  orgPickerPlaceholder: {
+    flex: 1,
+    fontSize: 14,
+    color: '#999',
+  },
+  orgPickerEmpty: {
+    fontSize: 13,
+    color: '#888',
+    textAlign: 'center',
+    padding: 20,
+  },
+  orgRequiredHint: {
+    fontSize: 11,
+    color: '#E65100',
+    marginTop: 8,
   },
   updateBtn: {
     backgroundColor: '#4CAF50',

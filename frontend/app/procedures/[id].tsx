@@ -1206,7 +1206,8 @@ export default function ProcedureDetailScreen() {
             || !!(procedure.created_by_id && user?.id === procedure.created_by_id);
           const isReviewer = user?.role === 'supervisor'
             || user?.role === 'implant_incharge'
-            || user?.role === 'administrator';
+            || user?.role === 'administrator'
+            || user?.role === 'super_admin';
           if (!isReviewer || isOwner) return null;
           const waitingMap: Record<string, string> = {
             phase1_approved: 'Awaiting student to start Phase 2 — Implant Surgery',
@@ -1287,7 +1288,7 @@ export default function ProcedureDetailScreen() {
             ? procedure.phase2_edit_requests.find((r: any) => r?.status === 'pending')
             : null;
           if (!pending) return null;
-          const canResolve = user?.role === 'implant_incharge' || user?.role === 'administrator'
+          const canResolve = user?.role === 'implant_incharge' || user?.role === 'administrator' || user?.role === 'super_admin'
             || (user?.role === 'supervisor' && procedure?.supervisor_id === user?.id);
           if (!canResolve) return null;
           return (
@@ -1321,7 +1322,7 @@ export default function ProcedureDetailScreen() {
             || !!(procedure.created_by_id && user?.id === procedure.created_by_id);
           const canUpload = user?.role === 'nurse' || isOwner;
           const canViewOnly = !canUpload
-            && (user?.role === 'supervisor' || user?.role === 'implant_incharge' || user?.role === 'administrator');
+            && (user?.role === 'supervisor' || user?.role === 'implant_incharge' || user?.role === 'administrator' || user?.role === 'super_admin');
           const phase1Window = procedure.status === 'pending_phase1' || procedure.status === 'phase1_approved';
           if (!phase1Window) return null;
           const consentUploaded = !!procedure.patient_consent_form;
@@ -1749,7 +1750,7 @@ export default function ProcedureDetailScreen() {
               // the current user is either the creator or faculty.
               const eligibleStatuses = new Set(['draft', 'pending_phase1', 'rejected_phase1', 'phase1_approved']);
               const isCreator = procedure.created_by_id === user?.id || procedure.student_id === user?.id;
-              const isFaculty = user?.role === 'supervisor' || user?.role === 'implant_incharge' || user?.role === 'administrator';
+              const isFaculty = user?.role === 'supervisor' || user?.role === 'implant_incharge' || user?.role === 'administrator' || user?.role === 'super_admin';
               if (!eligibleStatuses.has(procedure.status)) return null;
               if (!(isCreator || isFaculty)) return null;
               return (

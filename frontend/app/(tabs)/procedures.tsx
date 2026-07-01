@@ -165,7 +165,7 @@ function DefaultProceduresScreen() {
     // RESCHEDULE_ELIGIBLE_STATUSES.
     const rescheduleEligible = new Set(['draft', 'pending_phase1', 'rejected_phase1', 'phase1_approved']);
     const isCreator = item.created_by_id === user?.id || item.student_id === user?.id;
-    const isFaculty = role === 'supervisor' || role === 'implant_incharge' || role === 'administrator';
+    const isFaculty = role === 'supervisor' || role === 'implant_incharge' || role === 'administrator' || role === 'super_admin';
     if (rescheduleEligible.has(item.status) && (isCreator || isFaculty)) {
       actions.push({
         key: 'reschedule',

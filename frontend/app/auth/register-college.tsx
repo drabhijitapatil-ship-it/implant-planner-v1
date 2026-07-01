@@ -59,13 +59,27 @@ export default function CollegeRegisterScreen() {
 
   const collegeName = useManual ? manualCollegeName : (selectedCollege?.name ?? '');
 
+  // Colleges already onboarded as a workspace shouldn't be selectable again —
+  // fetched once on mount (public endpoint, no auth needed pre-signup).
+  const [onboardedNames, setOnboardedNames] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    api.get('/organizations/onboarded-college-names')
+      .then(res => setOnboardedNames(new Set((res.data?.names || []).map((n: string) => n.trim().toLowerCase()))))
+      .catch(() => {});
+  }, []);
+
+  const availableColleges = useMemo(
+    () => DENTAL_COLLEGES.filter(c => !onboardedNames.has(c.name.trim().toLowerCase())),
+    [onboardedNames]
+  );
+
   const filteredColleges = useMemo(() => {
     const q = collegeSearch.trim().toLowerCase();
-    if (!q) return DENTAL_COLLEGES;
-    return DENTAL_COLLEGES.filter(
+    if (!q) return availableColleges;
+    return availableColleges.filter(
       c => c.name.toLowerCase().includes(q) || c.state.toLowerCase().includes(q)
     );
-  }, [collegeSearch]);
+  }, [collegeSearch, availableColleges]);
 
   const handleSelectCollege = (c: DentalCollege) => {
     setSelectedCollege(c);
@@ -85,6 +99,7 @@ export default function CollegeRegisterScreen() {
   const validate = () => {
     const e: Record<string, string> = {};
     if (!collegeName.trim()) e.collegeName = 'College name is required';
+    else if (onboardedNames.has(collegeName.trim().toLowerCase())) e.collegeName = 'This college has already been onboarded';
     if (!state) e.state = 'State is required';
     if (!inchargeName.trim()) e.inchargeName = 'Name is required';
     if (!email.trim()) e.email = 'Email is required';

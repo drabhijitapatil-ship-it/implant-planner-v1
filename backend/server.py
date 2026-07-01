@@ -164,8 +164,13 @@ async def _org_member_ids(org_id: Optional[str]) -> List[str]:
     return [str(i) for i in ids]
 
 
-def _org_scope_match(org_member_ids: List[str]) -> Dict[str, Any]:
-    """Mongo $match restricting a procedures query to cases linked to any of these user ids."""
+async def _org_scope_match(current_user: dict) -> Dict[str, Any]:
+    """Mongo $match restricting a procedures query to the caller's org (derived from the
+    linked student/supervisor/creator, since procedures don't store org_id directly).
+    super_admin is platform-wide and gets an empty filter — i.e. no restriction."""
+    if current_user.get("is_super_admin"):
+        return {}
+    org_member_ids = await _org_member_ids(current_user.get("org_id"))
     return {"$or": [
         {"student_id": {"$in": org_member_ids}},
         {"supervisor_id": {"$in": org_member_ids}},
@@ -178,6 +183,8 @@ async def _assert_procedure_org_access(proc: dict, current_user: dict) -> None:
     directly, so org membership is derived from the linked student/supervisor/creator.
     Only org-wide roles need this check — student/supervisor self-scoped access is already
     enforced by each endpoint's own identity checks and can't cross orgs."""
+    if current_user.get("is_super_admin"):
+        return
     role = current_user.get("role")
     if role not in ORG_WIDE_ROLES:
         return
@@ -212,7 +219,20 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             raise HTTPException(status_code=401, detail="User not found")
         user["_id"] = str(user["_id"])
         user["_original_role"] = user.get("role", "")
-        user["role"] = normalize_role(user.get("role", ""))
+        # super_admin is a platform-wide role with no org_id of its own. It is never
+        # granted through any user-editable path (invite / create-user / edit-user all
+        # validate role against COLLEGE_ROLES/CLINIC_ROLES, which deliberately exclude
+        # it) — only provisioned via the seed script. Rather than threading a
+        # super_admin branch through every permission check in the file, it's remapped
+        # to "administrator" here (the existing ceiling of in-app capability) and
+        # flagged via is_super_admin, which the org-scoping helpers check to bypass
+        # the org boundary specifically.
+        if user.get("role") == "super_admin":
+            user["is_super_admin"] = True
+            user["role"] = "administrator"
+        else:
+            user["is_super_admin"] = False
+            user["role"] = normalize_role(user.get("role", ""))
         return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
@@ -1458,7 +1478,7 @@ async def register_push_token(
 # User Routes
 @api_router.get("/users")
 async def get_users(role: Optional[str] = None, current_user: dict = Depends(get_current_user)):
-    query = {"org_id": current_user.get("org_id")}
+    query = {} if current_user.get("is_super_admin") else {"org_id": current_user.get("org_id")}
     if role:
         query["role"] = role
 
@@ -1475,6 +1495,9 @@ class UserCreate(BaseModel):
     email: EmailStr = Field(..., max_length=255)
     password: str = Field(..., max_length=128)
     role: str = Field(..., max_length=30)
+    # Only honoured for super_admin, who has no org_id of their own and must pick
+    # a target organization explicitly. Ignored (uses the caller's own org) otherwise.
+    org_id: Optional[str] = Field(None, max_length=64)
 
     @field_validator('name')
     @classmethod
@@ -1487,9 +1510,14 @@ async def create_user(user: UserCreate, current_user: dict = Depends(get_current
     if current_user["role"] not in ["administrator", "implant_incharge"]:
         raise HTTPException(status_code=403, detail="Only administrators and implant incharge can create users")
 
-    org_id = current_user.get("org_id")
-    if not org_id:
-        raise HTTPException(status_code=400, detail="Your account is not linked to an organization")
+    if current_user.get("is_super_admin"):
+        org_id = user.org_id
+        if not org_id:
+            raise HTTPException(status_code=400, detail="org_id is required when creating a user as super admin")
+    else:
+        org_id = current_user.get("org_id")
+        if not org_id:
+            raise HTTPException(status_code=400, detail="Your account is not linked to an organization")
 
     org = await db.organizations.find_one({"_id": ObjectId(org_id)})
     if not org:
@@ -1523,7 +1551,15 @@ async def create_user(user: UserCreate, current_user: dict = Depends(get_current
 
     result = await db.users.insert_one(user_dict)
 
-    return {"id": str(result.inserted_id), "message": "User created successfully"}
+    email_sent = await _send_credentials_email(
+        to_email=user.email,
+        to_name=user.name,
+        password=user.password,
+        role_display=_role_display_name(user.role),
+        org_name=org.get("name", ""),
+    )
+
+    return {"id": str(result.inserted_id), "message": "User created successfully", "email_sent": email_sent}
 
 @api_router.delete("/users/{user_id}")
 async def delete_user(user_id: str, current_user: dict = Depends(get_current_user)):
@@ -1538,7 +1574,7 @@ async def delete_user(user_id: str, current_user: dict = Depends(get_current_use
     target = await db.users.find_one({"_id": ObjectId(user_id)})
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
-    if target.get("org_id") != current_user.get("org_id"):
+    if not current_user.get("is_super_admin") and target.get("org_id") != current_user.get("org_id"):
         raise HTTPException(status_code=403, detail="Cannot manage users outside your organization")
 
     result = await db.users.delete_one({"_id": ObjectId(user_id)})
@@ -1568,7 +1604,7 @@ async def update_user(user_id: str, user: UserUpdate, current_user: dict = Depen
     existing = await db.users.find_one({"_id": ObjectId(user_id)})
     if not existing:
         raise HTTPException(status_code=404, detail="User not found")
-    if existing.get("org_id") != current_user.get("org_id"):
+    if not current_user.get("is_super_admin") and existing.get("org_id") != current_user.get("org_id"):
         raise HTTPException(status_code=403, detail="Cannot manage users outside your organization")
 
     update_fields = {}
@@ -1622,6 +1658,9 @@ CLINIC_ROLES = {"chief_dentist", "dentist", "dental_assistant", "administrator"}
 
 EMAIL_LOGO_PATH = ROOT_DIR / "email_assets" / "logo.png"
 EMAIL_WEBSITE_URL = os.environ.get("WEBSITE_URL", "https://implanr.com")
+# No App Store / Play Store listing yet — placeholder until APP_DOWNLOAD_URL is set,
+# falls back to the website so the email link is never broken.
+EMAIL_APP_DOWNLOAD_URL = os.environ.get("APP_DOWNLOAD_URL", EMAIL_WEBSITE_URL)
 
 
 async def _send_smtp_email(to_email: str, subject: str, html_body: str, text_body: str, log_tag: str = "email", inline_logo: bool = False) -> bool:
@@ -1759,6 +1798,74 @@ async def _send_otp_email(to_email: str, otp: str) -> bool:
         f"— The Implanr Team\n{EMAIL_WEBSITE_URL}"
     )
     return await _send_smtp_email(to_email, subject, html_body, text_body, log_tag="otp", inline_logo=True)
+
+
+async def _send_credentials_email(to_email: str, to_name: str, password: str, role_display: str, org_name: str = "") -> bool:
+    """Send login credentials to a user created directly by an admin/incharge
+    (as opposed to the token-based invite-accept flow)."""
+    subject = "Your Implanr account is ready"
+    org_line = f" at <strong>{org_name}</strong>" if org_name else ""
+    html_body = f"""\
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background-color:#F4F6F8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F4F6F8;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;background-color:#FFFFFF;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(10,37,64,0.08);">
+          <tr>
+            <td align="center" style="background:linear-gradient(135deg,#0A2540,#1565C0);padding:32px 24px;">
+              <img src="cid:implanr_logo" width="96" height="96" alt="Implanr" style="display:block;border-radius:20px;" />
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:36px 32px 24px 32px;">
+              <h1 style="margin:0 0 8px 0;font-size:20px;color:#0A2540;font-weight:700;">Welcome to Implanr</h1>
+              <p style="margin:0 0 24px 0;font-size:14px;line-height:22px;color:#546E7A;">
+                Hi {to_name}, an account has been created for you{org_line} as <strong>{role_display}</strong>. Use these credentials to sign in:
+              </p>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#EFF6FF;border:1.5px solid #BBDEFB;border-radius:12px;">
+                <tr>
+                  <td style="padding:16px 18px;">
+                    <p style="margin:0 0 4px 0;font-size:11px;font-weight:700;color:#78909C;text-transform:uppercase;letter-spacing:0.5px;">Email</p>
+                    <p style="margin:0 0 14px 0;font-size:15px;color:#0A2540;font-weight:600;">{to_email}</p>
+                    <p style="margin:0 0 4px 0;font-size:11px;font-weight:700;color:#78909C;text-transform:uppercase;letter-spacing:0.5px;">Password</p>
+                    <p style="margin:0;font-size:15px;color:#0A2540;font-weight:600;font-family:'Courier New',monospace;">{password}</p>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:20px 0 0 0;font-size:12px;line-height:18px;color:#90A4AE;">
+                For your security, please sign in and change this password as soon as possible.
+              </p>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:24px;">
+                <tr>
+                  <td align="center">
+                    <a href="{EMAIL_APP_DOWNLOAD_URL}" style="display:inline-block;background:#1565C0;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;">Open Implanr</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="background-color:#F8FAFC;padding:20px 24px;border-top:1px solid #ECEFF1;">
+              <a href="{EMAIL_WEBSITE_URL}" style="color:#1565C0;font-size:12px;font-weight:600;text-decoration:none;">{EMAIL_WEBSITE_URL.replace('https://', '').replace('http://', '')}</a>
+              <p style="margin:6px 0 0 0;font-size:11px;color:#B0BEC5;">© {datetime.utcnow().year} Implanr. All rights reserved.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+"""
+    text_body = (
+        f"Hi {to_name},\n\nAn account has been created for you{org_line.replace('<strong>', '').replace('</strong>', '')} as {role_display}.\n\n"
+        f"Email: {to_email}\nPassword: {password}\n\n"
+        f"Please sign in and change this password as soon as possible.\n\n"
+        f"Open Implanr: {EMAIL_APP_DOWNLOAD_URL}\n\n— The Implanr Team"
+    )
+    return await _send_smtp_email(to_email, subject, html_body, text_body, log_tag="credentials", inline_logo=True)
 
 
 def _role_display_name(role: str) -> str:
@@ -1904,6 +2011,209 @@ async def verify_otp(request: Request, payload: OtpVerifyRequest):
     return {"message": "Email verified"}
 
 
+# ── super_admin: list all organizations (for the cross-org "Add User" picker) ──
+
+@api_router.get("/organizations")
+async def list_organizations(current_user: dict = Depends(get_current_user)):
+    if not current_user.get("is_super_admin"):
+        raise HTTPException(status_code=403, detail="Only super admin can list all organizations")
+    orgs = []
+    async for org in db.organizations.find({}, {"name": 1, "org_type": 1}).sort("name", 1):
+        orgs.append({"id": str(org["_id"]), "name": org.get("name", ""), "org_type": org.get("org_type", "")})
+    return {"organizations": orgs}
+
+
+@api_router.get("/organizations/details")
+async def list_organizations_detailed(skip: int = 0, limit: int = 20, current_user: dict = Depends(get_current_user)):
+    """Full onboarding details + live headcounts for every organization on the
+    platform. super_admin only — this is the cross-org oversight view.
+    Paginated (skip/limit) for infinite-scroll on the Organizations screen."""
+    if not current_user.get("is_super_admin"):
+        raise HTTPException(status_code=403, detail="Only super admin can view organization details")
+
+    limit = max(1, min(int(limit or 20), 50))
+    skip = max(0, int(skip or 0))
+    total = await db.organizations.count_documents({})
+
+    results = []
+    async for org in db.organizations.find({}).sort("created_at", -1).skip(skip).limit(limit):
+        org_id = str(org["_id"])
+
+        role_pipeline = [
+            {"$match": {"org_id": org_id}},
+            {"$group": {"_id": "$role", "count": {"$sum": 1}}},
+        ]
+        role_counts: Dict[str, int] = {}
+        async for doc in db.users.aggregate(role_pipeline):
+            role_counts[doc["_id"]] = doc["count"]
+        actual_users = sum(role_counts.values())
+
+        member_ids = await _org_member_ids(org_id)
+        cases_total = await db.procedures.count_documents({
+            "$or": [
+                {"student_id": {"$in": member_ids}},
+                {"supervisor_id": {"$in": member_ids}},
+                {"created_by_id": {"$in": member_ids}},
+            ],
+            "archived": {"$ne": True},
+        })
+
+        entry = {
+            "id": org_id,
+            "name": org.get("name", ""),
+            "org_type": org.get("org_type", ""),
+            "created_at": org.get("created_at").isoformat() if org.get("created_at") else None,
+            "declared_num_users": org.get("num_users"),
+            "actual_user_count": actual_users,
+            "role_breakdown": role_counts,
+            "cases_total": cases_total,
+        }
+        if org.get("org_type") == "college":
+            entry["state"] = org.get("state")
+        else:
+            entry["state_of_registration"] = org.get("state_of_registration")
+            entry["state_of_practice"] = org.get("state_of_practice")
+            entry["registration_number"] = org.get("registration_number")
+
+        results.append(entry)
+
+    return {"organizations": results, "total": total, "skip": skip, "limit": limit}
+
+
+@api_router.get("/organizations/{org_id}/detail")
+async def get_organization_detail(org_id: str, current_user: dict = Depends(get_current_user)):
+    """Full drill-down for a single organization: onboarding details, case KPIs,
+    phase pipeline, monthly throughput, and role breakdown. super_admin only."""
+    if not current_user.get("is_super_admin"):
+        raise HTTPException(status_code=403, detail="Only super admin can view organization details")
+
+    try:
+        org = await db.organizations.find_one({"_id": ObjectId(org_id)})
+    except Exception:
+        org = None
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    member_ids = await _org_member_ids(org_id)
+    base_match: Dict[str, Any] = {
+        "$or": [
+            {"student_id": {"$in": member_ids}},
+            {"supervisor_id": {"$in": member_ids}},
+            {"created_by_id": {"$in": member_ids}},
+        ],
+        "archived": {"$ne": True},
+    }
+
+    total = await db.procedures.count_documents(base_match)
+    pending = await db.procedures.count_documents({**base_match, "status": {"$in": ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic", "pending_final_delivery"]}})
+    approved = await db.procedures.count_documents({**base_match, "status": {"$in": ["phase1_approved", "phase2_approved", "stage2_surgical_approved", "completed"]}})
+    rejected = await db.procedures.count_documents({**base_match, "status": {"$in": ["rejected", "stage2_surgical_rejected", "stage2_prosthetic_rejected", "permanently_rejected"]}})
+    completed = await db.procedures.count_documents({**base_match, "status": "completed"})
+
+    pipeline = {
+        "phase1": await db.procedures.count_documents({**base_match, "status": {"$in": ["draft", "pending_phase1"]}}),
+        "phase2": await db.procedures.count_documents({**base_match, "status": {"$in": ["phase1_approved", "pending_phase2"]}}),
+        "phase3": await db.procedures.count_documents({**base_match, "status": {"$in": ["phase2_approved", "pending_stage2_surgical"]}}),
+        "phase4": await db.procedures.count_documents({**base_match, "status": {"$in": ["stage2_surgical_approved", "pending_stage2_prosthetic", "stage2_prosthetic_step1_approved", "pending_final_delivery"]}}),
+        "completed": completed,
+        "rejected": rejected,
+    }
+
+    role_pipeline = [
+        {"$match": {"org_id": org_id}},
+        {"$group": {"_id": "$role", "count": {"$sum": 1}}},
+    ]
+    role_counts: Dict[str, int] = {}
+    async for doc in db.users.aggregate(role_pipeline):
+        role_counts[doc["_id"]] = doc["count"]
+
+    # Monthly throughput — completed cases per month for the last 6 calendar months
+    now = datetime.now(timezone.utc)
+    monthly: List[Dict[str, Any]] = []
+    for offset in range(5, -1, -1):
+        y = now.year
+        m = now.month - offset
+        while m <= 0:
+            m += 12
+            y -= 1
+        start = datetime(y, m, 1, tzinfo=timezone.utc)
+        end = datetime(y + 1, 1, 1, tzinfo=timezone.utc) if m == 12 else datetime(y, m + 1, 1, tzinfo=timezone.utc)
+        cnt = await db.procedures.count_documents({
+            **base_match,
+            "status": "completed",
+            "treatment_completed_at": {"$gte": start, "$lt": end},
+        })
+        monthly.append({"label": start.strftime("%b %Y"), "count": cnt})
+
+    profile = {
+        "id": org_id,
+        "name": org.get("name", ""),
+        "org_type": org.get("org_type", ""),
+        "created_at": org.get("created_at").isoformat() if org.get("created_at") else None,
+        "declared_num_users": org.get("num_users"),
+    }
+    if org.get("org_type") == "college":
+        profile["state"] = org.get("state")
+    else:
+        profile["state_of_registration"] = org.get("state_of_registration")
+        profile["state_of_practice"] = org.get("state_of_practice")
+        profile["registration_number"] = org.get("registration_number")
+
+    return {
+        "profile": profile,
+        "kpis": {"total": total, "pending": pending, "approved": approved, "rejected": rejected, "completed": completed},
+        "phase_pipeline": pipeline,
+        "role_breakdown": role_counts,
+        "monthly_throughput": monthly,
+    }
+
+
+@api_router.get("/organizations/{org_id}/users")
+async def get_organization_users(org_id: str, skip: int = 0, limit: int = 20, role: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """Paginated user list scoped to a single organization, for the org detail
+    screen's infinite-scroll list. super_admin only."""
+    if not current_user.get("is_super_admin"):
+        raise HTTPException(status_code=403, detail="Only super admin can view organization users")
+
+    limit = max(1, min(int(limit or 20), 50))
+    skip = max(0, int(skip or 0))
+    query: Dict[str, Any] = {"org_id": org_id}
+    if role:
+        query["role"] = role
+
+    total = await db.users.count_documents(query)
+    users = await db.users.find(query, {"password_hash": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    for u in users:
+        u["_id"] = str(u["_id"])
+        u["id"] = u["_id"]
+
+    return {"users": users, "total": total, "skip": skip, "limit": limit}
+
+
+# ── Public: names of colleges already onboarded (so the registration picker
+# can hide them — each college should only be onboarded once) ──
+
+@api_router.get("/organizations/onboarded-college-names")
+async def get_onboarded_college_names():
+    names = await db.organizations.distinct("name", {"org_type": "college"})
+    return {"names": names}
+
+
+# ── Public: check whether a dental registration number is already in use by
+# an onboarded clinic — lets the clinic signup form flag it before submit. ──
+
+@api_router.get("/organizations/check-registration-number")
+async def check_registration_number(number: str):
+    number = number.strip()
+    if not number:
+        return {"exists": False}
+    existing = await db.organizations.find_one({
+        "org_type": "clinic",
+        "registration_number": {"$regex": f"^{re.escape(number)}$", "$options": "i"},
+    })
+    return {"exists": bool(existing)}
+
+
 # ── Endpoint 1: Public workspace signup ──
 
 @api_router.post("/auth/signup")
@@ -1924,6 +2234,21 @@ async def workspace_signup(payload: WorkspaceSignup):
     verified_at = otp_record.get("verified_at")
     if not verified_at or verified_at < datetime.utcnow() - timedelta(minutes=OTP_VERIFIED_WINDOW_MINUTES):
         raise HTTPException(400, "Email verification expired. Please verify your email again.")
+
+    if payload.org_type == "college":
+        existing_college = await db.organizations.find_one({
+            "org_type": "college",
+            "name": {"$regex": f"^{re.escape(payload.college_data.college_name.strip())}$", "$options": "i"},
+        })
+        if existing_college:
+            raise HTTPException(400, "This college has already been onboarded. Contact your Implant In-Charge for access.")
+    else:
+        existing_clinic = await db.organizations.find_one({
+            "org_type": "clinic",
+            "registration_number": {"$regex": f"^{re.escape(payload.clinic_data.registration_number.strip())}$", "$options": "i"},
+        })
+        if existing_clinic:
+            raise HTTPException(400, "This registration number is already onboarded. Contact your Chief Dentist for access.")
 
     # Build org document
     now = datetime.utcnow()
@@ -2893,10 +3218,10 @@ async def get_procedures(
     elif current_user["role"] == "nurse":
         # Nurses can only see fully approved/completed procedures, within their own org
         query["status"] = {"$in": ["phase1_approved", "phase2_approved", "approved", "stage2_surgical_approved", "completed"]}
-        query.update(_org_scope_match(await _org_member_ids(current_user.get("org_id"))))
+        query.update(await _org_scope_match(current_user))
     elif current_user["role"] in ("administrator", "implant_incharge"):
         # Sees all cases within their own organization
-        query.update(_org_scope_match(await _org_member_ids(current_user.get("org_id"))))
+        query.update(await _org_scope_match(current_user))
 
     # Optional student_id filter — honoured for In-Charge / Administrator.
     # Supervisors can also use it but the supervisor $and scope applies on top
@@ -2950,7 +3275,7 @@ async def get_archived_procedures(current_user: dict = Depends(get_current_user)
     elif role == "supervisor":
         query["$or"] = [{"created_by_id": uid}, {"supervisor_id": uid}]
     else:
-        query.update(_org_scope_match(await _org_member_ids(current_user.get("org_id"))))
+        query.update(await _org_scope_match(current_user))
     procedures = []
     async for proc in db.procedures.find(query, {"_id": 0}).sort("archived_at", -1):
         procedures.append(proc)
@@ -2976,7 +3301,7 @@ async def get_recent_activity(
     limit = max(1, min(int(limit or 10), 50))
     skip = max(0, int(skip or 0))
     match_stage: Dict[str, Any] = {"edit_log": {"$exists": True, "$ne": []}}
-    match_stage.update(_org_scope_match(await _org_member_ids(current_user.get("org_id"))))
+    match_stage.update(await _org_scope_match(current_user))
     if student_id and role in ("implant_incharge", "administrator"):
         match_stage["student_id"] = student_id
     pipeline = [
@@ -3032,6 +3357,8 @@ async def list_students_analytics(current_user: dict = Depends(get_current_user)
             "archived": {"$ne": True},
         })
         student_filter = {"_id": {"$in": [ObjectId(s) for s in supervised_ids if s]}, "role": "student"}
+    elif current_user.get("is_super_admin"):
+        student_filter = {"role": "student"}
     else:
         student_filter = {"role": "student", "org_id": current_user.get("org_id")}
 
@@ -3111,7 +3438,11 @@ async def get_student_summary(student_id: str, current_user: dict = Depends(get_
             "profile_photo": u.get("profile_photo"),
         }
 
-    if role in ("implant_incharge", "administrator") and u and u.get("org_id") != current_user.get("org_id"):
+    if (
+        role in ("implant_incharge", "administrator")
+        and not current_user.get("is_super_admin")
+        and u and u.get("org_id") != current_user.get("org_id")
+    ):
         raise HTTPException(status_code=403, detail="Cannot view students outside your organization")
 
     # Aggregations across this student's procedures
@@ -3212,7 +3543,8 @@ async def list_supervisors_analytics(current_user: dict = Depends(get_current_us
     PENDING = ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic"]
     stale_cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
 
-    supervisors_cursor = db.users.find({"role": "supervisor", "org_id": current_user.get("org_id")}, {"password_hash": 0})
+    sv_filter = {"role": "supervisor"} if current_user.get("is_super_admin") else {"role": "supervisor", "org_id": current_user.get("org_id")}
+    supervisors_cursor = db.users.find(sv_filter, {"password_hash": 0})
     results = []
     async for sv in supervisors_cursor:
         sv_id = str(sv["_id"])
@@ -3279,7 +3611,7 @@ async def get_supervisor_summary(supervisor_id: str, current_user: dict = Depend
             "profile_photo": u.get("profile_photo"),
         }
 
-    if u and u.get("org_id") != current_user.get("org_id"):
+    if not current_user.get("is_super_admin") and u and u.get("org_id") != current_user.get("org_id"):
         raise HTTPException(status_code=403, detail="Cannot view supervisors outside your organization")
 
     base_match: Dict[str, Any] = {"supervisor_id": supervisor_id, "archived": {"$ne": True}}
@@ -3697,6 +4029,7 @@ async def get_procedure(procedure_id: str, request: Request, current_user: dict 
     
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
     
     # Check access
     if current_user["role"] == "student" and procedure["student_id"] != current_user["_id"]:
@@ -3735,6 +4068,7 @@ async def update_procedure(
     
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
     
     # Check permissions
     if current_user["role"] == "student":
@@ -3977,6 +4311,7 @@ async def get_augmentation_checklist(procedure_id: str, current_user: dict = Dep
     proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0})
     if not proc:
         raise HTTPException(status_code=404, detail="Case not found")
+    await _assert_procedure_org_access(proc, current_user)
     if not _is_case_stakeholder(proc, current_user):
         raise HTTPException(status_code=403, detail="Not authorized")
     return {
@@ -3997,6 +4332,7 @@ async def get_clinical_evaluation(
     proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not proc:
         raise HTTPException(status_code=404, detail="Case not found")
+    await _assert_procedure_org_access(proc, current_user)
     if not _is_case_stakeholder(proc, current_user):
         raise HTTPException(status_code=403, detail="Not authorized")
     flat = {**proc}
@@ -4035,6 +4371,7 @@ async def regenerate_augmentation_checklist(procedure_id: str, current_user: dic
     proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0})
     if not proc:
         raise HTTPException(status_code=404, detail="Case not found")
+    await _assert_procedure_org_access(proc, current_user)
     if not _is_case_stakeholder(proc, current_user):
         raise HTTPException(status_code=403, detail="Not authorized")
     new_items = generate_augmentation_checklist(proc)
@@ -4114,6 +4451,7 @@ async def create_phase2_edit_request(
     proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(proc, current_user)
     if proc.get("student_id") != current_user["_id"]:
         raise HTTPException(status_code=403, detail="Access denied — not your case")
     if not proc.get("phase2_data"):
@@ -4181,6 +4519,7 @@ async def cancel_phase2_edit_request(
     proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(proc, current_user)
     reqs = proc.get("phase2_edit_requests") or []
     target = next((r for r in reqs if r.get("id") == request_id), None)
     if not target:
@@ -4215,6 +4554,7 @@ async def resolve_phase2_edit_request(
     proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(proc, current_user)
     if current_user["role"] == "supervisor" and proc.get("supervisor_id") != current_user["_id"]:
         raise HTTPException(status_code=403, detail="Access denied — not your case")
     reqs = proc.get("phase2_edit_requests") or []
@@ -4266,6 +4606,7 @@ async def delete_procedure(procedure_id: str, current_user: dict = Depends(get_c
     proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(proc, current_user)
 
     # Allow any user to delete their own draft cases
     is_owner = proc.get("created_by_id") == current_user["_id"] or proc.get("student_id") == current_user["_id"]
@@ -4292,6 +4633,7 @@ async def archive_procedure(procedure_id: str, current_user: dict = Depends(get_
     proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(proc, current_user)
     if current_user["role"] == "nurse":
         raise HTTPException(status_code=403, detail="Nurses cannot archive procedures")
     await db.procedures.update_one(
@@ -4307,6 +4649,7 @@ async def unarchive_procedure(procedure_id: str, current_user: dict = Depends(ge
     proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(proc, current_user)
     await db.procedures.update_one(
         {"_id": ObjectId(procedure_id)},
         {"$set": {"archived": False}, "$unset": {"archived_by": "", "archived_at": ""}}
@@ -4345,6 +4688,7 @@ async def reschedule_procedure(
     proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(proc, current_user)
 
     # Permission: case creator OR faculty
     creator_id = proc.get("created_by_id") or proc.get("student_id")
@@ -4508,6 +4852,7 @@ async def generate_consent_template(
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
     
     role = current_user.get("role")
     uid = current_user.get("_id")
@@ -4753,6 +5098,7 @@ async def upload_consent_for_procedure(
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
     
     role = current_user.get("role")
     uid = current_user.get("_id")
@@ -4863,9 +5209,12 @@ async def get_pending_consents(current_user: dict = Depends(get_current_user)):
     ]
     query = {
         "status": {"$in": statuses_needing_consent},
-        "$or": [
-            {"patient_consent_form": {"$exists": False}},
-            {"patient_consent_form": None},
+        "$and": [
+            {"$or": [
+                {"patient_consent_form": {"$exists": False}},
+                {"patient_consent_form": None},
+            ]},
+            await _org_scope_match(current_user),
         ],
         "archived": {"$ne": True},
     }
@@ -4919,6 +5268,7 @@ async def get_nurse_scheduled_cases(
         "procedure_date": {"$in": date_strs},
         "archived": {"$ne": True},
     }
+    query.update(await _org_scope_match(current_user))
     cursor = db.procedures.find(query, {
         "_id": 1, "patient_name": 1, "patient_id": 1, "student_name": 1, "created_by_name": 1,
         "implant_procedure_type": 1, "num_implants": 1, "status": 1, "procedure_date": 1, "procedure_time": 1,
@@ -5171,6 +5521,7 @@ async def mark_instruments_autoclaved(
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
 
     marked = bool(payload.get("marked", True))
 
@@ -5216,6 +5567,7 @@ async def get_nurse_consent_cases(current_user: dict = Depends(get_current_user)
         "status": {"$nin": ["draft", "rejected"]},
         "archived": {"$ne": True},
     }
+    query.update(await _org_scope_match(current_user))
     cursor = db.procedures.find(query, {
         "_id": 1, "patient_name": 1, "patient_id": 1, "student_name": 1, "created_by_name": 1,
         "implant_procedure_type": 1, "status": 1, "procedure_date": 1, "procedure_time": 1,
@@ -5308,6 +5660,7 @@ async def upload_cbct(
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
     
     ext = Path(file.filename).suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
@@ -5346,6 +5699,7 @@ async def upload_ios(
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
     if procedure["student_id"] != current_user["_id"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
@@ -5506,6 +5860,7 @@ async def mint_cbct_qr_token(procedure_id: str, current_user: dict = Depends(get
     proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(proc, current_user)
     role = current_user.get("role")
     if role in ("administrator", "implant_incharge", "nurse"):
         allowed = True
@@ -5891,9 +6246,10 @@ async def upload_checklist_file(
     current_user: dict = Depends(get_current_user),
 ):
     """Upload a file for a specific checklist item (e.g. academic_readiness, hematological, radiographic)."""
-    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0, "student_id": 1})
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0, "student_id": 1, "supervisor_id": 1, "created_by_id": 1})
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(proc, current_user)
     if current_user["role"] == "student" and proc.get("student_id") != current_user["_id"]:
         raise HTTPException(status_code=403, detail="You can only modify your own procedures")
 
@@ -5940,6 +6296,7 @@ async def list_checklist_files(
     )
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(proc, current_user)
     files = proc.get("checklist_files", [])
     grouped: dict = {}
     for f in files:
@@ -5958,9 +6315,10 @@ async def delete_checklist_file(
     current_user: dict = Depends(get_current_user),
 ):
     """Delete a checklist file."""
-    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0, "student_id": 1})
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0, "student_id": 1, "supervisor_id": 1, "created_by_id": 1})
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(proc, current_user)
     if current_user["role"] == "student" and proc.get("student_id") != current_user["_id"]:
         raise HTTPException(status_code=403, detail="You can only modify your own procedures")
 
@@ -5999,6 +6357,7 @@ async def save_implant_plan(
     proc = await db.procedures.find_one({"_id": oid}, {"_id": 1, "student_id": 1, "status": 1, "supervisor_id": 1, "implant_incharge_id": 1, "implant_plans": 1})
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(proc, current_user)
 
     is_assigned_faculty = current_user["_id"] in (proc.get("supervisor_id"), proc.get("implant_incharge_id"))
     is_student_owner = current_user["role"] == "student" and proc.get("student_id") == current_user["_id"]
@@ -6130,9 +6489,10 @@ async def get_implant_plan(
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid procedure ID")
     # Check existence first (without projection that can return empty dict)
-    exists = await db.procedures.find_one({"_id": oid}, {"_id": 1})
+    exists = await db.procedures.find_one({"_id": oid}, {"_id": 1, "student_id": 1, "supervisor_id": 1, "created_by_id": 1})
     if not exists:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(exists, current_user)
     proc = await db.procedures.find_one(
         {"_id": oid},
         {"_id": 0, "implant_plans": 1, "number_of_implants": 1},
@@ -6439,6 +6799,7 @@ async def ai_explain_recommendation(request: Request, current_user: dict = Depen
     proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0})
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(proc, current_user)
     
     plans = proc.get("implant_plans") or []
     plan = plans[implant_index] if implant_index < len(plans) else (plans[0] if plans else {})
@@ -6686,6 +7047,7 @@ async def generate_radiograph_ai_notes(
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
     if not _user_can_edit_radiograph_notes(current_user, procedure):
         raise HTTPException(status_code=403, detail="Not authorised for this case")
 
@@ -6783,6 +7145,7 @@ async def edit_radiograph_notes(
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
     if not _user_can_edit_radiograph_notes(current_user, procedure):
         raise HTTPException(status_code=403, detail="Not authorised for this case")
 
@@ -7978,6 +8341,7 @@ async def save_atrophy_assessment(procedure_id: str, request: Request, current_u
     proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(proc, current_user)
 
     body = await request.json()
     # Derive patient context once, from the persisted procedure document, so
@@ -8416,6 +8780,7 @@ async def generate_smart_planner(
     )
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
 
     valid_statuses = {"stage2_surgical_approved", "pending_stage2_prosthetic", "completed"}
     if procedure.get("status") not in valid_statuses:
@@ -8438,10 +8803,11 @@ async def get_smart_planner(
 ):
     """Retrieve existing Smart Planner report."""
     procedure = await db.procedures.find_one(
-        {"_id": ObjectId(procedure_id)}, {"_id": 0, "smart_planner_report": 1}
+        {"_id": ObjectId(procedure_id)}, {"_id": 0, "smart_planner_report": 1, "student_id": 1, "supervisor_id": 1, "created_by_id": 1}
     )
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
     report = procedure.get("smart_planner_report")
     if not report:
         raise HTTPException(status_code=404, detail="Smart Planner report not yet generated")
@@ -8459,6 +8825,7 @@ async def generate_case_report(
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
     await log_access(
         action="pdf_export",
         resource_type="case_report",
@@ -9155,6 +9522,7 @@ async def generate_preop_briefing(
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
     if (procedure.get("implant_procedure_type") or "") != "Sinus Lift":
         raise HTTPException(
             status_code=400,
@@ -9426,6 +9794,7 @@ async def upload_photo(
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
     if procedure["student_id"] != current_user["_id"]:
         raise HTTPException(status_code=403, detail="Access denied")
 
@@ -9485,6 +9854,7 @@ async def delete_photo(
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
     if procedure["student_id"] != current_user["_id"]:
         raise HTTPException(status_code=403, detail="Access denied")
 
@@ -9508,9 +9878,10 @@ async def get_procedure_photos(
     current_user: dict = Depends(get_current_user),
 ):
     """Get all photos for a procedure, grouped by step_id."""
-    procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0, "photos": 1})
+    procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0, "photos": 1, "student_id": 1, "supervisor_id": 1, "created_by_id": 1})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
 
     photos = procedure.get("photos", {})
 
@@ -9606,6 +9977,7 @@ async def generate_album(
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
 
     photos = procedure.get("photos", {})
     patient_name = procedure.get("patient_name", "Unknown")
@@ -9745,6 +10117,7 @@ async def approve_procedure(
     
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
     
     # Check if user is the assigned supervisor or implant incharge for this procedure
     # Assignment-based check (not role-based) allows any faculty to approve when assigned
@@ -10115,6 +10488,7 @@ async def request_phase1_approval(
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
 
     is_student = current_user["role"] == "student" and procedure.get("student_id") == current_user["_id"]
     is_incharge_creator = current_user["role"] in ("implant_incharge", "administrator") and procedure.get("created_by_id") == current_user["_id"]
@@ -10183,6 +10557,7 @@ async def submit_phase2(
     
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
     
     # Check if user has permission to submit Phase 2
     is_student = current_user["role"] == "student" and procedure.get("student_id") == current_user["_id"]
@@ -10335,6 +10710,7 @@ async def submit_phase2_preop(
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
     
     is_student = current_user["role"] == "student" and procedure.get("student_id") == current_user["_id"]
     is_supervisor = current_user["role"] == "supervisor" and procedure.get("supervisor_id") == current_user["_id"]
@@ -10396,6 +10772,7 @@ async def submit_stage2_surgical(
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
     if current_user["role"] == "student" and procedure.get("student_id") != current_user["_id"]:
         raise HTTPException(status_code=403, detail="Only the student who created this procedure can submit")
     is_student = current_user["role"] == "student" and procedure.get("student_id") == current_user["_id"]
@@ -10478,6 +10855,7 @@ async def submit_stage2_prosthetic(
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
     if current_user["role"] == "student" and procedure.get("student_id") != current_user["_id"]:
         raise HTTPException(status_code=403, detail="Access denied")
     is_student = current_user["role"] == "student" and procedure.get("student_id") == current_user["_id"]
@@ -10621,6 +10999,7 @@ async def approve_stage2_surgical(
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
     if procedure["status"] != "pending_stage2_surgical":
         raise HTTPException(status_code=400, detail="Procedure is not pending Phase 3 approval")
 
@@ -10740,6 +11119,7 @@ async def approve_stage2_prosthetic(
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
     if procedure["status"] != "pending_stage2_prosthetic":
         raise HTTPException(status_code=400, detail="Procedure is not pending Phase 4 approval")
 
@@ -10865,6 +11245,7 @@ async def submit_phase4_step2(
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
     is_student = current_user["role"] == "student" and procedure.get("student_id") == current_user["_id"]
     is_supervisor = current_user["role"] == "supervisor"
     is_incharge = current_user["role"] == "implant_incharge"
@@ -10950,6 +11331,7 @@ async def approve_phase4_step2(
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
     if procedure["status"] != "pending_final_delivery":
         raise HTTPException(status_code=400, detail="Procedure is not pending Phase 4 Step 2 approval")
 
@@ -11142,14 +11524,13 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     query = {}
     user_id = current_user["_id"]
     role = current_user["role"]
-    org_member_ids = await _org_member_ids(current_user.get("org_id"))
 
     if role == "student":
         query["student_id"] = user_id
     elif role == "supervisor":
         query["supervisor_id"] = user_id
     elif role in ORG_WIDE_ROLES:
-        query.update(_org_scope_match(org_member_ids))
+        query.update(await _org_scope_match(current_user))
 
     total = await db.procedures.count_documents(query)
     pending = await db.procedures.count_documents({**query, "status": {"$in": ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic", "pending_final_delivery"]}})
@@ -11185,13 +11566,21 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
         if role == "supervisor":
             my_pending = await db.procedures.count_documents({"supervisor_id": user_id, "status": {"$in": pending_statuses}})
         else:
-            my_pending = await db.procedures.count_documents({**_org_scope_match(org_member_ids), "status": {"$in": pending_statuses}})
+            my_pending = await db.procedures.count_documents({**(await _org_scope_match(current_user)), "status": {"$in": pending_statuses}})
         result["pending_my_approval"] = my_pending
 
         # Student stats for incharge
         if role in ["implant_incharge", "administrator"]:
+            if current_user.get("is_super_admin"):
+                student_id_match: Dict[str, Any] = {"$exists": True, "$nin": [None, ""]}
+                supervisor_id_match: Dict[str, Any] = {"$exists": True, "$nin": [None, ""]}
+            else:
+                _org_ids = await _org_member_ids(current_user.get("org_id"))
+                student_id_match = {"$in": _org_ids}
+                supervisor_id_match = {"$in": _org_ids}
+
             student_pipeline = [
-                {"$match": {"student_id": {"$in": org_member_ids}}},
+                {"$match": {"student_id": student_id_match}},
                 {"$group": {
                     "_id": "$student_id",
                     "student_name": {"$first": "$student_name"},
@@ -11216,7 +11605,7 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
 
             # Supervisor stats — aggregate cases per supervisor with review-load metrics
             sup_pipeline = [
-                {"$match": {"supervisor_id": {"$in": org_member_ids}}},
+                {"$match": {"supervisor_id": supervisor_id_match}},
                 {"$group": {
                     "_id": "$supervisor_id",
                     "supervisor_name": {"$first": "$supervisor_name"},

@@ -139,7 +139,7 @@ const STATE_META: Record<PhaseStatus['state'], { icon: string; label: string; bg
 
 export default function CaseSubmissionStatus({ procedure, user, compact = false }: Props) {
   const router = useRouter();
-  const isAdmin = user?.role === 'administrator' || user?.role === 'admin';
+  const isAdmin = user?.role === 'administrator' || user?.role === 'admin' || user?.role === 'super_admin';
   const isNurse = user?.role === 'nurse';
 
   const phases = useMemo(() => [computePhase1(procedure), computePhase2(procedure), computePhase3(procedure), computePhase4(procedure)], [procedure]);

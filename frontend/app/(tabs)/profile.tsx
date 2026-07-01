@@ -122,6 +122,8 @@ export default function ProfileScreen() {
         return 'Implant Incharge';
       case 'nurse':
         return 'Nurse';
+      case 'super_admin':
+        return 'Super Admin';
       default:
         return role;
     }
@@ -139,6 +141,8 @@ export default function ProfileScreen() {
         return '#4CAF50';
       case 'nurse':
         return '#E91E63';
+      case 'super_admin':
+        return '#212121';
       default:
         return '#757575';
     }
@@ -238,7 +242,7 @@ export default function ProfileScreen() {
 
         {/* HIPAA — Compliance section. Only Implant In-Charge / Administrator
             see this section. Everyone else has no render. */}
-        {(user?.role === 'implant_incharge' || user?.role === 'administrator') && (
+        {(user?.role === 'implant_incharge' || user?.role === 'administrator' || user?.role === 'super_admin') && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Compliance</Text>
             <TouchableOpacity

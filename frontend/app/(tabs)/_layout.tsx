@@ -42,6 +42,7 @@ function DrawerMenu({
   onClose,
   isAdmin,
   isNurse,
+  isSuperAdmin,
   userName,
   userRole,
   profilePhoto,
@@ -54,6 +55,7 @@ function DrawerMenu({
   onClose: () => void;
   isAdmin: boolean;
   isNurse: boolean;
+  isSuperAdmin: boolean;
   userName: string;
   userRole: string;
   profilePhoto: string | null;
@@ -97,6 +99,12 @@ function DrawerMenu({
       ? [{
           key: 'users', icon: 'people' as const, label: 'Users', route: '/user-management',
           bg: '#E3F2FD', chip: '#BBDEFB', iconColor: '#1565C0',
+        }]
+      : []),
+    ...(isSuperAdmin
+      ? [{
+          key: 'organizations', icon: 'business' as const, label: 'Organizations', route: '/admin/organizations',
+          bg: '#EDE7F6', chip: '#D1C4E9', iconColor: '#4527A0',
         }]
       : []),
     {
@@ -386,8 +394,9 @@ export default function TabsLayout() {
   const [hasUnreadForum, setHasUnreadForum] = useState(false);
 
   const role = user?.role;
-  const isAdmin = role === 'administrator' || role === 'implant_incharge';
+  const isAdmin = role === 'administrator' || role === 'implant_incharge' || role === 'super_admin';
   const isNurse = role === 'nurse';
+  const isSuperAdmin = role === 'super_admin';
 
   const fetchUnreadCount = useCallback(async () => {
     try {
@@ -400,7 +409,7 @@ export default function TabsLayout() {
   // Lightweight: re-uses the existing /procedures list. Filters for
   // pending_* statuses where the current user is the assigned
   // supervisor or implant in-charge. Skipped for nurses + students.
-  const isFaculty = role === 'supervisor' || role === 'implant_incharge' || role === 'administrator';
+  const isFaculty = role === 'supervisor' || role === 'implant_incharge' || role === 'administrator' || role === 'super_admin';
   const fetchPendingApprovalCount = useCallback(async () => {
     if (!isFaculty) { setPendingApprovalCount(0); return; }
     try {
@@ -502,6 +511,7 @@ export default function TabsLayout() {
         onClose={() => setDrawerOpen(false)}
         isAdmin={isAdmin}
         isNurse={isNurse}
+        isSuperAdmin={isSuperAdmin}
         userName={user?.name || user?.username || ''}
         userRole={roleName}
         profilePhoto={user?.profile_photo || null}

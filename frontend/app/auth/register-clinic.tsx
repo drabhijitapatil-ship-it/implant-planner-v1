@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
-  Modal, Pressable, Alert, Keyboard,
+  Modal, Pressable, Alert, Keyboard, FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import api from '../../utils/api';
 import OtpEmailField from '../../components/OtpEmailField';
+import { INDIAN_STATES } from '../../constants/indianStates';
 
 const PREFIXES = ['Dr.', 'Mr.', 'Mrs.', 'Ms.', 'Prof.'];
 
@@ -17,12 +18,14 @@ export default function ClinicRegisterScreen() {
   const router = useRouter();
 
   const [clinicName, setClinicName] = useState('');
-  const [city, setCity] = useState('');
-  const [state, setState] = useState('');
   const [prefix, setPrefix] = useState('Dr.');
-  const [ownerName, setOwnerName] = useState('');
+  const [chiefDentistName, setChiefDentistName] = useState('');
+  const [registrationNumber, setRegistrationNumber] = useState('');
+  const [checkingRegNumber, setCheckingRegNumber] = useState(false);
+  const [stateOfRegistration, setStateOfRegistration] = useState('');
+  const [stateOfPractice, setStateOfPractice] = useState('');
+  const [numUsers, setNumUsers] = useState('');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -32,8 +35,30 @@ export default function ClinicRegisterScreen() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [emailVerified, setEmailVerified] = useState(false);
   const [showPrefixPicker, setShowPrefixPicker] = useState(false);
+  const [statePicker, setStatePicker] = useState<'registration' | 'practice' | null>(null);
+  const [infoModal, setInfoModal] = useState<'registration' | 'users' | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  const checkRegistrationNumber = async () => {
+    const num = registrationNumber.trim();
+    if (!num) return;
+    setCheckingRegNumber(true);
+    try {
+      const res = await api.get('/organizations/check-registration-number', { params: { number: num } });
+      if (res.data?.exists) {
+        setErrors((e) => ({ ...e, registrationNumber: 'This registration number is already onboarded' }));
+      } else {
+        setErrors((e) => {
+          const { registrationNumber: _drop, ...rest } = e;
+          return rest;
+        });
+      }
+    } catch {
+    } finally {
+      setCheckingRegNumber(false);
+    }
+  };
 
   useEffect(() => {
     const showSub = Keyboard.addListener(
@@ -53,9 +78,13 @@ export default function ClinicRegisterScreen() {
   const validate = () => {
     const e: Record<string, string> = {};
     if (!clinicName.trim()) e.clinicName = 'Clinic name is required';
-    if (!city.trim()) e.city = 'City is required';
-    if (!state.trim()) e.state = 'State is required';
-    if (!ownerName.trim()) e.ownerName = 'Name is required';
+    if (!chiefDentistName.trim()) e.chiefDentistName = 'Name is required';
+    if (!registrationNumber.trim()) e.registrationNumber = 'Registration number is required';
+    else if (errors.registrationNumber) e.registrationNumber = errors.registrationNumber;
+    if (!stateOfRegistration.trim()) e.stateOfRegistration = 'State of registration is required';
+    if (!stateOfPractice.trim()) e.stateOfPractice = 'State of practice is required';
+    const n = Number(numUsers);
+    if (!numUsers || isNaN(n) || n < 1 || n > 500) e.numUsers = 'Enter a valid number (1–500)';
     if (!email.trim()) e.email = 'Email is required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) e.email = 'Invalid email address';
     else if (!emailVerified) e.email = 'Please verify your email';
@@ -77,11 +106,12 @@ export default function ClinicRegisterScreen() {
         password,
         clinic_data: {
           clinic_name: clinicName.trim(),
-          city: city.trim(),
-          state: state.trim(),
-          owner_name: ownerName.trim(),
-          owner_prefix: prefix,
-          phone: phone.trim(),
+          chief_dentist_name: chiefDentistName.trim(),
+          chief_dentist_prefix: prefix,
+          registration_number: registrationNumber.trim(),
+          state_of_registration: stateOfRegistration.trim(),
+          state_of_practice: stateOfPractice.trim(),
+          num_users: Number(numUsers),
         },
       });
       setShowSuccess(true);
@@ -132,44 +162,91 @@ export default function ClinicRegisterScreen() {
               />
               {errors.clinicName ? <Text style={s.err}>{errors.clinicName}</Text> : null}
 
-              {/* City */}
-              <Text style={s.label}>City *</Text>
-              <TextInput
-                style={[s.input, errors.city && s.inputErr]}
-                placeholder="e.g. Mumbai"
-                value={city}
-                onChangeText={setCity}
-                autoCapitalize="words"
-              />
-              {errors.city ? <Text style={s.err}>{errors.city}</Text> : null}
-
-              {/* State */}
-              <Text style={s.label}>State *</Text>
-              <TextInput
-                style={[s.input, errors.state && s.inputErr]}
-                placeholder="e.g. Maharashtra"
-                value={state}
-                onChangeText={setState}
-                autoCapitalize="words"
-              />
-              {errors.state ? <Text style={s.err}>{errors.state}</Text> : null}
-
-              {/* Owner Name */}
-              <Text style={s.label}>Clinic Owner / Primary Doctor *</Text>
+              {/* Chief Dentist Name */}
+              <Text style={s.label}>Chief Dentist / Owner *</Text>
               <View style={s.prefixRow}>
                 <TouchableOpacity style={s.prefixBtn} onPress={() => setShowPrefixPicker(true)}>
                   <Text style={s.prefixTxt}>{prefix}</Text>
                   <Ionicons name="chevron-down" size={14} color="#666" />
                 </TouchableOpacity>
                 <TextInput
-                  style={[s.nameInput, errors.ownerName && s.inputErr]}
+                  style={[s.nameInput, errors.chiefDentistName && s.inputErr]}
                   placeholder="Full name"
-                  value={ownerName}
-                  onChangeText={setOwnerName}
+                  value={chiefDentistName}
+                  onChangeText={setChiefDentistName}
                   autoCapitalize="words"
                 />
               </View>
-              {errors.ownerName ? <Text style={s.err}>{errors.ownerName}</Text> : null}
+              {errors.chiefDentistName ? <Text style={s.err}>{errors.chiefDentistName}</Text> : null}
+
+              {/* Registration Number */}
+              <View style={s.labelRow}>
+                <Text style={s.label}>Registration Number *</Text>
+                <TouchableOpacity onPress={() => setInfoModal('registration')}>
+                  <Ionicons name="information-circle-outline" size={19} color="#2E7D32" />
+                </TouchableOpacity>
+              </View>
+              <View style={[s.input, s.regNumberRow, errors.registrationNumber && s.inputErr]}>
+                <TextInput
+                  style={s.regNumberInput}
+                  placeholder="e.g. DCI-12345"
+                  value={registrationNumber}
+                  onChangeText={(t) => { setRegistrationNumber(t); if (errors.registrationNumber) setErrors((e) => { const { registrationNumber: _d, ...rest } = e; return rest; }); }}
+                  onBlur={checkRegistrationNumber}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                />
+                {checkingRegNumber ? <ActivityIndicator size="small" color="#2E7D32" /> : null}
+              </View>
+              {errors.registrationNumber ? <Text style={s.err}>{errors.registrationNumber}</Text> : null}
+
+              {/* State of Registration */}
+              <Text style={s.label}>State of Registration *</Text>
+              <TouchableOpacity
+                style={[s.input, s.pickerRow, errors.stateOfRegistration && s.inputErr]}
+                onPress={() => setStatePicker('registration')}
+              >
+                <Text style={stateOfRegistration ? s.pickerValueTxt : s.pickerPlaceholderTxt}>
+                  {stateOfRegistration || 'Select state'}
+                </Text>
+                <Ionicons name="chevron-down" size={18} color="#666" />
+              </TouchableOpacity>
+              {errors.stateOfRegistration ? <Text style={s.err}>{errors.stateOfRegistration}</Text> : null}
+
+              {/* State of Practice */}
+              <Text style={s.label}>State of Practice *</Text>
+              <TouchableOpacity
+                style={[s.input, s.pickerRow, errors.stateOfPractice && s.inputErr]}
+                onPress={() => setStatePicker('practice')}
+              >
+                <Text style={stateOfPractice ? s.pickerValueTxt : s.pickerPlaceholderTxt}>
+                  {stateOfPractice || 'Select state'}
+                </Text>
+                <Ionicons name="chevron-down" size={18} color="#666" />
+              </TouchableOpacity>
+              {!stateOfPractice && stateOfRegistration ? (
+                <TouchableOpacity style={s.sameAsBtn} onPress={() => setStateOfPractice(stateOfRegistration)}>
+                  <Ionicons name="copy-outline" size={13} color="#2E7D32" />
+                  <Text style={s.sameAsTxt}>Same as registration state</Text>
+                </TouchableOpacity>
+              ) : null}
+              {errors.stateOfPractice ? <Text style={s.err}>{errors.stateOfPractice}</Text> : null}
+
+              {/* Number of Users */}
+              <View style={s.labelRow}>
+                <Text style={s.label}>Number of People Using the App *</Text>
+                <TouchableOpacity onPress={() => setInfoModal('users')}>
+                  <Ionicons name="information-circle-outline" size={19} color="#2E7D32" />
+                </TouchableOpacity>
+              </View>
+              <TextInput
+                style={[s.input, errors.numUsers && s.inputErr]}
+                placeholder="e.g. 8"
+                value={numUsers}
+                onChangeText={setNumUsers}
+                keyboardType="number-pad"
+              />
+              {errors.numUsers ? <Text style={s.err}>{errors.numUsers}</Text> : null}
 
               {/* Email */}
               <Text style={s.label}>Email *</Text>
@@ -180,16 +257,6 @@ export default function ClinicRegisterScreen() {
                 onVerifiedChange={setEmailVerified}
                 placeholder="doctor@clinic.com"
                 error={errors.email}
-              />
-
-              {/* Phone (optional) */}
-              <Text style={s.label}>Phone Number <Text style={s.optional}>(optional)</Text></Text>
-              <TextInput
-                style={s.input}
-                placeholder="e.g. 9876543210"
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
               />
 
               {/* Password */}
@@ -278,6 +345,69 @@ export default function ClinicRegisterScreen() {
         </Pressable>
       </Modal>
 
+      {/* State Picker */}
+      <Modal visible={!!statePicker} animationType="slide" transparent>
+        <View style={s.sheetOverlay}>
+          <View style={s.sheet}>
+            <View style={s.sheetHeader}>
+              <Text style={s.sheetTitle}>
+                {statePicker === 'registration' ? 'State of Registration' : 'State of Practice'}
+              </Text>
+              <TouchableOpacity onPress={() => setStatePicker(null)}>
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={INDIAN_STATES}
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => {
+                const selected = statePicker === 'registration' ? stateOfRegistration === item : stateOfPractice === item;
+                return (
+                  <TouchableOpacity
+                    style={[s.stateItem, selected && s.stateItemSel]}
+                    onPress={() => {
+                      if (statePicker === 'registration') setStateOfRegistration(item);
+                      else setStateOfPractice(item);
+                      setStatePicker(null);
+                    }}
+                  >
+                    <Text style={[s.stateItemTxt, selected && s.stateItemTxtSel]}>{item}</Text>
+                    {selected && <Ionicons name="checkmark-circle" size={18} color="#2E7D32" />}
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Info Modal */}
+      <Modal visible={!!infoModal} animationType="fade" transparent>
+        <Pressable style={s.centeredOverlay} onPress={() => setInfoModal(null)}>
+          <View style={s.infoCard}>
+            <Ionicons name="information-circle" size={28} color="#2E7D32" style={{ marginBottom: 8 }} />
+            {infoModal === 'registration' ? (
+              <>
+                <Text style={s.infoTitle}>Registration Number</Text>
+                <Text style={s.infoBody}>
+                  The dental registration number of the clinic, or of the Chief Dentist if the clinic itself isn't separately registered. This must be unique — each registration number can only be onboarded once.
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={s.infoTitle}>Number of Users</Text>
+                <Text style={s.infoBody}>
+                  Count everyone who will use the app — Chief Dentist, Dentists, and Dental Assistants.
+                </Text>
+              </>
+            )}
+            <TouchableOpacity style={s.infoCloseBtn} onPress={() => setInfoModal(null)}>
+              <Text style={s.infoCloseTxt}>Got it</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+
       {/* Success Modal */}
       <Modal visible={showSuccess} animationType="fade" transparent statusBarTranslucent>
         <View style={s.successOverlay}>
@@ -314,6 +444,27 @@ const s = StyleSheet.create({
   input: { borderWidth: 1.5, borderColor: '#CFD8DC', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: '#1A1A2E', backgroundColor: '#FAFAFA' },
   inputErr: { borderColor: '#FF3B30' },
   err: { fontSize: 12, color: '#FF3B30', marginTop: 3 },
+  labelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 14, marginBottom: 6 },
+  regNumberRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 3 },
+  regNumberInput: { flex: 1, fontSize: 15, color: '#1A1A2E', paddingVertical: 8 },
+  sameAsBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
+  sameAsTxt: { fontSize: 13, color: '#2E7D32' },
+  pickerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  pickerValueTxt: { fontSize: 15, color: '#1A1A2E' },
+  pickerPlaceholderTxt: { fontSize: 15, color: '#94A3B8' },
+  sheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '75%', minHeight: '50%' },
+  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  sheetTitle: { fontSize: 17, fontWeight: '700', color: '#1A1A2E' },
+  stateItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
+  stateItemSel: { backgroundColor: '#E8F5E9' },
+  stateItemTxt: { fontSize: 15, color: '#37474F' },
+  stateItemTxtSel: { color: '#2E7D32', fontWeight: '700' },
+  infoCard: { backgroundColor: '#FFF', borderRadius: 16, margin: 30, padding: 24, alignItems: 'center', maxWidth: 340 },
+  infoTitle: { fontSize: 17, fontWeight: '700', color: '#1A1A2E', marginBottom: 10, textAlign: 'center' },
+  infoBody: { fontSize: 14, color: '#546E7A', textAlign: 'center', lineHeight: 22 },
+  infoCloseBtn: { marginTop: 18, backgroundColor: '#2E7D32', borderRadius: 10, paddingHorizontal: 28, paddingVertical: 10 },
+  infoCloseTxt: { color: '#FFF', fontWeight: '700', fontSize: 14 },
   prefixRow: { flexDirection: 'row', gap: 8 },
   prefixBtn: { borderWidth: 1.5, borderColor: '#CFD8DC', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FAFAFA' },
   prefixTxt: { fontSize: 15, color: '#1A1A2E', fontWeight: '600' },

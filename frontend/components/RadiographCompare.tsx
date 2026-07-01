@@ -54,7 +54,7 @@ export default function RadiographCompare({ procedure, iopaUploads, opgUpload }:
   const canEditNotes = useMemo(() => {
     if (!user || !procedure) return false;
     const role = user.role;
-    if (role === 'administrator' || role === 'implant_incharge') return true;
+    if (role === 'administrator' || role === 'implant_incharge' || role === 'super_admin') return true;
     if (role === 'supervisor' && procedure.supervisor_id === user.id) return true;
     if (role === 'student' && procedure.student_id === user.id) return true;
     return false;

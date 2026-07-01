@@ -50,6 +50,7 @@ Open College App → tap Sign In.
 
 | Role              | Email                              | Password         |
 | ----------------- | ---------------------------------- | ---------------- |
+| Implant In-Charge | `abhijit.patil@admin.edu`          | `Implanr#2026`   |
 | Implant In-Charge | `Abhijit.patil@dental.edu`         | `Admin@123`      |
 | Supervisor        | `Paresh.gandhi@dental.edu`         | `Supervisor@123` |
 | Student           | `Gaurav.pandey@student.dental.edu` | `Student@123`    |

@@ -80,7 +80,7 @@ const BLT_PLATFORM_OPTIONS: { label: string; platform: string; diameter_mm: numb
 
 export default function ImplantCatalogAdmin() {
   const { user } = useAuth();
-  const _canEdit = user?.role === 'administrator' || user?.role === 'implant_incharge';
+  const _canEdit = user?.role === 'administrator' || user?.role === 'implant_incharge' || user?.role === 'super_admin';
   const canEdit = _canEdit;
 
   // iter-162: editor passes `refresh` (timestamp) and `focusKey` after a save

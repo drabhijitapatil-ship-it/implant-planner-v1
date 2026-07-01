@@ -638,3 +638,12 @@ export const ROLE_OPTIONS = [
   { value: 'administrator', label: 'Administrator' },
   { value: 'nurse', label: 'Nurse (Read-only)' },
 ];
+
+// Clinic workspaces use a different role vocabulary (chief_dentist/dentist/
+// dental_assistant) — backend validates against this set for org_type "clinic".
+export const CLINIC_ROLE_OPTIONS = [
+  { value: 'dentist', label: 'Dentist / Consultant' },
+  { value: 'dental_assistant', label: 'Dental Assistant' },
+  { value: 'chief_dentist', label: 'Chief Dentist / Owner' },
+  { value: 'administrator', label: 'Administrator' },
+];

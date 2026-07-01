@@ -879,7 +879,7 @@ export default function DashboardScreen() {
   const role = user?.role;
   const isStudent = role === 'student';
   const isSupervisor = role === 'supervisor';
-  const isInCharge = role === 'implant_incharge' || role === 'administrator';
+  const isInCharge = role === 'implant_incharge' || role === 'administrator' || role === 'super_admin';
   const isNurse = role === 'nurse';
 
   return (
