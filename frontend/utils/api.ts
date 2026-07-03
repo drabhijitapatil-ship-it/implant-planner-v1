@@ -52,6 +52,38 @@ export async function getAuthFileUrl(filename: string): Promise<string> {
   return `${baseUrl}/uploads/${filename}${token ? `?token=${token}` : ''}`;
 }
 
+// Preferred: build a file URL backed by a short-lived, single-file token (not the
+// full access JWT). The mint call goes through axios (Authorization header, auto
+// -refreshed), and only the scoped token lands in the URL — so a leaked link
+// exposes just this one file, for a few minutes, at this user's permissions.
+export async function mintFileToken(filename: string): Promise<string> {
+  const baseUrl = api.defaults.baseURL || '';
+  const { data } = await api.post('/uploads/mint-file-token', { filename });
+  return `${baseUrl}/uploads/${filename}?ft=${encodeURIComponent(data.token)}`;
+}
+
+// Legacy fallback: file URL carrying a freshly-refreshed full access token. Kept
+// for viewers not yet migrated to mintFileToken. Prefer mintFileToken for new use.
+export async function getFreshAuthFileUrl(filename: string): Promise<string> {
+  const baseUrl = api.defaults.baseURL || '';
+  let token = await getToken('access_token');
+  try {
+    const refreshToken = await getToken('refresh_token');
+    if (refreshToken) {
+      const { data } = await axios.post(`${BACKEND_URL}/api/auth/refresh`, {
+        refresh_token: refreshToken,
+      });
+      if (data?.access_token) {
+        token = data.access_token;
+        await setToken('access_token', token);
+      }
+    }
+  } catch {
+    // Refresh failed — fall back to whatever token we have.
+  }
+  return `${baseUrl}/uploads/${filename}${token ? `?token=${token}` : ''}`;
+}
+
 // Flag to prevent infinite refresh loops
 let isRefreshing = false;
 let refreshSubscribers: ((token: string) => void)[] = [];

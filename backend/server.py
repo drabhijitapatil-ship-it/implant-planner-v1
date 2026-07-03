@@ -5883,18 +5883,46 @@ async def upload_ios(
     
     return {"message": "File uploaded successfully", "filename": file.filename}
 
+@api_router.post("/uploads/mint-file-token")
+async def mint_file_token(body: dict, current_user: dict = Depends(get_current_user)):
+    """Mint a short-lived, single-file access token for the given filename.
+    Requires a logged-in user; authorization for the file itself is enforced at
+    serve time (same procedure-membership / role checks as GET /uploads/{filename}),
+    so this only needs a valid session and cannot be used to bypass those checks.
+    """
+    filename = (body.get("filename") or "").strip()
+    if not filename or "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    token = _sign_file_token(str(current_user["_id"]), filename)
+    return {"token": token, "expires_in_seconds": FILE_TOKEN_TTL_SECONDS}
+
+
 @api_router.get("/uploads/{filename}")
-async def serve_upload(filename: str, token: Optional[str] = Query(None), current_user: dict = Depends(get_current_user_optional)):
+async def serve_upload(
+    filename: str,
+    token: Optional[str] = Query(None),
+    ft: Optional[str] = Query(None),
+    current_user: dict = Depends(get_current_user_optional),
+):
     file_path = UPLOADS_DIR / filename
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
-    
-    # Resolve user from header or query param token
+
+    # Resolve user from (1) header, (2) scoped file token, (3) legacy access JWT.
     user = current_user
+    # (2) Preferred: scoped single-file token — bound to this exact filename.
+    if not user and ft:
+        data = _verify_file_token(ft)
+        if data and data.get("filename") == filename and data.get("uid"):
+            try:
+                user = await db.users.find_one({"_id": ObjectId(data["uid"])})
+            except Exception:
+                user = None
+    # (3) Back-compat: full access JWT in the query string (being phased out).
     if not user and token:
         try:
             payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-            uid = payload.get("user_id")
+            uid = payload.get("user_id") or payload.get("sub")
             if uid:
                 user = await db.users.find_one({"_id": ObjectId(uid)})
         except Exception:
@@ -5961,6 +5989,38 @@ def _verify_cbct_token(token: str) -> Optional[str]:
         if int(data.get("e", 0)) < int(datetime.now(timezone.utc).timestamp()):
             return None
         return str(data["p"])
+    except Exception:
+        return None
+
+
+# ── Scoped single-file access token ─────────────────────────────────
+# Unlike the full access JWT, this token is NOT a credential for the rest of the
+# API. It binds {user_id, filename, short expiry} and is HMAC-signed, so a leaked
+# file URL only exposes that one file, for a few minutes, at that user's rights.
+FILE_TOKEN_TTL_SECONDS = 300  # 5 minutes
+
+
+def _sign_file_token(uid: str, filename: str) -> str:
+    exp = int((datetime.now(timezone.utc) + timedelta(seconds=FILE_TOKEN_TTL_SECONDS)).timestamp())
+    payload = _json_cbct.dumps({"u": uid, "f": filename, "e": exp}, separators=(",", ":")).encode()
+    b64 = _base64.urlsafe_b64encode(payload).rstrip(b"=")
+    sig = _hmac.new(SECRET_KEY.encode(), b64, _hashlib.sha256).digest()
+    sig_b64 = _base64.urlsafe_b64encode(sig).rstrip(b"=")
+    return f"{b64.decode()}.{sig_b64.decode()}"
+
+
+def _verify_file_token(token: str) -> Optional[dict]:
+    """Return {uid, filename} if the token is valid + unexpired, else None."""
+    try:
+        b64, sig_b64 = token.split(".", 1)
+        expected = _hmac.new(SECRET_KEY.encode(), b64.encode(), _hashlib.sha256).digest()
+        got = _base64.urlsafe_b64decode(sig_b64 + "=" * (-len(sig_b64) % 4))
+        if not _hmac.compare_digest(expected, got):
+            return None
+        data = _json_cbct.loads(_base64.urlsafe_b64decode(b64 + "=" * (-len(b64) % 4)))
+        if int(data.get("e", 0)) < int(datetime.now(timezone.utc).timestamp()):
+            return None
+        return {"uid": str(data["u"]), "filename": str(data["f"])}
     except Exception:
         return None
 

@@ -18,7 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import api, { getAuthFileUrl, getToken } from '../../utils/api';
+import api, { getAuthFileUrl, mintFileToken, getToken } from '../../utils/api';
 import { CaramesSeverityStrip } from '../../components/AtrophyClassificationChip';
 import { useAuth } from '../../contexts/AuthContext';
 import { showUploadPicker } from '../../utils/uploadPicker';
@@ -2317,7 +2317,14 @@ export default function ProcedureDetailScreen() {
                     </View>
                     <TouchableOpacity
                       style={{ backgroundColor: '#4CAF50', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}
-                      onPress={() => Linking.openURL(fileUrl).catch(() => Alert.alert('Error', 'Could not open file'))}
+                      onPress={async () => {
+                        try {
+                          const fileUrl = await mintFileToken(f.filename);
+                          await Linking.openURL(fileUrl);
+                        } catch {
+                          Alert.alert('Error', 'Could not open file');
+                        }
+                      }}
                       data-testid={`view-cbct-detail-${idx}`}
                     >
                       <Ionicons name="open-outline" size={14} color="#FFF" />
@@ -2331,8 +2338,7 @@ export default function ProcedureDetailScreen() {
                 style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#4CAF50', borderRadius: 10, paddingVertical: 14, paddingHorizontal: 20 }}
                 onPress={async () => {
                   try {
-                    const baseUrl = api.defaults.baseURL || '';
-                    const fileUrl = `${baseUrl}/uploads/${procedure.cbct_file}?token=${authToken}`;
+                    const fileUrl = await mintFileToken(procedure.cbct_file);
                     await Linking.openURL(fileUrl);
                   } catch (e) {
                     Alert.alert('Error', 'Could not open file');
