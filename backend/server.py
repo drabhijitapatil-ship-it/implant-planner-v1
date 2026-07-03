@@ -2155,6 +2155,30 @@ async def get_my_organization(current_user: dict = Depends(get_current_user)):
     return {"organization": entry}
 
 
+class OrgLogoUpdate(BaseModel):
+    logo: str  # Base64 image data URI
+
+
+@api_router.put("/organizations/me/logo")
+async def update_my_organization_logo(payload: OrgLogoUpdate, current_user: dict = Depends(get_current_user)):
+    """Update the logo of the caller's organization. Restricted to the Implant In-Charge."""
+    if current_user.get("role") != "implant_incharge":
+        raise HTTPException(status_code=403, detail="Only the Implant In-Charge can edit the organization logo")
+    org_id = current_user.get("org_id")
+    if not org_id:
+        raise HTTPException(status_code=400, detail="No organization associated with this account")
+    logo = (payload.logo or "").strip()
+    if not logo.startswith("data:image/"):
+        raise HTTPException(status_code=400, detail="Logo must be an image data URI")
+    try:
+        result = await db.organizations.update_one({"_id": ObjectId(org_id)}, {"$set": {"logo": logo}})
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid organization")
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    return {"logo": logo}
+
+
 # ── super_admin: list all organizations (for the cross-org "Add User" picker) ──
 
 @api_router.get("/organizations")
@@ -6136,7 +6160,7 @@ async def cbct_public_viewer(token: str):
     if files:
         actions_html = (
             f"<div class='actions'><a class='btn' href='/cbct/pdf/{token}'>"
-            f"⬇ Download all as one PDF</a></div>"
+            f"Download all as one PDF</a></div>"
         )
     if not items_html:
         items_html = "<p class='empty'>No CBCT files uploaded for this case yet.</p>"
@@ -6289,7 +6313,7 @@ async def cbct_public_single_viewer(token: str, filename: str):
 <body>
   <header>
     <span class='name'>{orig}</span>
-    <a class='btn' href='{dl}' download>⬇ Download</a>
+    <a class='btn' href='{dl}' download>Download</a>
   </header>
   <div class='stage'>{preview}</div>
 </body></html>"""

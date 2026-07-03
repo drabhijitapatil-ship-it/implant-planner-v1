@@ -25,6 +25,19 @@ export default function ProfileScreen() {
   const { user, logout, updateProfilePhoto } = useAuth();
   const router = useRouter();
   const [uploading, setUploading] = useState(false);
+  const [org, setOrg] = useState<any>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const isIncharge = user?.role === 'implant_incharge';
+
+  const fetchOrg = async () => {
+    try {
+      const res = await api.get('/organizations/me');
+      setOrg(res.data?.organization || null);
+    } catch {
+      // Non-fatal: org section just won't render.
+    }
+  };
+  useEffect(() => { fetchOrg(); }, []);
 
   // Change password — same OTP-verify flow as forgot-password, just pinned
   // to the logged-in user's own email (no email-entry step needed).
@@ -153,6 +166,34 @@ export default function ProfileScreen() {
         Alert.alert('Error', error.message || 'Failed to upload photo');
       } finally {
         setUploading(false);
+      }
+    }
+  };
+
+  const handlePickLogo = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissionResult.granted) {
+      Alert.alert('Permission Required', 'Please allow access to your photo library to upload a logo.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+      base64: true,
+    });
+    if (!result.canceled && result.assets[0].base64) {
+      setLogoUploading(true);
+      try {
+        const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
+        const res = await api.put('/organizations/me/logo', { logo: base64Image });
+        setOrg((prev: any) => (prev ? { ...prev, logo: res.data?.logo || base64Image } : prev));
+        Alert.alert('Success', 'Organization logo updated successfully!');
+      } catch (error: any) {
+        Alert.alert('Error', error?.response?.data?.detail || 'Failed to upload logo');
+      } finally {
+        setLogoUploading(false);
       }
     }
   };
@@ -294,6 +335,21 @@ export default function ProfileScreen() {
               <Text style={styles.infoValue}>{getRoleLabel(user?.role || '')}</Text>
             </View>
           </View>
+
+          {org && (
+            <View style={styles.infoRow}>
+              <View style={styles.infoIcon}>
+                <Ionicons name="business" size={20} color="#007AFF" />
+              </View>
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>Organization</Text>
+                <Text style={styles.infoValue}>{org.name}</Text>
+              </View>
+              {org.logo ? (
+                <Image source={{ uri: org.logo }} style={{ width: 40, height: 40, borderRadius: 8 }} />
+              ) : null}
+            </View>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -305,6 +361,26 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={20} color="#999" />
           </TouchableOpacity>
         </View>
+
+        {isIncharge && org && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Organization Logo</Text>
+            <View style={{ alignItems: 'center', marginBottom: 12 }}>
+              {org.logo ? (
+                <Image source={{ uri: org.logo }} style={{ width: 90, height: 90, borderRadius: 12, borderWidth: 1, borderColor: '#E0E0E0' }} />
+              ) : (
+                <View style={{ width: 90, height: 90, borderRadius: 12, backgroundColor: '#F0F0F0', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="business" size={36} color="#B0BEC5" />
+                </View>
+              )}
+            </View>
+            <TouchableOpacity style={styles.photoButton} onPress={handlePickLogo} disabled={logoUploading} data-testid="change-org-logo-btn">
+              <Ionicons name="image" size={24} color="#007AFF" />
+              <Text style={styles.photoButtonText}>{logoUploading ? 'Uploading…' : 'Change Organization Logo'}</Text>
+              {logoUploading ? <ActivityIndicator color="#007AFF" /> : <Ionicons name="chevron-forward" size={20} color="#999" />}
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Security</Text>
