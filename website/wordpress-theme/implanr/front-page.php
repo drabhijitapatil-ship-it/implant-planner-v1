@@ -1,0 +1,207 @@
+<?php
+/**
+ * Template Name: Implanr — Home
+ * Auto-generated from static HTML preview. Assign this template to the
+ * matching WordPress Page (Pages -> Home -> Page Attributes -> Template).
+ */
+get_header(); ?>
+<main id="content">
+<!-- ═══════════════ HERO ═══════════════ -->
+  <section class="hero" data-testid="section-hero">
+    <div class="wrap hero__grid">
+      <div>
+        <span class="eyebrow reveal" data-testid="hero-eyebrow">For Prosthodontists &amp; Dental Schools</span>
+        <h1 class="hero__h1 reveal" data-delay="1" data-testid="hero-h1">
+          Precision implant case management, <span class="italic-serif">perfected.</span>
+        </h1>
+        <p class="hero__sub lead reveal" data-delay="2" data-testid="hero-sub">
+          The clinical standard for managing the 4-phase implant workflow. From planning to prosthetic delivery, Implanr protects your biological safety margins with institutional-grade decision support.
+        </p>
+        <div class="hero__actions reveal" data-delay="3">
+          <a href="<?php echo esc_url( home_url( '/contact/#book' ) ); ?>" class="btn btn--primary" data-testid="hero-cta-primary" data-magnetic>
+            Request a Demo <span class="btn__arrow" aria-hidden="true">→</span>
+          </a>
+          <a href="<?php echo esc_url( home_url( '/features/' ) ); ?>" class="btn btn--ghost" data-testid="hero-cta-secondary">Explore Features</a>
+        </div>
+        <div class="hero__meta reveal" data-delay="4">
+          <div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span><strong>HIPAA</strong>-aware</span></div>
+          <div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span><strong>30+</strong> implant systems</span></div>
+          <div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span><strong>4-phase</strong> workflow</span></div>
+        </div>
+      </div>
+      <div class="hero__stack reveal" data-delay="2" aria-hidden="true">
+        <div class="hero__card hero__card--3">
+          <div class="mockup">
+            <div class="mockup__bar"><span></span><span></span><span></span>Case Report · REG-2891</div>
+            <div class="mockup__body">
+              <div class="mockup__row"><div class="mockup__row-dot"></div><div><div class="mockup__row-title">Phase 4 Step 2</div><div class="mockup__row-sub">Final delivery · 12 days total</div></div></div>
+              <div class="mockup__row"><div class="mockup__row-dot" style="background:#F59E0B"></div><div><div class="mockup__row-title">Phase 3</div><div class="mockup__row-sub">Healing complete</div></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="hero__card hero__card--2">
+          <div class="mockup">
+            <div class="mockup__bar"><span></span><span></span><span></span>Clinical decision · Bone width</div>
+            <div class="mockup__body">
+              <div class="safety-diagram" style="padding:14px;background:transparent">
+                <div class="safety-diagram__title">Implant Ø 4.3mm · Site #14</div>
+                <div class="safety-bar">
+                  <div class="safety-bar__label"><span>Buccal-lingual bone</span><span>7.1 mm</span></div>
+                  <div class="safety-bar__track"><div class="safety-bar__fill" style="width:78%"></div><div class="safety-bar__marker" style="left:60%"></div></div>
+                </div>
+                <div style="display:flex;gap:6px"><span class="safety-chip safety-chip--ok">Safe · +1.4 mm margin</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="hero__card hero__card--1">
+          <div class="mockup">
+            <div class="mockup__bar"><span></span><span></span><span></span>Implanr · Home</div>
+            <div class="mockup__body">
+              <div class="mockup__row" style="padding:14px 16px"><div style="display:flex;flex-direction:column;gap:2px"><div class="mockup__row-title">Good morning, Dr. Patil</div><div class="mockup__row-sub">You have 3 cases awaiting approval</div></div></div>
+              <div class="mockup__row"><span class="mockup__badge">Phase 1</span><div><div class="mockup__row-title" style="font-size:12px">Sinus Lift · Site #16</div><div class="mockup__row-sub">Awaiting supervisor sign-off</div></div></div>
+              <div class="mockup__row"><span class="mockup__badge" style="background:#FEF3C7;color:#92400E">Phase 2</span><div><div class="mockup__row-title" style="font-size:12px">Immediate implant · Site #21</div><div class="mockup__row-sub">Surgery scheduled Fri 10:00</div></div></div>
+              <div class="mockup__row"><span class="mockup__badge">Phase 4</span><div><div class="mockup__row-title" style="font-size:12px">Full arch · REG-2891</div><div class="mockup__row-sub">Prosthesis ready — try-in today</div></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ TRUST BAR ═══════════════ -->
+  <section class="trust tight" data-testid="section-trust">
+    <div class="wrap">
+      <p class="trust__label">Trusted by pioneering dental colleges &amp; private clinics</p>
+      <div class="trust__logos">
+        <div class="trust__logo">D. Y. Patil</div>
+        <div class="trust__logo">Bharati Vidyapeeth</div>
+        <div class="trust__logo">Sinhgad Dental</div>
+        <div class="trust__logo">MGV's KBH</div>
+        <div class="trust__logo">Nair Hospital</div>
+        <div class="trust__logo">Government Dental</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ ROLE ROUTER ═══════════════ -->
+  <section data-testid="section-roles">
+    <div class="wrap">
+      <div class="section__head reveal">
+        <span class="eyebrow">Built for every seat in the clinic</span>
+        <h2>One workflow. Three <span class="italic-serif">very different</span> jobs.</h2>
+        <p class="lead">From the resident submitting their first case to the department head signing off on 40 a week, Implanr adapts to each role while keeping the clinical record honest.</p>
+      </div>
+      <div class="roles">
+        <a class="role-card reveal" href="<?php echo esc_url( home_url( '/for-schools/' ) ); ?>" data-testid="role-card-schools">
+          <div class="role-card__icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+          </div>
+          <div class="role-card__title">Dental Schools</div>
+          <p class="role-card__body">Give supervisors real-time visibility across cohorts. Audit logs, dual-approval gates, and a scaffolded learning curve for residents.</p>
+          <span class="role-card__link">Explore for schools →</span>
+        </a>
+        <a class="role-card reveal" data-delay="1" href="<?php echo esc_url( home_url( '/for-clinicians/' ) ); ?>" data-testid="role-card-clinicians">
+          <div class="role-card__icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8"/><path d="M12 16v4"/></svg>
+          </div>
+          <div class="role-card__title">Private Clinicians</div>
+          <p class="role-card__body">Chair-side, tablet-native case management with patient-facing PDFs, lab slips, and Sinus-Lift pre-op briefings your patients will actually read.</p>
+          <span class="role-card__link">Explore for clinicians →</span>
+        </a>
+        <a class="role-card reveal" data-delay="2" href="<?php echo esc_url( home_url( '/features/' ) ); ?>" data-testid="role-card-students">
+          <div class="role-card__icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10L12 3 2 10l10 7 10-7z"/><path d="M6 12v5c0 1.7 3 3 6 3s6-1.3 6-3v-5"/></svg>
+          </div>
+          <div class="role-card__title">Residents &amp; Students</div>
+          <p class="role-card__body">Learn the 4-phase workflow with guided forms, biological safety guardrails, and AI-backed explanations for every clinical recommendation.</p>
+          <span class="role-card__link">See how it works →</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ PRODUCT TOUR (BENTO) ═══════════════ -->
+  <section data-testid="section-tour" style="padding-top:0">
+    <div class="wrap">
+      <div class="section__head reveal">
+        <span class="eyebrow">The 4-phase workflow, guided end-to-end</span>
+        <h2>From first radiograph to final <span class="italic-serif">occlusion check.</span></h2>
+      </div>
+
+      <div class="bento">
+        <div class="bento-card bento-card--wide reveal" data-testid="bento-phase-1">
+          <span class="b-tag">Phase 1</span>
+          <div class="b-num">01</div>
+          <h3 class="b-title">Planning &amp; Diagnosis</h3>
+          <p class="b-sub">Cascading forms capture chief complaint, medical history, periodontal status, radiographs, and the exact FDI tooth map. Bridges and cantilevers are flagged automatically the moment you place them.</p>
+        </div>
+        <div class="bento-card bento-card--sm bento-card--navy reveal" data-delay="1" data-testid="bento-safety">
+          <span class="b-tag" style="color:rgba(255,255,255,.5)">Guardrail</span>
+          <h3 class="b-title">Biological safety, live.</h3>
+          <p class="b-sub">Bone width and height are validated against every implant in the library. Posteriors below margin are hard-blocked.</p>
+        </div>
+
+        <div class="bento-card bento-card--sm reveal" data-testid="bento-phase-2">
+          <span class="b-tag">Phase 2</span>
+          <div class="b-num">02</div>
+          <h3 class="b-title">Implant Surgery</h3>
+          <p class="b-sub">Drilling protocol PDFs, torque logs, and photo evidence — all timestamped with your clinical <span class="italic-serif">Done On</span> date.</p>
+        </div>
+        <div class="bento-card bento-card--sm reveal" data-delay="1" data-testid="bento-phase-3">
+          <span class="b-tag">Phase 3</span>
+          <div class="b-num">03</div>
+          <h3 class="b-title">Healing &amp; Second Stage</h3>
+          <p class="b-sub">Healing abutment logs, IOPA comparison, and second-stage surgery photos side-by-side.</p>
+        </div>
+        <div class="bento-card bento-card--sm reveal" data-delay="2" data-testid="bento-phase-4">
+          <span class="b-tag">Phase 4</span>
+          <div class="b-num">04</div>
+          <h3 class="b-title">Prosthetic Delivery</h3>
+          <p class="b-sub">Impressions, try-in, lab slips, and final delivery — the full arch or single crown, generated as a signed case report PDF.</p>
+        </div>
+
+        <div class="bento-card bento-card--wide bento-card--navy reveal" data-testid="bento-ai">
+          <span class="b-tag" style="color:rgba(255,255,255,.5)">AI Explain</span>
+          <h3 class="b-title">Every recommendation, explained.</h3>
+          <p class="b-sub" style="max-width:52ch">Ask "why this implant, why this length?" — Implanr answers with the institutional guideline reference and the exact geometry that led to the recommendation. Guessing has no place in modern prosthodontics.</p>
+        </div>
+        <div class="bento-card bento-card--sm reveal" data-delay="1" data-testid="bento-pdf">
+          <span class="b-tag">PDFs</span>
+          <h3 class="b-title">Signed &amp; auditable.</h3>
+          <p class="b-sub">Case reports, drilling protocols, lab slips, patient briefings — one tap, one PDF.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ TESTIMONIAL ═══════════════ -->
+  <section data-testid="section-quote">
+    <div class="wrap">
+      <div class="quote reveal">
+        <div>
+          <p class="quote__text">Implanr collapsed six spreadsheets, three WhatsApp groups, and a folder of loose PDFs into one honest clinical record. My residents ship better cases in half the time.</p>
+          <div class="quote__cite"><strong>Dr. Riddhi Sabane</strong><span>Head of Prosthodontics · Sinhgad Dental College</span></div>
+        </div>
+        <div class="quote__portrait" aria-hidden="true"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ BIG CTA ═══════════════ -->
+  <section data-testid="section-cta" style="padding-top:0">
+    <div class="wrap">
+      <div class="big-cta reveal">
+        <div>
+          <h2>Modernize your implant workflow — this month.</h2>
+          <p>Institution licensing, resident cohort onboarding, and a live walk-through with your team. 30 minutes, and you'll never open a spreadsheet-based case log again.</p>
+        </div>
+        <div class="big-cta__actions">
+          <a href="<?php echo esc_url( home_url( '/contact/#book' ) ); ?>" class="btn btn--mint" data-testid="cta-book-demo" data-magnetic>Request a Demo <span class="btn__arrow">→</span></a>
+          <a href="<?php echo esc_url( home_url( '/pricing/' ) ); ?>" class="btn btn--ghost" style="color:#fff;border-color:rgba(255,255,255,.24)" data-testid="cta-view-pricing">View Pricing</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+<?php get_footer();
