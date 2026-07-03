@@ -92,6 +92,21 @@ async def health_check():
 async def api_health_check():
     return {"status": "ok"}
 
+@app.get("/api/downloads/implanr-theme.zip")
+async def download_implanr_theme():
+    """Public download of the Implanr WordPress theme zip (marketing website).
+    Anyone with the link can pull it — no auth needed since it's the user's own theme."""
+    import os as _os
+    zip_path = _os.path.join(_os.path.dirname(__file__), "implanr-wordpress-theme.zip")
+    if not _os.path.exists(zip_path):
+        raise HTTPException(status_code=404, detail="Theme zip not found on server")
+    return FileResponse(
+        zip_path,
+        media_type="application/zip",
+        filename="implanr-wordpress-theme.zip",
+    )
+
+
 @app.get("/api/health/db-status")
 async def db_status():
     """Public diagnostic endpoint — shows implant library and user counts to verify deployment state."""
