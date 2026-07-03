@@ -1,0 +1,32 @@
+/*
+Theme Name: Implanr
+Theme URI: https://implanr.com
+Author: The Implanr Team
+Author URI: https://implanr.com
+Description: A calm, clinical marketing theme for Implanr — precision implant case management for prosthodontists and dental schools. Ships with 10 page templates (Home, Features, For Schools, For Clinicians, Pricing, About, Security, Blog, Contact, 404), custom nav menu, and a mailto-powered contact form.
+Version: 1.0.0
+Requires at least: 6.0
+Requires PHP: 7.4
+License: Proprietary
+Text Domain: implanr
+Tags: clinical, medical, dental, custom-menu, threaded-comments, translation-ready
+*/
+
+/* The full design system lives in /assets/css/site.css, which is enqueued by functions.php.
+   This file only carries the WordPress theme metadata + a few WP-specific overrides below. */
+
+/* WP admin bar spacing */
+body.admin-bar .nav { top: 32px; }
+@media (max-width: 782px) { body.admin-bar .nav { top: 46px; } }
+
+/* WP standard content flow classes (used inside single.php / archives) */
+.wp-post-content { max-width: 720px; margin: 0 auto; font-size: 17px; line-height: 1.7; color: #0F172A; }
+.wp-post-content h2 { margin: 40px 0 16px; }
+.wp-post-content h3 { margin: 32px 0 12px; }
+.wp-post-content p { margin-bottom: 20px; }
+.wp-post-content img { border-radius: 12px; margin: 24px 0; }
+.wp-post-content blockquote {
+  border-left: 4px solid #14B8A6; padding-left: 20px; margin: 32px 0;
+  font-family: "Newsreader", serif; font-size: 1.3rem; font-style: italic; color: #475569;
+}
+.wp-post-content a { color: #0F766E; border-bottom: 1px solid rgba(15,118,110,.3); }
