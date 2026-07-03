@@ -103,6 +103,15 @@ export default function UserManagementScreen() {
 
   const isSuperAdmin = user?.role === 'super_admin';
 
+  // Read-only banner atop the list — shows which org's users these are.
+  const [myOrg, setMyOrg] = useState<{
+    id: string; name: string; org_type: string; logo?: string | null;
+    state?: string; state_of_registration?: string; state_of_practice?: string; registration_number?: string;
+  } | null>(null);
+  useEffect(() => {
+    api.get('/organizations/me').then((res) => setMyOrg(res.data?.organization || null)).catch(() => {});
+  }, []);
+
   // super_admin has no org of its own — every create flow needs an explicit org
   // picked from every organization on the platform.
   const [orgs, setOrgs] = useState<{ id: string; name: string; org_type: string }[]>([]);
@@ -477,6 +486,27 @@ export default function UserManagementScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
+      {/* Organization Banner — read-only, just for context */}
+      {myOrg && (
+        <View style={styles.orgBanner} data-testid="org-banner">
+          {myOrg.logo ? (
+            <Image source={{ uri: myOrg.logo }} style={styles.orgBannerLogo} />
+          ) : (
+            <View style={[styles.orgBannerLogo, styles.orgBannerLogoPlaceholder]}>
+              <Ionicons name={myOrg.org_type === 'clinic' ? 'medkit' : 'school'} size={18} color="#78909C" />
+            </View>
+          )}
+          <View style={{ flex: 1 }}>
+            <Text style={styles.orgBannerName} numberOfLines={1}>{myOrg.name}</Text>
+            <Text style={styles.orgBannerMeta} numberOfLines={1}>
+              {myOrg.org_type === 'clinic' ? 'Dental Clinic' : 'Dental College'}
+              {myOrg.org_type === 'college' && myOrg.state ? ` · ${myOrg.state}` : ''}
+              {myOrg.org_type === 'clinic' && myOrg.registration_number ? ` · Reg. ${myOrg.registration_number}` : ''}
+            </Text>
+          </View>
+        </View>
+      )}
+
       {/* Filter Chips */}
       <View style={styles.filterRow}>
         <FlatList
@@ -1014,6 +1044,36 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#888',
     textAlign: 'center',
+  },
+  orgBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FFF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+  },
+  orgBannerLogo: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+  },
+  orgBannerLogoPlaceholder: {
+    backgroundColor: '#F0F0F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  orgBannerName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  orgBannerMeta: {
+    fontSize: 12,
+    color: '#78909C',
+    marginTop: 1,
   },
   filterRow: {
     backgroundColor: '#FFF',

@@ -199,6 +199,25 @@ async def _assert_procedure_org_access(proc: dict, current_user: dict) -> None:
     if not match:
         raise HTTPException(status_code=403, detail="Cannot access procedures outside your organization")
 
+
+async def _get_procedure_org_name(procedure: dict) -> Optional[str]:
+    """Reverse lookup: procedures don't store org_id, so derive the owning
+    organization's name via whichever linked user (student/supervisor/creator)
+    has one. Used for letterheads on generated documents (consent form, etc.)."""
+    owner_ids = [procedure.get("student_id"), procedure.get("supervisor_id"), procedure.get("created_by_id")]
+    valid_oids = [ObjectId(o) for o in owner_ids if o and ObjectId.is_valid(o)]
+    if not valid_oids:
+        return None
+    user = await db.users.find_one({"_id": {"$in": valid_oids}, "org_id": {"$exists": True, "$ne": None}}, {"org_id": 1})
+    if not user or not user.get("org_id"):
+        return None
+    try:
+        org = await db.organizations.find_one({"_id": ObjectId(user["org_id"])}, {"name": 1})
+    except Exception:
+        return None
+    return org.get("name") if org else None
+
+
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
         token = credentials.credentials
@@ -293,6 +312,7 @@ class UserResponse(BaseModel):
     profile_photo: Optional[str] = None
     org_id: Optional[str] = None
     org_type: Optional[str] = None
+    org_name: Optional[str] = None
     # Timestamp when the user dismissed the first-login onboarding + workflow help.
     # Null means they haven't seen it yet → frontend routes them through onboarding.
     workflow_seen_at: Optional[datetime] = None
@@ -1229,11 +1249,13 @@ async def login(request: Request, user: UserLogin):
 async def get_me(current_user: dict = Depends(get_current_user)):
     org_id = current_user.get("org_id")
     org_type = None
+    org_name = None
     if org_id:
         try:
-            org = await db.organizations.find_one({"_id": ObjectId(org_id)}, {"org_type": 1})
+            org = await db.organizations.find_one({"_id": ObjectId(org_id)}, {"org_type": 1, "name": 1})
             if org:
                 org_type = org.get("org_type")
+                org_name = org.get("name")
         except Exception:
             pass
     return UserResponse(
@@ -1247,6 +1269,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         last_seen_whatsnew_version=current_user.get("last_seen_whatsnew_version"),
         org_id=org_id,
         org_type=org_type,
+        org_name=org_name,
     )
 
 # --- "What's New" changelog ─────────────────────────────────────────────────
@@ -1742,7 +1765,14 @@ OTP_VERIFIED_WINDOW_MINUTES = 30
 OTP_MAX_ATTEMPTS = 5
 
 
-async def _send_otp_email(to_email: str, otp: str) -> bool:
+async def _send_otp_email(
+    to_email: str,
+    otp: str,
+    heading: str = "Verify your email",
+    intro: str = "Enter this code to finish setting up your Implanr workspace.",
+    footer_note: str = "If you didn't request this code, you can safely ignore this email — no account will be created.",
+    log_tag: str = "otp",
+) -> bool:
     subject = f"{otp} is your Implanr verification code"
     otp_spaced = " ".join(otp)
     html_body = f"""\
@@ -1760,9 +1790,9 @@ async def _send_otp_email(to_email: str, otp: str) -> bool:
           </tr>
           <tr>
             <td style="padding:36px 32px 24px 32px;">
-              <h1 style="margin:0 0 8px 0;font-size:20px;color:#0A2540;font-weight:700;">Verify your email</h1>
+              <h1 style="margin:0 0 8px 0;font-size:20px;color:#0A2540;font-weight:700;">{heading}</h1>
               <p style="margin:0 0 24px 0;font-size:14px;line-height:22px;color:#546E7A;">
-                Enter this code to finish setting up your Implanr workspace.
+                {intro}
               </p>
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                 <tr>
@@ -1775,7 +1805,7 @@ async def _send_otp_email(to_email: str, otp: str) -> bool:
                 This code expires in {OTP_EXPIRY_MINUTES} minutes.
               </p>
               <p style="margin:24px 0 0 0;font-size:12px;line-height:18px;color:#90A4AE;">
-                If you didn't request this code, you can safely ignore this email — no account will be created.
+                {footer_note}
               </p>
             </td>
           </tr>
@@ -1794,10 +1824,10 @@ async def _send_otp_email(to_email: str, otp: str) -> bool:
 """
     text_body = (
         f"Your Implanr verification code is: {otp}\n\n"
-        f"This code expires in {OTP_EXPIRY_MINUTES} minutes. If you didn't request this, you can ignore this email.\n\n"
+        f"This code expires in {OTP_EXPIRY_MINUTES} minutes. {footer_note}\n\n"
         f"— The Implanr Team\n{EMAIL_WEBSITE_URL}"
     )
-    return await _send_smtp_email(to_email, subject, html_body, text_body, log_tag="otp", inline_logo=True)
+    return await _send_smtp_email(to_email, subject, html_body, text_body, log_tag=log_tag, inline_logo=True)
 
 
 async def _send_credentials_email(to_email: str, to_name: str, password: str, role_display: str, org_name: str = "") -> bool:
@@ -1906,6 +1936,7 @@ class WorkspaceSignup(BaseModel):
     password: str = Field(..., min_length=8, max_length=128)
     college_data: Optional[CollegeSignupData] = None
     clinic_data: Optional[ClinicSignupData] = None
+    logo: Optional[str] = None  # Base64 data URI — no max_length, images are large
 
     @field_validator("college_data", "clinic_data", mode="before")
     @classmethod
@@ -1914,6 +1945,14 @@ class WorkspaceSignup(BaseModel):
 
 class OtpSendRequest(BaseModel):
     email: EmailStr = Field(..., max_length=255)
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr = Field(..., max_length=255)
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr = Field(..., max_length=255)
+    otp: str = Field(..., min_length=6, max_length=6)
+    new_password: str = Field(..., min_length=8, max_length=128)
 
 class OtpVerifyRequest(BaseModel):
     email: EmailStr = Field(..., max_length=255)
@@ -1976,6 +2015,7 @@ async def send_otp(request: Request, payload: OtpSendRequest):
             "attempts": 0,
             "verified": False,
             "verified_at": None,
+            "purpose": "signup",
             "created_at": now,
         }},
         upsert=True,
@@ -1992,7 +2032,7 @@ async def send_otp(request: Request, payload: OtpSendRequest):
 @limiter.limit("10/minute")
 async def verify_otp(request: Request, payload: OtpVerifyRequest):
     email = payload.email.lower()
-    record = await db.otp_verifications.find_one({"email": email})
+    record = await db.otp_verifications.find_one({"email": email, "purpose": "signup"})
     if not record:
         raise HTTPException(400, "No OTP requested for this email. Please request a new code.")
     if record["expires_at"] < datetime.utcnow():
@@ -2009,6 +2049,110 @@ async def verify_otp(request: Request, payload: OtpVerifyRequest):
         {"$set": {"verified": True, "verified_at": datetime.utcnow()}},
     )
     return {"message": "Email verified"}
+
+
+# ── Forgot / reset password ──
+# Reuses the same otp_verifications collection as the signup-email-verify flow
+# (one pending OTP per email, upserted). A "purpose" tag keeps the two flows
+# from being confused with each other even though they share storage.
+
+@api_router.post("/auth/forgot-password")
+@limiter.limit("3/minute")
+async def forgot_password(request: Request, payload: ForgotPasswordRequest):
+    """Send a password-reset OTP if the email belongs to an account. Always
+    returns the same generic response either way, so the endpoint can't be
+    used to enumerate which emails are registered."""
+    email = payload.email.lower()
+    user = await db.users.find_one({"email": email})
+
+    if user:
+        otp = f"{_secrets_mod.randbelow(1_000_000):06d}"
+        now = datetime.utcnow()
+        await db.otp_verifications.update_one(
+            {"email": email},
+            {"$set": {
+                "email": email,
+                "otp_hash": hash_password(otp),
+                "expires_at": now + timedelta(minutes=OTP_EXPIRY_MINUTES),
+                "attempts": 0,
+                "verified": False,
+                "verified_at": None,
+                "purpose": "password_reset",
+                "created_at": now,
+            }},
+            upsert=True,
+        )
+        await _send_otp_email(
+            email, otp,
+            heading="Reset your password",
+            intro="Enter this code to set a new password for your Implanr account.",
+            footer_note="If you didn't request this, you can safely ignore this email — your password won't be changed.",
+            log_tag="password_reset",
+        )
+
+    return {"message": "If that email is registered, a reset code has been sent."}
+
+
+@api_router.post("/auth/reset-password")
+@limiter.limit("10/minute")
+async def reset_password(request: Request, payload: ResetPasswordRequest):
+    email = payload.email.lower()
+    record = await db.otp_verifications.find_one({"email": email, "purpose": "password_reset"})
+    if not record:
+        raise HTTPException(400, "No reset code requested for this email. Please request a new code.")
+    if record["expires_at"] < datetime.utcnow():
+        raise HTTPException(410, "Reset code expired. Please request a new code.")
+    if record.get("attempts", 0) >= OTP_MAX_ATTEMPTS:
+        raise HTTPException(429, "Too many incorrect attempts. Please request a new code.")
+
+    if not verify_password(payload.otp, record["otp_hash"]):
+        await db.otp_verifications.update_one({"email": email}, {"$inc": {"attempts": 1}})
+        raise HTTPException(400, "Incorrect code")
+
+    user = await db.users.find_one({"email": email})
+    if not user:
+        raise HTTPException(404, "Account not found")
+
+    user_id = str(user["_id"])
+    await db.users.update_one(
+        {"_id": user["_id"]},
+        {"$set": {"password_hash": hash_password(payload.new_password)}},
+    )
+    await db.otp_verifications.delete_one({"email": email})
+    # Force re-login everywhere — a password reset should kill existing sessions.
+    await db.refresh_tokens.delete_many({"user_id": user_id})
+
+    return {"message": "Password reset successfully"}
+
+
+# ── Any authenticated org member: basic details of their own organization
+# (read-only display banner, e.g. atop the Users screen) ──
+
+@api_router.get("/organizations/me")
+async def get_my_organization(current_user: dict = Depends(get_current_user)):
+    org_id = current_user.get("org_id")
+    if not org_id:
+        return {"organization": None}
+    try:
+        org = await db.organizations.find_one({"_id": ObjectId(org_id)})
+    except Exception:
+        org = None
+    if not org:
+        return {"organization": None}
+
+    entry = {
+        "id": str(org["_id"]),
+        "name": org.get("name", ""),
+        "org_type": org.get("org_type", ""),
+        "logo": org.get("logo"),
+    }
+    if org.get("org_type") == "college":
+        entry["state"] = org.get("state")
+    else:
+        entry["state_of_registration"] = org.get("state_of_registration")
+        entry["state_of_practice"] = org.get("state_of_practice")
+        entry["registration_number"] = org.get("registration_number")
+    return {"organization": entry}
 
 
 # ── super_admin: list all organizations (for the cross-org "Add User" picker) ──
@@ -2062,6 +2206,7 @@ async def list_organizations_detailed(skip: int = 0, limit: int = 20, current_us
             "id": org_id,
             "name": org.get("name", ""),
             "org_type": org.get("org_type", ""),
+            "logo": org.get("logo"),
             "created_at": org.get("created_at").isoformat() if org.get("created_at") else None,
             "declared_num_users": org.get("num_users"),
             "actual_user_count": actual_users,
@@ -2149,6 +2294,7 @@ async def get_organization_detail(org_id: str, current_user: dict = Depends(get_
         "id": org_id,
         "name": org.get("name", ""),
         "org_type": org.get("org_type", ""),
+        "logo": org.get("logo"),
         "created_at": org.get("created_at").isoformat() if org.get("created_at") else None,
         "declared_num_users": org.get("num_users"),
     }
@@ -2228,7 +2374,7 @@ async def workspace_signup(payload: WorkspaceSignup):
     if existing:
         raise HTTPException(400, "Email already registered")
 
-    otp_record = await db.otp_verifications.find_one({"email": payload.email.lower()})
+    otp_record = await db.otp_verifications.find_one({"email": payload.email.lower(), "purpose": "signup"})
     if not otp_record or not otp_record.get("verified"):
         raise HTTPException(400, "Please verify your email with the OTP before continuing")
     verified_at = otp_record.get("verified_at")
@@ -2261,6 +2407,7 @@ async def workspace_signup(payload: WorkspaceSignup):
             "name": d.college_name,
             "state": d.state,
             "num_users": d.num_users,
+            "logo": payload.logo,
             "created_at": now,
         }
     else:
@@ -2274,6 +2421,7 @@ async def workspace_signup(payload: WorkspaceSignup):
             "state_of_practice": d.state_of_practice,
             "registration_number": d.registration_number,
             "num_users": d.num_users,
+            "logo": payload.logo,
             "created_at": now,
         }
 
@@ -4865,7 +5013,9 @@ async def generate_consent_template(
     )
     if not is_stakeholder:
         raise HTTPException(status_code=403, detail="Not allowed to view this consent form")
-    
+
+    org_name = await _get_procedure_org_name(procedure)
+
     from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
@@ -4876,6 +5026,7 @@ async def generate_consent_template(
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=12*mm, rightMargin=12*mm, topMargin=8*mm, bottomMargin=8*mm)
     styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name='OrgHeader', fontName='Helvetica-Bold', fontSize=11, textColor=colors.HexColor('#263238'), alignment=1, spaceAfter=1))
     styles.add(ParagraphStyle(name='TitleC', fontName='Helvetica-Bold', fontSize=13, textColor=colors.HexColor('#0D47A1'), alignment=1, spaceAfter=2))
     styles.add(ParagraphStyle(name='SubC', fontName='Helvetica', fontSize=7.5, textColor=colors.HexColor('#546E7A'), alignment=1, spaceAfter=4))
     styles.add(ParagraphStyle(name='H2', fontName='Helvetica-Bold', fontSize=8.5, textColor=colors.HexColor('#1565C0'), spaceBefore=4, spaceAfter=1))
@@ -4887,6 +5038,9 @@ async def generate_consent_template(
     story = []
     
     # ── Header ──
+    if org_name:
+        from xml.sax.saxutils import escape as _xml_escape
+        story.append(Paragraph(_xml_escape(org_name), styles['OrgHeader']))
     story.append(Paragraph("INFORMED CONSENT — DENTAL IMPLANT PROCEDURE", styles['TitleC']))
     story.append(Paragraph("Please read carefully before signing. Keep one signed copy for your records.", styles['SubC']))
     story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor('#CFD8DC'), spaceAfter=3))
@@ -4918,7 +5072,7 @@ async def generate_consent_template(
     proc_rows = [
         ["Procedure Type:", procedure.get("implant_procedure_type") or "____________________"],
         ["Arch:", procedure.get("arch") or "____________________"],
-        ["Site / Teeth:", ", ".join(procedure.get("edentulous_sites") or []) or procedure.get("edentulous_site") or "____________"],
+        ["Site / Teeth:", ", ".join(procedure.get("missing_teeth") or []) or ", ".join(procedure.get("edentulous_sites") or []) or procedure.get("edentulous_site") or "____________"],
         ["Loading Protocol:", ", ".join(procedure.get("loading_type") or []) or "____________________"],
         ["Treating Clinician:", procedure.get("student_name") or procedure.get("created_by_name") or "____________________"],
         ["Supervising Clinician:", procedure.get("supervisor_name") or "____________________"],
@@ -5918,6 +6072,12 @@ async def cbct_public_viewer(token: str):
             f"<div class='meta'>{meta}</div>"
             f"</a>"
         )
+    actions_html = ""
+    if files:
+        actions_html = (
+            f"<div class='actions'><a class='btn' href='/cbct/pdf/{token}'>"
+            f"⬇ Download all as one PDF</a></div>"
+        )
     if not items_html:
         items_html = "<p class='empty'>No CBCT files uploaded for this case yet.</p>"
     html = f"""<!doctype html>
@@ -5938,6 +6098,10 @@ async def cbct_public_viewer(token: str):
  .label {{ font-size:12px; padding:8px 8px 2px; word-break:break-all; }}
  .meta {{ font-size:10px; opacity:0.6; padding:0 8px 8px; }}
  .empty {{ text-align:center; padding:40px; opacity:0.7; }}
+ .actions {{ padding:12px 14px 0; }}
+ .btn {{ display:inline-block; background:#1565C0; color:#FFF; text-decoration:none;
+         padding:11px 18px; border-radius:8px; font-size:14px; font-weight:600; }}
+ .btn:hover {{ background:#1976D2; }}
  footer {{ text-align:center; font-size:11px; opacity:0.6; padding:10px; }}
 </style></head>
 <body>
@@ -5945,6 +6109,7 @@ async def cbct_public_viewer(token: str):
     <h1>CBCT Files — {patient}</h1>
     <p>Tap any file to view · Link valid for 24 h from printing</p>
   </header>
+  {actions_html}
   <div class='grid'>{items_html}</div>
   <footer>Implanr · Secure CBCT QR Viewer</footer>
 </body></html>"""
@@ -5979,6 +6144,136 @@ async def cbct_public_file(token: str, filename: str):
             return Response(content=converted, media_type="image/jpeg")
     with open(path, "rb") as fh:
         return Response(content=fh.read(), media_type=content_type)
+
+
+# ── Combined CBCT PDF (all uploaded files merged into one PDF) ───────
+def _image_bytes_to_pdf_page(img_bytes: bytes, caption: str = "") -> bytes:
+    """Render one image as a single aspect-fit A4 PDF page. Returns PDF bytes."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.utils import ImageReader
+    from reportlab.pdfgen import canvas as _canvas
+    from PIL import Image as _PILImage
+    buf = io.BytesIO()
+    c = _canvas.Canvas(buf, pagesize=A4)
+    pw, ph = A4
+    margin = 28
+    try:
+        img = _PILImage.open(io.BytesIO(img_bytes))
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        iw, ih = img.size
+        avail_w, avail_h = pw - 2 * margin, ph - 2 * margin - 24
+        scale = min(avail_w / iw, avail_h / ih)
+        dw, dh = iw * scale, ih * scale
+        x = (pw - dw) / 2
+        y = (ph - dh) / 2 + 12
+        c.drawImage(ImageReader(img), x, y, width=dw, height=dh,
+                    preserveAspectRatio=True, anchor='c')
+    except Exception as exc:
+        logging.warning("CBCT image->pdf failed: %s", exc)
+        c.setFont("Helvetica", 12)
+        c.drawCentredString(pw / 2, ph / 2, "Image could not be rendered")
+    if caption:
+        c.setFont("Helvetica", 9)
+        c.setFillColorRGB(0.3, 0.3, 0.3)
+        c.drawCentredString(pw / 2, margin, caption[:120])
+    c.showPage()
+    c.save()
+    return buf.getvalue()
+
+
+def _placeholder_pdf_page(title: str, subtitle: str = "") -> bytes:
+    """A text-only A4 page used for missing files, DICOM, or unknown types."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas as _canvas
+    buf = io.BytesIO()
+    c = _canvas.Canvas(buf, pagesize=A4)
+    pw, ph = A4
+    c.setFont("Helvetica-Bold", 14)
+    c.drawCentredString(pw / 2, ph / 2 + 10, title[:90])
+    if subtitle:
+        c.setFont("Helvetica", 10)
+        c.setFillColorRGB(0.4, 0.4, 0.4)
+        c.drawCentredString(pw / 2, ph / 2 - 12, subtitle[:110])
+    c.showPage()
+    c.save()
+    return buf.getvalue()
+
+
+async def _build_cbct_combined_pdf(proc: dict) -> bytes:
+    """Merge every CBCT file for a procedure into one PDF (built per request).
+    Images -> aspect-fit pages, PDFs -> pages appended, HEIC -> converted first,
+    DICOM/unknown/missing -> placeholder page (never fails the whole document).
+    """
+    from PyPDF2 import PdfReader, PdfWriter
+    files = await _list_cbct_files(proc)
+    writer = PdfWriter()
+    patient = proc.get("patient_name") or "Patient"
+
+    def _append(pdf_bytes: bytes):
+        for p in PdfReader(io.BytesIO(pdf_bytes)).pages:
+            writer.add_page(p)
+
+    cover = _placeholder_pdf_page(
+        f"CBCT — {patient}",
+        f"{len(files)} file(s) · generated {datetime.now(timezone.utc).strftime('%b %d, %Y %H:%M UTC')}",
+    )
+    _append(cover)
+
+    for f in files:
+        filename = f["filename"]
+        path = UPLOADS_DIR / filename
+        ct = (f.get("content_type") or "").lower()
+        orig = f.get("original_name") or filename
+        low = filename.lower()
+        if not path.exists():
+            _append(_placeholder_pdf_page(orig, "File missing on server"))
+            continue
+        is_heic = ct in ("image/heic", "image/heif") or low.endswith((".heic", ".heif"))
+        is_image = ct.startswith("image/") and not is_heic
+        is_pdf = "pdf" in ct or low.endswith(".pdf")
+        is_dicom = "dicom" in ct or low.endswith((".dcm", ".dicom"))
+        try:
+            if is_pdf:
+                for p in PdfReader(str(path)).pages:
+                    writer.add_page(p)
+            elif is_heic:
+                conv = _maybe_convert_heic_to_jpeg(path)
+                _append(_image_bytes_to_pdf_page(conv if conv else path.read_bytes(), orig))
+            elif is_image:
+                _append(_image_bytes_to_pdf_page(path.read_bytes(), orig))
+            elif is_dicom:
+                _append(_placeholder_pdf_page(orig, "DICOM volume — open in the CBCT gallery viewer"))
+            else:
+                _append(_placeholder_pdf_page(orig, ct or "unknown file type"))
+        except Exception as exc:
+            logging.warning("CBCT combine failed for %s: %s", filename, exc)
+            _append(_placeholder_pdf_page(orig, "Could not be included"))
+
+    out = io.BytesIO()
+    writer.write(out)
+    return out.getvalue()
+
+
+@app.get("/cbct/pdf/{token}")
+async def cbct_public_pdf(token: str):
+    """Combined single PDF of all CBCT files for a case. Token-verified per request."""
+    procedure_id = _verify_cbct_token(token)
+    if not procedure_id:
+        raise HTTPException(status_code=403, detail="Link expired or invalid")
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    pdf_bytes = await _build_cbct_combined_pdf(proc)
+    patient = (proc.get("patient_name") or "patient").replace(" ", "_")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename=CBCT_{patient}.pdf"},
+    )
 
 
 # ── Clinical Case Album: Photo Step Definitions ─────────────────────
@@ -14968,8 +15263,15 @@ async def export_drilling_pdf(
         try:
             import qrcode as _qrcode_mod
             token = _sign_cbct_token(procedure_id)
-            # Use the backend public base (same host, /cbct/view/<token>)
-            public_base = os.environ.get("CBCT_PUBLIC_BASE_URL") or os.environ.get("EXPO_PUBLIC_BACKEND_URL", "").strip() or ""
+            # Absolute base URL required — a relative URL produces an unscannable QR.
+            public_base = (
+                os.environ.get("CBCT_PUBLIC_BASE_URL")
+                or os.environ.get("EXPO_PUBLIC_BACKEND_URL", "").strip()
+                or "https://api.implanr.com"
+            )
+            if not public_base.startswith("http"):
+                logging.warning("CBCT QR base URL missing/invalid: %r", public_base)
+            # Lands on the gallery, which links to /cbct/pdf/<token> for the combined PDF.
             qr_url = f"{public_base.rstrip('/')}/cbct/view/{token}"
             qr_img = _qrcode_mod.make(qr_url)
             qr_buf = io.BytesIO()

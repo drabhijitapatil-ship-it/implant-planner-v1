@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   Alert,
   Image,
   ActivityIndicator,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
@@ -15,11 +17,99 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import BackToDashboard from '../../components/BackToDashboard';
 import * as ImagePicker from 'expo-image-picker';
+import api from '../../utils/api';
+
+const RESEND_COOLDOWN_SECONDS = 60;
 
 export default function ProfileScreen() {
   const { user, logout, updateProfilePhoto } = useAuth();
   const router = useRouter();
   const [uploading, setUploading] = useState(false);
+
+  // Change password — same OTP-verify flow as forgot-password, just pinned
+  // to the logged-in user's own email (no email-entry step needed).
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [pwStage, setPwStage] = useState<'sending' | 'code' | 'resetting'>('sending');
+  const [pwOtp, setPwOtp] = useState('');
+  const [pwNew, setPwNew] = useState('');
+  const [pwConfirm, setPwConfirm] = useState('');
+  const [pwShowNew, setPwShowNew] = useState(false);
+  const [pwShowConfirm, setPwShowConfirm] = useState(false);
+  const [pwErrors, setPwErrors] = useState<Record<string, string>>({});
+  const [pwCooldown, setPwCooldown] = useState(0);
+  const pwTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => () => { if (pwTimerRef.current) clearInterval(pwTimerRef.current); }, []);
+
+  const startPwCooldown = () => {
+    setPwCooldown(RESEND_COOLDOWN_SECONDS);
+    if (pwTimerRef.current) clearInterval(pwTimerRef.current);
+    pwTimerRef.current = setInterval(() => {
+      setPwCooldown((c) => {
+        if (c <= 1) {
+          if (pwTimerRef.current) clearInterval(pwTimerRef.current);
+          return 0;
+        }
+        return c - 1;
+      });
+    }, 1000);
+  };
+
+  const sendPasswordOtp = async () => {
+    if (!user?.email) return;
+    setPwStage('sending');
+    try {
+      await api.post('/auth/forgot-password', { email: user.email });
+      setPwStage('code');
+      startPwCooldown();
+    } catch {
+      Alert.alert('Error', 'Could not send verification code. Try again.');
+      setShowPasswordModal(false);
+    }
+  };
+
+  const openPasswordModal = () => {
+    setPwOtp('');
+    setPwNew('');
+    setPwConfirm('');
+    setPwErrors({});
+    setShowPasswordModal(true);
+    sendPasswordOtp();
+  };
+
+  const handleResendPwOtp = () => {
+    if (pwCooldown > 0) return;
+    sendPasswordOtp();
+  };
+
+  const handleUpdatePassword = async () => {
+    const e: Record<string, string> = {};
+    if (pwOtp.length !== 6) e.otp = 'Enter the 6-digit code';
+    if (!pwNew) e.newPassword = 'Password is required';
+    else if (pwNew.length < 8) e.newPassword = 'Minimum 8 characters';
+    if (pwNew !== pwConfirm) e.confirmPassword = 'Passwords do not match';
+    setPwErrors(e);
+    if (Object.keys(e).length > 0) return;
+
+    setPwStage('resetting');
+    try {
+      await api.post('/auth/reset-password', {
+        email: user?.email,
+        otp: pwOtp,
+        new_password: pwNew,
+      });
+      setShowPasswordModal(false);
+      Alert.alert(
+        'Password Updated',
+        'Your password has been changed. Please sign in again with your new password.',
+        [{ text: 'OK', onPress: async () => { await logout(); router.replace('/auth/login'); } }]
+      );
+    } catch (err: any) {
+      const detail = err.response?.data?.detail;
+      Alert.alert('Error', typeof detail === 'string' ? detail : 'Could not update password. Try again.');
+      setPwStage('code');
+    }
+  };
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -217,6 +307,16 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Security</Text>
+
+          <TouchableOpacity style={styles.photoButton} onPress={openPasswordModal} data-testid="change-password-btn">
+            <Ionicons name="key" size={24} color="#007AFF" />
+            <Text style={styles.photoButtonText}>Change Password</Text>
+            <Ionicons name="chevron-forward" size={20} color="#999" />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Help</Text>
           <TouchableOpacity
             style={styles.legalRow}
@@ -305,6 +405,94 @@ export default function ProfileScreen() {
           <Text style={styles.logoutButtonText}>Logout</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Change Password Modal — OTP verify + set new password */}
+      <Modal visible={showPasswordModal} animationType="slide" transparent>
+        <View style={pwStyles.overlay}>
+          <View style={pwStyles.card}>
+            <View style={pwStyles.header}>
+              <Text style={pwStyles.title}>Change Password</Text>
+              <TouchableOpacity onPress={() => setShowPasswordModal(false)} data-testid="close-password-modal">
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            {pwStage === 'sending' ? (
+              <View style={pwStyles.sendingBox}>
+                <ActivityIndicator color="#007AFF" />
+                <Text style={pwStyles.sendingTxt}>Sending verification code to {user?.email}…</Text>
+              </View>
+            ) : (
+              <>
+                <Text style={pwStyles.subtitle}>
+                  Enter the 6-digit code sent to {user?.email} and choose a new password.
+                </Text>
+
+                <Text style={pwStyles.label}>Verification Code</Text>
+                <TextInput
+                  style={[pwStyles.input, pwStyles.otpInput, pwErrors.otp && pwStyles.inputErr]}
+                  placeholder="000000"
+                  value={pwOtp}
+                  onChangeText={(t) => setPwOtp(t.replace(/[^0-9]/g, '').slice(0, 6))}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  data-testid="change-password-otp"
+                />
+                {pwErrors.otp ? <Text style={pwStyles.err}>{pwErrors.otp}</Text> : null}
+
+                <TouchableOpacity onPress={handleResendPwOtp} disabled={pwCooldown > 0} style={pwStyles.resendRow}>
+                  <Text style={[pwStyles.resendTxt, pwCooldown > 0 && pwStyles.resendTxtDisabled]}>
+                    {pwCooldown > 0 ? `Resend code in ${pwCooldown}s` : 'Resend code'}
+                  </Text>
+                </TouchableOpacity>
+
+                <Text style={pwStyles.label}>New Password</Text>
+                <View style={[pwStyles.pwRow, pwErrors.newPassword && pwStyles.inputErr]}>
+                  <TextInput
+                    style={pwStyles.pwInput}
+                    placeholder="Min. 8 characters"
+                    value={pwNew}
+                    onChangeText={setPwNew}
+                    secureTextEntry={!pwShowNew}
+                    autoCapitalize="none"
+                    data-testid="change-password-new"
+                  />
+                  <TouchableOpacity onPress={() => setPwShowNew(!pwShowNew)}>
+                    <Ionicons name={pwShowNew ? 'eye-off-outline' : 'eye-outline'} size={20} color="#94A3B8" />
+                  </TouchableOpacity>
+                </View>
+                {pwErrors.newPassword ? <Text style={pwStyles.err}>{pwErrors.newPassword}</Text> : null}
+
+                <Text style={pwStyles.label}>Confirm New Password</Text>
+                <View style={[pwStyles.pwRow, pwErrors.confirmPassword && pwStyles.inputErr]}>
+                  <TextInput
+                    style={pwStyles.pwInput}
+                    placeholder="Re-enter password"
+                    value={pwConfirm}
+                    onChangeText={setPwConfirm}
+                    secureTextEntry={!pwShowConfirm}
+                    autoCapitalize="none"
+                    data-testid="change-password-confirm"
+                  />
+                  <TouchableOpacity onPress={() => setPwShowConfirm(!pwShowConfirm)}>
+                    <Ionicons name={pwShowConfirm ? 'eye-off-outline' : 'eye-outline'} size={20} color="#94A3B8" />
+                  </TouchableOpacity>
+                </View>
+                {pwErrors.confirmPassword ? <Text style={pwStyles.err}>{pwErrors.confirmPassword}</Text> : null}
+
+                <TouchableOpacity
+                  style={[pwStyles.submitBtn, pwStage === 'resetting' && pwStyles.btnDisabled]}
+                  onPress={handleUpdatePassword}
+                  disabled={pwStage === 'resetting'}
+                  data-testid="change-password-submit"
+                >
+                  {pwStage === 'resetting' ? <ActivityIndicator color="#FFF" /> : <Text style={pwStyles.submitTxt}>Update Password</Text>}
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -474,4 +662,27 @@ const styles = StyleSheet.create({
     color: '#78909C',
     fontStyle: 'italic',
   },
+});
+
+const pwStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  card: { backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '85%' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  title: { fontSize: 18, fontWeight: '700', color: '#1A1A1A' },
+  subtitle: { fontSize: 13, color: '#546E7A', marginBottom: 8, lineHeight: 19 },
+  sendingBox: { alignItems: 'center', paddingVertical: 40, gap: 12 },
+  sendingTxt: { fontSize: 14, color: '#546E7A', textAlign: 'center' },
+  label: { fontSize: 13, fontWeight: '600', color: '#37474F', marginBottom: 6, marginTop: 14 },
+  input: { borderWidth: 1.5, borderColor: '#CFD8DC', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: '#1A1A2E', backgroundColor: '#FAFAFA' },
+  otpInput: { fontSize: 20, letterSpacing: 8, fontFamily: 'monospace', textAlign: 'center' },
+  inputErr: { borderColor: '#FF3B30' },
+  err: { fontSize: 12, color: '#FF3B30', marginTop: 3 },
+  pwRow: { borderWidth: 1.5, borderColor: '#CFD8DC', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 3, flexDirection: 'row', alignItems: 'center', backgroundColor: '#FAFAFA' },
+  pwInput: { flex: 1, fontSize: 15, color: '#1A1A2E', paddingVertical: 8 },
+  resendRow: { marginTop: 8, alignItems: 'flex-end' },
+  resendTxt: { fontSize: 13, color: '#007AFF', fontWeight: '600' },
+  resendTxtDisabled: { color: '#90A4AE' },
+  submitBtn: { backgroundColor: '#007AFF', borderRadius: 12, paddingVertical: 15, alignItems: 'center', marginTop: 20, marginBottom: 8 },
+  btnDisabled: { opacity: 0.6 },
+  submitTxt: { color: '#FFF', fontSize: 16, fontWeight: '700' },
 });

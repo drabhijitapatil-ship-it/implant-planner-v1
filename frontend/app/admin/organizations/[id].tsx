@@ -20,6 +20,7 @@ type OrgProfile = {
   id: string;
   name: string;
   org_type: 'college' | 'clinic';
+  logo?: string | null;
   created_at: string | null;
   declared_num_users?: number;
   state?: string;
@@ -159,9 +160,13 @@ export default function OrganizationDetailScreen() {
         <>
           <View style={s.infoCard}>
             <View style={s.infoTop}>
-              <View style={[s.typeIconWrap, { backgroundColor: profile?.org_type === 'clinic' ? '#E8F5E9' : '#E3F2FD' }]}>
-                <Ionicons name={profile?.org_type === 'clinic' ? 'medkit' : 'school'} size={22} color={profile?.org_type === 'clinic' ? '#2E7D32' : '#1565C0'} />
-              </View>
+              {profile?.logo ? (
+                <Image source={{ uri: profile.logo }} style={s.typeIconWrap} />
+              ) : (
+                <View style={[s.typeIconWrap, { backgroundColor: profile?.org_type === 'clinic' ? '#E8F5E9' : '#E3F2FD' }]}>
+                  <Ionicons name={profile?.org_type === 'clinic' ? 'medkit' : 'school'} size={22} color={profile?.org_type === 'clinic' ? '#2E7D32' : '#1565C0'} />
+                </View>
+              )}
               <View style={{ flex: 1 }}>
                 <Text style={s.orgName}>{profile?.name}</Text>
                 <Text style={s.orgType}>{profile?.org_type === 'clinic' ? 'Dental Clinic' : 'Dental College'}</Text>

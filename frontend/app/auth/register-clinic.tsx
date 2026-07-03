@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
-  Modal, Pressable, Alert, Keyboard, FlatList,
+  Modal, Pressable, Alert, Keyboard, FlatList, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import api from '../../utils/api';
 import OtpEmailField from '../../components/OtpEmailField';
 import { INDIAN_STATES } from '../../constants/indianStates';
@@ -16,6 +17,8 @@ const PREFIXES = ['Dr.', 'Mr.', 'Mrs.', 'Ms.', 'Prof.'];
 
 export default function ClinicRegisterScreen() {
   const router = useRouter();
+
+  const [logo, setLogo] = useState<string | null>(null);
 
   const [clinicName, setClinicName] = useState('');
   const [prefix, setPrefix] = useState('Dr.');
@@ -57,6 +60,24 @@ export default function ClinicRegisterScreen() {
     } catch {
     } finally {
       setCheckingRegNumber(false);
+    }
+  };
+
+  const handlePickLogo = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissionResult.granted) {
+      Alert.alert('Permission Required', 'Please allow access to your photo library to upload a logo.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+      base64: true,
+    });
+    if (!result.canceled && result.assets[0].base64) {
+      setLogo(`data:image/jpeg;base64,${result.assets[0].base64}`);
     }
   };
 
@@ -104,6 +125,7 @@ export default function ClinicRegisterScreen() {
         org_type: 'clinic',
         email: email.trim().toLowerCase(),
         password,
+        logo,
         clinic_data: {
           clinic_name: clinicName.trim(),
           chief_dentist_name: chiefDentistName.trim(),
@@ -150,6 +172,28 @@ export default function ClinicRegisterScreen() {
             <Text style={s.subtitle}>Create your dental clinic workspace on Implanr</Text>
 
             <View style={s.card}>
+
+              {/* Logo (optional) */}
+              <View style={s.logoRow}>
+                <TouchableOpacity style={s.logoCircle} onPress={handlePickLogo}>
+                  {logo ? (
+                    <Image source={{ uri: logo }} style={s.logoImage} />
+                  ) : (
+                    <Ionicons name="image-outline" size={26} color="#90A4AE" />
+                  )}
+                </TouchableOpacity>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.logoTitle}>Clinic Logo <Text style={s.optional}>(optional)</Text></Text>
+                  <TouchableOpacity onPress={handlePickLogo}>
+                    <Text style={s.logoAction}>{logo ? 'Change logo' : 'Upload logo'}</Text>
+                  </TouchableOpacity>
+                </View>
+                {logo && (
+                  <TouchableOpacity onPress={() => setLogo(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                    <Ionicons name="close-circle" size={22} color="#B0BEC5" />
+                  </TouchableOpacity>
+                )}
+              </View>
 
               {/* Clinic Name */}
               <Text style={s.label}>Clinic Name *</Text>
@@ -441,6 +485,11 @@ const s = StyleSheet.create({
   card: { backgroundColor: '#FFF', borderRadius: 16, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 },
   label: { fontSize: 13, fontWeight: '600', color: '#37474F', marginBottom: 6, marginTop: 14 },
   optional: { fontWeight: '400', color: '#90A4AE' },
+  logoRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  logoCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#F5F5F5', borderWidth: 1.5, borderColor: '#E0E0E0', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  logoImage: { width: 56, height: 56, borderRadius: 28 },
+  logoTitle: { fontSize: 13, fontWeight: '600', color: '#37474F' },
+  logoAction: { fontSize: 13, color: '#2E7D32', fontWeight: '600', marginTop: 3 },
   input: { borderWidth: 1.5, borderColor: '#CFD8DC', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: '#1A1A2E', backgroundColor: '#FAFAFA' },
   inputErr: { borderColor: '#FF3B30' },
   err: { fontSize: 12, color: '#FF3B30', marginTop: 3 },

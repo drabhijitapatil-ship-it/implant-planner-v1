@@ -128,13 +128,13 @@ const computePhase4 = (p: any): PhaseStatus => {
   return { state: 'in_progress', pct: 50 + Math.round((done / checks.length) * 50), sectionsLeft: checks.length - done, elapsedDays: daysBetween(p?.phase4_step1_approved_at) };
 };
 
-const STATE_META: Record<PhaseStatus['state'], { icon: string; label: string; bg: string; fill: string; iconColor: string; textColor: string }> = {
-  done:        { icon: 'checkmark-circle', label: 'Done',          bg: '#E8F5E9', fill: '#43A047', iconColor: '#2E7D32', textColor: '#1B5E20' },
-  review:      { icon: 'paper-plane',      label: 'Awaiting approval', bg: '#E3F2FD', fill: '#1565C0', iconColor: '#1565C0', textColor: '#0D47A1' },
-  in_progress: { icon: 'pulse',            label: 'In progress',   bg: '#FFF8E1', fill: '#F9A825', iconColor: '#F57F17', textColor: '#E65100' },
-  rejected:    { icon: 'alert-circle',     label: 'Needs rework',  bg: '#FFEBEE', fill: '#E53935', iconColor: '#C62828', textColor: '#B71C1C' },
-  locked:      { icon: 'lock-closed',      label: 'Locked',        bg: '#F5F7FA', fill: '#CFD8DC', iconColor: '#90A4AE', textColor: '#90A4AE' },
-  completed:   { icon: 'trophy',           label: 'Complete',      bg: '#E8F5E9', fill: '#43A047', iconColor: '#2E7D32', textColor: '#1B5E20' },
+const STATE_META: Record<PhaseStatus['state'], { icon: string; label: string; bg: string; border: string; fill: string; iconColor: string; textColor: string; badgeBg: string; badgeText: string }> = {
+  done:        { icon: 'checkmark-circle', label: 'Done',              bg: '#F0FDF4', border: '#DCFCE7', fill: '#15803D', iconColor: '#15803D', textColor: '#166534', badgeBg: '#DCFCE7', badgeText: '#15803D' },
+  review:      { icon: 'paper-plane',      label: 'Awaiting approval', bg: '#EFF6FF', border: '#DBEAFE', fill: '#1D4ED8', iconColor: '#1D4ED8', textColor: '#1E40AF', badgeBg: '#DBEAFE', badgeText: '#1D4ED8' },
+  in_progress: { icon: 'pulse',            label: 'In progress',   bg: '#FFF8E1', border: '#FEF3C7', fill: '#EA580C', iconColor: '#EA580C', textColor: '#C2410C', badgeBg: '#FFE0B2', badgeText: '#EA580C' },
+  rejected:    { icon: 'alert-circle',     label: 'Needs rework',  bg: '#FEF2F2', border: '#FEE2E2', fill: '#DC2626', iconColor: '#DC2626', textColor: '#991B1B', badgeBg: '#FEE2E2', badgeText: '#DC2626' },
+  locked:      { icon: 'lock-closed',      label: 'Locked',        bg: '#F8FAFC', border: '#F1F5F9', fill: '#E2E8F0', iconColor: '#64748B', textColor: '#64748B', badgeBg: '#E2E8F0', badgeText: '#64748B' },
+  completed:   { icon: 'trophy',           label: 'Complete',      bg: '#F0FDF4', border: '#DCFCE7', fill: '#15803D', iconColor: '#15803D', textColor: '#166534', badgeBg: '#DCFCE7', badgeText: '#15803D' },
 };
 
 export default function CaseSubmissionStatus({ procedure, user, compact = false }: Props) {
@@ -205,11 +205,13 @@ export default function CaseSubmissionStatus({ procedure, user, compact = false 
               key={idx}
               activeOpacity={!compact && (ps.state === 'in_progress' || ps.state === 'rejected') ? 0.7 : 0.9}
               onPress={() => onCellPress(idx, ps)}
-              style={[s.cell, compact && s.cellCompact, { backgroundColor: meta.bg }]}
+              style={[s.cell, compact && s.cellCompact, { backgroundColor: meta.bg, borderColor: meta.border }]}
               testID={`case-status-phase-${idx + 1}`}
             >
               <View style={s.cellHead}>
-                <Text style={[s.phaseLabel, compact && s.phaseLabelCompact, { color: meta.textColor }]}>P{idx + 1}</Text>
+                <View style={[s.phaseBadge, compact && s.phaseBadgeCompact, { backgroundColor: meta.badgeBg }]}>
+                  <Text style={[s.phaseLabel, compact && s.phaseLabelCompact, { color: meta.badgeText }]}>P{idx + 1}</Text>
+                </View>
                 <Ionicons name={meta.icon as any} size={compact ? 14 : 18} color={meta.iconColor} />
               </View>
               <Text style={[s.stateLabel, compact && s.stateLabelCompact, { color: meta.textColor }]} numberOfLines={1}>{labelText}</Text>
@@ -236,15 +238,17 @@ const s = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   title: { fontSize: 14, fontWeight: '700', color: '#0D47A1', letterSpacing: 0.2 },
   count: { fontSize: 13, fontWeight: '700', color: '#1565C0' },
-  cell: { minWidth: 132, flex: 1, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10 },
-  cellCompact: { minWidth: 88, paddingHorizontal: 8, paddingVertical: 6, borderRadius: 8 },
-  cellHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  cell: { minWidth: 132, flex: 1, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1 },
+  cellCompact: { minWidth: 88, paddingHorizontal: 8, paddingVertical: 8, borderRadius: 12, borderWidth: 1 },
+  cellHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  phaseBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  phaseBadgeCompact: { paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 },
   phaseLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
   phaseLabelCompact: { fontSize: 10 },
   stateLabel: { fontSize: 12, fontWeight: '600', marginBottom: 6 },
   stateLabelCompact: { fontSize: 10, marginBottom: 4 },
-  track: { height: 4, backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: 2, overflow: 'hidden' },
-  fill: { height: 4, borderRadius: 2 },
+  track: { height: 6, backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: 3, overflow: 'hidden' },
+  fill: { height: 6, borderRadius: 3 },
   elapsed: { marginTop: 4, fontSize: 10, fontWeight: '700', color: '#607D8B', textAlign: 'right' },
   nextUp: { marginTop: 10, fontSize: 12, fontStyle: 'italic', color: '#546E7A' },
 });

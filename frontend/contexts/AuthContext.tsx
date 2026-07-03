@@ -11,6 +11,7 @@ interface User {
   role: string;
   org_id?: string | null;
   org_type?: 'college' | 'clinic' | null;
+  org_name?: string | null;
   profile_photo?: string | null;
   /** ISO timestamp set when the user first dismisses the onboarding + workflow
    *  help. Null/undefined means they haven't seen it → frontend routes them

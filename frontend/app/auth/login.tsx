@@ -335,13 +335,13 @@ export default function LoginScreen() {
                 {passwordError && (
                   <Text style={styles.fieldErrorText}>{passwordError}</Text>
                 )}
-{/* 
                 <TouchableOpacity
                   style={styles.forgotBtn}
+                  onPress={() => router.push('/auth/forgot-password')}
                   data-testid="forgot-password-link"
                 >
                   <Text style={styles.forgotText}>Forgot Password?</Text>
-                </TouchableOpacity> */}
+                </TouchableOpacity>
 
                 <Animated.View
                   style={{ transform: [{ scale: buttonScale }], marginTop: 12 }}

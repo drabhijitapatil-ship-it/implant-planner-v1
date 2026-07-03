@@ -70,6 +70,9 @@ function Header({ user, router }: any) {
       <View style={{ flex: 1 }}>
         <Text style={s.greeting}>Welcome back,</Text>
         <Text style={s.userName} data-testid="dashboard-user-name">{user?.name}</Text>
+        {user?.org_name ? (
+          <Text style={s.orgName} numberOfLines={1} data-testid="dashboard-org-name">{user.org_name}</Text>
+        ) : null}
         <Text style={s.roleTag}>{getRoleLabel(user?.role)}</Text>
         <WhatsNewBadge />
       </View>
@@ -929,6 +932,7 @@ const s = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 6 },
   greeting: { fontSize: 13, color: '#90A4AE', fontWeight: '500' },
   userName: { fontSize: 22, fontWeight: '700', color: '#1A1A1A', marginTop: 1 },
+  orgName: { fontSize: 13, color: '#1565C0', fontWeight: '600', marginTop: 2 },
   roleTag: { fontSize: 11, color: '#78909C', marginTop: 2, fontWeight: '500' },
   avatar: { width: 48, height: 48, borderRadius: 24, borderWidth: 2 },
   avatarFallback: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },

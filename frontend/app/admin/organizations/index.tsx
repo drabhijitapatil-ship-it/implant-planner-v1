@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl, TouchableOpacity,
+  View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl, TouchableOpacity, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +20,7 @@ type OrgDetail = {
   id: string;
   name: string;
   org_type: 'college' | 'clinic';
+  logo?: string | null;
   created_at: string | null;
   declared_num_users?: number;
   actual_user_count: number;
@@ -110,13 +111,17 @@ export default function OrganizationsScreen() {
       data-testid={`org-card-${item.id}`}
     >
       <View style={s.cardTop}>
-        <View style={[s.typeIconWrap, { backgroundColor: item.org_type === 'clinic' ? '#E8F5E9' : '#E3F2FD' }]}>
-          <Ionicons
-            name={item.org_type === 'clinic' ? 'medkit' : 'school'}
-            size={20}
-            color={item.org_type === 'clinic' ? '#2E7D32' : '#1565C0'}
-          />
-        </View>
+        {item.logo ? (
+          <Image source={{ uri: item.logo }} style={s.typeIconWrap} />
+        ) : (
+          <View style={[s.typeIconWrap, { backgroundColor: item.org_type === 'clinic' ? '#E8F5E9' : '#E3F2FD' }]}>
+            <Ionicons
+              name={item.org_type === 'clinic' ? 'medkit' : 'school'}
+              size={20}
+              color={item.org_type === 'clinic' ? '#2E7D32' : '#1565C0'}
+            />
+          </View>
+        )}
         <View style={{ flex: 1 }}>
           <Text style={s.orgName} numberOfLines={2}>{item.name}</Text>
           <View style={[s.typeTag, { backgroundColor: item.org_type === 'clinic' ? '#E8F5E9' : '#E3F2FD' }]}>
