@@ -1,0 +1,173 @@
+{
+  "project": "Implanr Marketing Website",
+  "domain": "implanr.com",
+  "contact": "info@implanr.com",
+  "theme": "LIGHT",
+  "archetype": "1_ORGANIC_AND_EARTHY",
+  "visual_mood": "Clinical calm",
+  "colors": {
+    "primary_navy": "#0A192F",
+    "surface_navy": "#112240",
+    "background_soft_white": "#F8FAFC",
+    "surface_pure_white": "#FFFFFF",
+    "accent_mint": "#14B8A6",
+    "accent_mint_light": "#CCFBF1",
+    "text_primary": "#0F172A",
+    "text_secondary": "#475569",
+    "border_neutral": "#E2E8F0",
+    "status_warning": "#F59E0B",
+    "status_error": "#EF4444"
+  },
+  "typography": {
+    "headings": {
+      "family": "Newsreader, serif",
+      "weights": [400, 500, 600],
+      "letter_spacing": "tracking-tight",
+      "usage": "Use for all H1, H2, and major blockquotes. Instills institutional authority and research-backed trust."
+    },
+    "body": {
+      "family": "Manrope, sans-serif",
+      "weights": [400, 500],
+      "letter_spacing": "tracking-normal",
+      "usage": "Use for all body copy, navigation, labels, and data points. Clean, highly legible medical UI feel."
+    }
+  },
+  "motion_and_interaction": [
+    "Staggered Hero Reveal: Content blocks fade in upwards. 0.1s delay between pre-title, H1, subhead, and CTA.",
+    "Scroll-linked Reveals: Feature sections fade from 0 to 1 opacity with slight upward Y-translation (framer-motion whileInView).",
+    "Magnetic CTAs: The primary 'Request a Demo' button subtly follows the cursor on hover to increase engagement.",
+    "Soft Parallax: Product screenshots in hero and feature sections have subtle mouse-linked parallax to simulate spatial depth.",
+    "Texture: Subtle grain/noise overlay (5% opacity) applied strictly to deep navy sections to avoid flat digital look."
+  ],
+  "illustration_and_media": {
+    "style": "Subtle line-drawn dental / tooth / implant icons. Avoid generic colorful vector art. Use monochrome wireframe-style mockups paired against full-color clinical app screenshots.",
+    "images": {
+      "hero_bg": {
+        "url": "https://images.unsplash.com/photo-1606811841689-23dfddce3e95?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDN8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBkZW50YWwlMjBjbGluaWMlMjBkb2N0b3IlMjBwYXRpZW50fGVufDB8fHx8MTc4MzA4Nzg5NHww&ixlib=rb-4.1.0&q=85",
+        "description": "Dentists viewing X-rays in a modern clinic. Use with a heavy white or mint gradient overlay to ensure text contrast."
+      },
+      "clinic_action": {
+        "url": "https://images.unsplash.com/photo-1667133295315-820bb6481730?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDN8MHwxfHNlYXJjaHwyfHxtb2Rlcm4lMjBkZW50YWwlMjBjbGluaWMlMjBkb2N0b3IlMjBwYXRpZW50fGVufDB8fHx8MTc4MzA4Nzg5NHww&ixlib=rb-4.1.0&q=85",
+        "description": "Dentist examining patient with scanner. Use in 'For Clinicians' section."
+      },
+      "university_logos": [
+        "https://images.unsplash.com/photo-1721441906254-b5d28d9114f4?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTJ8MHwxfHNlYXJjaHwxfHx1bml2ZXJzaXR5JTIwbG9nbyUyMG5ldXRyYWx8ZW58MHx8fHwxNzgzMDg3ODk5fDA&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1636720706064-cfcb6a9026b4?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTJ8MHwxfHNlYXJjaHwyfHx1bml2ZXJzaXR5JTIwbG9nbyUyMG5ldXRyYWx8ZW58MHx8fHwxNzgzMDg3ODk5fDA&ixlib=rb-4.1.0&q=85"
+      ],
+      "testimonials": {
+        "url": "https://images.unsplash.com/photo-1729162128021-f37dca3ff30d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1ODh8MHwxfHNlYXJjaHw0fHxwb3J0cmFpdCUyMHNtaWxpbmclMjBkb2N0b3IlMjBkZW50aXN0fGVufDB8fHx8MTc4MzA4NzkwN3ww&ixlib=rb-4.1.0&q=85",
+        "description": "Smiling clinician portrait for testimonial quote card."
+      }
+    }
+  },
+  "pages": {
+    "home": {
+      "order": 1,
+      "sections": [
+        "Hero: H1 + Subhead + Primary CTA. Parallax layout of 2-3 overlapping real app screenshots.",
+        "Trust Bar: 'Trusted by pioneering dental colleges' with greyscale university logos.",
+        "Role Routing (Sub-hero): 3 interactive cards (Dental School, Private Clinician, Student) - clean mint hover states.",
+        "Product Tour: Bento grid showcasing the 4-phase workflow (Planning -> Surgery -> Healing -> Prosthetic).",
+        "Testimonials: Single high-impact quote card with portrait.",
+        "Bottom CTA: Deep navy block, 'Modernize your implant workflow today.', Mint button."
+      ]
+    },
+    "features": {
+      "order": 2,
+      "sections": [
+        "Hero: Deep navy background, clinical interface mockups.",
+        "Clinical Decision Support: Visual diagram showing biological safety margins (bone width/height).",
+        "AI Explain: 2-column layout showing the 'Explain Recommendation' UI backed by institutional guidelines.",
+        "Implant Library: Minimalist grid of 30+ system icons/names.",
+        "Compliance & Roles: RBAC and PDF generation showcase."
+      ]
+    },
+    "for_schools": {
+      "order": 3,
+      "focus": "Institution-level pitch.",
+      "sections": [
+        "Hero: Academic focus, university clinic imagery.",
+        "Supervisor Oversight: Feature blocks on audit logs and student workflow approval.",
+        "Bulk Licensing: Clean pricing/demo table for departments."
+      ]
+    },
+    "for_clinicians": {
+      "order": 4,
+      "focus": "Private practice pitch.",
+      "sections": [
+        "Hero: Solo/group clinic efficiency.",
+        "iPad Native: High-res iPad mockup showing case management chair-side.",
+        "Patient Experience: Visuals of generated patient pre-op briefings and lab slips."
+      ]
+    },
+    "pricing": {
+      "order": 5,
+      "sections": [
+        "Pricing Grid: 3 tiers (Student, Clinic, Institution).",
+        "Contact CTA: All tiers route to 'Contact for Pricing' / Book Demo form."
+      ]
+    },
+    "about": {
+      "order": 6,
+      "sections": [
+        "Mission Statement: Beautiful serif typography, large text.",
+        "The Problem: Why dental workflows need modernization.",
+        "Founder Story: Placeholder image and text block."
+      ]
+    },
+    "security_and_compliance": {
+      "order": 7,
+      "sections": [
+        "HIPAA Safeguards: Listicle/Grid detailing 15-min auto-logout, audit logs, screen-capture blocking.",
+        "Data Architecture: Secure AWS/MongoDB technical diagram."
+      ]
+    },
+    "blog": {
+      "order": 8,
+      "sections": [
+        "Index Grid: 3-column layout of articles (clinical guidelines, workflow research).",
+        "Newsletter Capture: 'Get product updates' inline form."
+      ]
+    },
+    "contact": {
+      "order": 9,
+      "sections": [
+        "Split Layout: Left side copy + trust signal, Right side form.",
+        "Form: Routes to info@implanr.com.",
+        "Alternative: Calendly embed placeholder."
+      ]
+    }
+  },
+  "wordpress_considerations": {
+    "deployment": "GoDaddy WordPress Hosting",
+    "menu_structure": {
+      "primary": ["Features", "For Schools", "For Clinicians", "Pricing"],
+      "utility": ["About", "Security", "Blog", "Contact"]
+    },
+    "block_usage": "Build utilizing custom HTML/Tailwind templates wrapped into WordPress block templates or shortcodes. Avoid generic Elementor/Divi templates. Keep the DOM shallow.",
+    "page_mapping": "Create discrete WP Pages for a-j. Blog requires WP archive/single templates."
+  },
+  "sample_copy": {
+    "hero": {
+      "pre_title": "FOR PROSTHODONTISTS & DENTAL SCHOOLS",
+      "h1": "Precision Implant Case Management, Perfected.",
+      "subhead": "The clinical standard for managing the 4-phase implant workflow. From planning to prosthetic delivery, Implanr protects your biological safety margins with institutional AI guidelines.",
+      "cta_primary": "Request a Demo",
+      "cta_secondary": "Explore Features"
+    },
+    "feature_block": {
+      "h2": "Clinical Decision Support.",
+      "body": "Instantly validate bone height and width requirements against 30+ institutional implant systems. Our engine automatically flags biological safety risks, bridge/cantilever limitations, and provides AI-backed explanations for every clinical recommendation."
+    }
+  },
+  "accessibility_and_testing": {
+    "contrast": "Ensure all mint text on white meets minimum 4.5:1 ratio (darken mint to teal if needed for text). All text on Navy must be soft white/pure white.",
+    "motion": "Respect prefers-reduced-motion CSS media query. Fallback to opacity fades without translation.",
+    "testing_attributes": "CRITICAL: All interactive elements (buttons, links, form inputs) MUST include a data-testid attribute in kebab-case, role-based format (e.g., data-testid='request-demo-button-hero')."
+  },
+  "states": {
+    "loading": "Clean, medical-style indeterminate linear progress bar at top of viewport using Accent Mint.",
+    "empty": "Subtle line-drawn tooth icon with soft grey text ('No cases found').",
+    "error_404": "Hero-style page. H1: 'Margin Not Found'. Subhead: 'We couldn't locate this page. Let's get you back to the clinic.' CTA: 'Return to Home'."
+  }
+}
