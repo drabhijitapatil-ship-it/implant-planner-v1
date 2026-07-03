@@ -42,7 +42,9 @@
       "Bash(ls -d venv .venv env 2>/dev/null; which python 2>/dev/null; ls /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/../*/bin/activate 2>/dev/null; find . -maxdepth 3 -name \"reportlab\" -type d 2>/dev/null | head)",
       "Read(//Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/*/bin/**)",
       "Bash(./venv/bin/python -c \"import reportlab, PyPDF2, PIL, pillow_heif; print\\('deps OK', PyPDF2.__version__\\)\")",
-      "Bash(./venv/bin/python \"/private/tmp/claude-501/-Users-prathmeshjadhav-Desktop-work-implant-planner-v1-main/eb0c9288-131f-4cf6-b64a-43a74aa1516f/scratchpad/test_pdf.py\")"
+      "Bash(./venv/bin/python \"/private/tmp/claude-501/-Users-prathmeshjadhav-Desktop-work-implant-planner-v1-main/eb0c9288-131f-4cf6-b64a-43a74aa1516f/scratchpad/test_pdf.py\")",
+      "Bash(/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/venv/bin/python \"/private/tmp/claude-501/-Users-prathmeshjadhav-Desktop-work-implant-planner-v1-main/eb0c9288-131f-4cf6-b64a-43a74aa1516f/scratchpad/test_pdf.py\")",
+      "Bash(/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/venv/bin/python -m py_compile /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py)"
     ],
     "additionalDirectories": [
       "/dev"

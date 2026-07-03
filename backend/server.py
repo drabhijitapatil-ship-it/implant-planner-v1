@@ -6152,25 +6152,31 @@ def _image_bytes_to_pdf_page(img_bytes: bytes, caption: str = "") -> bytes:
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.utils import ImageReader
     from reportlab.pdfgen import canvas as _canvas
-    from PIL import Image as _PILImage
+    from PIL import Image as _PILImage, ImageOps as _ImageOps
     buf = io.BytesIO()
     c = _canvas.Canvas(buf, pagesize=A4)
     pw, ph = A4
     margin = 28
     try:
         img = _PILImage.open(io.BytesIO(img_bytes))
-        if img.mode not in ("RGB", "L"):
-            img = img.convert("RGB")
+        img.load()
+        # Honour EXIF orientation, then normalise to a clean RGB PNG so reportlab
+        # never has to decode an exotic mode (CMYK / P / 16-bit / progressive) itself.
+        img = _ImageOps.exif_transpose(img)
+        img = img.convert("RGB")
+        clean = io.BytesIO()
+        img.save(clean, format="PNG")
+        clean.seek(0)
         iw, ih = img.size
         avail_w, avail_h = pw - 2 * margin, ph - 2 * margin - 24
         scale = min(avail_w / iw, avail_h / ih)
         dw, dh = iw * scale, ih * scale
         x = (pw - dw) / 2
         y = (ph - dh) / 2 + 12
-        c.drawImage(ImageReader(img), x, y, width=dw, height=dh,
+        c.drawImage(ImageReader(clean), x, y, width=dw, height=dh,
                     preserveAspectRatio=True, anchor='c')
     except Exception as exc:
-        logging.warning("CBCT image->pdf failed: %s", exc)
+        logging.warning("CBCT image->pdf failed (%s): %s", caption or "?", exc)
         c.setFont("Helvetica", 12)
         c.drawCentredString(pw / 2, ph / 2, "Image could not be rendered")
     if caption:
@@ -6229,10 +6235,18 @@ async def _build_cbct_combined_pdf(proc: dict) -> bytes:
         if not path.exists():
             _append(_placeholder_pdf_page(orig, "File missing on server"))
             continue
-        is_heic = ct in ("image/heic", "image/heif") or low.endswith((".heic", ".heif"))
-        is_image = ct.startswith("image/") and not is_heic
-        is_pdf = "pdf" in ct or low.endswith(".pdf")
-        is_dicom = "dicom" in ct or low.endswith((".dcm", ".dicom"))
+        orig_low = (orig or "").lower()
+        # Content-type from mobile uploads is unreliable (often octet-stream/empty),
+        # so classify by file extension too — the stored filename always keeps its ext.
+        def _ext(*exts):
+            return low.endswith(exts) or orig_low.endswith(exts)
+        is_heic = ct in ("image/heic", "image/heif") or _ext(".heic", ".heif")
+        is_pdf = "pdf" in ct or _ext(".pdf")
+        is_dicom = "dicom" in ct or _ext(".dcm", ".dicom")
+        is_image = (
+            ct.startswith("image/")
+            or _ext(".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tif", ".tiff")
+        ) and not is_heic
         try:
             if is_pdf:
                 for p in PdfReader(str(path)).pages:
@@ -6245,7 +6259,13 @@ async def _build_cbct_combined_pdf(proc: dict) -> bytes:
             elif is_dicom:
                 _append(_placeholder_pdf_page(orig, "DICOM volume — open in the CBCT gallery viewer"))
             else:
-                _append(_placeholder_pdf_page(orig, ct or "unknown file type"))
+                # Unknown/misreported type — last-ditch: try to render it as an image.
+                try:
+                    from PIL import Image as _PILProbe
+                    _PILProbe.open(io.BytesIO(path.read_bytes())).verify()
+                    _append(_image_bytes_to_pdf_page(path.read_bytes(), orig))
+                except Exception:
+                    _append(_placeholder_pdf_page(orig, ct or "unknown file type"))
         except Exception as exc:
             logging.warning("CBCT combine failed for %s: %s", filename, exc)
             _append(_placeholder_pdf_page(orig, "Could not be included"))

@@ -18,6 +18,7 @@ function resolveUrl(url: string): string {
   return url;
 }
 
+// const _rawUrl: string = "http://localhost:8001";
 const _rawUrl: string =
   process.env.EXPO_PUBLIC_BACKEND_URL ||
   Constants.expoConfig?.extra?.backendUrl ||
