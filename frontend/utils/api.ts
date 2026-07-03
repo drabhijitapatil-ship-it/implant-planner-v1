@@ -52,6 +52,26 @@ export async function getAuthFileUrl(filename: string): Promise<string> {
   return `${baseUrl}/uploads/${filename}${token ? `?token=${token}` : ''}`;
 }
 
+// CBCT files: mint one procedure-scoped token (same mechanism as the printed-PDF
+// QR code) and serve every file through the public, path-token route
+// /cbct/file/<token>/<filename>. No auth header, no JWT in the URL — the token is
+// verified server-side and only grants read access to that procedure's CBCT files.
+export async function mintCbctToken(procedureId: string): Promise<string> {
+  const { data } = await api.post(`/procedures/${procedureId}/cbct-qr-token`);
+  return data.token as string;
+}
+
+// Raw bytes (inline) — used for in-app <Image> thumbnails.
+export function cbctFileUrl(token: string, filename: string): string {
+  return `${BACKEND_URL}/cbct/file/${token}/${encodeURIComponent(filename)}`;
+}
+
+// Browser viewer page: previews the file (image/PDF) with a Download button.
+// Used by the 'View' button so Chrome shows a preview instead of a blank download.
+export function cbctViewUrl(token: string, filename: string): string {
+  return `${BACKEND_URL}/cbct/view/${token}/${encodeURIComponent(filename)}`;
+}
+
 // Preferred: build a file URL backed by a short-lived, single-file token (not the
 // full access JWT). The mint call goes through axios (Authorization header, auto
 // -refreshed), and only the scoped token lands in the URL — so a leaked link

@@ -6176,10 +6176,30 @@ async def cbct_public_viewer(token: str):
     return HTMLResponse(html)
 
 
+_EXT_MIME = {
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp",
+    ".tif": "image/tiff", ".tiff": "image/tiff", ".pdf": "application/pdf",
+    ".heic": "image/heic", ".heif": "image/heif",
+}
+
+
+def _cbct_content_type(entry: dict, filename: str) -> str:
+    """Best-effort MIME: trust a real content_type, else infer from the extension.
+    Mobile uploads frequently send octet-stream/empty, which makes browsers
+    download instead of previewing — inferring from the ext fixes inline preview."""
+    ct = (entry.get("content_type") or "").lower()
+    if ct and ct != "application/octet-stream":
+        return ct
+    ext = os.path.splitext(filename.lower())[1]
+    return _EXT_MIME.get(ext, "application/octet-stream")
+
+
 @app.get("/cbct/file/{token}/{filename}")
-async def cbct_public_file(token: str, filename: str):
+async def cbct_public_file(token: str, filename: str, download: Optional[str] = Query(None)):
     """Stream a single CBCT file once token is verified. Auto-converts HEIC to JPEG
-    for browsers that can't render HEIC natively (non-Safari on non-iOS)."""
+    for browsers that can't render HEIC natively (non-Safari on non-iOS).
+    Pass ?download=1 to force a download (attachment) instead of inline preview."""
     procedure_id = _verify_cbct_token(token)
     if not procedure_id:
         raise HTTPException(status_code=403, detail="Link expired or invalid")
@@ -6196,14 +6216,84 @@ async def cbct_public_file(token: str, filename: str):
     path = UPLOADS_DIR / filename
     if not path.exists():
         raise HTTPException(status_code=404, detail="File not found")
-    content_type = (entry.get("content_type") or "application/octet-stream").lower()
+    content_type = _cbct_content_type(entry, filename)
+    orig_name = entry.get("original_name") or filename
     # HEIC → JPEG auto-conversion (non-Safari browsers can't render HEIC)
     if content_type in ("image/heic", "image/heif") or filename.lower().endswith((".heic", ".heif")):
         converted = _maybe_convert_heic_to_jpeg(path)
         if converted:
-            return Response(content=converted, media_type="image/jpeg")
-    with open(path, "rb") as fh:
-        return Response(content=fh.read(), media_type=content_type)
+            content_type = "image/jpeg"
+            body = converted
+            orig_name = os.path.splitext(orig_name)[0] + ".jpg"
+        else:
+            body = path.read_bytes()
+    else:
+        body = path.read_bytes()
+    disp_type = "attachment" if download else "inline"
+    headers = {"Content-Disposition": f'{disp_type}; filename="{orig_name}"'}
+    return Response(content=body, media_type=content_type, headers=headers)
+
+
+@app.get("/cbct/view/{token}/{filename}", response_class=HTMLResponse)
+async def cbct_public_single_viewer(token: str, filename: str):
+    """Single-file preview page opened in the browser: shows the image/PDF inline
+    with a Download button. Reached from the in-app CBCT 'View' button."""
+    procedure_id = _verify_cbct_token(token)
+    if not procedure_id:
+        return HTMLResponse(
+            "<html><body style='font-family:system-ui;text-align:center;padding:40px'>"
+            "<h2>Link expired or invalid</h2></body></html>", status_code=403,
+        )
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        return HTMLResponse("Procedure not found", status_code=404)
+    files = await _list_cbct_files(proc)
+    entry = next((f for f in files if f["filename"] == filename), None)
+    if not entry:
+        return HTMLResponse("File not associated with this procedure", status_code=404)
+    ct = _cbct_content_type(entry, filename)
+    if filename.lower().endswith((".heic", ".heif")):
+        ct = "image/jpeg"  # served converted
+    orig = entry.get("original_name") or filename
+    raw = f"/cbct/file/{token}/{filename}"
+    dl = f"{raw}?download=1"
+    if ct.startswith("image/"):
+        preview = f"<img src='{raw}' alt='{orig}'/>"
+    elif "pdf" in ct:
+        preview = f"<iframe src='{raw}' title='{orig}'></iframe>"
+    else:
+        preview = "<div class='fallback'><span class='icon'>📁</span><p>Preview not available for this file type.</p></div>"
+    html = f"""<!doctype html>
+<html><head><meta charset='utf-8'>
+<meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>{orig}</title>
+<style>
+ * {{ box-sizing:border-box; }}
+ body {{ font-family:-apple-system,system-ui,sans-serif; margin:0; background:#0D1B2A; color:#E0E7EE;
+        min-height:100vh; display:flex; flex-direction:column; }}
+ header {{ background:#1565C0; color:#FFF; padding:12px 16px; display:flex; align-items:center;
+          justify-content:space-between; gap:12px; position:sticky; top:0; }}
+ header .name {{ font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
+ .btn {{ display:inline-flex; align-items:center; gap:6px; background:#4CAF50; color:#FFF;
+        text-decoration:none; padding:9px 16px; border-radius:8px; font-size:14px; font-weight:700; white-space:nowrap; }}
+ .btn:active {{ opacity:0.85; }}
+ .stage {{ flex:1; display:flex; align-items:center; justify-content:center; padding:12px; overflow:auto; }}
+ .stage img {{ max-width:100%; max-height:88vh; border-radius:8px; }}
+ .stage iframe {{ width:100%; height:88vh; border:0; border-radius:8px; background:#fff; }}
+ .fallback {{ text-align:center; opacity:0.8; }}
+ .fallback .icon {{ font-size:56px; }}
+</style></head>
+<body>
+  <header>
+    <span class='name'>{orig}</span>
+    <a class='btn' href='{dl}' download>⬇ Download</a>
+  </header>
+  <div class='stage'>{preview}</div>
+</body></html>"""
+    return HTMLResponse(html)
 
 
 # ── Combined CBCT PDF (all uploaded files merged into one PDF) ───────

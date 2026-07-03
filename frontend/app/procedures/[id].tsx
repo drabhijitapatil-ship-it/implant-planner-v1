@@ -18,7 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import api, { getAuthFileUrl, mintFileToken, getToken } from '../../utils/api';
+import api, { getAuthFileUrl, mintCbctToken, cbctFileUrl, cbctViewUrl, getToken } from '../../utils/api';
 import { CaramesSeverityStrip } from '../../components/AtrophyClassificationChip';
 import { useAuth } from '../../contexts/AuthContext';
 import { showUploadPicker } from '../../utils/uploadPicker';
@@ -248,6 +248,7 @@ export default function ProcedureDetailScreen() {
   const [labSlipNote, setLabSlipNote] = useState('');
   const [approvalComment, setApprovalComment] = useState('');
   const [authToken, setAuthToken] = useState('');
+  const [cbctToken, setCbctToken] = useState('');
   const [smartPlannerReport, setSmartPlannerReport] = useState<any>(null);
   const [smartPlannerLoading, setSmartPlannerLoading] = useState(false);
   const [showSmartPlanner, setShowSmartPlanner] = useState(false);
@@ -361,6 +362,15 @@ export default function ProcedureDetailScreen() {
   // All InfoRow components automatically show pencil icons in edit mode via EditContext
 
   useEffect(() => { getToken('access_token').then(t => setAuthToken(t || '')); }, []);
+
+  // Mint one procedure-scoped CBCT token (QR-code mechanism) so thumbnails and the
+  // View buttons load via the public /cbct/file route — no auth header, no JWT in URL.
+  useEffect(() => {
+    const hasCbct = (procedure?.cbct_files?.length > 0) || !!procedure?.cbct_file;
+    if (hasCbct && id) {
+      mintCbctToken(id as string).then(setCbctToken).catch(() => {});
+    }
+  }, [procedure?.cbct_files, procedure?.cbct_file, id]);
 
   useEffect(() => {
     loadProcedure();
@@ -2299,12 +2309,11 @@ export default function ProcedureDetailScreen() {
             <Text style={styles.sectionTitle}>CBCT Reports</Text>
             {procedure.cbct_files?.length > 0 ? (
               procedure.cbct_files.map((f: any, idx: number) => {
-                const baseUrl = api.defaults.baseURL || '';
-                const fileUrl = `${baseUrl}/uploads/${f.filename}?token=${authToken}`;
+                const fileUrl = cbctToken ? cbctFileUrl(cbctToken, f.filename) : '';
                 const isImage = f.filename?.match(/\.(png|jpg|jpeg)$/i);
                 return (
                   <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 10, backgroundColor: '#E3F2FD', padding: 8, borderRadius: 10 }} data-testid={`cbct-thumb-${idx}`}>
-                    {isImage ? (
+                    {isImage && fileUrl ? (
                       <Image source={{ uri: fileUrl }} style={{ width: 50, height: 50, borderRadius: 8, borderWidth: 1, borderColor: '#90CAF9' }} resizeMode="cover" />
                     ) : (
                       <View style={{ width: 50, height: 50, borderRadius: 8, backgroundColor: '#BBDEFB', alignItems: 'center', justifyContent: 'center' }}>
@@ -2319,8 +2328,9 @@ export default function ProcedureDetailScreen() {
                       style={{ backgroundColor: '#4CAF50', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}
                       onPress={async () => {
                         try {
-                          const fileUrl = await mintFileToken(f.filename);
-                          await Linking.openURL(fileUrl);
+                          const t = cbctToken || await mintCbctToken(id as string);
+                          if (!cbctToken) setCbctToken(t);
+                          await Linking.openURL(cbctViewUrl(t, f.filename));
                         } catch {
                           Alert.alert('Error', 'Could not open file');
                         }
@@ -2338,8 +2348,9 @@ export default function ProcedureDetailScreen() {
                 style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#4CAF50', borderRadius: 10, paddingVertical: 14, paddingHorizontal: 20 }}
                 onPress={async () => {
                   try {
-                    const fileUrl = await mintFileToken(procedure.cbct_file);
-                    await Linking.openURL(fileUrl);
+                    const t = cbctToken || await mintCbctToken(id as string);
+                    if (!cbctToken) setCbctToken(t);
+                    await Linking.openURL(cbctViewUrl(t, procedure.cbct_file));
                   } catch (e) {
                     Alert.alert('Error', 'Could not open file');
                   }
