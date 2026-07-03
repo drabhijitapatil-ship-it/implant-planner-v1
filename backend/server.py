@@ -2082,13 +2082,17 @@ async def forgot_password(request: Request, payload: ForgotPasswordRequest):
             }},
             upsert=True,
         )
-        await _send_otp_email(
+        sent = await _send_otp_email(
             email, otp,
             heading="Reset your password",
             intro="Enter this code to set a new password for your Implanr account.",
             footer_note="If you didn't request this, you can safely ignore this email — your password won't be changed.",
             log_tag="password_reset",
         )
+        if not sent:
+            logging.error("[password_reset] OTP generated but email send FAILED for %s — check SMTP env/deliverability", email)
+    else:
+        logging.info("[password_reset] No account for %s — no email sent (enumeration-safe)", email)
 
     return {"message": "If that email is registered, a reset code has been sent."}
 

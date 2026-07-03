@@ -19,6 +19,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { usePushNotifications } from '../../utils/usePushNotifications';
 import ImplantIcon from '../../components/ImplantIcon';
 import api from '../../utils/api';
+import LogoutConfirmModal from '../../components/LogoutConfirmModal';
 
 // ── Tile-Grid Menu ──────────────────────────────────────────
 // Tactile-feedback helper: silent on web (Haptics is a no-op), light tap on
@@ -381,6 +382,7 @@ export default function TabsLayout() {
   const router = useRouter();
   usePushNotifications();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   // iter-266: red-dot count of cases waiting for THIS user's faculty
   // approval (Supervisor / Implant In-Charge / Administrator). Rendered
@@ -470,17 +472,7 @@ export default function TabsLayout() {
   };
 
   const handleLogout = () => {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Logout',
-        style: 'destructive',
-        onPress: async () => {
-          await logout();
-          router.replace('/auth/login');
-        },
-      },
-    ]);
+    setShowLogoutModal(true);
   };
 
   // Header menu button (hamburger) — red dot appears when there are unseen
@@ -645,6 +637,16 @@ export default function TabsLayout() {
           }}
         />
       </Tabs>
+
+      <LogoutConfirmModal
+        visible={showLogoutModal}
+        onClose={() => setShowLogoutModal(false)}
+        onConfirm={async () => {
+          setShowLogoutModal(false);
+          await logout();
+          router.replace('/auth/login');
+        }}
+      />
     </>
   );
 }

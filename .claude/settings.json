@@ -46,7 +46,8 @@
       "Bash(/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/venv/bin/python \"/private/tmp/claude-501/-Users-prathmeshjadhav-Desktop-work-implant-planner-v1-main/eb0c9288-131f-4cf6-b64a-43a74aa1516f/scratchpad/test_pdf.py\")",
       "Bash(/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/venv/bin/python -m py_compile /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py)",
       "Bash(/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/venv/bin/python \"/private/tmp/claude-501/-Users-prathmeshjadhav-Desktop-work-implant-planner-v1-main/eb0c9288-131f-4cf6-b64a-43a74aa1516f/scratchpad/test_filetoken.py\")",
-      "Bash(timeout 300 node_modules/.bin/tsc --noEmit -p tsconfig.json)"
+      "Bash(timeout 300 node_modules/.bin/tsc --noEmit -p tsconfig.json)",
+      "Bash(venv/bin/python -)"
     ],
     "additionalDirectories": [
       "/dev"

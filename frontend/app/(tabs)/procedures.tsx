@@ -589,7 +589,7 @@ function DefaultProceduresScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={["bottom"]}>
+    <View style={styles.container}>
       <View style={styles.filterContainer}>
         {filterButtons.map((btn) => {
           const isActive = filter === btn.key;
@@ -697,7 +697,7 @@ function DefaultProceduresScreen() {
           }}
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 

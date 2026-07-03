@@ -18,6 +18,8 @@ import { Ionicons } from '@expo/vector-icons';
 import BackToDashboard from '../../components/BackToDashboard';
 import * as ImagePicker from 'expo-image-picker';
 import api from '../../utils/api';
+import LogoutConfirmModal from '../../components/LogoutConfirmModal';
+import PhotoOptionsModal from '../../components/PhotoOptionsModal';
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
@@ -27,6 +29,8 @@ export default function ProfileScreen() {
   const [uploading, setUploading] = useState(false);
   const [org, setOrg] = useState<any>(null);
   const [logoUploading, setLogoUploading] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
   const isIncharge = user?.role === 'implant_incharge';
 
   const fetchOrg = async () => {
@@ -125,17 +129,7 @@ export default function ProfileScreen() {
   };
 
   const handleLogout = () => {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Logout',
-        style: 'destructive',
-        onPress: async () => {
-          await logout();
-          router.replace('/auth/login');
-        },
-      },
-    ]);
+    setShowLogoutModal(true);
   };
 
   const handlePickImage = async () => {
@@ -230,15 +224,7 @@ export default function ProfileScreen() {
   };
 
   const showPhotoOptions = () => {
-    Alert.alert(
-      'Update Profile Photo',
-      'Choose an option',
-      [
-        { text: 'Take Photo', onPress: handleTakePhoto },
-        { text: 'Choose from Library', onPress: handlePickImage },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
+    setShowPhotoModal(true);
   };
 
   const getRoleLabel = (role: string) => {
@@ -280,8 +266,9 @@ export default function ProfileScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
-      <ScrollView>
+    <View style={styles.container}>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Header Block */}
         <View style={styles.profileHeader}>
           <TouchableOpacity 
             style={styles.avatarContainer} 
@@ -299,11 +286,11 @@ export default function ProfileScreen() {
               />
             ) : (
               <View style={styles.avatarPlaceholder}>
-                <Ionicons name="person" size={60} color="#999" />
+                <Ionicons name="person" size={54} color="#94A3B8" />
               </View>
             )}
             <View style={styles.cameraIconContainer}>
-              <Ionicons name="camera" size={20} color="#FFF" />
+              <Ionicons name="camera" size={16} color="#FFF" />
             </View>
           </TouchableOpacity>
           
@@ -313,171 +300,195 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* Section: Account Information */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account Information</Text>
           
-          <View style={styles.infoRow}>
-            <View style={styles.infoIcon}>
-              <Ionicons name="mail" size={20} color="#007AFF" />
+          <View style={styles.rowItem}>
+            <View style={[styles.iconBadge, { backgroundColor: '#EFF6FF' }]}>
+              <Ionicons name="mail" size={20} color="#1D4ED8" />
             </View>
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Email</Text>
-              <Text style={styles.infoValue}>{user?.email}</Text>
+            <View style={styles.rowContent}>
+              <Text style={styles.rowLabel}>Email</Text>
+              <Text style={styles.rowValue}>{user?.email}</Text>
             </View>
           </View>
 
-          <View style={styles.infoRow}>
-            <View style={styles.infoIcon}>
-              <Ionicons name="shield-checkmark" size={20} color="#007AFF" />
+          <View style={styles.rowItem}>
+            <View style={[styles.iconBadge, { backgroundColor: '#EEF2F6' }]}>
+              <Ionicons name="shield-checkmark" size={20} color="#475569" />
             </View>
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Role</Text>
-              <Text style={styles.infoValue}>{getRoleLabel(user?.role || '')}</Text>
+            <View style={styles.rowContent}>
+              <Text style={styles.rowLabel}>Role</Text>
+              <Text style={styles.rowValue}>{getRoleLabel(user?.role || '')}</Text>
             </View>
           </View>
 
           {org && (
-            <View style={styles.infoRow}>
-              <View style={styles.infoIcon}>
-                <Ionicons name="business" size={20} color="#007AFF" />
+            <View style={[styles.rowItem, styles.rowItemLast]}>
+              <View style={[styles.iconBadge, { backgroundColor: '#E0F2F1' }]}>
+                <Ionicons name="business" size={20} color="#00695C" />
               </View>
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Organization</Text>
-                <Text style={styles.infoValue}>{org.name}</Text>
+              <View style={styles.rowContent}>
+                <Text style={styles.rowLabel}>Organization</Text>
+                <Text style={styles.rowValue}>{org.name}</Text>
               </View>
               {org.logo ? (
-                <Image source={{ uri: org.logo }} style={{ width: 40, height: 40, borderRadius: 8 }} />
+                <Image source={{ uri: org.logo }} style={{ width: 36, height: 36, borderRadius: 8 }} />
               ) : null}
             </View>
           )}
         </View>
 
+        {/* Section: Profile Photo */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Profile Photo</Text>
           
-          <TouchableOpacity style={styles.photoButton} onPress={showPhotoOptions}>
-            <Ionicons name="image" size={24} color="#007AFF" />
+          <TouchableOpacity style={[styles.rowItem, styles.rowItemLast]} onPress={showPhotoOptions}>
+            <View style={[styles.iconBadge, { backgroundColor: '#E8F5E9' }]}>
+              <Ionicons name="image" size={20} color="#2E7D32" />
+            </View>
             <Text style={styles.photoButtonText}>Change Profile Photo</Text>
-            <Ionicons name="chevron-forward" size={20} color="#999" />
+            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
           </TouchableOpacity>
         </View>
 
+        {/* Section: Organization Logo (In-charge only) */}
         {isIncharge && org && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Organization Logo</Text>
-            <View style={{ alignItems: 'center', marginBottom: 12 }}>
+            <View style={styles.orgLogoContainer}>
               {org.logo ? (
-                <Image source={{ uri: org.logo }} style={{ width: 90, height: 90, borderRadius: 12, borderWidth: 1, borderColor: '#E0E0E0' }} />
+                <Image source={{ uri: org.logo }} style={styles.orgLogo} />
               ) : (
-                <View style={{ width: 90, height: 90, borderRadius: 12, backgroundColor: '#F0F0F0', alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name="business" size={36} color="#B0BEC5" />
+                <View style={styles.orgLogoPlaceholder}>
+                  <Ionicons name="business" size={32} color="#94A3B8" />
                 </View>
               )}
             </View>
-            <TouchableOpacity style={styles.photoButton} onPress={handlePickLogo} disabled={logoUploading} data-testid="change-org-logo-btn">
-              <Ionicons name="image" size={24} color="#007AFF" />
+            <TouchableOpacity style={[styles.rowItem, styles.rowItemLast]} onPress={handlePickLogo} disabled={logoUploading} data-testid="change-org-logo-btn">
+              <View style={[styles.iconBadge, { backgroundColor: '#E0F7FA' }]}>
+                <Ionicons name="image" size={20} color="#00838F" />
+              </View>
               <Text style={styles.photoButtonText}>{logoUploading ? 'Uploading…' : 'Change Organization Logo'}</Text>
-              {logoUploading ? <ActivityIndicator color="#007AFF" /> : <Ionicons name="chevron-forward" size={20} color="#999" />}
+              {logoUploading ? <ActivityIndicator size="small" color="#007AFF" /> : <Ionicons name="chevron-forward" size={18} color="#94A3B8" />}
             </TouchableOpacity>
           </View>
         )}
 
+        {/* Section: Security */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Security</Text>
 
-          <TouchableOpacity style={styles.photoButton} onPress={openPasswordModal} data-testid="change-password-btn">
-            <Ionicons name="key" size={24} color="#007AFF" />
+          <TouchableOpacity style={[styles.rowItem, styles.rowItemLast]} onPress={openPasswordModal} data-testid="change-password-btn">
+            <View style={[styles.iconBadge, { backgroundColor: '#FFF8E1' }]}>
+              <Ionicons name="key" size={20} color="#F57F17" />
+            </View>
             <Text style={styles.photoButtonText}>Change Password</Text>
-            <Ionicons name="chevron-forward" size={20} color="#999" />
+            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
           </TouchableOpacity>
         </View>
 
+        {/* Section: Help */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Help</Text>
           <TouchableOpacity
-            style={styles.legalRow}
+            style={styles.rowItem}
             onPress={() => router.push('/help-workflow?mode=review')}
             data-testid="link-how-it-works"
             testID="link-how-it-works"
           >
-            <Ionicons name="help-circle-outline" size={22} color="#1565C0" />
-            <Text style={styles.legalRowText}>How it works</Text>
-            <Ionicons name="chevron-forward" size={18} color="#999" />
+            <View style={[styles.iconBadge, { backgroundColor: '#E8EAF6' }]}>
+              <Ionicons name="help-circle" size={20} color="#3F51B5" />
+            </View>
+            <Text style={styles.photoButtonText}>How it works</Text>
+            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.legalRow}
+            style={[styles.rowItem, styles.rowItemLast]}
             onPress={() => router.push('/whatsnew?mode=history')}
             data-testid="link-whats-new"
             testID="link-whats-new"
           >
-            <Ionicons name="sparkles-outline" size={22} color="#FF8F00" />
-            <Text style={styles.legalRowText}>What's new</Text>
-            <Ionicons name="chevron-forward" size={18} color="#999" />
+            <View style={[styles.iconBadge, { backgroundColor: '#FFF3E0' }]}>
+              <Ionicons name="sparkles" size={20} color="#E65100" />
+            </View>
+            <Text style={styles.photoButtonText}>What's new</Text>
+            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
           </TouchableOpacity>
         </View>
 
-        {/* HIPAA — Compliance section. Only Implant In-Charge / Administrator
-            see this section. Everyone else has no render. */}
+        {/* Section: Compliance (Admins / Incharges) */}
         {(user?.role === 'implant_incharge' || user?.role === 'administrator' || user?.role === 'super_admin') && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Compliance</Text>
             <TouchableOpacity
-              style={styles.legalRow}
+              style={[styles.rowItem, styles.rowItemLast]}
               onPress={() => router.push('/admin/audit-log')}
               data-testid="link-audit-log"
               testID="link-audit-log"
             >
-              <Ionicons name="shield-outline" size={22} color="#1565C0" />
-              <Text style={styles.legalRowText}>Audit log</Text>
-              <Ionicons name="chevron-forward" size={18} color="#999" />
+              <View style={[styles.iconBadge, { backgroundColor: '#F1F8E9' }]}>
+                <Ionicons name="shield" size={20} color="#558B2F" />
+              </View>
+              <Text style={styles.photoButtonText}>Audit log</Text>
+              <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
             </TouchableOpacity>
           </View>
         )}
 
+        {/* Section: Learning (All except Nurse) */}
         {(user?.role || '').toLowerCase() !== 'nurse' && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Learning</Text>
             <TouchableOpacity
-              style={styles.legalRow}
+              style={[styles.rowItem, styles.rowItemLast]}
               onPress={() => router.push('/saved-tips' as any)}
               data-testid="link-saved-tips"
               testID="link-saved-tips"
             >
-              <Ionicons name="bookmark-outline" size={22} color="#1565C0" />
-              <Text style={styles.legalRowText}>Saved Smart Tips</Text>
-              <Ionicons name="chevron-forward" size={18} color="#999" />
+              <View style={[styles.iconBadge, { backgroundColor: '#FCE4EC' }]}>
+                <Ionicons name="bookmark" size={20} color="#C2185B" />
+              </View>
+              <Text style={styles.photoButtonText}>Saved Smart Tips</Text>
+              <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
             </TouchableOpacity>
           </View>
         )}
 
+        {/* Section: Legal */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Legal</Text>
           <TouchableOpacity
-            style={styles.legalRow}
+            style={styles.rowItem}
             onPress={() => router.push('/legal/privacy-policy')}
             data-testid="link-privacy-policy"
           >
-            <Ionicons name="shield-checkmark-outline" size={22} color="#1565C0" />
-            <Text style={styles.legalRowText}>Privacy Policy</Text>
-            <Ionicons name="chevron-forward" size={18} color="#999" />
+            <View style={[styles.iconBadge, { backgroundColor: '#ECEFF1' }]}>
+              <Ionicons name="shield-checkmark" size={20} color="#37474F" />
+            </View>
+            <Text style={styles.photoButtonText}>Privacy Policy</Text>
+            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.legalRow}
+            style={[styles.rowItem, styles.rowItemLast]}
             onPress={() => router.push('/legal/terms')}
             data-testid="link-terms"
           >
-            <Ionicons name="document-text-outline" size={22} color="#1565C0" />
-            <Text style={styles.legalRowText}>Terms of Service</Text>
-            <Ionicons name="chevron-forward" size={18} color="#999" />
+            <View style={[styles.iconBadge, { backgroundColor: '#ECEFF1' }]}>
+              <Ionicons name="document-text" size={20} color="#37474F" />
+            </View>
+            <Text style={styles.photoButtonText}>Terms of Service</Text>
+            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
           </TouchableOpacity>
           <View style={styles.legalFootnote}>
-            <Ionicons name="time-outline" size={12} color="#78909C" />
-            <Text style={styles.legalFootnoteText}>Auto-logout after 20 min of inactivity</Text>
+            <Ionicons name="time-outline" size={12} color="#94A3B8" />
+            <Text style={styles.legalFootnoteText}>Auto-logout after 15 min of inactivity</Text>
           </View>
         </View>
 
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Ionicons name="log-out" size={24} color="#FFF" />
+          <Ionicons name="log-out" size={20} color="#DC2626" />
           <Text style={styles.logoutButtonText}>Logout</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -489,7 +500,7 @@ export default function ProfileScreen() {
             <View style={pwStyles.header}>
               <Text style={pwStyles.title}>Change Password</Text>
               <TouchableOpacity onPress={() => setShowPasswordModal(false)} data-testid="close-password-modal">
-                <Ionicons name="close" size={24} color="#666" />
+                <Ionicons name="close" size={24} color="#64748B" />
               </TouchableOpacity>
             </View>
 
@@ -569,196 +580,237 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+
+      <LogoutConfirmModal 
+        visible={showLogoutModal} 
+        onClose={() => setShowLogoutModal(false)} 
+        onConfirm={async () => {
+          setShowLogoutModal(false);
+          await logout();
+          router.replace('/auth/login');
+        }}
+      />
+
+      <PhotoOptionsModal
+        visible={showPhotoModal}
+        onClose={() => setShowPhotoModal(false)}
+        onTakePhoto={handleTakePhoto}
+        onChooseLibrary={handlePickImage}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#F8FAFC',
   },
   profileHeader: {
     alignItems: 'center',
-    padding: 24,
-    backgroundColor: '#FFF',
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    paddingTop: 32,
+    paddingBottom: 28,
+    paddingHorizontal: 24,
+    backgroundColor: '#0B1930',
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
   },
   avatarContainer: {
     position: 'relative',
     marginBottom: 16,
   },
   avatarImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 4,
-    borderColor: '#007AFF',
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    borderWidth: 3,
+    borderColor: '#FFF',
   },
   avatarPlaceholder: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#E0E0E0',
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: '#334155',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 4,
-    borderColor: '#007AFF',
+    borderWidth: 3,
+    borderColor: '#FFF',
   },
   cameraIconContainer: {
     position: 'absolute',
     bottom: 0,
     right: 0,
     backgroundColor: '#007AFF',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 3,
-    borderColor: '#FFF',
+    borderColor: '#0B1930',
   },
   userName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1A1A1A',
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#FFF',
     marginBottom: 8,
   },
   roleBadge: {
-    paddingHorizontal: 16,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 5,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   roleText: {
     color: '#FFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
   },
   section: {
     backgroundColor: '#FFF',
-    margin: 16,
+    marginTop: 16,
+    marginHorizontal: 16,
     borderRadius: 16,
-    padding: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
     elevation: 2,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#666',
-    marginBottom: 16,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    marginTop: 12,
+    marginBottom: 8,
   },
-  infoRow: {
+  rowItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: '#F1F5F9',
   },
-  infoIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#E3F2FD',
-    justifyContent: 'center',
+  rowItemLast: {
+    borderBottomWidth: 0,
+  },
+  iconBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
     alignItems: 'center',
+    justifyContent: 'center',
     marginRight: 12,
   },
-  infoContent: {
+  rowContent: {
     flex: 1,
   },
-  infoLabel: {
-    fontSize: 12,
-    color: '#999',
+  rowLabel: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '500',
     marginBottom: 2,
   },
-  infoValue: {
-    fontSize: 16,
-    color: '#1A1A1A',
-  },
-  photoButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    gap: 12,
+  rowValue: {
+    fontSize: 14,
+    color: '#0F172A',
+    fontWeight: '600',
   },
   photoButtonText: {
     flex: 1,
-    fontSize: 16,
-    color: '#1A1A1A',
+    fontSize: 14,
+    color: '#0F172A',
+    fontWeight: '600',
+  },
+  orgLogoContainer: {
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    marginBottom: 4,
+  },
+  orgLogo: {
+    width: 80,
+    height: 80,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  orgLogoPlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#DC3545',
+    backgroundColor: '#FEF2F2',
     marginHorizontal: 16,
-    marginVertical: 24,
+    marginTop: 20,
+    marginBottom: 32,
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 16,
     gap: 8,
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
   },
   logoutButtonText: {
-    color: '#FFF',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  legalRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-    gap: 12,
-  },
-  legalRowText: {
-    flex: 1,
-    fontSize: 15,
-    color: '#1A1A1A',
-    fontWeight: '500',
+    color: '#DC2626',
+    fontSize: 16,
+    fontWeight: '700',
   },
   legalFootnote: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
-    paddingTop: 10,
+    paddingVertical: 12,
+    marginTop: 8,
   },
   legalFootnoteText: {
     fontSize: 11,
-    color: '#78909C',
+    color: '#94A3B8',
     fontStyle: 'italic',
   },
 });
 
 const pwStyles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  card: { backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '85%' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  title: { fontSize: 18, fontWeight: '700', color: '#1A1A1A' },
-  subtitle: { fontSize: 13, color: '#546E7A', marginBottom: 8, lineHeight: 19 },
+  overlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'flex-end' },
+  card: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '90%', shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.1, shadowRadius: 16, elevation: 16 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  title: { fontSize: 20, fontWeight: '700', color: '#0F172A' },
+  subtitle: { fontSize: 13, color: '#64748B', marginBottom: 12, lineHeight: 18 },
   sendingBox: { alignItems: 'center', paddingVertical: 40, gap: 12 },
-  sendingTxt: { fontSize: 14, color: '#546E7A', textAlign: 'center' },
-  label: { fontSize: 13, fontWeight: '600', color: '#37474F', marginBottom: 6, marginTop: 14 },
-  input: { borderWidth: 1.5, borderColor: '#CFD8DC', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: '#1A1A2E', backgroundColor: '#FAFAFA' },
+  sendingTxt: { fontSize: 14, color: '#64748B', textAlign: 'center' },
+  label: { fontSize: 12, fontWeight: '600', color: '#475569', marginBottom: 6, marginTop: 16, textTransform: 'uppercase', letterSpacing: 0.5 },
+  input: { borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: '#0F172A', backgroundColor: '#F8FAFC' },
   otpInput: { fontSize: 20, letterSpacing: 8, fontFamily: 'monospace', textAlign: 'center' },
   inputErr: { borderColor: '#FF3B30' },
   err: { fontSize: 12, color: '#FF3B30', marginTop: 3 },
-  pwRow: { borderWidth: 1.5, borderColor: '#CFD8DC', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 3, flexDirection: 'row', alignItems: 'center', backgroundColor: '#FAFAFA' },
-  pwInput: { flex: 1, fontSize: 15, color: '#1A1A2E', paddingVertical: 8 },
+  pwRow: { borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 3, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC' },
+  pwInput: { flex: 1, fontSize: 15, color: '#0F172A', paddingVertical: 8 },
   resendRow: { marginTop: 8, alignItems: 'flex-end' },
   resendTxt: { fontSize: 13, color: '#007AFF', fontWeight: '600' },
-  resendTxtDisabled: { color: '#90A4AE' },
-  submitBtn: { backgroundColor: '#007AFF', borderRadius: 12, paddingVertical: 15, alignItems: 'center', marginTop: 20, marginBottom: 8 },
+  resendTxtDisabled: { color: '#94A3B8' },
+  submitBtn: { backgroundColor: '#007AFF', borderRadius: 14, paddingVertical: 14, alignItems: 'center', marginTop: 24, marginBottom: 8 },
   btnDisabled: { opacity: 0.6 },
   submitTxt: { color: '#FFF', fontSize: 16, fontWeight: '700' },
 });

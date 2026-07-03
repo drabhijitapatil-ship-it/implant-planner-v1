@@ -5,13 +5,12 @@
  */
 import React, { useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import BackButton from '../components/BackButton';
 import { useAuth } from '../contexts/AuthContext';
-import api from '../utils/api';
 import {
   ONBOARDING_VERSION, activeGateFor,
 } from '../components/onboarding/content/onboardingContent';
@@ -26,13 +25,13 @@ type Step = {
 };
 
 const TONE_COLORS: Record<Step['tone'], { bg: string; stripe: string; fg: string }> = {
-  pre:      { bg: '#ECEFF1', stripe: '#78909C', fg: '#37474F' },
-  phase1:   { bg: '#E3F2FD', stripe: '#1565C0', fg: '#0D47A1' },
-  phase2:   { bg: '#E8F5E9', stripe: '#2E7D32', fg: '#1B5E20' },
-  phase3:   { bg: '#FFF3E0', stripe: '#EF6C00', fg: '#E65100' },
-  phase4:   { bg: '#F3E5F5', stripe: '#8E24AA', fg: '#6A1B9A' },
-  done:     { bg: '#E0F7FA', stripe: '#00838F', fg: '#006064' },
-  reviewer: { bg: '#FFFDE7', stripe: '#F9A825', fg: '#795548' },
+  pre:      { bg: '#F1F5F9', stripe: '#64748B', fg: '#0F172A' },
+  phase1:   { bg: '#EFF6FF', stripe: '#3B82F6', fg: '#1E3A8A' },
+  phase2:   { bg: '#ECFDF5', stripe: '#10B981', fg: '#064E3B' },
+  phase3:   { bg: '#FFFBEB', stripe: '#F59E0B', fg: '#78350F' },
+  phase4:   { bg: '#FAF5FF', stripe: '#A855F7', fg: '#581C87' },
+  done:     { bg: '#ECFEFF', stripe: '#06B6D4', fg: '#083344' },
+  reviewer: { bg: '#FEFCE8', stripe: '#EAB308', fg: '#713F12' },
 };
 
 const WORKFLOW: Record<string, { intro: string; steps: Step[] }> = {
@@ -98,7 +97,7 @@ const LEGEND_STATUSES: { code: string; label: string }[] = [
 export default function HelpWorkflowScreen() {
   const { user, refreshUser, ackWorkflow } = useAuth();
   const { mode } = useLocalSearchParams<{ mode?: string }>();
-  const isFirstRun = mode !== 'review'; // when opened from Profile, mode=review → no ack, no dashboard redirect
+  const isFirstRun = mode !== 'review';
   const [busy, setBusy] = useState(false);
 
   const content = useMemo(() => {
@@ -115,9 +114,6 @@ export default function HelpWorkflowScreen() {
     } catch {
       // Even if ack fails, don't trap the user — move on.
     }
-    // Note: we no longer auto-redirect to /whatsnew. New changelog entries
-    // are surfaced via the WhatsNewBadge on the dashboard, which is less
-    // intrusive and lets the user choose when to read them.
     router.replace('/(tabs)/dashboard');
   };
 
@@ -128,31 +124,43 @@ export default function HelpWorkflowScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} testID="help-workflow-screen">
+    <SafeAreaView style={styles.safe} testID="help-workflow-screen" edges={['top', 'bottom']}>
+      {/* Header Row */}
       <View style={styles.header}>
-        {!isFirstRun && (
-          <BackButton onPress={close} testID="workflow-close-btn" />
+        {!isFirstRun ? (
+          <TouchableOpacity style={styles.backBtn} onPress={close} testID="workflow-close-btn">
+            <Ionicons name="arrow-back" size={24} color="#0F172A" />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 24 }} />
         )}
         <Text style={styles.headerTitle}>How it works</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <Text style={styles.greeting} testID="workflow-greeting">
           {isFirstRun ? `Welcome, ${user?.name || ''}` : 'Your workflow'}
         </Text>
-        <Text style={styles.roleTag}>
-          Role: <Text style={styles.roleTagStrong}>{(user?.role || '').replace('_', ' ')}</Text>
-        </Text>
+        
+        {/* Role Tag Badge */}
+        <View style={styles.roleTagContainer}>
+          <Text style={styles.roleTagLabel}>ROLE</Text>
+          <View style={styles.roleTagValueBadge}>
+            <Text style={styles.roleTagStrong}>{(user?.role || '').replace('_', ' ')}</Text>
+          </View>
+        </View>
+
         <Text style={styles.intro}>{content.intro}</Text>
 
+        {/* Steps flowchart */}
         {content.steps.map((step, i) => {
           const c = TONE_COLORS[step.tone];
           return (
             <View key={i}>
               <View style={[styles.stepCard, { backgroundColor: c.bg, borderLeftColor: c.stripe }]} testID={`workflow-step-${i}`}>
                 <View style={styles.stepHeader}>
-                  <Ionicons name={step.icon} size={22} color={c.stripe} />
+                  <Ionicons name={step.icon as any} size={20} color={c.stripe} />
                   <Text style={[styles.stepTitle, { color: c.fg }]}>{step.title}</Text>
                 </View>
                 {step.bullets.map((b, j) => (
@@ -164,24 +172,26 @@ export default function HelpWorkflowScreen() {
               </View>
               {i < content.steps.length - 1 && (
                 <View style={styles.arrowCol}>
-                  <Ionicons name="chevron-down" size={18} color="#CFD8DC" />
+                  <Ionicons name="chevron-down" size={18} color="#94A3B8" />
                 </View>
               )}
             </View>
           );
         })}
 
-        <Text style={styles.sectionTitle}>Status legend</Text>
+        <Text style={styles.sectionTitle}>Status Legend</Text>
         <View style={styles.legend}>
           {LEGEND_STATUSES.map((l) => (
             <View key={l.code} style={styles.legendRow}>
-              <Text style={styles.legendCode}>{l.code}</Text>
+              <View style={styles.legendCodeBadge}>
+                <Text style={styles.legendCode}>{l.code}</Text>
+              </View>
               <Text style={styles.legendText}>{l.label}</Text>
             </View>
           ))}
         </View>
 
-        <Text style={styles.sectionTitle}>Approval gates at a glance</Text>
+        <Text style={styles.sectionTitle}>Approval Gates at a Glance</Text>
         <View style={styles.gatesCard} testID="help-approval-gates">
           <ApprovalGateDiagram active={activeGateFor(user?.role || '')} />
           <Text style={styles.gatesNote}>
@@ -193,58 +203,58 @@ export default function HelpWorkflowScreen() {
 
         {(user?.role || '').toLowerCase() !== 'nurse' && (
           <>
-        <Text style={styles.sectionTitle}>Smart tools you'll use every day</Text>
-        <View style={styles.toolsGrid} testID="help-smart-tools">
-          <View style={styles.toolsRow}>
-            <FeatureCard
-              icon="cube-outline" tint="#1565C0"
-              title="Implant Database"
-              bullets={['30+ implant systems', 'Component comparison', 'Manufacturer datasheets attached']}
-            />
-            <FeatureCard
-              icon="bulb-outline" tint="#2E7D32"
-              title="Smart Selection"
-              bullets={['Suggest Me & Let Me Choose', 'Bone-width / height safety chips', 'Bridge & cantilever auto-detect']}
-            />
-          </View>
-          <View style={styles.toolsRow}>
-            <FeatureCard
-              icon="document-text-outline" tint="#EF6C00"
-              title="Drilling Protocol PDF"
-              bullets={['Auto-generated per case', 'Embedded CBCT QR for chair-side', 'Nurse autoclave stamps']}
-            />
-            <FeatureCard
-              icon="sparkles-outline" tint="#0D47A1"
-              title="Implanr AI"
-              bullets={['Phase summaries on demand', '"Ask Implanr" assistant', 'Explain Recommendation context']}
-            />
-          </View>
-          <View style={styles.toolsRow}>
-            <FeatureCard
-              icon="chatbubbles-outline" tint="#8E24AA"
-              title="Discussion Forum"
-              bullets={['Anonymised case posts', 'Threaded peer replies', 'Bookmarkable threads']}
-            />
-            <FeatureCard
-              icon="people-circle-outline" tint="#00838F"
-              title="Group Chat"
-              bullets={['Direct & group conversations', 'Share images, PDFs, case links', 'Read receipts']}
-            />
-          </View>
-          <View style={styles.toolsRow}>
-            <FeatureCard
-              icon="shield-checkmark-outline" tint="#546E7A"
-              title="HIPAA Safeguards"
-              bullets={['15-min auto-logout on inactivity', 'Screen-capture blocking on Android', 'Append-only audit log']}
-            />
-            <View style={{ flex: 1 }} />
-          </View>
-        </View>
+            <Text style={styles.sectionTitle}>Smart Tools You'll Use Every Day</Text>
+            <View style={styles.toolsGrid} testID="help-smart-tools">
+              <View style={styles.toolsRow}>
+                <FeatureCard
+                  icon="cube-outline" tint="#1D4ED8"
+                  title="Implant Database"
+                  bullets={['30+ implant systems', 'Component comparison', 'Manufacturer datasheets attached']}
+                />
+                <FeatureCard
+                  icon="bulb-outline" tint="#059669"
+                  title="Smart Selection"
+                  bullets={['Suggest Me & Let Me Choose', 'Bone-width / height safety chips', 'Bridge & cantilever auto-detect']}
+                />
+              </View>
+              <View style={styles.toolsRow}>
+                <FeatureCard
+                  icon="document-text-outline" tint="#D97706"
+                  title="Drilling Protocol PDF"
+                  bullets={['Auto-generated per case', 'Embedded CBCT QR for chair-side', 'Nurse autoclave stamps']}
+                />
+                <FeatureCard
+                  icon="sparkles-outline" tint="#0369A1"
+                  title="Implanr AI"
+                  bullets={['Phase summaries on demand', '"Ask Implanr" assistant', 'Explain Recommendation context']}
+                />
+              </View>
+              <View style={styles.toolsRow}>
+                <FeatureCard
+                  icon="chatbubbles-outline" tint="#7C3AED"
+                  title="Discussion Forum"
+                  bullets={['Anonymised case posts', 'Threaded peer replies', 'Bookmarkable threads']}
+                />
+                <FeatureCard
+                  icon="people-circle-outline" tint="#0891B2"
+                  title="Group Chat"
+                  bullets={['Direct & group conversations', 'Share images, PDFs, case links', 'Read receipts']}
+                />
+              </View>
+              <View style={styles.toolsRow}>
+                <FeatureCard
+                  icon="shield-checkmark-outline" tint="#475569"
+                  title="HIPAA Safeguards"
+                  bullets={['15-min auto-logout on inactivity', 'Screen-capture blocking on Android', 'Append-only audit log']}
+                />
+                <View style={{ flex: 1 }} />
+              </View>
+            </View>
           </>
         )}
 
         <TouchableOpacity onPress={replayOnboarding} style={styles.replayBtn} testID="help-replay-onboarding">
-          <Ionicons name="play-circle-outline" size={16} color="#1565C0" />
+          <Ionicons name="play-circle-outline" size={18} color="#0B1930" />
           <Text style={styles.replayText}>Replay the welcome tour</Text>
         </TouchableOpacity>
 
@@ -263,48 +273,220 @@ export default function HelpWorkflowScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F5F7FA' },
+  safe: { flex: 1, backgroundColor: '#F8FAFC' },
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 12, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#ECEFF1', backgroundColor: '#FFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#FFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
-  backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 16, fontWeight: '800', color: '#0D47A1' },
-  scroll: { padding: 20, paddingBottom: 40 },
-  greeting: { fontSize: 22, fontWeight: '800', color: '#0D47A1' },
-  roleTag: { marginTop: 4, fontSize: 12, color: '#78909C' },
-  roleTagStrong: { fontWeight: '800', color: '#37474F', textTransform: 'capitalize' },
-  intro: { marginTop: 14, marginBottom: 18, fontSize: 14, color: '#455A64', lineHeight: 20 },
-  stepCard: { borderRadius: 12, padding: 14, borderLeftWidth: 4 },
-  stepHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
-  stepTitle: { fontSize: 15, fontWeight: '800', flexShrink: 1 },
-  bulletRow: { flexDirection: 'row', gap: 6, marginTop: 2 },
-  bulletDot: { fontSize: 14, fontWeight: '800', lineHeight: 20 },
-  bulletText: { flex: 1, fontSize: 13, color: '#37474F', lineHeight: 19 },
-  arrowCol: { alignItems: 'center', paddingVertical: 6 },
-  sectionTitle: { marginTop: 26, marginBottom: 10, fontSize: 14, fontWeight: '800', color: '#0D47A1' },
-  legend: { backgroundColor: '#FFF', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#ECEFF1' },
-  legendRow: { flexDirection: 'row', gap: 8, paddingVertical: 4, alignItems: 'flex-start' },
-  legendCode: { width: 140, fontSize: 11, fontWeight: '700', color: '#1565C0', fontFamily: 'monospace' },
-  legendText: { flex: 1, fontSize: 12, color: '#455A64', lineHeight: 17 },
-  footer: { marginTop: 20, fontSize: 11, color: '#90A4AE', textAlign: 'center', fontStyle: 'italic' },
-  bottomBar: { padding: 14, borderTopWidth: 1, borderTopColor: '#ECEFF1', backgroundColor: '#FFF' },
-  primary: { backgroundColor: '#1565C0', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-  primaryText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
+  backBtn: { 
+    padding: 4,
+  },
+  headerTitle: { 
+    fontSize: 18, 
+    fontWeight: '700', 
+    color: '#0F172A',
+  },
+  scroll: { padding: 16, paddingBottom: 32 },
+  greeting: { 
+    fontSize: 22, 
+    fontWeight: '700', 
+    color: '#0F172A',
+  },
+  roleTagContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 8,
+  },
+  roleTagLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
+    letterSpacing: 0.5,
+  },
+  roleTagValueBadge: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#DBEAFE',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  roleTagStrong: { 
+    fontWeight: '600', 
+    color: '#1E3A8A', 
+    textTransform: 'uppercase',
+    fontSize: 11,
+  },
+  intro: { 
+    marginTop: 14, 
+    marginBottom: 20, 
+    fontSize: 14, 
+    color: '#475569', 
+    lineHeight: 21,
+  },
+  stepCard: { 
+    borderRadius: 16, 
+    padding: 16, 
+    borderLeftWidth: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  stepHeader: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 8, 
+    marginBottom: 8,
+  },
+  stepTitle: { 
+    fontSize: 15, 
+    fontWeight: '700', 
+    flexShrink: 1,
+  },
+  bulletRow: { 
+    flexDirection: 'row', 
+    gap: 6, 
+    marginTop: 4,
+  },
+  bulletDot: { 
+    fontSize: 14, 
+    fontWeight: '700', 
+    lineHeight: 20,
+  },
+  bulletText: { 
+    flex: 1, 
+    fontSize: 13, 
+    color: '#334155', 
+    lineHeight: 19,
+  },
+  arrowCol: { 
+    alignItems: 'center', 
+    paddingVertical: 8,
+  },
+  sectionTitle: { 
+    marginTop: 28, 
+    marginBottom: 12, 
+    fontSize: 13, 
+    fontWeight: '700', 
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  legend: { 
+    backgroundColor: '#FFF', 
+    borderRadius: 16, 
+    padding: 16, 
+    borderWidth: 1, 
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2,
+    gap: 6,
+  },
+  legendRow: { 
+    flexDirection: 'row', 
+    gap: 12, 
+    paddingVertical: 6, 
+    alignItems: 'center',
+  },
+  legendCodeBadge: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    alignSelf: 'flex-start',
+  },
+  legendCode: { 
+    fontSize: 11, 
+    fontWeight: '600', 
+    color: '#334155', 
+    fontFamily: 'monospace',
+  },
+  legendText: { 
+    flex: 1, 
+    fontSize: 13, 
+    color: '#475569', 
+    lineHeight: 18,
+  },
+  footer: { 
+    marginTop: 24, 
+    fontSize: 12, 
+    color: '#94A3B8', 
+    textAlign: 'center', 
+    fontStyle: 'italic',
+    paddingHorizontal: 24,
+  },
+  bottomBar: { 
+    padding: 16, 
+    borderTopWidth: 1, 
+    borderTopColor: '#E2E8F0', 
+    backgroundColor: '#FFF' 
+  },
+  primary: { 
+    backgroundColor: '#0B1930', 
+    borderRadius: 12, 
+    paddingVertical: 14, 
+    alignItems: 'center' 
+  },
+  primaryText: { 
+    color: '#FFF', 
+    fontSize: 15, 
+    fontWeight: '600' 
+  },
   gatesCard: {
-    backgroundColor: '#FFF', borderRadius: 14, padding: 14,
-    borderWidth: 1, borderColor: '#ECEFF1', alignItems: 'center',
+    backgroundColor: '#FFF', 
+    borderRadius: 16, 
+    padding: 16,
+    borderWidth: 1, 
+    borderColor: '#E2E8F0', 
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2,
   },
   gatesNote: {
-    fontSize: 12, color: '#546E7A', textAlign: 'center', marginTop: 6,
-    lineHeight: 17, maxWidth: 360,
+    fontSize: 12, 
+    color: '#64748B', 
+    textAlign: 'center', 
+    marginTop: 10,
+    lineHeight: 18, 
+    maxWidth: 360,
   },
   toolsGrid: { gap: 10 },
   toolsRow: { flexDirection: 'row', gap: 10 },
   replayBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    paddingVertical: 12, marginTop: 18,
-    backgroundColor: '#E3F2FD', borderRadius: 10,
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    gap: 8,
+    paddingVertical: 14, 
+    marginTop: 20,
+    backgroundColor: '#FFF', 
+    borderColor: '#E2E8F0',
+    borderWidth: 1,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 4,
+    elevation: 1,
   },
-  replayText: { color: '#1565C0', fontSize: 13, fontWeight: '700' },
+  replayText: { 
+    color: '#0B1930', 
+    fontSize: 14, 
+    fontWeight: '600' 
+  },
 });
