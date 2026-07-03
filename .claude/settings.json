@@ -47,10 +47,24 @@
       "Bash(/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/venv/bin/python -m py_compile /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py)",
       "Bash(/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/venv/bin/python \"/private/tmp/claude-501/-Users-prathmeshjadhav-Desktop-work-implant-planner-v1-main/eb0c9288-131f-4cf6-b64a-43a74aa1516f/scratchpad/test_filetoken.py\")",
       "Bash(timeout 300 node_modules/.bin/tsc --noEmit -p tsconfig.json)",
-      "Bash(venv/bin/python -)"
+      "Bash(venv/bin/python -)",
+      "Bash(dig +short TXT implanr.com)",
+      "Bash(dig +short TXT _dmarc.implanr.com)",
+      "Bash(dig +short MX implanr.com)",
+      "Bash(dig +short TXT google._domainkey.implanr.com)",
+      "Bash(lsof -iTCP -sTCP:LISTEN -P -n)",
+      "Bash(ls -la phase1/backend/.env)",
+      "Bash(sed -E 's/=.*/=<set>/' phase1/backend/.env)",
+      "Read(//Users/prathmeshjadhav/Desktop/work/implant-planner-v1/phase1/backend/**)",
+      "Bash(venv/bin/python -c ' *)",
+      "Bash(venv/bin/python -m py_compile server.py)",
+      "Bash(curl -s https://api.implanr.com/api/health)",
+      "Bash(awk '$4==\"cwd\"{print $9}')",
+      "Bash(lsof -a -p 65717 -d cwd 2>/dev/null; lsof -a -p 70891 -d cwd 2>/dev/null; echo \"--- fallback: which server.py has the marker ---\"; grep -l \"BUILD_INFO\" /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/phase1/backend/server.py 2>/dev/null)"
     ],
     "additionalDirectories": [
-      "/dev"
+      "/dev",
+      "/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/phase1/backend"
     ]
   }
 }

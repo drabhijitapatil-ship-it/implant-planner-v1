@@ -1718,17 +1718,30 @@ async def _send_smtp_email(to_email: str, subject: str, html_body: str, text_bod
 
         loop = asyncio.get_event_loop()
         def _send():
-            with smtplib.SMTP(smtp_host, smtp_port) as server:
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
                 server.ehlo()
                 server.starttls()
+                server.ehlo()
                 if smtp_user:
                     server.login(smtp_user, smtp_pass)
                 server.sendmail(email_from, [to_email], root.as_string())
-        await loop.run_in_executor(None, _send)
-        logging.info(f"[{log_tag}] Email sent to {to_email}")
-        return True
+        # Gmail's SMTP relay intermittently defers connections/logins from a
+        # datacenter IP (421/454) — retry a few times with backoff before failing.
+        last_err = None
+        for attempt in range(1, 4):
+            try:
+                await loop.run_in_executor(None, _send)
+                logging.info(f"[{log_tag}] Email sent to {to_email} (attempt {attempt})")
+                return True
+            except Exception as e:
+                last_err = e
+                logging.warning(f"[{log_tag}] send attempt {attempt} to {to_email} failed: {e}")
+                if attempt < 3:
+                    await asyncio.sleep(2 * attempt)
+        logging.error(f"[{log_tag}] Failed to send email to {to_email} after retries: {last_err}")
+        return False
     except Exception as e:
-        logging.error(f"[{log_tag}] Failed to send email to {to_email}: {e}")
+        logging.error(f"[{log_tag}] Failed to build/send email to {to_email}: {e}")
         return False
 
 
