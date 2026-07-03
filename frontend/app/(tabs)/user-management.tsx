@@ -304,6 +304,38 @@ export default function UserManagementScreen() {
 
   useEffect(() => { loadUsers(); }, [loadUsers]);
 
+  // Onboarding tracking for the Single/Multiple/CSV Add User flow — those
+  // paths set a password immediately, so "onboarded" means "has actually
+  // logged in" (first_login_at set by the backend on successful login),
+  // not a separate invite/token state.
+  const [onboardingFilter, setOnboardingFilter] = useState<'all' | 'pending'>('all');
+  const [resendingId, setResendingId] = useState<string | null>(null);
+
+  const handleResendCredentials = (userId: string, name: string) => {
+    Alert.alert('Resend Credentials', `Generate a new password for ${name} and email it to them?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Resend',
+        onPress: async () => {
+          setResendingId(userId);
+          try {
+            const resp = await api.post(`/users/${userId}/resend-credentials`);
+            Alert.alert(
+              'Success',
+              resp.data?.email_sent
+                ? 'New credentials have been emailed.'
+                : 'Password reset, but the email could not be sent — share it manually.'
+            );
+          } catch (error: any) {
+            Alert.alert('Error', error.response?.data?.detail || 'Failed to resend credentials');
+          } finally {
+            setResendingId(null);
+          }
+        },
+      },
+    ]);
+  };
+
   const onRefresh = () => { setRefreshing(true); loadUsers(); };
 
   const handleCreateUser = async () => {
@@ -404,50 +436,90 @@ export default function UserManagementScreen() {
     );
   }
 
-  const renderUser = ({ item }: any) => (
-    <TouchableOpacity
-      style={styles.userCard}
-      onPress={() => openEditModal(item)}
-      data-testid={`user-card-${item.id}`}
-    >
-      <View style={styles.userRow}>
-        {item.profile_photo ? (
-          <Image source={{ uri: item.profile_photo }} style={styles.userAvatarImage} />
-        ) : (
-          <View style={[styles.userAvatar, { backgroundColor: ROLE_COLORS[item.role] || '#757575' }]}>
-            <Text style={styles.avatarText}>
-              {item.name?.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
-            </Text>
-          </View>
-        )}
-        <View style={styles.userInfo}>
-          <Text style={styles.userName}>{item.name}</Text>
-          <Text style={styles.userEmail}>{item.email}</Text>
-          <View style={[styles.roleBadge, { backgroundColor: ROLE_COLORS[item.role] || '#757575' }]}>
-            <Text style={styles.roleText}>{ROLE_DISPLAY[item.role] || item.role}</Text>
-          </View>
-        </View>
-        <View style={styles.actionBtns}>
-          <TouchableOpacity
-            style={styles.editBtn}
-            onPress={() => openEditModal(item)}
-            data-testid={`edit-user-${item.id}`}
-          >
-            <Ionicons name="create-outline" size={20} color="#007AFF" />
-          </TouchableOpacity>
-          {item.id !== user?.id && (
-            <TouchableOpacity
-              style={styles.deleteBtn}
-              onPress={() => handleDeleteUser(item.id, item.name)}
-              data-testid={`delete-user-${item.id}`}
-            >
-              <Ionicons name="trash-outline" size={20} color="#F44336" />
-            </TouchableOpacity>
+  const formatRelative = (iso?: string | null) => {
+    if (!iso) return '';
+    const then = new Date(iso).getTime();
+    if (isNaN(then)) return '';
+    const days = Math.floor((Date.now() - then) / 86_400_000);
+    if (days <= 0) return 'today';
+    if (days === 1) return 'yesterday';
+    if (days < 30) return `${days}d ago`;
+    const months = Math.floor(days / 30);
+    return `${months}mo ago`;
+  };
+
+  const renderUser = ({ item }: any) => {
+    const onboarded = !!item.first_login_at;
+    return (
+      <TouchableOpacity
+        style={styles.userCard}
+        onPress={() => openEditModal(item)}
+        data-testid={`user-card-${item.id}`}
+      >
+        <View style={styles.userRow}>
+          {item.profile_photo ? (
+            <Image source={{ uri: item.profile_photo }} style={styles.userAvatarImage} />
+          ) : (
+            <View style={[styles.userAvatar, { backgroundColor: ROLE_COLORS[item.role] || '#757575' }]}>
+              <Text style={styles.avatarText}>
+                {item.name?.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
+              </Text>
+            </View>
           )}
+          <View style={styles.userInfo}>
+            <Text style={styles.userName}>{item.name}</Text>
+            <Text style={styles.userEmail}>{item.email}</Text>
+            <View style={styles.badgeRow}>
+              <View style={[styles.roleBadge, { backgroundColor: ROLE_COLORS[item.role] || '#757575' }]}>
+                <Text style={styles.roleText}>{ROLE_DISPLAY[item.role] || item.role}</Text>
+              </View>
+              <View style={[styles.onboardBadge, onboarded ? styles.onboardBadgeActive : styles.onboardBadgePending]}>
+                <View style={[styles.onboardDot, { backgroundColor: onboarded ? '#4CAF50' : '#FF9800' }]} />
+                <Text style={[styles.onboardBadgeText, { color: onboarded ? '#2E7D32' : '#E65100' }]}>
+                  {onboarded ? `Active · seen ${formatRelative(item.last_login_at)}` : 'Not logged in yet'}
+                </Text>
+              </View>
+            </View>
+          </View>
+          <View style={styles.actionBtns}>
+            {!onboarded && (
+              <TouchableOpacity
+                style={styles.resendBtn}
+                onPress={(e) => { e.stopPropagation(); handleResendCredentials(item.id, item.name); }}
+                disabled={resendingId === item.id}
+                data-testid={`resend-credentials-${item.id}`}
+              >
+                {resendingId === item.id ? (
+                  <ActivityIndicator size="small" color="#FF9800" />
+                ) : (
+                  <Ionicons name="mail-outline" size={20} color="#FF9800" />
+                )}
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.editBtn}
+              onPress={() => openEditModal(item)}
+              data-testid={`edit-user-${item.id}`}
+            >
+              <Ionicons name="create-outline" size={20} color="#007AFF" />
+            </TouchableOpacity>
+            {item.id !== user?.id && (
+              <TouchableOpacity
+                style={styles.deleteBtn}
+                onPress={() => handleDeleteUser(item.id, item.name)}
+                data-testid={`delete-user-${item.id}`}
+              >
+                <Ionicons name="trash-outline" size={20} color="#F44336" />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
+
+  const pendingOnboardCount = users.filter((u) => !u.first_login_at).length;
+  const displayedUsers = onboardingFilter === 'pending' ? users.filter((u) => !u.first_login_at) : users;
 
   const filters = [
     { key: 'all', label: 'All' },
@@ -507,6 +579,27 @@ export default function UserManagementScreen() {
         </View>
       )}
 
+      {/* Onboarding tracking — All Users vs Pending Onboarding (created via
+          Single/Multiple/CSV but never actually logged in yet). */}
+      <View style={styles.viewModeRow}>
+        <TouchableOpacity
+          style={[styles.viewModeBtn, onboardingFilter === 'all' && styles.viewModeBtnActive]}
+          onPress={() => setOnboardingFilter('all')}
+          data-testid="onboarding-filter-all"
+        >
+          <Text style={[styles.viewModeText, onboardingFilter === 'all' && styles.viewModeTextActive]}>All Users</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.viewModeBtn, onboardingFilter === 'pending' && styles.viewModeBtnActive]}
+          onPress={() => setOnboardingFilter('pending')}
+          data-testid="onboarding-filter-pending"
+        >
+          <Text style={[styles.viewModeText, onboardingFilter === 'pending' && styles.viewModeTextActive]}>
+            Pending Onboarding{pendingOnboardCount > 0 ? ` (${pendingOnboardCount})` : ''}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Filter Chips */}
       <View style={styles.filterRow}>
         <FlatList
@@ -536,20 +629,22 @@ export default function UserManagementScreen() {
         </View>
       ) : (
         <FlatList
-          data={users}
+          data={displayedUsers}
           renderItem={renderUser}
           keyExtractor={(item) => item.id}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Ionicons name="people-outline" size={48} color="#CCC" />
-              <Text style={styles.emptyText}>No users found</Text>
+              <Ionicons name={onboardingFilter === 'pending' ? 'checkmark-done-outline' : 'people-outline'} size={48} color="#CCC" />
+              <Text style={styles.emptyText}>
+                {onboardingFilter === 'pending' ? 'Everyone has logged in — nothing pending' : 'No users found'}
+              </Text>
             </View>
           }
           ListHeaderComponent={
             <Text style={styles.userCount} data-testid="user-count">
-              {users.length} user{users.length !== 1 ? 's' : ''}
+              {displayedUsers.length} user{displayedUsers.length !== 1 ? 's' : ''}
             </Text>
           }
         />
@@ -1075,6 +1170,31 @@ const styles = StyleSheet.create({
     color: '#78909C',
     marginTop: 1,
   },
+  viewModeRow: {
+    flexDirection: 'row',
+    backgroundColor: '#FFF',
+    padding: 4,
+    gap: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+  },
+  viewModeBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  viewModeBtnActive: {
+    backgroundColor: '#E3F2FD',
+  },
+  viewModeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#888',
+  },
+  viewModeTextActive: {
+    color: '#007AFF',
+  },
   filterRow: {
     backgroundColor: '#FFF',
     borderBottomWidth: 1,
@@ -1166,11 +1286,43 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
-    marginTop: 4,
   },
   roleText: {
     fontSize: 11,
     color: '#FFF',
+    fontWeight: '600',
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  onboardBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  onboardBadgeActive: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#DCFCE7',
+  },
+  onboardBadgePending: {
+    backgroundColor: '#FFF8E1',
+    borderColor: '#FFECB3',
+  },
+  onboardDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  onboardBadgeText: {
+    fontSize: 11,
     fontWeight: '600',
   },
   actionBtns: {
@@ -1181,6 +1333,9 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   deleteBtn: {
+    padding: 8,
+  },
+  resendBtn: {
     padding: 8,
   },
   emptyState: {

@@ -1208,7 +1208,12 @@ async def login(request: Request, user: UserLogin):
         logging.warning(f"Login failed: wrong password for user '{db_user['name']}'")
         await log_access(action="login", outcome="failure", user={"_id": str(db_user["_id"]), "name": db_user["name"], "role": db_user.get("role")}, request=request, extra={"reason": "wrong_password"})
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    
+
+    if db_user.get("disabled"):
+        logging.warning(f"Login blocked: account disabled for user '{db_user['name']}'")
+        await log_access(action="login", outcome="failure", user={"_id": str(db_user["_id"]), "name": db_user["name"], "role": db_user.get("role")}, request=request, extra={"reason": "account_disabled"})
+        raise HTTPException(status_code=403, detail="This account has been disabled. Contact your administrator.")
+
     user_id_str = str(db_user["_id"])
     # Create access + refresh tokens
     access_token = create_access_token({"user_id": user_id_str})
@@ -1221,6 +1226,16 @@ async def login(request: Request, user: UserLogin):
         "created_at": datetime.now(timezone.utc),
         "expires_at": datetime.now(timezone.utc) + timedelta(days=7),
     })
+
+    # first_login_at powers onboarding tracking (Single/Multiple/CSV-created
+    # users get a password immediately, so "onboarded" means "has actually
+    # logged in", not "has an activation link pending"). last_login_at just
+    # tracks recency for display.
+    now_login = datetime.now(timezone.utc)
+    login_update = {"last_login_at": now_login}
+    if not db_user.get("first_login_at"):
+        login_update["first_login_at"] = now_login
+    await db.users.update_one({"_id": db_user["_id"]}, {"$set": login_update})
 
     user_resp = UserResponse(
         id=user_id_str,
@@ -1648,6 +1663,41 @@ async def update_user(user_id: str, user: UserUpdate, current_user: dict = Depen
     return {"message": "User updated successfully"}
 
 
+@api_router.post("/users/{user_id}/resend-credentials")
+async def resend_user_credentials(user_id: str, current_user: dict = Depends(get_current_user)):
+    """Generate a fresh password and re-email login credentials — the natural
+    follow-up for a user stuck in 'pending' onboarding (created but never
+    logged in) via the Single/Multiple/CSV Add User flow."""
+    if current_user["role"] not in ["administrator", "implant_incharge"]:
+        raise HTTPException(status_code=403, detail="Only administrators and implant incharge can resend credentials")
+
+    target = await db.users.find_one({"_id": ObjectId(user_id)})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not current_user.get("is_super_admin") and target.get("org_id") != current_user.get("org_id"):
+        raise HTTPException(status_code=403, detail="Cannot manage users outside your organization")
+
+    new_password = _secrets_mod.token_urlsafe(9)
+    await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": {"password_hash": hash_password(new_password)}})
+
+    org_name = ""
+    if target.get("org_id"):
+        try:
+            org = await db.organizations.find_one({"_id": ObjectId(target["org_id"])}, {"name": 1})
+            org_name = org.get("name", "") if org else ""
+        except Exception:
+            pass
+
+    email_sent = await _send_credentials_email(
+        to_email=target["email"],
+        to_name=target.get("name", ""),
+        password=new_password,
+        role_display=_role_display_name(target.get("role", "")),
+        org_name=org_name,
+    )
+    return {"message": "Credentials resent", "email_sent": email_sent}
+
+
 # ─────────────────────────────────────────────────────────────────────
 # ORGANIZATIONS  &  INVITE-BASED REGISTRATION
 # ─────────────────────────────────────────────────────────────────────
@@ -1977,6 +2027,9 @@ class InviteCreate(BaseModel):
     mobile: Optional[str] = Field(None, max_length=20)
     role: str = Field(..., max_length=30)
     sub_role: Optional[str] = Field(None, max_length=30)
+    # Only honoured for super_admin, who has no org_id of their own and must pick
+    # a target organization explicitly. Ignored (uses the caller's own org) otherwise.
+    org_id: Optional[str] = Field(None, max_length=64)
 
     @field_validator("name")
     @classmethod
@@ -2481,8 +2534,14 @@ async def workspace_signup(payload: WorkspaceSignup):
     user_id = str(user_result.inserted_id)
     await db.otp_verifications.delete_one({"email": payload.email.lower()})
 
-    access_token = create_access_token({"sub": user_id})
-    refresh_token = create_refresh_token({"sub": user_id})
+    access_token = create_access_token({"user_id": user_id})
+    refresh_token = create_refresh_token({"user_id": user_id})
+    await db.refresh_tokens.insert_one({
+        "user_id": user_id,
+        "token": refresh_token,
+        "created_at": datetime.now(timezone.utc),
+        "expires_at": datetime.now(timezone.utc) + timedelta(days=7),
+    })
 
     return {
         "access_token": access_token,
@@ -2507,9 +2566,14 @@ async def send_invite(payload: InviteCreate, current_user: dict = Depends(get_cu
     if current_user["role"] not in ("implant_incharge", "administrator"):
         raise HTTPException(403, "Only admins can invite users")
 
-    org_id = current_user.get("org_id")
-    if not org_id:
-        raise HTTPException(400, "Your account is not linked to an organization")
+    if current_user.get("is_super_admin"):
+        org_id = payload.org_id
+        if not org_id:
+            raise HTTPException(400, "org_id is required when inviting as super admin")
+    else:
+        org_id = current_user.get("org_id")
+        if not org_id:
+            raise HTTPException(400, "Your account is not linked to an organization")
 
     org = await db.organizations.find_one({"_id": ObjectId(org_id)})
     if not org:
@@ -2635,8 +2699,14 @@ async def activate_invite(token: str, payload: InviteActivate):
         {"$set": {"accepted": True, "accepted_at": now, "accepted_user_id": user_id}},
     )
 
-    access_token = create_access_token({"sub": user_id})
-    refresh_token = create_refresh_token({"sub": user_id})
+    access_token = create_access_token({"user_id": user_id})
+    refresh_token = create_refresh_token({"user_id": user_id})
+    await db.refresh_tokens.insert_one({
+        "user_id": user_id,
+        "token": refresh_token,
+        "created_at": datetime.now(timezone.utc),
+        "expires_at": datetime.now(timezone.utc) + timedelta(days=7),
+    })
 
     return {
         "access_token": access_token,
