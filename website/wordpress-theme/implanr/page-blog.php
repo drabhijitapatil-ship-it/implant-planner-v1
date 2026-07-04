@@ -1,8 +1,7 @@
 <?php
 /**
  * Template Name: Implanr — Insights
- * Auto-generated from static HTML preview. Assign this template to the
- * matching WordPress Page (Pages -> Insights -> Page Attributes -> Template).
+ * Auto-generated from static HTML. Assign to the WordPress Page with slug matching this template.
  */
 get_header(); ?>
 <main id="content">

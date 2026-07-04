@@ -1,20 +1,19 @@
 <?php
 /**
  * Template Name: Implanr — For Clinicians
- * Auto-generated from static HTML preview. Assign this template to the
- * matching WordPress Page (Pages -> For Clinicians -> Page Attributes -> Template).
+ * Auto-generated from static HTML. Assign to the WordPress Page with slug matching this template.
  */
 get_header(); ?>
 <main id="content">
 <section class="hero" data-testid="clinicians-hero">
     <div class="wrap hero__grid">
       <div>
-        <span class="eyebrow reveal">For Private Clinicians</span>
-        <h1 class="reveal" data-delay="1" style="margin:22px 0">Chair-side clarity. Zero <span class="italic-serif">paperwork guilt.</span></h1>
-        <p class="lead reveal" data-delay="2" style="margin-bottom:32px">Whether you're a solo prosthodontist or a 6-chair group practice, Implanr keeps every implant case honest — from consultation to delivery — on the same iPad you already carry.</p>
+        <span class="eyebrow reveal">Implanr for Private Implant Clinics</span>
+        <h1 class="reveal" data-delay="1" style="margin:22px 0">Built for <span class="italic-serif">clinical practice.</span></h1>
+        <p class="lead reveal" data-delay="2" style="margin-bottom:32px">Simplify every implant case from consultation to delivery. One intelligent platform for solo implantologists, group practices, and multi-chair clinics.</p>
         <div class="hero__actions reveal" data-delay="3">
-          <a href="<?php echo esc_url( home_url( '/contact/#book' ) ); ?>" class="btn btn--primary" data-testid="clinicians-cta-demo" data-magnetic>Request a Demo <span class="btn__arrow">→</span></a>
-          <a href="<?php echo esc_url( home_url( '/pricing/' ) ); ?>" class="btn btn--ghost" data-testid="clinicians-cta-pricing">Clinic Pricing</a>
+          <a href="<?php echo esc_url( home_url( '/contact/#book' ) ); ?>" class="btn btn--primary" data-testid="clinicians-cta-demo" data-magnetic>Book Demo <span class="btn__arrow">→</span></a>
+          <a href="<?php echo esc_url( home_url( '/pricing/' ) ); ?>" class="btn btn--ghost" data-testid="clinicians-cta-pricing">See Pricing</a>
         </div>
       </div>
       <div class="feature-row__media reveal" data-delay="2" style="aspect-ratio:5/4;max-width:520px;margin-left:auto">
@@ -30,60 +29,84 @@ get_header(); ?>
     </div>
   </section>
 
-  <section data-testid="clinicians-features">
+  <!-- ═══════════════ DESIGNED FOR ═══════════════ -->
+  <section data-testid="clinicians-designed-for" style="padding-top:0">
+    <div class="wrap">
+      <div class="section__head reveal">
+        <span class="eyebrow">Designed for</span>
+        <h2>Every scale of <span class="italic-serif">modern implant practice.</span></h2>
+      </div>
+      <div class="bento reveal">
+        <div class="bento-card bento-card--sm"><h3 class="b-title" style="font-size:1.1rem">Solo implantologists</h3></div>
+        <div class="bento-card bento-card--sm"><h3 class="b-title" style="font-size:1.1rem">Group practices</h3></div>
+        <div class="bento-card bento-card--sm"><h3 class="b-title" style="font-size:1.1rem">Implant centres</h3></div>
+        <div class="bento-card bento-card--sm"><h3 class="b-title" style="font-size:1.1rem">Multi-chair clinics</h3></div>
+        <div class="bento-card bento-card--sm"><h3 class="b-title" style="font-size:1.1rem">Corporate dental chains</h3></div>
+        <div class="bento-card bento-card--sm bento-card--navy"><h3 class="b-title">One workflow · Every scale.</h3></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ WORKFLOW ═══════════════ -->
+  <section data-testid="clinicians-workflow" style="padding-top:0">
+    <div class="wrap">
+      <div class="section__head reveal">
+        <span class="eyebrow">Workflow</span>
+        <h2>Associate to owner <span class="italic-serif">to completion.</span></h2>
+      </div>
+      <div class="reveal" style="display:flex;flex-wrap:wrap;align-items:center;gap:16px;padding:32px;background:var(--white);border-radius:var(--radius-lg);border:1px solid var(--border);box-shadow:var(--shadow-soft)">
+        <div style="flex:1;min-width:180px;text-align:center;padding:20px 12px;background:var(--white-soft);border-radius:12px"><div style="font-family:var(--f-serif);font-size:1.2rem;color:var(--navy);font-weight:500">Associate Dentist</div><div style="font-size:12px;color:var(--text-3);margin-top:4px">Owns the case</div></div>
+        <div style="color:var(--mint-dark);font-size:24px">→</div>
+        <div style="flex:1;min-width:180px;text-align:center;padding:20px 12px;background:var(--white-soft);border-radius:12px"><div style="font-family:var(--f-serif);font-size:1.2rem;color:var(--navy);font-weight:500">Clinic Owner</div><div style="font-size:12px;color:var(--text-3);margin-top:4px">Approves &amp; mentors</div></div>
+        <div style="color:var(--mint-dark);font-size:24px">→</div>
+        <div style="flex:1;min-width:180px;text-align:center;padding:20px 12px;background:var(--navy);border-radius:12px"><div style="font-family:var(--f-serif);font-size:1.2rem;color:#fff;font-weight:500">Treatment Completion</div><div style="font-size:12px;color:#5EEAD4;margin-top:4px">Signed &amp; archived</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ ROLES ═══════════════ -->
+  <section data-testid="clinicians-roles" style="padding-top:0">
+    <div class="wrap">
+      <div class="section__head reveal">
+        <span class="eyebrow">Role-Based Experience</span>
+        <h2>Every user sees <span class="italic-serif">exactly what they need.</span></h2>
+      </div>
+      <div class="bento">
+        <div class="bento-card bento-card--md reveal">
+          <span class="b-tag">Associate Dentist</span>
+          <h3 class="b-title">The Case Owner</h3>
+          <p class="b-sub">Owns cases, plans treatment, receives AI guidance, submits phases for approval.</p>
+        </div>
+        <div class="bento-card bento-card--md reveal" data-delay="1">
+          <span class="b-tag">Clinic Owner</span>
+          <h3 class="b-title">The Mentor</h3>
+          <p class="b-sub">Reviews cases, comments, approves, requests modifications, mentors associate dentists.</p>
+        </div>
+        <div class="bento-card bento-card--wide bento-card--navy reveal">
+          <span class="b-tag" style="color:rgba(255,255,255,.5)">Nurse / Dental Assistant</span>
+          <h3 class="b-title">Chairside Support</h3>
+          <p class="b-sub">Sterilization checklist, surgical preparation, consent management, chairside assistance.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ COLLABORATION ═══════════════ -->
+  <section data-testid="clinicians-collab" style="padding-top:0">
     <div class="wrap">
       <div class="feature-row reveal">
         <div>
-          <span class="eyebrow">Tablet-native</span>
-          <h2 class="feature-row__title">Designed for the operatory, not the office.</h2>
-          <p class="feature-row__body">Big touch targets, glove-friendly interaction, and offline draft mode. Everything a clinician needs while gowned, nothing they don't.</p>
-          <ul class="feature-row__list">
-            <li>Optimized for 10.9" and 12.9" iPads</li>
-            <li>Offline draft mode with automatic sync</li>
-            <li>Screen-capture blocking on iOS &amp; Android</li>
+          <span class="eyebrow">Collaboration Without Leaving the Platform</span>
+          <h2 class="feature-row__title">Communication stays <span class="italic-serif">attached to the case.</span></h2>
+          <p class="feature-row__body">Every comment, image, and mention lives with the case it belongs to — no more scattered messages across email and messaging apps.</p>
+          <ul class="feature-row__list" style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px">
+            <li>Case discussion threads</li><li>Faculty comments</li>
+            <li>Image attachments</li><li>Group chat</li>
+            <li>Notifications</li><li>Saved clinical tips</li>
+            <li>Mentions</li><li>Approval alerts</li>
           </ul>
         </div>
         <div class="feature-row__media" style="background:linear-gradient(135deg,#CCFBF1,#F8FAFC)"></div>
-      </div>
-
-      <div class="feature-row feature-row--flip reveal">
-        <div>
-          <span class="eyebrow">Patient Experience</span>
-          <h2 class="feature-row__title">Send patients briefings <span class="italic-serif">they'll actually read.</span></h2>
-          <p class="feature-row__body">The Sinus Lift Pre-Op Briefing PDF — plain-language, illustrated, sent by WhatsApp or email. Direct vs. indirect approach, sinus precautions, red-flag list. Patients arrive prepared.</p>
-          <ul class="feature-row__list">
-            <li>Sinus Lift, immediate, full-arch briefings</li>
-            <li>Patient-signed digital consent (optional)</li>
-            <li>Custom-branded with your clinic logo</li>
-          </ul>
-        </div>
-        <div class="feature-row__media" style="background:linear-gradient(180deg,#F8FAFC,#FFFFFF)">
-          <div style="padding:32px;height:100%;display:flex;flex-direction:column;gap:12px">
-            <div style="font-family:var(--f-serif);font-size:1.35rem;font-weight:500;color:var(--navy)">Your appointment at a glance</div>
-            <div style="height:1px;background:var(--border)"></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px">
-              <div><strong style="display:block;color:var(--text-2);font-size:11px;text-transform:uppercase;letter-spacing:.06em">Procedure</strong>Direct Sinus Lift</div>
-              <div><strong style="display:block;color:var(--text-2);font-size:11px;text-transform:uppercase;letter-spacing:.06em">Duration</strong>90 minutes</div>
-              <div><strong style="display:block;color:var(--text-2);font-size:11px;text-transform:uppercase;letter-spacing:.06em">Surgeon</strong>Dr. Sabane</div>
-              <div><strong style="display:block;color:var(--text-2);font-size:11px;text-transform:uppercase;letter-spacing:.06em">Site</strong>Upper right molar (#16)</div>
-            </div>
-            <div style="margin-top:auto;padding:12px;background:#FEF3C7;border-radius:8px;font-size:12px;color:#92400E"><strong>Avoid smoking</strong> for 72 hours before surgery.</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="feature-row reveal">
-        <div>
-          <span class="eyebrow">Lab Workflow</span>
-          <h2 class="feature-row__title">One tap to a lab-ready slip.</h2>
-          <p class="feature-row__body">Shade, occlusion, framework material, delivery date — pre-filled from the case, generated as a signed PDF and sent to your lab via email or WhatsApp.</p>
-          <ul class="feature-row__list">
-            <li>Custom lab-slip templates per lab</li>
-            <li>Framework, shade, and occlusion pre-populated</li>
-            <li>Auto-reminder 48h before delivery</li>
-          </ul>
-        </div>
-        <div class="feature-row__media" style="background:linear-gradient(135deg,#F8FAFC,#CCFBF1)"></div>
       </div>
     </div>
   </section>
@@ -96,7 +119,7 @@ get_header(); ?>
           <p>Solo, group, or multi-location — see how Implanr fits your day.</p>
         </div>
         <div class="big-cta__actions">
-          <a href="<?php echo esc_url( home_url( '/contact/#book' ) ); ?>" class="btn btn--mint" data-testid="clinicians-bottom-cta" data-magnetic>Request a Demo <span class="btn__arrow">→</span></a>
+          <a href="<?php echo esc_url( home_url( '/contact/#book' ) ); ?>" class="btn btn--mint" data-testid="clinicians-bottom-cta" data-magnetic>Book Demo <span class="btn__arrow">→</span></a>
         </div>
       </div>
     </div>
