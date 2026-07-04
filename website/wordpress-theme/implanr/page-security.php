@@ -1,79 +1,51 @@
 <?php
 /**
  * Template Name: Implanr — Security
- * Auto-generated from static HTML preview. Assign this template to the
- * matching WordPress Page (Pages -> Security -> Page Attributes -> Template).
+ * Auto-generated from static HTML. Assign to the WordPress Page with slug matching this template.
  */
 get_header(); ?>
 <main id="content">
 <section class="hero" data-testid="security-hero" style="padding-bottom:56px">
     <div class="wrap wrap-narrow">
       <span class="eyebrow reveal">Security &amp; Compliance</span>
-      <h1 class="reveal" data-delay="1" style="margin:24px 0">Patient data, <span class="italic-serif">engineered for trust.</span></h1>
-      <p class="lead reveal" data-delay="2">Implanr treats every case record like it belongs to a real person — because it does. HIPAA-aware technical safeguards, immutable audit trails, and defence-in-depth engineering, from the login screen down to the database.</p>
+      <h1 class="reveal" data-delay="1" style="margin:24px 0">Designed with <span class="italic-serif">healthcare security</span> at its core.</h1>
+      <p class="lead reveal" data-delay="2">Implanr treats every case record like it belongs to a real person — because it does. HIPAA-compliant architecture, immutable audit trails, and defence-in-depth engineering, from the login screen down to the database.</p>
     </div>
   </section>
 
-  <section data-testid="security-safeguards" style="padding-top:16px">
+  <section data-testid="security-features" style="padding-top:16px">
     <div class="wrap">
       <div class="section__head reveal">
-        <span class="eyebrow">Technical Safeguards</span>
-        <h2 style="margin-top:20px">Defence-in-depth, phase by phase.</h2>
+        <span class="eyebrow">Security Features</span>
+        <h2 style="margin-top:20px">Defence-in-depth, <span class="italic-serif">phase by phase.</span></h2>
       </div>
       <div class="badges">
-        <div class="badge reveal" data-testid="badge-autologout"><div class="badge__ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><div class="badge__title">15-min Auto-Logout</div><div class="badge__body">Every inactivity timer respects HIPAA's minimum-necessary-access principle — closed session, closed record.</div></div>
-        <div class="badge reveal" data-delay="1" data-testid="badge-screencap"><div class="badge__ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4v6c0 5.25-3.75 9.75-9 10-5.25-.25-9-4.75-9-10V6z"/></svg></div><div class="badge__title">Screen-Capture Block</div><div class="badge__body">Native iOS &amp; Android APIs render screenshots blank — accidental leaks, prevented at the OS level.</div></div>
-        <div class="badge reveal" data-delay="2" data-testid="badge-audit"><div class="badge__ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div><div class="badge__title">Immutable Audit Log</div><div class="badge__body">Every view, every export, every override — logged with user, IP, and timestamp. CSV export in one click.</div></div>
-        <div class="badge reveal" data-testid="badge-rbac"><div class="badge__ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div><div class="badge__title">Role-Based Access</div><div class="badge__body">Five roles, five scopes. Students see their cases; supervisors see their cohort; admins see the audit trail.</div></div>
-        <div class="badge reveal" data-delay="1" data-testid="badge-transit"><div class="badge__ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div><div class="badge__title">TLS 1.3 In Transit</div><div class="badge__body">Every byte between device and server is encrypted with modern ciphers. HSTS enforced on every route.</div></div>
-        <div class="badge reveal" data-delay="2" data-testid="badge-rest"><div class="badge__ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg></div><div class="badge__title">Encrypted At Rest</div><div class="badge__body">Database volumes are AES-256 encrypted. PHI fields carry an additional application-layer envelope.</div></div>
+        <div class="badge reveal" data-testid="badge-hipaa"><div class="badge__ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4v6c0 5.25-3.75 9.75-9 10-5.25-.25-9-4.75-9-10V6z"/></svg></div><div class="badge__title">HIPAA-compliant architecture</div><div class="badge__body">Designed from the ground up to meet HIPAA's Security Rule requirements.</div></div>
+        <div class="badge reveal" data-delay="1" data-testid="badge-rbac"><div class="badge__ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div><div class="badge__title">Role-based access control</div><div class="badge__body">Every user sees only the data their role requires. No shared workstation accounts.</div></div>
+        <div class="badge reveal" data-delay="2" data-testid="badge-autologout"><div class="badge__ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><div class="badge__title">15-minute automatic logout</div><div class="badge__body">Inactivity closes the session across web and native mobile.</div></div>
+        <div class="badge reveal" data-testid="badge-jwt"><div class="badge__ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div><div class="badge__title">JWT authentication</div><div class="badge__body">Modern token-based auth with per-device revocation.</div></div>
+        <div class="badge reveal" data-delay="1" data-testid="badge-encrypted"><div class="badge__ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg></div><div class="badge__title">Encrypted cloud storage</div><div class="badge__body">AES-256 encryption at rest. TLS 1.3 in transit.</div></div>
+        <div class="badge reveal" data-delay="2" data-testid="badge-audit"><div class="badge__ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div><div class="badge__title">Immutable audit logs</div><div class="badge__body">Every action, timestamped and un-editable. CSV export in one click.</div></div>
+        <div class="badge reveal" data-testid="badge-pdflog"><div class="badge__ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/></svg></div><div class="badge__title">PDF export logging</div><div class="badge__body">Every generated PDF is logged with user, timestamp, and IP.</div></div>
+        <div class="badge reveal" data-delay="1" data-testid="badge-signatures"><div class="badge__ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.66V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5.34"/><polygon points="18 2 22 6 12 16 8 16 8 12 18 2"/></svg></div><div class="badge__title">Digital signatures</div><div class="badge__body">Every approval and document is signed and cryptographically bound.</div></div>
+        <div class="badge reveal" data-delay="2" data-testid="badge-timestamps"><div class="badge__ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><div class="badge__title">Timestamped approvals</div><div class="badge__body">Chronological audit trail of every case decision.</div></div>
+        <div class="badge reveal" data-testid="badge-screencap"><div class="badge__ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div><div class="badge__title">Screenshot protection</div><div class="badge__body">Native iOS &amp; Android APIs render screenshots blank on supported platforms.</div></div>
+        <div class="badge reveal" data-delay="1" data-testid="badge-phi"><div class="badge__ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z"/><circle cx="12" cy="10" r="3"/></svg></div><div class="badge__title">PHI protection for AI features</div><div class="badge__body">PHI never leaves your tenant boundary. AI processes data with strict isolation.</div></div>
       </div>
     </div>
   </section>
 
-  <section data-testid="security-architecture" style="padding-top:0">
+  <section data-testid="security-cta">
     <div class="wrap">
-      <div class="feature-row reveal">
+      <div class="big-cta reveal">
         <div>
-          <span class="eyebrow">Data Architecture</span>
-          <h2 class="feature-row__title">Tenant-isolated. Region-aware. Backup-tested.</h2>
-          <p class="feature-row__body">Institutions are multi-tenant-isolated by default — no case, log, or PDF crosses tenant boundaries. Data residency options include India (Mumbai), EU (Frankfurt), and US-East for institutions with specific regulatory needs.</p>
-          <ul class="feature-row__list">
-            <li>Point-in-time recovery, tested weekly</li>
-            <li>Disaster-recovery drills every quarter</li>
-            <li>Third-party penetration testing annually</li>
-          </ul>
+          <h2>Security-first, for real.</h2>
+          <p>Full compliance documentation, BAA, and vendor questionnaires available for institutional customers.</p>
         </div>
-        <div class="feature-row__media feature-row__media--navy">
-          <div style="padding:40px;color:#fff;height:100%;display:flex;flex-direction:column;justify-content:center;gap:16px">
-            <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#5EEAD4;font-weight:600">Stack</div>
-            <div style="font-family:var(--f-serif);font-size:1.5rem;line-height:1.35;color:#fff">FastAPI + MongoDB + Expo · TLS 1.3 · AES-256 · MFA-ready</div>
-            <div style="height:1px;background:rgba(255,255,255,.12)"></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px;color:rgba(255,255,255,.72)">
-              <div><strong style="color:#fff">99.9%</strong><br>Uptime SLA</div>
-              <div><strong style="color:#fff">&lt; 4h</strong><br>Recovery point</div>
-              <div><strong style="color:#fff">4 regions</strong><br>Data residency</div>
-              <div><strong style="color:#fff">Quarterly</strong><br>Pen-tested</div>
-            </div>
-          </div>
+        <div class="big-cta__actions">
+          <a href="mailto:info@implanr.com" class="btn btn--mint" data-testid="security-cta-contact" data-magnetic>Request Compliance Pack <span class="btn__arrow">→</span></a>
         </div>
       </div>
-    </div>
-  </section>
-
-  <section data-testid="security-hipaa">
-    <div class="wrap">
-      <div class="section__head reveal">
-        <span class="eyebrow">HIPAA-Aware Design</span>
-        <h2 style="margin-top:20px">How Implanr maps to the Security Rule.</h2>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:12px">
-        <div class="badge reveal" style="flex-direction:row;align-items:flex-start;gap:20px"><div style="font-family:var(--f-serif);font-size:1.6rem;color:var(--mint);min-width:64px">§164.312<br>(a)(1)</div><div><div class="badge__title">Unique user identification</div><div class="badge__body">Every user has an individual login. No shared workstation accounts. Auth tokens are per-device.</div></div></div>
-        <div class="badge reveal" data-delay="1" style="flex-direction:row;align-items:flex-start;gap:20px"><div style="font-family:var(--f-serif);font-size:1.6rem;color:var(--mint);min-width:64px">§164.312<br>(a)(2)(iii)</div><div><div class="badge__title">Automatic logoff</div><div class="badge__body">15-minute inactivity closes the session across web and native. Configurable per institution.</div></div></div>
-        <div class="badge reveal" style="flex-direction:row;align-items:flex-start;gap:20px"><div style="font-family:var(--f-serif);font-size:1.6rem;color:var(--mint);min-width:64px">§164.312<br>(b)</div><div><div class="badge__title">Audit controls</div><div class="badge__body">Immutable audit log of every access, view, export, and override. Retention policy per institution.</div></div></div>
-        <div class="badge reveal" data-delay="1" style="flex-direction:row;align-items:flex-start;gap:20px"><div style="font-family:var(--f-serif);font-size:1.6rem;color:var(--mint);min-width:64px">§164.312<br>(e)(1)</div><div><div class="badge__title">Transmission security</div><div class="badge__body">TLS 1.3 with HSTS. Certificate pinning on native. No unencrypted PHI ever leaves the device.</div></div></div>
-      </div>
-      <p class="lead reveal" style="margin-top:32px;font-size:14px;color:var(--text-3)">Implanr is <em>HIPAA-aware by design</em>. Full BAA and compliance certifications are available for institutional customers on request via <a href="mailto:info@implanr.com" style="color:var(--mint-dark);border-bottom:1px solid currentColor">info@implanr.com</a>.</p>
     </div>
   </section>
 </main>
