@@ -1,15 +1,12 @@
 /*
 Theme Name: Implanr
 Theme URI: https://implanr.com
-Author: The Implanr Team
+Author: Implanr
 Author URI: https://implanr.com
-Description: A calm, clinical marketing theme for Implanr — precision implant case management for prosthodontists and dental schools. Ships with 10 page templates (Home, Features, For Schools, For Clinicians, Pricing, About, Security, Blog, Contact, 404), custom nav menu, and a mailto-powered contact form.
-Version: 1.0.0
-Requires at least: 6.0
-Requires PHP: 7.4
+Description: A calm, clinical marketing theme for Implanr - precision implant case management for prosthodontists and dental schools. Ships with 10 page templates, custom nav menu, and a mailto-powered contact form.
+Version: 1.0.1
 License: Proprietary
 Text Domain: implanr
-Tags: clinical, medical, dental, custom-menu, threaded-comments, translation-ready
 */
 
 /* The full design system lives in /assets/css/site.css, which is enqueued by functions.php.
