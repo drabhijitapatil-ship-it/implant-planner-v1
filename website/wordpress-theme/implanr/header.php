@@ -1,10 +1,12 @@
 <?php if ( ! defined( 'ABSPATH' ) ) exit; ?>
 <!doctype html>
-<html <?php language_attributes(); ?>>
+<html <?php language_attributes(); ?> class="no-js">
 <head>
   <meta charset="<?php bloginfo( 'charset' ); ?>" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%2314B8A6'/%3E%3C/svg%3E" />
+  <script>document.documentElement.classList.remove('no-js');document.documentElement.classList.add('js');</script>
+  <noscript><style>.reveal{opacity:1!important;transform:none!important}</style></noscript>
   <?php wp_head(); ?>
 </head>
 <body <?php body_class(); ?>>
