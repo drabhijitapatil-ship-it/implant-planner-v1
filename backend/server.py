@@ -95,7 +95,7 @@ async def api_health_check():
 @app.get("/api/downloads/implanr-theme.zip")
 async def download_implanr_theme():
     """Public download of the Implanr WordPress theme zip (marketing website).
-    Anyone with the link can pull it — no auth needed since it's the user's own theme."""
+    Anyone with the link can pull it - no auth needed since it's the user's own theme."""
     import os as _os
     zip_path = _os.path.join(_os.path.dirname(__file__), "implanr-wordpress-theme.zip")
     if not _os.path.exists(zip_path):
@@ -105,6 +105,20 @@ async def download_implanr_theme():
         media_type="application/zip",
         filename="implanr-wordpress-theme.zip",
     )
+
+@app.get("/api/downloads/implanr-elementor.zip")
+async def download_implanr_elementor():
+    """Public download of the Implanr Elementor Template Kit (JSON templates)."""
+    import os as _os
+    zip_path = _os.path.join(_os.path.dirname(__file__), "implanr-elementor-templates.zip")
+    if not _os.path.exists(zip_path):
+        raise HTTPException(status_code=404, detail="Elementor kit not found on server")
+    return FileResponse(
+        zip_path,
+        media_type="application/zip",
+        filename="implanr-elementor-templates.zip",
+    )
+
 
 
 @app.get("/api/health/db-status")
