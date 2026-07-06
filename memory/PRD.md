@@ -2,6 +2,17 @@
 
 
 
+## Iteration 338 (Jul 2026) — HIPAA: strip patient name from all AI transmissions
+
+### What shipped
+1. **`_build_case_context()` sanitized** (`server.py` line 5411) — the shared context builder that every AI endpoint uses (case summary, surgical notes, AI assistant, ask-implanr, chat, explain) no longer sends the actual `patient_name`. Sends `"Patient: the patient"` + age/sex/profession instead. One-line fix covers every AI call.
+2. **Explicit HIPAA instruction in prompts** — both `/ai/case-summary` and `/ai/surgical-notes` prompts now include: *"HIPAA: Refer to the individual only as 'the patient' throughout. Never use, guess, or invent any personal name. No initials. No pseudonyms."*
+3. **`_redact_name_from_ai_text()` post-response scrubber** — belt-and-braces net that runs on every AI response before it hits the DB. Matches the full name AND each individual token (first/last, ≥3 chars, case-insensitive, word-boundary safe). Verified with 4 unit tests (Mrs./Mr. prefixes, mid-sentence first-name references, 3-char names, no-leak baseline).
+4. **Live end-to-end verified** — `/api/ai/case-summary` returned no patient-name occurrences on a real seeded case (`UPDATED via resume`).
+
+### Files touched
+- EDIT `/app/backend/server.py` — added `_redact_name_from_ai_text()` helper (line ~5411), redacted `_build_case_context` line 5413, added HIPAA prompt clause + scrubber call in `ai_case_summary` and `ai_surgical_notes`.
+
 ## Iteration 332 (Feb 2026) — Treatment Timeline ("Done On" dates) complete
 
 ### What shipped
