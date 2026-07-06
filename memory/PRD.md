@@ -2,6 +2,23 @@
 
 
 
+## Iteration 339 (Jul 2026) — HIPAA: extended PHI scrubber (name + phone + email + DOB + address)
+
+### What shipped
+1. **`_redact_phi_from_ai_text(text, proc)`** — extended the iter-338 name-only scrubber to a full HIPAA identifier stripper. Redacts:
+   - **Patient name** — full + tokens ≥3 chars, case-insensitive, word-boundary safe → `the patient`
+   - **Phone/mobile** — from record (`mobile_number`, `phone`, `patient_phone`, `contact_number`) AND generic regex (`+91-xxx / (022) xxx / bare 10-digit`) → `[phone redacted]`
+   - **Email** — from record (`patient_email`, `email`) AND generic RFC-lite regex → `[email redacted]`
+   - **DOB** — dates preceded by `DOB:`, `D.O.B.`, `Date of Birth:`, `Born:` → `[DOB redacted]`. Clinical dates (surgery, appointment) are preserved.
+   - **Address** — from record (`address`, `patient_address`, `residential_address`) → `[address redacted]`
+2. **Both AI summary endpoints** (`/ai/case-summary` and `/ai/surgical-notes`) now pass the full `proc` dict to the scrubber (not just the name).
+3. **Backward-compat alias** kept — legacy `_redact_name_from_ai_text(text, name)` still works so future callers don't break.
+4. **8 unit tests pass** — name-in-text, phone (record + generic), email (record + generic), DOB with explicit label, address, clinical dates preserved, mixed leakage, baseline no-PHI.
+
+### Files touched
+- EDIT `/app/backend/server.py` (line ~5411) — replaced name-only scrubber with full PHI scrubber; kept name-only alias for backward compat.
+- EDIT `/app/backend/server.py` (lines ~7252, ~7314) — both AI endpoints now call `_redact_phi_from_ai_text(response, proc)`.
+
 ## Iteration 338 (Jul 2026) — HIPAA: strip patient name from all AI transmissions
 
 ### What shipped

@@ -5408,34 +5408,82 @@ async def get_procedure_badge(
 from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
 import uuid
 
-def _redact_name_from_ai_text(text: str, patient_name: Optional[str]) -> str:
-    """iter-338 HIPAA: redact any occurrence of the patient's name in an AI response.
-    Belt-and-braces net in case the LLM ignores the 'refer as the patient' instruction.
-    Replaces the full name AND each individual token (first/last name) with 'the patient'.
-    Case-insensitive; preserves surrounding punctuation."""
-    if not text or not patient_name:
+def _redact_phi_from_ai_text(text: str, proc: Optional[dict]) -> str:
+    """iter-339 HIPAA: redact all patient PHI identifiers from an AI response.
+    Belt-and-braces net that runs on every AI response before the DB stores it
+    or the frontend renders it. Redacts:
+      - Patient name (full + tokens ≥3 chars, case-insensitive, word-boundary safe)
+      - Phone/mobile numbers (from proc.mobile_number AND generic 10-digit / +91 patterns)
+      - Email addresses (from proc.patient_email AND generic RFC-lite regex)
+      - Dates of birth (any date preceded by 'DOB:', 'D.O.B.:', 'Date of Birth:', 'Born:')
+      - Street address (from proc.address if present)
+    Preserves clinical dates (surgery, appointments) and demographic minimums
+    (age, sex, profession) which are HIPAA-safe."""
+    if not text or not proc:
         return text
     import re as _re
-    name = patient_name.strip()
-    if not name:
-        return text
-    # Whole name first (most specific)
-    text = _re.sub(_re.escape(name), "the patient", text, flags=_re.IGNORECASE)
-    # Then each token (skip common titles + tokens <3 chars to avoid over-scrubbing)
-    for token in name.split():
-        tok = token.strip(".,")
-        if len(tok) < 3 or tok.lower() in {"mr", "mrs", "ms", "dr", "prof", "the"}:
-            continue
-        # \b word-boundary so 'Ram' inside 'Ramp' is safe
-        text = _re.sub(rf"\b{_re.escape(tok)}\b", "the patient", text, flags=_re.IGNORECASE)
+
+    # 1) Patient name (full + tokens)
+    name = (proc.get("patient_name") or "").strip()
+    if name:
+        text = _re.sub(_re.escape(name), "the patient", text, flags=_re.IGNORECASE)
+        for token in name.split():
+            tok = token.strip(".,")
+            if len(tok) < 3 or tok.lower() in {"mr", "mrs", "ms", "dr", "prof", "the"}:
+                continue
+            text = _re.sub(rf"\b{_re.escape(tok)}\b", "the patient", text, flags=_re.IGNORECASE)
+
+    # 2) Known phone/mobile from record (exact match first)
+    for phone_field in ("mobile_number", "phone", "patient_phone", "contact_number"):
+        pv = (proc.get(phone_field) or "").strip()
+        if pv:
+            text = _re.sub(_re.escape(pv), "[phone redacted]", text)
+
+    # 3) Generic phone patterns: +91-9876543210 / 9876543210 / (022) 12345678
+    #    Only matches sequences of 10+ digits (with optional +country / spaces / hyphens).
+    text = _re.sub(
+        r"(?<!\d)(?:\+?\d{1,3}[-.\s]?)?\(?\d{3,5}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4}(?!\d)",
+        "[phone redacted]", text,
+    )
+
+    # 4) Known email from record
+    for email_field in ("patient_email", "email"):
+        ev = (proc.get(email_field) or "").strip()
+        if ev and "@" in ev:
+            text = _re.sub(_re.escape(ev), "[email redacted]", text, flags=_re.IGNORECASE)
+
+    # 5) Generic email regex (RFC-lite)
+    text = _re.sub(
+        r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b",
+        "[email redacted]", text,
+    )
+
+    # 6) DOB — only when explicitly labelled (protects clinical dates)
+    text = _re.sub(
+        r"(?i)(D\.?O\.?B\.?|Date of Birth|Born)\s*[:\-]?\s*[\w\s,./-]{5,25}",
+        r"\1: [DOB redacted]", text,
+    )
+
+    # 7) Address field from record (if stored)
+    for addr_field in ("address", "patient_address", "residential_address"):
+        av = (proc.get(addr_field) or "").strip()
+        if av and len(av) >= 8:  # avoid over-scrubbing tiny strings
+            text = _re.sub(_re.escape(av), "[address redacted]", text, flags=_re.IGNORECASE)
+
     return text
+
+
+# iter-338 backward-compat alias — old call-sites still work.
+def _redact_name_from_ai_text(text: str, patient_name: Optional[str]) -> str:
+    return _redact_phi_from_ai_text(text, {"patient_name": patient_name} if patient_name else None)
 
 
 def _build_case_context(proc: dict) -> str:
     """Build a clinical case context string from procedure data.
-    iter-338 HIPAA: patient_name is intentionally NOT sent to the AI. The
-    LLM only sees 'the patient' + demographic minimums (age/sex/profession)
-    that are clinically relevant. Full identity stays server-side."""
+    iter-338 HIPAA: patient_name, mobile, email, DOB, and address are
+    intentionally NOT sent to the AI. The LLM only sees 'the patient' +
+    demographic minimums (age/sex/profession) that are clinically relevant.
+    Full identity stays server-side."""
     parts = [f"Patient: the patient, Age: {proc.get('age','N/A')}, Sex: {proc.get('sex','N/A')}"]
     if proc.get('profession'):
         parts.append(f"Profession: {proc.get('profession')}")
@@ -7202,8 +7250,8 @@ FORMAT INSTRUCTIONS:
     ).with_model("openai", "gpt-5.2")
 
     response = await chat.send_message(UserMessage(text=prompt))
-    # iter-338 HIPAA: scrub any patient-name occurrence that slipped through.
-    response = _redact_name_from_ai_text(response, proc.get("patient_name"))
+    # iter-339 HIPAA: scrub all PHI (name, phone, email, DOB, address).
+    response = _redact_phi_from_ai_text(response, proc)
 
     await db.procedures.update_one(
         {"_id": ObjectId(procedure_id)},
@@ -7262,8 +7310,8 @@ HIPAA: Refer to the individual only as "the patient" throughout. Never use, gues
     ).with_model("openai", "gpt-5.2")
     
     response = await chat.send_message(UserMessage(text=prompt))
-    # iter-338 HIPAA: scrub any patient-name that slipped through.
-    response = _redact_name_from_ai_text(response, proc.get("patient_name"))
+    # iter-339 HIPAA: scrub all PHI (name, phone, email, DOB, address).
+    response = _redact_phi_from_ai_text(response, proc)
     
     await db.procedures.update_one(
         {"_id": ObjectId(procedure_id)},
