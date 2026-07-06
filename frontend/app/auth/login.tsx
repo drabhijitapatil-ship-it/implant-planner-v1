@@ -463,6 +463,7 @@ const styles = StyleSheet.create({
   featureDot: { color: "rgba(0, 122, 255, 0.4)", fontSize: 14 },
   card: {
     width: "100%",
+    maxWidth:500,
     borderRadius: 28,
     padding: 24,
     backgroundColor: "#FFFFFF",

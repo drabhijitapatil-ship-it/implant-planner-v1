@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
   Alert,
   Platform,
   KeyboardAvoidingView,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -144,6 +145,17 @@ function ToothRecBox({ tooth, info }: { tooth: string; info: ToothRec }) {
 
 // ── MAIN SCREEN ────────────────────────────────────────────
 export default function ImplantSelectionScreen() {
+  const { width } = useWindowDimensions();
+  const isTablet = width >= 768;
+
+  const s = useMemo(() => ({
+    ...staticStyles,
+    scroll: [staticStyles.scroll, isTablet && { maxWidth: 800, alignSelf: 'center', width: '100%' }],
+    tabBar: [staticStyles.tabBar, isTablet && { maxWidth: 800, alignSelf: 'center', width: '100%' }],
+    modalOverlay: [staticStyles.modalOverlay, isTablet && { justifyContent: 'center', alignItems: 'center' }],
+    modalContent: [staticStyles.modalContent, isTablet && { maxWidth: 600, width: '90%', borderRadius: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%' }],
+  }), [isTablet]);
+
   const [activeTab, setActiveTab] = useState<'choose' | 'suggest'>('choose');
   const [systems, setSystems] = useState<ImplantSystem[]>([]);
   const [toothRecs, setToothRecs] = useState<Record<string, ToothRec>>({});
@@ -1606,7 +1618,7 @@ const nrS = StyleSheet.create({
 });
 
 // ── Styles ─────────────────────────────────────────────────
-const s = StyleSheet.create({
+const staticStyles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5FAFF' },
   scroll: { padding: 16, paddingBottom: 120 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
@@ -1806,3 +1818,5 @@ const s = StyleSheet.create({
   allOptionsNote: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: '#FFF3E0', borderRadius: 8, padding: 10, marginBottom: 10 },
   allOptionsNoteText: { flex: 1, fontSize: 12, color: '#E65100', lineHeight: 16 },
 });
+
+const s = staticStyles;

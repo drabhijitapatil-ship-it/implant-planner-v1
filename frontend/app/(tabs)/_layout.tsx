@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Tabs, useRouter, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -11,6 +11,7 @@ import {
   Platform,
   Image,
   Alert,
+  useWindowDimensions,
 } from 'react-native';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -65,7 +66,28 @@ function DrawerMenu({
   hasUnseenWhatsNew: boolean;
   hasUnreadForum: boolean;
 }) {
+  const { width } = useWindowDimensions();
+  const isTablet = width >= 768;
   const insets = useSafeAreaInsets();
+
+  const t = useMemo(() => ({
+    ...staticStyles,
+    overlay: [staticStyles.overlay, isTablet && { justifyContent: 'center', alignItems: 'center' }],
+    sheet: [
+      staticStyles.sheet,
+      { paddingTop: insets.top + 14 },
+      isTablet && {
+        maxWidth: 600,
+        width: '90%',
+        borderRadius: 28,
+        borderTopLeftRadius: 28,
+        borderTopRightRadius: 28,
+        paddingTop: 24,
+        paddingBottom: 24,
+      },
+    ],
+  }), [isTablet, insets.top]);
+
   const forumAllowed = !!userRole && !isNurse;
 
   // When the popover opens AND the user has unread badges, fire a soft
@@ -154,7 +176,7 @@ function DrawerMenu({
     >
       <Pressable style={t.overlay} onPress={onClose} testID="tile-menu-overlay">
         <Pressable
-          style={[t.sheet, { paddingTop: insets.top + 14 }]}
+          style={t.sheet}
           onPress={(e) => e.stopPropagation()}
           testID="tile-menu-sheet"
           // @ts-ignore
@@ -254,7 +276,7 @@ function DrawerMenu({
   );
 }
 
-const t = StyleSheet.create({
+const staticStyles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(15, 25, 40, 0.45)',
@@ -360,6 +382,8 @@ const t = StyleSheet.create({
     letterSpacing: 0.3,
   },
 });
+
+const t = staticStyles;
 
 const d = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', flexDirection: 'row' },

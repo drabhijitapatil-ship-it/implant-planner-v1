@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  RefreshControl, ActivityIndicator, Image, Alert,
+  RefreshControl, ActivityIndicator, Image, Alert, useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar } from 'react-native-calendars';
@@ -135,9 +135,10 @@ function ProcedureCalendar({ procedures, selectedDate, setSelectedDate, router }
                 <Text style={s.procDetail}><Ionicons name="time-outline" size={12} color="#90A4AE" /> {proc.procedure_time}</Text>
                 <Text style={s.procDetail}><Ionicons name="location-outline" size={12} color="#90A4AE" /> Site: {proc.implant_site}</Text>
               </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                <Ionicons name="person-outline" size={12} color="#90A4AE" />
-                <Text style={s.procDetail}> Scheduled by: {proc.created_by_name || proc.student_name || '—'}</Text>
+              <View style={{ marginTop: 4 }}>
+                <Text style={s.procDetail}>
+                  <Ionicons name="person-outline" size={12} color="#90A4AE" /> Scheduled by: {proc.created_by_name || proc.student_name || '—'}
+                </Text>
               </View>
             </TouchableOpacity>
           ))
@@ -148,7 +149,7 @@ function ProcedureCalendar({ procedures, selectedDate, setSelectedDate, router }
 }
 
 // ── Student Dashboard ─────────────────────────────────────
-function StudentDashboard({ stats, procedures, selectedDate, setSelectedDate, router }: any) {
+function StudentDashboard({ stats, procedures, selectedDate, setSelectedDate, router, layoutMode = 'mobile' }: any) {
   const [approvingDraftId, setApprovingDraftId] = useState<string | null>(null);
 
   const actionNeeded = useMemo(() =>
@@ -192,91 +193,97 @@ function StudentDashboard({ stats, procedures, selectedDate, setSelectedDate, ro
 
   return (
     <>
-      {/* Stats */}
-      <View style={s.statsRow}>
-        <StatCard label="Active" value={stats.total - (stats.completed || 0) - stats.rejected} color="#1A73E8" icon="pulse" onPress={() => router.push('/procedures')} />
-        <StatCard label="Pending" value={stats.pending} color="#FF9800" icon="hourglass" onPress={() => router.push({ pathname: '/procedures', params: { filter: 'pending' } })} />
-        <StatCard label="Done" value={stats.completed || stats.approved} color="#4CAF50" icon="checkmark-circle" onPress={() => router.push({ pathname: '/procedures', params: { filter: 'completed' } })} />
-        <StatCard label="Rejected" value={stats.rejected} color="#F44336" icon="close-circle" onPress={() => router.push({ pathname: '/procedures', params: { filter: 'rejected' } })} />
-      </View>
-
-      {/* Action Needed */}
-      {actionNeeded.length > 0 && (
-        <View style={s.section}>
-          <View style={s.sectionHeader}>
-            <Ionicons name="flash" size={18} color="#E65100" />
-            <Text style={[s.sectionTitle, { color: '#E65100' }]}>Action Needed ({actionNeeded.length})</Text>
+      {layoutMode !== 'tablet-right' && (
+        <>
+          {/* Stats */}
+          <View style={s.statsRow}>
+            <StatCard label="Active" value={stats.total - (stats.completed || 0) - stats.rejected} color="#1A73E8" icon="pulse" onPress={() => router.push('/procedures')} />
+            <StatCard label="Pending" value={stats.pending} color="#FF9800" icon="hourglass" onPress={() => router.push({ pathname: '/procedures', params: { filter: 'pending' } })} />
+            <StatCard label="Done" value={stats.completed || stats.approved} color="#4CAF50" icon="checkmark-circle" onPress={() => router.push({ pathname: '/procedures', params: { filter: 'completed' } })} />
+            <StatCard label="Rejected" value={stats.rejected} color="#F44336" icon="close-circle" onPress={() => router.push({ pathname: '/procedures', params: { filter: 'rejected' } })} />
           </View>
-          {actionNeeded.slice(0, 4).map((proc: any) => {
-            const info = ACTION_NEEDED_MAP[proc.status];
-            return (
-              <TouchableOpacity key={proc.id} style={s.actionCard} onPress={() => router.push(`/procedures/${proc.id}`)} data-testid={`action-card-${proc.id}`}>
-                <View style={[s.actionIconWrap, { backgroundColor: info.color + '18' }]}>
-                  <Ionicons name={info.icon as any} size={20} color={info.color} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.actionPatient}>{proc.patient_name}</Text>
-                  <Text style={s.actionLabel}>{info.label}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color="#B0BEC5" />
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      )}
 
-      {/* Draft Cases */}
-      {draftCases.length > 0 && (
-        <View style={s.section} data-testid="draft-cases-section">
-          <View style={s.sectionHeader}>
-            <Ionicons name="document-text-outline" size={18} color="#546E7A" />
-            <Text style={s.sectionTitle}>Drafts ({draftCases.length})</Text>
-          </View>
-          {draftCases.slice(0, 5).map((proc: any) => (
-            <View key={proc.id} style={s.draftCard} data-testid={`draft-card-${proc.id}`}>
-              <View style={{ flex: 1 }}>
-                <Text style={s.draftPatient}>{proc.patient_name}</Text>
-                <Text style={s.draftSub}>{proc.implant_procedure_type} - {proc.procedure_date}</Text>
+          {/* Action Needed */}
+          {actionNeeded.length > 0 && (
+            <View style={s.section}>
+              <View style={s.sectionHeader}>
+                <Ionicons name="flash" size={18} color="#E65100" />
+                <Text style={[s.sectionTitle, { color: '#E65100' }]}>Action Needed ({actionNeeded.length})</Text>
               </View>
-              <TouchableOpacity
-                style={s.continueBtn}
-                onPress={() => router.push(`/(tabs)/new-procedure?draftId=${proc.id}`)}
-                data-testid={`draft-continue-btn-${proc.id}`}
-              >
-                <Ionicons name="play-circle" size={14} color="#FFF" />
-                <Text style={s.continueBtnText}>Continue</Text>
-              </TouchableOpacity>
+              {actionNeeded.slice(0, 4).map((proc: any) => {
+                const info = ACTION_NEEDED_MAP[proc.status];
+                return (
+                  <TouchableOpacity key={proc.id} style={s.actionCard} onPress={() => router.push(`/procedures/${proc.id}`)} data-testid={`action-card-${proc.id}`}>
+                    <View style={[s.actionIconWrap, { backgroundColor: info.color + '18' }]}>
+                      <Ionicons name={info.icon as any} size={20} color={info.color} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.actionPatient}>{proc.patient_name}</Text>
+                      <Text style={s.actionLabel}>{info.label}</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color="#B0BEC5" />
+                  </TouchableOpacity>
+                );
+              })}
             </View>
-          ))}
-        </View>
-      )}
+          )}
 
-      {/* Faculty Remarks */}
-      {recentRemarks.length > 0 && (
-        <View style={s.section}>
-          <View style={s.sectionHeader}>
-            <Ionicons name="chatbubble-ellipses-outline" size={18} color="#5C35A3" />
-            <Text style={[s.sectionTitle, { color: '#5C35A3' }]}>Faculty Remarks</Text>
-          </View>
-          {recentRemarks.map((r, idx) => (
-            <TouchableOpacity key={idx} style={s.remarkCard} onPress={() => router.push(`/procedures/${r.id}`)}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                <Text style={s.remarkPhase}>{r.phase} - {r.role}</Text>
-                <Text style={s.remarkPatient}>{r.patient}</Text>
+          {/* Draft Cases */}
+          {draftCases.length > 0 && (
+            <View style={s.section} data-testid="draft-cases-section">
+              <View style={s.sectionHeader}>
+                <Ionicons name="document-text-outline" size={18} color="#546E7A" />
+                <Text style={s.sectionTitle}>Drafts ({draftCases.length})</Text>
               </View>
-              <Text style={s.remarkText} numberOfLines={2}>"{r.text}"</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+              {draftCases.slice(0, 5).map((proc: any) => (
+                <View key={proc.id} style={s.draftCard} data-testid={`draft-card-${proc.id}`}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.draftPatient}>{proc.patient_name}</Text>
+                    <Text style={s.draftSub}>{proc.implant_procedure_type} - {proc.procedure_date}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={s.continueBtn}
+                    onPress={() => router.push(`/(tabs)/new-procedure?draftId=${proc.id}`)}
+                    data-testid={`draft-continue-btn-${proc.id}`}
+                  >
+                    <Ionicons name="play-circle" size={14} color="#FFF" />
+                    <Text style={s.continueBtnText}>Continue</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Faculty Remarks */}
+          {recentRemarks.length > 0 && (
+            <View style={s.section}>
+              <View style={s.sectionHeader}>
+                <Ionicons name="chatbubble-ellipses-outline" size={18} color="#5C35A3" />
+                <Text style={[s.sectionTitle, { color: '#5C35A3' }]}>Faculty Remarks</Text>
+              </View>
+              {recentRemarks.map((r, idx) => (
+                <TouchableOpacity key={idx} style={s.remarkCard} onPress={() => router.push(`/procedures/${r.id}`)}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <Text style={s.remarkPhase}>{r.phase} - {r.role}</Text>
+                    <Text style={s.remarkPatient}>{r.patient}</Text>
+                  </View>
+                  <Text style={s.remarkText} numberOfLines={2}>"{r.text}"</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </>
       )}
 
-      <ProcedureCalendar procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
+      {layoutMode !== 'tablet-left' && (
+        <ProcedureCalendar procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
+      )}
     </>
   );
 }
 
 // ── Supervisor Dashboard ──────────────────────────────────
-function SupervisorDashboard({ stats, procedures, selectedDate, setSelectedDate, router, userId }: any) {
+function SupervisorDashboard({ stats, procedures, selectedDate, setSelectedDate, router, userId, layoutMode = 'mobile' }: any) {
   const pendingApproval = useMemo(() =>
     procedures.filter((p: any) => PENDING_STATUSES.includes(p.status)),
     [procedures]
@@ -305,125 +312,134 @@ function SupervisorDashboard({ stats, procedures, selectedDate, setSelectedDate,
 
   return (
     <>
-      {/* Stats */}
-      <View style={s.statsRow}>
-        <StatCard label="To Review" value={stats.pending_my_approval || pendingApproval.length} color="#E65100" icon="document-attach" onPress={() => router.push('/procedures')} />
-        <StatCard label="Approved" value={stats.approved} color="#4CAF50" icon="checkmark-circle" onPress={() => router.push('/procedures')} />
-        <StatCard label="Total" value={stats.total} color="#1565C0" icon="folder-open" onPress={() => router.push('/procedures')} />
-        <StatCard label="Rate" value={`${approvalRate}%`} color="#5C35A3" icon="analytics" onPress={() => router.push('/procedures')} />
-      </View>
-
-      {/* Case Pipeline */}
-      <View style={s.section}>
-        <View style={s.sectionHeader}>
-          <Ionicons name="git-branch-outline" size={18} color="#1565C0" />
-          <Text style={[s.sectionTitle, { color: '#1565C0' }]}>Case Pipeline</Text>
-        </View>
-        <View style={s.pipelineCard}>
-          {[
-            { label: 'Phase 1', count: pipeline.phase1 || 0, color: '#78909C', phase: '1' },
-            { label: 'Phase 2', count: pipeline.phase2 || 0, color: '#1A73E8', phase: '2' },
-            { label: 'Phase 3', count: pipeline.phase3 || 0, color: '#FF9800', phase: '3' },
-            { label: 'Phase 4', count: pipeline.phase4 || 0, color: '#9C27B0', phase: '4' },
-            { label: 'Complete', count: pipeline.completed || 0, color: '#4CAF50', phase: 'completed' },
-          ].map((item, idx) => (
-            <TouchableOpacity key={idx} style={s.pipelineItem} onPress={() => router.push(`/(tabs)/procedures?phase=${item.phase}`)} data-testid={`sup-pipeline-${item.phase}`}>
-              <View style={[s.pipelineBar, { backgroundColor: item.color, height: Math.max(8, pipelineTotal > 0 ? (item.count / pipelineTotal) * 80 : 8) }]} />
-              <Text style={s.pipelineCount}>{item.count}</Text>
-              <Text style={s.pipelineLabel}>{item.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      {/* Pending Approval Queue */}
-      {pendingApproval.length > 0 && (
-        <View style={s.section}>
-          <View style={s.sectionHeader}>
-            <Ionicons name="clipboard-outline" size={18} color="#E65100" />
-            <Text style={[s.sectionTitle, { color: '#E65100' }]}>Pending Your Approval ({pendingApproval.length})</Text>
+      {layoutMode !== 'tablet-right' && (
+        <>
+          {/* Stats */}
+          <View style={s.statsRow}>
+            <StatCard label="To Review" value={stats.pending_my_approval || pendingApproval.length} color="#E65100" icon="document-attach" onPress={() => router.push('/procedures')} />
+            <StatCard label="Approved" value={stats.approved} color="#4CAF50" icon="checkmark-circle" onPress={() => router.push('/procedures')} />
+            <StatCard label="Total" value={stats.total} color="#1565C0" icon="folder-open" onPress={() => router.push('/procedures')} />
+            <StatCard label="Rate" value={`${approvalRate}%`} color="#5C35A3" icon="analytics" onPress={() => router.push('/procedures')} />
           </View>
-          {pendingApproval.slice(0, 5).map((proc: any) => {
-            const phase = getPhaseFromStatus(proc.status);
-            return (
-              <TouchableOpacity key={proc.id} style={s.approvalCard} onPress={() => router.push(`/procedures/${proc.id}`)} data-testid={`pending-card-${proc.id}`}>
-                <View style={s.approvalPhaseWrap}>
-                  <Text style={s.approvalPhaseNum}>P{phase}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.approvalPatient}>{proc.patient_name}</Text>
-                  <Text style={s.approvalSub}>{proc.student_name} - {proc.implant_procedure_type}</Text>
-                </View>
-                <PulsingDoubleArrow color="#EF6C00" size={14} delayMs={120} />
-                <View style={s.reviewChip}>
-                  <Text style={s.reviewChipText}>Review</Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      )}
 
-      {/* My Students */}
-      {myStudents.length > 0 && (
-        <View style={s.section}>
-          <View style={s.sectionHeader}>
-            <Ionicons name="people-outline" size={18} color="#1565C0" />
-            <Text style={[s.sectionTitle, { color: '#1565C0' }]}>My Students</Text>
-          </View>
-          {myStudents.map((st, idx) => (
-            <View key={idx} style={s.studentCard}>
-              <View style={s.studentAvatar}>
-                <Text style={s.studentAvatarText}>{st.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.studentName}>{st.name}</Text>
-                <Text style={s.studentSub}>{st.cases} cases total</Text>
-              </View>
-              {st.pending > 0 && (
-                <View style={s.pendingBadge}>
-                  <Text style={s.pendingBadgeText}>{st.pending} pending</Text>
-                </View>
-              )}
+          {/* Case Pipeline */}
+          <View style={s.section}>
+            <View style={s.sectionHeader}>
+              <Ionicons name="git-branch-outline" size={18} color="#1565C0" />
+              <Text style={[s.sectionTitle, { color: '#1565C0' }]}>Case Pipeline</Text>
             </View>
-          ))}
-        </View>
-      )}
-
-      {/* Draft Cases */}
-      {draftCases.length > 0 && (
-        <View style={s.section} data-testid="sup-draft-cases-section">
-          <View style={s.sectionHeader}>
-            <Ionicons name="document-text-outline" size={18} color="#546E7A" />
-            <Text style={s.sectionTitle}>Drafts ({draftCases.length})</Text>
-          </View>
-          {draftCases.slice(0, 5).map((proc: any) => (
-            <View key={proc.id} style={s.draftCard} data-testid={`sup-draft-card-${proc.id}`}>
-              <View style={{ flex: 1 }}>
-                <Text style={s.draftPatient}>{proc.patient_name}</Text>
-                <Text style={s.draftSub}>{proc.implant_procedure_type} - {proc.procedure_date}</Text>
-              </View>
-              <TouchableOpacity
-                style={s.continueBtn}
-                onPress={() => router.push(`/(tabs)/new-procedure?draftId=${proc.id}`)}
-                data-testid={`sup-draft-continue-btn-${proc.id}`}
-              >
-                <Ionicons name="play-circle" size={14} color="#FFF" />
-                <Text style={s.continueBtnText}>Continue</Text>
-              </TouchableOpacity>
+            <View style={s.pipelineCard}>
+              {[
+                { label: 'Phase 1', count: pipeline.phase1 || 0, color: '#78909C', phase: '1' },
+                { label: 'Phase 2', count: pipeline.phase2 || 0, color: '#1A73E8', phase: '2' },
+                { label: 'Phase 3', count: pipeline.phase3 || 0, color: '#FF9800', phase: '3' },
+                { label: 'Phase 4', count: pipeline.phase4 || 0, color: '#9C27B0', phase: '4' },
+                { label: 'Complete', count: pipeline.completed || 0, color: '#4CAF50', phase: 'completed' },
+              ].map((item, idx) => (
+                <TouchableOpacity key={idx} style={s.pipelineItem} onPress={() => router.push(`/(tabs)/procedures?phase=${item.phase}`)} data-testid={`sup-pipeline-${item.phase}`}>
+                  <View style={[s.pipelineBar, { backgroundColor: item.color, height: Math.max(8, pipelineTotal > 0 ? (item.count / pipelineTotal) * 80 : 8) }]} />
+                  <Text style={s.pipelineCount}>{item.count}</Text>
+                  <Text style={s.pipelineLabel}>{item.label}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
-          ))}
-        </View>
+          </View>
+
+          {/* Pending Approval Queue */}
+          {pendingApproval.length > 0 && (
+            <View style={s.section}>
+              <View style={s.sectionHeader}>
+                <Ionicons name="clipboard-outline" size={18} color="#E65100" />
+                <Text style={[s.sectionTitle, { color: '#E65100' }]}>Pending Your Approval ({pendingApproval.length})</Text>
+              </View>
+              {pendingApproval.slice(0, 5).map((proc: any) => {
+                const phase = getPhaseFromStatus(proc.status);
+                return (
+                  <TouchableOpacity key={proc.id} style={s.approvalCard} onPress={() => router.push(`/procedures/${proc.id}`)} data-testid={`pending-card-${proc.id}`}>
+                    <View style={s.approvalPhaseWrap}>
+                      <Text style={s.approvalPhaseNum}>P{phase}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.approvalPatient}>{proc.patient_name}</Text>
+                      <Text style={s.approvalSub}>{proc.student_name} - {proc.implant_procedure_type}</Text>
+                    </View>
+                    <PulsingDoubleArrow color="#EF6C00" size={14} delayMs={120} />
+                    <View style={s.reviewChip}>
+                      <Text style={s.reviewChipText}>Review</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+
+          {/* My Students */}
+          {myStudents.length > 0 && (
+            <View style={s.section}>
+              <View style={s.sectionHeader}>
+                <Ionicons name="people-outline" size={18} color="#1565C0" />
+                <Text style={[s.sectionTitle, { color: '#1565C0' }]}>My Students</Text>
+              </View>
+              {myStudents.map((st, idx) => (
+                <View key={idx} style={s.studentCard}>
+                  <View style={s.studentAvatar}>
+                    <Text style={s.studentAvatarText}>{st.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.studentName}>{st.name}</Text>
+                    <Text style={s.studentSub}>{st.cases} cases total</Text>
+                  </View>
+                  {st.pending > 0 && (
+                    <View style={s.pendingBadge}>
+                      <Text style={s.pendingBadgeText}>{st.pending} pending</Text>
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Draft Cases */}
+          {draftCases.length > 0 && (
+            <View style={s.section} data-testid="sup-draft-cases-section">
+              <View style={s.sectionHeader}>
+                <Ionicons name="document-text-outline" size={18} color="#546E7A" />
+                <Text style={s.sectionTitle}>Drafts ({draftCases.length})</Text>
+              </View>
+              {draftCases.slice(0, 5).map((proc: any) => (
+                <View key={proc.id} style={s.draftCard} data-testid={`sup-draft-card-${proc.id}`}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.draftPatient}>{proc.patient_name}</Text>
+                    <Text style={s.draftSub}>{proc.implant_procedure_type} - {proc.procedure_date}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={s.continueBtn}
+                    onPress={() => router.push(`/(tabs)/new-procedure?draftId=${proc.id}`)}
+                    data-testid={`sup-draft-continue-btn-${proc.id}`}
+                  >
+                    <Ionicons name="play-circle" size={14} color="#FFF" />
+                    <Text style={s.continueBtnText}>Continue</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+        </>
       )}
 
-      <ProcedureCalendar procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
-      <RecentActivityWidget router={router} limit={5} />
+      {layoutMode !== 'tablet-left' && (
+        <ProcedureCalendar procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
+      )}
+
+      {layoutMode !== 'tablet-right' && (
+        <RecentActivityWidget router={router} limit={5} />
+      )}
     </>
   );
 }
 
 // ── In-Charge / Admin Dashboard ───────────────────────────
-function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, router }: any) {
+function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, router, layoutMode = 'mobile' }: any) {
   const pipeline = stats.pipeline || {};
   const pipelineTotal = (pipeline.phase1 || 0) + (pipeline.phase2 || 0) + (pipeline.phase3 || 0) + (pipeline.phase4 || 0) + (pipeline.completed || 0);
   const studentStats = stats.student_stats || [];
@@ -437,127 +453,166 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
 
   return (
     <>
-      {/* Stats */}
-      <View style={s.statsRow}>
-        <StatCard label="Total" value={stats.total} color="#283593" icon="layers" onPress={() => router.push('/procedures')} />
-        <StatCard label="Active" value={stats.total - (stats.completed || 0) - stats.rejected} color="#1A73E8" icon="pulse" onPress={() => router.push('/procedures')} />
-        <StatCard label="Done" value={stats.completed || 0} color="#4CAF50" icon="checkmark-circle" onPress={() => router.push('/procedures')} />
-        <StatCard label="To Review" value={stats.pending_my_approval || 0} color="#E65100" icon="document-attach" onPress={() => router.push('/procedures')} />
-      </View>
-
-      {/* Phase Pipeline */}
-      <View style={s.section}>
-        <View style={s.sectionHeader}>
-          <Ionicons name="git-branch-outline" size={18} color="#283593" />
-          <Text style={[s.sectionTitle, { color: '#283593' }]}>Case Pipeline</Text>
-        </View>
-        <View style={s.pipelineCard}>
-          {[
-            { label: 'Phase 1', count: pipeline.phase1 || 0, color: '#78909C', phase: '1' },
-            { label: 'Phase 2', count: pipeline.phase2 || 0, color: '#1A73E8', phase: '2' },
-            { label: 'Phase 3', count: pipeline.phase3 || 0, color: '#FF9800', phase: '3' },
-            { label: 'Phase 4', count: pipeline.phase4 || 0, color: '#9C27B0', phase: '4' },
-            { label: 'Complete', count: pipeline.completed || 0, color: '#4CAF50', phase: 'completed' },
-          ].map((item, idx) => (
-            <TouchableOpacity key={idx} style={s.pipelineItem} onPress={() => router.push(`/(tabs)/procedures?phase=${item.phase}`)} data-testid={`ic-pipeline-${item.phase}`}>
-              <View style={[s.pipelineBar, { backgroundColor: item.color, height: Math.max(8, pipelineTotal > 0 ? (item.count / pipelineTotal) * 80 : 8) }]} />
-              <Text style={s.pipelineCount}>{item.count}</Text>
-              <Text style={s.pipelineLabel}>{item.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      {/* Draft Cases */}
-      {draftCases.length > 0 && (
-        <View style={s.section} data-testid="ic-draft-cases-section">
-          <View style={s.sectionHeader}>
-            <Ionicons name="document-text-outline" size={18} color="#546E7A" />
-            <Text style={s.sectionTitle}>Drafts ({draftCases.length})</Text>
+      {layoutMode !== 'tablet-right' && (
+        <>
+          {/* Stats */}
+          <View style={s.statsRow}>
+            <StatCard label="Total" value={stats.total} color="#283593" icon="layers" onPress={() => router.push('/procedures')} />
+            <StatCard label="Active" value={stats.total - (stats.completed || 0) - stats.rejected} color="#1A73E8" icon="pulse" onPress={() => router.push('/procedures')} />
+            <StatCard label="Done" value={stats.completed || 0} color="#4CAF50" icon="checkmark-circle" onPress={() => router.push('/procedures')} />
+            <StatCard label="To Review" value={stats.pending_my_approval || 0} color="#E65100" icon="document-attach" onPress={() => router.push('/procedures')} />
           </View>
-          {draftCases.slice(0, 5).map((proc: any) => (
-            <View key={proc.id} style={s.draftCard} data-testid={`ic-draft-card-${proc.id}`}>
-              <View style={{ flex: 1 }}>
-                <Text style={s.draftPatient}>{proc.patient_name}</Text>
-                <Text style={s.draftSub}>{proc.implant_procedure_type} - {proc.procedure_date}</Text>
-              </View>
-              <TouchableOpacity
-                style={s.continueBtn}
-                onPress={() => router.push(`/(tabs)/new-procedure?draftId=${proc.id}`)}
-                data-testid={`ic-draft-continue-btn-${proc.id}`}
-              >
-                <Ionicons name="play-circle" size={14} color="#FFF" />
-                <Text style={s.continueBtnText}>Continue</Text>
-              </TouchableOpacity>
+
+          {/* Phase Pipeline */}
+          <View style={s.section}>
+            <View style={s.sectionHeader}>
+              <Ionicons name="git-branch-outline" size={18} color="#283593" />
+              <Text style={[s.sectionTitle, { color: '#283593' }]}>Case Pipeline</Text>
             </View>
-          ))}
-        </View>
+            <View style={s.pipelineCard}>
+              {[
+                { label: 'Phase 1', count: pipeline.phase1 || 0, color: '#78909C', phase: '1' },
+                { label: 'Phase 2', count: pipeline.phase2 || 0, color: '#1A73E8', phase: '2' },
+                { label: 'Phase 3', count: pipeline.phase3 || 0, color: '#FF9800', phase: '3' },
+                { label: 'Phase 4', count: pipeline.phase4 || 0, color: '#9C27B0', phase: '4' },
+                { label: 'Complete', count: pipeline.completed || 0, color: '#4CAF50', phase: 'completed' },
+              ].map((item, idx) => (
+                <TouchableOpacity key={idx} style={s.pipelineItem} onPress={() => router.push(`/(tabs)/procedures?phase=${item.phase}`)} data-testid={`ic-pipeline-${item.phase}`}>
+                  <View style={[s.pipelineBar, { backgroundColor: item.color, height: Math.max(8, pipelineTotal > 0 ? (item.count / pipelineTotal) * 80 : 8) }]} />
+                  <Text style={s.pipelineCount}>{item.count}</Text>
+                  <Text style={s.pipelineLabel}>{item.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Draft Cases */}
+          {draftCases.length > 0 && (
+            <View style={s.section} data-testid="ic-draft-cases-section">
+              <View style={s.sectionHeader}>
+                <Ionicons name="document-text-outline" size={18} color="#546E7A" />
+                <Text style={s.sectionTitle}>Drafts ({draftCases.length})</Text>
+              </View>
+              {draftCases.slice(0, 5).map((proc: any) => (
+                <View key={proc.id} style={s.draftCard} data-testid={`ic-draft-card-${proc.id}`}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.draftPatient}>{proc.patient_name}</Text>
+                    <Text style={s.draftSub}>{proc.implant_procedure_type} - {proc.procedure_date}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={s.continueBtn}
+                    onPress={() => router.push(`/(tabs)/new-procedure?draftId=${proc.id}`)}
+                    data-testid={`ic-draft-continue-btn-${proc.id}`}
+                  >
+                    <Ionicons name="play-circle" size={14} color="#FFF" />
+                    <Text style={s.continueBtnText}>Continue</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Pending Review */}
+          {pendingApproval.length > 0 && (
+            <View style={s.section}>
+              <View style={s.sectionHeader}>
+                <Ionicons name="clipboard-outline" size={18} color="#E65100" />
+                <Text style={[s.sectionTitle, { color: '#E65100' }]}>Pending Review ({pendingApproval.length})</Text>
+              </View>
+              {pendingApproval.slice(0, 5).map((proc: any) => {
+                const phase = getPhaseFromStatus(proc.status);
+                return (
+                  <TouchableOpacity key={proc.id} style={s.approvalCard} onPress={() => router.push(`/procedures/${proc.id}`)} data-testid={`ic-pending-${proc.id}`}>
+                    <View style={s.approvalPhaseWrap}>
+                      <Text style={s.approvalPhaseNum}>P{phase}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.approvalPatient}>{proc.patient_name}</Text>
+                      <Text style={s.approvalSub}>{proc.student_name} - {proc.implant_procedure_type}</Text>
+                    </View>
+                    <PulsingDoubleArrow color="#EF6C00" size={14} delayMs={120} />
+                    <View style={s.reviewChip}>
+                      <Text style={s.reviewChipText}>Review</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Student Performance */}
+          {studentStats.length > 0 && <StudentPerformanceSection rows={studentStats.filter((st: any) => st.student_name)} router={router} />}
+
+          {/* Supervisor Performance */}
+          {(stats.supervisor_stats || []).length > 0 && (
+            <SupervisorPerformanceSection rows={(stats.supervisor_stats || []).filter((sp: any) => sp.supervisor_name)} router={router} />
+          )}
+        </>
       )}
 
-      {/* Pending Review */}
-      {pendingApproval.length > 0 && (
+      {/* Quick Actions - Tablet Right position */}
+      {layoutMode === 'tablet-right' && (
         <View style={s.section}>
           <View style={s.sectionHeader}>
-            <Ionicons name="clipboard-outline" size={18} color="#E65100" />
-            <Text style={[s.sectionTitle, { color: '#E65100' }]}>Pending Review ({pendingApproval.length})</Text>
+            <Ionicons name="apps-outline" size={18} color="#37474F" />
+            <Text style={s.sectionTitle}>Quick Actions</Text>
           </View>
-          {pendingApproval.slice(0, 5).map((proc: any) => {
-            const phase = getPhaseFromStatus(proc.status);
-            return (
-              <TouchableOpacity key={proc.id} style={s.approvalCard} onPress={() => router.push(`/procedures/${proc.id}`)} data-testid={`ic-pending-${proc.id}`}>
-                <View style={s.approvalPhaseWrap}>
-                  <Text style={s.approvalPhaseNum}>P{phase}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.approvalPatient}>{proc.patient_name}</Text>
-                  <Text style={s.approvalSub}>{proc.student_name} - {proc.implant_procedure_type}</Text>
-                </View>
-                <PulsingDoubleArrow color="#EF6C00" size={14} delayMs={120} />
-                <View style={s.reviewChip}>
-                  <Text style={s.reviewChipText}>Review</Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
+          <View style={s.quickActions}>
+            <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/new-procedure')} testID="quick-new-case-btn" /* @ts-ignore */ data-testid="quick-new-case-btn">
+              <Ionicons name="add-circle-outline" size={24} color="#1A73E8" />
+              <Text style={s.quickBtnText}>New Case</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/procedures')}>
+              <Ionicons name="folder-open-outline" size={24} color="#4CAF50" />
+              <Text style={s.quickBtnText}>All Cases</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/user-management')}>
+              <Ionicons name="people-outline" size={24} color="#FF9800" />
+              <Text style={s.quickBtnText}>Users</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/implant-selection')}>
+              <Ionicons name="search-outline" size={24} color="#9C27B0" />
+              <Text style={s.quickBtnText}>Implants</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
-      {/* Student Performance — top performers, paginated 5-at-a-time, tappable */}
-      {studentStats.length > 0 && <StudentPerformanceSection rows={studentStats.filter((st: any) => st.student_name)} router={router} />}
-
-      {/* Supervisor Performance — top supervisors, paginated, tappable */}
-      {(stats.supervisor_stats || []).length > 0 && (
-        <SupervisorPerformanceSection rows={(stats.supervisor_stats || []).filter((sp: any) => sp.supervisor_name)} router={router} />
+      {/* Quick Actions - Mobile position */}
+      {layoutMode === 'mobile' && (
+        <View style={s.section}>
+          <View style={s.sectionHeader}>
+            <Ionicons name="apps-outline" size={18} color="#37474F" />
+            <Text style={s.sectionTitle}>Quick Actions</Text>
+          </View>
+          <View style={s.quickActions}>
+            <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/new-procedure')} testID="quick-new-case-btn" /* @ts-ignore */ data-testid="quick-new-case-btn">
+              <Ionicons name="add-circle-outline" size={24} color="#1A73E8" />
+              <Text style={s.quickBtnText}>New Case</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/procedures')}>
+              <Ionicons name="folder-open-outline" size={24} color="#4CAF50" />
+              <Text style={s.quickBtnText}>All Cases</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/user-management')}>
+              <Ionicons name="people-outline" size={24} color="#FF9800" />
+              <Text style={s.quickBtnText}>Users</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/implant-selection')}>
+              <Ionicons name="search-outline" size={24} color="#9C27B0" />
+              <Text style={s.quickBtnText}>Implants</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       )}
 
-      {/* Quick Actions */}
-      <View style={s.section}>
-        <View style={s.sectionHeader}>
-          <Ionicons name="apps-outline" size={18} color="#37474F" />
-          <Text style={s.sectionTitle}>Quick Actions</Text>
-        </View>
-        <View style={s.quickActions}>
-          <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/new-procedure')} testID="quick-new-case-btn" /* @ts-ignore */ data-testid="quick-new-case-btn">
-            <Ionicons name="add-circle-outline" size={24} color="#1A73E8" />
-            <Text style={s.quickBtnText}>New Case</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/procedures')}>
-            <Ionicons name="folder-open-outline" size={24} color="#4CAF50" />
-            <Text style={s.quickBtnText}>All Cases</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/user-management')}>
-            <Ionicons name="people-outline" size={24} color="#FF9800" />
-            <Text style={s.quickBtnText}>Users</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/implant-selection')}>
-            <Ionicons name="search-outline" size={24} color="#9C27B0" />
-            <Text style={s.quickBtnText}>Implants</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      {layoutMode !== 'tablet-left' && (
+        <ProcedureCalendar procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
+      )}
 
-      <ProcedureCalendar procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
-      <RecentActivityWidget router={router} limit={5} />
+      {layoutMode !== 'tablet-right' && (
+        <RecentActivityWidget router={router} limit={5} />
+      )}
     </>
   );
 }
@@ -845,6 +900,8 @@ function StatCard({ label, value, color, icon, onPress }: { label: string; value
 
 // ── Main Dashboard ────────────────────────────────────────
 export default function DashboardScreen() {
+  const { width } = useWindowDimensions();
+  const isTablet = width >= 768;
   const [procedures, setProcedures] = useState<any[]>([]);
   const [stats, setStats] = useState<any>({ total: 0, pending: 0, approved: 0, rejected: 0, completed: 0, pipeline: {} });
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -878,7 +935,6 @@ export default function DashboardScreen() {
   if (loading) {
     return <View style={s.loading}><ActivityIndicator size="large" color="#1A73E8" /></View>;
   }
-
   const role = user?.role;
   const isStudent = role === 'student';
   const isSupervisor = role === 'supervisor';
@@ -894,26 +950,69 @@ export default function DashboardScreen() {
       >
         <Header user={user} router={router} />
 
-        {isNurse && <NurseHomeCalendar router={router} />}
-        {isNurse && <PatientConsentSection router={router} />}
-        {isNurse && <ScheduledCasesSection router={router} />}
+        {isTablet ? (
+          <View style={s.tabletMainContainer}>
+            <View style={s.tabletLeftColumn}>
+              {isNurse && (
+                <>
+                  <PatientConsentSection router={router} />
+                  <ScheduledCasesSection router={router} />
+                </>
+              )}
+              {isStudent && (
+                <StudentDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} layoutMode="tablet-left" />
+              )}
+              {isSupervisor && (
+                <SupervisorDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} userId={user?.id} layoutMode="tablet-left" />
+              )}
+              {isInCharge && (
+                <InChargeDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} layoutMode="tablet-left" />
+              )}
+              {!isStudent && !isSupervisor && !isInCharge && !isNurse && (
+                <StudentDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} layoutMode="tablet-left" />
+              )}
+            </View>
 
-        {isStudent && (
-          <StudentDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
-        )}
-        {isSupervisor && (
-          <SupervisorDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} userId={user?.id} />
-        )}
-        {isInCharge && (
-          <InChargeDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
-        )}
-        {!isStudent && !isSupervisor && !isInCharge && !isNurse && (
-          <StudentDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
-        )}
+            <View style={s.tabletRightColumn}>
+              {isNurse && <NurseHomeCalendar router={router} />}
+              {isStudent && (
+                <StudentDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} layoutMode="tablet-right" />
+              )}
+              {isSupervisor && (
+                <SupervisorDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} userId={user?.id} layoutMode="tablet-right" />
+              )}
+              {isInCharge && (
+                <InChargeDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} layoutMode="tablet-right" />
+              )}
+              {!isStudent && !isSupervisor && !isInCharge && !isNurse && (
+                <StudentDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} layoutMode="tablet-right" />
+              )}
 
-        {/* iter-280: Smart Clinical Tip banner — hidden for nurses (they
-            don't drive the surgical workflow, so daily clinical tips add noise). */}
-        {!isNurse && <SmartTipBanner />}
+              {!isNurse && <SmartTipBanner />}
+            </View>
+          </View>
+        ) : (
+          <>
+            {isNurse && <NurseHomeCalendar router={router} />}
+            {isNurse && <PatientConsentSection router={router} />}
+            {isNurse && <ScheduledCasesSection router={router} />}
+
+            {isStudent && (
+              <StudentDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
+            )}
+            {isSupervisor && (
+              <SupervisorDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} userId={user?.id} />
+            )}
+            {isInCharge && (
+              <InChargeDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
+            )}
+            {!isStudent && !isSupervisor && !isInCharge && !isNurse && (
+              <StudentDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
+            )}
+
+            {!isNurse && <SmartTipBanner />}
+          </>
+        )}
 
         <View style={{ height: 24 }} />
       </ScrollView>
@@ -926,6 +1025,9 @@ export default function DashboardScreen() {
 // ── Styles ────────────────────────────────────────────────
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F7FA' },
+  tabletMainContainer: { flexDirection: 'row', paddingHorizontal: 16, gap: 20, width: '100%' },
+  tabletLeftColumn: { flex: 1.6 },
+  tabletRightColumn: { flex: 1, maxWidth: 420 },
   loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   // Header

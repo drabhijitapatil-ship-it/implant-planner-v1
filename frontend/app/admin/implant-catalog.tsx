@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
   RefreshControl, TextInput, Alert, Modal, FlatList, Pressable,
-  KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView, Platform, useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -80,6 +80,10 @@ const BLT_PLATFORM_OPTIONS: { label: string; platform: string; diameter_mm: numb
 
 export default function ImplantCatalogAdmin() {
   const { user } = useAuth();
+  // iPad / tablet: two-pane layout (selectors + browse on the left, detail on
+  // the right). Phones keep the original stacked layout untouched.
+  const { width } = useWindowDimensions();
+  const isTablet = width >= 768;
   const _canEdit = user?.role === 'administrator' || user?.role === 'implant_incharge' || user?.role === 'super_admin';
   const canEdit = _canEdit;
 
@@ -104,7 +108,9 @@ export default function ImplantCatalogAdmin() {
 
   const [pickerKind, setPickerKind] = useState<null | 'brand' | 'family' | 'variant' | 'blt_platform'>(null);
 
-  const [gridOpen, setGridOpen] = useState(false);
+  // iPad: the visual browse grid lives in the left sidebar, so open it by
+  // default there; phones keep it collapsed as before.
+  const [gridOpen, setGridOpen] = useState(isTablet);
 
   const [question, setQuestion] = useState('');
   const [aiAnswer, setAiAnswer] = useState<string | null>(null);
@@ -392,65 +398,10 @@ export default function ImplantCatalogAdmin() {
   const showFamilyDropdown = !!selectedBrand && familiesForBrand.length > 0;
   const showVariantDropdown = !!selectedFamily && variantsForFamily.length > 1;
 
-  return (
-    <SafeAreaView style={s.container}>
-      <View style={s.headerBar}>
-        <View style={s.headerTopRow}>
-          <BackButton />
-          <View style={s.headerTitleBlock}>
-            <Text style={s.headerTitle}>Implant Database</Text>
-            <Text style={s.headerSub}>Implanr AI Knowledge Base</Text>
-          </View>
-          {/* iter-159: Right-slot "+" pill (Implant In-Charge / Administrator only)
-              replaces the previous full-width "Add Implant System" button below. */}
-          {canEdit ? (
-            <TouchableOpacity
-              style={s.addCircleBtn}
-              onPress={() => router.push('/admin/implant-catalog-edit')}
-              testID="catalog-add-new"
-              data-testid="catalog-add-new"
-              accessibilityLabel="Add Implant System"
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons name="add" size={26} color="#FFF" />
-            </TouchableOpacity>
-          ) : (
-            <View style={{ width: 44, height: 44 }} />
-          )}
-        </View>
-
-        <View style={s.tabRow}>
-          <TouchableOpacity
-            style={s.tabPill}
-            onPress={() => router.push('/ask-implanr')}
-            testID="catalog-open-ask-ai"
-            data-testid="catalog-open-ask-ai"
-          >
-            <Ionicons name="sparkles" size={16} color="#0277BD" />
-            <Text style={s.tabPillTextAi}>Ask Implanr AI</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={s.tabPillCompare}
-            onPress={() => router.push('/admin/implant-compare')}
-            testID="catalog-open-compare"
-            data-testid="catalog-open-compare"
-          >
-            <Ionicons name="git-compare-outline" size={16} color="#00695C" />
-            <Text style={s.tabPillTextCompare}>Compare</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-      >
-      <ScrollView
-        contentContainerStyle={{ padding: 16, paddingBottom: 48 }}
-        keyboardShouldPersistTaps="handled"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
-      >
+  // ── Reusable JSX blocks — composed differently for phone (stacked) vs.
+  //    iPad (two-pane: selectors + browse left, detail right). ──
+  const selectorsJsx = (
+    <>
         {/* ── Cascading dropdowns ── */}
         <View style={s.dropdownGroup}>
           <Text style={s.dropdownLabel}>Implant Company</Text>
@@ -569,8 +520,11 @@ export default function ImplantCatalogAdmin() {
           </View>
         )}
 
-        {/* ── Detail card (full width) ── */}
-        {selected ? (
+    </>
+  );
+
+  // ── Detail card (full width on phone; right pane on iPad) ──
+  const detailJsx = selected ? (
           <View style={s.detailCard} data-testid="catalog-detail-card">
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
               <View style={{ flex: 1 }}>
@@ -599,24 +553,27 @@ export default function ImplantCatalogAdmin() {
               )}
             </View>
 
-            {!!selected.connection && (
-              <SectionBlock title="Connection">
-                <DetailRow label="Type" value={selected.connection.type || '—'} />
-                {!!selected.connection.subtype && <DetailRow label="Subtype" value={selected.connection.subtype} />}
-                {!!selected.connection.indexing?.length && <DetailRow label="Indexing" value={selected.connection.indexing.join(', ')} />}
-                {selected.platform_switching != null && <DetailRow label="Platform Switching" value={selected.platform_switching ? 'Yes' : 'No'} />}
-              </SectionBlock>
-            )}
+            {/* iPad: Connection + Implant sit side-by-side; phone stacks them. */}
+            <View style={isTablet ? s.sectionPairRow : undefined}>
+              {!!selected.connection && (
+                <SectionBlock title="Connection" style={isTablet ? s.sectionPairItem : undefined}>
+                  <DetailRow label="Type" value={selected.connection.type || '—'} />
+                  {!!selected.connection.subtype && <DetailRow label="Subtype" value={selected.connection.subtype} />}
+                  {!!selected.connection.indexing?.length && <DetailRow label="Indexing" value={selected.connection.indexing.join(', ')} />}
+                  {selected.platform_switching != null && <DetailRow label="Platform Switching" value={selected.platform_switching ? 'Yes' : 'No'} />}
+                </SectionBlock>
+              )}
 
-            {!!selected.implant && (selected.implant.diameters_mm?.length || selected.implant.lengths_mm?.length || selected.implant.bone_types?.length) && (
-              <SectionBlock title="Implant">
-                {!!selected.implant.diameters_mm?.length && <DetailRow label="Diameters (mm)" value={selected.implant.diameters_mm.join(', ')} />}
-                {!!selected.implant.lengths_mm?.length && <DetailRow label="Lengths (mm)" value={selected.implant.lengths_mm.join(', ')} />}
-                {!!selected.implant.bone_types?.length && <DetailRow label="Bone Types" value={selected.implant.bone_types.join(', ')} />}
-                {!!selected.implant.healing_modes?.length && <DetailRow label="Healing Modes" value={selected.implant.healing_modes.join(', ')} />}
-                {!!selected.implant.surface_options?.length && <DetailRow label="Surface Options" value={selected.implant.surface_options.join(', ')} />}
-              </SectionBlock>
-            )}
+              {!!selected.implant && (selected.implant.diameters_mm?.length || selected.implant.lengths_mm?.length || selected.implant.bone_types?.length) && (
+                <SectionBlock title="Implant" style={isTablet ? s.sectionPairItem : undefined}>
+                  {!!selected.implant.diameters_mm?.length && <DetailRow label="Diameters (mm)" value={selected.implant.diameters_mm.join(', ')} />}
+                  {!!selected.implant.lengths_mm?.length && <DetailRow label="Lengths (mm)" value={selected.implant.lengths_mm.join(', ')} />}
+                  {!!selected.implant.bone_types?.length && <DetailRow label="Bone Types" value={selected.implant.bone_types.join(', ')} />}
+                  {!!selected.implant.healing_modes?.length && <DetailRow label="Healing Modes" value={selected.implant.healing_modes.join(', ')} />}
+                  {!!selected.implant.surface_options?.length && <DetailRow label="Surface Options" value={selected.implant.surface_options.join(', ')} />}
+                </SectionBlock>
+              )}
+            </View>
 
             {!!selected.features?.length && (
               <SectionBlock title="Features">
@@ -635,7 +592,7 @@ export default function ImplantCatalogAdmin() {
                   <View style={s.platformHintBox} testID="catalog-blt-platform-hint">
                     <Ionicons name="information-circle-outline" size={18} color="#0277BD" />
                     <Text style={s.platformHintText}>
-                      Select a platform above (SC 2.9 / NC 3.3 / RC 4.1 / RC 4.8) to view the matching prosthetic components.
+                      Select a platform {isTablet ? 'on the left' : 'above'} (SC 2.9 / NC 3.3 / RC 4.1 / RC 4.8) to view the matching prosthetic components.
                     </Text>
                   </View>
                 </SectionBlock>
@@ -647,7 +604,10 @@ export default function ImplantCatalogAdmin() {
                       : `Components (${visibleComponents.length})`
                   }
                 >
-                  {visibleComponents.map((c, i) => <ComponentCard key={i} c={c} />)}
+                  {/* iPad: components flow in a 2-column grid; phone stacks them. */}
+                  <View style={isTablet ? s.compGridTablet : undefined}>
+                    {visibleComponents.map((c, i) => <ComponentCard key={i} c={c} tablet={isTablet} />)}
+                  </View>
                 </SectionBlock>
               ) : requiresBltPlatformPick && activeBltPlatformCode ? (
                 <SectionBlock title={`Components — ${selectedBltPlatformOpt}`}>
@@ -704,14 +664,16 @@ export default function ImplantCatalogAdmin() {
             <Ionicons name="library-outline" size={36} color="#B3E5FC" />
             <Text style={s.placeholderText}>
               {!selectedBrand
-                ? 'Select an implant company above to begin.'
+                ? `Select an implant company ${isTablet ? 'on the left' : 'above'} to begin.`
                 : showVariantDropdown
                   ? 'Select a variant to load its full data.'
                   : 'Loading…'}
             </Text>
           </View>
-        )}
+        );
 
+  const gridJsx = (
+    <>
         {/* ── Collapsible visual grid (browse fallback) ── */}
         <TouchableOpacity
           style={s.gridToggle}
@@ -740,13 +702,95 @@ export default function ImplantCatalogAdmin() {
                   }}
                   data-testid={`catalog-grid-${sys.key}`}
                 >
-                  <Text style={[s.gridCardBrand, active && { color: '#FFF' }]}>{sys.brand}</Text>
-                  <Text style={[s.gridCardName, active && { color: '#FFF' }]} numberOfLines={2}>{sys.name}</Text>
-                  <Text style={[s.gridCardCount, active && { color: '#E1F5FE' }]}>{sys.components?.length || 0} components</Text>
+                  <Text style={[s.gridCardBrand, active ? { color: '#FFF' } : null]}>{sys.brand}</Text>
+                  <Text style={[s.gridCardName, active ? { color: '#FFF' } : null]} numberOfLines={2}>{sys.name}</Text>
+                  <Text style={[s.gridCardCount, active ? { color: '#E1F5FE' } : null]}>{sys.components?.length || 0} components</Text>
                 </TouchableOpacity>
               );
             })}
           </View>
+        )}
+    </>
+  );
+
+  return (
+    <SafeAreaView style={s.container}>
+      <View style={s.headerBar}>
+        <View style={s.headerTopRow}>
+          <BackButton />
+          <View style={s.headerTitleBlock}>
+            <Text style={s.headerTitle}>Implant Database</Text>
+            <Text style={s.headerSub}>Implanr AI Knowledge Base</Text>
+          </View>
+          {/* iter-159: Right-slot "+" pill (Implant In-Charge / Administrator only)
+              replaces the previous full-width "Add Implant System" button below. */}
+          {canEdit ? (
+            <TouchableOpacity
+              style={s.addCircleBtn}
+              onPress={() => router.push('/admin/implant-catalog-edit')}
+              testID="catalog-add-new"
+              data-testid="catalog-add-new"
+              accessibilityLabel="Add Implant System"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="add" size={26} color="#FFF" />
+            </TouchableOpacity>
+          ) : (
+            <View style={{ width: 44, height: 44 }} />
+          )}
+        </View>
+
+        <View style={s.tabRow}>
+          <TouchableOpacity
+            style={s.tabPill}
+            onPress={() => router.push('/ask-implanr')}
+            testID="catalog-open-ask-ai"
+            data-testid="catalog-open-ask-ai"
+          >
+            <Ionicons name="sparkles" size={16} color="#0277BD" />
+            <Text style={s.tabPillTextAi}>Ask Implanr AI</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={s.tabPillCompare}
+            onPress={() => router.push('/admin/implant-compare')}
+            testID="catalog-open-compare"
+            data-testid="catalog-open-compare"
+          >
+            <Ionicons name="git-compare-outline" size={16} color="#00695C" />
+            <Text style={s.tabPillTextCompare}>Compare</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
+      <ScrollView
+        contentContainerStyle={isTablet ? s.scrollTablet : { padding: 16, paddingBottom: 48 }}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
+      >
+        {isTablet ? (
+          /* iPad: two-pane — selectors + visual browse on the left,
+             detail card + Ask AI on the right. */
+          <View style={s.tabletBody} data-testid="catalog-tablet-body">
+            <View style={s.tabletLeftCol}>
+              {selectorsJsx}
+              {gridJsx}
+            </View>
+            <View style={s.tabletRightCol}>
+              {detailJsx}
+            </View>
+          </View>
+        ) : (
+          /* Phone: original stacked layout, unchanged. */
+          <>
+            {selectorsJsx}
+            {detailJsx}
+            {gridJsx}
+          </>
         )}
       </ScrollView>
       </KeyboardAvoidingView>
@@ -761,13 +805,14 @@ export default function ImplantCatalogAdmin() {
         {/* iter-170: backdrop is a separate absolute-filled Pressable BEHIND the
             modal card. The card itself is a sibling View — taps on the card or
             its FlatList rows no longer bubble up to dismiss the modal. */}
-        <View style={s.modalBackdrop}>
+        <View style={[s.modalBackdrop, isTablet && s.modalBackdropTablet]}>
           <Pressable
             style={StyleSheet.absoluteFill}
             onPress={() => setPickerKind(null)}
             data-testid="catalog-picker-backdrop"
           />
-          <View style={s.modalCard} onStartShouldSetResponder={() => true}>
+          {/* iPad: centered dialog instead of the phone bottom-sheet. */}
+          <View style={[s.modalCard, isTablet && s.modalCardTablet]} onStartShouldSetResponder={() => true}>
             <View style={s.modalHeader}>
               <Text style={s.modalTitle}>{pickerTitle}</Text>
               <TouchableOpacity onPress={() => setPickerKind(null)} data-testid="catalog-picker-close">
@@ -828,8 +873,8 @@ export default function ImplantCatalogAdmin() {
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────
-const SectionBlock: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <View style={s.section}>
+const SectionBlock: React.FC<{ title: string; children: React.ReactNode; style?: object }> = ({ title, children, style }) => (
+  <View style={[s.section, style]}>
     <Text style={s.sectionTitle}>{title}</Text>
     {children}
   </View>
@@ -853,12 +898,12 @@ const titleCase = (s: string) =>
 const prettyList = (arr?: string[], sep: string = ' / ') =>
   (arr || []).map(titleCase).join(sep);
 
-const ComponentCard: React.FC<{ c: Component }> = ({ c }) => {
+const ComponentCard: React.FC<{ c: Component; tablet?: boolean }> = ({ c, tablet }) => {
   const type = titleCase(c.type);
   const subtype = c.subtype ? titleCase(c.subtype) : '';
   const title = subtype ? `${type} / ${subtype}` : type;
   return (
-    <View style={s.compCard}>
+    <View style={[s.compCard, tablet && s.compCardTablet]}>
       <Text style={s.compTitle}>{title}</Text>
       {!!c.gingival_heights_mm?.length && <DetailRow label="Cuff height (GH)" value={`${c.gingival_heights_mm.join(', ')} mm`} />}
       {!!c.angulations_deg?.length && <DetailRow label="Angulations" value={`${c.angulations_deg.join(', ')}°`} />}
@@ -992,4 +1037,15 @@ const s = StyleSheet.create({
   pickerSub: { fontSize: 12, color: '#90A4AE', marginTop: 2 },
   pickerSubActive: { color: '#0277BD' },
   pickerSep: { height: 1, backgroundColor: '#F0F4F8' },
+  // iPad two-pane layout (width >= 768). Phone styles above are untouched.
+  scrollTablet: { padding: 20, paddingBottom: 64 },
+  tabletBody: { flexDirection: 'row', gap: 20, alignItems: 'flex-start' },
+  tabletLeftCol: { width: 360, flexShrink: 0 },
+  tabletRightCol: { flex: 1, minWidth: 0 },
+  sectionPairRow: { flexDirection: 'row', gap: 12 },
+  sectionPairItem: { flex: 1 },
+  compGridTablet: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  compCardTablet: { width: '48.5%', marginBottom: 0 },
+  modalBackdropTablet: { justifyContent: 'center', alignItems: 'center', padding: 32 },
+  modalCardTablet: { width: 520, maxWidth: '92%', borderRadius: 20, maxHeight: '70%' },
 });

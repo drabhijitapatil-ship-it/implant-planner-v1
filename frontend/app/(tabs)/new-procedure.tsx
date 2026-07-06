@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, Alert, ActivityIndicator, Platform, AppState, Linking, Image, Animated, Modal
+  StyleSheet, Alert, ActivityIndicator, Platform, AppState, Linking, Image, Animated, Modal, useWindowDimensions
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -263,6 +263,8 @@ const calStyles = StyleSheet.create({
 
 // ─── Main Component ────────────────────────────────────
 export default function NewProcedureScreen() {
+  const { width } = useWindowDimensions();
+  const isTablet = width >= 768;
   const { user } = useAuth();
   const router = useRouter();
   const params = useLocalSearchParams<{ draftId?: string }>();
@@ -424,6 +426,17 @@ export default function NewProcedureScreen() {
   const [activeTooltip, setActiveTooltip] = useState<{ label: string; tooltip: string } | null>(null);
   const [showSupervisorPicker, setShowSupervisorPicker] = useState(false);
   const [showInchargePicker, setShowInchargePicker] = useState(false);
+
+  // Dynamic responsive styles to prevent stretching on iPad
+  const styles = useMemo(() => ({
+    ...staticStyles,
+    headerBar: [staticStyles.headerBar, isTablet && { maxWidth: 800, alignSelf: 'center', width: '100%' }],
+    existingProgressBar: [staticStyles.existingProgressBar, isTablet && { maxWidth: 800, alignSelf: 'center', width: '100%' }],
+    section: [staticStyles.section, isTablet && { maxWidth: 800, alignSelf: 'center', width: '100%', marginHorizontal: 'auto' }],
+    continueBtn: [staticStyles.continueBtn, isTablet && { maxWidth: 800, alignSelf: 'center', width: '100%', marginHorizontal: 'auto' }],
+    stepHeader: [staticStyles.stepHeader, isTablet && { maxWidth: 800, alignSelf: 'center', width: '100%' }],
+    submitContainer: [staticStyles.submitContainer, isTablet && { maxWidth: 800, alignSelf: 'center', width: '100%' }],
+  }), [isTablet]);
 
   // iter-231: for Existing Implant cases use the *original* procedure type
   // captured inside ExistingImplantSection so the Clinical Examination + Medical
@@ -2888,7 +2901,7 @@ export default function NewProcedureScreen() {
 }
 
 // ─── Styles ────────────────────────────────────────────
-const styles = StyleSheet.create({
+const staticStyles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F0F4F8' },
   headerBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
   headerTitle: { fontSize: 18, fontWeight: '800', color: '#0D47A1', marginLeft: 12, lineHeight: 22 },
@@ -2970,3 +2983,5 @@ const styles = StyleSheet.create({
   submitBtn: { flexDirection: 'row', backgroundColor: '#43A047', borderRadius: 14, padding: 16, alignItems: 'center', justifyContent: 'center', gap: 8, shadowColor: '#43A047', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 5 },
   submitBtnText: { color: '#FFF', fontSize: 16, fontWeight: '700', letterSpacing: 0.5 },
 });
+
+const styles = staticStyles;

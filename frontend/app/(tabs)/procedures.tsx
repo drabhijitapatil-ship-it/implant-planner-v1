@@ -11,6 +11,7 @@ import {
   Alert,
   Modal,
   Pressable,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -64,6 +65,8 @@ const getStatusBadgeStyle = (status: string) => {
 };
 
 function DefaultProceduresScreen() {
+  const { width } = useWindowDimensions();
+  const isTablet = width >= 768;
   const { user } = useAuth();
   const [procedures, setProcedures] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -326,7 +329,14 @@ function DefaultProceduresScreen() {
 
     return (
       <TouchableOpacity
-        style={styles.procedureCard}
+        style={[
+          styles.procedureCard,
+          isTablet && {
+            flex: 1,
+            maxWidth: "48.5%",
+            marginBottom: 16,
+          },
+        ]}
         onPress={() => {
           setMenuOpenId(null);
           router.push(`/procedures/${item.id}`);
@@ -590,62 +600,66 @@ function DefaultProceduresScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.filterContainer}>
-        {filterButtons.map((btn) => {
-          const isActive = filter === btn.key;
-          const count = tabCounts[btn.key] ?? 0;
-          return (
-            <TouchableOpacity
-              key={btn.key}
-              style={[
-                styles.filterButton,
-                isActive && styles.filterButtonActive,
-              ]}
-              onPress={() => setFilter(btn.key as any)}
-              testID={`filter-tab-${btn.key}`}
-            >
-              <Text
-                style={[styles.filterText, isActive && styles.filterTextActive]}
-                numberOfLines={1}
+      <View style={isTablet ? { backgroundColor: "#FFF", borderBottomWidth: 1, borderBottomColor: "#E5E5EA" } : null}>
+        <View style={[styles.filterContainer, isTablet && { maxWidth: 960, alignSelf: "center", width: "100%", borderBottomWidth: 0 }]}>
+          {filterButtons.map((btn) => {
+            const isActive = filter === btn.key;
+            const count = tabCounts[btn.key] ?? 0;
+            return (
+              <TouchableOpacity
+                key={btn.key}
+                style={[
+                  styles.filterButton,
+                  isActive && styles.filterButtonActive,
+                ]}
+                onPress={() => setFilter(btn.key as any)}
+                testID={`filter-tab-${btn.key}`}
               >
-                {btn.label}
                 <Text
-                  style={[
-                    styles.filterCount,
-                    isActive && styles.filterCountActive,
-                  ]}
-                >{` (${count})`}</Text>
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+                  style={[styles.filterText, isActive && styles.filterTextActive]}
+                  numberOfLines={1}
+                >
+                  {btn.label}
+                  <Text
+                    style={[
+                      styles.filterCount,
+                      isActive && styles.filterCountActive,
+                    ]}
+                  >{` (${count})`}</Text>
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
 
-      <View style={styles.searchContainer} data-testid="search-bar-container">
-        <Ionicons
-          name="search"
-          size={18}
-          color="#999"
-          style={{ marginLeft: 12 }}
-        />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search by patient, registration, student..."
-          placeholderTextColor="#999"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          autoCorrect={false}
-          data-testid="search-input"
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity
-            onPress={() => setSearchQuery("")}
-            style={{ padding: 8 }}
-            data-testid="search-clear"
-          >
-            <Ionicons name="close-circle" size={20} color="#999" />
-          </TouchableOpacity>
-        )}
+      <View style={isTablet && { maxWidth: 960, alignSelf: "center", width: "100%" }}>
+        <View style={styles.searchContainer} data-testid="search-bar-container">
+          <Ionicons
+            name="search"
+            size={18}
+            color="#999"
+            style={{ marginLeft: 12 }}
+          />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search by patient, registration, student..."
+            placeholderTextColor="#999"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCorrect={false}
+            data-testid="search-input"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setSearchQuery("")}
+              style={{ padding: 8 }}
+              data-testid="search-clear"
+            >
+              <Ionicons name="close-circle" size={20} color="#999" />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {filteredProcedures.length === 0 ? (
@@ -661,13 +675,23 @@ function DefaultProceduresScreen() {
         </View>
       ) : (
         <FlatList
+          key={isTablet ? "tablet-grid" : "mobile-list"}
+          numColumns={isTablet ? 2 : 1}
+          columnWrapperStyle={isTablet ? { justifyContent: "space-between" } : undefined}
           data={filteredProcedures}
           renderItem={renderProcedure}
           keyExtractor={(item: any) => item.id}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
-          contentContainerStyle={styles.listContainer}
+          contentContainerStyle={[
+            styles.listContainer,
+            isTablet && {
+              maxWidth: 960,
+              alignSelf: "center",
+              width: "100%",
+            }
+          ]}
           keyboardShouldPersistTaps="handled"
         />
       )}

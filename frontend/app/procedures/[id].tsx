@@ -1986,7 +1986,7 @@ export default function ProcedureDetailScreen() {
         )}
 
         {/* Clinical Examination */}
-        {(procedure.occlusocervical_height || procedure.mesiodistal_space || procedure.edentulous_sites?.length > 0 || procedure.edentulous_site || procedure.arch_condition || procedure.ridge_contour || procedure.soft_tissue_thickness || procedure.keratinized_mucosa) && (
+        {(procedure.occlusocervical_height || procedure.mesiodistal_space || procedure.edentulous_sites?.length > 0 || procedure.edentulous_site || procedure.arch_condition || procedure.ridge_contour || procedure.soft_tissue_thickness || procedure.keratinized_mucosa || procedure.periodontal_status) && (
           <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#1E88E5' }]} data-testid="clinical-examination-section">
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <Ionicons name="search" size={20} color="#1E88E5" />
@@ -2020,6 +2020,9 @@ export default function ProcedureDetailScreen() {
             )}
             {procedure.keratinized_mucosa && (
               <InfoRow icon="resize" label="Keratinized Mucosa" value={procedure.keratinized_mucosa} fieldKey="keratinized_mucosa" />
+            )}
+            {procedure.periodontal_status && (
+              <InfoRow icon="pulse" label="Periodontal Status" value={procedure.periodontal_status} fieldKey="periodontal_status" />
             )}
           </View>
         )}
