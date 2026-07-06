@@ -3,9 +3,34 @@ import * as Sharing from 'expo-sharing';
 import { Alert, Platform } from 'react-native';
 import { format } from 'date-fns';
 import { getImplantSite, getImplantSpec } from './implantPlan';
+import api from './api';
+
+// ── Organization letterhead (name + logo) for generated documents ──
+export type OrgBranding = { name?: string | null; logo?: string | null };
+
+/** Fetch the current user's organization name + logo (base64 data URI).
+ *  Never throws — PDFs must still generate when the org lookup fails. */
+export const fetchOrgBranding = async (): Promise<OrgBranding | null> => {
+  try {
+    const { data } = await api.get('/organizations/me');
+    const org = data?.organization;
+    return org && (org.name || org.logo) ? { name: org.name, logo: org.logo } : null;
+  } catch {
+    return null;
+  }
+};
+
+const orgHeaderHtml = (org?: OrgBranding | null): string => {
+  if (!org || (!org.name && !org.logo)) return '';
+  return `
+    <div style="text-align: center; margin-bottom: 12px;">
+      ${org.logo ? `<img src="${org.logo}" style="height: 52px; max-width: 220px; object-fit: contain;" />` : ''}
+      ${org.name ? `<div style="font-size: 15px; font-weight: bold; color: #263238; margin-top: 4px;">${org.name}</div>` : ''}
+    </div>`;
+};
 
 /** Build the full HTML for the procedure case report (shared by download + print flows). */
-export const buildProcedurePdfHtml = (procedure: any): string => {
+export const buildProcedurePdfHtml = (procedure: any, org?: OrgBranding | null): string => {
   const isCompleted = procedure.status === 'completed';
   const statusBadgeText = isCompleted
     ? 'TREATMENT COMPLETE - ALL PROTOCOLS APPROVED'
@@ -37,6 +62,7 @@ export const buildProcedurePdfHtml = (procedure: any): string => {
         </head>
         <body>
           <div class="header">
+            ${orgHeaderHtml(org)}
             <h1>Dental Implant Procedure Report</h1>
             <span class="status-badge">${statusBadgeText}</span>
           </div>
@@ -404,7 +430,7 @@ export const buildProcedurePdfHtml = (procedure: any): string => {
 /** Generate the PDF and open the Share sheet (or trigger browser download on web). */
 export const generateProcedurePDF = async (procedure: any) => {
   try {
-    const html = buildProcedurePdfHtml(procedure);
+    const html = buildProcedurePdfHtml(procedure, await fetchOrgBranding());
 
     if (Platform.OS === 'web') {
       // Browser: open the HTML report in a new tab; user can Save As PDF.
@@ -439,7 +465,7 @@ export const generateProcedurePDF = async (procedure: any) => {
 /** Open the native print dialog (AirPrint / Android Print Services) with the case report. */
 export const printProcedurePDF = async (procedure: any) => {
   try {
-    const html = buildProcedurePdfHtml(procedure);
+    const html = buildProcedurePdfHtml(procedure, await fetchOrgBranding());
 
     if (Platform.OS === 'web') {
       // Open the HTML in a hidden iframe, call window.print() on load.
@@ -487,7 +513,7 @@ const _labelize = (val: string | undefined | null, map: Record<string, string>):
   return map[val] || val.replace(/_/g, ' ');
 };
 
-export const buildLabSlipHtml = (procedure: any): string => {
+export const buildLabSlipHtml = (procedure: any, org?: OrgBranding | null): string => {
   const p4 = procedure.phase4_step1_data || {};
   // iter-211: when the case originates from existing implants (Path A), the
   // surgical phases were skipped so `implant_plans` is empty. Pull the
@@ -620,6 +646,7 @@ export const buildLabSlipHtml = (procedure: any): string => {
       </style>
     </head>
     <body>
+      ${orgHeaderHtml(org)}
       <div class="ls-header">
         <div>
           <h1>DENTAL LABORATORY PRESCRIPTION</h1>
@@ -729,7 +756,7 @@ export const buildLabSlipHtml = (procedure: any): string => {
 
 export const generateLabSlipPDF = async (procedure: any) => {
   try {
-    const html = buildLabSlipHtml(procedure);
+    const html = buildLabSlipHtml(procedure, await fetchOrgBranding());
     if (Platform.OS === 'web') {
       const blob = new Blob([html], { type: 'text/html' });
       const url = URL.createObjectURL(blob);

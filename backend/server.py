@@ -218,6 +218,53 @@ async def _get_procedure_org_name(procedure: dict) -> Optional[str]:
     return org.get("name") if org else None
 
 
+async def _get_procedure_org_branding(procedure: dict) -> dict:
+    """Org letterhead for generated documents: {'name': str|None, 'logo_bytes': bytes|None}.
+    Same reverse lookup as _get_procedure_org_name; also decodes the org logo
+    (stored as a base64 data URI via PUT /organizations/me/logo) to raw bytes
+    ready for FPDF / reportlab image embedding."""
+    empty = {"name": None, "logo_bytes": None}
+    owner_ids = [procedure.get("student_id"), procedure.get("supervisor_id"), procedure.get("created_by_id")]
+    valid_oids = [ObjectId(o) for o in owner_ids if o and ObjectId.is_valid(o)]
+    if not valid_oids:
+        return empty
+    user = await db.users.find_one({"_id": {"$in": valid_oids}, "org_id": {"$exists": True, "$ne": None}}, {"org_id": 1})
+    if not user or not user.get("org_id"):
+        return empty
+    try:
+        org = await db.organizations.find_one({"_id": ObjectId(user["org_id"])}, {"name": 1, "logo": 1})
+    except Exception:
+        return empty
+    if not org:
+        return empty
+    logo_bytes = None
+    logo = org.get("logo") or ""
+    if isinstance(logo, str) and logo.startswith("data:image"):
+        try:
+            import base64 as _brand_b64
+            logo_bytes = _brand_b64.b64decode(logo.split(",", 1)[1])
+        except Exception:
+            logo_bytes = None
+    return {"name": org.get("name"), "logo_bytes": logo_bytes}
+
+
+def _fpdf_org_letterhead(pdf, branding: dict, safe) -> None:
+    """Draw centered org logo + name at the top of the current FPDF page."""
+    if branding.get("logo_bytes"):
+        try:
+            logo_h = 22
+            pdf.image(io.BytesIO(branding["logo_bytes"]), x=pdf.w / 2 - logo_h / 2, y=pdf.get_y(), h=logo_h)
+            pdf.set_y(pdf.get_y() + logo_h + 2)
+        except Exception:
+            pass  # corrupt/unsupported image — skip the logo, keep the name
+    if branding.get("name"):
+        pdf.set_font("Helvetica", "B", 13)
+        pdf.set_text_color(38, 50, 56)
+        pdf.cell(0, 8, safe(branding["name"]), ln=True, align="C")
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(2)
+
+
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
         token = credentials.credentials
@@ -4291,12 +4338,27 @@ async def get_procedure(procedure_id: str, request: Request, current_user: dict 
     await _assert_procedure_org_access(procedure, current_user)
     
     # Check access
+    async def _forum_shared_readable() -> bool:
+        # Cases shared to the Discussion Forum are viewable read-only by every
+        # forum member (any non-nurse role in the org — org access is asserted
+        # above). Anonymous shares stay locked down: opening the full case
+        # would reveal the patient + operator identity the sharer chose to
+        # hide, so only the normal owner/assignee rules apply there.
+        thread = await db.forum_threads.find_one({
+            "procedure_id": procedure_id,
+            "status": {"$in": ["open", "closed"]},
+            "anonymous": {"$ne": True},
+        })
+        return thread is not None
+
     if current_user["role"] == "student" and procedure["student_id"] != current_user["_id"]:
-        await log_access(action="procedure_view", resource_type="procedure", resource_id=procedure_id, user=current_user, request=request, outcome="denied")
-        raise HTTPException(status_code=403, detail="Access denied")
+        if not await _forum_shared_readable():
+            await log_access(action="procedure_view", resource_type="procedure", resource_id=procedure_id, user=current_user, request=request, outcome="denied")
+            raise HTTPException(status_code=403, detail="Access denied")
     elif current_user["role"] == "supervisor" and procedure["supervisor_id"] != current_user["_id"]:
-        await log_access(action="procedure_view", resource_type="procedure", resource_id=procedure_id, user=current_user, request=request, outcome="denied")
-        raise HTTPException(status_code=403, detail="Access denied")
+        if not await _forum_shared_readable():
+            await log_access(action="procedure_view", resource_type="procedure", resource_id=procedure_id, user=current_user, request=request, outcome="denied")
+            raise HTTPException(status_code=403, detail="Access denied")
     elif current_user["role"] == "nurse":
         # Nurses can view any case where Phase 1 has been submitted (draft is hidden).
         # They only see Phase 1 data on the UI (frontend-enforced).
@@ -5125,11 +5187,12 @@ async def generate_consent_template(
     if not is_stakeholder:
         raise HTTPException(status_code=403, detail="Not allowed to view this consent form")
 
-    org_name = await _get_procedure_org_name(procedure)
+    branding = await _get_procedure_org_branding(procedure)
+    org_name = branding["name"]
 
     from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable, Image as RLImage
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import mm
     from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT
@@ -5149,6 +5212,18 @@ async def generate_consent_template(
     story = []
     
     # ── Header ──
+    if branding.get("logo_bytes"):
+        try:
+            logo_img = RLImage(io.BytesIO(branding["logo_bytes"]))
+            ratio = logo_img.imageWidth / float(logo_img.imageHeight or 1)
+            logo_img.drawHeight = 14 * mm
+            logo_img.drawWidth = min(14 * mm * ratio, 60 * mm)
+            logo_img.drawHeight = logo_img.drawWidth / ratio
+            logo_img.hAlign = 'CENTER'
+            story.append(logo_img)
+            story.append(Spacer(1, 2))
+        except Exception:
+            pass  # unreadable logo — letterhead falls back to name only
     if org_name:
         from xml.sax.saxutils import escape as _xml_escape
         story.append(Paragraph(_xml_escape(org_name), styles['OrgHeader']))
@@ -9411,6 +9486,8 @@ async def generate_case_report(
         extra={"patient_name": procedure.get("patient_name")},
     )
 
+    branding = await _get_procedure_org_branding(procedure)
+
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
 
@@ -9455,9 +9532,12 @@ async def generate_case_report(
 
     # ── Page 1: Title Page ──────────────────────────────────
     pdf.add_page()
+    # Organization letterhead (logo + name) on top of the report.
+    pdf.set_y(15)
+    _fpdf_org_letterhead(pdf, branding, safe)
     pdf.set_font("Helvetica", "B", 24)
     pdf.set_text_color(0, 51, 153)
-    pdf.cell(0, 20, "", ln=True)
+    pdf.cell(0, 10, "", ln=True)
     pdf.cell(0, 15, safe("Implant Case Report"), ln=True, align="C")
     pdf.set_font("Helvetica", "", 14)
     pdf.set_text_color(80, 80, 80)
@@ -10196,6 +10276,8 @@ async def generate_preop_briefing(
 
     # ── Page 1 ────────────────────────────────────────────────
     pdf.add_page()
+    # Organization letterhead (logo + name) on top of the briefing.
+    _fpdf_org_letterhead(pdf, await _get_procedure_org_branding(procedure), safe)
     h1("Sinus Lift Surgery - Pre-Operative Briefing")
     pdf.set_font("Helvetica", "I", 9)
     pdf.set_text_color(*GREY)
@@ -15960,7 +16042,17 @@ async def forum_share_case(payload: ForumShareRequest, request: Request, current
     # Idempotent: return existing open thread if any
     existing = await db.forum_threads.find_one({"procedure_id": payload.procedure_id, "status": "open"}, {"_id": 0})
     if existing:
-        return {"thread": _serialize_thread(existing, viewer_id=str(current_user.get("_id") or current_user.get("id"))), "existing": True}
+        # Honour a stricter privacy choice on re-share: requesting anonymous on
+        # a currently-public thread flips it to anonymous. The reverse
+        # (de-anonymising) is only allowed for the original sharer — otherwise
+        # a colleague re-sharing publicly would unmask the sharer's choice.
+        req_uid = str(current_user.get("_id") or current_user.get("id"))
+        want_anon = bool(payload.anonymous)
+        if want_anon != bool(existing.get("anonymous")):
+            if want_anon or existing.get("shared_by_id") == req_uid:
+                await db.forum_threads.update_one({"id": existing["id"]}, {"$set": {"anonymous": want_anon}})
+                existing["anonymous"] = want_anon
+        return {"thread": _serialize_thread(existing, viewer_id=req_uid), "existing": True}
     uid = str(current_user.get("_id") or current_user.get("id"))
     now = datetime.now(timezone.utc)
     tid = str(uuid.uuid4())
@@ -15993,8 +16085,12 @@ async def forum_share_case(payload: ForumShareRequest, request: Request, current
     try:
         mods = db.users.find({"role": {"$in": ["implant_incharge", "administrator"]}}, {"_id": 0, "id": 1})
         mod_ids = [m.get("id") async for m in mods if m.get("id") and m.get("id") != uid]
-        patient_label = "anonymous case" if payload.anonymous else (proc.get("patient_name") or "a case")
-        await _forum_notify(mod_ids, "New Discussion Forum case", f"{current_user.get('name')} shared {patient_label} for discussion.", {"thread_id": tid})
+        if payload.anonymous:
+            # Anonymous share — hide the sharer's identity in the broadcast too.
+            body = "An anonymous case was shared for discussion."
+        else:
+            body = f"{current_user.get('name')} shared {proc.get('patient_name') or 'a case'} for discussion."
+        await _forum_notify(mod_ids, "New Discussion Forum case", body, {"thread_id": tid})
     except Exception:
         pass
     thread_clean = await db.forum_threads.find_one({"id": tid}, {"_id": 0})
@@ -16034,12 +16130,16 @@ async def forum_list_threads(
     if q:
         qs = q.strip()
         if qs:
+            rx = {"$regex": qs, "$options": "i"}
+            # Name-based matches are restricted to non-anonymous threads —
+            # otherwise searching a patient/operator name would reveal that an
+            # anonymous case about them exists.
             query["$or"] = [
-                {"patient_name": {"$regex": qs, "$options": "i"}},
-                {"student_name": {"$regex": qs, "$options": "i"}},
-                {"supervisor_name": {"$regex": qs, "$options": "i"}},
-                {"implant_procedure_type": {"$regex": qs, "$options": "i"}},
-                {"tags": {"$regex": qs, "$options": "i"}},
+                {"anonymous": {"$ne": True}, "patient_name": rx},
+                {"anonymous": {"$ne": True}, "student_name": rx},
+                {"anonymous": {"$ne": True}, "supervisor_name": rx},
+                {"implant_procedure_type": rx},
+                {"tags": rx},
             ]
     total = await db.forum_threads.count_documents(query)
     cursor = db.forum_threads.find(query, {"_id": 0}).sort("last_activity_at", -1).skip(skip).limit(limit)
@@ -16064,9 +16164,16 @@ async def forum_get_thread(thread_id: str, request: Request, current_user: dict 
     # snapshot so other members cannot identify the patient or sharer.
     if thread.get("anonymous") and procedure:
         _PII_KEYS = (
+            # Patient identity + contact + identifiers
             "patient_name", "patient_id", "patient_phone", "patient_email",
-            "age", "student_name", "student_id", "created_by_name", "created_by_id",
+            "email", "mobile_number", "age", "sex", "profession",
+            "registration_number", "receipt_number", "amount_paid",
+            # Signed documents carry the patient's name + signature
+            "patient_consent_form", "consent_form",
+            # Operator identity (the sharer chose to stay anonymous)
+            "student_name", "student_id", "created_by_name", "created_by_id",
             "supervisor_name", "supervisor_id", "instructor_name",
+            "implant_incharge_name", "implant_incharge_id",
         )
         procedure = {k: v for k, v in procedure.items() if k not in _PII_KEYS}
     return {

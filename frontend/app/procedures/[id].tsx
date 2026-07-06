@@ -4431,7 +4431,6 @@ const styles = StyleSheet.create({
   progressInline: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
     gap: 4,
     marginTop: 8,
     paddingHorizontal: 8,

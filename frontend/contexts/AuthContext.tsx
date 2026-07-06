@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect, useRef, useCallback } from 'react';
-import { Alert } from 'react-native';
+import { Alert, AppState } from 'react-native';
 import api, { getToken, setToken, removeToken, setOnAuthFailure, setOnActivity } from '../utils/api';
 import { BACKEND_URL } from '../utils/config';
 import { router } from 'expo-router';
@@ -49,6 +49,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const lastActivityRef = useRef<number>(Date.now());
   const sessionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Mirror of `user` readable from long-lived closures (auth-failure callback).
+  const userRef = useRef<User | null>(null);
+  useEffect(() => { userRef.current = user; }, [user]);
 
   const recordActivity = useCallback(() => {
     lastActivityRef.current = Date.now();
@@ -56,15 +59,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     loadStoredAuth();
-    // Register auth failure callback so interceptor can trigger logout safely
+    // Register auth failure callback so interceptor can trigger logout safely.
+    // Fires when the access token is rejected AND the refresh attempt fails —
+    // i.e. the session is genuinely over. Redirect to login with an explicit
+    // message instead of leaving the user stranded on a broken screen.
     setOnAuthFailure(() => {
+      const wasLoggedIn = !!userRef.current;
       setUser(null);
+      if (wasLoggedIn) {
+        Alert.alert(
+          'Session Expired',
+          'Your session has expired. Please log in again.',
+          [{ text: 'OK', onPress: () => router.replace('/auth/login') }]
+        );
+      }
     });
     // iter-169: Every authenticated API call records activity. Closes the HIPAA
     // compliance gap where ScrollView / TextInput consumed touches before they
     // reached the top-level responder, logging users out mid-session.
     setOnActivity(() => {
       lastActivityRef.current = Date.now();
+    });
+  }, []);
+
+  // Shared "kicked out after 15 min of inactivity" flow — used by the
+  // in-app interval, the background→foreground check, and nowhere else.
+  const expireSession = useCallback(() => {
+    logout().then(() => {
+      Alert.alert(
+        'Session Expired',
+        'You have been logged out after 15 minutes of inactivity. Please log in again.',
+        [{ text: 'OK', onPress: () => router.replace('/auth/login') }]
+      );
     });
   }, []);
 
@@ -85,20 +111,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           clearInterval(sessionTimerRef.current);
           sessionTimerRef.current = null;
         }
-        logout().then(() => {
-         Alert.alert(
-            'Session Expired',
-            'You have been logged out after 15 minutes of inactivity. Please log in again.',
-            [
-              {
-                text: 'OK',
-                onPress: () => {
-                  router.replace('/auth/login');
-                },
-              },
-            ]
-          );
-        });
+        expireSession();
       }
     }, 30000); // check every 30 seconds
     return () => {
@@ -107,12 +120,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         sessionTimerRef.current = null;
       }
     };
-  }, [user]);
+  }, [user, expireSession]);
+
+  // Backgrounding pauses JS timers, so the interval alone can't catch a user
+  // who leaves the app and comes back much later. Persist the last-activity
+  // timestamp when the app goes to background (survives an app kill — see
+  // loadStoredAuth) and re-check the moment it becomes active again.
+  useEffect(() => {
+    if (!user) return;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'background' || state === 'inactive') {
+        setToken('last_activity_at', String(lastActivityRef.current));
+      } else if (state === 'active') {
+        if (Date.now() - lastActivityRef.current > SESSION_TIMEOUT_MS) {
+          expireSession();
+        }
+      }
+    });
+    return () => sub.remove();
+  }, [user, expireSession]);
 
   const loadStoredAuth = async () => {
     try {
       const storedAccessToken = await getToken('access_token');
       if (storedAccessToken) {
+        // Enforce the 15-minute inactivity rule across app restarts too:
+        // without this, killing and reopening the app silently re-logs the
+        // user in via the 7-day refresh token — a hole on shared clinic
+        // devices. `last_activity_at` is persisted on app background.
+        const lastActivity = Number(await getToken('last_activity_at')) || 0;
+        if (lastActivity && Date.now() - lastActivity > SESSION_TIMEOUT_MS) {
+          await removeToken('access_token');
+          await removeToken('refresh_token');
+          await removeToken('user');
+          await removeToken('last_activity_at');
+          return; // index route sends the user to /auth/login
+        }
         try {
           const resp = await api.get('/auth/me');
           setUser(resp.data);
@@ -139,6 +182,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await setToken('access_token', access_token);
     await setToken('refresh_token', refresh_token);
     await setToken('user', JSON.stringify(newUser));
+    await setToken('last_activity_at', String(Date.now()));
 
     setUser(newUser);
   };
@@ -161,6 +205,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await removeToken('access_token');
     await removeToken('refresh_token');
     await removeToken('user');
+    await removeToken('last_activity_at');
     setUser(null);
   };
 

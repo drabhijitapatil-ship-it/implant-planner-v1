@@ -33,6 +33,7 @@ interface Thread {
   bookmarked?: boolean;
   watching?: boolean;
   anonymous: boolean;
+  is_my_thread?: boolean;
   reply_count: number;
 }
 
@@ -356,12 +357,24 @@ export default function ForumThreadScreen() {
           <View style={s.tagsRow}>
             {thread.tags.map(t => <View key={t} style={s.tag}><Text style={s.tagTxt}>{t}</Text></View>)}
           </View>
-          <View style={s.summaryActionsRow}>
-            <TouchableOpacity style={s.summaryBtn} onPress={() => router.push(`/procedures/${thread.procedure_id}` as any)} data-testid="forum-open-case-btn">
-              <Ionicons name="document-text" size={14} color="#1565C0" />
-              <Text style={s.summaryBtnTxt}>Open Full Case Report</Text>
-            </TouchableOpacity>
-          </View>
+          {/* Full case report is only reachable by users the backend will let
+              through: everyone for non-anonymous shares, but for anonymous
+              shares only the sharer, the case supervisor, and in-charges/admins
+              (opening the case would reveal the hidden patient + operator
+              identity). Others see a hint instead of a button that 403s. */}
+          {(!thread.anonymous || thread.is_my_thread || canModerate) ? (
+            <View style={s.summaryActionsRow}>
+              <TouchableOpacity style={s.summaryBtn} onPress={() => router.push(`/procedures/${thread.procedure_id}` as any)} data-testid="forum-open-case-btn">
+                <Ionicons name="document-text" size={14} color="#1565C0" />
+                <Text style={s.summaryBtnTxt}>Open Full Case Report</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={s.anonCaseHint} data-testid="forum-anon-case-hint">
+              <Ionicons name="eye-off-outline" size={14} color="#90A4AE" />
+              <Text style={s.anonCaseHintTxt}>Full case hidden — shared anonymously. Clinical details are summarised above.</Text>
+            </View>
+          )}
           <Text style={s.sharedBy}>Shared by {thread.shared_by_display || 'Unknown'} • {thread.shared_by_role}</Text>
         </View>
 
@@ -588,6 +601,8 @@ const s = StyleSheet.create({
   summaryActionsRow: { flexDirection: 'row', marginTop: 10, gap: 8 },
   summaryBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8, backgroundColor: '#E3F2FD' },
   summaryBtnTxt: { fontSize: 12, fontWeight: '600', color: '#1565C0' },
+  anonCaseHint: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
+  anonCaseHintTxt: { flex: 1, fontSize: 11, color: '#90A4AE', fontStyle: 'italic' },
   closedBanner: { margin: 14, padding: 12, backgroundColor: '#FFF3E0', borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 8 },
   closedTxt: { flex: 1, fontSize: 13, color: '#E65100' },
   modRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 14, marginBottom: 4, flexWrap: 'wrap' },
