@@ -18,11 +18,11 @@ function resolveUrl(url: string): string {
   return url;
 }
 
-const _rawUrl: string = "http://localhost:8001";
-// const _rawUrl: string =
-//   process.env.EXPO_PUBLIC_BACKEND_URL ||
-//   Constants.expoConfig?.extra?.backendUrl ||
-//   "https://api.implanr.com";
+// const _rawUrl: string = "http://localhost:8001";
+const _rawUrl: string =
+  process.env.EXPO_PUBLIC_BACKEND_URL ||
+  Constants.expoConfig?.extra?.backendUrl ||
+  "https://api.implanr.com";
 
 const BACKEND_URL: string = resolveUrl(_rawUrl);
 

@@ -81,7 +81,11 @@
       "Bash(sed -i '' 's/\"version\": \"1.0.6\"/\"version\": \"1.0.7\"/; s/\"runtimeVersion\": \"1.0.6\"/\"runtimeVersion\": \"1.0.7\"/' app.json)",
       "Bash(sed -i '' 's/MARKETING_VERSION = 1.0.6;/MARKETING_VERSION = 1.0.7;/g; s/CURRENT_PROJECT_VERSION = 4;/CURRENT_PROJECT_VERSION = 5;/g' ios/Implanr.xcodeproj/project.pbxproj)",
       "Bash(sed -i '' 's|<string>1.0.6</string>|<string>1.0.7</string>|' ios/Implanr/Info.plist)",
-      "Bash(sed -i '' 's/versionCode 5/versionCode 6/; s/versionName \"1.0.6\"/versionName \"1.0.7\"/' android/app/build.gradle)"
+      "Bash(sed -i '' 's/versionCode 5/versionCode 6/; s/versionName \"1.0.6\"/versionName \"1.0.7\"/' android/app/build.gradle)",
+      "Bash(sed -i '' 's/\"version\": \"1.0.7\"/\"version\": \"1.0.8\"/; s/\"runtimeVersion\": \"1.0.7\"/\"runtimeVersion\": \"1.0.8\"/' app.json)",
+      "Bash(sed -i '' 's/MARKETING_VERSION = 1.0.7;/MARKETING_VERSION = 1.0.8;/g; s/CURRENT_PROJECT_VERSION = 5;/CURRENT_PROJECT_VERSION = 6;/g' ios/Implanr.xcodeproj/project.pbxproj)",
+      "Bash(sed -i '' 's|<string>1.0.7</string>|<string>1.0.8</string>|' ios/Implanr/Info.plist)",
+      "Bash(sed -i '' 's/versionCode 6/versionCode 7/; s/versionName \"1.0.7\"/versionName \"1.0.8\"/' android/app/build.gradle)"
     ],
     "additionalDirectories": [
       "/dev",
