@@ -5408,9 +5408,35 @@ async def get_procedure_badge(
 from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
 import uuid
 
+def _redact_name_from_ai_text(text: str, patient_name: Optional[str]) -> str:
+    """iter-338 HIPAA: redact any occurrence of the patient's name in an AI response.
+    Belt-and-braces net in case the LLM ignores the 'refer as the patient' instruction.
+    Replaces the full name AND each individual token (first/last name) with 'the patient'.
+    Case-insensitive; preserves surrounding punctuation."""
+    if not text or not patient_name:
+        return text
+    import re as _re
+    name = patient_name.strip()
+    if not name:
+        return text
+    # Whole name first (most specific)
+    text = _re.sub(_re.escape(name), "the patient", text, flags=_re.IGNORECASE)
+    # Then each token (skip common titles + tokens <3 chars to avoid over-scrubbing)
+    for token in name.split():
+        tok = token.strip(".,")
+        if len(tok) < 3 or tok.lower() in {"mr", "mrs", "ms", "dr", "prof", "the"}:
+            continue
+        # \b word-boundary so 'Ram' inside 'Ramp' is safe
+        text = _re.sub(rf"\b{_re.escape(tok)}\b", "the patient", text, flags=_re.IGNORECASE)
+    return text
+
+
 def _build_case_context(proc: dict) -> str:
-    """Build a clinical case context string from procedure data."""
-    parts = [f"Patient: {proc.get('patient_name','N/A')}, Age: {proc.get('age','N/A')}, Sex: {proc.get('sex','N/A')}"]
+    """Build a clinical case context string from procedure data.
+    iter-338 HIPAA: patient_name is intentionally NOT sent to the AI. The
+    LLM only sees 'the patient' + demographic minimums (age/sex/profession)
+    that are clinically relevant. Full identity stays server-side."""
+    parts = [f"Patient: the patient, Age: {proc.get('age','N/A')}, Sex: {proc.get('sex','N/A')}"]
     if proc.get('profession'):
         parts.append(f"Profession: {proc.get('profession')}")
     if proc.get('chief_complaint'):
@@ -7134,6 +7160,7 @@ IMPORTANT GUIDELINES:
 - Write in professional scientific clinical language.
 - Generate a DYNAMIC summary tailored to this specific case — do not produce a generic template.
 - Make section headings **bold** and descriptions in regular type.
+- HIPAA: Refer to the individual only as "the patient" throughout. Never use, guess, or invent any personal name. No initials. No pseudonyms.
 {case_type_instruction}
 
 Case Data:
@@ -7175,6 +7202,8 @@ FORMAT INSTRUCTIONS:
     ).with_model("openai", "gpt-5.2")
 
     response = await chat.send_message(UserMessage(text=prompt))
+    # iter-338 HIPAA: scrub any patient-name occurrence that slipped through.
+    response = _redact_name_from_ai_text(response, proc.get("patient_name"))
 
     await db.procedures.update_one(
         {"_id": ObjectId(procedure_id)},
@@ -7222,7 +7251,9 @@ Prosthetic Component: {phase2.get('prosthetic_component','N/A')}
 Sutures: {phase2.get('sutures_placed','N/A')}
 Hemostasis Achieved: {'Yes' if phase2.get('hemostasis_achieved') else 'N/A'}
 
-Write a concise operative note (4-6 sentences) in standard surgical documentation format. Include: preparation, osteotomy, implant placement, primary stability (referencing actual torque values), and closure. Professional tone."""
+Write a concise operative note (4-6 sentences) in standard surgical documentation format. Include: preparation, osteotomy, implant placement, primary stability (referencing actual torque values), and closure. Professional tone.
+
+HIPAA: Refer to the individual only as "the patient" throughout. Never use, guess, or invent any personal name."""
 
     chat = LlmChat(
         api_key=_get_llm_key(),
@@ -7231,6 +7262,8 @@ Write a concise operative note (4-6 sentences) in standard surgical documentatio
     ).with_model("openai", "gpt-5.2")
     
     response = await chat.send_message(UserMessage(text=prompt))
+    # iter-338 HIPAA: scrub any patient-name that slipped through.
+    response = _redact_name_from_ai_text(response, proc.get("patient_name"))
     
     await db.procedures.update_one(
         {"_id": ObjectId(procedure_id)},
