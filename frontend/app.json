@@ -2,12 +2,12 @@
   "expo": {
     "name": "Implanr",
     "slug": "implanr",
-    "version": "1.0.8",
+    "version": "1.0.9",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "Implanr",
     "userInterfaceStyle": "automatic",
-    "runtimeVersion": "1.0.8",
+    "runtimeVersion": "1.0.9",
     "updates": {
       "enabled": true,
       "url": "https://u.expo.dev/421ba752-d276-4e5d-9496-66d13cd3d6a0"
