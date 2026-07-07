@@ -53,13 +53,7 @@ export default function AttachPickerModalRoot() {
     launchedRef.current = true;
     setBusy(true);
     try {
-      if (Platform.OS !== 'web') {
-        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!perm.granted) {
-          Alert.alert('Permission Required', 'Please allow access to your photo library in Settings.');
-          return closeAndResolve(null);
-        }
-      }
+      // System photo picker needs no media-library permission (Play policy: READ_MEDIA_* removed).
       // Hide our overlay immediately; no RN Modal means no dismiss race.
       setVisible(false);
       const result = await safeLaunchLibrary({ mediaTypes: ['images'], quality: 0.8 });

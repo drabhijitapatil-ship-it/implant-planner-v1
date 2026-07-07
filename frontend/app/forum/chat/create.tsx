@@ -114,10 +114,7 @@ export default function CreateGroupScreen() {
     setShowPhotoSheet(false);
     await waitForSheetClose();
     try {
-      if (Platform.OS !== 'web') {
-        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!perm.granted) { Alert.alert('Permission needed'); return; }
-      }
+      // System photo picker needs no media-library permission (Play policy: READ_MEDIA_* removed).
       const res = await safeLaunchLibrary({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85, allowsEditing: true, aspect: [1, 1] });
       if (res.canceled) return;
       const a = res.assets?.[0]; if (!a) return;

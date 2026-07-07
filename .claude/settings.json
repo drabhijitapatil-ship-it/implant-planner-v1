@@ -91,7 +91,8 @@
       "Bash(sed -i '' 's/\"version\": \"1.0.8\"/\"version\": \"1.0.9\"/; s/\"runtimeVersion\": \"1.0.8\"/\"runtimeVersion\": \"1.0.9\"/' app.json)",
       "Bash(sed -i '' 's/MARKETING_VERSION = 1.0.8;/MARKETING_VERSION = 1.0.9;/g; s/CURRENT_PROJECT_VERSION = 6;/CURRENT_PROJECT_VERSION = 7;/g' ios/Implanr.xcodeproj/project.pbxproj)",
       "Bash(sed -i '' 's|<string>1.0.8</string>|<string>1.0.9</string>|' ios/Implanr/Info.plist)",
-      "Bash(sed -i '' 's/versionCode 7/versionCode 8/; s/versionName \"1.0.8\"/versionName \"1.0.9\"/' android/app/build.gradle)"
+      "Bash(sed -i '' 's/versionCode 7/versionCode 8/; s/versionName \"1.0.8\"/versionName \"1.0.9\"/' android/app/build.gradle)",
+      "Bash(echo \"remaining gates: $?\")"
     ],
     "additionalDirectories": [
       "/dev",

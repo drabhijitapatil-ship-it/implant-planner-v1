@@ -134,12 +134,7 @@ export default function ProfileScreen() {
 
   const handlePickImage = async () => {
     // Request permission
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    
-    if (!permissionResult.granted) {
-      Alert.alert('Permission Required', 'Please allow access to your photo library to upload a profile picture.');
-      return;
-    }
+    // System photo picker needs no media-library permission (Play policy: READ_MEDIA_* removed).
 
     // Pick image
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -165,11 +160,7 @@ export default function ProfileScreen() {
   };
 
   const handlePickLogo = async () => {
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permissionResult.granted) {
-      Alert.alert('Permission Required', 'Please allow access to your photo library to upload a logo.');
-      return;
-    }
+    // System photo picker needs no media-library permission (Play policy: READ_MEDIA_* removed).
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
