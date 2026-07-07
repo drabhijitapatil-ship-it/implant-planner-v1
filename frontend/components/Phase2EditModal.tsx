@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, Modal, TouchableOpacity, TextInput, ScrollView, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, Modal, TouchableOpacity, TextInput, ScrollView, StyleSheet, ActivityIndicator, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../utils/api';
 
@@ -42,10 +42,25 @@ export default function Phase2EditModal({ visible, onClose, procedureId, request
     const v = p2.healing_abutment_cuff_height;
     if (Array.isArray(v)) return v.map(x => (x == null ? '' : String(x)));
     const n = Math.max(implantPlans.length || 1, 1);
+    // Single-implant cases store a scalar — surface it in the first input
+    // instead of showing a blank form over an existing value.
+    if (v != null && v !== '') return [String(v), ...Array(Math.max(n - 1, 0)).fill('')];
     return Array(n).fill('');
   }, [p2.healing_abutment_cuff_height, implantPlans.length]);
   const [cuffs, setCuffs] = useState<string[]>(initialCuffs);
   const [saving, setSaving] = useState(false);
+
+  // The modal stays mounted while the case screen lives — state initialised at
+  // mount goes stale after a save or an external procedure update, which made
+  // reopened edits show old/blank values ("my new values weren't taken").
+  // Re-seed from the current procedure every time the sheet opens.
+  useEffect(() => {
+    if (!visible) return;
+    setProsthesisType(p2.prosthesis_type || '');
+    setProsthesisOther(p2.prosthesis_type_other || '');
+    setCuffs(initialCuffs);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
 
   const pc = p2.prosthetic_component || '';
   const showProsthesisType = pc === 'Immediate Loading Done';
@@ -87,7 +102,12 @@ export default function Phase2EditModal({ visible, onClose, procedureId, request
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={s.backdrop}>
+      {/* Keyboard handling: the sheet is bottom-anchored, so without this the
+          cuff-height / prosthesis inputs disappear behind the keyboard. */}
+      <KeyboardAvoidingView
+        style={s.backdrop}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <View style={s.sheet}>
           <View style={s.header}>
             <View style={{ flex: 1 }}>
@@ -175,7 +195,7 @@ export default function Phase2EditModal({ visible, onClose, procedureId, request
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

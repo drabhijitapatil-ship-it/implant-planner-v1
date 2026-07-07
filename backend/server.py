@@ -106,6 +106,20 @@ async def db_status():
         "seed_strategy": "force_reseed_on_every_startup",
     }
 
+@app.get("/api/downloads/implanr-elementor.zip")
+async def download_implanr_elementor():
+    """Public download of the Implanr Elementor Template Kit (JSON templates)."""
+    import os as _os
+    zip_path = _os.path.join(_os.path.dirname(__file__), "implanr-elementor-templates.zip")
+    if not _os.path.exists(zip_path):
+        raise HTTPException(status_code=404, detail="Elementor kit not found on server")
+    return FileResponse(
+        zip_path,
+        media_type="application/zip",
+        filename="implanr-elementor-templates.zip",
+    )
+
+
 @app.get("/api/expo-qr")
 async def expo_qr():
     import os
@@ -3496,6 +3510,38 @@ async def get_booked_slots(date: str, current_user: dict = Depends(get_current_u
     return {"date": date, "booked_slots": slots}
 
 
+@api_router.get("/procedures/slots-month/{month}")
+async def get_booked_slots_month(month: str, current_user: dict = Depends(get_current_user)):
+    """Org-wide slot occupancy for a calendar month (YYYY-MM), visible to every
+    role — powers the Home-screen calendar dots (orange = one of the two daily
+    slots booked, red = both). Per slot returns who booked it + procedure type;
+    deliberately no patient identity."""
+    if not re.fullmatch(r"\d{4}-\d{2}", month):
+        raise HTTPException(status_code=400, detail="month must be YYYY-MM")
+    query: Dict[str, Any] = {
+        "procedure_date": {"$regex": f"^{month}-"},
+        "archived": {"$ne": True},
+    }
+    org_scope = await _org_scope_match(current_user)
+    if org_scope:
+        query.update(org_scope)
+    cursor = db.procedures.find(
+        query,
+        {"_id": 0, "procedure_date": 1, "procedure_time": 1, "student_name": 1,
+         "created_by_name": 1, "implant_procedure_type": 1},
+    )
+    days: Dict[str, Dict[str, Any]] = {}
+    async for p in cursor:
+        d, t = p.get("procedure_date"), p.get("procedure_time")
+        if not d or not t:
+            continue
+        days.setdefault(d, {})[t] = {
+            "scheduled_by": p.get("created_by_name") or p.get("student_name") or "",
+            "procedure_type": p.get("implant_procedure_type") or "",
+        }
+    return {"month": month, "days": days}
+
+
 @api_router.get("/procedures")
 async def get_procedures(
     status: Optional[str] = None,
@@ -6129,7 +6175,10 @@ async def serve_upload(
         allowed = False
         if user["role"] in ["administrator", "implant_incharge"]:
             allowed = True
-        elif user["role"] == "supervisor" and procedure.get("supervisor_id") == str(user["_id"]):
+        elif user["role"] == "supervisor" and (
+            procedure.get("supervisor_id") == str(user["_id"])
+            or procedure.get("created_by_id") == str(user["_id"])
+        ):
             allowed = True
         elif user["role"] == "student" and procedure.get("student_id") == str(user["_id"]):
             allowed = True
@@ -7176,8 +7225,12 @@ async def get_procedure_badge(
 
 
 # ── AI Integration (Implanr AI) ────────────────────────────────────────────
+
+
+
 try:
     from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+    import uuid
 except ImportError:
     # Fall back to openai SDK directly (emergentintegrations not on PyPI)
     try:
@@ -7232,7 +7285,78 @@ except ImportError:
         class LlmChat(_AIStub): pass  # type: ignore[no-redef]
         class UserMessage(_AIStub): pass  # type: ignore[no-redef]
         class ImageContent(_AIStub): pass  # type: ignore[no-redef]
-import uuid
+
+
+def _redact_phi_from_ai_text(text: str, proc: Optional[dict]) -> str:
+    """iter-339 HIPAA: redact all patient PHI identifiers from an AI response.
+    Belt-and-braces net that runs on every AI response before the DB stores it
+    or the frontend renders it. Redacts:
+      - Patient name (full + tokens ≥3 chars, case-insensitive, word-boundary safe)
+      - Phone/mobile numbers (from proc.mobile_number AND generic 10-digit / +91 patterns)
+      - Email addresses (from proc.patient_email AND generic RFC-lite regex)
+      - Dates of birth (any date preceded by 'DOB:', 'D.O.B.:', 'Date of Birth:', 'Born:')
+      - Street address (from proc.address if present)
+    Preserves clinical dates (surgery, appointments) and demographic minimums
+    (age, sex, profession) which are HIPAA-safe."""
+    if not text or not proc:
+        return text
+    import re as _re
+
+    # 1) Patient name (full + tokens)
+    name = (proc.get("patient_name") or "").strip()
+    if name:
+        text = _re.sub(_re.escape(name), "the patient", text, flags=_re.IGNORECASE)
+        for token in name.split():
+            tok = token.strip(".,")
+            if len(tok) < 3 or tok.lower() in {"mr", "mrs", "ms", "dr", "prof", "the"}:
+                continue
+            text = _re.sub(rf"\b{_re.escape(tok)}\b", "the patient", text, flags=_re.IGNORECASE)
+
+    # 2) Known phone/mobile from record (exact match first)
+    for phone_field in ("mobile_number", "phone", "patient_phone", "contact_number"):
+        pv = (proc.get(phone_field) or "").strip()
+        if pv:
+            text = _re.sub(_re.escape(pv), "[phone redacted]", text)
+
+    # 3) Generic phone patterns: +91-9876543210 / 9876543210 / (022) 12345678
+    #    Only matches sequences of 10+ digits (with optional +country / spaces / hyphens).
+    text = _re.sub(
+        r"(?<!\d)(?:\+?\d{1,3}[-.\s]?)?\(?\d{3,5}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4}(?!\d)",
+        "[phone redacted]", text,
+    )
+
+    # 4) Known email from record
+    for email_field in ("patient_email", "email"):
+        ev = (proc.get(email_field) or "").strip()
+        if ev and "@" in ev:
+            text = _re.sub(_re.escape(ev), "[email redacted]", text, flags=_re.IGNORECASE)
+
+    # 5) Generic email regex (RFC-lite)
+    text = _re.sub(
+        r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b",
+        "[email redacted]", text,
+    )
+
+    # 6) DOB — only when explicitly labelled (protects clinical dates)
+    text = _re.sub(
+        r"(?i)(D\.?O\.?B\.?|Date of Birth|Born)\s*[:\-]?\s*[\w\s,./-]{5,25}",
+        r"\1: [DOB redacted]", text,
+    )
+
+    # 7) Address field from record (if stored)
+    for addr_field in ("address", "patient_address", "residential_address"):
+        av = (proc.get(addr_field) or "").strip()
+        if av and len(av) >= 8:  # avoid over-scrubbing tiny strings
+            text = _re.sub(_re.escape(av), "[address redacted]", text, flags=_re.IGNORECASE)
+
+    return text
+
+
+# iter-338 backward-compat alias — old call-sites still work.
+def _redact_name_from_ai_text(text: str, patient_name: Optional[str]) -> str:
+    return _redact_phi_from_ai_text(text, {"patient_name": patient_name} if patient_name else None)
+
+
 
 def _build_case_context(proc: dict) -> str:
     """Build a clinical case context string from procedure data."""
@@ -7536,6 +7660,9 @@ Provide a clinical explanation in professional scientific language. Do not menti
     ).with_model("openai", "gpt-5.2")
     
     response = await chat.send_message(UserMessage(text=prompt))
+    # iter-339 HIPAA: scrub all PHI (name, phone, email, DOB, address).
+    response = _redact_phi_from_ai_text(response, proc)
+    
     
     # Store in procedure
     await db.procedures.update_one(

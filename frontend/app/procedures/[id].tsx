@@ -414,6 +414,12 @@ export default function ProcedureDetailScreen() {
     try {
       const response = await api.get(`/procedures/${id}`);
       setProcedure(response.data);
+      // Re-read the access token AFTER the fetch: if the stored token was
+      // expired at mount, the api interceptor has just refreshed it during
+      // this request. File URLs (IOPA/OPG/consent thumbnails) are signed with
+      // `authToken` — seeding it only at mount left them carrying a dead JWT,
+      // so radiographs rendered blank for anyone opening the case later.
+      getToken('access_token').then(t => { if (t) setAuthToken(t); });
       // Auto-load existing Smart Planner report if available
       if (response.data?.smart_planner_report) {
         setSmartPlannerReport(response.data.smart_planner_report);
@@ -735,9 +741,17 @@ export default function ProcedureDetailScreen() {
         <Text style={styles.pageHeaderTitle} numberOfLines={1}>Case Details</Text>
         <View style={{ width: 44 }} />
       </View>
+      {/* KeyboardAvoidingView so inline inputs (approval/rejection comments,
+          field edits) aren't hidden behind the keyboard — the comment box sits
+          near the bottom of a long scroll and was fully covered on phones. */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
       <ScrollView
         ref={mainScrollRef}
         contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
       >
         {/* Pre-Op Augmentation Checklist (iter-136) — auto-derived rule-based
             augmentation/grafting plan items. Hidden on completed cases (already
@@ -2473,7 +2487,7 @@ export default function ProcedureDetailScreen() {
                   ? procedure.phase2_data.healing_abutment_cuff_height.map((val: string, idx: number) => (
                     <InfoRow key={idx} icon="resize" label={`Healing Abutment Cuff Height (Implant ${idx + 1})`} value={`${val} mm`} />
                   ))
-                  : <InfoRow icon="resize" label="Healing Abutment Cuff Height" value={`${procedure.phase2_data.healing_abutment_cuff_height} mm`} />
+                  : <InfoRow icon="resize" label="Healing Abutment Cuff Height" value={`${procedure.phase2_data.healing_abutment_cuff_height} mm`} fieldKey="phase2_data.healing_abutment_cuff_height" />
               )}
               {/* iter-311: empty-state placeholder rows so the operator
                   can populate the child field after switching the parent
@@ -3799,6 +3813,7 @@ export default function ProcedureDetailScreen() {
         {/* Extra bottom spacing for the fixed buttons */}
         <View style={{ height: (canExportPDF() || canViewAiSummary()) ? 70 : 10 }} />
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Implant In-Charge "Edit Patient Consent Form" bottom-sheet.
           Opens on non-owner cases so the In-Charge can override the consent
@@ -4195,8 +4210,13 @@ function InfoRow({ icon, label, value, fieldKey, onEdit, isEditing: isEditingPro
 
   const showPencil = (editCtx?.isEditMode || !!onEdit) && !isEditing;
 
-  // Resolve picker config if the field has predefined options
-  const pickerCfg = useCtx && isEditing ? resolveFieldOptions(key, editCtx.procedure) : null;
+  // Resolve picker config if the field has predefined options. Configs without
+  // an options list (e.g. numeric free-text like healing_abutment_cuff_height)
+  // must fall through to the plain TextInput — feeding them to the picker
+  // branch crashes on `undefined.map` and the edit silently dies.
+  const rawCfg = useCtx && isEditing ? resolveFieldOptions(key, editCtx.procedure) : null;
+  const pickerCfg = rawCfg && Array.isArray(rawCfg.options) ? rawCfg : null;
+  const isNumericField = !!(rawCfg as any)?.numeric;
 
   // Normalize options to {value, label}[]
   const normOptions = pickerCfg
@@ -4266,6 +4286,7 @@ function InfoRow({ icon, label, value, fieldKey, onEdit, isEditing: isEditingPro
                   style={{ flex: 1, borderWidth: 1, borderColor: '#1565C0', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, fontSize: 13, backgroundColor: '#F0F7FF' }}
                   value={String(editValue ?? '')}
                   onChangeText={handleChange}
+                  keyboardType={isNumericField ? 'decimal-pad' : 'default'}
                   autoFocus
                 />
                 <TouchableOpacity onPress={handleSave} style={{ backgroundColor: '#4CAF50', borderRadius: 6, padding: 6 }} disabled={!!saving}>

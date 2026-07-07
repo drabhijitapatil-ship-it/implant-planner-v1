@@ -67,11 +67,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const wasLoggedIn = !!userRef.current;
       setUser(null);
       if (wasLoggedIn) {
-        Alert.alert(
-          'Session Expired',
-          'Your session has expired. Please log in again.',
-          [{ text: 'OK', onPress: () => router.replace('/auth/login') }]
-        );
+        // Navigate FIRST, then alert. Screens render blank/black once `user`
+        // is null, so waiting for the alert's OK leaves the user staring at
+        // an empty screen behind the dialog.
+        router.replace('/auth/login');
+        Alert.alert('Session Expired', 'Your session has expired. Please log in again.');
       }
     });
     // iter-169: Every authenticated API call records activity. Closes the HIPAA
@@ -86,10 +86,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // in-app interval, the background→foreground check, and nowhere else.
   const expireSession = useCallback(() => {
     logout().then(() => {
+      // Navigate before alerting — once `user` is null the previous screen
+      // renders blank/black, so the login screen must already be underneath
+      // the dialog instead of appearing only after the user taps OK.
+      router.replace('/auth/login');
       Alert.alert(
         'Session Expired',
-        'You have been logged out after 15 minutes of inactivity. Please log in again.',
-        [{ text: 'OK', onPress: () => router.replace('/auth/login') }]
+        'You have been logged out after 15 minutes of inactivity. Please log in again.'
       );
     });
   }, []);

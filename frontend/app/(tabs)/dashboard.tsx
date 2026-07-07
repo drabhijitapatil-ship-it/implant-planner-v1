@@ -89,7 +89,22 @@ function Header({ user, router }: any) {
   );
 }
 
+// Display labels for the two daily procedure slots (see PROCEDURE_TIME_SLOTS).
+const SLOT_LABELS: Record<string, string> = { '10:00': '10:00 AM', '14:00': '2:00 PM' };
+
 function ProcedureCalendar({ procedures, selectedDate, setSelectedDate, router }: any) {
+  // Org-wide slot occupancy — every role sees which dates/slots are booked:
+  // orange dot = one of the two daily slots taken, red dot = both taken.
+  const [slotDays, setSlotDays] = useState<Record<string, Record<string, { scheduled_by: string; procedure_type: string }>>>({});
+  const [visibleMonth, setVisibleMonth] = useState<string>((selectedDate || format(new Date(), 'yyyy-MM-dd')).slice(0, 7));
+  useEffect(() => {
+    let cancelled = false;
+    api.get(`/procedures/slots-month/${visibleMonth}`)
+      .then(res => { if (!cancelled) setSlotDays(prev => ({ ...prev, ...(res.data?.days || {}) })); })
+      .catch(() => {}); // dots are best-effort; calendar still works without them
+    return () => { cancelled = true; };
+  }, [visibleMonth]);
+
   const markedDates = procedures.reduce((acc: any, proc: any) => {
     const date = proc.procedure_date;
     if (!date) return acc;
@@ -97,10 +112,21 @@ function ProcedureCalendar({ procedures, selectedDate, setSelectedDate, router }
     acc[date].dots.push({ key: proc.id, color: STATUS_COLORS[proc.status as keyof typeof STATUS_COLORS] || '#999' });
     return acc;
   }, {} as Record<string, any>);
+  // Slot-occupancy dot leads each date's dot row.
+  Object.entries(slotDays).forEach(([date, slots]) => {
+    const n = Object.keys(slots || {}).length;
+    if (!n) return;
+    if (!markedDates[date]) markedDates[date] = { marked: true, dots: [] };
+    markedDates[date].dots = [
+      { key: 'slot-occupancy', color: n >= 2 ? '#F44336' : '#FF9800' },
+      ...markedDates[date].dots.filter((d: any) => d.key !== 'slot-occupancy'),
+    ];
+  });
   if (selectedDate) {
     markedDates[selectedDate] = { ...markedDates[selectedDate], selected: true, selectedColor: '#1A73E8' };
   }
   const procsForDate = procedures.filter((p: any) => p.procedure_date === selectedDate);
+  const slotsForDate = Object.entries(slotDays[selectedDate] || {}).sort(([a], [b]) => a.localeCompare(b));
 
   return (
     <>
@@ -108,6 +134,7 @@ function ProcedureCalendar({ procedures, selectedDate, setSelectedDate, router }
         <Calendar
           current={selectedDate}
           onDayPress={(day: any) => setSelectedDate(day.dateString)}
+          onMonthChange={(m: any) => setVisibleMonth(`${m.year}-${String(m.month).padStart(2, '0')}`)}
           markedDates={markedDates}
           markingType="multi-dot"
           theme={{ todayTextColor: '#1A73E8', selectedDayBackgroundColor: '#1A73E8', arrowColor: '#1A73E8' }}
@@ -117,6 +144,20 @@ function ProcedureCalendar({ procedures, selectedDate, setSelectedDate, router }
         <Text style={s.sectionTitle}>
           {format(new Date(selectedDate), 'MMM dd, yyyy')}
         </Text>
+        {slotsForDate.length > 0 && (
+          <View style={s.slotInfoCard} data-testid="booked-slots-info">
+            {slotsForDate.map(([t, info]: any) => (
+              <View key={t} style={s.slotInfoRow}>
+                <View style={[s.slotDot, { backgroundColor: slotsForDate.length >= 2 ? '#F44336' : '#FF9800' }]} />
+                <Text style={s.slotInfoText}>
+                  <Text style={{ fontWeight: '700' }}>{SLOT_LABELS[t] || t}</Text>
+                  {' — booked by '}{info.scheduled_by || 'Unknown'}
+                  {info.procedure_type ? ` · ${info.procedure_type}` : ''}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
         {procsForDate.length === 0 ? (
           <View style={s.emptyCard}>
             <Ionicons name="calendar-outline" size={28} color="#B0BEC5" />
@@ -1056,6 +1097,11 @@ const s = StyleSheet.create({
 
   // Empty state
   emptyCard: { backgroundColor: '#FFF', borderRadius: 14, padding: 28, alignItems: 'center', gap: 8 },
+  // Org-wide booked-slot info shown under the calendar for the selected date
+  slotInfoCard: { backgroundColor: '#FFF8F0', borderRadius: 12, borderWidth: 1, borderColor: '#FFE0B2', padding: 12, marginBottom: 10, gap: 6 },
+  slotInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  slotDot: { width: 10, height: 10, borderRadius: 5 },
+  slotInfoText: { flex: 1, fontSize: 13, color: '#37474F' },
   emptyText: { fontSize: 13, color: '#90A4AE' },
 
   // Procedure cards
