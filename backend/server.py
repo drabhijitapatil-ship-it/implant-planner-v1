@@ -1,7 +1,7 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Response, Request, Query, Body
 from fastapi import status as http_status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import FileResponse, StreamingResponse, JSONResponse, HTMLResponse
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse, HTMLResponse, RedirectResponse
 from dotenv import load_dotenv
 import io
 import csv
@@ -6863,10 +6863,14 @@ async def cbct_public_single_viewer(token: str, filename: str):
     orig = entry.get("original_name") or filename
     raw = f"/cbct/file/{token}/{filename}"
     dl = f"{raw}?download=1"
+    if "pdf" in ct:
+        # Mobile Chrome can't render a PDF embedded in an <iframe> (no plugin
+        # the way desktop has) — it falls back to a bare "can't preview"
+        # stub. A top-level redirect to the raw file lets Chrome's actual
+        # built-in PDF viewer take over properly instead.
+        return RedirectResponse(raw)
     if ct.startswith("image/"):
         preview = f"<img src='{raw}' alt='{orig}'/>"
-    elif "pdf" in ct:
-        preview = f"<iframe src='{raw}' title='{orig}'></iframe>"
     else:
         preview = "<div class='fallback'><span class='icon'>📁</span><p>Preview not available for this file type.</p></div>"
     html = f"""<!doctype html>

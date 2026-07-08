@@ -18,6 +18,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import api, { getAuthFileUrl, mintCbctToken, cbctFileUrl, cbctViewUrl, getToken, mintFileToken } from '../../utils/api';
 import { CaramesSeverityStrip } from '../../components/AtrophyClassificationChip';
 import { useAuth } from '../../contexts/AuthContext';
@@ -223,6 +225,34 @@ function resolveFieldOptions(fieldKey: string, procedure: any): FieldOptionsConf
     return null;
   }
   return FIELD_OPTIONS[fieldKey] || null;
+}
+
+// Open a document URL for viewing. `Linking.openURL` hands PDFs to Android's
+// ACTION_VIEW resolver, which on many devices shows a bare "Open/Download"
+// stub screen instead of actually rendering the file (Chrome isn't always
+// the resolver, and even when it is, some devices route .pdf straight to a
+// separate viewer app). Downloading the bytes locally and handing them to
+// the native share/open sheet skips that stub entirely — the OS opens the
+// file directly (or lets the user pick a viewer) with no intermediate page.
+// Images are left on the browser path since inline image viewing in-browser
+// already works fine and doesn't hit this bug.
+async function openDocument(url: string, filename: string) {
+  const isPdf = /\.pdf($|\?)/i.test(filename);
+  if (!isPdf) {
+    await Linking.openURL(url);
+    return;
+  }
+  try {
+    const localUri = `${FileSystem.cacheDirectory}${filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    const { uri } = await FileSystem.downloadAsync(url, localUri);
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf' });
+    } else {
+      await Linking.openURL(url); // fallback if sharing isn't available on this device
+    }
+  } catch {
+    await Linking.openURL(url); // download/share failed — fall back to the old behavior
+  }
 }
 
 export default function ProcedureDetailScreen() {
@@ -1366,7 +1396,7 @@ export default function ProcedureDetailScreen() {
               const filename = procedure.patient_consent_form?.filename;
               if (!filename) { Alert.alert('Error', 'Consent form filename missing'); return; }
               const fileUrl = await mintFileToken(filename);
-              await Linking.openURL(fileUrl);
+              await openDocument(fileUrl, filename);
             } catch {
               Alert.alert('Error', 'Could not open consent form');
             }
@@ -2317,7 +2347,7 @@ export default function ProcedureDetailScreen() {
               onPress={async () => {
                 try {
                   const fileUrl = await mintFileToken(procedure.ios_file);
-                  await Linking.openURL(fileUrl);
+                  await openDocument(fileUrl, procedure.ios_file);
                 } catch (e) {
                   Alert.alert('Error', 'Could not open file');
                 }
@@ -2605,7 +2635,7 @@ export default function ProcedureDetailScreen() {
                             // depend on how long ago the screen loaded.
                             try {
                               const freshUrl = await mintFileToken(f.filename);
-                              await Linking.openURL(freshUrl);
+                              await openDocument(freshUrl, f.filename);
                             } catch {
                               Alert.alert('Error', 'Could not open file');
                             }
@@ -2647,7 +2677,7 @@ export default function ProcedureDetailScreen() {
                           onPress={async () => {
                             try {
                               const freshUrl = await mintFileToken(procedure.phase2_data.opg_file.filename);
-                              await Linking.openURL(freshUrl);
+                              await openDocument(freshUrl, procedure.phase2_data.opg_file.filename);
                             } catch {
                               Alert.alert('Error', 'Could not open file');
                             }
@@ -2932,7 +2962,7 @@ export default function ProcedureDetailScreen() {
                         onPress={async () => {
                           try {
                             const freshUrl = await mintFileToken(f.filename);
-                            await Linking.openURL(freshUrl);
+                            await openDocument(freshUrl, f.filename);
                           } catch {
                             Alert.alert('Error', 'Could not open file');
                           }
