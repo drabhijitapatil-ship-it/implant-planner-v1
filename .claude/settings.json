@@ -99,7 +99,15 @@
       "Bash(sed -i '' 's|<string>1.0.9</string>|<string>1.1.0</string>|' ios/Implanr/Supporting/Expo.plist)",
       "Bash(sed -i '' 's/CURRENT_PROJECT_VERSION = 8;/CURRENT_PROJECT_VERSION = 9;/g' ios/Implanr.xcodeproj/project.pbxproj)",
       "Bash(sed -i '' 's/CURRENT_PROJECT_VERSION = 9;/CURRENT_PROJECT_VERSION = 1.1.0;/g' ios/Implanr.xcodeproj/project.pbxproj)",
-      "Bash(sed -i '' 's/versionCode 9/versionCode 110/' android/app/build.gradle)"
+      "Bash(sed -i '' 's/versionCode 9/versionCode 110/' android/app/build.gradle)",
+      "Bash(awk 'NR>=7540 && NR<=7602' server.py)",
+      "Bash(awk 'NR>=8341 && NR<=8560 && /tokens/' server.py)",
+      "Bash(grep -n \"^\\\\s*</SafeAreaView>\\\\|^\\\\s*\\);$\" \"app/\\(tabs\\)/user-management.tsx\")",
+      "Bash(grep -n \"bookedSlots\\\\|slots/\\\\${\" app/\\\\\\(tabs\\\\\\)/new-procedure.tsx)",
+      "Bash(git stash *)",
+      "Bash(grep -oE \"api\\\\.get\\\\\\(\\\\`/procedures/\\\\\\\\\\\\$\\\\{[a-zA-Z]+\\\\}[a-zA-Z0-9_/-]*\" \"app/procedures/[id].tsx\")",
+      "Bash(grep -oE \"api\\\\.\\(get|post\\)\\\\\\(\\\\`\\\\/procedures\\\\/\\\\\\\\\\\\$\\\\{[a-zA-Z]+\\\\}[^\\\\`]*\\\\`\" \"app/procedures/[id].tsx\")",
+      "Bash(pip3 show *)"
     ],
     "additionalDirectories": [
       "/dev",

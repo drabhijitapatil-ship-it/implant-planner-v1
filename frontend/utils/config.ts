@@ -18,11 +18,31 @@ function resolveUrl(url: string): string {
   return url;
 }
 
-// const _rawUrl: string = "http://localhost:8001";
-const _rawUrl: string =
-  process.env.EXPO_PUBLIC_BACKEND_URL ||
-  Constants.expoConfig?.extra?.backendUrl ||
-  "https://api.implanr.com";
+const LOCAL_BACKEND_PORT = 8001;
+
+// On a REAL device (not simulator/emulator), "localhost" means the phone
+// itself and "10.0.2.2" doesn't exist — neither reaches the dev machine.
+// Expo's dev server already knows the LAN IP the phone used to connect
+// (hostUri, e.g. "192.168.31.34:3000"); reuse that host so the backend URL
+// always matches whatever network the phone is actually on, with no IP to
+// hardcode or update when networks change. Falls back to localhost for
+// simulators/emulators/web, where hostUri may be absent.
+function resolveLocalDevUrl(): string {
+  const hostUri: string | undefined =
+    Constants.expoConfig?.hostUri ||
+    (Constants as any).manifest2?.extra?.expoClient?.hostUri;
+  if (hostUri) {
+    const host = hostUri.split(":")[0];
+    return `http://${host}:${LOCAL_BACKEND_PORT}`;
+  }
+  return `http://localhost:${LOCAL_BACKEND_PORT}`;
+}
+
+const _rawUrl: string = resolveLocalDevUrl();
+// const _rawUrl: string =
+//   process.env.EXPO_PUBLIC_BACKEND_URL ||
+//   Constants.expoConfig?.extra?.backendUrl ||
+//   "https://api.implanr.com";
 
 const BACKEND_URL: string = resolveUrl(_rawUrl);
 

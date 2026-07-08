@@ -357,22 +357,20 @@ export default function ForumThreadScreen() {
           <View style={s.tagsRow}>
             {thread.tags.map(t => <View key={t} style={s.tag}><Text style={s.tagTxt}>{t}</Text></View>)}
           </View>
-          {/* Full case report is only reachable by users the backend will let
-              through: everyone for non-anonymous shares, but for anonymous
-              shares only the sharer, the case supervisor, and in-charges/admins
-              (opening the case would reveal the hidden patient + operator
-              identity). Others see a hint instead of a button that 403s. */}
-          {(!thread.anonymous || thread.is_my_thread || canModerate) ? (
-            <View style={s.summaryActionsRow}>
-              <TouchableOpacity style={s.summaryBtn} onPress={() => router.push(`/procedures/${thread.procedure_id}` as any)} data-testid="forum-open-case-btn">
-                <Ionicons name="document-text" size={14} color="#1565C0" />
-                <Text style={s.summaryBtnTxt}>Open Full Case Report</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
+          {/* Everyone can open the full case now — the backend redacts patient
+              + operator identity for anonymous shares unless the viewer is
+              the sharer, the case supervisor, or an in-charge/admin (who
+              always see the unredacted case). */}
+          <View style={s.summaryActionsRow}>
+            <TouchableOpacity style={s.summaryBtn} onPress={() => router.push(`/procedures/${thread.procedure_id}` as any)} data-testid="forum-open-case-btn">
+              <Ionicons name="document-text" size={14} color="#1565C0" />
+              <Text style={s.summaryBtnTxt}>Open Full Case Report</Text>
+            </TouchableOpacity>
+          </View>
+          {thread.anonymous && !thread.is_my_thread && !canModerate && (
             <View style={s.anonCaseHint} data-testid="forum-anon-case-hint">
               <Ionicons name="eye-off-outline" size={14} color="#90A4AE" />
-              <Text style={s.anonCaseHintTxt}>Full case hidden — shared anonymously. Clinical details are summarised above.</Text>
+              <Text style={s.anonCaseHintTxt}>Shared anonymously — patient and operator details are hidden in the full case view.</Text>
             </View>
           )}
           <Text style={s.sharedBy}>Shared by {thread.shared_by_display || 'Unknown'} • {thread.shared_by_role}</Text>

@@ -341,11 +341,14 @@ export default function ProcedureDetailScreen() {
       } else {
         fields[fieldKey] = rawValue;
       }
+      console.log('[saveField] PATCH fields:', JSON.stringify(fields));
       const res = await api.patch(`/procedures/${id}/edit-fields`, { fields });
+      console.log('[saveField] response phase2_data:', JSON.stringify(res.data?.phase2_data));
       setProcedure(res.data);
       setEditingField(null);
       Alert.alert('Saved', 'Field updated successfully');
     } catch (e: any) {
+      console.log('[saveField] error:', JSON.stringify(e.response?.data || e.message));
       Alert.alert('Error', e.response?.data?.detail || 'Failed to save');
     } finally { setSaving(false); }
   };
@@ -2283,15 +2286,20 @@ export default function ProcedureDetailScreen() {
               <Ionicons name="speedometer" size={20} color="#FF6D00" />
               <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#E65100' }]}>Torque Values Achieved</Text>
             </View>
-            {procedure.torque_values.map((tv: number, idx: number) => (
-              <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: idx < procedure.torque_values.length - 1 ? 1 : 0, borderBottomColor: '#F0F0F0' }}>
-                <View style={{ backgroundColor: '#FFF3E0', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, marginRight: 12 }}>
-                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#BF360C' }}>Implant {idx + 1}</Text>
+            {procedure.torque_values.map((tv: number, idx: number) => {
+              const toothLabel = procedure.implant_plans?.[idx]?.position
+                ? `Tooth ${procedure.implant_plans[idx].position}`
+                : `Implant ${idx + 1}`;
+              return (
+                <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: idx < procedure.torque_values.length - 1 ? 1 : 0, borderBottomColor: '#F0F0F0' }}>
+                  <View style={{ backgroundColor: '#FFF3E0', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, marginRight: 12 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: '#BF360C' }}>{toothLabel}</Text>
+                  </View>
+                  <Text style={{ fontSize: 18, fontWeight: '700', color: '#E65100' }}>{tv}</Text>
+                  <Text style={{ fontSize: 13, color: '#888', marginLeft: 4 }}>Ncm</Text>
                 </View>
-                <Text style={{ fontSize: 18, fontWeight: '700', color: '#E65100' }}>{tv}</Text>
-                <Text style={{ fontSize: 13, color: '#888', marginLeft: 4 }}>Ncm</Text>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
 

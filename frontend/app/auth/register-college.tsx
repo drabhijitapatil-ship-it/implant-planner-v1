@@ -101,10 +101,12 @@ export default function CollegeRegisterScreen() {
 
   const handlePickLogo = async () => {
     // System photo picker needs no media-library permission (Play policy: READ_MEDIA_* removed).
+    // allowsEditing intentionally omitted: chaining PHPicker → the native
+    // crop screen hangs/blanks on iOS Simulator (Apple/Expo-side bug, not
+    // fixable here). Display-side square crop (borderRadius + resizeMode
+    // cover) already handles non-square source images.
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
+      mediaTypes: ['images'],
       quality: 0.5,
       base64: true,
     });

@@ -31,7 +31,7 @@ const CenteredHeader: React.FC<Props> = ({
   title, subtitle, rightAction, fallback, style, testID,
 }) => (
   <View style={[s.bar, style]} testID={testID}>
-    <BackButton fallback={fallback} />
+    <BackButton fallbackHref={fallback} />
     <View style={s.titleBlock}>
       <Text style={s.title} numberOfLines={1}>{title}</Text>
       {!!subtitle && <Text style={s.sub} numberOfLines={1}>{subtitle}</Text>}

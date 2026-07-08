@@ -31,7 +31,6 @@ export default function ProfileScreen() {
   const router = useRouter();
   const [uploading, setUploading] = useState(false);
   const [org, setOrg] = useState<any>(null);
-  const [logoUploading, setLogoUploading] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
   const isIncharge = user?.role === 'implant_incharge';
@@ -140,49 +139,34 @@ export default function ProfileScreen() {
     // System photo picker needs no media-library permission (Play policy: READ_MEDIA_* removed).
 
     // Pick image
+    // allowsEditing intentionally omitted: chaining PHPicker → the native
+    // crop screen hangs/blanks on iOS Simulator (Apple/Expo-side bug, not
+    // fixable here — real devices are typically fine). Display-side square
+    // crop (borderRadius + resizeMode cover) already handles non-square
+    // source images.
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
+      mediaTypes: ['images'],
       quality: 0.5,
       base64: true,
     });
 
-    if (!result.canceled && result.assets[0].base64) {
-      setUploading(true);
-      try {
-        const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
-        await updateProfilePhoto(base64Image);
-        Alert.alert('Success', 'Profile photo updated successfully!');
-      } catch (error: any) {
-        Alert.alert('Error', error.message || 'Failed to upload photo');
-      } finally {
-        setUploading(false);
-      }
+    console.log('[handlePickImage] result:', JSON.stringify({ canceled: result.canceled, hasAsset: !!result.assets?.[0], hasBase64: !!result.assets?.[0]?.base64 }));
+    if (result.canceled) return;
+    if (!result.assets?.[0]?.base64) {
+      // Picker returned but no base64 came back — surface this instead of
+      // silently no-op'ing, which looks identical to "the button does nothing".
+      Alert.alert('Could not read photo', 'That photo could not be loaded. Please try a different one.');
+      return;
     }
-  };
-
-  const handlePickLogo = async () => {
-    // System photo picker needs no media-library permission (Play policy: READ_MEDIA_* removed).
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.5,
-      base64: true,
-    });
-    if (!result.canceled && result.assets[0].base64) {
-      setLogoUploading(true);
-      try {
-        const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
-        const res = await api.put('/organizations/me/logo', { logo: base64Image });
-        setOrg((prev: any) => (prev ? { ...prev, logo: res.data?.logo || base64Image } : prev));
-        Alert.alert('Success', 'Organization logo updated successfully!');
-      } catch (error: any) {
-        Alert.alert('Error', error?.response?.data?.detail || 'Failed to upload logo');
-      } finally {
-        setLogoUploading(false);
-      }
+    setUploading(true);
+    try {
+      const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
+      await updateProfilePhoto(base64Image);
+      Alert.alert('Success', 'Profile photo updated successfully!');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to upload photo');
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -203,17 +187,21 @@ export default function ProfileScreen() {
       base64: true,
     });
 
-    if (!result.canceled && result.assets[0].base64) {
-      setUploading(true);
-      try {
-        const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
-        await updateProfilePhoto(base64Image);
-        Alert.alert('Success', 'Profile photo updated successfully!');
-      } catch (error: any) {
-        Alert.alert('Error', error.message || 'Failed to upload photo');
-      } finally {
-        setUploading(false);
-      }
+    console.log('[handleTakePhoto] result:', JSON.stringify({ canceled: result.canceled, hasAsset: !!result.assets?.[0], hasBase64: !!result.assets?.[0]?.base64 }));
+    if (result.canceled) return;
+    if (!result.assets?.[0]?.base64) {
+      Alert.alert('Could not read photo', 'That photo could not be loaded. Please try again.');
+      return;
+    }
+    setUploading(true);
+    try {
+      const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
+      await updateProfilePhoto(base64Image);
+      Alert.alert('Success', 'Profile photo updated successfully!');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to upload photo');
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -319,7 +307,7 @@ export default function ProfileScreen() {
           </View>
 
           {org && (
-            <View style={[styles.rowItem, styles.rowItemLast]}>
+            <View style={isIncharge ? styles.rowItem : [styles.rowItem, styles.rowItemLast]}>
               <View style={[styles.iconBadge, { backgroundColor: '#E0F2F1' }]}>
                 <Ionicons name="business" size={20} color="#00695C" />
               </View>
@@ -332,12 +320,30 @@ export default function ProfileScreen() {
               ) : null}
             </View>
           )}
+
+          {/* Organization Settings (scheduling, logo, etc.) — Implant In-Charge only. */}
+          {isIncharge && (
+            <TouchableOpacity
+              style={[styles.rowItem, styles.rowItemLast]}
+              onPress={() => router.push('/admin/scheduling-settings')}
+              data-testid="profile-org-settings-btn"
+            >
+              <View style={[styles.iconBadge, { backgroundColor: '#EEF2F6' }]}>
+                <Ionicons name="settings-outline" size={20} color="#475569" />
+              </View>
+              <View style={styles.rowContent}>
+                <Text style={styles.rowLabel}>Settings</Text>
+                <Text style={styles.rowValue}>Organization logo, scheduling &amp; more</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Section: Profile Photo */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Profile Photo</Text>
-          
+
           <TouchableOpacity style={[styles.rowItem, styles.rowItemLast]} onPress={showPhotoOptions}>
             <View style={[styles.iconBadge, { backgroundColor: '#E8F5E9' }]}>
               <Ionicons name="image" size={20} color="#2E7D32" />
@@ -346,29 +352,6 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
           </TouchableOpacity>
         </View>
-
-        {/* Section: Organization Logo (In-charge only) */}
-        {isIncharge && org && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Organization Logo</Text>
-            <View style={styles.orgLogoContainer}>
-              {org.logo ? (
-                <Image source={{ uri: org.logo }} style={styles.orgLogo} />
-              ) : (
-                <View style={styles.orgLogoPlaceholder}>
-                  <Ionicons name="business" size={32} color="#94A3B8" />
-                </View>
-              )}
-            </View>
-            <TouchableOpacity style={[styles.rowItem, styles.rowItemLast]} onPress={handlePickLogo} disabled={logoUploading} data-testid="change-org-logo-btn">
-              <View style={[styles.iconBadge, { backgroundColor: '#E0F7FA' }]}>
-                <Ionicons name="image" size={20} color="#00838F" />
-              </View>
-              <Text style={styles.photoButtonText}>{logoUploading ? 'Uploading…' : 'Change Organization Logo'}</Text>
-              {logoUploading ? <ActivityIndicator size="small" color="#007AFF" /> : <Ionicons name="chevron-forward" size={18} color="#94A3B8" />}
-            </TouchableOpacity>
-          </View>
-        )}
 
         {/* Section: Security */}
         <View style={styles.section}>
@@ -738,30 +721,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#0F172A',
     fontWeight: '600',
-  },
-  orgLogoContainer: {
-    alignItems: 'center',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    marginBottom: 4,
-  },
-  orgLogo: {
-    width: 80,
-    height: 80,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  orgLogoPlaceholder: {
-    width: 80,
-    height: 80,
-    borderRadius: 12,
-    backgroundColor: '#F8FAFC',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
   },
   logoutButton: {
     flexDirection: 'row',

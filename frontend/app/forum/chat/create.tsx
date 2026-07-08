@@ -99,7 +99,7 @@ export default function CreateGroupScreen() {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
         if (!perm.granted) { Alert.alert('Camera permission needed'); return; }
       }
-      const res = await safeLaunchCamera({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85, allowsEditing: true, aspect: [1, 1] });
+      const res = await safeLaunchCamera({ mediaTypes: ['images'], quality: 0.85, allowsEditing: true, aspect: [1, 1] });
       if (res.canceled) return;
       const a = res.assets?.[0]; if (!a) return;
       await uploadPhoto(a.uri, a.fileName || `photo_${Date.now()}.jpg`, 'image/jpeg');
@@ -115,7 +115,9 @@ export default function CreateGroupScreen() {
     await waitForSheetClose();
     try {
       // System photo picker needs no media-library permission (Play policy: READ_MEDIA_* removed).
-      const res = await safeLaunchLibrary({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85, allowsEditing: true, aspect: [1, 1] });
+      // allowsEditing omitted: chaining PHPicker → the native crop screen
+      // hangs/blanks on iOS Simulator.
+      const res = await safeLaunchLibrary({ mediaTypes: ['images'], quality: 0.85 });
       if (res.canceled) return;
       const a = res.assets?.[0]; if (!a) return;
       await uploadPhoto(a.uri, a.fileName || `photo_${Date.now()}.jpg`, 'image/jpeg');

@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, Alert, ActivityIndicator, Platform, AppState, Linking, Image, Animated, Modal, useWindowDimensions
+  StyleSheet, Alert, ActivityIndicator, Platform, AppState, Linking, Image, Animated, Modal, useWindowDimensions,
+  Pressable
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import Svg, { Circle, Line } from 'react-native-svg';
 import api, { getAuthFileUrl, getToken } from '../../utils/api';
 import { showUploadPicker } from '../../utils/uploadPicker';
 import { useAuth } from '../../contexts/AuthContext';
@@ -42,6 +44,17 @@ import {
 } from '../../constants/checklist';
 
 import { BACKEND_URL } from '../../utils/config';
+
+// "HH:MM" (24h) -> "10:00 AM" — used by the open-scheduling-mode picker to
+// show existing bookings in a readable form.
+const formatTimeLabelLocal = (t: string): string => {
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(t);
+  if (!m) return t;
+  let h = parseInt(m[1], 10);
+  const suffix = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${m[2]} ${suffix}`;
+};
 
 // ─── Multi-Select Dropdown ─────────────────────────────
 function MultiSelectDropdown({ label, values, options, onChange, placeholder, required }: {
@@ -707,6 +720,25 @@ export default function NewProcedureScreen() {
 
   // ── Load faculty data ──
   const [bookedSlots, setBookedSlots] = useState<Record<string, { patient_name: string; scheduled_by: string }>>({});
+  // Org scheduling mode (default/custom/open) + mode-specific config, both
+  // returned alongside booked_slots by GET /procedures/slots/{date} — see
+  // the fetch effect below. "default" reproduces the original fixed-slot
+  // behaviour exactly, so orgs that never touch Scheduling Settings see zero
+  // change.
+  const [schedMode, setSchedMode] = useState<'default' | 'custom' | 'open'>('default');
+  const [daySlots, setDaySlots] = useState<{ time: string; label: string; days: string[] }[]>([]);
+  const [openWindowHours, setOpenWindowHours] = useState<number>(2);
+  // Open-mode manual time entry (hour 1-12 + minute + AM/PM), composed into
+  // formData.procedure_time as 24h "HH:MM" on change.
+  const [openHour, setOpenHour] = useState<number | null>(null);
+  const [openMinute, setOpenMinute] = useState<number>(0);
+  const [openMeridiem, setOpenMeridiem] = useState<'AM' | 'PM'>('AM');
+  const [showOpenTimePicker, setShowOpenTimePicker] = useState(false);
+  const [tempHour, setTempHour] = useState('07');
+  const [tempMinute, setTempMinute] = useState('00');
+  const [tempMeridiem, setTempMeridiem] = useState<'AM' | 'PM'>('AM');
+  const [activeInput, setActiveInput] = useState<'hour' | 'minute'>('hour');
+  const [showDialMode, setShowDialMode] = useState(true);
   const [cbctFiles, setCbctFiles] = useState<(null | { filename: string; original_name: string; content_type: string })[]>([null, null]);
   const [cbctUploadingIdx, setCbctUploadingIdx] = useState<number | null>(null);
   const [extraCbctCount, setExtraCbctCount] = useState(0);
@@ -757,10 +789,14 @@ export default function NewProcedureScreen() {
   // Fetch booked slots when procedure_date changes
   useEffect(() => {
     if (!formData.procedure_date) { setBookedSlots({}); return; }
+    setOpenHour(null); setOpenMinute(0); setOpenMeridiem('AM'); // reset open-mode picker on date change
     const fetchSlots = async () => {
       try {
         const res = await api.get(`/procedures/slots/${formData.procedure_date}`);
         setBookedSlots(res.data?.booked_slots || {});
+        setSchedMode(res.data?.mode || 'default');
+        setDaySlots(res.data?.day_slots || []);
+        if (res.data?.open_window_hours) setOpenWindowHours(res.data.open_window_hours);
       } catch { setBookedSlots({}); }
     };
     fetchSlots();
@@ -2443,7 +2479,7 @@ export default function NewProcedureScreen() {
           }}
           required
         />
-        {formData.procedure_date && (() => {
+        {formData.procedure_date && schedMode === 'default' && (() => {
           const d = new Date(formData.procedure_date + 'T00:00:00');
           const dayOfWeek = d.getDay(); // 0=Sun
           if (dayOfWeek === 0) {
@@ -2487,6 +2523,324 @@ export default function NewProcedureScreen() {
                   );
                 })}
               </View>
+            </View>
+          );
+        })()}
+
+        {/* Custom mode — org-defined named slots for this weekday. */}
+        {formData.procedure_date && schedMode === 'custom' && (
+          daySlots.length === 0 ? (
+            <View style={[styles.riskBadge, { backgroundColor: '#FFF3E0' }]}>
+              <Text style={{ color: '#E65100', fontWeight: '600', fontSize: 13 }}>
+                No procedure slots are configured for this day.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.fieldContainer}>
+              <Text style={styles.label}>Time Slot <Text style={{ color: '#DC3545' }}>*</Text></Text>
+              <View style={styles.chipRow}>
+                {daySlots.map(slot => {
+                  const booked = bookedSlots[slot.time];
+                  const isBooked = !!booked;
+                  const isSelected = formData.procedure_time === slot.time;
+                  return (
+                    <View key={slot.time}>
+                      <TouchableOpacity
+                        style={[styles.chip, isSelected && styles.chipActive, isBooked && styles.chipBooked]}
+                        onPress={() => !isBooked && updateForm('procedure_time', slot.time)}
+                        disabled={isBooked}
+                        data-testid={`slot-${slot.time}`}>
+                        <Text style={[styles.chipText, isSelected && styles.chipTextActive, isBooked && styles.chipBookedText]}>
+                          {slot.label}
+                        </Text>
+                        {isBooked && <Ionicons name="lock-closed" size={12} color="#999" style={{ marginLeft: 4 }} />}
+                      </TouchableOpacity>
+                      {isBooked && (
+                        <Text style={styles.bookedInfo} numberOfLines={1}>
+                          {booked.patient_name} ({booked.scheduled_by})
+                        </Text>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          )
+        )}
+
+        {/* Open-window mode — pick any start time; it auto-occupies the
+            org-configured duration (e.g. 10:00 AM + 2h -> blocks to 12:00 PM). */}
+        {formData.procedure_date && schedMode === 'open' && (() => {
+          const commitTime = (h: number | null, m: number, mer: 'AM' | 'PM') => {
+            if (h == null) { updateForm('procedure_time', ''); return; }
+            let h24 = h % 12;
+            if (mer === 'PM') h24 += 12;
+            updateForm('procedure_time', `${String(h24).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+          };
+          const endTimeLabel = (() => {
+            if (openHour == null) return null;
+            let h24 = openHour % 12; if (openMeridiem === 'PM') h24 += 12;
+            const startMin = h24 * 60 + openMinute;
+            const endMin = startMin + Math.round(openWindowHours * 60);
+            const eh = Math.floor((endMin / 60) % 24);
+            const em = endMin % 60;
+            const suffix = eh >= 12 ? 'PM' : 'AM';
+            const eh12 = eh % 12 || 12;
+            return `${eh12}:${String(em).padStart(2, '0')} ${suffix}`;
+          })();
+          const existingBookings = Object.entries(bookedSlots);
+
+          const handleOpenPicker = () => {
+            setTempHour(openHour ? String(openHour).padStart(2, '0') : '07');
+            setTempMinute(String(openMinute).padStart(2, '0'));
+            setTempMeridiem(openMeridiem);
+            setActiveInput('hour');
+            setShowOpenTimePicker(true);
+          };
+
+          return (
+            <View style={styles.fieldContainer}>
+              <Text style={styles.label}>Time Slot <Text style={{ color: '#DC3545' }}>*</Text></Text>
+              
+              <TouchableOpacity
+                style={styles.dropdown}
+                onPress={handleOpenPicker}
+                data-testid="open-mode-time-picker-btn"
+              >
+                <Text style={[styles.dropdownText, openHour == null && { color: '#90A4AE' }]}>
+                  {openHour != null
+                    ? `${String(openHour).padStart(2, '0')}:${String(openMinute).padStart(2, '0')} ${openMeridiem}`
+                    : 'Select Time'}
+                </Text>
+                <Ionicons name="time-outline" size={20} color="#1565C0" />
+              </TouchableOpacity>
+
+              {/* Open-window time picker dialog modal (Material 3 style with Clock Face) */}
+              <Modal
+                visible={showOpenTimePicker}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowOpenTimePicker(false)}
+              >
+                <Pressable style={styles.timeModalOverlay} onPress={() => setShowOpenTimePicker(false)}>
+                  <Pressable style={styles.timeModalContainer} onPress={() => {}}>
+                    <Text style={styles.timeModalTitle}>Select time</Text>
+                    
+                    <View style={styles.timeModalInputRow}>
+                      {/* Hour Box */}
+                      <View style={{ alignItems: 'center' }}>
+                        <TouchableOpacity
+                          style={[styles.timeModalBox, activeInput === 'hour' && styles.timeModalBoxActive]}
+                          onPress={() => setActiveInput('hour')}
+                        >
+                          <TextInput
+                            style={styles.timeModalInput}
+                            value={tempHour}
+                            onChangeText={(v) => {
+                              const clean = v.replace(/[^0-9]/g, '');
+                              setTempHour(clean);
+                              if (clean.length === 2) {
+                                setActiveInput('minute');
+                              }
+                            }}
+                            keyboardType="number-pad"
+                            maxLength={2}
+                            placeholder="00"
+                            placeholderTextColor="#90A4AE"
+                            onFocus={() => setActiveInput('hour')}
+                            selectTextOnFocus={true}
+                          />
+                        </TouchableOpacity>
+                        <Text style={styles.timeModalSubLabel}>Hour</Text>
+                      </View>
+
+                      {/* Colon */}
+                      <Text style={styles.timeModalColon}>:</Text>
+
+                      {/* Minute Box */}
+                      <View style={{ alignItems: 'center' }}>
+                        <TouchableOpacity
+                          style={[styles.timeModalBox, activeInput === 'minute' && styles.timeModalBoxActive]}
+                          onPress={() => setActiveInput('minute')}
+                        >
+                          <TextInput
+                            style={styles.timeModalInput}
+                            value={tempMinute}
+                            onChangeText={(v) => {
+                              const clean = v.replace(/[^0-9]/g, '');
+                              setTempMinute(clean);
+                            }}
+                            keyboardType="number-pad"
+                            maxLength={2}
+                            placeholder="00"
+                            placeholderTextColor="#90A4AE"
+                            onFocus={() => setActiveInput('minute')}
+                            selectTextOnFocus={true}
+                          />
+                        </TouchableOpacity>
+                        <Text style={styles.timeModalSubLabel}>Minute</Text>
+                      </View>
+
+                      {/* AM/PM Toggle */}
+                      <View style={styles.timeModalMeridiemContainer}>
+                        <TouchableOpacity
+                          style={[styles.timeModalMeridiemBtn, tempMeridiem === 'AM' && styles.timeModalMeridiemBtnActive, { borderBottomWidth: 0.5, borderBottomColor: '#CFD8DC' }]}
+                          onPress={() => setTempMeridiem('AM')}
+                        >
+                          <Text style={[styles.timeModalMeridiemText, tempMeridiem === 'AM' && styles.timeModalMeridiemTextActive]}>AM</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.timeModalMeridiemBtn, tempMeridiem === 'PM' && styles.timeModalMeridiemBtnActive, { borderTopWidth: 0.5, borderTopColor: '#CFD8DC' }]}
+                          onPress={() => setTempMeridiem('PM')}
+                        >
+                          <Text style={[styles.timeModalMeridiemText, tempMeridiem === 'PM' && styles.timeModalMeridiemTextActive]}>PM</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    {/* Clock Dial Face */}
+                    {showDialMode && (() => {
+                      const dialSize = 220;
+                      const center = dialSize / 2;
+                      const handLength = 70;
+                      
+                      const angle = (() => {
+                        if (activeInput === 'hour') {
+                          const val = parseInt(tempHour, 10) || 12;
+                          return (val * 30 - 90) * (Math.PI / 180);
+                        } else {
+                          const val = parseInt(tempMinute, 10) || 0;
+                          return (val * 6 - 90) * (Math.PI / 180);
+                        }
+                      })();
+
+                      const targetX = center + handLength * Math.cos(angle);
+                      const targetY = center + handLength * Math.sin(angle);
+
+                      return (
+                        <View style={styles.clockDial}>
+                          <Svg height={dialSize} width={dialSize} style={StyleSheet.absoluteFill}>
+                            {/* Line connecting pivot to number */}
+                            <Line
+                              x1={center}
+                              y1={center}
+                              x2={targetX}
+                              y2={targetY}
+                              stroke="#1565C0"
+                              strokeWidth="2.5"
+                            />
+                            {/* Inner circle pivot */}
+                            <Circle cx={center} cy={center} r="4" fill="#1565C0" />
+                          </Svg>
+
+                          {/* Hours 1-12 or Minutes 0-55 */}
+                          {activeInput === 'hour' ? (
+                            [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(h => {
+                              const theta = (h * 30 - 90) * (Math.PI / 180);
+                              const numX = center + handLength * Math.cos(theta) - 16;
+                              const numY = center + handLength * Math.sin(theta) - 16;
+                              const isSelected = parseInt(tempHour, 10) === h || (h === 12 && parseInt(tempHour, 10) === 0);
+                              return (
+                                <TouchableOpacity
+                                  key={h}
+                                  style={[
+                                    styles.clockNumberBox,
+                                    { left: numX, top: numY },
+                                    isSelected && styles.clockNumberBoxSelected
+                                  ]}
+                                  onPress={() => {
+                                    setTempHour(String(h).padStart(2, '0'));
+                                    setActiveInput('minute');
+                                  }}
+                                >
+                                  <Text style={[styles.clockNumberText, isSelected && styles.clockNumberTextSelected]}>
+                                    {h}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })
+                          ) : (
+                            [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map(m => {
+                              const theta = ((m / 5) * 30 - 90) * (Math.PI / 180);
+                              const numX = center + handLength * Math.cos(theta) - 16;
+                              const numY = center + handLength * Math.sin(theta) - 16;
+                              const isSelected = parseInt(tempMinute, 10) === m;
+                              return (
+                                <TouchableOpacity
+                                  key={m}
+                                  style={[
+                                    styles.clockNumberBox,
+                                    { left: numX, top: numY },
+                                    isSelected && styles.clockNumberBoxSelected
+                                  ]}
+                                  onPress={() => {
+                                    setTempMinute(String(m).padStart(2, '0'));
+                                  }}
+                                >
+                                  <Text style={[styles.clockNumberText, isSelected && styles.clockNumberTextSelected]}>
+                                    {m === 0 ? '00' : m}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })
+                          )}
+                        </View>
+                      );
+                    })()}
+
+                    {/* Bottom Action buttons */}
+                    <View style={[styles.timeModalFooter, { marginTop: showDialMode ? 24 : 12 }]}>
+                      <TouchableOpacity onPress={() => setShowDialMode(prev => !prev)} style={{ padding: 4 }}>
+                        <MaterialCommunityIcons 
+                          name={showDialMode ? "keyboard-outline" : "clock-outline"} 
+                          size={24} 
+                          color="#546E7A" 
+                        />
+                      </TouchableOpacity>
+                      <View style={{ flexDirection: 'row', gap: 20 }}>
+                        <TouchableOpacity onPress={() => setShowOpenTimePicker(false)}>
+                          <Text style={styles.timeModalFooterText}>Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => {
+                          const h = parseInt(tempHour, 10);
+                          const m = parseInt(tempMinute, 10);
+                          if (isNaN(h) || h < 1 || h > 12) {
+                            Alert.alert('Invalid Hour', 'Please enter a valid hour (1-12).');
+                            return;
+                          }
+                          if (isNaN(m) || m < 0 || m > 59) {
+                            Alert.alert('Invalid Minute', 'Please enter a valid minute (0-59).');
+                            return;
+                          }
+                          setOpenHour(h);
+                          setOpenMinute(m);
+                          setOpenMeridiem(tempMeridiem);
+                          commitTime(h, m, tempMeridiem);
+                          setShowOpenTimePicker(false);
+                        }}>
+                          <Text style={styles.timeModalFooterText}>OK</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </Pressable>
+                </Pressable>
+              </Modal>
+
+              {endTimeLabel && (
+                <Text style={[styles.bookedInfo, { textAlign: 'left', marginTop: 8, maxWidth: '100%' }]}>
+                  Occupies until {endTimeLabel} ({openWindowHours}h slot)
+                </Text>
+              )}
+              {existingBookings.length > 0 && (
+                <View style={{ marginTop: 8 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#78909C', marginBottom: 4 }}>Already booked today:</Text>
+                  {existingBookings.map(([t, info]) => (
+                    <Text key={t} style={[styles.bookedInfo, { textAlign: 'left', maxWidth: '100%' }]} numberOfLines={1}>
+                      {formatTimeLabelLocal(t)} — {info.patient_name} ({info.scheduled_by})
+                    </Text>
+                  ))}
+                </View>
+              )}
             </View>
           );
         })()}
@@ -2982,6 +3336,37 @@ const staticStyles = StyleSheet.create({
   submitContainer: { padding: 16, backgroundColor: '#FFF', borderTopWidth: 1, borderTopColor: '#E0E7EE' },
   submitBtn: { flexDirection: 'row', backgroundColor: '#43A047', borderRadius: 14, padding: 16, alignItems: 'center', justifyContent: 'center', gap: 8, shadowColor: '#43A047', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 5 },
   submitBtnText: { color: '#FFF', fontSize: 16, fontWeight: '700', letterSpacing: 0.5 },
+  timeChipRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', alignItems: 'center' },
+  timeChipCircle: { width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: '#D0DCE8', backgroundColor: '#F8FAFC', alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  timeChipCircleActive: { backgroundColor: '#1565C0', borderColor: '#1565C0' },
+  timeChipCircleText: { fontSize: 13, fontWeight: '700', color: '#666' },
+  timeChipCircleTextActive: { color: '#FFF' },
+  timeChipCapsule: { paddingHorizontal: 14, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: '#D0DCE8', backgroundColor: '#F8FAFC', alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  timeChipCapsuleActive: { backgroundColor: '#1565C0', borderColor: '#1565C0' },
+  timeChipCapsuleText: { fontSize: 13, fontWeight: '700', color: '#666' },
+  timeChipCapsuleTextActive: { color: '#FFF' },
+  timeChipBadge: { position: 'absolute', top: -3, right: -3, width: 14, height: 14, borderRadius: 7, backgroundColor: '#1565C0', borderWidth: 1, borderColor: '#FFF', alignItems: 'center', justifyContent: 'center' },
+  timeModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.4)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  timeModalContainer: { backgroundColor: '#F8FAFC', borderRadius: 28, padding: 24, width: '100%', maxWidth: 320, borderWidth: 1, borderColor: '#CFD8DC', shadowColor: '#1565C0', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.1, shadowRadius: 16, elevation: 8 },
+  timeModalTitle: { fontSize: 13, fontWeight: '700', color: '#1565C0', alignSelf: 'flex-start', marginBottom: 20, letterSpacing: 0.3 },
+  timeModalInputRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 24 },
+  timeModalBox: { width: 80, height: 72, borderRadius: 8, backgroundColor: '#ECEFF1', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'transparent' },
+  timeModalBoxActive: { backgroundColor: '#E3F2FD', borderColor: '#1565C0' },
+  timeModalInput: { fontSize: 44, fontWeight: '700', color: '#1E3A5F', width: 80, height: 60, textAlign: 'center', padding: 0, margin: 0, includeFontPadding: false, textAlignVertical: 'center' },
+  timeModalColon: { fontSize: 44, fontWeight: '700', color: '#1E3A5F', marginHorizontal: 4, transform: [{ translateY: -4 }] },
+  timeModalSubLabel: { fontSize: 11, color: '#546E7A', marginTop: 6, fontWeight: '500' },
+  timeModalMeridiemContainer: { width: 52, height: 72, borderRadius: 8, borderWidth: 1.5, borderColor: '#CFD8DC', overflow: 'hidden', backgroundColor: '#F8FAFC' },
+  timeModalMeridiemBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent' },
+  timeModalMeridiemBtnActive: { backgroundColor: '#E3F2FD' },
+  timeModalMeridiemText: { fontSize: 13, fontWeight: '700', color: '#546E7A' },
+  timeModalMeridiemTextActive: { color: '#1565C0', fontWeight: '800' },
+  timeModalFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 },
+  timeModalFooterText: { color: '#1565C0', fontSize: 14, fontWeight: '700', paddingHorizontal: 8, paddingVertical: 4 },
+  clockDial: { width: 220, height: 220, borderRadius: 110, backgroundColor: '#ECEFF1', alignSelf: 'center', position: 'relative', overflow: 'hidden' },
+  clockNumberBox: { position: 'absolute', width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  clockNumberBoxSelected: { backgroundColor: '#1565C0' },
+  clockNumberText: { fontSize: 14, fontWeight: '600', color: '#37474F' },
+  clockNumberTextSelected: { color: '#FFFFFF', fontWeight: '800' },
 });
 
 const styles = staticStyles;

@@ -33,6 +33,36 @@ UPLOADS_DIR = ROOT_DIR / 'uploads'
 UPLOADS_DIR.mkdir(exist_ok=True)
 load_dotenv(ROOT_DIR / '.env')
 
+import s3_storage  # noqa: E402 — after load_dotenv so AWS_* env vars are populated
+
+
+async def _s3_put_async(local_path: Path, uploads_root: Path = None, content_type: Optional[str] = None) -> None:
+    """Fire-and-forget best-effort S3 upload after a local file write. boto3
+    is synchronous, so this runs off the event loop thread; failures are
+    logged and swallowed — the local write already succeeded and the user's
+    upload must not fail because of an S3 hiccup."""
+    if not s3_storage.is_configured():
+        return
+    try:
+        await asyncio.to_thread(s3_storage.put_file, local_path, uploads_root or UPLOADS_DIR, content_type)
+    except Exception as e:
+        logging.warning(f"[s3] async put failed for {local_path}: {e}")
+
+
+async def _s3_ensure_local_async(local_path: Path, uploads_root: Path = None) -> bool:
+    """Read-path helper: True if the file exists locally already, or was
+    just pulled down from S3 to fill a local-disk gap (redeploy wipe, fresh
+    instance, etc.) — the actual fix for documents intermittently 404ing."""
+    if local_path.exists():
+        return True
+    if not s3_storage.is_configured():
+        return False
+    try:
+        return await asyncio.to_thread(s3_storage.fetch_to_local, local_path, uploads_root or UPLOADS_DIR)
+    except Exception as e:
+        logging.warning(f"[s3] async fetch failed for {local_path}: {e}")
+        return False
+
 # MongoDB connection
 mongo_url = os.environ.get('MONGO_URL', '')
 if not mongo_url:
@@ -168,6 +198,55 @@ def normalize_role(role: str) -> str:
     return CLINIC_ROLE_MAP.get(role, role)
 
 ORG_WIDE_ROLES = {"administrator", "implant_incharge", "nurse"}
+
+
+# ── Org-configurable scheduling (Implant In-Charge → Organization Settings) ──
+# Three modes for the "Time Slot" picker on case creation:
+#   "default" — the original fixed slots (10:00 AM Mon-Sat, 2:00 PM Mon-Fri),
+#                Sunday blocked entirely. Exact legacy behaviour.
+#   "custom"  — the in-charge defines named time slots per weekday.
+#   "open"    — the scheduler picks ANY start time; a slot occupies
+#               [start, start + open_window_hours). Conflicts are resolved by
+#               range overlap instead of an exact-time match.
+# Fields stripped from a procedure document when it's viewed through an
+# anonymous Discussion Forum share by anyone other than the case owner,
+# assigned supervisor, or implant_incharge/administrator (who always see the
+# full case). Shared by forum_get_thread and GET /procedures/{id}.
+FORUM_ANONYMOUS_PII_KEYS = (
+    # Patient identity + contact + identifiers
+    "patient_name", "patient_id", "patient_phone", "patient_email",
+    "email", "mobile_number", "age", "sex", "profession",
+    "registration_number", "receipt_number", "amount_paid",
+    # Signed documents carry the patient's name + signature
+    "patient_consent_form", "consent_form",
+    # Operator identity (the sharer chose to stay anonymous)
+    "student_name", "student_id", "created_by_name", "created_by_id",
+    "supervisor_name", "supervisor_id", "instructor_name",
+    "implant_incharge_name", "implant_incharge_id",
+)
+
+DEFAULT_SCHEDULING_CONFIG: Dict[str, Any] = {
+    "mode": "default",
+    "custom_slots": [],       # [{"time": "HH:MM", "label": str, "days": ["Mon", ...]}]
+    "open_window_hours": 2.0,
+}
+_WEEKDAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+
+async def _get_org_scheduling_config(org_id: Optional[str]) -> Dict[str, Any]:
+    """Fetch the caller's org scheduling config, filled in with defaults for
+    any field the org hasn't set (or has no scheduling_config at all — every
+    org created before this feature shipped defaults to "default" mode, i.e.
+    zero behavior change until an in-charge opts into custom/open)."""
+    if not org_id:
+        return dict(DEFAULT_SCHEDULING_CONFIG)
+    try:
+        org = await db.organizations.find_one({"_id": ObjectId(org_id)}, {"scheduling_config": 1})
+    except Exception:
+        return dict(DEFAULT_SCHEDULING_CONFIG)
+    if not org or not org.get("scheduling_config"):
+        return dict(DEFAULT_SCHEDULING_CONFIG)
+    return {**DEFAULT_SCHEDULING_CONFIG, **org["scheduling_config"]}
 
 
 async def _org_member_ids(org_id: Optional[str]) -> List[str]:
@@ -882,8 +961,19 @@ async def notify_rejection(procedure: dict, procedure_id: str, phase_label: str,
         )
 
 # Expo Push Notification Helper
-async def send_expo_push_notifications(user_ids: List[str], title: str, body: str, data: Optional[Dict] = None):
-    """Send push notifications to users via Expo Push API."""
+async def send_expo_push_notifications(user_ids: List[str], title: str, body: str, data: Optional[Dict] = None, redact: Optional[List[str]] = None):
+    """Send push notifications to users via Expo Push API.
+
+    `redact`: literal substrings (typically a patient name) to strip from
+    `title`/`body` before the payload leaves our server. Push notifications
+    render on the OS lock screen — visible to anyone glancing at the device,
+    not just the authenticated recipient — so patient identity must not ride
+    in a push payload even though the same detail is fine in the persisted
+    in-app notification (only visible after login, to an authorized viewer).
+    Expo's relay also stores payloads in transit, another reason to keep PHI
+    out of it. Callers pass the patient name(s) that were interpolated into
+    the message; here they're swapped for a neutral placeholder.
+    """
     if not user_ids:
         return
     valid_oids = [ObjectId(uid) for uid in user_ids if ObjectId.is_valid(uid)]
@@ -899,6 +989,12 @@ async def send_expo_push_notifications(user_ids: List[str], title: str, body: st
             tokens.append(user["push_token"])
     if not tokens:
         return
+    for needle in (redact or []):
+        needle = (needle or "").strip()
+        if not needle:
+            continue
+        title = title.replace(needle, "the patient")
+        body = body.replace(needle, "the patient")
     messages = [
         {"to": token, "sound": "default", "title": title, "body": body, "data": data or {}}
         for token in tokens
@@ -1075,6 +1171,7 @@ async def run_pre_surgery_reminders():
                 title,
                 body,
                 {"procedure_id": str(proc["_id"]), "kind": "pre_surgery_reminder"},
+                redact=[patient_label],
             )
 
             # 3) Mark as sent
@@ -1164,6 +1261,7 @@ async def run_preop_checklist_reminders():
                 title,
                 body,
                 {"procedure_id": str(proc["_id"]), "kind": "preop_reminder", "bucket": bucket},
+                redact=[patient_label],
             )
             await db.procedures.update_one(
                 {"_id": proc["_id"]},
@@ -2276,6 +2374,12 @@ async def get_my_organization(current_user: dict = Depends(get_current_user)):
         "name": org.get("name", ""),
         "org_type": org.get("org_type", ""),
         "logo": org.get("logo"),
+        # Default True: students always had this restriction; supervisors are
+        # folded into the same toggle since orgs previously had no way to
+        # scope it independently, and defaulting closed matches the safer,
+        # already-live-for-students behavior until an in-charge opts out.
+        "enforce_scheduling_restriction": org.get("enforce_scheduling_restriction", True),
+        "scheduling_config": {**DEFAULT_SCHEDULING_CONFIG, **(org.get("scheduling_config") or {})},
     }
     if org.get("org_type") == "college":
         entry["state"] = org.get("state")
@@ -2308,6 +2412,91 @@ async def update_my_organization_logo(payload: OrgLogoUpdate, current_user: dict
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Organization not found")
     return {"logo": logo}
+
+
+class SchedulingRestrictionUpdate(BaseModel):
+    enforce: bool
+
+
+@api_router.put("/organizations/me/scheduling-restriction")
+async def update_scheduling_restriction(payload: SchedulingRestrictionUpdate, current_user: dict = Depends(get_current_user)):
+    """Toggle the 24-hour advance-scheduling restriction for students and
+    supervisors in the caller's organization. Implant In-Charge always
+    bypasses this restriction regardless of the setting. Restricted to the
+    Implant In-Charge — same authority level as the org logo."""
+    if current_user.get("role") != "implant_incharge":
+        raise HTTPException(status_code=403, detail="Only the Implant In-Charge can change this setting")
+    org_id = current_user.get("org_id")
+    if not org_id:
+        raise HTTPException(status_code=400, detail="No organization associated with this account")
+    try:
+        result = await db.organizations.update_one(
+            {"_id": ObjectId(org_id)},
+            {"$set": {"enforce_scheduling_restriction": bool(payload.enforce)}},
+        )
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid organization")
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    return {"enforce_scheduling_restriction": bool(payload.enforce)}
+
+
+class CustomSlotIn(BaseModel):
+    time: str = Field(..., description="24-hour HH:MM")
+    label: Optional[str] = None
+    days: List[str] = Field(..., min_length=1)
+
+
+class SchedulingConfigUpdate(BaseModel):
+    mode: str  # "default" | "custom" | "open"
+    custom_slots: Optional[List[CustomSlotIn]] = None
+    open_window_hours: Optional[float] = None
+
+
+@api_router.put("/organizations/me/scheduling-config")
+async def update_scheduling_config(payload: SchedulingConfigUpdate, current_user: dict = Depends(get_current_user)):
+    """Set the caller's org scheduling mode (default / custom / open) and its
+    mode-specific settings. Implant In-Charge only."""
+    if current_user.get("role") != "implant_incharge":
+        raise HTTPException(status_code=403, detail="Only the Implant In-Charge can change this setting")
+    org_id = current_user.get("org_id")
+    if not org_id:
+        raise HTTPException(status_code=400, detail="No organization associated with this account")
+    if payload.mode not in ("default", "custom", "open"):
+        raise HTTPException(status_code=400, detail="mode must be 'default', 'custom', or 'open'")
+
+    valid_days = set(_WEEKDAY_NAMES)
+    cfg: Dict[str, Any] = {"mode": payload.mode, "custom_slots": [], "open_window_hours": 2.0}
+
+    if payload.mode == "custom":
+        if not payload.custom_slots:
+            raise HTTPException(status_code=400, detail="At least one custom time slot is required")
+        slots_out = []
+        seen_times = set()
+        for s in payload.custom_slots:
+            if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", s.time):
+                raise HTTPException(status_code=400, detail=f"Invalid time format: {s.time} (expected HH:MM, 24-hour)")
+            bad_days = set(s.days) - valid_days
+            if bad_days:
+                raise HTTPException(status_code=400, detail=f"Invalid day(s): {', '.join(bad_days)}")
+            if s.time in seen_times:
+                raise HTTPException(status_code=400, detail=f"Duplicate time slot: {s.time}")
+            seen_times.add(s.time)
+            slots_out.append({"time": s.time, "label": (s.label or "").strip() or s.time, "days": s.days})
+        cfg["custom_slots"] = slots_out
+    elif payload.mode == "open":
+        hours = payload.open_window_hours if payload.open_window_hours is not None else 2.0
+        if hours < 0.5 or hours > 8:
+            raise HTTPException(status_code=400, detail="Slot duration must be between 0.5 and 8 hours")
+        cfg["open_window_hours"] = hours
+
+    try:
+        result = await db.organizations.update_one({"_id": ObjectId(org_id)}, {"$set": {"scheduling_config": cfg}})
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid organization")
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    return {"scheduling_config": cfg}
 
 
 # ── super_admin: list all organizations (for the cross-org "Add User" picker) ──
@@ -3274,57 +3463,117 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
     is_student = current_user["role"] == "student"
     is_supervisor = current_user["role"] == "supervisor"
     is_incharge = current_user["role"] in ("implant_incharge", "administrator")
-    
+
+    # Org-configurable scheduling: mode (default/custom/open) + the 24h
+    # advance-booking toggle. Both set by the Implant In-Charge from
+    # Organization Settings; fetched once here for the checks below.
+    org_id = current_user.get("org_id")
+    sched_cfg = await _get_org_scheduling_config(org_id)
+    sched_mode = sched_cfg.get("mode", "default")
+    org_enforces_restriction = True
+    if org_id:
+        try:
+            org_doc = await db.organizations.find_one({"_id": ObjectId(org_id)}, {"enforce_scheduling_restriction": 1})
+            if org_doc is not None:
+                org_enforces_restriction = org_doc.get("enforce_scheduling_restriction", True)
+        except Exception:
+            pass
+
     # Check scheduling restrictions
+    procedure_datetime: Optional[datetime] = None
     try:
         procedure_datetime = datetime.strptime(f"{procedure.procedure_date} {procedure.procedure_time}", "%Y-%m-%d %H:%M")
-        
-        # Block Sunday scheduling for everyone
-        if procedure_datetime.weekday() == 6:  # Sunday
-            raise HTTPException(
-                status_code=400,
-                detail="No scheduling is available on Sundays."
-            )
-        
-        # Saturday: only 9:30 AM slot
-        if procedure_datetime.weekday() == 5:  # Saturday
-            if procedure.procedure_time != "10:00":
-                raise HTTPException(
-                    status_code=400,
-                    detail="Only 10:00 AM slot is available on Saturdays."
-                )
-        
-        # 24-hour restriction for students only
-        if is_student:
+    except ValueError:
+        procedure_datetime = None  # bad date/time format — caught by field validation below
+
+    if procedure_datetime is not None:
+        day_name = _WEEKDAY_NAMES[procedure_datetime.weekday()]
+
+        if sched_mode == "default":
+            # Block Sunday scheduling for everyone
+            if procedure_datetime.weekday() == 6:  # Sunday
+                raise HTTPException(status_code=400, detail="No scheduling is available on Sundays.")
+            # Saturday: only 10:00 AM slot
+            if procedure_datetime.weekday() == 5 and procedure.procedure_time != "10:00":
+                raise HTTPException(status_code=400, detail="Only 10:00 AM slot is available on Saturdays.")
+        elif sched_mode == "custom":
+            day_slots = [s for s in (sched_cfg.get("custom_slots") or []) if day_name in (s.get("days") or [])]
+            if not day_slots:
+                raise HTTPException(status_code=400, detail=f"No procedure slots are configured for {day_name}.")
+            if procedure.procedure_time not in {s.get("time") for s in day_slots}:
+                raise HTTPException(status_code=400, detail="Selected time slot is not available on this day.")
+        # sched_mode == "open": any day/time is allowed here; the duration-
+        # based overlap check below is what actually guards occupancy.
+
+        # 24-hour restriction for students and supervisors — org-configurable
+        # by the Implant In-Charge (default: enforced). In-Charge/Admin always
+        # bypass this regardless of the setting.
+        if (is_student or is_supervisor) and org_enforces_restriction:
             hours_until_procedure = (procedure_datetime - datetime.now()).total_seconds() / 3600
             if hours_until_procedure < 24:
+                role_label = "Students" if is_student else "Supervisors"
                 raise HTTPException(
-                    status_code=400, 
-                    detail="Students cannot schedule procedures less than 24 hours in advance. Please select a date at least 24 hours from now."
+                    status_code=400,
+                    detail=f"{role_label} cannot schedule procedures less than 24 hours in advance. Please select a date at least 24 hours from now."
                 )
-    except ValueError:
-        pass  # If date parsing fails, let it proceed (will be caught by validation)
 
-    # ── Duplicate slot check: only 1 patient per slot per day (skip for own draft) ──
-    existing = await db.procedures.find_one({
-        "procedure_date": procedure.procedure_date,
-        "procedure_time": procedure.procedure_time,
-    })
-    if existing:
-        existing_id = str(existing["_id"])
-        # Allow if it's the user's own draft being continued
-        is_own_draft = existing.get("status") == "draft" and (
-            existing.get("created_by_id") == current_user["_id"] or
-            existing.get("student_id") == current_user["_id"]
-        )
-        if not is_own_draft:
-            booked_by = existing.get("created_by_name") or existing.get("student_name") or "Unknown"
-            patient = existing.get("patient_name", "Unknown")
-            slot_label = "10:00 AM" if procedure.procedure_time == "10:00" else "2:00 PM"
-            raise HTTPException(
-                status_code=409,
-                detail=f"The {slot_label} slot on {procedure.procedure_date} is already booked for patient {patient} (scheduled by {booked_by}). Please choose a different time or date."
+    # ── Slot conflict check ──
+    if sched_mode == "open" and procedure_datetime is not None:
+        # Open-window mode: a booking at T occupies [T, T + open_window_hours).
+        # Same-day bookings conflict if their windows overlap. Uses the org's
+        # CURRENT duration setting for existing bookings too (duration isn't
+        # stored per-booking) — if the in-charge changes it later, past
+        # bookings are reinterpreted under the new duration for this check.
+        window_hours = float(sched_cfg.get("open_window_hours") or 2.0)
+        new_end = procedure_datetime + timedelta(hours=window_hours)
+        same_day = await db.procedures.find(
+            {"procedure_date": procedure.procedure_date},
+            {"_id": 1, "procedure_time": 1, "patient_name": 1, "created_by_name": 1,
+             "student_name": 1, "status": 1, "created_by_id": 1, "student_id": 1},
+        ).to_list(200)
+        for other in same_day:
+            is_own_draft = other.get("status") == "draft" and (
+                other.get("created_by_id") == current_user["_id"] or
+                other.get("student_id") == current_user["_id"]
             )
+            if is_own_draft:
+                continue
+            try:
+                other_start = datetime.strptime(f"{procedure.procedure_date} {other['procedure_time']}", "%Y-%m-%d %H:%M")
+            except (ValueError, KeyError, TypeError):
+                continue
+            other_end = other_start + timedelta(hours=window_hours)
+            if procedure_datetime < other_end and other_start < new_end:
+                booked_by = other.get("created_by_name") or other.get("student_name") or "Unknown"
+                patient = other.get("patient_name", "Unknown")
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"This time overlaps an existing booking ({other_start.strftime('%I:%M %p')}–{other_end.strftime('%I:%M %p')}) for patient {patient} (scheduled by {booked_by}). Please choose a different time."
+                )
+    else:
+        # ── Duplicate slot check: only 1 patient per slot per day (default/custom modes) ──
+        existing = await db.procedures.find_one({
+            "procedure_date": procedure.procedure_date,
+            "procedure_time": procedure.procedure_time,
+        })
+        if existing:
+            # Allow if it's the user's own draft being continued
+            is_own_draft = existing.get("status") == "draft" and (
+                existing.get("created_by_id") == current_user["_id"] or
+                existing.get("student_id") == current_user["_id"]
+            )
+            if not is_own_draft:
+                booked_by = existing.get("created_by_name") or existing.get("student_name") or "Unknown"
+                patient = existing.get("patient_name", "Unknown")
+                if sched_mode == "custom":
+                    match = next((s for s in (sched_cfg.get("custom_slots") or []) if s.get("time") == procedure.procedure_time), None)
+                    slot_label = (match or {}).get("label") or procedure.procedure_time
+                else:
+                    slot_label = "10:00 AM" if procedure.procedure_time == "10:00" else "2:00 PM"
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"The {slot_label} slot on {procedure.procedure_date} is already booked for patient {patient} (scheduled by {booked_by}). Please choose a different time or date."
+                )
 
     # Validate mandatory fields
     valid_procedure_types = [
@@ -3488,6 +3737,7 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
                 "Consent form pending",
                 msg,
                 {"procedure_id": procedure_id, "type": "consent_pending"},
+                redact=[procedure.patient_name],
             )
     
     return procedure_dict
@@ -3495,11 +3745,14 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
 
 @api_router.get("/procedures/slots/{date}")
 async def get_booked_slots(date: str, current_user: dict = Depends(get_current_user)):
-    """Return booked time slots for a given date with patient/scheduler info."""
+    """Return booked time slots for a given date with patient/scheduler info,
+    plus the caller's org scheduling config so the case-creation picker can
+    render whichever mode (default/custom/open) is active without a second
+    round-trip to /organizations/me."""
     booked = await db.procedures.find(
         {"procedure_date": date},
         {"_id": 0, "procedure_time": 1, "patient_name": 1, "student_name": 1, "created_by_name": 1, "created_by_role": 1},
-    ).to_list(10)
+    ).to_list(50)
     slots = {}
     for b in booked:
         t = b.get("procedure_time", "")
@@ -3507,15 +3760,34 @@ async def get_booked_slots(date: str, current_user: dict = Depends(get_current_u
             "patient_name": b.get("patient_name", ""),
             "scheduled_by": b.get("created_by_name") or b.get("student_name") or "",
         }
-    return {"date": date, "booked_slots": slots}
+
+    sched_cfg = await _get_org_scheduling_config(current_user.get("org_id"))
+    sched_mode = sched_cfg.get("mode", "default")
+    day_slots: List[Dict[str, Any]] = []
+    if sched_mode == "custom":
+        try:
+            day_name = _WEEKDAY_NAMES[datetime.strptime(date, "%Y-%m-%d").weekday()]
+            day_slots = [s for s in (sched_cfg.get("custom_slots") or []) if day_name in (s.get("days") or [])]
+        except ValueError:
+            pass
+
+    return {
+        "date": date,
+        "booked_slots": slots,
+        "mode": sched_mode,
+        "day_slots": day_slots,  # populated only in "custom" mode
+        "open_window_hours": sched_cfg.get("open_window_hours") if sched_mode == "open" else None,
+    }
 
 
 @api_router.get("/procedures/slots-month/{month}")
 async def get_booked_slots_month(month: str, current_user: dict = Depends(get_current_user)):
     """Org-wide slot occupancy for a calendar month (YYYY-MM), visible to every
-    role — powers the Home-screen calendar dots (orange = one of the two daily
-    slots booked, red = both). Per slot returns who booked it + procedure type;
-    deliberately no patient identity."""
+    role — powers the Home-screen calendar dots (orange = partially booked,
+    red = fully booked). `total` is computed server-side from the org's
+    scheduling config (fixed count for default/custom, null for open mode —
+    there's no fixed capacity to be "full" against). Per slot returns who
+    booked it + procedure type; deliberately no patient identity."""
     if not re.fullmatch(r"\d{4}-\d{2}", month):
         raise HTTPException(status_code=400, detail="month must be YYYY-MM")
     query: Dict[str, Any] = {
@@ -3530,16 +3802,37 @@ async def get_booked_slots_month(month: str, current_user: dict = Depends(get_cu
         {"_id": 0, "procedure_date": 1, "procedure_time": 1, "student_name": 1,
          "created_by_name": 1, "implant_procedure_type": 1},
     )
-    days: Dict[str, Dict[str, Any]] = {}
+    raw_days: Dict[str, Dict[str, Any]] = {}
     async for p in cursor:
         d, t = p.get("procedure_date"), p.get("procedure_time")
         if not d or not t:
             continue
-        days.setdefault(d, {})[t] = {
+        raw_days.setdefault(d, {})[t] = {
             "scheduled_by": p.get("created_by_name") or p.get("student_name") or "",
             "procedure_type": p.get("implant_procedure_type") or "",
         }
-    return {"month": month, "days": days}
+
+    sched_cfg = await _get_org_scheduling_config(current_user.get("org_id"))
+    sched_mode = sched_cfg.get("mode", "default")
+
+    def _total_for_date(date_str: str) -> Optional[int]:
+        try:
+            d = datetime.strptime(date_str, "%Y-%m-%d")
+        except ValueError:
+            return None
+        if sched_mode == "default":
+            if d.weekday() == 6:  # Sunday
+                return 0
+            return 1 if d.weekday() == 5 else 2  # Saturday: 1 slot, else 2
+        if sched_mode == "custom":
+            day_name = _WEEKDAY_NAMES[d.weekday()]
+            return len([s for s in (sched_cfg.get("custom_slots") or []) if day_name in (s.get("days") or [])])
+        return None  # open mode: no fixed capacity to compare against
+
+    days: Dict[str, Dict[str, Any]] = {
+        d: {"slots": slots, "total": _total_for_date(d)} for d, slots in raw_days.items()
+    }
+    return {"month": month, "days": days, "mode": sched_mode}
 
 
 @api_router.get("/procedures")
@@ -4382,43 +4675,51 @@ async def get_procedure(procedure_id: str, request: Request, current_user: dict 
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
     await _assert_procedure_org_access(procedure, current_user)
-    
+
     # Check access
-    async def _forum_shared_readable() -> bool:
+    async def _forum_share_thread():
         # Cases shared to the Discussion Forum are viewable read-only by every
         # forum member (any non-nurse role in the org — org access is asserted
-        # above). Anonymous shares stay locked down: opening the full case
-        # would reveal the patient + operator identity the sharer chose to
-        # hide, so only the normal owner/assignee rules apply there.
-        thread = await db.forum_threads.find_one({
+        # above), including anonymous shares. Returns the thread doc (or None)
+        # so the caller can tell whether redaction is needed.
+        return await db.forum_threads.find_one({
             "procedure_id": procedure_id,
             "status": {"$in": ["open", "closed"]},
-            "anonymous": {"$ne": True},
         })
-        return thread is not None
 
+    redact_pii = False
     if current_user["role"] == "student" and procedure["student_id"] != current_user["_id"]:
-        if not await _forum_shared_readable():
+        thread = await _forum_share_thread()
+        if not thread:
             await log_access(action="procedure_view", resource_type="procedure", resource_id=procedure_id, user=current_user, request=request, outcome="denied")
             raise HTTPException(status_code=403, detail="Access denied")
+        redact_pii = bool(thread.get("anonymous"))
     elif current_user["role"] == "supervisor" and procedure["supervisor_id"] != current_user["_id"]:
-        if not await _forum_shared_readable():
+        thread = await _forum_share_thread()
+        if not thread:
             await log_access(action="procedure_view", resource_type="procedure", resource_id=procedure_id, user=current_user, request=request, outcome="denied")
             raise HTTPException(status_code=403, detail="Access denied")
+        redact_pii = bool(thread.get("anonymous"))
     elif current_user["role"] == "nurse":
         # Nurses can view any case where Phase 1 has been submitted (draft is hidden).
         # They only see Phase 1 data on the UI (frontend-enforced).
         if procedure.get("status") == "draft":
             await log_access(action="procedure_view", resource_type="procedure", resource_id=procedure_id, user=current_user, request=request, outcome="denied")
             raise HTTPException(status_code=403, detail="Nurses cannot view draft procedures")
-    
+    # implant_incharge / administrator / super_admin: no restriction — they
+    # always see the full case, anonymous share or not.
+
+    if redact_pii:
+        procedure = {k: v for k, v in procedure.items() if k not in FORUM_ANONYMOUS_PII_KEYS}
+        procedure["patient_name"] = "Anonymous Patient"
+
     procedure["_id"] = str(procedure["_id"])
     procedure["id"] = procedure["_id"]
     # Normalise instruments_autoclaved payload so "unmarked" always looks like None/null,
     # keeping the response contract identical to POST mark-instruments-autoclaved and
     # GET /procedures/nurse/scheduled-cases.
     procedure["instruments_autoclaved"] = _serialise_instruments_autoclaved(procedure.get("instruments_autoclaved"))
-    await log_access(action="procedure_view", resource_type="procedure", resource_id=procedure_id, user=current_user, request=request, extra={"patient_name": procedure.get("patient_name")})
+    await log_access(action="procedure_view", resource_type="procedure", resource_id=procedure_id, user=current_user, request=request, extra={"patient_name": procedure.get("patient_name"), "redacted": redact_pii})
     return procedure
 
 @api_router.put("/procedures/{procedure_id}")
@@ -4574,6 +4875,18 @@ async def edit_procedure_fields(procedure_id: str, request: Request, current_use
                 }
                 for child in CASCADE_RULES.get(new_pc or "", []):
                     prev = existing_p2.get(child)
+                    # If THIS SAME request is also explicitly setting a new,
+                    # different value for `child` (e.g. an in-charge editing
+                    # the Healing Abutment Cuff Height row spreads the whole
+                    # phase2_data sub-object, which drags prosthetic_component
+                    # along unchanged — but if it were stale that would look
+                    # like an unrelated "prosthetic_component changed" cascade
+                    # and silently wipe the very value being saved). A
+                    # deliberate simultaneous edit always wins over the
+                    # cascade-clear, which exists only to drop genuinely
+                    # stale children left over from a real type switch.
+                    if child in p2 and p2[child] != prev:
+                        continue
                     if prev not in (None, "", []):
                         p2[child] = None
                         log_entries.append({
@@ -4646,6 +4959,7 @@ async def edit_procedure_fields(procedure_id: str, request: Request, current_use
                 f"Case edited · {patient_label}",
                 msg,
                 {"procedure_id": procedure_id, "type": "case_edited"},
+                redact=[patient_label],
             )
     
     updated = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0})
@@ -4673,13 +4987,30 @@ def _is_case_stakeholder(proc: dict, user: dict) -> bool:
     return uid in (proc.get("student_id"), proc.get("supervisor_id"), proc.get("implant_incharge_id"))
 
 
+async def _is_case_readable(procedure_id: str, proc: dict, user: dict) -> bool:
+    """Stakeholder OR the case has been shared to the Discussion Forum — forum
+    members get read-only access to these GET endpoints too (matches GET
+    /procedures/{id}). Anonymous-share PII redaction doesn't apply here since
+    these endpoints only return checklist items / rule-engine hits, not
+    patient identity. Write endpoints (regenerate/toggle) stay stakeholder-only."""
+    if _is_case_stakeholder(proc, user):
+        return True
+    if user.get("role") == "nurse":
+        return False
+    thread = await db.forum_threads.find_one({
+        "procedure_id": procedure_id,
+        "status": {"$in": ["open", "closed"]},
+    })
+    return thread is not None
+
+
 @api_router.get("/procedures/{procedure_id}/augmentation-checklist")
 async def get_augmentation_checklist(procedure_id: str, current_user: dict = Depends(get_current_user)):
     proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0})
     if not proc:
         raise HTTPException(status_code=404, detail="Case not found")
     await _assert_procedure_org_access(proc, current_user)
-    if not _is_case_stakeholder(proc, current_user):
+    if not await _is_case_readable(procedure_id, proc, current_user):
         raise HTTPException(status_code=403, detail="Not authorized")
     return {
         "items": proc.get("augmentation_checklist") or [],
@@ -4700,7 +5031,7 @@ async def get_clinical_evaluation(
     if not proc:
         raise HTTPException(status_code=404, detail="Case not found")
     await _assert_procedure_org_access(proc, current_user)
-    if not _is_case_stakeholder(proc, current_user):
+    if not await _is_case_readable(procedure_id, proc, current_user):
         raise HTTPException(status_code=403, detail="Not authorized")
     flat = {**proc}
     p2 = proc.get("phase2_data") or {}
@@ -4872,6 +5203,7 @@ async def create_phase2_edit_request(
             f"Phase 2 edit requested · {patient_label}",
             msg,
             {"procedure_id": procedure_id, "type": "phase2_edit_request", "request_id": request_doc["id"]},
+            redact=[patient_label],
         )
     return request_doc
 
@@ -4962,6 +5294,7 @@ async def resolve_phase2_edit_request(
             f"Phase 2 updated · {patient_label}",
             msg,
             {"procedure_id": procedure_id, "type": "phase2_edit_resolved"},
+            redact=[patient_label],
         )
     return {"ok": True, "status": "resolved"}
 
@@ -5175,6 +5508,7 @@ async def reschedule_procedure(
                 "new_date": body.procedure_date,
                 "new_time": body.procedure_time,
             },
+            redact=[patient_label],
         )
 
     # iter-270: HIPAA audit — every reschedule is recorded to access_logs
@@ -5464,6 +5798,8 @@ async def upload_consent_temp(
     file_path = UPLOADS_DIR / unique_name
     with open(file_path, "wb") as f:
         f.write(contents)
+    import mimetypes as _mt_5799
+    await _s3_put_async(file_path, content_type=_mt_5799.guess_type(str(file_path))[0])
     return {
         "filename": unique_name,
         "original_name": file.filename,
@@ -5508,6 +5844,8 @@ async def upload_consent_for_procedure(
     file_path = UPLOADS_DIR / unique_name
     with open(file_path, "wb") as f:
         f.write(contents)
+    import mimetypes as _mt_5843
+    await _s3_put_async(file_path, content_type=_mt_5843.guess_type(str(file_path))[0])
     
     previous = procedure.get("patient_consent_form")
     version = (previous.get("version", 1) + 1) if previous else 1
@@ -5572,6 +5910,7 @@ async def upload_consent_for_procedure(
             f"Consent uploaded · {patient_label}",
             f"Patient consent form uploaded by {current_user.get('name','')}. Phase 2 is unlocked.",
             {"procedure_id": procedure_id, "type": "consent_uploaded"},
+            redact=[patient_label],
         )
     
     updated = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0})
@@ -6002,6 +6341,8 @@ async def upload_cbct_temp(
     file_path = UPLOADS_DIR / unique_name
     with open(file_path, "wb") as f:
         f.write(contents)
+    import mimetypes as _mt_6338
+    await _s3_put_async(file_path, content_type=_mt_6338.guess_type(str(file_path))[0])
     return {
         "cbct_file": unique_name,
         "cbct_original_name": file.filename,
@@ -6028,6 +6369,8 @@ async def upload_media_temp(
     file_path = UPLOADS_DIR / unique_name
     with open(file_path, "wb") as f:
         f.write(contents)
+    import mimetypes as _mt_6364
+    await _s3_put_async(file_path, content_type=_mt_6364.guess_type(str(file_path))[0])
     return {
         "filename": unique_name,
         "original_name": file.filename,
@@ -6060,6 +6403,8 @@ async def upload_cbct(
     file_path = UPLOADS_DIR / unique_name
     with open(file_path, "wb") as f:
         f.write(contents)
+    import mimetypes as _mt_6396
+    await _s3_put_async(file_path, content_type=_mt_6396.guess_type(str(file_path))[0])
     
     await db.procedures.update_one(
         {"_id": ObjectId(procedure_id)},
@@ -6102,6 +6447,8 @@ async def upload_ios(
     file_path = UPLOADS_DIR / unique_name
     with open(file_path, "wb") as f:
         f.write(contents)
+    import mimetypes as _mt_6438
+    await _s3_put_async(file_path, content_type=_mt_6438.guess_type(str(file_path))[0])
     
     await db.procedures.update_one(
         {"_id": ObjectId(procedure_id)},
@@ -6968,6 +7315,8 @@ async def upload_checklist_file(
     filepath = CHECKLIST_UPLOADS_DIR / filename
     with open(filepath, "wb") as f:
         f.write(contents)
+    import mimetypes as _mt_7304
+    await _s3_put_async(filepath, content_type=_mt_7304.guess_type(str(filepath))[0])
 
     file_record = {
         "item_id": item_id,
@@ -7460,7 +7809,12 @@ def _build_case_context(proc: dict) -> str:
         parts.append("\n--- Phase 2: Surgical Data ---")
         torques = p2.get('torque_values') or proc.get('torque_values') or []
         if torques:
-            parts.append(f"Insertion Torque Values: {', '.join([str(t) + ' Ncm' for t in torques])}")
+            implant_plans_ctx = proc.get('implant_plans') or []
+            torque_labels = []
+            for i, t in enumerate(torques):
+                label = f"Tooth {implant_plans_ctx[i].get('position')}" if i < len(implant_plans_ctx) and implant_plans_ctx[i].get('position') else f"Implant {i+1}"
+                torque_labels.append(f"{label}: {t} Ncm")
+            parts.append(f"Insertion Torque Values: {', '.join(torque_labels)}")
         if p2.get('anesthesia_details'):
             parts.append(f"Anesthesia: {p2.get('anesthesia_details')}")
         if p2.get('flap_design'):
@@ -8911,7 +9265,15 @@ async def ai_surgical_notes(request: Request, current_user: dict = Depends(get_c
     
     # Get torque values from correct location
     torques = phase2.get("torque_values") or proc.get("torque_values") or []
-    torque_str = ', '.join([str(t) + ' Ncm' for t in torques]) if torques else 'N/A'
+    if torques:
+        implant_plans_ctx = proc.get("implant_plans") or []
+        torque_parts = []
+        for i, t in enumerate(torques):
+            label = f"Tooth {implant_plans_ctx[i].get('position')}" if i < len(implant_plans_ctx) and implant_plans_ctx[i].get('position') else f"Implant {i+1}"
+            torque_parts.append(f"{label}: {t} Ncm")
+        torque_str = ', '.join(torque_parts)
+    else:
+        torque_str = 'N/A'
     
     drill_info = ""
     if phase2.get("drilling_protocol"):
@@ -9976,10 +10338,8 @@ async def generate_case_report(
             pdf.cell(0, 7, safe("Torque Values (Ncm):"), ln=True)
             pdf.set_font("Helvetica", "", 9)
             for i, t in enumerate(tv):
-                pos_label = ""
-                if i < len(implant_plans):
-                    pos_label = f" (Tooth {implant_plans[i].get('position', '')})"
-                pdf.cell(0, 6, safe(f"  Implant {i+1}{pos_label}: {t} Ncm"), ln=True)
+                label = f"Tooth {implant_plans[i].get('position', '')}" if i < len(implant_plans) and implant_plans[i].get('position') else f"Implant {i+1}"
+                pdf.cell(0, 6, safe(f"  {label}: {t} Ncm"), ln=True)
             pdf.ln(2)
         if p2.get("implant_other_notes"):
             add_field("Other Implant Notes", p2["implant_other_notes"])
@@ -10039,10 +10399,8 @@ async def generate_case_report(
             pdf.cell(0, 7, safe("Torque Values (Ncm):"), ln=True)
             pdf.set_font("Helvetica", "", 9)
             for i, tv in enumerate(torque):
-                pos_label = ""
-                if i < len(implant_plans):
-                    pos_label = f" (Tooth {implant_plans[i].get('position', '')})"
-                pdf.cell(0, 6, safe(f"  Implant {i+1}{pos_label}: {tv} Ncm"), ln=True)
+                label = f"Tooth {implant_plans[i].get('position', '')}" if i < len(implant_plans) and implant_plans[i].get('position') else f"Implant {i+1}"
+                pdf.cell(0, 6, safe(f"  {label}: {tv} Ncm"), ln=True)
             pdf.ln(2)
     # Bone Graft and Membrane
     p2 = procedure.get("phase2_data", {})
@@ -10606,6 +10964,8 @@ async def upload_photo(
     file_path = PHOTO_UPLOADS_DIR / unique_name
     with open(file_path, "wb") as f:
         f.write(contents)
+    import mimetypes as _mt_10951
+    await _s3_put_async(file_path, content_type=_mt_10951.guess_type(str(file_path))[0])
 
     # Store in procedure's photos subdocument
     photo_record = {
@@ -11184,6 +11544,7 @@ async def approve_procedure(
                     "Procedure Complete!",
                     f"Stage 1 Implant Placement for {procedure['patient_name']} done successfully!",
                     {"procedure_id": procedure_id, "type": "completed"},
+                    redact=[procedure['patient_name']],
                 )
                 
                 # Notify both approvers
@@ -11326,6 +11687,7 @@ async def request_phase1_approval(
             "Phase 1 Approval Requested",
             msg,
             {"procedure_id": procedure_id, "type": "approval_request"},
+            redact=[patient_name],
         )
 
     updated = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
@@ -11461,6 +11823,7 @@ async def submit_phase2(
         "Phase 2 Requires Approval",
         f"Surgical protocol submitted by {procedure['student_name']} for patient {procedure['patient_name']}",
         {"procedure_id": procedure_id, "type": "approval_request"},
+        redact=[procedure['patient_name']],
     )
     
     updated_procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
@@ -11624,6 +11987,7 @@ async def submit_stage2_surgical(
         "Phase 3: Healing and Second Stage Surgery Requires Approval",
         f"{procedure['student_name']} submitted Phase 3 Healing and Second Stage Surgery for {procedure['patient_name']}",
         {"procedure_id": procedure_id, "type": "approval_request"},
+        redact=[procedure['patient_name']],
     )
 
     updated = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
@@ -11766,6 +12130,7 @@ async def submit_stage2_prosthetic(
             "Phase 4: Prosthetic Rehabilitation Requires Approval",
             f"{procedure['student_name']} submitted Phase 4 Prosthetic Rehabilitation for {procedure['patient_name']}",
             {"procedure_id": procedure_id, "type": "approval_request"},
+            redact=[procedure['patient_name']],
         )
 
     updated = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
@@ -11968,6 +12333,7 @@ async def approve_stage2_prosthetic(
                 "Phase 4 Step 1 Approved!",
                 f"Phase 4 Step 1 for {procedure['patient_name']} approved. Proceed to Step 2 - Trial and Delivery.",
                 {"procedure_id": procedure_id, "type": "approved"},
+                redact=[procedure['patient_name']],
             )
         else:
             approver_name = current_user["name"]
@@ -12208,6 +12574,7 @@ async def approve_phase4_step2(
                 "Treatment Complete!",
                 f"All protocols for {procedure['patient_name']} approved. Treatment complete.",
                 {"procedure_id": procedure_id, "type": "completed"},
+                redact=[procedure['patient_name']],
             )
 
         await db.procedures.update_one({"_id": ObjectId(procedure_id)}, {"$set": update_fields})
@@ -16293,19 +16660,7 @@ async def forum_get_thread(thread_id: str, request: Request, current_user: dict 
     # For anonymous threads, strip all patient / operator PII from the procedure
     # snapshot so other members cannot identify the patient or sharer.
     if thread.get("anonymous") and procedure:
-        _PII_KEYS = (
-            # Patient identity + contact + identifiers
-            "patient_name", "patient_id", "patient_phone", "patient_email",
-            "email", "mobile_number", "age", "sex", "profession",
-            "registration_number", "receipt_number", "amount_paid",
-            # Signed documents carry the patient's name + signature
-            "patient_consent_form", "consent_form",
-            # Operator identity (the sharer chose to stay anonymous)
-            "student_name", "student_id", "created_by_name", "created_by_id",
-            "supervisor_name", "supervisor_id", "instructor_name",
-            "implant_incharge_name", "implant_incharge_id",
-        )
-        procedure = {k: v for k, v in procedure.items() if k not in _PII_KEYS}
+        procedure = {k: v for k, v in procedure.items() if k not in FORUM_ANONYMOUS_PII_KEYS}
     return {
         "thread": _serialize_thread(thread, viewer_id=uid),
         "procedure": procedure,
@@ -16681,6 +17036,8 @@ async def forum_upload_attachment(file: UploadFile = File(...), current_user: di
     path = FORUM_ATTACH_DIR / unique
     with open(path, "wb") as f:
         f.write(content)
+    import mimetypes as _mt_17021
+    await _s3_put_async(path, content_type=_mt_17021.guess_type(str(path))[0])
     url = f"/api/uploads/forum/{unique}"
     return {"url": url, "filename": file.filename or unique, "size": len(content), "type": "pdf" if ext == ".pdf" else "image"}
 
@@ -17173,6 +17530,8 @@ async def chat_upload(file: UploadFile = File(...), current_user: dict = Depends
     path = CHAT_ATTACH_DIR / unique
     with open(path, "wb") as f:
         f.write(content)
+    import mimetypes as _mt_17513
+    await _s3_put_async(path, content_type=_mt_17513.guess_type(str(path))[0])
     url = f"/api/uploads/chat/{unique}"
     return {"url": url, "filename": file.filename or unique, "size": len(content), "type": "pdf" if ext == ".pdf" else "image"}
 

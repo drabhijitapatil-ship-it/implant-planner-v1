@@ -685,7 +685,7 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
   const pickFromLibraryInternal = async (target: { kind: 'iopa' | 'opg'; idx?: number }) => {
     try {
       // System photo picker needs no media-library permission (Play policy: READ_MEDIA_* removed).
-      const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.7 });
+      const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
       if (r.canceled || !r.assets?.length) return;
       const a = r.assets[0];
       await uploadBlob(a.uri, a.fileName || `${target.kind}-${Date.now()}.jpg`, a.mimeType || 'image/jpeg', target);

@@ -53,8 +53,40 @@ function Header({ user, router }: any) {
       default: return '#546E7A';
     }
   };
+  
+  const getRoleBadgeColors = (role: string) => {
+    switch (role) {
+      case 'administrator': return { bg: '#F3E5F5', border: '#E1BEE7' };
+      case 'supervisor': return { bg: '#E3F2FD', border: '#BBDEFB' };
+      case 'implant_incharge': return { bg: '#FFF3E0', border: '#FFE0B2' };
+      case 'student': return { bg: '#E8F5E9', border: '#C8E6C9' };
+      default: return { bg: '#ECEFF1', border: '#CFD8DC' };
+    }
+  };
+
+  const getRoleIconName = (role: string): any => {
+    switch (role) {
+      case 'administrator': return 'shield-checkmark';
+      case 'supervisor': return 'school';
+      case 'implant_incharge': return 'medkit';
+      case 'student': return 'person';
+      default: return 'star';
+    }
+  };
+
+  const getOverlayIconName = (role: string): any => {
+    switch (role) {
+      case 'administrator': return 'key';
+      case 'supervisor': return 'ribbon';
+      case 'implant_incharge': return 'pulse';
+      case 'student': return 'school';
+      default: return 'person';
+    }
+  };
+
   const getInitials = (name: string) =>
     name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+
   const getRoleLabel = (role: string) => {
     switch (role) {
       case 'student': return 'Postgraduate Student';
@@ -65,25 +97,73 @@ function Header({ user, router }: any) {
     }
   };
 
+  const role = user?.role || '';
+  const roleColor = getRoleColor(role);
+  const badgeColors = getRoleBadgeColors(role);
+  const roleIcon = getRoleIconName(role);
+  const overlayIcon = getOverlayIconName(role);
+
   return (
-    <View style={s.header} data-testid="dashboard-header">
-      <View style={{ flex: 1 }}>
-        <Text style={s.greeting}>Welcome back,</Text>
+    <View style={s.headerCard} data-testid="dashboard-header">
+      <View style={{ flex: 1, paddingRight: 12 }}>
+        
+        {/* Welcome Row */}
+        <View style={s.welcomeRow}>
+          <View style={s.welcomeIconContainer}>
+            <Ionicons name="person-outline" size={12} color="#1A73E8" />
+          </View>
+          <Text style={s.greeting}>Welcome back,</Text>
+        </View>
+
+        {/* User Name */}
         <Text style={s.userName} data-testid="dashboard-user-name">{user?.name}</Text>
+        
+        {/* Decorative Line */}
+        <View style={[s.decorLine, { backgroundColor: roleColor }]} />
+
+        {/* Org Row */}
         {user?.org_name ? (
-          <Text style={s.orgName} numberOfLines={1} data-testid="dashboard-org-name">{user.org_name}</Text>
+          <View style={s.orgContainer}>
+            <View style={s.orgIconContainer}>
+              <Ionicons name="business" size={18} color="#0D47A1" />
+            </View>
+            <Text style={s.orgName} data-testid="dashboard-org-name">{user.org_name}</Text>
+          </View>
         ) : null}
-        <Text style={s.roleTag}>{getRoleLabel(user?.role)}</Text>
+
+        {/* Role Badge Pill */}
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={[s.roleBadgeCard, { backgroundColor: badgeColors.bg, borderColor: badgeColors.border }]}>
+            <View style={[s.roleBadgeIconCircle, { backgroundColor: roleColor }]}>
+              <Ionicons name={roleIcon} size={11} color="#FFF" />
+            </View>
+            <Text style={[s.roleBadgeCardText, { color: roleColor }]}>
+              {getRoleLabel(role).toUpperCase()}
+            </Text>
+          </View>
+        </View>
+
         <WhatsNewBadge />
       </View>
-      <TouchableOpacity onPress={() => router.push('/profile')} data-testid="dashboard-profile-avatar">
-        {user?.profile_photo ? (
-          <Image source={{ uri: user.profile_photo }} style={[s.avatar, { borderColor: getRoleColor(user?.role) }]} />
-        ) : (
-          <View style={[s.avatarFallback, { backgroundColor: getRoleColor(user?.role || '') }]}>
-            <Text style={s.avatarInitials}>{getInitials(user?.name || 'U')}</Text>
-          </View>
-        )}
+
+      {/* Avatar with Ring Border & Overlay Badge */}
+      <TouchableOpacity
+        onPress={() => router.push('/profile')}
+        data-testid="dashboard-profile-avatar"
+        style={s.avatarWrapper}
+      >
+        <View style={[s.avatarRing, { borderColor: roleColor }]}>
+          {user?.profile_photo ? (
+            <Image source={{ uri: user.profile_photo }} style={s.avatarImage} />
+          ) : (
+            <View style={[s.avatarFallbackContainer, { backgroundColor: roleColor }]}>
+              <Text style={s.avatarInitialsText}>{getInitials(user?.name || 'U')}</Text>
+            </View>
+          )}
+        </View>
+        <View style={[s.avatarOverlayBadge, { backgroundColor: roleColor }]}>
+          <Ionicons name={overlayIcon} size={10} color="#FFF" />
+        </View>
       </TouchableOpacity>
     </View>
   );
@@ -92,41 +172,63 @@ function Header({ user, router }: any) {
 // Display labels for the two daily procedure slots (see PROCEDURE_TIME_SLOTS).
 const SLOT_LABELS: Record<string, string> = { '10:00': '10:00 AM', '14:00': '2:00 PM' };
 
+// "HH:MM" (24h) -> "10:00 AM" — used for custom/open-mode slot times that
+// aren't in the fixed SLOT_LABELS map above.
+const formatTimeLabel = (t: string): string => {
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(t);
+  if (!m) return t;
+  let h = parseInt(m[1], 10);
+  const suffix = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${m[2]} ${suffix}`;
+};
+
+type DaySlots = { slots: Record<string, { scheduled_by: string; procedure_type: string }>; total: number | null };
+
 function ProcedureCalendar({ procedures, selectedDate, setSelectedDate, router }: any) {
   // Org-wide slot occupancy — every role sees which dates/slots are booked:
-  // orange dot = one of the two daily slots taken, red dot = both taken.
-  const [slotDays, setSlotDays] = useState<Record<string, Record<string, { scheduled_by: string; procedure_type: string }>>>({});
+  // orange dot = partially booked, red dot = fully booked. Two different
+  // rules for "fully booked" depending on the org's scheduling mode:
+  //   default/custom — all configured slots for that day are taken (`total`
+  //                     is a real fixed count from the backend).
+  //   open           — no fixed capacity to compare against, so red kicks in
+  //                     past a flat headcount instead (5+ bookings/day).
+  const HEAVY_BOOKING_THRESHOLD = 5;
+  const [slotDays, setSlotDays] = useState<Record<string, DaySlots>>({});
+  const [schedMode, setSchedMode] = useState<'default' | 'custom' | 'open'>('default');
   const [visibleMonth, setVisibleMonth] = useState<string>((selectedDate || format(new Date(), 'yyyy-MM-dd')).slice(0, 7));
   useEffect(() => {
     let cancelled = false;
     api.get(`/procedures/slots-month/${visibleMonth}`)
-      .then(res => { if (!cancelled) setSlotDays(prev => ({ ...prev, ...(res.data?.days || {}) })); })
+      .then(res => {
+        if (cancelled) return;
+        setSlotDays(prev => ({ ...prev, ...(res.data?.days || {}) }));
+        if (res.data?.mode) setSchedMode(res.data.mode);
+      })
       .catch(() => {}); // dots are best-effort; calendar still works without them
     return () => { cancelled = true; };
   }, [visibleMonth]);
 
-  const markedDates = procedures.reduce((acc: any, proc: any) => {
-    const date = proc.procedure_date;
-    if (!date) return acc;
-    if (!acc[date]) acc[date] = { marked: true, dots: [] };
-    acc[date].dots.push({ key: proc.id, color: STATUS_COLORS[proc.status as keyof typeof STATUS_COLORS] || '#999' });
-    return acc;
-  }, {} as Record<string, any>);
-  // Slot-occupancy dot leads each date's dot row.
-  Object.entries(slotDays).forEach(([date, slots]) => {
-    const n = Object.keys(slots || {}).length;
-    if (!n) return;
-    if (!markedDates[date]) markedDates[date] = { marked: true, dots: [] };
-    markedDates[date].dots = [
-      { key: 'slot-occupancy', color: n >= 2 ? '#F44336' : '#FF9800' },
-      ...markedDates[date].dots.filter((d: any) => d.key !== 'slot-occupancy'),
-    ];
+  const isFullyBooked = (booked: number, total: number | null): boolean =>
+    schedMode === 'open' ? booked >= HEAVY_BOOKING_THRESHOLD : total != null && booked >= total;
+
+  // Calendar dots show ONLY slot occupancy (booked vs available for that
+  // day) — no per-procedure status dot.
+  const markedDates: Record<string, any> = {};
+  Object.entries(slotDays).forEach(([date, day]) => {
+    const booked = Object.keys(day?.slots || {}).length;
+    if (!booked) return;
+    markedDates[date] = {
+      marked: true,
+      dots: [{ key: 'slot-occupancy', color: isFullyBooked(booked, day.total) ? '#F44336' : '#FF9800' }],
+    };
   });
   if (selectedDate) {
     markedDates[selectedDate] = { ...markedDates[selectedDate], selected: true, selectedColor: '#1A73E8' };
   }
   const procsForDate = procedures.filter((p: any) => p.procedure_date === selectedDate);
-  const slotsForDate = Object.entries(slotDays[selectedDate] || {}).sort(([a], [b]) => a.localeCompare(b));
+  const selectedDay = slotDays[selectedDate];
+  const slotsForDate = Object.entries(selectedDay?.slots || {}).sort(([a], [b]) => a.localeCompare(b));
 
   return (
     <>
@@ -141,23 +243,32 @@ function ProcedureCalendar({ procedures, selectedDate, setSelectedDate, router }
         />
       </View>
       <View style={s.section}>
-        <Text style={s.sectionTitle}>
+        <Text style={[s.sectionTitle, { marginBottom: 12 }]}>
           {format(new Date(selectedDate), 'MMM dd, yyyy')}
         </Text>
-        {slotsForDate.length > 0 && (
-          <View style={s.slotInfoCard} data-testid="booked-slots-info">
-            {slotsForDate.map(([t, info]: any) => (
-              <View key={t} style={s.slotInfoRow}>
-                <View style={[s.slotDot, { backgroundColor: slotsForDate.length >= 2 ? '#F44336' : '#FF9800' }]} />
-                <Text style={s.slotInfoText}>
-                  <Text style={{ fontWeight: '700' }}>{SLOT_LABELS[t] || t}</Text>
-                  {' — booked by '}{info.scheduled_by || 'Unknown'}
-                  {info.procedure_type ? ` · ${info.procedure_type}` : ''}
-                </Text>
-              </View>
-            ))}
-          </View>
-        )}
+        {slotsForDate.length > 0 && (() => {
+          const total = selectedDay?.total ?? null;
+          const fullyBooked = isFullyBooked(slotsForDate.length, total);
+          return (
+            <View style={s.slotInfoCard} data-testid="booked-slots-info">
+              <Text style={s.slotInfoHeader}>
+                {total != null
+                  ? `${slotsForDate.length} of ${total} slot${total === 1 ? '' : 's'} booked`
+                  : `${slotsForDate.length} booking${slotsForDate.length === 1 ? '' : 's'} today`}
+              </Text>
+              {slotsForDate.map(([t, info]: any) => (
+                <View key={t} style={s.slotInfoRow}>
+                  <View style={[s.slotDot, { backgroundColor: fullyBooked ? '#F44336' : '#FF9800' }]} />
+                  <Text style={s.slotInfoText}>
+                    <Text style={{ fontWeight: '700' }}>{SLOT_LABELS[t] || formatTimeLabel(t)}</Text>
+                    {' — booked by '}{info.scheduled_by || 'Unknown'}
+                    {info.procedure_type ? ` · ${info.procedure_type}` : ''}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          );
+        })()}
         {procsForDate.length === 0 ? (
           <View style={s.emptyCard}>
             <Ionicons name="calendar-outline" size={28} color="#B0BEC5" />
@@ -1072,14 +1183,93 @@ const s = StyleSheet.create({
   loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   // Header
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 6 },
-  greeting: { fontSize: 13, color: '#90A4AE', fontWeight: '500' },
-  userName: { fontSize: 22, fontWeight: '700', color: '#1A1A1A', marginTop: 1 },
-  orgName: { fontSize: 13, color: '#1565C0', fontWeight: '600', marginTop: 2 },
-  roleTag: { fontSize: 11, color: '#78909C', marginTop: 2, fontWeight: '500' },
-  avatar: { width: 48, height: 48, borderRadius: 24, borderWidth: 2 },
-  avatarFallback: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
-  avatarInitials: { color: '#FFF', fontSize: 18, fontWeight: '700' },
+  headerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 20,
+    shadowColor: '#1A2B49',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#F0F4F8',
+  },
+  welcomeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  welcomeIconContainer: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#E8F0FE',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  greeting: { fontSize: 13, color: '#64748B', fontWeight: '600' },
+  userName: { fontSize: 24, fontWeight: '800', color: '#0A192F', letterSpacing: -0.5 },
+  decorLine: { width: 36, height: 3, borderRadius: 2, marginTop: 8, marginBottom: 14 },
+  orgContainer: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
+  orgIconContainer: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: '#E8F0FE',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  orgName: { fontSize: 14, color: '#0D47A1', fontWeight: '700', flex: 1, lineHeight: 18 },
+  roleBadgeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingVertical: 3,
+    paddingHorizontal: 10,
+    paddingLeft: 3,
+    gap: 6,
+  },
+  roleBadgeIconCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  roleBadgeCardText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  avatarWrapper: { position: 'relative' },
+  avatarRing: {
+    width: 86,
+    height: 86,
+    borderRadius: 43,
+    borderWidth: 2,
+    padding: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarImage: { width: 74, height: 74, borderRadius: 37 },
+  avatarFallbackContainer: {
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarInitialsText: { color: '#FFF', fontSize: 26, fontWeight: '800' },
+  avatarOverlayBadge: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: '#FFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 
   // Stats Row
   statsRow: { flexDirection: 'row', paddingHorizontal: 16, paddingTop: 16, gap: 10 },
@@ -1099,6 +1289,7 @@ const s = StyleSheet.create({
   emptyCard: { backgroundColor: '#FFF', borderRadius: 14, padding: 28, alignItems: 'center', gap: 8 },
   // Org-wide booked-slot info shown under the calendar for the selected date
   slotInfoCard: { backgroundColor: '#FFF8F0', borderRadius: 12, borderWidth: 1, borderColor: '#FFE0B2', padding: 12, marginBottom: 10, gap: 6 },
+  slotInfoHeader: { fontSize: 12, fontWeight: '700', color: '#E65100', marginBottom: 2, textTransform: 'uppercase', letterSpacing: 0.3 },
   slotInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   slotDot: { width: 10, height: 10, borderRadius: 5 },
   slotInfoText: { flex: 1, fontSize: 13, color: '#37474F' },
