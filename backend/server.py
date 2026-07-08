@@ -6492,6 +6492,7 @@ async def serve_upload(
     filename: str,
     token: Optional[str] = Query(None),
     ft: Optional[str] = Query(None),
+    download: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user_optional),
 ):
     file_path = UPLOADS_DIR / filename
@@ -6543,7 +6544,16 @@ async def serve_upload(
         if not allowed:
             raise HTTPException(status_code=403, detail="Access denied")
     
-    return FileResponse(file_path, filename=procedure.get("cbct_original_name", filename) if procedure else filename)
+    # Default to inline so Chrome/the OS renders PDFs and images in place
+    # instead of triggering Android's generic "open with / download" chooser
+    # (Starlette's FileResponse defaults to Content-Disposition: attachment
+    # whenever a `filename` is passed, which is what forced that sheet).
+    # Pass ?download=1 to force a real download instead.
+    return FileResponse(
+        file_path,
+        filename=procedure.get("cbct_original_name", filename) if procedure else filename,
+        content_disposition_type="attachment" if download else "inline",
+    )
 
 
 # ───────────────────────────────────────────────────────────────────
