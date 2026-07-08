@@ -18,7 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import api, { getAuthFileUrl, mintCbctToken, cbctFileUrl, cbctViewUrl, getToken } from '../../utils/api';
+import api, { getAuthFileUrl, mintCbctToken, cbctFileUrl, cbctViewUrl, getToken, mintFileToken } from '../../utils/api';
 import { CaramesSeverityStrip } from '../../components/AtrophyClassificationChip';
 import { useAuth } from '../../contexts/AuthContext';
 import { showUploadPicker } from '../../utils/uploadPicker';
@@ -1358,8 +1358,14 @@ export default function ProcedureDetailScreen() {
           if (!canUpload && !canViewOnly) return null;
           const openUploadedConsent = async () => {
             try {
-              const baseUrl = (process.env.EXPO_PUBLIC_BACKEND_URL || '').replace(/\/$/, '');
-              const fileUrl = `${baseUrl}/uploads/${procedure.patient_consent_form}?token=${authToken}`;
+              // patient_consent_form is an object ({filename, original_name,
+              // ...}), not a bare filename — and mintFileToken pulls a fresh
+              // scoped token at click time instead of reusing whatever access
+              // token happened to be in state when the screen loaded (which
+              // may have since expired, causing this to "sometimes" fail).
+              const filename = procedure.patient_consent_form?.filename;
+              if (!filename) { Alert.alert('Error', 'Consent form filename missing'); return; }
+              const fileUrl = await mintFileToken(filename);
               await Linking.openURL(fileUrl);
             } catch {
               Alert.alert('Error', 'Could not open consent form');
@@ -2310,8 +2316,7 @@ export default function ProcedureDetailScreen() {
               style={styles.cbctFileRow}
               onPress={async () => {
                 try {
-                  const baseUrl = api.defaults.baseURL || '';
-                  const fileUrl = `${baseUrl}/uploads/${procedure.ios_file}?token=${authToken}`;
+                  const fileUrl = await mintFileToken(procedure.ios_file);
                   await Linking.openURL(fileUrl);
                 } catch (e) {
                   Alert.alert('Error', 'Could not open file');
@@ -2593,7 +2598,18 @@ export default function ProcedureDetailScreen() {
                         </View>
                         <TouchableOpacity
                           style={{ backgroundColor: '#4CAF50', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}
-                          onPress={() => Linking.openURL(fileUrl).catch(() => Alert.alert('Error', 'Could not open file'))}
+                          onPress={async () => {
+                            // Thumbnail above uses the (possibly stale) authToken —
+                            // fine for a best-effort preview. The View tap mints a
+                            // fresh scoped token so opening the full file doesn't
+                            // depend on how long ago the screen loaded.
+                            try {
+                              const freshUrl = await mintFileToken(f.filename);
+                              await Linking.openURL(freshUrl);
+                            } catch {
+                              Alert.alert('Error', 'Could not open file');
+                            }
+                          }}
                           data-testid={`view-iopa-detail-${idx}`}
                         >
                           <Ionicons name="open-outline" size={14} color="#FFF" />
@@ -2628,7 +2644,14 @@ export default function ProcedureDetailScreen() {
                         </View>
                         <TouchableOpacity
                           style={{ backgroundColor: '#4CAF50', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 4 }}
-                          onPress={() => Linking.openURL(fileUrl).catch(() => Alert.alert('Error', 'Could not open file'))}
+                          onPress={async () => {
+                            try {
+                              const freshUrl = await mintFileToken(procedure.phase2_data.opg_file.filename);
+                              await Linking.openURL(freshUrl);
+                            } catch {
+                              Alert.alert('Error', 'Could not open file');
+                            }
+                          }}
                           data-testid="view-opg-detail"
                         >
                           <Ionicons name="open-outline" size={14} color="#FFF" />
@@ -2906,7 +2929,14 @@ export default function ProcedureDetailScreen() {
                       </View>
                       <TouchableOpacity
                         style={{ backgroundColor: '#4CAF50', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}
-                        onPress={() => Linking.openURL(fileUrl).catch(() => Alert.alert('Error', 'Could not open file'))}
+                        onPress={async () => {
+                          try {
+                            const freshUrl = await mintFileToken(f.filename);
+                            await Linking.openURL(freshUrl);
+                          } catch {
+                            Alert.alert('Error', 'Could not open file');
+                          }
+                        }}
                         data-testid={`p3-view-iopa-detail-${idx}`}
                       >
                         <Ionicons name="open-outline" size={14} color="#FFF" />

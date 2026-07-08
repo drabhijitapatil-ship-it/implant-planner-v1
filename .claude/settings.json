@@ -107,7 +107,12 @@
       "Bash(git stash *)",
       "Bash(grep -oE \"api\\\\.get\\\\\\(\\\\`/procedures/\\\\\\\\\\\\$\\\\{[a-zA-Z]+\\\\}[a-zA-Z0-9_/-]*\" \"app/procedures/[id].tsx\")",
       "Bash(grep -oE \"api\\\\.\\(get|post\\)\\\\\\(\\\\`\\\\/procedures\\\\/\\\\\\\\\\\\$\\\\{[a-zA-Z]+\\\\}[^\\\\`]*\\\\`\" \"app/procedures/[id].tsx\")",
-      "Bash(pip3 show *)"
+      "Bash(pip3 show *)",
+      "Bash(awk 'NR<=6535 && /^@api_router|^async def/{last=$0; lastln=NR} END{}' server.py)",
+      "Bash(awk -v n=6535 'NR<=n && /^@api_router|^async def/{last=$0; lastln=NR} NR==n{print lastln\": \"last}' server.py)",
+      "Bash(python3 -m py_compile server.py s3_storage.py)",
+      "Bash(python3 -m py_compile migrate_uploads_to_s3.py)",
+      "Bash(grep -rln \"?token=\\\\${authToken}\\\\|?token=\\\\${.*[Tt]oken\" components/ app/procedures/ --include=\"*.tsx\")"
     ],
     "additionalDirectories": [
       "/dev",

@@ -49,6 +49,17 @@ async def _s3_put_async(local_path: Path, uploads_root: Path = None, content_typ
         logging.warning(f"[s3] async put failed for {local_path}: {e}")
 
 
+async def _s3_delete_async(local_path: Path, uploads_root: Path = None) -> None:
+    """Best-effort S3 delete to match a local unlink() — keeps the bucket
+    from accumulating orphaned objects for every deleted document."""
+    if not s3_storage.is_configured():
+        return
+    try:
+        await asyncio.to_thread(s3_storage.delete_file, local_path, uploads_root or UPLOADS_DIR)
+    except Exception as e:
+        logging.warning(f"[s3] async delete failed for {local_path}: {e}")
+
+
 async def _s3_ensure_local_async(local_path: Path, uploads_root: Path = None) -> bool:
     """Read-path helper: True if the file exists locally already, or was
     just pulled down from S3 to fill a local-disk gap (redeploy wipe, fresh
@@ -6484,7 +6495,7 @@ async def serve_upload(
     current_user: dict = Depends(get_current_user_optional),
 ):
     file_path = UPLOADS_DIR / filename
-    if not file_path.exists():
+    if not await _s3_ensure_local_async(file_path):
         raise HTTPException(status_code=404, detail="File not found")
 
     # Resolve user from (1) header, (2) scoped file token, (3) legacy access JWT.
@@ -6796,7 +6807,7 @@ async def cbct_public_file(token: str, filename: str, download: Optional[str] = 
     if not entry:
         raise HTTPException(status_code=404, detail="File not associated with this procedure")
     path = UPLOADS_DIR / filename
-    if not path.exists():
+    if not await _s3_ensure_local_async(path):
         raise HTTPException(status_code=404, detail="File not found")
     content_type = _cbct_content_type(entry, filename)
     orig_name = entry.get("original_name") or filename
@@ -6964,7 +6975,7 @@ async def _build_cbct_combined_pdf(proc: dict) -> bytes:
         ct = (f.get("content_type") or "").lower()
         orig = f.get("original_name") or filename
         low = filename.lower()
-        if not path.exists():
+        if not await _s3_ensure_local_async(path):
             _append(_placeholder_pdf_page(orig, "File missing on server"))
             continue
         orig_low = (orig or "").lower()
@@ -7374,6 +7385,7 @@ async def delete_checklist_file(
     filepath = CHECKLIST_UPLOADS_DIR / filename
     if filepath.exists():
         filepath.unlink()
+    await _s3_delete_async(filepath)
 
     await db.procedures.update_one(
         {"_id": ObjectId(procedure_id)},
@@ -7386,7 +7398,7 @@ async def delete_checklist_file(
 async def serve_checklist_file(filename: str):
     """Serve a checklist file."""
     filepath = CHECKLIST_UPLOADS_DIR / filename
-    if not filepath.exists():
+    if not await _s3_ensure_local_async(filepath):
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(str(filepath))
 
@@ -11016,6 +11028,7 @@ async def delete_photo(
     file_path = PHOTO_UPLOADS_DIR / filename
     if file_path.exists():
         file_path.unlink()
+    await _s3_delete_async(file_path)
 
     return {"message": "Photo deleted"}
 
@@ -11110,7 +11123,7 @@ async def get_implantlens_cases(current_user: dict = Depends(get_current_user)):
 async def serve_photo(filename: str, current_user: dict = Depends(get_current_user)):
     """Serve a photo file."""
     file_path = PHOTO_UPLOADS_DIR / filename
-    if not file_path.exists():
+    if not await _s3_ensure_local_async(file_path):
         raise HTTPException(status_code=404, detail="Photo not found")
     return FileResponse(file_path)
 
@@ -17056,7 +17069,7 @@ async def serve_forum_upload(filename: str, token: Optional[str] = Query(None), 
         raise HTTPException(status_code=403, detail="Access denied.")
     safe = filename.replace("..", "").lstrip("/")
     path = FORUM_ATTACH_DIR / safe
-    if not path.exists() or not path.is_file():
+    if not await _s3_ensure_local_async(path) or not path.is_file():
         raise HTTPException(status_code=404, detail="File not found.")
     return FileResponse(str(path))
 
@@ -17550,7 +17563,7 @@ async def serve_chat_upload(filename: str, token: Optional[str] = Query(None), c
         raise HTTPException(status_code=403, detail="Access denied.")
     safe = filename.replace("..", "").lstrip("/")
     path = CHAT_ATTACH_DIR / safe
-    if not path.exists():
+    if not await _s3_ensure_local_async(path):
         raise HTTPException(status_code=404, detail="File not found.")
     return FileResponse(str(path))
 
