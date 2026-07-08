@@ -10,6 +10,9 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
+  KeyboardAvoidingView,
+  Keyboard,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
@@ -486,7 +489,12 @@ export default function ProfileScreen() {
 
       {/* Change Password Modal — OTP verify + set new password */}
       <Modal visible={showPasswordModal} animationType="slide" transparent>
-        <View style={pwStyles.overlay}>
+        {/* KeyboardAvoidingView so the password fields aren't hidden behind the
+            keyboard while typing the OTP / new password. */}
+        <KeyboardAvoidingView
+          style={pwStyles.overlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
           <View style={pwStyles.card}>
             <View style={pwStyles.header}>
               <Text style={pwStyles.title}>Change Password</Text>
@@ -511,7 +519,13 @@ export default function ProfileScreen() {
                   style={[pwStyles.input, pwStyles.otpInput, pwErrors.otp && pwStyles.inputErr]}
                   placeholder="000000"
                   value={pwOtp}
-                  onChangeText={(t) => setPwOtp(t.replace(/[^0-9]/g, '').slice(0, 6))}
+                  onChangeText={(t) => {
+                    const v = t.replace(/[^0-9]/g, '').slice(0, 6);
+                    setPwOtp(v);
+                    // number-pad has no Done key on iOS — drop the keyboard once
+                    // the full 6-digit code is in so the password fields show.
+                    if (v.length === 6) Keyboard.dismiss();
+                  }}
                   keyboardType="number-pad"
                   maxLength={6}
                   data-testid="change-password-otp"
@@ -569,10 +583,10 @@ export default function ProfileScreen() {
               </>
             )}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
-      <LogoutConfirmModal 
+      <LogoutConfirmModal
         visible={showLogoutModal} 
         onClose={() => setShowLogoutModal(false)} 
         onConfirm={async () => {

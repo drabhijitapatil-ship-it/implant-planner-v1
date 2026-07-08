@@ -7359,10 +7359,12 @@ def _redact_name_from_ai_text(text: str, patient_name: Optional[str]) -> str:
 
 
 def _build_case_context(proc: dict) -> str:
-    """Build a clinical case context string from procedure data."""
-    parts = [f"Patient: {proc.get('patient_name','N/A')}, Age: {proc.get('age','N/A')}, Sex: {proc.get('sex','N/A')}"]
-    if proc.get('profession'):
-        parts.append(f"Profession: {proc.get('profession')}")
+    """Build a clinical case context string from procedure data.
+    De-identified: patient name / age / profession are never included — the
+    context is sent to a third-party AI provider and the generated summary is
+    shown and exported, so identity stays out end-to-end (sex is kept as a
+    clinically relevant, non-identifying attribute)."""
+    parts = [f"Patient: [de-identified], Sex: {proc.get('sex','N/A')}"]
     if proc.get('chief_complaint'):
         parts.append(f"Chief Complaint: {proc.get('chief_complaint')}")
     parts.append(f"Procedure Type: {proc.get('implant_procedure_type','N/A')}")
@@ -8833,6 +8835,7 @@ IMPORTANT GUIDELINES:
 - Write in professional scientific clinical language.
 - Generate a DYNAMIC summary tailored to this specific case — do not produce a generic template.
 - Write section headings as plain uppercase text (no bold, no asterisks).
+- DE-IDENTIFIED OUTPUT: never state the patient's name, age, or profession. Refer to them only as "the patient".
 {case_type_instruction}
 
 Case Data:
