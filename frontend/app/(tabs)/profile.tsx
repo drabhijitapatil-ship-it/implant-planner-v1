@@ -23,6 +23,7 @@ import * as ImagePicker from 'expo-image-picker';
 import api from '../../utils/api';
 import LogoutConfirmModal from '../../components/LogoutConfirmModal';
 import PhotoOptionsModal from '../../components/PhotoOptionsModal';
+import PasswordRequirements, { isPasswordValid } from '../../components/PasswordRequirements';
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
@@ -105,7 +106,7 @@ export default function ProfileScreen() {
     const e: Record<string, string> = {};
     if (pwOtp.length !== 6) e.otp = 'Enter the 6-digit code';
     if (!pwNew) e.newPassword = 'Password is required';
-    else if (pwNew.length < 8) e.newPassword = 'Minimum 8 characters';
+    else if (!isPasswordValid(pwNew, user?.name)) e.newPassword = 'Password does not meet all requirements';
     if (pwNew !== pwConfirm) e.confirmPassword = 'Passwords do not match';
     setPwErrors(e);
     if (Object.keys(e).length > 0) return;
@@ -537,6 +538,7 @@ export default function ProfileScreen() {
                   </TouchableOpacity>
                 </View>
                 {pwErrors.newPassword ? <Text style={pwStyles.err}>{pwErrors.newPassword}</Text> : null}
+                <PasswordRequirements password={pwNew} fullName={user?.name} />
 
                 <Text style={pwStyles.label}>Confirm New Password</Text>
                 <View style={[pwStyles.pwRow, pwErrors.confirmPassword && pwStyles.inputErr]}>

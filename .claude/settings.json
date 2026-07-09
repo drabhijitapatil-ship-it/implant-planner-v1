@@ -113,7 +113,16 @@
       "Bash(python3 -m py_compile server.py s3_storage.py)",
       "Bash(python3 -m py_compile migrate_uploads_to_s3.py)",
       "Bash(grep -rln \"?token=\\\\${authToken}\\\\|?token=\\\\${.*[Tt]oken\" components/ app/procedures/ --include=\"*.tsx\")",
-      "Bash(unzip -p android/app/src/main/AndroidManifest.xml)"
+      "Bash(unzip -p android/app/src/main/AndroidManifest.xml)",
+      "Bash(grep -oE \"^[A-Z_]+=\" .env)",
+      "Bash(grep -n \"^resend\" requirements.txt requirements_unpinned.txt)",
+      "Bash(pip3 index *)",
+      "Bash(venv/bin/pip install *)",
+      "Bash(venv/bin/python3 -c ' *)",
+      "Bash(venv/bin/pip show *)",
+      "Bash(SITE=\"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/phase1/backend/venv/lib/python3.14/site-packages\"; cat \"$SITE/resend/emails/_emails.py\" | head -60)",
+      "Read(//Users/prathmeshjadhav/Desktop/work/implant-planner-v1/phase1/backend/venv/lib/python3.14/site-packages/resend/emails/**)",
+      "Bash(grep -n \"^boto3\\\\|^resend\\\\|^requests$\" requirements_unpinned.txt)"
     ],
     "additionalDirectories": [
       "/dev",

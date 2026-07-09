@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect, useRef, useCallback } from 'react';
-import { Alert, AppState } from 'react-native';
+import { Alert } from 'react-native';
 import api, { getToken, setToken, removeToken, setOnAuthFailure, setOnActivity } from '../utils/api';
 import { BACKEND_URL } from '../utils/config';
 import { router } from 'expo-router';
@@ -67,11 +67,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const wasLoggedIn = !!userRef.current;
       setUser(null);
       if (wasLoggedIn) {
-        // Navigate FIRST, then alert. Screens render blank/black once `user`
-        // is null, so waiting for the alert's OK leaves the user staring at
-        // an empty screen behind the dialog.
-        router.replace('/auth/login');
-        Alert.alert('Session Expired', 'Your session has expired. Please log in again.');
+        // Navigate only on OK tap — cancelable:false so a back-button/outside
+        // dismiss can't skip navigation and strand the user on a blank screen.
+        Alert.alert(
+          'Session Expired',
+          'Your session has expired. Please log in again.',
+          [{ text: 'OK', onPress: () => router.replace('/auth/login') }],
+          { cancelable: false }
+        );
       }
     });
     // iter-169: Every authenticated API call records activity. Closes the HIPAA
@@ -82,17 +85,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   }, []);
 
-  // Shared "kicked out after 15 min of inactivity" flow — used by the
-  // in-app interval, the background→foreground check, and nowhere else.
+  // "Kicked out after 15 min of inactivity" flow — used by the in-app
+  // interval only. Navigates on OK tap, not automatically.
   const expireSession = useCallback(() => {
     logout().then(() => {
-      // Navigate before alerting — once `user` is null the previous screen
-      // renders blank/black, so the login screen must already be underneath
-      // the dialog instead of appearing only after the user taps OK.
-      router.replace('/auth/login');
       Alert.alert(
         'Session Expired',
-        'You have been logged out after 15 minutes of inactivity. Please log in again.'
+        'You have been logged out after 15 minutes of inactivity. Please log in again.',
+        [{ text: 'OK', onPress: () => router.replace('/auth/login') }],
+        { cancelable: false }
       );
     });
   }, []);
@@ -123,24 +124,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         sessionTimerRef.current = null;
       }
     };
-  }, [user, expireSession]);
-
-  // Backgrounding pauses JS timers, so the interval alone can't catch a user
-  // who leaves the app and comes back much later. Persist the last-activity
-  // timestamp when the app goes to background (survives an app kill — see
-  // loadStoredAuth) and re-check the moment it becomes active again.
-  useEffect(() => {
-    if (!user) return;
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'background' || state === 'inactive') {
-        setToken('last_activity_at', String(lastActivityRef.current));
-      } else if (state === 'active') {
-        if (Date.now() - lastActivityRef.current > SESSION_TIMEOUT_MS) {
-          expireSession();
-        }
-      }
-    });
-    return () => sub.remove();
   }, [user, expireSession]);
 
   const loadStoredAuth = async () => {

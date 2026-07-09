@@ -30,16 +30,6 @@ fonttools
 fpdf2
 frozenlist
 fsspec
-google-ai-generativelanguage
-google-api-core
-google-api-python-client
-google-auth
-google-auth-httplib2
-google-genai
-google-generativeai
-googleapis-common-protos
-grpcio
-grpcio-status
 gunicorn
 h11
 hf-xet
@@ -83,8 +73,6 @@ pillow_heif
 platformdirs
 pluggy
 propcache
-proto-plus
-protobuf
 ptyprocess
 pyasn1
 pyasn1_modules
@@ -113,6 +101,7 @@ regex
 reportlab
 requests
 requests-oauthlib
+resend
 rich
 rpds-py
 s3transfer

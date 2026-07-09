@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 type PhotoOptionsModalProps = {
@@ -9,20 +9,21 @@ type PhotoOptionsModalProps = {
   onChooseLibrary: () => void;
 };
 
+// Plain absolutely-positioned View overlay instead of RN's <Modal>. RN Modal
+// is a native presentation (window/view-controller) — dismissing it while
+// launching a native ImagePicker intent in the same tick races and silently
+// fails on Android. A JS-only overlay has no native modal to dismiss, so no race.
 export default function PhotoOptionsModal({
   visible,
   onClose,
   onTakePhoto,
   onChooseLibrary,
 }: PhotoOptionsModalProps) {
+  if (!visible) return null;
   return (
-    <Modal
-      transparent
-      visible={visible}
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <View style={styles.overlay}>
+    <View style={styles.overlay} pointerEvents="box-none">
+      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+      <View style={styles.overlayCentering} pointerEvents="box-none">
         <View style={styles.card}>
           {/* Header Icon */}
           <View style={styles.iconContainer}>
@@ -70,14 +71,18 @@ export default function PhotoOptionsModal({
           </TouchableOpacity>
         </View>
       </View>
-    </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   overlay: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 9999,
     backgroundColor: 'rgba(15, 23, 42, 0.65)',
+  },
+  overlayCentering: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },

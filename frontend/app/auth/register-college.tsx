@@ -12,6 +12,7 @@ import * as ImagePicker from 'expo-image-picker';
 import api from '../../utils/api';
 import { DENTAL_COLLEGES, type DentalCollege } from '../../constants/dentalColleges';
 import OtpEmailField from '../../components/OtpEmailField';
+import PasswordRequirements, { isPasswordValid } from '../../components/PasswordRequirements';
 
 const PREFIXES = ['Dr.', 'Mr.', 'Mrs.', 'Ms.', 'Prof.'];
 
@@ -127,7 +128,7 @@ export default function CollegeRegisterScreen() {
     const n = Number(numUsers);
     if (!numUsers || isNaN(n) || n < 1 || n > 500) e.numUsers = 'Enter a valid number (1–500)';
     if (!password) e.password = 'Password is required';
-    else if (password.length < 8) e.password = 'Minimum 8 characters';
+    else if (!isPasswordValid(password, inchargeName)) e.password = 'Password does not meet all requirements';
     if (password !== confirmPassword) e.confirmPassword = 'Passwords do not match';
     if (!termsAccepted) e.terms = 'Please accept the Terms & Privacy Policy';
     setErrors(e);
@@ -340,6 +341,7 @@ export default function CollegeRegisterScreen() {
                 </TouchableOpacity>
               </View>
               {errors.password ? <Text style={s.err}>{errors.password}</Text> : null}
+              <PasswordRequirements password={password} fullName={inchargeName} />
 
               <Text style={s.label}>Confirm Password *</Text>
               <View style={[s.pwRow, errors.confirmPassword && s.inputErr]}>

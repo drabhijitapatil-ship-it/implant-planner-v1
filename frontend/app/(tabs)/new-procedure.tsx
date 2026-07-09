@@ -803,6 +803,23 @@ export default function NewProcedureScreen() {
     fetchSlots();
   }, [formData.procedure_date]);
 
+  // Re-fetch booked slots on screen focus too — not just when the date
+  // changes — so a slot freed elsewhere (cancellation/deletion by another
+  // user) shows up without needing to restart the app.
+  useFocusEffect(
+    useCallback(() => {
+      if (!formData.procedure_date) return;
+      api.get(`/procedures/slots/${formData.procedure_date}`)
+        .then(res => {
+          setBookedSlots(res.data?.booked_slots || {});
+          setSchedMode(res.data?.mode || 'default');
+          setDaySlots(res.data?.day_slots || []);
+          if (res.data?.open_window_hours) setOpenWindowHours(res.data.open_window_hours);
+        })
+        .catch(() => {});
+    }, [formData.procedure_date])
+  );
+
   // Update medical risk and auto-mark checklist when factors change
   useEffect(() => {
     if (Object.keys(formData.medical_assessment).length > 0) {

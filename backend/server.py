@@ -1886,10 +1886,6 @@ async def resend_user_credentials(user_id: str, current_user: dict = Depends(get
 # ─────────────────────────────────────────────────────────────────────
 
 import secrets as _secrets_mod
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.mime.image import MIMEImage
 
 INVITE_EXPIRY_DAYS = 7
 INCHARGE_ROLES = {"implant_incharge", "chief_dentist"}
@@ -1907,46 +1903,44 @@ EMAIL_APP_DOWNLOAD_URL = os.environ.get("APP_DOWNLOAD_URL", EMAIL_WEBSITE_URL)
 
 
 async def _send_smtp_email(to_email: str, subject: str, html_body: str, text_body: str, log_tag: str = "email", inline_logo: bool = False) -> bool:
-    """Send an email via SMTP env vars. Returns False (and logs) on missing config or failure."""
-    smtp_host = os.environ.get("SMTP_HOST")
-    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
-    smtp_user = os.environ.get("SMTP_USER", "")
-    smtp_pass = os.environ.get("SMTP_PASS", "")
-    email_from = os.environ.get("EMAIL_FROM", smtp_user)
+    """Send an email via Resend. Returns False (and logs) on missing config or
+    failure. Name kept as `_send_smtp_email` (not renamed) so every existing
+    caller — invite, OTP, credentials-resend — needs zero changes."""
+    resend_api_key = os.environ.get("RESEND_API_KEY")
+    email_from = os.environ.get("EMAIL_FROM") or "noreply@implanr.com"
 
-    if not smtp_host:
-        logging.warning(f"[{log_tag}] SMTP_HOST not configured — skipping email to {to_email}")
+    if not resend_api_key:
+        logging.warning(f"[{log_tag}] RESEND_API_KEY not configured — skipping email to {to_email}")
         return False
 
     try:
-        root = MIMEMultipart("related")
-        root["Subject"] = subject
-        root["From"] = email_from
-        root["To"] = to_email
+        import resend
+        resend.api_key = resend_api_key
 
-        alt = MIMEMultipart("alternative")
-        alt.attach(MIMEText(text_body, "plain"))
-        alt.attach(MIMEText(html_body, "html"))
-        root.attach(alt)
-
+        params: Dict[str, Any] = {
+            "from": email_from,
+            "to": [to_email],
+            "subject": subject,
+            "html": html_body,
+            "text": text_body,
+        }
         if inline_logo and EMAIL_LOGO_PATH.exists():
             with open(EMAIL_LOGO_PATH, "rb") as f:
-                logo = MIMEImage(f.read())
-            logo.add_header("Content-ID", "<implanr_logo>")
-            logo.add_header("Content-Disposition", "inline", filename="logo.png")
-            root.attach(logo)
+                logo_bytes = f.read()
+            # Resend's Python SDK takes attachment content as a byte list, and
+            # `content_id` wires it up to the `cid:implanr_logo` reference
+            # already used in the HTML body below (unchanged from the SMTP path).
+            params["attachments"] = [{
+                "filename": "logo.png",
+                "content": list(logo_bytes),
+                "content_id": "implanr_logo",
+            }]
 
         loop = asyncio.get_event_loop()
         def _send():
-            with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
-                server.ehlo()
-                server.starttls()
-                server.ehlo()
-                if smtp_user:
-                    server.login(smtp_user, smtp_pass)
-                server.sendmail(email_from, [to_email], root.as_string())
-        # Gmail's SMTP relay intermittently defers connections/logins from a
-        # datacenter IP (421/454) — retry a few times with backoff before failing.
+            resend.Emails.send(params)
+        # Transient network/API hiccups can happen with any HTTP provider —
+        # keep the same retry-with-backoff behavior the SMTP path had.
         last_err = None
         for attempt in range(1, 4):
             try:
@@ -3538,7 +3532,7 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
         window_hours = float(sched_cfg.get("open_window_hours") or 2.0)
         new_end = procedure_datetime + timedelta(hours=window_hours)
         same_day = await db.procedures.find(
-            {"procedure_date": procedure.procedure_date},
+            {"procedure_date": procedure.procedure_date, "status": {"$ne": "cancelled"}},
             {"_id": 1, "procedure_time": 1, "patient_name": 1, "created_by_name": 1,
              "student_name": 1, "status": 1, "created_by_id": 1, "student_id": 1},
         ).to_list(200)
@@ -3566,6 +3560,7 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
         existing = await db.procedures.find_one({
             "procedure_date": procedure.procedure_date,
             "procedure_time": procedure.procedure_time,
+            "status": {"$ne": "cancelled"},
         })
         if existing:
             # Allow if it's the user's own draft being continued
@@ -3761,7 +3756,7 @@ async def get_booked_slots(date: str, current_user: dict = Depends(get_current_u
     render whichever mode (default/custom/open) is active without a second
     round-trip to /organizations/me."""
     booked = await db.procedures.find(
-        {"procedure_date": date},
+        {"procedure_date": date, "status": {"$ne": "cancelled"}},
         {"_id": 0, "procedure_time": 1, "patient_name": 1, "student_name": 1, "created_by_name": 1, "created_by_role": 1},
     ).to_list(50)
     slots = {}
@@ -3804,6 +3799,7 @@ async def get_booked_slots_month(month: str, current_user: dict = Depends(get_cu
     query: Dict[str, Any] = {
         "procedure_date": {"$regex": f"^{month}-"},
         "archived": {"$ne": True},
+        "status": {"$ne": "cancelled"},
     }
     org_scope = await _org_scope_match(current_user)
     if org_scope:
@@ -5438,7 +5434,7 @@ async def reschedule_procedure(
             "_id": {"$ne": ObjectId(procedure_id)},
             "procedure_date": body.procedure_date,
             "procedure_time": body.procedure_time,
-            "status": {"$ne": "draft"},
+            "status": {"$nin": ["draft", "cancelled"]},
         })
         if clash:
             booked_by = clash.get("created_by_name") or clash.get("student_name") or "Unknown"
@@ -5542,6 +5538,137 @@ async def reschedule_procedure(
     )
 
     return {"message": "Procedure rescheduled successfully", "entry": history_entry}
+
+
+# ── Cancel scheduled case ──────────────────────────────────────────────────
+# Lets the case creator (student) OR faculty (supervisor / implant_incharge /
+# administrator) cancel a scheduled case with a mandatory reason. Cancelling
+# frees the booked slot immediately — the slot-conflict/booked-slot queries
+# below all exclude status "cancelled" — so other users see the opening on
+# their next fetch without needing to restart the app.
+class CancelProcedureRequest(BaseModel):
+    reason: str = Field(..., min_length=3, max_length=500)
+
+
+# A case can be cancelled any time before it's finished or already cancelled.
+CANCEL_BLOCKED_STATUSES = {"draft", "completed", "cancelled"}
+
+
+@api_router.post("/procedures/{procedure_id}/cancel")
+async def cancel_procedure(
+    procedure_id: str,
+    body: CancelProcedureRequest,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(proc, current_user)
+
+    creator_id = proc.get("created_by_id") or proc.get("student_id")
+    role = current_user.get("role")
+    is_creator = creator_id == current_user["_id"]
+    is_supervisor_on_case = role == "supervisor" and proc.get("supervisor_id") == current_user["_id"]
+    is_faculty = role in ("implant_incharge", "administrator", "super_admin") or is_supervisor_on_case
+    if not (is_creator or is_faculty):
+        raise HTTPException(
+            status_code=403,
+            detail="Only the case creator or a Supervisor / Implant In-Charge / Administrator can cancel this case.",
+        )
+
+    if proc.get("status") in CANCEL_BLOCKED_STATUSES:
+        raise HTTPException(status_code=400, detail="This case cannot be cancelled in its current state.")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    prior_status = proc.get("status")
+    cancel_entry = {
+        "id": str(uuid.uuid4()),
+        "prior_status": prior_status,
+        "procedure_date": proc.get("procedure_date"),
+        "procedure_time": proc.get("procedure_time"),
+        "reason": body.reason.strip(),
+        "by_user_id": current_user["_id"],
+        "by_user_name": current_user.get("name") or current_user.get("username"),
+        "by_user_role": role,
+        "at": now_iso,
+    }
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {
+            "$set": {
+                "status": "cancelled",
+                "cancel_reason": cancel_entry["reason"],
+                "cancelled_by": current_user["_id"],
+                "cancelled_by_name": cancel_entry["by_user_name"],
+                "cancelled_by_role": role,
+                "cancelled_at": now_iso,
+                "status_before_cancel": prior_status,
+            },
+            "$push": {"cancellation_history": cancel_entry},
+        },
+    )
+
+    # Notify other assigned stakeholders (push + in-app).
+    actor_id = current_user["_id"]
+    recipient_ids = [
+        rid for rid in [
+            proc.get("student_id"),
+            proc.get("supervisor_id"),
+            proc.get("implant_incharge_id"),
+            proc.get("nurse_id"),
+            creator_id,
+        ]
+        if rid and rid != actor_id
+    ]
+    recipient_ids = list(dict.fromkeys(recipient_ids))
+
+    patient_label = proc.get("patient_name") or "case"
+    msg = (
+        f"{cancel_entry['by_user_name']} cancelled {patient_label} "
+        f"(was scheduled {cancel_entry['procedure_date'] or '—'} {cancel_entry['procedure_time'] or ''}). "
+        f"Reason: {cancel_entry['reason']}"
+    ).strip()
+
+    for uid in recipient_ids:
+        await db.notifications.insert_one({
+            "user_id": uid,
+            "procedure_id": procedure_id,
+            "message": msg,
+            "type": "procedure_cancelled",
+            "read": False,
+            "created_at": datetime.utcnow(),
+        })
+    if recipient_ids:
+        await send_expo_push_notifications(
+            recipient_ids,
+            f"Case cancelled · {patient_label}",
+            f"Reason: {cancel_entry['reason']}",
+            {
+                "procedure_id": procedure_id,
+                "type": "procedure_cancelled",
+            },
+            redact=[patient_label],
+        )
+
+    await log_access(
+        action="procedure_cancel",
+        resource_type="procedure",
+        resource_id=procedure_id,
+        user=current_user,
+        request=request,
+        extra={
+            "patient_name": patient_label,
+            "prior_status": prior_status,
+            "procedure_date": cancel_entry["procedure_date"],
+            "procedure_time": cancel_entry["procedure_time"],
+            "reason": cancel_entry["reason"],
+            "notified_user_ids": recipient_ids,
+        },
+    )
+
+    return {"message": "Procedure cancelled successfully", "entry": cancel_entry}
 
 
 

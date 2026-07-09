@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -16,7 +16,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import api from "../../utils/api";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { format } from "date-fns";
 import { STATUS_COLORS, STATUS_LABELS } from "../../constants/checklist";
 import { useAuth } from "../../contexts/AuthContext";
@@ -24,6 +24,7 @@ import CaseSubmissionStatus from "../../components/CaseSubmissionStatus";
 import NurseCasesScreen from "../../components/NurseCasesScreen";
 import ShareToForumModal from "../../components/ShareToForumModal";
 import RescheduleModal from "../../components/RescheduleModal";
+import CancelCaseModal from "../../components/CancelCaseModal";
 
 export default function ProceduresScreen() {
   const { user } = useAuth();
@@ -55,6 +56,13 @@ const getStatusBadgeStyle = (status: string) => {
       bg: "#DC2626",
       text: "#FFF",
       icon: "alert-circle-outline" as const,
+    };
+  }
+  if (s === "cancelled") {
+    return {
+      bg: "#78909C",
+      text: "#FFF",
+      icon: "close-circle-outline" as const,
     };
   }
   return {
@@ -92,6 +100,11 @@ function DefaultProceduresScreen() {
     currentDate?: string;
     currentTime?: string;
   } | null>(null);
+  // Case selected for cancellation via the three-dot menu.
+  const [cancelCase, setCancelCase] = useState<{
+    id: string;
+    patientName?: string;
+  } | null>(null);
   const router = useRouter();
   const params = useLocalSearchParams<{ filter?: string; phase?: string }>();
 
@@ -112,6 +125,15 @@ function DefaultProceduresScreen() {
   useEffect(() => {
     loadProcedures();
   }, [filter]);
+
+  // Re-fetch on every screen focus so a case cancelled/deleted/rescheduled
+  // elsewhere (by this user or another) is reflected without needing to
+  // restart the app.
+  useFocusEffect(
+    useCallback(() => {
+      loadProcedures();
+    }, [filter])
+  );
 
   const loadProcedures = async () => {
     try {
@@ -317,6 +339,28 @@ function DefaultProceduresScreen() {
             currentDate: item.procedure_date,
             currentTime: item.procedure_time,
           }),
+      });
+    }
+    // Cancel scheduled case — case creator (student) or faculty, any time
+    // before completion. Mirrors backend CANCEL_BLOCKED_STATUSES.
+    const cancelBlocked = new Set(["draft", "completed", "cancelled"]);
+    const isSupervisorOnCase =
+      role === "supervisor" && item.supervisor_id === user?.id;
+    const canCancel =
+      !cancelBlocked.has(item.status) &&
+      (isCreator ||
+        isSupervisorOnCase ||
+        role === "implant_incharge" ||
+        role === "administrator" ||
+        role === "super_admin");
+    if (canCancel) {
+      actions.push({
+        key: "cancel",
+        label: "Cancel Case",
+        icon: "close-circle-outline",
+        color: "#C62828",
+        onPress: () =>
+          setCancelCase({ id: pid, patientName: item.patient_name }),
       });
     }
     return actions;
@@ -717,6 +761,18 @@ function DefaultProceduresScreen() {
           onClose={() => setRescheduleCase(null)}
           onRescheduled={() => {
             setRescheduleCase(null);
+            loadProcedures();
+          }}
+        />
+      )}
+      {cancelCase && (
+        <CancelCaseModal
+          visible={!!cancelCase}
+          procedureId={cancelCase.id}
+          patientName={cancelCase.patientName}
+          onClose={() => setCancelCase(null)}
+          onCancelled={() => {
+            setCancelCase(null);
             loadProcedures();
           }}
         />

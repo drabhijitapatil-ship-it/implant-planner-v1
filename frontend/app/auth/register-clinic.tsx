@@ -12,6 +12,7 @@ import * as ImagePicker from 'expo-image-picker';
 import api from '../../utils/api';
 import OtpEmailField from '../../components/OtpEmailField';
 import { INDIAN_STATES } from '../../constants/indianStates';
+import PasswordRequirements, { isPasswordValid } from '../../components/PasswordRequirements';
 
 const PREFIXES = ['Dr.', 'Mr.', 'Mrs.', 'Ms.', 'Prof.'];
 
@@ -108,7 +109,7 @@ export default function ClinicRegisterScreen() {
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) e.email = 'Invalid email address';
     else if (!emailVerified) e.email = 'Please verify your email';
     if (!password) e.password = 'Password is required';
-    else if (password.length < 8) e.password = 'Minimum 8 characters';
+    else if (!isPasswordValid(password, chiefDentistName)) e.password = 'Password does not meet all requirements';
     if (password !== confirmPassword) e.confirmPassword = 'Passwords do not match';
     if (!termsAccepted) e.terms = 'Please accept the Terms & Privacy Policy';
     setErrors(e);
@@ -317,6 +318,7 @@ export default function ClinicRegisterScreen() {
                 </TouchableOpacity>
               </View>
               {errors.password ? <Text style={s.err}>{errors.password}</Text> : null}
+              <PasswordRequirements password={password} fullName={chiefDentistName} />
 
               <Text style={s.label}>Confirm Password *</Text>
               <View style={[s.pwRow, errors.confirmPassword && s.inputErr]}>

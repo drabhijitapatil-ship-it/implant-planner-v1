@@ -602,6 +602,7 @@ export const STATUS_COLORS: Record<string, string> = {
   approved: '#4CAF50',
   rejected: '#F44336',
   permanently_rejected: '#B71C1C',
+  cancelled: '#78909C',
 };
 
 export const STATUS_LABELS: Record<string, string> = {
@@ -621,6 +622,7 @@ export const STATUS_LABELS: Record<string, string> = {
   approved: 'Approved',
   rejected: 'Rejected',
   permanently_rejected: 'Permanently Rejected',
+  cancelled: 'Cancelled',
 };
 
 export const USER_ROLES = {

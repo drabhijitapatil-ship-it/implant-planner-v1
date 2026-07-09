@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import api from '../../utils/api';
+import PasswordRequirements, { isPasswordValid } from '../../components/PasswordRequirements';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RESEND_COOLDOWN_SECONDS = 60;
@@ -80,7 +81,7 @@ export default function ForgotPasswordScreen() {
     const e: Record<string, string> = {};
     if (otp.length !== 6) e.otp = 'Enter the 6-digit code';
     if (!newPassword) e.newPassword = 'Password is required';
-    else if (newPassword.length < 8) e.newPassword = 'Minimum 8 characters';
+    else if (!isPasswordValid(newPassword)) e.newPassword = 'Password does not meet all requirements';
     if (newPassword !== confirmPassword) e.confirmPassword = 'Passwords do not match';
     setErrors(e);
     if (Object.keys(e).length > 0) return;
@@ -116,8 +117,8 @@ export default function ForgotPasswordScreen() {
                 <View style={s.doneIconWrap}>
                   <Ionicons name="checkmark-circle" size={72} color="#1565C0" />
                 </View>
-                <Text style={s.title}>Password Reset</Text>
-                <Text style={s.subtitle}>
+                <Text style={[s.title, { textAlign: 'center', marginVertical: 12 }]}>Password Reset</Text>
+                <Text style={[s.subtitle, { textAlign: 'center', paddingHorizontal: 20 }]}>
                   Your password has been changed. Sign in with your new password to continue.
                 </Text>
                 <TouchableOpacity style={s.submitBtn} onPress={() => router.replace('/auth/login')} data-testid="forgot-password-to-login">
@@ -197,6 +198,7 @@ export default function ForgotPasswordScreen() {
                         </TouchableOpacity>
                       </View>
                       {errors.newPassword ? <Text style={s.err}>{errors.newPassword}</Text> : null}
+                      <PasswordRequirements password={newPassword} />
 
                       <Text style={s.label}>Confirm New Password</Text>
                       <View style={[s.pwRow, errors.confirmPassword && s.inputErr]}>
@@ -260,7 +262,7 @@ const s = StyleSheet.create({
   resendRow: { marginTop: 8, alignItems: 'flex-end' },
   resendTxt: { fontSize: 13, color: '#1565C0', fontWeight: '600' },
   resendTxtDisabled: { color: '#90A4AE' },
-  submitBtn: { backgroundColor: '#1565C0', borderRadius: 12, paddingVertical: 15, alignItems: 'center', marginTop: 20 },
+  submitBtn: { backgroundColor: '#1565C0', borderRadius: 12, paddingVertical: 15, alignItems: 'center', marginTop: 20, alignSelf: 'stretch' },
   btnDisabled: { opacity: 0.6 },
   submitTxt: { color: '#FFF', fontSize: 16, fontWeight: '700' },
   changeEmailBtn: { alignItems: 'center', marginTop: 14 },

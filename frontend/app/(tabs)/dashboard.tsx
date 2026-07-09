@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   RefreshControl, ActivityIndicator, Image, Alert, useWindowDimensions,
@@ -197,17 +197,22 @@ function ProcedureCalendar({ procedures, selectedDate, setSelectedDate, router }
   const [slotDays, setSlotDays] = useState<Record<string, DaySlots>>({});
   const [schedMode, setSchedMode] = useState<'default' | 'custom' | 'open'>('default');
   const [visibleMonth, setVisibleMonth] = useState<string>((selectedDate || format(new Date(), 'yyyy-MM-dd')).slice(0, 7));
-  useEffect(() => {
-    let cancelled = false;
-    api.get(`/procedures/slots-month/${visibleMonth}`)
-      .then(res => {
-        if (cancelled) return;
-        setSlotDays(prev => ({ ...prev, ...(res.data?.days || {}) }));
-        if (res.data?.mode) setSchedMode(res.data.mode);
-      })
-      .catch(() => {}); // dots are best-effort; calendar still works without them
-    return () => { cancelled = true; };
-  }, [visibleMonth]);
+  // Re-fetch on every screen focus (not just when the visible month changes)
+  // so a slot freed by a cancellation/deletion elsewhere shows up the moment
+  // the user comes back to this screen, instead of requiring an app restart.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      api.get(`/procedures/slots-month/${visibleMonth}`)
+        .then(res => {
+          if (cancelled) return;
+          setSlotDays(prev => ({ ...prev, ...(res.data?.days || {}) }));
+          if (res.data?.mode) setSchedMode(res.data.mode);
+        })
+        .catch(() => {}); // dots are best-effort; calendar still works without them
+      return () => { cancelled = true; };
+    }, [visibleMonth])
+  );
 
   const isFullyBooked = (booked: number, total: number | null): boolean =>
     schedMode === 'open' ? booked >= HEAVY_BOOKING_THRESHOLD : total != null && booked >= total;
