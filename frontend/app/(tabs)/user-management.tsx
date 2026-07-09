@@ -22,6 +22,7 @@ import * as DocumentPicker from "expo-document-picker";
 import { useRouter } from "expo-router";
 import api from "../../utils/api";
 import { useAuth } from "../../contexts/AuthContext";
+import BackButton from "../../components/BackButton";
 import { ROLE_OPTIONS, CLINIC_ROLE_OPTIONS } from "../../constants/checklist";
 
 const ROLE_COLORS: Record<string, string> = {
@@ -568,7 +569,11 @@ export default function UserManagementScreen() {
 
   if (!isAdmin) {
     return (
-      <SafeAreaView style={styles.container} edges={["bottom"]}>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.headerBar}>
+          <BackButton />
+          <Text style={styles.headerTitle}>User Management</Text>
+        </View>
         <View style={styles.accessDenied}>
           <Ionicons name="lock-closed" size={48} color="#CCC" />
           <Text style={styles.accessDeniedText}>Access Restricted</Text>
@@ -1037,12 +1042,6 @@ export default function UserManagementScreen() {
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
-            <Ionicons
-              name="funnel-outline"
-              size={16}
-              color="#64748B"
-              style={{ marginLeft: 8 }}
-            />
           </View>
           <TouchableOpacity
             style={styles.sortBtn}
@@ -1074,7 +1073,11 @@ export default function UserManagementScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.headerBar}>
+        <BackButton />
+        <Text style={styles.headerTitle}>User Management</Text>
+      </View>
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#1A73E8" />
@@ -2036,7 +2039,7 @@ export default function UserManagementScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -2044,6 +2047,23 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F8FAFC",
+  },
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1A202C',
+    marginLeft: 8,
   },
   loadingContainer: {
     flex: 1,

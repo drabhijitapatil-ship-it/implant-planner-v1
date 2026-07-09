@@ -88,7 +88,7 @@ export default function ArchivedScreen() {
   );
 
   return (
-    <SafeAreaView style={s.container} edges={['bottom']}>
+    <View style={s.container}>
       <TextInput
         style={s.searchBar}
         placeholder="Search archived cases..."
@@ -107,7 +107,7 @@ export default function ArchivedScreen() {
       ) : (
         <FlatList data={filtered} renderItem={renderItem} keyExtractor={item => item.id || item._id || Math.random().toString()} contentContainerStyle={{ padding: 16 }} />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 

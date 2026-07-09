@@ -1094,7 +1094,7 @@ export default function DashboardScreen() {
   const isNurse = role === 'nurse';
 
   return (
-    <SafeAreaView style={s.container} edges={['bottom']}>
+    <View style={s.container}>
       <ScrollView
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} />}
         keyboardShouldPersistTaps="handled"
@@ -1170,7 +1170,7 @@ export default function DashboardScreen() {
       </ScrollView>
       {/* iter-242: floating "Ask Implanr AI" personal assistant — available to every role. */}
       <AskImplanrAIFab />
-    </SafeAreaView>
+    </View>
   );
 }
 

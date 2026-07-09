@@ -504,17 +504,48 @@ export default function TabsLayout() {
   const HeaderLeft = () => (
     <TouchableOpacity
       onPress={() => { tapLight(); setDrawerOpen(true); }}
-      style={{ marginLeft: 14 }}
-      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      style={{
+        width: 48,
+        height: 48,
+        justifyContent: 'center',
+        alignItems: 'flex-start',
+        paddingLeft: 14,
+      }}
       testID="hamburger-btn"
       accessibilityLabel="hamburger-btn"
       // @ts-ignore - RNW passes through
       data-testid="hamburger-btn"
     >
       <View>
-        <Ionicons name="grid" size={24} color="#1565C0" />
+        <Ionicons name="menu" size={28} color="#1565C0" />
         {(hasUnseenWhatsNew || hasUnreadForum) && (
           <View style={badgeStyles.reddot} data-testid="profile-whatsnew-reddot" />
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+
+  const HeaderRight = () => (
+    <TouchableOpacity
+      onPress={() => { tapLight(); router.push('/(tabs)/notifications'); }}
+      style={{
+        width: 48,
+        height: 48,
+        justifyContent: 'center',
+        alignItems: 'flex-end',
+        paddingRight: 14,
+      }}
+      testID="header-notification-btn"
+      accessibilityLabel="header-notification-btn"
+    >
+      <View>
+        <Ionicons name="notifications-outline" size={24} color="#1565C0" />
+        {unreadCount > 0 && (
+          <View style={[badgeStyles.badge, { top: -4, right: -4 }]} data-testid="header-alerts-badge">
+            <Text style={badgeStyles.badgeText}>
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </Text>
+          </View>
         )}
       </View>
     </TouchableOpacity>
@@ -542,6 +573,13 @@ export default function TabsLayout() {
           tabBarInactiveTintColor: '#8E8E93',
           headerShown: true,
           headerLeft: () => <HeaderLeft />,
+          headerRight: () => <HeaderRight />,
+          headerTitle: () => (
+            <Text style={{ fontSize: 20, fontWeight: '900', color: '#1565C0', letterSpacing: 0.6 }}>
+              Implanr
+            </Text>
+          ),
+          headerTitleAlign: 'center',
           tabBarStyle: {
             backgroundColor: '#FFF',
             borderTopWidth: 1,
@@ -584,6 +622,8 @@ export default function TabsLayout() {
               <Ionicons name="document-text-outline" size={24} color={color} />
             ),
             href: isNurse ? null : '/new-procedure',
+            headerShown: false,
+            tabBarStyle: { display: 'none' },
           }}
         />
         <Tabs.Screen
@@ -621,21 +661,8 @@ export default function TabsLayout() {
           name="notifications"
           options={{
             title: 'Alerts',
-            tabBarIcon: ({ color }) => (
-              <View>
-                <Ionicons name="notifications-outline" size={24} color={color} />
-                {unreadCount > 0 && (
-                  <View style={badgeStyles.badge} data-testid="alerts-badge">
-                    <Text style={badgeStyles.badgeText}>
-                      {unreadCount > 99 ? '99+' : unreadCount}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            ),
-          }}
-          listeners={{
-            tabPress: () => { setTimeout(fetchUnreadCount, 1000); },
+            href: null,
+            headerRight: () => <View style={{ width: 48 }} />,
           }}
         />
         {/* Hidden from bottom bar — accessible via side drawer */}
@@ -644,13 +671,17 @@ export default function TabsLayout() {
           options={{
             title: 'Users',
             href: null,
+            headerShown: false,
+            tabBarStyle: { display: 'none' },
           }}
         />
         <Tabs.Screen
           name="profile"
           options={{
-            title: 'My Profile',
-            href: null,
+            title: 'Profile',
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="person-outline" size={24} color={color} />
+            ),
           }}
         />
         <Tabs.Screen

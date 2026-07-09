@@ -112,7 +112,8 @@
       "Bash(awk -v n=6535 'NR<=n && /^@api_router|^async def/{last=$0; lastln=NR} NR==n{print lastln\": \"last}' server.py)",
       "Bash(python3 -m py_compile server.py s3_storage.py)",
       "Bash(python3 -m py_compile migrate_uploads_to_s3.py)",
-      "Bash(grep -rln \"?token=\\\\${authToken}\\\\|?token=\\\\${.*[Tt]oken\" components/ app/procedures/ --include=\"*.tsx\")"
+      "Bash(grep -rln \"?token=\\\\${authToken}\\\\|?token=\\\\${.*[Tt]oken\" components/ app/procedures/ --include=\"*.tsx\")",
+      "Bash(unzip -p android/app/src/main/AndroidManifest.xml)"
     ],
     "additionalDirectories": [
       "/dev",

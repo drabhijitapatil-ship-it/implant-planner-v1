@@ -7,6 +7,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Line } from 'react-native-svg';
 import api, { getAuthFileUrl, getToken } from '../../utils/api';
 import { showUploadPicker } from '../../utils/uploadPicker';
@@ -1180,7 +1181,7 @@ export default function NewProcedureScreen() {
   // ── Render Step: Implant Selection ──
   if (step === 'implants' && createdProcedureId) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#F5F7FA' }} data-testid="step2-implant-selection-view">
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#F5F7FA' }} data-testid="step2-implant-selection-view">
         <View style={styles.stepHeader}>
           <BackButton onPress={() => { setStep('details'); setIsDraftResume(false); }} testID="step2-back-btn" />
           <Text style={styles.stepTitle}>Step 2: Implant Selection</Text>
@@ -1316,7 +1317,7 @@ export default function NewProcedureScreen() {
           </TouchableOpacity>
           )}
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -1493,7 +1494,7 @@ export default function NewProcedureScreen() {
   // "Rendered fewer hooks than expected" → blank white screen.
 
   return (
-    <>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#F0F4F8' }}>
     <ScrollView
       ref={scrollRef}
       style={styles.container}
@@ -3250,7 +3251,7 @@ export default function NewProcedureScreen() {
         </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
-    </>
+    </SafeAreaView>
   );
 }
 

@@ -182,7 +182,7 @@ export default function NotificationsScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <View style={styles.container}>
 
       {/* Search bar — hidden for nurse (display-only alerts feed) */}
       {user?.role !== 'nurse' && (
@@ -219,7 +219,7 @@ export default function NotificationsScreen() {
           contentContainerStyle={styles.listContainer}
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 

@@ -92,7 +92,7 @@ export default function BackButton({
         // @ts-ignore RN-Web mapping
         data-testid={testID}
       >
-        <Ionicons name="chevron-back" size={34} color={color} style={{ marginLeft: -2 }} />
+        <Ionicons name="chevron-back" size={26} color={color} style={{ marginLeft: -2 }} />
       </Pressable>
     </Animated.View>
   );
@@ -103,8 +103,8 @@ const s = StyleSheet.create({
     // Circular floating chip — white fill with soft halo-style shadow so the
     // button reads as elevated from the grey background even on pure-white
     // screens.
-    width: 44,
-    height: 44,
+    width: 38,
+    height: 38,
     borderRadius: 22,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
