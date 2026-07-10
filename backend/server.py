@@ -2216,6 +2216,8 @@ async def _ensure_org_indexes() -> None:
         await db.invites.create_index("org_id")
         await db.invites.create_index("expires_at", expireAfterSeconds=0)
         await db.users.create_index("org_id")
+        await db.procedures.create_index("org_id")
+        await db.procedures.create_index("department_id")
         await db.otp_verifications.create_index("email", unique=True)
         await db.otp_verifications.create_index("expires_at", expireAfterSeconds=3600)
     except Exception as e:
@@ -3389,6 +3391,8 @@ async def create_procedure_with_existing_implants(
         })
     procedure_dict["created_by_id"] = current_user["_id"]
     procedure_dict["created_by_name"] = current_user["name"]
+    procedure_dict["org_id"] = current_user.get("org_id")
+    procedure_dict["department_id"] = None
 
     # iter-228: Mirror routine `POST /procedures` behaviour for Phase 1
     # approval auto-stamping when the case is being routed through the
@@ -3425,6 +3429,8 @@ async def create_procedure_with_existing_implants(
         procedure_dict["created_by_name"] = existing.get("created_by_name", procedure_dict.get("created_by_name"))
         procedure_dict["created_by_role"] = existing.get("created_by_role", procedure_dict.get("created_by_role"))
         procedure_dict["student_id"] = existing.get("student_id", procedure_dict.get("student_id"))
+        procedure_dict["org_id"] = existing.get("org_id", procedure_dict.get("org_id"))
+        procedure_dict["department_id"] = existing.get("department_id", procedure_dict.get("department_id"))
         await db.procedures.replace_one({"_id": existing["_id"]}, procedure_dict)
         new_id = str(existing["_id"])
     else:
@@ -3682,6 +3688,8 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
     procedure_dict["augmentation_checklist"] = generate_augmentation_checklist(procedure_dict)
     procedure_dict["augmentation_checklist_generated_at"] = datetime.now(timezone.utc).isoformat()
     procedure_dict["augmentation_checklist_generated_by"] = current_user.get("id") or current_user.get("_id") or ""
+    procedure_dict["org_id"] = current_user.get("org_id")
+    procedure_dict["department_id"] = None
 
     result = await db.procedures.insert_one(procedure_dict)
     procedure_id = str(result.inserted_id)
@@ -4818,7 +4826,7 @@ async def edit_procedure_fields(procedure_id: str, request: Request, current_use
         raise HTTPException(status_code=400, detail="No fields to update")
     
     # Prevent editing protected fields
-    protected = {"_id", "id", "created_by_id", "created_by_name", "created_by_role", "created_at", "edit_log"}
+    protected = {"_id", "id", "created_by_id", "created_by_name", "created_by_role", "created_at", "edit_log", "org_id", "department_id"}
     fields = {k: v for k, v in fields.items() if k not in protected}
     
     # Build per-field edit log entries (diff old vs new)

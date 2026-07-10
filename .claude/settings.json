@@ -122,7 +122,9 @@
       "Bash(venv/bin/pip show *)",
       "Bash(SITE=\"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/phase1/backend/venv/lib/python3.14/site-packages\"; cat \"$SITE/resend/emails/_emails.py\" | head -60)",
       "Read(//Users/prathmeshjadhav/Desktop/work/implant-planner-v1/phase1/backend/venv/lib/python3.14/site-packages/resend/emails/**)",
-      "Bash(grep -n \"^boto3\\\\|^resend\\\\|^requests$\" requirements_unpinned.txt)"
+      "Bash(grep -n \"^boto3\\\\|^resend\\\\|^requests$\" requirements_unpinned.txt)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" https://appstoreconnect.apple.com --max-time 5)",
+      "Bash(python3 -m py_compile server.py migrate_backfill_procedure_org_id.py)"
     ],
     "additionalDirectories": [
       "/dev",
