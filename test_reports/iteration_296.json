@@ -1,0 +1,40 @@
+{
+  "summary": "iter-343 Implant Survival & Revision Engine visibility fix verified. Backend: 9/9 tests PASS — active-implants + implant-lifecycle now correctly materialize implants from implant_plans[] fallback for the target case 699fc5c2248100e8a0d87265 (tooth 16, ICE 5×13mm); existing_implants normalization still works (6a01da5afaa288be26abd086 → SPI 4.2); /analytics/survival counters.placed > 0 (plans-only cases now counted); PATCH /admin/procedures/{id}/timeline accepts far-past (2025-08-15) and future (2027-06-15) dates. Frontend: survival-review-card appears on the case-detail page for the phase2_approved case; tapping it navigates to /procedures/survival-review/{id}; the survival form shows tooth 16 ICE 5×13mm; selecting No → Failed reveals the reason chips + Removed + Replaced Yes/No; Replaced=Yes shows the full extended replacement block with all fields (System, Diameter, Length, Lot#, Insertion torque, ISQ, One-stage/Two-stage/Immediate loading chips, Placement date).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/procedures/survival-review/{id}", "issues": ["The 'Reason for failure' chip row overflows the card width horizontally (Peri-i… truncated in view). The row should either wrap to a second line or make horizontal scroll obvious with a visible scrollbar. Minor UX."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_survival_engine_iter343.py",
+    "/app/test_reports/pytest/iter343_survival.xml"
+  ],
+  "action_items": [
+    "SEED-DATA MISMATCH BLOCKING FRONTEND CTA COVERAGE: Procedure 699fc5c2248100e8a0d87265 is owned by student_id=699ed39eea05b2cb35f0cbd3 (a duplicate 'Gaurav Pandey' user), NOT the Gaurav.pandey login (student_id=69b79409a17f36c024eb2d65) provided in the review request. As a result, logging in with the specified credentials returns 403 on GET /api/procedures/699fc5c2248100e8a0d87265, and the [data-testid=survival-review-cta] / [data-testid=stage2-surgical-btn] IIFE (gated by canSubmitStage2Surgical → user.id === procedure.student_id) never renders for the intended tester. Main agent must either (a) reassign the case's student_id/created_by_id to 69b79409a17f36c024eb2d65, or (b) deduplicate the two 'Gaurav Pandey' student accounts, or (c) point the review request at a different phase2_approved case that Gaurav.pandey actually owns. All survival-card + navigation + reason-chip + replacement-block behavior was verified as admin — but the specific 'IMPLANT SURVIVAL REVIEW' vs 'PHASE 2 APPROVED - Start Phase 3' CTA toggle at the case-detail bottom could not be visually confirmed because admin never sees that button.",
+    "Consider wrapping or scrolling the 'Reason for failure' chips row so all 9 options are visible without horizontal cutoff at 1280px width."
+  ],
+  "critical_code_review_comments": [
+    "backend/server.py L4245: `_extract_procedure_implants` returns `proc['implants']` directly when set — but Phase-2 submit at L10547 writes the same shape, so the truthiness check `proc.get('implants')` succeeds on `[]` too. Not currently a bug (empty list is falsy), but note the semantics: if a future migration ever writes `implants: []` explicitly to mark 'checked, none placed', the plans fallback will silently kick in. Consider `proc.get('implants') is not None and len(proc['implants']) > 0` if that becomes a concern.",
+    "backend/server.py L10545-10562: Phase-2 submit materialization takes the CLIENT-supplied `phase2_data.torque_values` but the PLANS come from the DB (`procedure.get('implant_plans')`). If the student re-submits Phase 2 later with reordered torque_values, per-implant torques could mis-align since the join is by list index. Acceptable per current schema but worth a code comment.",
+    "backend/server.py L687 `_validate_done_date`: helper's `label` and `prev_date` args are now unused (constraints relaxed). Consider removing them or adding a deprecation note; callers still pass them, creating unused-argument code smell.",
+    "frontend/app/procedures/[id].tsx L1104: gate uses `procedure?.phase2_completed_at || procedure?.status === 'phase2_approved'`. For a case reset back to `pending_phase2` after correction, `phase2_completed_at` may still be set from a prior submit — the survival card would still appear. Verify that the reset flow clears `phase2_completed_at`.",
+    "frontend/app/procedures/survival-review/[id].tsx: 'Reason for failure' chips row lacks a horizontal-scrollable ScrollView on narrow viewports — chips overflow the card edge."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_survival_engine_iter343.py"
+  ],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "~80% — survival card, navigation, form gating (No→Failed→Replaced=Yes) + all extended replacement fields visually confirmed. CTA toggle at case-detail bottom not verified due to seed-data ownership mismatch (see action_items)."},
+  "test_credentials": "Admin: Abhijit.patil / Admin@123 (used for all tests). Student Gaurav.pandey / Student@123 login works but returns 403 on the target procedure — see action_items.",
+  "seed_data_creation": "None. Timeline back-fill tests mutated phase2_actual_done_date and phase4_step2_done_date on procedure 699fc5c2248100e8a0d87265 (to 2025-08-15 and 2027-06-15 respectively). No survival-review POST executed to avoid polluting analytics.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression suite at /app/backend/tests/test_survival_engine_iter343.py — 9 tests, ~2 seconds. Complements iter-342 suite at test_survival_engine_iter342.py (mutation tests reset state around themselves). For UI, use Abhijit.patil admin login + search 'REG-P2B' in My Cases → click #REG-P2B card → click survival-review-card. Note the case has phase2_actual_done_date=2025-08-15 (set by the relax-constraint test); if a chronological check is later re-enabled, this may become invalid. Also note two 'Phase2 Test' cases exist (699fc5c... phase2_approved & 69c23603feb06fbdfc09512b pending_phase2) belonging to two different student_ids — see action_items.",
+  "rca of the issue": "Root cause validation: prior iter-342 report noted the Implant Survival & Revision Engine gate keyed off `procedure.implants?.length`, but Phase-2 submission never wrote a top-level `implants[]` array — the plan lived at `implant_plans[]` and torques at flat `torque_values[]`. iter-343 fix (a) materializes `implants[]` on new submits (server.py L10545-10562) and (b) adds `_extract_procedure_implants()` fallback for legacy cases (server.py L4234). Verified via curl: GET /api/procedures/699fc5c2248100e8a0d87265/active-implants returns 1 implant even though the persisted document still has implants=None; the fallback synthesizes from implant_plans[0]={position:16, system:'ICE', diameter:5.0, length:13.0}. Verified in UI: survival-review-card is rendered (procedure.implant_plans.length===1 satisfies the gate); tapping navigates to the review form; the form correctly lists Implant 1 · Tooth 16 · ICE 5×13mm."
+}

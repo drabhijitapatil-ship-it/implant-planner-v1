@@ -4231,6 +4231,58 @@ class ImplantSurvivalReviewBody(BaseModel):
     #                 replacement: { system, diameter, length, placement_date } | null }
 
 
+def _extract_procedure_implants(proc: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Return the canonical list of implants for a procedure. iter-343:
+    Prior to this iteration, Phase 2 never materialized a top-level
+    `implants[]` array — the implant plan was persisted at
+    `implant_plans[]` (a per-implant plan) and torque/ISQ lived flat on
+    `torque_values[]`. All survival endpoints (survival-review,
+    active-implants, implant-lifecycle, analytics) key off
+    `procedure.implants`. To keep older cases functional we fall back to
+    `existing_implants`, then to a derived view over `implant_plans` +
+    `torque_values`, materialising the same shape the survival flow
+    expects."""
+    if proc.get("implants"):
+        return proc["implants"]
+    ex = proc.get("existing_implants")
+    if ex:
+        # existing_implants use `_mm` suffixed fields and `tooth` (str) —
+        # normalize to the survival-flow shape here.
+        return [
+            {
+                "tooth_number": e.get("tooth") or e.get("tooth_number"),
+                "system": e.get("system") or e.get("brand"),
+                "brand": e.get("brand"),
+                "diameter": e.get("diameter") or e.get("diameter_mm"),
+                "length": e.get("length") or e.get("length_mm"),
+                "bone_type": e.get("bone_type"),
+                "insertion_torque_ncm": e.get("insertion_torque_ncm"),
+                "placement_date": e.get("surgery_date") or proc.get("phase2_actual_done_date"),
+            }
+            for e in ex
+        ]
+    plans = proc.get("implant_plans") or []
+    if not plans:
+        return []
+    torques = proc.get("torque_values") or []
+    p2 = proc.get("phase2_data") or {}
+    return [
+        {
+            "tooth_number": plan.get("position"),
+            "system": plan.get("system") or plan.get("brand"),
+            "brand": plan.get("brand"),
+            "diameter": plan.get("diameter"),
+            "length": plan.get("length"),
+            "bone_width": plan.get("bone_width"),
+            "bone_height": plan.get("bone_height"),
+            "bone_type": plan.get("bone_type"),
+            "insertion_torque_ncm": (torques[i] if i < len(torques) else None),
+            "placement_date": proc.get("phase2_actual_done_date"),
+        }
+        for i, plan in enumerate(plans)
+    ]
+
+
 @api_router.post("/procedures/{procedure_id}/survival-review")
 async def submit_survival_review(
     procedure_id: str,
@@ -4251,7 +4303,7 @@ async def submit_survival_review(
         raise HTTPException(status_code=404, detail="Procedure not found")
 
     now = datetime.now(timezone.utc)
-    implants = proc.get("implants") or proc.get("existing_implants") or []
+    implants = _extract_procedure_implants(proc)
     survival_map: Dict[int, Dict[str, Any]] = {}   # idx -> status
 
     if body.all_survived:
@@ -4358,7 +4410,7 @@ async def get_active_implants(
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
 
-    implants = proc.get("implants") or proc.get("existing_implants") or []
+    implants = _extract_procedure_implants(proc)
     review = proc.get("phase2_survival_review")
     active: List[Dict[str, Any]] = []
     archived: List[Dict[str, Any]] = []
@@ -4441,7 +4493,7 @@ async def get_implant_lifecycle(
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
 
-    implants = proc.get("implants") or proc.get("existing_implants") or []
+    implants = _extract_procedure_implants(proc)
     review = proc.get("phase2_survival_review") or {}
     smap = review.get("implants") or {}
     phase2_date = proc.get("phase2_actual_done_date") or proc.get("phase2_completed_at")
@@ -4592,7 +4644,8 @@ async def _load_analytics_procedures(from_date: Optional[str], to_date: Optional
             {"procedure_date": date_clause},
         ]
     return await db.procedures.find(match, {
-        "implants": 1, "existing_implants": 1, "phase2_survival_review": 1,
+        "implants": 1, "existing_implants": 1, "implant_plans": 1, "torque_values": 1, "phase2_data": 1,
+        "phase2_survival_review": 1,
         "phase2_actual_done_date": 1, "procedure_date": 1,
         "phase3_done_date": 1, "phase4_step2_done_date": 1,
         "implant_procedure_type": 1, "student_name": 1, "supervisor_name": 1,
@@ -4627,7 +4680,7 @@ def _compute_analytics(procs: List[Dict[str, Any]], filters: Dict[str, Any]) -> 
     case_rows: List[Dict[str, Any]] = []
 
     for p in procs:
-        implants = p.get("implants") or p.get("existing_implants") or []
+        implants = _extract_procedure_implants(p)
         review = p.get("phase2_survival_review") or {}
         smap = review.get("implants") or {}
         placed_date = p.get("phase2_actual_done_date") or p.get("procedure_date")
@@ -10482,6 +10535,31 @@ async def submit_phase2(
     )
     if phase2_data.torque_values:
         update_data["torque_values"] = phase2_data.torque_values
+
+    # iter-343: Materialize the top-level `implants[]` array from the
+    # Phase-1 implant plan + captured torque values. This is the source
+    # of truth for downstream flows (survival review, active-implants,
+    # analytics, lifecycle timeline). Without this the Implant Survival
+    # & Revision Engine never surfaces in the UI because the gate reads
+    # `procedure.implants?.length`.
+    plans = procedure.get("implant_plans") or []
+    torques = phase2_data.torque_values or []
+    if plans:
+        implants_array: List[Dict[str, Any]] = []
+        for i, plan in enumerate(plans):
+            implants_array.append({
+                "tooth_number": plan.get("position"),
+                "system": plan.get("system") or plan.get("brand"),
+                "brand": plan.get("brand"),
+                "diameter": plan.get("diameter"),
+                "length": plan.get("length"),
+                "bone_width": plan.get("bone_width"),
+                "bone_height": plan.get("bone_height"),
+                "bone_type": plan.get("bone_type"),
+                "insertion_torque_ncm": (torques[i] if i < len(torques) else None),
+                "placement_date": update_data["phase2_actual_done_date"],
+            })
+        update_data["implants"] = implants_array
     
     await db.procedures.update_one(
         {"_id": ObjectId(procedure_id)},

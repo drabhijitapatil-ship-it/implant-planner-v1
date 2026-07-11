@@ -1096,12 +1096,13 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
-        {/* iter-341: Implant Survival Review card — shows between Phase 2 & Phase 3.
-            Persistent card on Case Detail (per user pick 4c). Only rendered
-            once Phase 2 is complete AND Phase 3 not yet submitted. */}
-        {procedure?.phase2_completed_at &&
-         !procedure?.stage2_surgical_completed_at &&
-         (procedure?.implants?.length || procedure?.existing_implants?.length) ? (
+        {/* iter-341/343: Implant Survival Review card. Appears once
+            Phase 2 is approved and remains visible until the review is
+            submitted (or, if already submitted, links to the recorded
+            outcome). Also acts as the entry point when re-visiting the
+            revision chain. */}
+        {(procedure?.phase2_completed_at || procedure?.status === 'phase2_approved') &&
+         (procedure?.implants?.length || procedure?.existing_implants?.length || procedure?.implant_plans?.length) ? (
           <TouchableOpacity
             style={styles.timelineContainer}
             testID="survival-review-card"
@@ -1110,17 +1111,17 @@ export default function ProcedureDetailScreen() {
             activeOpacity={0.7}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: '#E3F2FD', alignItems: 'center', justifyContent: 'center' }}>
-                <Ionicons name="pulse-outline" size={22} color="#1565C0" />
+              <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: procedure.phase2_survival_review ? '#E8F5E9' : '#FFF3E0', alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="pulse-outline" size={22} color={procedure.phase2_survival_review ? '#2E7D32' : '#EF6C00'} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 15, fontWeight: '800', color: '#0D47A1' }}>
-                  {procedure.phase2_survival_review ? 'Implant Survival Review — submitted' : 'Implant Survival Review'}
+                <Text style={{ fontSize: 15, fontWeight: '800', color: procedure.phase2_survival_review ? '#2E7D32' : '#EF6C00' }}>
+                  {procedure.phase2_survival_review ? 'Implant Survival Review — submitted' : 'Implant Survival Review — action required'}
                 </Text>
                 <Text style={{ fontSize: 12, color: '#546E7A', marginTop: 3 }}>
                   {procedure.phase2_survival_review
-                    ? 'Tap to review the recorded survival status'
-                    : 'Verify implant survival before proceeding to Phase 3'}
+                    ? 'Tap to view or update the recorded survival status'
+                    : 'Verify each implant survived (or record a revision) before Phase 3'}
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color="#90A4AE" />
@@ -1700,25 +1701,48 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
-        {/* Start Stage 2 Surgical Button */}
-        {canSubmitStage2Surgical() && (
-          <View style={styles.phase2ButtonContainer}>
-            <TouchableOpacity
-              style={[styles.phase2Button, { backgroundColor: '#2196F3' }]}
-              onPress={() => router.push(`/procedures/submit-stage2-surgical/${id}`)}
-              data-testid="stage2-surgical-btn"
-            >
-              <Ionicons name="medkit" size={24} color="#FFF" />
-              <View style={styles.phase2ButtonTextContainer}>
-                <Text style={styles.phase2ButtonTitle}>
-                  {procedure.case_origin === 'existing_implants' ? 'PHASE 1 APPROVED' : 'PHASE 2 APPROVED'}
-                </Text>
-                <Text style={styles.phase2ButtonSubtitle}>Tap to start Phase 3 - Healing and Second Stage Surgery</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={24} color="#FFF" />
-            </TouchableOpacity>
-          </View>
-        )}
+        {/* Start Stage 2 Surgical Button — iter-343: gated behind
+            Implant Survival Review. When Phase 2 is approved and implants
+            exist but the survival review hasn't been submitted, this
+            button routes to the survival review screen instead of Phase 3
+            directly. Once submitted (or if there are no implants), it
+            behaves like the original Phase 3 CTA. */}
+        {canSubmitStage2Surgical() && (() => {
+          const hasImplants = !!(procedure.implants?.length || procedure.existing_implants?.length || procedure.implant_plans?.length);
+          const survivalDone = !!procedure.phase2_survival_review;
+          const needsSurvival = hasImplants && !survivalDone;
+          return (
+            <View style={styles.phase2ButtonContainer}>
+              <TouchableOpacity
+                style={[styles.phase2Button, { backgroundColor: needsSurvival ? '#1565C0' : '#2196F3' }]}
+                onPress={() => {
+                  if (needsSurvival) {
+                    router.push(`/procedures/survival-review/${procedure.id || procedure._id}` as any);
+                  } else {
+                    router.push(`/procedures/submit-stage2-surgical/${id}`);
+                  }
+                }}
+                data-testid={needsSurvival ? "survival-review-cta" : "stage2-surgical-btn"}
+                testID={needsSurvival ? "survival-review-cta" : "stage2-surgical-btn"}
+              >
+                <Ionicons name={needsSurvival ? "pulse" : "medkit"} size={24} color="#FFF" />
+                <View style={styles.phase2ButtonTextContainer}>
+                  <Text style={styles.phase2ButtonTitle}>
+                    {needsSurvival
+                      ? 'IMPLANT SURVIVAL REVIEW'
+                      : (procedure.case_origin === 'existing_implants' ? 'PHASE 1 APPROVED' : 'PHASE 2 APPROVED')}
+                  </Text>
+                  <Text style={styles.phase2ButtonSubtitle}>
+                    {needsSurvival
+                      ? 'Verify each implant survived before starting Phase 3'
+                      : 'Tap to start Phase 3 - Healing and Second Stage Surgery'}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={24} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+          );
+        })()}
 
         {/* Start Stage 2 Prosthetic Button */}
         {canSubmitStage2Prosthetic() && (
