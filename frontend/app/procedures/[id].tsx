@@ -1096,51 +1096,9 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
-        {/* iter-341/343: Implant Survival Review card. Appears once a
-            case has reached Phase 2 (any post-phase2 status) and stays
-            visible even after Phase 3+ so retrospective reviews are
-            possible. Requires at least one implant in any of the three
-            data sources (implants[], existing_implants[], implant_plans[]).
-        */}
-        {(() => {
-          const POST_PHASE2 = new Set([
-            'phase2_approved', 'phase2_submitted',
-            'pending_stage2_surgical', 'stage2_surgical_submitted', 'stage2_surgical_approved',
-            'pending_stage2_prosthetic', 'stage2_prosthetic_submitted', 'stage2_prosthetic_step1_approved',
-            'pending_final_delivery', 'phase4_step1_approved', 'phase4_step1_submitted',
-            'phase4_step2_submitted', 'final_delivery_approved', 'completed',
-          ]);
-          const inPhase2Plus = !!procedure?.phase2_completed_at || POST_PHASE2.has(procedure?.status);
-          const hasImplants = !!(procedure?.implants?.length || procedure?.existing_implants?.length || procedure?.implant_plans?.length);
-          if (!inPhase2Plus || !hasImplants) return null;
-          const submitted = !!procedure.phase2_survival_review;
-          return (
-            <TouchableOpacity
-              style={styles.timelineContainer}
-              testID="survival-review-card"
-              data-testid="survival-review-card"
-              onPress={() => router.push(`/procedures/survival-review/${procedure.id || procedure._id}` as any)}
-              activeOpacity={0.7}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: submitted ? '#E8F5E9' : '#FFF3E0', alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name="pulse-outline" size={22} color={submitted ? '#2E7D32' : '#EF6C00'} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 15, fontWeight: '800', color: submitted ? '#2E7D32' : '#EF6C00' }}>
-                    {submitted ? 'Implant Survival Review — submitted' : 'Implant Survival Review — action required'}
-                  </Text>
-                  <Text style={{ fontSize: 12, color: '#546E7A', marginTop: 3 }}>
-                    {submitted
-                      ? 'Tap to view or update the recorded survival status'
-                      : 'Verify each implant survived (or record a revision) before Phase 3'}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#90A4AE" />
-              </View>
-            </TouchableOpacity>
-          );
-        })()}
+        {/* iter-344: Duplicate survival card removed per user request —
+            only the blue "IMPLANT SURVIVAL REVIEW" CTA button (below the
+            Treatment Progress list) remains as the single entry point. */}
 
         {/* iter-342 Phase B: Implant Lifecycle Timeline — full revision
             history (Placed → Failed → Replaced → Healed → Loaded). Auto-

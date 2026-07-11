@@ -4305,6 +4305,7 @@ async def submit_survival_review(
     now = datetime.now(timezone.utc)
     implants = _extract_procedure_implants(proc)
     survival_map: Dict[int, Dict[str, Any]] = {}   # idx -> status
+    site_changes: List[Dict[str, Any]] = []  # iter-344: apply after loop
 
     if body.all_survived:
         for i, imp in enumerate(implants):
@@ -4315,36 +4316,50 @@ async def submit_survival_review(
             idx = f.get("implant_idx")
             if idx is None or not (0 <= idx < len(implants)):
                 raise HTTPException(status_code=400, detail=f"Invalid implant_idx {idx}")
-            reason = f.get("reason") or "Unknown"
-            if reason not in FAILURE_REASONS:
-                raise HTTPException(status_code=400, detail=f"Unknown failure reason: {reason}")
+            raw_reason = (f.get("reason") or "Unknown").strip()
+            # iter-344: reason may arrive as "Other: <text>" — normalize.
+            reason_base, reason_detail = (raw_reason.split(":", 1) + [""])[:2] if raw_reason.startswith("Other:") else (raw_reason, "")
+            if reason_base not in FAILURE_REASONS:
+                raise HTTPException(status_code=400, detail=f"Unknown failure reason: {reason_base}")
             replaced = bool(f.get("replaced"))
+            site_changed = bool(f.get("site_changed"))
+            new_tooth = (f.get("new_tooth_number") or "").strip() or None
             survival_map[idx] = {
                 "status": "Replaced" if replaced else "Failed",
-                "reason": reason,
+                "reason": reason_base,
+                "reason_detail": reason_detail.strip() or None,
                 "removed": bool(f.get("removed", True)),
                 "replaced": replaced,
+                "site_changed": site_changed,
+                "new_tooth_number": new_tooth,
                 "failure_date": f.get("failure_date") or now.isoformat(),
             }
+            if site_changed and new_tooth:
+                site_changes.append({"implant_idx": idx, "old_tooth": (implants[idx].get("tooth_number") or implants[idx].get("tooth")), "new_tooth": new_tooth})
             if replaced:
                 repl = f.get("replacement") or {}
                 if not all(repl.get(k) for k in ("system", "diameter", "length")):
                     raise HTTPException(status_code=400, detail="Replacement requires system, diameter, length")
-                # iter-342 Phase B: capture lighter-subset placement data on the
-                # revision (lot #, torque, ISQ, healing_protocol) + revision
-                # numbering. When a chain already exists (Rn), append Rn+1.
                 existing_chain = (proc.get("phase2_survival_review") or {}).get("implants", {}).get(str(idx)) or {}
                 prior = existing_chain.get("replacement")
                 revision_number = 1
                 chain: List[Dict[str, Any]] = []
                 if prior:
                     chain = list(prior.get("chain") or [])
-                    # Move the prior replacement into the chain as a failed R(n) node
                     chain.append({**{k: v for k, v in prior.items() if k != "chain"},
                                   "status": "Failed",
-                                  "failure_reason": reason,
+                                  "failure_reason": reason_base,
                                   "failure_date": now.isoformat()})
                     revision_number = int(prior.get("revision_number", 1)) + 1
+                # iter-344: capture the new Type of Procedure branch fields.
+                proc_type_val = (repl.get("procedure_type") or "").strip() or None
+                raw_imm_load = (repl.get("immediate_loading_prosthesis") or "").strip() or None
+                imm_base, imm_detail = (None, None)
+                if raw_imm_load:
+                    if raw_imm_load.startswith("Other:"):
+                        imm_base, imm_detail = "Other", raw_imm_load.split(":", 1)[1].strip()
+                    else:
+                        imm_base = raw_imm_load
                 survival_map[idx]["replacement"] = {
                     "system": repl["system"],
                     "diameter": float(repl["diameter"]),
@@ -4361,6 +4376,15 @@ async def submit_survival_review(
                     "status": "Active",
                     "created_at": now.isoformat(),
                     "chain": chain,
+                    # iter-344 extras
+                    "procedure_type": proc_type_val,
+                    "prosthetic_component": (repl.get("prosthetic_component") or "").strip() or None,
+                    "healing_abutment_mm": (float(repl["healing_abutment_mm"])
+                                             if repl.get("healing_abutment_mm") not in (None, "") else None),
+                    "immediate_loading_prosthesis": imm_base,
+                    "immediate_loading_prosthesis_detail": imm_detail,
+                    # If the site changed, the replacement lives at the NEW tooth
+                    "tooth_number": new_tooth or (implants[idx].get("tooth_number") or implants[idx].get("tooth")),
                 }
         # Any implant not listed in failures is treated as Active.
         for i in range(len(implants)):
@@ -4370,18 +4394,42 @@ async def submit_survival_review(
     # Persist review + implant lifecycle
     # Mongo requires string keys on nested documents.
     survival_map_str = {str(k): v for k, v in survival_map.items()}
-    await db.procedures.update_one(
-        {"_id": proc_oid},
-        {"$set": {
-            "phase2_survival_review": {
-                "all_survived": body.all_survived,
-                "reviewed_at": now.isoformat(),
-                "reviewed_by": current_user.get("name") or current_user.get("username"),
-                "implants": survival_map_str,
-            },
-            "phase2_survival_review_at": now,
-        }},
-    )
+    update_set: Dict[str, Any] = {
+        "phase2_survival_review": {
+            "all_survived": body.all_survived,
+            "reviewed_at": now.isoformat(),
+            "reviewed_by": current_user.get("name") or current_user.get("username"),
+            "implants": survival_map_str,
+        },
+        "phase2_survival_review_at": now,
+    }
+    # iter-344: apply site-change carry-forward — update the tooth number
+    # on the source implant lists so downstream forms (Phase 3 second-stage
+    # surgical, Phase 4 impressions/delivery) key off the new position.
+    if site_changes:
+        # Prefer the concrete `implants[]` array if present; else patch
+        # existing_implants / implant_plans in place so /active-implants
+        # returns the new tooth.
+        for src_key, tooth_field in (("implants", "tooth_number"),
+                                     ("existing_implants", "tooth"),
+                                     ("implant_plans", "position")):
+            src = proc.get(src_key)
+            if not isinstance(src, list) or not src:
+                continue
+            updated = False
+            new_src = [dict(x) for x in src]
+            for ch in site_changes:
+                i = ch["implant_idx"]
+                if 0 <= i < len(new_src) and ch.get("new_tooth"):
+                    new_src[i][tooth_field] = ch["new_tooth"]
+                    # Mirror on all common keys so any reader sees the update.
+                    for kk in ("tooth_number", "tooth", "position"):
+                        new_src[i][kk] = ch["new_tooth"]
+                    updated = True
+            if updated:
+                update_set[src_key] = new_src
+                break  # only patch the primary source
+    await db.procedures.update_one({"_id": proc_oid}, {"$set": update_set})
     await log_access(
         action="survival_review_submitted",
         outcome="success",
