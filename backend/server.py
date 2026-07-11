@@ -4279,21 +4279,43 @@ async def submit_survival_review(
                 "reason": reason,
                 "removed": bool(f.get("removed", True)),
                 "replaced": replaced,
-                "failure_date": now.isoformat(),
+                "failure_date": f.get("failure_date") or now.isoformat(),
             }
             if replaced:
                 repl = f.get("replacement") or {}
                 if not all(repl.get(k) for k in ("system", "diameter", "length")):
                     raise HTTPException(status_code=400, detail="Replacement requires system, diameter, length")
+                # iter-342 Phase B: capture lighter-subset placement data on the
+                # revision (lot #, torque, ISQ, healing_protocol) + revision
+                # numbering. When a chain already exists (Rn), append Rn+1.
+                existing_chain = (proc.get("phase2_survival_review") or {}).get("implants", {}).get(str(idx)) or {}
+                prior = existing_chain.get("replacement")
+                revision_number = 1
+                chain: List[Dict[str, Any]] = []
+                if prior:
+                    chain = list(prior.get("chain") or [])
+                    # Move the prior replacement into the chain as a failed R(n) node
+                    chain.append({**{k: v for k, v in prior.items() if k != "chain"},
+                                  "status": "Failed",
+                                  "failure_reason": reason,
+                                  "failure_date": now.isoformat()})
+                    revision_number = int(prior.get("revision_number", 1)) + 1
                 survival_map[idx]["replacement"] = {
                     "system": repl["system"],
                     "diameter": float(repl["diameter"]),
                     "length": float(repl["length"]),
+                    "lot_number": (repl.get("lot_number") or "").strip() or None,
+                    "insertion_torque_ncm": (float(repl["insertion_torque_ncm"])
+                                              if repl.get("insertion_torque_ncm") not in (None, "") else None),
+                    "isq": (float(repl["isq"]) if repl.get("isq") not in (None, "") else None),
+                    "healing_protocol": (repl.get("healing_protocol") or "").strip() or None,
+                    "surface": (repl.get("surface") or "").strip() or None,
                     "placement_date": repl.get("placement_date") or now.isoformat()[:10],
-                    "revision_number": 1,
+                    "revision_number": revision_number,
                     "parent_implant_idx": idx,
                     "status": "Active",
                     "created_at": now.isoformat(),
+                    "chain": chain,
                 }
         # Any implant not listed in failures is treated as Active.
         for i in range(len(implants)):
@@ -4301,6 +4323,8 @@ async def submit_survival_review(
                 survival_map[i] = {"status": "Active", "reviewed_at": now.isoformat()}
 
     # Persist review + implant lifecycle
+    # Mongo requires string keys on nested documents.
+    survival_map_str = {str(k): v for k, v in survival_map.items()}
     await db.procedures.update_one(
         {"_id": proc_oid},
         {"$set": {
@@ -4308,7 +4332,7 @@ async def submit_survival_review(
                 "all_survived": body.all_survived,
                 "reviewed_at": now.isoformat(),
                 "reviewed_by": current_user.get("name") or current_user.get("username"),
-                "implants": survival_map,
+                "implants": survival_map_str,
             },
             "phase2_survival_review_at": now,
         }},
@@ -4363,13 +4387,32 @@ async def get_active_implants(
                 archived.append({**imp, "implant_idx": i, "status": "Replaced",
                                  "failure_reason": entry.get("reason"),
                                  "failure_date": entry.get("failure_date")})
-                # Replacement takes its place in active
+                # Any older revisions in the chain -> archived too
+                for old in (repl.get("chain") or []):
+                    archived.append({
+                        "implant_idx": i,
+                        "tooth_number": imp.get("tooth_number") or imp.get("tooth"),
+                        "system": old.get("system"),
+                        "diameter": old.get("diameter"),
+                        "length": old.get("length"),
+                        "status": "Failed",
+                        "revision_number": old.get("revision_number", 1),
+                        "parent_implant_idx": i,
+                        "failure_reason": old.get("failure_reason"),
+                        "failure_date": old.get("failure_date"),
+                    })
+                # Latest replacement takes its place in active
                 active.append({
                     "implant_idx": i,
                     "tooth_number": imp.get("tooth_number") or imp.get("tooth"),
                     "system": repl.get("system"),
                     "diameter": repl.get("diameter"),
                     "length": repl.get("length"),
+                    "lot_number": repl.get("lot_number"),
+                    "insertion_torque_ncm": repl.get("insertion_torque_ncm"),
+                    "isq": repl.get("isq"),
+                    "healing_protocol": repl.get("healing_protocol"),
+                    "surface": repl.get("surface"),
                     "status": "Active",
                     "revision_number": repl.get("revision_number", 1),
                     "parent_implant_idx": i,
@@ -4383,6 +4426,458 @@ async def get_active_implants(
     return {"active": active, "archived": archived,
             "review_submitted": bool(review),
             "failure_reasons": FAILURE_REASONS}
+
+
+# iter-342 Phase B: Implant Lifecycle Timeline
+# ─────────────────────────────────────────────
+# Returns a per-tooth-position chronological timeline of every event on
+# that implant record: Placed → Failed → Replaced (R1) → Failed → Replaced (R2)
+# → Healed / Loaded. The Case Detail UI renders this to show the full
+# history at a glance without re-walking the survival_map structure.
+
+@api_router.get("/procedures/{procedure_id}/implant-lifecycle")
+async def get_implant_lifecycle(
+    procedure_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        proc_oid = ObjectId(procedure_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid procedure id")
+    proc = await db.procedures.find_one({"_id": proc_oid})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    implants = proc.get("implants") or proc.get("existing_implants") or []
+    review = proc.get("phase2_survival_review") or {}
+    smap = review.get("implants") or {}
+    phase2_date = proc.get("phase2_actual_done_date") or proc.get("phase2_completed_at")
+    phase3_date = proc.get("phase3_done_date") or proc.get("stage2_surgical_completed_at")
+    phase4_step2_date = proc.get("phase4_step2_done_date") or proc.get("completed_at")
+
+    positions: List[Dict[str, Any]] = []
+    for i, imp in enumerate(implants):
+        entry = smap.get(str(i)) or smap.get(i) or {}
+        tooth = imp.get("tooth_number") or imp.get("tooth") or "-"
+        events: List[Dict[str, Any]] = []
+        # R0 — original Phase 2 placement
+        events.append({
+            "kind": "placed",
+            "revision_number": 0,
+            "label": f"Placed — {imp.get('system','')} {imp.get('diameter','')}×{imp.get('length','')}mm",
+            "system": imp.get("system"),
+            "diameter": imp.get("diameter"),
+            "length": imp.get("length"),
+            "isq": imp.get("isq"),
+            "insertion_torque_ncm": imp.get("insertion_torque_ncm") or imp.get("torque"),
+            "date": phase2_date,
+        })
+        status = entry.get("status", "Active")
+        if status in ("Failed", "Replaced"):
+            events.append({
+                "kind": "failed",
+                "revision_number": 0,
+                "label": f"Failed — {entry.get('reason') or 'Unknown'}",
+                "reason": entry.get("reason"),
+                "removed": entry.get("removed"),
+                "date": entry.get("failure_date"),
+            })
+        if status == "Replaced":
+            repl = entry.get("replacement") or {}
+            # older revisions if any
+            for old in (repl.get("chain") or []):
+                events.append({
+                    "kind": "replaced",
+                    "revision_number": old.get("revision_number", 1),
+                    "label": f"Replaced (R{old.get('revision_number',1)}) — {old.get('system','')} {old.get('diameter','')}×{old.get('length','')}mm",
+                    "system": old.get("system"),
+                    "diameter": old.get("diameter"),
+                    "length": old.get("length"),
+                    "isq": old.get("isq"),
+                    "insertion_torque_ncm": old.get("insertion_torque_ncm"),
+                    "healing_protocol": old.get("healing_protocol"),
+                    "date": old.get("placement_date") or old.get("created_at"),
+                })
+                events.append({
+                    "kind": "failed",
+                    "revision_number": old.get("revision_number", 1),
+                    "label": f"Failed — {old.get('failure_reason') or 'Unknown'}",
+                    "reason": old.get("failure_reason"),
+                    "date": old.get("failure_date"),
+                })
+            # current active revision
+            events.append({
+                "kind": "replaced",
+                "revision_number": repl.get("revision_number", 1),
+                "label": f"Replaced (R{repl.get('revision_number',1)}) — {repl.get('system','')} {repl.get('diameter','')}×{repl.get('length','')}mm",
+                "system": repl.get("system"),
+                "diameter": repl.get("diameter"),
+                "length": repl.get("length"),
+                "isq": repl.get("isq"),
+                "insertion_torque_ncm": repl.get("insertion_torque_ncm"),
+                "healing_protocol": repl.get("healing_protocol"),
+                "lot_number": repl.get("lot_number"),
+                "date": repl.get("placement_date") or repl.get("created_at"),
+            })
+        if phase3_date and status in ("Active", "Replaced"):
+            events.append({
+                "kind": "healed",
+                "revision_number": (entry.get("replacement") or {}).get("revision_number", 0) if status == "Replaced" else 0,
+                "label": "Healing / 2nd Stage complete",
+                "date": phase3_date,
+            })
+        if phase4_step2_date and status in ("Active", "Replaced"):
+            events.append({
+                "kind": "loaded",
+                "revision_number": (entry.get("replacement") or {}).get("revision_number", 0) if status == "Replaced" else 0,
+                "label": "Prosthesis delivered — Loaded",
+                "date": phase4_step2_date,
+            })
+
+        current_status = status
+        current_revision = (entry.get("replacement") or {}).get("revision_number", 0) if status == "Replaced" else 0
+
+        positions.append({
+            "implant_idx": i,
+            "tooth": tooth,
+            "current_status": current_status,
+            "current_revision": current_revision,
+            "events": events,
+        })
+
+    return {
+        "procedure_id": procedure_id,
+        "review_submitted": bool(review),
+        "positions": positions,
+    }
+
+
+# iter-342 Phase C: Implant Survival Analytics
+# ────────────────────────────────────────────
+# Institutional analytics aggregations for the Admin dashboard. Reads
+# every procedure that has a Phase 2 implant record + optional survival
+# review, and produces counts, survival rates, replacement success rates,
+# failure-reason breakdown, per-system stats, per-tooth-position stats
+# and monthly time-series. Filters supported via query params.
+#
+# Access: implant_incharge + administrator only.
+
+_MAXILLA_TEETH = {11,12,13,14,15,16,17,18,21,22,23,24,25,26,27,28}
+_MANDIBLE_TEETH = {31,32,33,34,35,36,37,38,41,42,43,44,45,46,47,48}
+_ANTERIOR_TEETH = {11,12,13,21,22,23,31,32,33,41,42,43}
+_POSTERIOR_TEETH = {14,15,16,17,18,24,25,26,27,28,34,35,36,37,38,44,45,46,47,48}
+
+
+def _tooth_int(t: Any) -> Optional[int]:
+    try:
+        return int(str(t).strip())
+    except Exception:
+        return None
+
+
+def _tooth_bucket(t: Optional[int]) -> str:
+    if t is None:
+        return "unknown"
+    if t in _ANTERIOR_TEETH:
+        return "anterior_max" if t in _MAXILLA_TEETH else "anterior_mand"
+    if t in _POSTERIOR_TEETH:
+        return "posterior_max" if t in _MAXILLA_TEETH else "posterior_mand"
+    return "unknown"
+
+
+async def _load_analytics_procedures(from_date: Optional[str], to_date: Optional[str]) -> List[Dict[str, Any]]:
+    match: Dict[str, Any] = {"archived": {"$ne": True}}
+    # Placement date range = phase2_actual_done_date if present, else procedure_date
+    date_clause: Dict[str, Any] = {}
+    if from_date:
+        date_clause["$gte"] = from_date
+    if to_date:
+        date_clause["$lte"] = to_date
+    if date_clause:
+        match["$or"] = [
+            {"phase2_actual_done_date": date_clause},
+            {"procedure_date": date_clause},
+        ]
+    return await db.procedures.find(match, {
+        "implants": 1, "existing_implants": 1, "phase2_survival_review": 1,
+        "phase2_actual_done_date": 1, "procedure_date": 1,
+        "phase3_done_date": 1, "phase4_step2_done_date": 1,
+        "implant_procedure_type": 1, "student_name": 1, "supervisor_name": 1,
+        "patient_name": 1, "registration_number": 1,
+    }).to_list(20000)
+
+
+def _month_key(iso_date: Optional[str]) -> Optional[str]:
+    if not iso_date:
+        return None
+    s = str(iso_date)[:7]
+    if len(s) == 7 and s[4] == "-":
+        return s
+    return None
+
+
+def _compute_analytics(procs: List[Dict[str, Any]], filters: Dict[str, Any]) -> Dict[str, Any]:
+    system_filter = (filters.get("system") or "").strip().lower() or None
+    tooth_filter = filters.get("tooth_bucket") or None
+
+    placed = 0
+    active = 0
+    failed = 0
+    replaced_success = 0
+    replaced_refailed = 0
+    reason_counts: Dict[str, int] = {r: 0 for r in FAILURE_REASONS}
+    system_stats: Dict[str, Dict[str, int]] = {}
+    tooth_stats: Dict[str, Dict[str, int]] = {}
+    monthly_placed: Dict[str, int] = {}
+    monthly_failed: Dict[str, int] = {}
+    monthly_survival: Dict[str, Dict[str, int]] = {}
+    case_rows: List[Dict[str, Any]] = []
+
+    for p in procs:
+        implants = p.get("implants") or p.get("existing_implants") or []
+        review = p.get("phase2_survival_review") or {}
+        smap = review.get("implants") or {}
+        placed_date = p.get("phase2_actual_done_date") or p.get("procedure_date")
+        month = _month_key(placed_date)
+        for i, imp in enumerate(implants):
+            system = (imp.get("system") or "Unknown").strip()
+            tooth = _tooth_int(imp.get("tooth_number") or imp.get("tooth"))
+            bucket = _tooth_bucket(tooth)
+            if system_filter and system.lower() != system_filter:
+                continue
+            if tooth_filter and bucket != tooth_filter:
+                continue
+            placed += 1
+            if month:
+                monthly_placed[month] = monthly_placed.get(month, 0) + 1
+
+            entry = smap.get(str(i)) or smap.get(i) or {}
+            status = entry.get("status", "Active")
+            sys_bucket = system_stats.setdefault(system, {"placed": 0, "failed": 0, "active": 0, "replaced": 0})
+            sys_bucket["placed"] += 1
+            tb = tooth_stats.setdefault(bucket, {"placed": 0, "failed": 0, "active": 0, "replaced": 0})
+            tb["placed"] += 1
+
+            if status == "Active":
+                active += 1
+                sys_bucket["active"] += 1
+                tb["active"] += 1
+            elif status == "Failed":
+                failed += 1
+                sys_bucket["failed"] += 1
+                tb["failed"] += 1
+                reason = entry.get("reason") or "Unknown"
+                reason_counts[reason] = reason_counts.get(reason, 0) + 1
+                fd_month = _month_key(entry.get("failure_date"))
+                if fd_month:
+                    monthly_failed[fd_month] = monthly_failed.get(fd_month, 0) + 1
+            elif status == "Replaced":
+                # The original counts as failed for survival math
+                failed += 1
+                sys_bucket["failed"] += 1
+                tb["failed"] += 1
+                reason = entry.get("reason") or "Unknown"
+                reason_counts[reason] = reason_counts.get(reason, 0) + 1
+                fd_month = _month_key(entry.get("failure_date"))
+                if fd_month:
+                    monthly_failed[fd_month] = monthly_failed.get(fd_month, 0) + 1
+                # Latest replacement: active or failed?
+                repl = entry.get("replacement") or {}
+                # older chain revisions all count as replaced_refailed
+                for _old in (repl.get("chain") or []):
+                    replaced_refailed += 1
+                    _r = _old.get("failure_reason") or "Unknown"
+                    reason_counts[_r] = reason_counts.get(_r, 0) + 1
+                    _fdm = _month_key(_old.get("failure_date"))
+                    if _fdm:
+                        monthly_failed[_fdm] = monthly_failed.get(_fdm, 0) + 1
+                # current replacement is Active (survival status field always Active in our writer)
+                if repl:
+                    active += 1
+                    replaced_success += 1
+                    sys_bucket["replaced"] += 1
+                    tb["replaced"] += 1
+                    sys_bucket["active"] += 1
+                    tb["active"] += 1
+
+            # Monthly survival snapshot: for each month, track placed vs still active
+            if month:
+                b = monthly_survival.setdefault(month, {"placed": 0, "active": 0})
+                b["placed"] += 1
+                if status == "Active" or (status == "Replaced" and entry.get("replacement")):
+                    b["active"] += 1
+
+        # Case row for CSV export
+        case_rows.append({
+            "procedure_id": str(p.get("_id")),
+            "patient": p.get("patient_name"),
+            "registration": p.get("registration_number"),
+            "student": p.get("student_name"),
+            "supervisor": p.get("supervisor_name"),
+            "procedure_type": p.get("implant_procedure_type"),
+            "placement_date": placed_date,
+            "implants": len(implants),
+            "review_submitted": bool(review),
+            "all_survived": review.get("all_survived") if review else None,
+        })
+
+    survival_rate = round(100.0 * active / placed, 1) if placed else 0.0
+    replacement_success_rate = (
+        round(100.0 * replaced_success / (replaced_success + replaced_refailed), 1)
+        if (replaced_success + replaced_refailed) else 0.0
+    )
+
+    # Sorted monthly series
+    months = sorted(set(list(monthly_placed) + list(monthly_failed) + list(monthly_survival)))
+    time_series = [
+        {
+            "month": m,
+            "placed": monthly_placed.get(m, 0),
+            "failed": monthly_failed.get(m, 0),
+            "survival_rate": (
+                round(100.0 * monthly_survival[m]["active"] / monthly_survival[m]["placed"], 1)
+                if monthly_survival.get(m, {}).get("placed") else None
+            ),
+        }
+        for m in months
+    ]
+
+    return {
+        "counters": {
+            "placed": placed,
+            "active": active,
+            "failed": failed,
+            "replaced_success": replaced_success,
+            "replaced_refailed": replaced_refailed,
+        },
+        "rates": {
+            "survival_rate": survival_rate,
+            "replacement_success_rate": replacement_success_rate,
+        },
+        "failure_reasons": [
+            {"reason": r, "count": reason_counts.get(r, 0)} for r in FAILURE_REASONS
+        ],
+        "by_system": [
+            {"system": s, **v, "survival_rate": (round(100.0 * v["active"] / v["placed"], 1) if v["placed"] else 0.0)}
+            for s, v in sorted(system_stats.items(), key=lambda kv: -kv[1]["placed"])
+        ],
+        "by_tooth": [
+            {"bucket": b, **v, "survival_rate": (round(100.0 * v["active"] / v["placed"], 1) if v["placed"] else 0.0)}
+            for b, v in tooth_stats.items()
+        ],
+        "time_series": time_series,
+        "case_rows": case_rows,
+        "filters": {
+            "system": system_filter,
+            "tooth_bucket": tooth_filter,
+            "from": filters.get("from_date"),
+            "to": filters.get("to_date"),
+        },
+    }
+
+
+@api_router.get("/analytics/survival")
+async def get_survival_analytics(
+    request: Request,
+    system: Optional[str] = None,
+    tooth_bucket: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user.get("role") not in ("administrator", "implant_incharge"):
+        raise HTTPException(status_code=403, detail="Administrator or Implant In-Charge role required")
+    procs = await _load_analytics_procedures(from_date, to_date)
+    result = _compute_analytics(procs, {
+        "system": system, "tooth_bucket": tooth_bucket,
+        "from_date": from_date, "to_date": to_date,
+    })
+    result.pop("case_rows", None)  # Trimmed for the summary endpoint
+    await log_access(
+        action="analytics_view",
+        outcome="success",
+        resource_type="survival_analytics",
+        resource_id="global",
+        user=current_user,
+        request=request,
+        extra={"filters": result["filters"]},
+    )
+    return result
+
+
+@api_router.get("/analytics/survival/export.csv")
+async def export_survival_analytics_csv(
+    request: Request,
+    system: Optional[str] = None,
+    tooth_bucket: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user.get("role") not in ("administrator", "implant_incharge"):
+        raise HTTPException(status_code=403, detail="Administrator or Implant In-Charge role required")
+    procs = await _load_analytics_procedures(from_date, to_date)
+    result = _compute_analytics(procs, {
+        "system": system, "tooth_bucket": tooth_bucket,
+        "from_date": from_date, "to_date": to_date,
+    })
+
+    import io as _io
+    import csv as _csv
+    buf = _io.StringIO()
+    w = _csv.writer(buf)
+    w.writerow(["Implanr — Implant Survival Analytics Export"])
+    w.writerow(["Generated at", datetime.now(timezone.utc).isoformat()])
+    w.writerow(["Filters", f"system={system or 'all'}, tooth_bucket={tooth_bucket or 'all'}, from={from_date or '-'}, to={to_date or '-'}"])
+    w.writerow([])
+    w.writerow(["## Summary Counters"])
+    w.writerow(["Placed", "Active", "Failed", "Replaced (success)", "Replaced (re-failed)", "Survival %", "Replacement Success %"])
+    c = result["counters"]; r = result["rates"]
+    w.writerow([c["placed"], c["active"], c["failed"], c["replaced_success"], c["replaced_refailed"], r["survival_rate"], r["replacement_success_rate"]])
+    w.writerow([])
+    w.writerow(["## Failure Reasons"])
+    w.writerow(["Reason", "Count"])
+    for row in result["failure_reasons"]:
+        w.writerow([row["reason"], row["count"]])
+    w.writerow([])
+    w.writerow(["## By System"])
+    w.writerow(["System", "Placed", "Active", "Failed", "Replaced", "Survival %"])
+    for row in result["by_system"]:
+        w.writerow([row["system"], row["placed"], row["active"], row["failed"], row["replaced"], row["survival_rate"]])
+    w.writerow([])
+    w.writerow(["## By Tooth Bucket"])
+    w.writerow(["Bucket", "Placed", "Active", "Failed", "Replaced", "Survival %"])
+    for row in result["by_tooth"]:
+        w.writerow([row["bucket"], row["placed"], row["active"], row["failed"], row["replaced"], row["survival_rate"]])
+    w.writerow([])
+    w.writerow(["## Monthly Time Series"])
+    w.writerow(["Month", "Placed", "Failed", "Survival %"])
+    for row in result["time_series"]:
+        w.writerow([row["month"], row["placed"], row["failed"], row["survival_rate"] if row["survival_rate"] is not None else ""])
+    w.writerow([])
+    w.writerow(["## Case Rows"])
+    w.writerow(["Procedure ID", "Patient", "Registration", "Student", "Supervisor", "Procedure Type", "Placement Date", "Implants", "Review Submitted", "All Survived"])
+    for row in result["case_rows"]:
+        w.writerow([row["procedure_id"], row["patient"] or "", row["registration"] or "", row["student"] or "",
+                    row["supervisor"] or "", row["procedure_type"] or "", row["placement_date"] or "",
+                    row["implants"], row["review_submitted"], row["all_survived"] if row["all_survived"] is not None else ""])
+
+    await log_access(
+        action="analytics_export",
+        outcome="success",
+        resource_type="survival_analytics_csv",
+        resource_id="global",
+        user=current_user,
+        request=request,
+    )
+
+    csv_bytes = buf.getvalue().encode("utf-8")
+    filename = f"implanr-survival-analytics-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}.csv"
+    return Response(
+        content=csv_bytes,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ── Treatment Timeline Backfill (iter-332) ─────────────────────────
