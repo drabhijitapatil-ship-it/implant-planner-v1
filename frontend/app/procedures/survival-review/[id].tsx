@@ -170,13 +170,13 @@ export default function SurvivalReview() {
               {failed && (
                 <View style={{marginTop:14,gap:10}}>
                   <Text style={s.lbl}>Reason for failure</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:8}}>
+                  <View style={{flexDirection:'row', flexWrap:'wrap', gap:8}}>
                     {REASONS.map(r => (
-                      <TouchableOpacity key={r} style={[s.chip, f.reason === r && s.chipOn]} onPress={() => setField(i, 'reason', r)} data-testid={`imp-${i}-reason-${r.replace(/\s+/g,'-')}`}>
+                      <TouchableOpacity key={r} style={[s.chip, f.reason === r && s.chipOn]} onPress={() => setField(i, 'reason', r)} data-testid={`imp-${i}-reason-${r.replace(/\s+/g,'-')}`} testID={`imp-${i}-reason-${r.replace(/\s+/g,'-')}`}>
                         <Text style={[s.chipT, f.reason === r && s.chipTOn]}>{r}</Text>
                       </TouchableOpacity>
                     ))}
-                  </ScrollView>
+                  </View>
                   <View style={{flexDirection:'row',alignItems:'center',gap:12,marginTop:6}}>
                     <Text style={s.lbl}>Was it removed?</Text>
                     <TouchableOpacity style={[s.pillTiny, f.removed && s.pillOn]} onPress={() => setField(i, 'removed', true)}><Text style={[s.pillTT, f.removed && s.pillTOn]}>Yes</Text></TouchableOpacity>
