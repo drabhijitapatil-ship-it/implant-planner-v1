@@ -1725,7 +1725,7 @@ function ModalContent(props: any) {
                     implantLengthMm: imp.length,
                     procedureType,
                   });
-                  if (v.kind === 'length_block') return -Infinity;
+                  if (v.kind === 'length_warning') return -Infinity;
                   if (v.kind === 'width_warning') return v.marginMm;
                   return Infinity;
                 };
@@ -1765,16 +1765,38 @@ function ModalContent(props: any) {
                         implantLengthMm: imp.length,
                         procedureType,
                       });
-                      const blocked = verdict.kind === 'length_block';
+                      const blocked = verdict.kind === 'length_warning';
                       const warning = verdict.kind === 'width_warning';
                       const chip = shortSafetyChip(verdict);
                       const handleTap = () => {
                         if (isSelected) { setSelectedImplant(null); return; }
-                        if (blocked) { Alert.alert('Selection blocked', verdict.message); return; }
                         const apply = () => {
                           setSelectedImplant({ diameter: imp.diameter, length: imp.length, brand: imp.brand || selectedSystem?.brand || '', system: imp.system || selectedSystem?.system || '' });
                           setShowProtocol(false);
                         };
+                        if (blocked) {
+                          // iter-340: soft confirmation instead of hard block for posterior length.
+                          Alert.alert('Bone height conflict', `${verdict.message}\n\nDo you choose to proceed?`, [
+                            { text: 'Exit', style: 'cancel' },
+                            { text: 'Continue', onPress: async () => {
+                              apply();
+                              try {
+                                await api.post('/audit/safety-override', {
+                                  context: 'phase1_step2_length',
+                                  tooth_position: position,
+                                  bone_width: parseFloat(boneWidth) || null,
+                                  bone_height: parseFloat(boneHeight) || null,
+                                  implant_diameter: imp.diameter,
+                                  implant_length: imp.length,
+                                  short_by: (verdict as any).actualShortBy ?? null,
+                                  verdict_kind: verdict.kind,
+                                  system: `${imp.brand || ''} - ${imp.system || ''}`,
+                                });
+                              } catch {/* non-fatal */}
+                            }},
+                          ]);
+                          return;
+                        }
                         if (warning) {
                           Alert.alert('Bone margin warning', verdict.message, [
                             { text: 'Change the selection', style: 'cancel' },

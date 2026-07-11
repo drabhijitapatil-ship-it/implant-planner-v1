@@ -33,8 +33,11 @@ export type SafetyVerdict =
       marginMm: number; // available bone on each side, may be negative
     }
   | {
-      /** Rule 2 — hard block. Selection cannot proceed. */
-      kind: 'length_block';
+      /** Rule 2 — soft warning (iter-340). Selection can proceed with a
+       *  2-button confirmation dialog + audit-override log. Downgraded
+       *  from a hard block per clinical review — the safety chip stays
+       *  visible so the clinician always sees the risk before tapping. */
+      kind: 'length_warning';
       message: string;
       requiredShortBy: number; // 1.5
       actualShortBy: number;   // bone_height - implant_length (may be ≤ 0)
@@ -55,9 +58,11 @@ export type SafetyArgs = {
 };
 
 /**
- * Returns the FIRST blocking verdict (length_block > width_warning > ok).
- * Length is checked first because it's a hard block — the student needs to
- * see it before they can address a softer width warning.
+ * Returns the FIRST safety verdict (length_warning > width_warning > ok).
+ * Length is checked first because it involves anatomical structures
+ * (sinus / IAN) — the clinician needs to acknowledge that risk first.
+ * iter-340: length is a SOFT warning (Continue / Exit confirmation),
+ * no longer a hard block.
  */
 export function evaluateImplantSafety(args: SafetyArgs): SafetyVerdict {
   const { toothPosition, boneWidthMm, boneHeightMm, implantDiameterMm, implantLengthMm, procedureType } = args;
@@ -71,8 +76,8 @@ export function evaluateImplantSafety(args: SafetyArgs): SafetyVerdict {
       const isMax = isMaxillaryPosterior(toothPosition);
       const structure = isMax ? 'maxillary sinus floor' : 'inferior alveolar nerve';
       return {
-        kind: 'length_block',
-        message: `Choose an implant at least 1.5–2 mm shorter than the entered bone length to protect the ${structure}.`,
+        kind: 'length_warning',
+        message: `Selected implant length is ${implantLengthMm} mm and bone height is ${boneHeightMm} mm. Recommended clearance to the ${structure} is at least 1.5–2 mm.`,
         requiredShortBy: 1.5,
         actualShortBy: +shortBy.toFixed(2),
       };
@@ -119,7 +124,7 @@ export function annotateImplantSafety<T extends { diameter?: number; length?: nu
  * Short reason chip text for the "Suggest Me" greyed-out card.
  */
 export function shortSafetyChip(v: SafetyVerdict): string | null {
-  if (v.kind === 'length_block') return 'Too long — vital structure at risk';
+  if (v.kind === 'length_warning') return 'Bone height conflict';
   if (v.kind === 'width_warning') return `Tight bone — ${v.marginMm.toFixed(1)} mm margin`;
   return null;
 }

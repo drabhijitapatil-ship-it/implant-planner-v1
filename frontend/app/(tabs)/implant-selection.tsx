@@ -650,36 +650,36 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
     boneHeightMm: parseFloat(boneHeight) || null,
   });
   const _safetyRank = (v: SafetyVerdict) =>
-    v.kind === 'length_block' ? -Infinity : v.kind === 'width_warning' ? v.marginMm : Infinity;
+    v.kind === 'length_warning' ? -Infinity : v.kind === 'width_warning' ? v.marginMm : Infinity;
   const safetyAnnotated = [..._annotated].sort((a, b) => _safetyRank(b._safety) - _safetyRank(a._safety));
   const baseImplants: Implant[] = safetyAnnotated;
 
-  // Safety-aware tap — soft warning for width, hard block for length.
-  // Width override is logged to the access_logs collection per HIPAA spec Q3=a.
+  // Safety-aware tap — soft warning for width AND for length (iter-340). Both
+  // get a 2-button confirmation; overrides log to /audit/safety-override.
   const handleImplantTap = (idx: number, imp: any) => {
     if (selectedIdx === idx) { setSelectedIdx(null); return; } // unselect — always allowed
     const verdict = safetyAnnotated[idx]?._safety as SafetyVerdict | undefined;
     if (!verdict || verdict.kind === 'ok') { setSelectedIdx(idx); return; }
-    if (verdict.kind === 'length_block') {
-      Alert.alert('Selection blocked', verdict.message);
-      return;
-    }
-    // width_warning — soft, two options.
-    Alert.alert('Bone margin warning', verdict.message, [
-      { text: 'Change the selection', style: 'cancel' },
+    const isLength = verdict.kind === 'length_warning';
+    const title = isLength ? 'Bone height conflict' : 'Bone margin warning';
+    const body = isLength ? `${verdict.message}\n\nDo you choose to proceed?` : verdict.message;
+    Alert.alert(title, body, [
+      { text: 'Exit', style: 'cancel' },
       {
-        text: 'Continue with selection',
+        text: 'Continue',
         onPress: async () => {
           setSelectedIdx(idx);
           try {
             await api.post('/audit/safety-override', {
-              context: 'implant_selection_home',
+              context: isLength ? 'implant_selection_home_length' : 'implant_selection_home',
               tooth_position: tooth,
               bone_width: parseFloat(boneWidth) || null,
               bone_height: parseFloat(boneHeight) || null,
               implant_diameter: imp.diameter,
               implant_length: imp.length,
-              margin_mm: (verdict as any).marginMm,
+              margin_mm: (verdict as any).marginMm ?? null,
+              short_by: (verdict as any).actualShortBy ?? null,
+              verdict_kind: verdict.kind,
               system: `${imp.brand} - ${imp.system}`,
             });
           } catch {/* non-fatal */}
@@ -794,12 +794,15 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
             {visibleImplants.map((imp: Implant, i: number) => {
               const isSelected = selectedIdx === i;
               const verdict = safetyAnnotated[i]?._safety;
-              const blocked = verdict?.kind === 'length_block';
+              // iter-340: posterior length is now a soft warning (not a hard block).
+              // Both length + width verdicts render as amber warning chips.
+              const lengthWarn = verdict?.kind === 'length_warning';
               const warning = verdict?.kind === 'width_warning';
+              const hasWarning = lengthWarn || warning;
               const chip = verdict ? shortSafetyChip(verdict) : null;
               return (
                 <TouchableOpacity key={`r-${i}`}
-                  style={[s.impCard, isSelected && s.impCardSelected, blocked && { opacity: 0.55 }]}
+                  style={[s.impCard, isSelected && s.impCardSelected]}
                   onPress={() => handleImplantTap(i, imp)}
                   activeOpacity={0.7}
                   data-testid={`recommended-implant-${i}`}>
@@ -811,13 +814,13 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
                       <View style={[s.specBadge, isSelected && { backgroundColor: '#BBDEFB' }]}><Text style={[s.specText, isSelected && { color: '#0D47A1' }]}>Length: {imp.length} mm</Text></View>
                     </View>
                     {chip && (
-                      <View style={[s.safetyChip, blocked ? s.safetyChipBlocked : s.safetyChipWarn]} testID={`safety-chip-${i}`}>
-                        <Ionicons name={blocked ? 'close-circle' : 'warning'} size={12} color={blocked ? '#B71C1C' : '#E65100'} />
-                        <Text style={[s.safetyChipText, { color: blocked ? '#B71C1C' : '#E65100' }]}>{chip}</Text>
+                      <View style={[s.safetyChip, s.safetyChipWarn]} testID={`safety-chip-${i}`}>
+                        <Ionicons name="warning" size={12} color="#E65100" />
+                        <Text style={[s.safetyChipText, { color: '#E65100' }]}>{chip}</Text>
                       </View>
                     )}
                   </View>
-                  {i === 0 && !blocked && !warning && <View style={s.bestBadge}><Text style={s.bestBadgeText}>Best</Text></View>}
+                  {i === 0 && !hasWarning && <View style={s.bestBadge}><Text style={s.bestBadgeText}>Best</Text></View>}
                 </TouchableOpacity>
               );
             })}
@@ -1075,25 +1078,26 @@ function SuggestResult({ result, tooth, toothInfo, onReset, onOpenProtocol }: {
     if (selectedKey === key) { setSelectedKey(null); return; }
     const verdict = imp._safety as SafetyVerdict | undefined;
     if (!verdict || verdict.kind === 'ok') { setSelectedKey(key); return; }
-    if (verdict.kind === 'length_block') {
-      Alert.alert('Selection blocked', verdict.message);
-      return;
-    }
-    Alert.alert('Bone margin warning', verdict.message, [
-      { text: 'Change the selection', style: 'cancel' },
+    const isLength = verdict.kind === 'length_warning';
+    const title = isLength ? 'Bone height conflict' : 'Bone margin warning';
+    const body = isLength ? `${verdict.message}\n\nDo you choose to proceed?` : verdict.message;
+    Alert.alert(title, body, [
+      { text: 'Exit', style: 'cancel' },
       {
-        text: 'Continue with selection',
+        text: 'Continue',
         onPress: async () => {
           setSelectedKey(key);
           try {
             await api.post('/audit/safety-override', {
-              context: 'implant_selection_home_suggest',
+              context: isLength ? 'implant_selection_home_suggest_length' : 'implant_selection_home_suggest',
               tooth_position: tooth,
               bone_width: cg.bone_width != null ? Number(cg.bone_width) : null,
               bone_height: cg.bone_height != null ? Number(cg.bone_height) : null,
               implant_diameter: imp.diameter,
               implant_length: imp.length,
-              margin_mm: (verdict as any).marginMm,
+              margin_mm: (verdict as any).marginMm ?? null,
+              short_by: (verdict as any).actualShortBy ?? null,
+              verdict_kind: verdict.kind,
               system: `${sys.brand} - ${sys.system}`,
             });
           } catch {/* non-fatal */}
@@ -1223,23 +1227,23 @@ function SuggestResult({ result, tooth, toothInfo, onReset, onOpenProtocol }: {
                     const key = `${i}-${j}`;
                     const isSelected = selectedKey === key;
                     const verdict = imp._safety as SafetyVerdict | undefined;
-                    const blocked = verdict?.kind === 'length_block';
-                    const warning = verdict?.kind === 'width_warning';
+                    // iter-340: both length + width render as amber warnings (no hard block).
+                    const hasWarning = verdict && verdict.kind !== 'ok';
                     const chip = verdict ? shortSafetyChip(verdict) : null;
                     return (
                       <View key={`imp-${j}`} style={{ alignItems: 'flex-start' }}>
                         <TouchableOpacity
-                          style={[s.sugSizeBadge, isSelected && s.sugSizeBadgeSelected, blocked && { opacity: 0.55 }]}
+                          style={[s.sugSizeBadge, isSelected && s.sugSizeBadgeSelected]}
                           onPress={() => handleSuggestTap(i, j, sys, imp)}
                           activeOpacity={0.7}
                           data-testid={`suggest-implant-${i}-${j}`}>
                           <Ionicons name={isSelected ? 'radio-button-on' : 'radio-button-off'} size={14} color={isSelected ? '#0D47A1' : '#66BB6A'} />
                           <Text style={[s.sugSizeText, isSelected && { color: '#0D47A1' }]}>D: {imp.diameter} mm  L: {imp.length} mm</Text>
                         </TouchableOpacity>
-                        {chip && (
-                          <View style={[s.safetyChip, blocked ? s.safetyChipBlocked : s.safetyChipWarn]} testID={`suggest-safety-chip-${i}-${j}`}>
-                            <Ionicons name={blocked ? 'close-circle' : 'warning'} size={12} color={blocked ? '#B71C1C' : '#E65100'} />
-                            <Text style={[s.safetyChipText, { color: blocked ? '#B71C1C' : '#E65100' }]}>{chip}</Text>
+                        {chip && hasWarning && (
+                          <View style={[s.safetyChip, s.safetyChipWarn]} testID={`suggest-safety-chip-${i}-${j}`}>
+                            <Ionicons name="warning" size={12} color="#E65100" />
+                            <Text style={[s.safetyChipText, { color: '#E65100' }]}>{chip}</Text>
                           </View>
                         )}
                       </View>
