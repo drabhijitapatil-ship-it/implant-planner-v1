@@ -597,16 +597,22 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
   const canAddImplant = canEdit && !phase2Done;
   const canDeleteImplant = canEdit && !phase2Done;
 
+  const [survivalReview, setSurvivalReview] = useState<any | null>(null);
+
   const loadData = useCallback(async () => {
     try {
-      const [planRes, sysRes, toothRes] = await Promise.allSettled([
+      const [planRes, sysRes, toothRes, procRes] = await Promise.allSettled([
         api.get(`/procedures/${procedureId}/implant-plan`),
         api.get('/implant-library/systems'),
         api.get('/implant-library/tooth-recommendations'),
+        api.get(`/procedures/${procedureId}`),
       ]);
       if (planRes.status === 'fulfilled') setPlans(planRes.value.data.implant_plans || []);
       if (sysRes.status === 'fulfilled') setSystems(sysRes.value.data || []);
       if (toothRes.status === 'fulfilled') setToothRecs(toothRes.value.data || {});
+      // iter-345: load survival review so Implant Planning cards can show
+      // Active/Inactive badges + append replacement cards at the bottom.
+      if (procRes.status === 'fulfilled') setSurvivalReview(procRes.value.data?.phase2_survival_review || null);
     } catch (err) {
       console.error('Failed to load implant planning data:', err);
     } finally {
@@ -718,8 +724,16 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
       {/* Saved Implant Cards */}
       {plans.map((plan, idx) => {
         const rec = toothRecs[plan.position];
+        // iter-345: derive Active/Inactive from survival review data.
+        const surv = (survivalReview?.implants || {})[String(idx)] || {};
+        const isInactive = surv?.status === 'Failed' || surv?.status === 'Replaced';
         return (
-          <View key={`${plan.position}-${idx}`} style={st.implantCard} data-testid={`implant-plan-${idx}`}>
+          <View key={`${plan.position}-${idx}`} style={[st.implantCard, isInactive && st.implantCardInactive]} data-testid={`implant-plan-${idx}`}>
+            {/* Active/Inactive badge */}
+            <View style={[st.statusBadge, isInactive ? st.statusBadgeInactive : st.statusBadgeActive]} data-testid={`implant-plan-status-${idx}`}>
+              <Ionicons name={isInactive ? 'close-circle' : 'checkmark-circle'} size={12} color="#FFF" />
+              <Text style={st.statusBadgeText}>{isInactive ? 'Inactive' : 'Active'}</Text>
+            </View>
             <View style={st.implantCardHeader}>
               <View style={st.positionBadge}>
                 <Text style={st.positionText}>{plan.position}</Text>
@@ -728,15 +742,21 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
                 brand={plan.brand}
                 system={plan.system}
                 diameter={plan.diameter}
-                active
+                active={!isInactive}
                 testID={`implant-plan-stripe-${idx}`}
               />
               <View style={st.implantInfo}>
-                <Text style={st.implantTitle}>{plan.brand} - {plan.system}</Text>
-                <Text style={st.implantSpecs}>
+                <Text style={[st.implantTitle, isInactive && st.textMuted]}>{plan.brand} - {plan.system}</Text>
+                <Text style={[st.implantSpecs, isInactive && st.textMuted]}>
                   D: {plan.diameter}mm | L: {plan.length}mm
                   {rec ? ` | ${rec.region}` : ''}
                 </Text>
+                {isInactive && (
+                  <Text style={st.inactiveNote}>
+                    {surv?.status === 'Replaced' ? 'Failed — replaced' : 'Failed'}
+                    {surv?.reason ? ` · ${surv.reason}` : ''}
+                  </Text>
+                )}
               </View>
               {plan.risk_level && (
                 <View style={[st.riskBadge, { backgroundColor: plan.risk_level === 'Low' ? '#E8F5E9' : plan.risk_level === 'Moderate' ? '#FFF3E0' : '#FFEBEE' }]}>
@@ -851,6 +871,55 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
           </View>
         );
       })}
+
+      {/* iter-345: Revision (replacement) implant cards from Phase 2 survival
+          review — appended at the bottom of the Implant Planning list.
+          Each card mirrors the default planning card layout with an Active
+          badge and links back to the failed original by tooth position. */}
+      {survivalReview?.implants ? Object.entries(survivalReview.implants).map(([keyStr, entry]: [string, any]) => {
+        const repl = entry?.replacement;
+        if (!repl) return null;
+        const originalIdx = Number(keyStr);
+        const originalPlan = plans[originalIdx];
+        const tooth = repl.tooth_number || originalPlan?.position || entry?.new_tooth_number || '-';
+        const brand = repl.brand || (repl.system || '').split(' — ')[0] || repl.system || 'System';
+        const systemName = repl.system_name || (repl.system || '').split(' — ')[1] || repl.system || '';
+        return (
+          <View key={`revision-${keyStr}`} style={st.implantCard} data-testid={`implant-revision-${keyStr}`}>
+            <View style={[st.statusBadge, st.statusBadgeActive]}>
+              <Ionicons name="checkmark-circle" size={12} color="#FFF" />
+              <Text style={st.statusBadgeText}>Active</Text>
+            </View>
+            <View style={st.implantCardHeader}>
+              <View style={[st.positionBadge, { backgroundColor: '#2E7D32' }]}>
+                <Text style={st.positionText}>{tooth}</Text>
+              </View>
+              <ColorStripe brand={brand} system={systemName} diameter={repl.diameter} active testID={`implant-revision-stripe-${keyStr}`} />
+              <View style={st.implantInfo}>
+                <Text style={st.implantTitle}>{brand} {systemName ? `- ${systemName}` : ''}</Text>
+                <Text style={st.implantSpecs}>D: {repl.diameter}mm | L: {repl.length}mm</Text>
+                <Text style={st.revisionNote}>Revision R{repl.revision_number || 1} · replaced #{originalPlan?.position || tooth}</Text>
+              </View>
+            </View>
+            <View style={st.implantDetails}>
+              {repl.insertion_torque_ncm != null && (
+                <View style={st.torqueRow}>
+                  <Ionicons name="speedometer" size={14} color="#FF6D00" />
+                  <Text style={st.torqueText}>Torque: <Text style={st.torqueValue}>{repl.insertion_torque_ncm} Ncm</Text></Text>
+                </View>
+              )}
+              {repl.isq != null && <Text style={st.detailText}>ISQ: {repl.isq}</Text>}
+              {repl.procedure_type && <Text style={st.detailText}>Procedure: {repl.procedure_type}
+                {repl.prosthetic_component ? ` · ${repl.prosthetic_component}` : ''}
+                {repl.healing_abutment_mm != null ? ` (${repl.healing_abutment_mm}mm)` : ''}
+                {repl.immediate_loading_prosthesis ? ` · ${repl.immediate_loading_prosthesis}` : ''}
+              </Text>}
+              {repl.lot_number && <Text style={st.detailText}>Lot: {repl.lot_number}</Text>}
+              {repl.placement_date && <Text style={st.detailText}>Placed on: {repl.placement_date}</Text>}
+            </View>
+          </View>
+        );
+      }) : null}
 
       {plans.length === 0 && (
         <View style={st.emptyState}>
@@ -2193,7 +2262,15 @@ const st = StyleSheet.create({
   headerTitle: { fontSize: 16, fontWeight: '700', color: '#1A1A1A' },
   badge: { backgroundColor: '#1E88E5', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
   badgeText: { color: '#FFF', fontSize: 12, fontWeight: '600' },
-  implantCard: { backgroundColor: '#FFF', marginTop: 1, padding: 14 },
+  implantCard: { backgroundColor: '#FFF', marginTop: 1, padding: 14, position: 'relative' },
+  implantCardInactive: { backgroundColor: '#FAFAFA', opacity: 0.72 },
+  textMuted: { color: '#78909C' },
+  inactiveNote: { fontSize: 11, color: '#B71C1C', fontStyle: 'italic', marginTop: 3, fontWeight: '600' },
+  revisionNote: { fontSize: 11, color: '#2E7D32', fontStyle: 'italic', marginTop: 3, fontWeight: '600' },
+  statusBadge: { position: 'absolute', top: 8, right: 8, flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, zIndex: 2 },
+  statusBadgeActive: { backgroundColor: '#2E7D32' },
+  statusBadgeInactive: { backgroundColor: '#90A4AE' },
+  statusBadgeText: { color: '#FFF', fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.4 },
   implantCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   positionBadge: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#E3F2FD', alignItems: 'center', justifyContent: 'center' },
   positionText: { fontSize: 14, fontWeight: '700', color: '#1565C0' },
