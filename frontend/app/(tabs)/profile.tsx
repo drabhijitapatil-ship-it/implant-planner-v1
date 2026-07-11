@@ -35,6 +35,7 @@ export default function ProfileScreen() {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
   const isIncharge = user?.role === 'implant_incharge';
+  const isOrgAdmin = !!user?.is_admin;
 
   const fetchOrg = async () => {
     try {
@@ -278,8 +279,18 @@ export default function ProfileScreen() {
           </TouchableOpacity>
           
           <Text style={styles.userName}>{user?.name}</Text>
-          <View style={[styles.roleBadge, { backgroundColor: getRoleColor(user?.role || '') }]}>
-            <Text style={styles.roleText}>{getRoleLabel(user?.role || '')}</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
+            <View style={[styles.roleBadge, { backgroundColor: getRoleColor(user?.role || '') }]}>
+              <Text style={styles.roleText}>{getRoleLabel(user?.role || '')}</Text>
+            </View>
+            {isOrgAdmin && (
+              <View
+                style={[styles.roleBadge, { backgroundColor: '#B8860B' }]}
+                data-testid="profile-org-admin-badge"
+              >
+                <Text style={styles.roleText}>ORG ADMIN</Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -308,7 +319,7 @@ export default function ProfileScreen() {
           </View>
 
           {org && (
-            <View style={isIncharge ? styles.rowItem : [styles.rowItem, styles.rowItemLast]}>
+            <View style={(isIncharge || isOrgAdmin) ? styles.rowItem : [styles.rowItem, styles.rowItemLast]}>
               <View style={[styles.iconBadge, { backgroundColor: '#E0F2F1' }]}>
                 <Ionicons name="business" size={20} color="#00695C" />
               </View>
@@ -325,7 +336,7 @@ export default function ProfileScreen() {
           {/* Organization Settings (scheduling, logo, etc.) — Implant In-Charge only. */}
           {isIncharge && (
             <TouchableOpacity
-              style={[styles.rowItem, styles.rowItemLast]}
+              style={isOrgAdmin ? styles.rowItem : [styles.rowItem, styles.rowItemLast]}
               onPress={() => router.push('/admin/scheduling-settings')}
               data-testid="profile-org-settings-btn"
             >
@@ -335,6 +346,24 @@ export default function ProfileScreen() {
               <View style={styles.rowContent}>
                 <Text style={styles.rowLabel}>Settings</Text>
                 <Text style={styles.rowValue}>Organization logo, scheduling &amp; more</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+            </TouchableOpacity>
+          )}
+
+          {/* Departments — org admin only (the org founder, not every Implant In-Charge). */}
+          {isOrgAdmin && (
+            <TouchableOpacity
+              style={[styles.rowItem, styles.rowItemLast]}
+              onPress={() => router.push('/admin/departments' as any)}
+              data-testid="profile-departments-btn"
+            >
+              <View style={[styles.iconBadge, { backgroundColor: '#E3F2FD' }]}>
+                <Ionicons name="business-outline" size={20} color="#1565C0" />
+              </View>
+              <View style={styles.rowContent}>
+                <Text style={styles.rowLabel}>Departments</Text>
+                <Text style={styles.rowValue}>Create departments &amp; assign incharges</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
             </TouchableOpacity>
@@ -411,6 +440,26 @@ export default function ProfileScreen() {
               </View>
               <Text style={styles.photoButtonText}>Audit log</Text>
               <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+            </TouchableOpacity>
+            <TouchableOpacity
+        style={[styles.rowItem, styles.rowItemLast]}
+              onPress={() => router.push('/admin/backfill-timeline' as any)}
+              data-testid="link-backfill-timeline"
+              testID="link-backfill-timeline"
+            >
+              <Ionicons name="calendar-outline" size={22} color="#1565C0" />
+              <Text style={styles.photoButtonText}>Backfill treatment timeline</Text>
+              <Ionicons name="chevron-forward" size={18} color="#999" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.rowItem, styles.rowItemLast]}
+              onPress={() => router.push('/admin/survival-analytics' as any)}
+              data-testid="link-survival-analytics"
+              testID="link-survival-analytics"
+            >
+              <Ionicons name="bar-chart-outline" size={22} color="#1565C0" />
+              <Text style={styles.photoButtonText}>Implant survival analytics</Text>
+              <Ionicons name="chevron-forward" size={18} color="#999" />
             </TouchableOpacity>
           </View>
         )}

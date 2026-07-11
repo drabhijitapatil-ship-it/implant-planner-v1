@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,8 +12,6 @@ import {
   Pressable,
   Alert,
   Platform,
-  KeyboardAvoidingView,
-  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,8 +19,8 @@ import * as Clipboard from 'expo-clipboard';
 import api from '../../utils/api';
 import DrillingProtocolScreen from '../../components/DrillingProtocol';
 import { getImplantDetails } from '../../constants/implantIndications';
-import { evaluateImplantSafety, annotateImplantSafety, shortSafetyChip, type SafetyVerdict } from '../../utils/implantSafety';
 import ColorStripe from '../../components/ColorStripe';
+import { evaluateImplantSafety, annotateImplantSafety, shortSafetyChip, type SafetyVerdict } from '../../utils/implantSafety';
 
 // ── Types ──────────────────────────────────────────────────
 type ImplantSystem = {
@@ -145,17 +143,6 @@ function ToothRecBox({ tooth, info }: { tooth: string; info: ToothRec }) {
 
 // ── MAIN SCREEN ────────────────────────────────────────────
 export default function ImplantSelectionScreen() {
-  const { width } = useWindowDimensions();
-  const isTablet = width >= 768;
-
-  const s = useMemo(() => ({
-    ...staticStyles,
-    scroll: [staticStyles.scroll, isTablet && { maxWidth: 800, alignSelf: 'center', width: '100%' }],
-    tabBar: [staticStyles.tabBar, isTablet && { maxWidth: 800, alignSelf: 'center', width: '100%' }],
-    modalOverlay: [staticStyles.modalOverlay, isTablet && { justifyContent: 'center', alignItems: 'center' }],
-    modalContent: [staticStyles.modalContent, isTablet && { maxWidth: 600, width: '90%', borderRadius: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%' }],
-  }), [isTablet]);
-
   const [activeTab, setActiveTab] = useState<'choose' | 'suggest'>('choose');
   const [systems, setSystems] = useState<ImplantSystem[]>([]);
   const [toothRecs, setToothRecs] = useState<Record<string, ToothRec>>({});
@@ -263,14 +250,14 @@ export default function ImplantSelectionScreen() {
   const sToothInfo = sTooth ? toothRecs[sTooth] : null;
 
   if (loading) return (
-    <View style={s.container}>
+    <SafeAreaView style={s.container} edges={['bottom']}>
       <View style={s.center}><ActivityIndicator size="large" color="#1E88E5" /><Text style={s.centerText}>Loading implant data...</Text></View>
-    </View>
+    </SafeAreaView>
   );
   if (loadError) return (
-    <View style={s.container}>
+    <SafeAreaView style={s.container} edges={['bottom']}>
       <View style={s.center}><Ionicons name="alert-circle" size={48} color="#D32F2F" /><Text style={s.errText}>{loadError}</Text></View>
-    </View>
+    </SafeAreaView>
   );
 
   // Show Drilling Protocol screen as full overlay
@@ -285,12 +272,8 @@ export default function ImplantSelectionScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={s.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
-    >
-      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+    <SafeAreaView style={s.container} edges={['bottom']}>
+      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={s.header}>
           <Ionicons name="medical" size={26} color="#1E88E5" />
@@ -499,37 +482,73 @@ export default function ImplantSelectionScreen() {
                 showsVerticalScrollIndicator
                 keyboardShouldPersistTaps="handled"
                 ListFooterComponent={<View style={{ height: 30 }} />}
-                renderItem={({ item, index: i }) => {
-                  const isSel = cSystem?.brand === item.brand && cSystem?.system === item.system;
-                  const isRestricted = item.restricted_teeth && cTooth && !item.restricted_teeth.includes(cTooth);
-                  return (
-                    <TouchableOpacity key={`${item.brand}-${item.system}-${i}`}
-                      style={[s.ddItem, isSel && s.ddItemActive, isRestricted && s.ddItemRestricted]}
-                      onPress={() => {
-                        if (isRestricted) { Alert.alert('Not Indicated', `${item.brand} – ${item.system} is not indicated for tooth ${cTooth}.\n\n${item.indication}`); return; }
-                        setCSystem(item); setShowDropdown(false); setCWidth(''); setCHeight(''); setCResult(null);
-                      }}
-                      activeOpacity={isRestricted ? 1 : 0.6} data-testid={`system-option-${i}`}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[s.ddItemTitle, isRestricted && { color: '#9E9E9E' }]}>{item.brand} – {item.system}</Text>
-                        {item.indication ? <Text style={[s.ddItemInd, isRestricted && { color: '#B0BEC5' }]} numberOfLines={2}>{item.indication}</Text> : null}
-                        <Text style={[s.ddItemSizes, isRestricted && { color: '#B0BEC5' }]}>
-                          {item.count} sizes | D: {item.diameters[0]}–{item.diameters[item.diameters.length - 1]} mm | L: {item.lengths[0]}–{item.lengths[item.lengths.length - 1]} mm
-                        </Text>
-                        {isRestricted && (
-                          <View style={s.restrictBadge}><Ionicons name="lock-closed" size={10} color="#E53935" /><Text style={s.restrictText}>Not for tooth {cTooth}</Text></View>
-                        )}
-                      </View>
-                      {isSel && <Ionicons name="checkmark-circle" size={22} color="#1E88E5" />}
-                    </TouchableOpacity>
-                  );
-                }}
+                renderItem={({ item, index: i }) => (
+                  <SystemDropdownRow
+                    item={item}
+                    index={i}
+                    selected={cSystem?.brand === item.brand && cSystem?.system === item.system}
+                    restricted={!!(item.restricted_teeth && cTooth && !item.restricted_teeth.includes(cTooth))}
+                    cTooth={cTooth}
+                    onSelect={() => {
+                      setCSystem(item); setShowDropdown(false); setCWidth(''); setCHeight(''); setCResult(null);
+                    }}
+                  />
+                )}
               />
             </Pressable>
           </Pressable>
         </Modal>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+// ── Animated dropdown row (iter-286): owns its own press state so the
+//    <ColorStripe> can ramp a brand-tinted glow without re-rendering the
+//    whole list.
+function SystemDropdownRow({ item, index, selected, restricted, cTooth, onSelect }: {
+  item: any; index: number; selected: boolean; restricted: boolean;
+  cTooth: string | null; onSelect: () => void;
+}) {
+  const [pressed, setPressed] = React.useState(false);
+  return (
+    <TouchableOpacity
+      key={`${item.brand}-${item.system}-${index}`}
+      style={[s.ddItem, selected && s.ddItemActive, restricted && s.ddItemRestricted]}
+      onPress={() => {
+        if (restricted) {
+          Alert.alert(
+            'Not Indicated',
+            `${item.brand} – ${item.system} is not indicated for tooth ${cTooth}.\n\n${item.indication}`
+          );
+          return;
+        }
+        onSelect();
+      }}
+      onPressIn={() => setPressed(true)}
+      onPressOut={() => setPressed(false)}
+      activeOpacity={restricted ? 1 : 0.6}
+      data-testid={`system-option-${index}`}
+    >
+      <ColorStripe
+        brand={item.brand}
+        system={item.system}
+        active={pressed || selected}
+        dimmed={restricted}
+        testID={`system-color-stripe-${index}`}
+      />
+      <View style={{ flex: 1 }}>
+        <Text style={[s.ddItemTitle, restricted && { color: '#9E9E9E' }]}>{item.brand} – {item.system}</Text>
+        {item.indication ? <Text style={[s.ddItemInd, restricted && { color: '#B0BEC5' }]} numberOfLines={2}>{item.indication}</Text> : null}
+        <Text style={[s.ddItemSizes, restricted && { color: '#B0BEC5' }]}>
+          {item.count} sizes | D: {item.diameters[0]}–{item.diameters[item.diameters.length - 1]} mm | L: {item.lengths[0]}–{item.lengths[item.lengths.length - 1]} mm
+        </Text>
+        {restricted && (
+          <View style={s.restrictBadge}><Ionicons name="lock-closed" size={10} color="#E53935" /><Text style={s.restrictText}>Not for tooth {cTooth}</Text></View>
+        )}
+      </View>
+      {selected && <Ionicons name="checkmark-circle" size={22} color="#1E88E5" />}
+    </TouchableOpacity>
   );
 }
 
@@ -562,11 +581,7 @@ function BoneInputs({ width, height, setWidth, setHeight, enabled, tooth }: {
     <>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <Text style={s.inputLabel}>Bone Width (mm)</Text>
-        {widthInfo ? (
-          <TouchableOpacity onPress={() => Alert.alert('Bone Width', widthInfo)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Ionicons name="information-circle" size={18} color="#1565C0" />
-          </TouchableOpacity>
-        ) : null}
+        {widthInfo ? <Ionicons name="information-circle" size={18} color="#1565C0" /> : null}
       </View>
       {widthInfo && !widthFocused ? <Text style={{ fontSize: 11, color: '#1565C0', marginBottom: 4, marginLeft: 2, fontStyle: 'italic' }}>{widthInfo}</Text> : null}
       <View style={s.inputRow}>
@@ -579,11 +594,7 @@ function BoneInputs({ width, height, setWidth, setHeight, enabled, tooth }: {
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <Text style={s.inputLabel}>Bone Height (mm)</Text>
-        {heightInfo ? (
-          <TouchableOpacity onPress={() => Alert.alert('Bone Height', heightInfo)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Ionicons name="information-circle" size={18} color="#1565C0" />
-          </TouchableOpacity>
-        ) : null}
+        {heightInfo ? <Ionicons name="information-circle" size={18} color="#1565C0" /> : null}
       </View>
       {heightInfo && !heightFocused ? <Text style={{ fontSize: 11, color: '#1565C0', marginBottom: 4, marginLeft: 2, fontStyle: 'italic' }}>{heightInfo}</Text> : null}
       <View style={s.inputRow}>
@@ -639,36 +650,36 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
     boneHeightMm: parseFloat(boneHeight) || null,
   });
   const _safetyRank = (v: SafetyVerdict) =>
-    v.kind === 'length_block' ? -Infinity : v.kind === 'width_warning' ? v.marginMm : Infinity;
+    v.kind === 'length_warning' ? -Infinity : v.kind === 'width_warning' ? v.marginMm : Infinity;
   const safetyAnnotated = [..._annotated].sort((a, b) => _safetyRank(b._safety) - _safetyRank(a._safety));
   const baseImplants: Implant[] = safetyAnnotated;
 
-  // Safety-aware tap — soft warning for width, hard block for length.
-  // Width override is logged to the access_logs collection per HIPAA spec Q3=a.
+  // Safety-aware tap — soft warning for width AND for length (iter-340). Both
+  // get a 2-button confirmation; overrides log to /audit/safety-override.
   const handleImplantTap = (idx: number, imp: any) => {
     if (selectedIdx === idx) { setSelectedIdx(null); return; } // unselect — always allowed
     const verdict = safetyAnnotated[idx]?._safety as SafetyVerdict | undefined;
     if (!verdict || verdict.kind === 'ok') { setSelectedIdx(idx); return; }
-    if (verdict.kind === 'length_block') {
-      Alert.alert('Selection blocked', verdict.message);
-      return;
-    }
-    // width_warning — soft, two options.
-    Alert.alert('Bone margin warning', verdict.message, [
-      { text: 'Change the selection', style: 'cancel' },
+    const isLength = verdict.kind === 'length_warning';
+    const title = isLength ? 'Bone height conflict' : 'Bone margin warning';
+    const body = isLength ? `${verdict.message}\n\nDo you choose to proceed?` : verdict.message;
+    Alert.alert(title, body, [
+      { text: 'Exit', style: 'cancel' },
       {
-        text: 'Continue with selection',
+        text: 'Continue',
         onPress: async () => {
           setSelectedIdx(idx);
           try {
             await api.post('/audit/safety-override', {
-              context: 'implant_selection_home',
+              context: isLength ? 'implant_selection_home_length' : 'implant_selection_home',
               tooth_position: tooth,
               bone_width: parseFloat(boneWidth) || null,
               bone_height: parseFloat(boneHeight) || null,
               implant_diameter: imp.diameter,
               implant_length: imp.length,
-              margin_mm: (verdict as any).marginMm,
+              margin_mm: (verdict as any).marginMm ?? null,
+              short_by: (verdict as any).actualShortBy ?? null,
+              verdict_kind: verdict.kind,
               system: `${imp.brand} - ${imp.system}`,
             });
           } catch {/* non-fatal */}
@@ -783,12 +794,15 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
             {visibleImplants.map((imp: Implant, i: number) => {
               const isSelected = selectedIdx === i;
               const verdict = safetyAnnotated[i]?._safety;
-              const blocked = verdict?.kind === 'length_block';
+              // iter-340: posterior length is now a soft warning (not a hard block).
+              // Both length + width verdicts render as amber warning chips.
+              const lengthWarn = verdict?.kind === 'length_warning';
               const warning = verdict?.kind === 'width_warning';
+              const hasWarning = lengthWarn || warning;
               const chip = verdict ? shortSafetyChip(verdict) : null;
               return (
                 <TouchableOpacity key={`r-${i}`}
-                  style={[s.impCard, isSelected && s.impCardSelected, blocked && { opacity: 0.55 }]}
+                  style={[s.impCard, isSelected && s.impCardSelected]}
                   onPress={() => handleImplantTap(i, imp)}
                   activeOpacity={0.7}
                   data-testid={`recommended-implant-${i}`}>
@@ -800,13 +814,13 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
                       <View style={[s.specBadge, isSelected && { backgroundColor: '#BBDEFB' }]}><Text style={[s.specText, isSelected && { color: '#0D47A1' }]}>Length: {imp.length} mm</Text></View>
                     </View>
                     {chip && (
-                      <View style={[s.safetyChip, blocked ? s.safetyChipBlocked : s.safetyChipWarn]} testID={`safety-chip-${i}`}>
-                        <Ionicons name={blocked ? 'close-circle' : 'warning'} size={12} color={blocked ? '#B71C1C' : '#E65100'} />
-                        <Text style={[s.safetyChipText, { color: blocked ? '#B71C1C' : '#E65100' }]}>{chip}</Text>
+                      <View style={[s.safetyChip, s.safetyChipWarn]} testID={`safety-chip-${i}`}>
+                        <Ionicons name="warning" size={12} color="#E65100" />
+                        <Text style={[s.safetyChipText, { color: '#E65100' }]}>{chip}</Text>
                       </View>
                     )}
                   </View>
-                  {i === 0 && !blocked && !warning && <View style={s.bestBadge}><Text style={s.bestBadgeText}>Best</Text></View>}
+                  {i === 0 && !hasWarning && <View style={s.bestBadge}><Text style={s.bestBadgeText}>Best</Text></View>}
                 </TouchableOpacity>
               );
             })}
@@ -1064,25 +1078,26 @@ function SuggestResult({ result, tooth, toothInfo, onReset, onOpenProtocol }: {
     if (selectedKey === key) { setSelectedKey(null); return; }
     const verdict = imp._safety as SafetyVerdict | undefined;
     if (!verdict || verdict.kind === 'ok') { setSelectedKey(key); return; }
-    if (verdict.kind === 'length_block') {
-      Alert.alert('Selection blocked', verdict.message);
-      return;
-    }
-    Alert.alert('Bone margin warning', verdict.message, [
-      { text: 'Change the selection', style: 'cancel' },
+    const isLength = verdict.kind === 'length_warning';
+    const title = isLength ? 'Bone height conflict' : 'Bone margin warning';
+    const body = isLength ? `${verdict.message}\n\nDo you choose to proceed?` : verdict.message;
+    Alert.alert(title, body, [
+      { text: 'Exit', style: 'cancel' },
       {
-        text: 'Continue with selection',
+        text: 'Continue',
         onPress: async () => {
           setSelectedKey(key);
           try {
             await api.post('/audit/safety-override', {
-              context: 'implant_selection_home_suggest',
+              context: isLength ? 'implant_selection_home_suggest_length' : 'implant_selection_home_suggest',
               tooth_position: tooth,
               bone_width: cg.bone_width != null ? Number(cg.bone_width) : null,
               bone_height: cg.bone_height != null ? Number(cg.bone_height) : null,
               implant_diameter: imp.diameter,
               implant_length: imp.length,
-              margin_mm: (verdict as any).marginMm,
+              margin_mm: (verdict as any).marginMm ?? null,
+              short_by: (verdict as any).actualShortBy ?? null,
+              verdict_kind: verdict.kind,
               system: `${sys.brand} - ${sys.system}`,
             });
           } catch {/* non-fatal */}
@@ -1194,7 +1209,12 @@ function SuggestResult({ result, tooth, toothInfo, onReset, onOpenProtocol }: {
             <Text style={s.selectHint}>Tap an implant size to select it for drilling protocol</Text>
             {visibleSystems.map((sys, i) => (
               <View key={`sys-${i}`} style={s.sugSysCard} data-testid={`suggest-system-${i}`}>
-                <ColorStripe brand={sys.brand} system={sys.system} active={selectedKey?.startsWith(`${i}-`) ?? false} testID={`suggest-system-stripe-${i}`} />
+                <ColorStripe
+                  brand={sys.brand}
+                  system={sys.system}
+                  active={selectedKey?.startsWith(`${i}-`) ?? false}
+                  testID={`suggest-system-stripe-${i}`}
+                />
                 <View style={{ flex: 1 }}>
                 <View style={s.sugSysHeader}>
                   <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
@@ -1207,23 +1227,23 @@ function SuggestResult({ result, tooth, toothInfo, onReset, onOpenProtocol }: {
                     const key = `${i}-${j}`;
                     const isSelected = selectedKey === key;
                     const verdict = imp._safety as SafetyVerdict | undefined;
-                    const blocked = verdict?.kind === 'length_block';
-                    const warning = verdict?.kind === 'width_warning';
+                    // iter-340: both length + width render as amber warnings (no hard block).
+                    const hasWarning = verdict && verdict.kind !== 'ok';
                     const chip = verdict ? shortSafetyChip(verdict) : null;
                     return (
                       <View key={`imp-${j}`} style={{ alignItems: 'flex-start' }}>
                         <TouchableOpacity
-                          style={[s.sugSizeBadge, isSelected && s.sugSizeBadgeSelected, blocked && { opacity: 0.55 }]}
+                          style={[s.sugSizeBadge, isSelected && s.sugSizeBadgeSelected]}
                           onPress={() => handleSuggestTap(i, j, sys, imp)}
                           activeOpacity={0.7}
                           data-testid={`suggest-implant-${i}-${j}`}>
                           <Ionicons name={isSelected ? 'radio-button-on' : 'radio-button-off'} size={14} color={isSelected ? '#0D47A1' : '#66BB6A'} />
                           <Text style={[s.sugSizeText, isSelected && { color: '#0D47A1' }]}>D: {imp.diameter} mm  L: {imp.length} mm</Text>
                         </TouchableOpacity>
-                        {chip && (
-                          <View style={[s.safetyChip, blocked ? s.safetyChipBlocked : s.safetyChipWarn]} testID={`suggest-safety-chip-${i}-${j}`}>
-                            <Ionicons name={blocked ? 'close-circle' : 'warning'} size={12} color={blocked ? '#B71C1C' : '#E65100'} />
-                            <Text style={[s.safetyChipText, { color: blocked ? '#B71C1C' : '#E65100' }]}>{chip}</Text>
+                        {chip && hasWarning && (
+                          <View style={[s.safetyChip, s.safetyChipWarn]} testID={`suggest-safety-chip-${i}-${j}`}>
+                            <Ionicons name="warning" size={12} color="#E65100" />
+                            <Text style={[s.safetyChipText, { color: '#E65100' }]}>{chip}</Text>
                           </View>
                         )}
                       </View>
@@ -1544,6 +1564,13 @@ function NarrowRidgeProtocol({ evaluation }: { evaluation: any }) {
           ))}
         </View>
       )}
+      {evaluation.recommendation?.drilling_protocol_label && (
+        <View style={nrS.row}>
+          <Ionicons name="construct" size={16} color="#37474F" />
+          <Text style={nrS.rowLabel}>Drilling: </Text>
+          <Text style={nrS.rowValue}>{evaluation.recommendation.drilling_protocol_label}</Text>
+        </View>
+      )}
       {evaluation.recommendation?.label && (
         <View style={nrS.recommendBox}>
           <Ionicons name="bulb" size={16} color="#1565C0" />
@@ -1618,9 +1645,9 @@ const nrS = StyleSheet.create({
 });
 
 // ── Styles ─────────────────────────────────────────────────
-const staticStyles = StyleSheet.create({
+const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5FAFF' },
-  scroll: { padding: 16, paddingBottom: 120 },
+  scroll: { padding: 16, paddingBottom: 40 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
   centerText: { fontSize: 15, color: '#546E7A' },
   errText: { fontSize: 14, color: '#D32F2F', textAlign: 'center', marginTop: 8 },
@@ -1818,5 +1845,3 @@ const staticStyles = StyleSheet.create({
   allOptionsNote: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: '#FFF3E0', borderRadius: 8, padding: 10, marginBottom: 10 },
   allOptionsNoteText: { flex: 1, fontSize: 12, color: '#E65100', lineHeight: 16 },
 });
-
-const s = staticStyles;

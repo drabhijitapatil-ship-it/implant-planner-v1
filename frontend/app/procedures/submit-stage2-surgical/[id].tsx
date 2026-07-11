@@ -80,8 +80,21 @@ export default function Stage2SurgicalSubmissionScreen() {
   const loadImplantPlan = async () => {
     try {
       const res = await api.get(`/procedures/${id}/implant-plan`);
-      const count = res.data.number_of_implants || 1;
-      const positions = (res.data.implant_plans || []).map((p: any) => p.position);
+      // iter-341: filter to active implants (survivors + revisions). Backend
+      // returns every Phase 2 implant when no survival review has been submitted,
+      // so this call is safe for legacy cases and never over-filters.
+      let activeTeeth: Set<string> | null = null;
+      try {
+        const act = await api.get(`/procedures/${id}/active-implants`);
+        const teeth = (act.data?.active || []).map((im: any) => String(im.tooth_number || im.tooth || im.position || '').trim()).filter(Boolean);
+        if (teeth.length > 0) activeTeeth = new Set(teeth);
+      } catch {}
+      const rawPlans = (res.data.implant_plans || []);
+      const filteredPlans = activeTeeth
+        ? rawPlans.filter((p: any) => activeTeeth!.has(String(p.position || '').trim()))
+        : rawPlans;
+      const count = filteredPlans.length || res.data.number_of_implants || 1;
+      const positions = filteredPlans.map((p: any) => p.position);
       setImplantPositions(positions);
       setHealingAbutmentHeight(new Array(count).fill(''));
       setIsqValues(new Array(count).fill(''));

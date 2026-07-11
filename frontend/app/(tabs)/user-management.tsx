@@ -59,7 +59,15 @@ function generatePassword(): string {
   return pw;
 }
 
-type BulkRow = { id: string; name: string; email: string; role: string };
+type BulkRow = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  // Per-row department override (org admin only) — set from the CSV
+  // "department" column. Falls back to the batch-level picker when absent.
+  department_id?: string | null;
+};
 type BulkResult = {
   name: string;
   email: string;
@@ -73,6 +81,8 @@ type CsvRow = {
   email: string;
   role: string;
   rawRole: string;
+  rawDepartment: string;
+  departmentId: string | null;
   valid: boolean;
   error?: string;
 };
@@ -122,6 +132,8 @@ export default function UserManagementScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filterRole, setFilterRole] = useState("all");
+  // "all" | "none" (org-wide, no department) | a department id.
+  const [filterDepartment, setFilterDepartment] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<"recent" | "name" | "role">("role");
   const [showSortModal, setShowSortModal] = useState(false);
@@ -135,6 +147,32 @@ export default function UserManagementScreen() {
 
   const isSuperAdmin = user?.role === "super_admin";
   const isIncharge = user?.role === "implant_incharge";
+  // Org owner — distinct from role. Can create/edit departments, assign any
+  // user (incl. Implant In-Charges) to any department, or leave org-wide.
+  const isOrgAdmin = !!user?.is_admin;
+  // Department incharge: scoped to their own department, users they create
+  // silently inherit it (no picker shown — see create/bulk/csv handlers below).
+  const myDepartmentId = user?.department_id || null;
+
+  // Departments list — used for the admin-only assignment picker and for the
+  // department badge on each user card. Empty for super_admin (no fixed org)
+  // and for orgs that haven't created any departments yet.
+  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+  const fetchDepartments = () =>
+    api
+      .get("/departments")
+      .then((res) => setDepartments(res.data?.departments || []))
+      .catch(() => {});
+  useEffect(() => {
+    if (isSuperAdmin) return;
+    fetchDepartments();
+  }, [isSuperAdmin]);
+  const departmentName = (id?: string | null) =>
+    departments.find((d) => d.id === id)?.name || null;
+
+  // Create-flow department target (org admin only — null = org-wide, no department).
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(null);
+  const [showDeptPicker, setShowDeptPicker] = useState(false);
 
   // Read-only banner atop the list — shows which org's users these are.
   const [myOrg, setMyOrg] = useState<{
@@ -212,6 +250,7 @@ export default function UserManagementScreen() {
   const openCreateModal = () => {
     setCreateMode("single");
     setSelectedOrgId(null);
+    setSelectedDepartmentId(null);
     setNewUser({ name: "", email: "", password: "", role: defaultRole });
     setBulkRows([{ id: "1", name: "", email: "", role: defaultRole }]);
     setCsvRows([]);
@@ -221,7 +260,12 @@ export default function UserManagementScreen() {
 
   const downloadCsvTemplate = async () => {
     const exampleRole = roleOptions[0]?.value || "student";
-    const csv = `name,email,role\nDr. Jane Doe,jane.doe@example.com,${exampleRole}\n`;
+    // Department column only matters for the org admin — a department incharge's
+    // uploads always inherit their own department server-side regardless of
+    // what's in the CSV, so keep the template simpler for them.
+    const csv = isOrgAdmin && departments.length > 0
+      ? `name,email,role,department\nDr. Jane Doe,jane.doe@example.com,${exampleRole},${departments[0].name}\n`
+      : `name,email,role\nDr. Jane Doe,jane.doe@example.com,${exampleRole}\n`;
     setCsvBusy(true);
     try {
       const uri = `${FileSystem.cacheDirectory}implanr_user_template.csv`;
@@ -271,6 +315,10 @@ export default function UserManagementScreen() {
       const nameIdx = hasHeader ? header.indexOf("name") : 0;
       const emailIdx = hasHeader ? header.indexOf("email") : 1;
       const roleIdx = hasHeader ? header.indexOf("role") : 2;
+      // Optional 4th column — only meaningful for the org admin (a department
+      // incharge's rows always inherit their own department server-side, so we
+      // don't even bother resolving/validating it for them).
+      const deptIdx = hasHeader ? header.indexOf("department") : 3;
       const validRoleValues = roleOptions.map((o) => o.value);
 
       const rows: CsvRow[] = dataRows.map((cols) => {
@@ -278,12 +326,21 @@ export default function UserManagementScreen() {
         const email = (cols[emailIdx] || "").trim();
         const rawRole = (cols[roleIdx] || "").trim();
         const role = rawRole.toLowerCase().replace(/\s+/g, "_");
+        const rawDepartment = deptIdx >= 0 ? (cols[deptIdx] || "").trim() : "";
         let error: string | undefined;
+        let departmentId: string | null = null;
         if (!name) error = "Missing name";
         else if (!EMAIL_RE.test(email)) error = "Invalid email";
         else if (!validRoleValues.includes(role))
           error = `Role must be one of: ${validRoleValues.join(", ")}`;
-        return { name, email, role, rawRole, valid: !error, error };
+        else if (isOrgAdmin && rawDepartment) {
+          const match = departments.find(
+            (d) => d.name.toLowerCase() === rawDepartment.toLowerCase(),
+          );
+          if (!match) error = `Unknown department: "${rawDepartment}"`;
+          else departmentId = match.id;
+        }
+        return { name, email, role, rawRole, rawDepartment, departmentId, valid: !error, error };
       });
 
       setCsvFileName(asset.name || "uploaded.csv");
@@ -303,6 +360,7 @@ export default function UserManagementScreen() {
         name: r.name,
         email: r.email,
         role: r.role,
+        department_id: r.departmentId,
       }));
     if (validRows.length === 0) {
       Alert.alert(
@@ -358,6 +416,10 @@ export default function UserManagementScreen() {
           role: row.role,
         };
         if (isSuperAdmin) payload.org_id = selectedOrgId;
+        if (isOrgAdmin) {
+          const rowDeptId = row.department_id || selectedDepartmentId;
+          if (rowDeptId) payload.department_id = rowDeptId;
+        }
         const resp = await api.post("/users", payload);
         results.push({
           name: row.name.trim(),
@@ -395,7 +457,9 @@ export default function UserManagementScreen() {
     name: "",
     role: "",
     password: "",
+    departmentId: "" as string | null,
   });
+  const [showEditDeptPicker, setShowEditDeptPicker] = useState(false);
   const [updating, setUpdating] = useState(false);
 
   const loadUsers = useCallback(async () => {
@@ -481,6 +545,7 @@ export default function UserManagementScreen() {
     try {
       const payload: any = { ...newUser };
       if (isSuperAdmin) payload.org_id = selectedOrgId;
+      if (isOrgAdmin && selectedDepartmentId) payload.department_id = selectedDepartmentId;
       const resp = await api.post("/users", payload);
       Alert.alert(
         "Success",
@@ -503,7 +568,12 @@ export default function UserManagementScreen() {
 
   const openEditModal = (u: any) => {
     setEditingUser(u);
-    setEditForm({ name: u.name, role: u.role, password: "" });
+    setEditForm({
+      name: u.name,
+      role: u.role,
+      password: "",
+      departmentId: u.department_id || null,
+    });
     setShowEditModal(true);
   };
 
@@ -518,6 +588,12 @@ export default function UserManagementScreen() {
     }
     if (editForm.password.trim()) {
       payload.password = editForm.password.trim();
+    }
+    if (
+      isOrgAdmin &&
+      (editForm.departmentId || null) !== (editingUser.department_id || null)
+    ) {
+      payload.department_id = editForm.departmentId || "";
     }
     if (Object.keys(payload).length === 0) {
       Alert.alert("No Changes", "No fields were modified");
@@ -725,6 +801,20 @@ export default function UserManagementScreen() {
                   {ROLE_DISPLAY[item.role] || item.role}
                 </Text>
               </View>
+              {departmentName(item.department_id) && (
+                <View style={styles.deptBadge} data-testid={`user-dept-${item.id}`}>
+                  <Ionicons name="business-outline" size={11} color="#546E7A" />
+                  <Text style={styles.deptBadgeText}>
+                    {departmentName(item.department_id)}
+                  </Text>
+                </View>
+              )}
+              {item.is_admin && (
+                <View style={styles.adminBadge} data-testid={`user-admin-${item.id}`}>
+                  <Ionicons name="star" size={11} color="#B8860B" />
+                  <Text style={styles.adminBadgeText}>Org Admin</Text>
+                </View>
+              )}
             </View>
 
             {/* Email with envelope icon */}
@@ -791,6 +881,11 @@ export default function UserManagementScreen() {
     let filtered = users;
     if (onboardingFilter === "pending") {
       filtered = filtered.filter((u) => !u.first_login_at);
+    }
+    if (filterDepartment === "none") {
+      filtered = filtered.filter((u) => !u.department_id);
+    } else if (filterDepartment !== "all") {
+      filtered = filtered.filter((u) => u.department_id === filterDepartment);
     }
     if (searchQuery.trim().length > 0) {
       const q = searchQuery.toLowerCase();
@@ -882,7 +977,22 @@ export default function UserManagementScreen() {
               ? `  •  Reg. ${myOrg.registration_number}`
               : ""}
           </Text>
+          {!isOrgAdmin && myDepartmentId && departmentName(myDepartmentId) && (
+            <Text style={styles.orgMetaDept} data-testid="my-department-label">
+              Managing: {departmentName(myDepartmentId)}
+            </Text>
+          )}
         </View>
+        {isOrgAdmin && (
+          <TouchableOpacity
+            style={styles.headerSettingsBtn}
+            onPress={() => router.push('/admin/departments' as any)}
+            data-testid="org-departments-btn"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="business-outline" size={18} color="#1565C0" />
+          </TouchableOpacity>
+        )}
         {isIncharge && (
           <TouchableOpacity
             style={styles.headerSettingsBtn}
@@ -1025,6 +1135,41 @@ export default function UserManagementScreen() {
             })}
           </ScrollView>
         </View>
+
+        {/* Department filter chips — only when the org actually has departments */}
+        {departments.length > 0 && (
+          <View style={styles.filterContainer}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterScroll}
+            >
+              {[{ key: "all", label: "All Depts" }, { key: "none", label: "Org-wide" }, ...departments.map((d) => ({ key: d.id, label: d.name }))].map((item) => {
+                const isSelected = filterDepartment === item.key;
+                return (
+                  <TouchableOpacity
+                    key={item.key}
+                    style={[
+                      styles.filterChip,
+                      isSelected && styles.filterChipActive,
+                    ]}
+                    onPress={() => setFilterDepartment(item.key)}
+                    data-testid={`dept-filter-${item.key}`}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        isSelected && styles.filterChipTextActive,
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
 
         {/* Search and Sort row */}
         <View style={styles.searchSortRow}>
@@ -1355,6 +1500,42 @@ export default function UserManagementScreen() {
                 </>
               )}
 
+              {isOrgAdmin && departments.length > 0 && (
+                <>
+                  <Text style={styles.inputLabel}>Department (optional)</Text>
+                  <TouchableOpacity
+                    style={styles.orgPickerBtn}
+                    onPress={() => setShowDeptPicker(true)}
+                    data-testid="dept-picker-btn"
+                  >
+                    <Text
+                      style={
+                        selectedDepartmentId
+                          ? styles.orgPickerName
+                          : styles.orgPickerPlaceholder
+                      }
+                    >
+                      {selectedDepartmentId
+                        ? departmentName(selectedDepartmentId)
+                        : "Org-wide (no department)"}
+                    </Text>
+                    <Ionicons name="chevron-down" size={18} color="#666" />
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {!isOrgAdmin && myDepartmentId && (
+                <View style={styles.deptInheritHint} data-testid="dept-inherit-hint">
+                  <Ionicons name="business-outline" size={14} color="#546E7A" />
+                  <Text style={styles.deptInheritHintText}>
+                    Will be added to your department
+                    {departmentName(myDepartmentId)
+                      ? `: ${departmentName(myDepartmentId)}`
+                      : ""}
+                  </Text>
+                </View>
+              )}
+
               <View style={styles.modeToggle}>
                 <TouchableOpacity
                   style={[
@@ -1592,13 +1773,23 @@ export default function UserManagementScreen() {
                     </View>
                     <Text style={styles.csvInstructionsText}>
                       Columns:{" "}
-                      <Text style={styles.csvMono}>name, email, role</Text>{" "}
+                      <Text style={styles.csvMono}>
+                        name, email, role
+                        {isOrgAdmin && departments.length > 0 ? ", department" : ""}
+                      </Text>{" "}
                       (header row required).{"\n"}
                       Role must be exactly one of:{" "}
                       <Text style={styles.csvMono}>
                         {roleOptions.map((o) => o.value).join(", ")}
                       </Text>
                       .{"\n"}
+                      {isOrgAdmin && departments.length > 0 && (
+                        <>
+                          Department is optional — must match an existing
+                          department name exactly, or leave blank for
+                          org-wide.{"\n"}
+                        </>
+                      )}
                       Rows that don't match are flagged below and skipped on
                       create.
                     </Text>
@@ -1690,6 +1881,11 @@ export default function UserManagementScreen() {
                         <Text style={[styles.csvTableHeaderText, { flex: 1 }]}>
                           Role
                         </Text>
+                        {isOrgAdmin && departments.length > 0 && (
+                          <Text style={[styles.csvTableHeaderText, { flex: 1 }]}>
+                            Dept
+                          </Text>
+                        )}
                       </View>
                       {csvRows.map((row, idx) => (
                         <View
@@ -1740,6 +1936,14 @@ export default function UserManagementScreen() {
                                 {row.rawRole || "—"}
                               </Text>
                             </View>
+                            {isOrgAdmin && departments.length > 0 && (
+                              <Text
+                                style={[styles.csvTableCell, { flex: 1 }]}
+                                numberOfLines={1}
+                              >
+                                {row.rawDepartment || "—"}
+                              </Text>
+                            )}
                           </View>
                           {!row.valid && (
                             <Text style={styles.csvRowErrorText}>
@@ -1828,6 +2032,86 @@ export default function UserManagementScreen() {
                   </TouchableOpacity>
                 ))
               )}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Department Picker (org admin only) */}
+      <Modal visible={showDeptPicker} animationType="fade" transparent>
+        <TouchableOpacity
+          style={styles.pickerOverlay}
+          activeOpacity={1}
+          onPress={() => setShowDeptPicker(false)}
+          data-testid="dept-picker-overlay"
+        >
+          <View style={styles.pickerSheet}>
+            <ScrollView style={{ maxHeight: 400 }}>
+              <TouchableOpacity
+                style={styles.pickerItem}
+                onPress={() => {
+                  setSelectedDepartmentId(null);
+                  setShowDeptPicker(false);
+                }}
+                data-testid="dept-picker-option-none"
+              >
+                <Ionicons name="globe-outline" size={18} color="#666" />
+                <Text style={styles.pickerItemText}>Org-wide (no department)</Text>
+              </TouchableOpacity>
+              {departments.map((d) => (
+                <TouchableOpacity
+                  key={d.id}
+                  style={styles.pickerItem}
+                  onPress={() => {
+                    setSelectedDepartmentId(d.id);
+                    setShowDeptPicker(false);
+                  }}
+                  data-testid={`dept-picker-option-${d.id}`}
+                >
+                  <Ionicons name="business-outline" size={18} color="#666" />
+                  <Text style={styles.pickerItemText}>{d.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Department Picker for Edit User modal (org admin only) */}
+      <Modal visible={showEditDeptPicker} animationType="fade" transparent>
+        <TouchableOpacity
+          style={styles.pickerOverlay}
+          activeOpacity={1}
+          onPress={() => setShowEditDeptPicker(false)}
+          data-testid="edit-dept-picker-overlay"
+        >
+          <View style={styles.pickerSheet}>
+            <ScrollView style={{ maxHeight: 400 }}>
+              <TouchableOpacity
+                style={styles.pickerItem}
+                onPress={() => {
+                  setEditForm({ ...editForm, departmentId: null });
+                  setShowEditDeptPicker(false);
+                }}
+                data-testid="edit-dept-picker-option-none"
+              >
+                <Ionicons name="globe-outline" size={18} color="#666" />
+                <Text style={styles.pickerItemText}>Org-wide (no department)</Text>
+              </TouchableOpacity>
+              {departments.map((d) => (
+                <TouchableOpacity
+                  key={d.id}
+                  style={styles.pickerItem}
+                  onPress={() => {
+                    setEditForm({ ...editForm, departmentId: d.id });
+                    setShowEditDeptPicker(false);
+                  }}
+                  data-testid={`edit-dept-picker-option-${d.id}`}
+                >
+                  <Ionicons name="business-outline" size={18} color="#666" />
+                  <Text style={styles.pickerItemText}>{d.name}</Text>
+                </TouchableOpacity>
+              ))}
             </ScrollView>
           </View>
         </TouchableOpacity>
@@ -2008,6 +2292,30 @@ export default function UserManagementScreen() {
                 setEditForm({ ...editForm, role }),
               )}
 
+              {isOrgAdmin && departments.length > 0 && (
+                <>
+                  <Text style={styles.inputLabel}>Department</Text>
+                  <TouchableOpacity
+                    style={styles.orgPickerBtn}
+                    onPress={() => setShowEditDeptPicker(true)}
+                    data-testid="edit-dept-picker-btn"
+                  >
+                    <Text
+                      style={
+                        editForm.departmentId
+                          ? styles.orgPickerName
+                          : styles.orgPickerPlaceholder
+                      }
+                    >
+                      {editForm.departmentId
+                        ? departmentName(editForm.departmentId)
+                        : "Org-wide (no department)"}
+                    </Text>
+                    <Ionicons name="chevron-down" size={18} color="#666" />
+                  </TouchableOpacity>
+                </>
+              )}
+
               <Text style={styles.inputLabel}>
                 Reset Password (leave empty to keep current)
               </Text>
@@ -2117,6 +2425,12 @@ const styles = StyleSheet.create({
   orgMeta: {
     fontSize: 12,
     color: "#64748B",
+    marginTop: 2,
+    fontWeight: "600",
+  },
+  orgMetaDept: {
+    fontSize: 12,
+    color: "#1565C0",
     marginTop: 2,
     fontWeight: "600",
   },
@@ -2399,6 +2713,57 @@ const styles = StyleSheet.create({
   roleText: {
     fontSize: 10,
     fontWeight: "700",
+  },
+  deptBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ECEFF1",
+    borderWidth: 1,
+    borderColor: "#CFD8DC",
+    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginLeft: 6,
+    marginTop: 0,
+    gap: 4,
+  },
+  deptBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#546E7A",
+  },
+  adminBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF8E1",
+    borderWidth: 1,
+    borderColor: "#FFECB3",
+    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginLeft: 6,
+    gap: 4,
+  },
+  adminBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#B8860B",
+  },
+  deptInheritHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ECEFF1",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginTop: 4,
+    marginBottom: 8,
+    gap: 6,
+  },
+  deptInheritHintText: {
+    fontSize: 12,
+    color: "#546E7A",
+    fontWeight: "600",
   },
   emailRow: {
     flexDirection: "row",

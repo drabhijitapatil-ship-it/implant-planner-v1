@@ -124,7 +124,20 @@
       "Read(//Users/prathmeshjadhav/Desktop/work/implant-planner-v1/phase1/backend/venv/lib/python3.14/site-packages/resend/emails/**)",
       "Bash(grep -n \"^boto3\\\\|^resend\\\\|^requests$\" requirements_unpinned.txt)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" https://appstoreconnect.apple.com --max-time 5)",
-      "Bash(python3 -m py_compile server.py migrate_backfill_procedure_org_id.py)"
+      "Bash(python3 -m py_compile server.py migrate_backfill_procedure_org_id.py)",
+      "Bash(python3 -m py_compile backend/migrate_backfill_org_admin.py)",
+      "Bash(git -C /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main diff --stat -- backend/server.py backend/migrate_backfill_org_admin.py backend/migrate_backfill_procedure_org_id.py)",
+      "Bash(grep -n '\"org_type\": payload.org_type$\\\\|\"org_type\": invite\\\\[\"org_type\"\\\\]$' backend/server.py)",
+      "Bash(timeout 180 npx tsc --noEmit -p .)",
+      "Bash(echo \"EXIT:$?\")",
+      "Read(//tmp/**)",
+      "Bash(python3 -m py_compile backend/server.py backend/migrate_backfill_org_admin.py backend/migrate_backfill_procedure_org_id.py)",
+      "Bash(ls -la \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/backend/server.py\" \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py\")",
+      "Read(//Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/backend/**)",
+      "Bash(diff \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/backend/server.py\" \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py\" > /private/tmp/claude-501/-Users-prathmeshjadhav-Desktop-work-implant-planner-v1-main/36f702fe-c40a-41c5-a576-ab94ca34157e/scratchpad/server_diff.txt; wc -l /private/tmp/claude-501/-Users-prathmeshjadhav-Desktop-work-implant-planner-v1-main/36f702fe-c40a-41c5-a576-ab94ca34157e/scratchpad/server_diff.txt)",
+      "Bash(wc -l \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/backend/server.py\" \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py\")",
+      "Bash(grep -nE '^\\(async def|def|class |@api_router|@app\\\\.\\)' \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/backend/server.py\")",
+      "Bash(grep -nE '^\\(async def|def|class |@api_router|@app\\\\.\\)' \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py\")"
     ],
     "additionalDirectories": [
       "/dev",

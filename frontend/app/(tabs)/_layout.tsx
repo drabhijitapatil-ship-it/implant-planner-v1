@@ -45,6 +45,7 @@ function DrawerMenu({
   isAdmin,
   isNurse,
   isSuperAdmin,
+  isOrgAdmin,
   userName,
   userRole,
   profilePhoto,
@@ -58,6 +59,7 @@ function DrawerMenu({
   isAdmin: boolean;
   isNurse: boolean;
   isSuperAdmin: boolean;
+  isOrgAdmin: boolean;
   userName: string;
   userRole: string;
   profilePhoto: string | null;
@@ -128,6 +130,12 @@ function DrawerMenu({
       ? [{
           key: 'organizations', icon: 'business' as const, label: 'Organizations', route: '/admin/organizations',
           bg: '#EDE7F6', chip: '#D1C4E9', iconColor: '#4527A0',
+        }]
+      : []),
+    ...(isOrgAdmin
+      ? [{
+          key: 'departments', icon: 'business-outline' as const, label: 'Departments', route: '/admin/departments',
+          bg: '#E3F2FD', chip: '#BBDEFB', iconColor: '#1565C0',
         }]
       : []),
     {
@@ -423,6 +431,7 @@ export default function TabsLayout() {
   const isAdmin = role === 'administrator' || role === 'implant_incharge' || role === 'super_admin';
   const isNurse = role === 'nurse';
   const isSuperAdmin = role === 'super_admin';
+  const isOrgAdmin = !!user?.is_admin;
 
   const fetchUnreadCount = useCallback(async () => {
     try {
@@ -559,6 +568,7 @@ export default function TabsLayout() {
         isAdmin={isAdmin}
         isNurse={isNurse}
         isSuperAdmin={isSuperAdmin}
+        isOrgAdmin={isOrgAdmin}
         userName={user?.name || user?.username || ''}
         userRole={roleName}
         profilePhoto={user?.profile_photo || null}

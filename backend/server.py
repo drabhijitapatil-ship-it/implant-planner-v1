@@ -268,17 +268,39 @@ async def _org_member_ids(org_id: Optional[str]) -> List[str]:
     return [str(i) for i in ids]
 
 
+def _dept_scope_query(current_user: dict) -> Dict[str, Any]:
+    """org_id (+ department_id when the caller is department-scoped) match for db.users.
+    A department incharge is an org-wide-role user (implant_incharge) with department_id
+    set and is_admin False — their visibility narrows to just that department. The org
+    admin (is_admin=True) and any user with no department_id keep full org-wide scope —
+    this is what keeps existing single-department orgs behaving exactly as before."""
+    query: Dict[str, Any] = {"org_id": current_user.get("org_id")}
+    dept_id = current_user.get("department_id")
+    if dept_id and not current_user.get("is_admin"):
+        query["department_id"] = dept_id
+    return query
+
+
+async def _scope_member_ids(current_user: dict) -> List[str]:
+    """Like _org_member_ids, but narrowed to the caller's department when applicable."""
+    if not current_user.get("org_id"):
+        return []
+    ids = await db.users.distinct("_id", _dept_scope_query(current_user))
+    return [str(i) for i in ids]
+
+
 async def _org_scope_match(current_user: dict) -> Dict[str, Any]:
     """Mongo $match restricting a procedures query to the caller's org (derived from the
-    linked student/supervisor/creator, since procedures don't store org_id directly).
+    linked student/supervisor/creator, since procedures don't store org_id directly),
+    narrowed to department when the caller is a department incharge.
     super_admin is platform-wide and gets an empty filter — i.e. no restriction."""
     if current_user.get("is_super_admin"):
         return {}
-    org_member_ids = await _org_member_ids(current_user.get("org_id"))
+    scoped_member_ids = await _scope_member_ids(current_user)
     return {"$or": [
-        {"student_id": {"$in": org_member_ids}},
-        {"supervisor_id": {"$in": org_member_ids}},
-        {"created_by_id": {"$in": org_member_ids}},
+        {"student_id": {"$in": scoped_member_ids}},
+        {"supervisor_id": {"$in": scoped_member_ids}},
+        {"created_by_id": {"$in": scoped_member_ids}},
     ]}
 
 
@@ -286,7 +308,8 @@ async def _assert_procedure_org_access(proc: dict, current_user: dict) -> None:
     """Cross-tenant guard for single-procedure endpoints. Procedures don't store org_id
     directly, so org membership is derived from the linked student/supervisor/creator.
     Only org-wide roles need this check — student/supervisor self-scoped access is already
-    enforced by each endpoint's own identity checks and can't cross orgs."""
+    enforced by each endpoint's own identity checks and can't cross orgs. Narrows to
+    department when the caller is a department incharge (see _dept_scope_query)."""
     if current_user.get("is_super_admin"):
         return
     role = current_user.get("role")
@@ -299,7 +322,7 @@ async def _assert_procedure_org_access(proc: dict, current_user: dict) -> None:
     valid_oids = [ObjectId(o) for o in owner_ids if o and ObjectId.is_valid(o)]
     if not valid_oids:
         raise HTTPException(status_code=403, detail="Cannot access procedures outside your organization")
-    match = await db.users.find_one({"_id": {"$in": valid_oids}, "org_id": org_id})
+    match = await db.users.find_one({"_id": {"$in": valid_oids}, **_dept_scope_query(current_user)})
     if not match:
         raise HTTPException(status_code=403, detail="Cannot access procedures outside your organization")
 
@@ -464,6 +487,10 @@ class UserResponse(BaseModel):
     org_id: Optional[str] = None
     org_type: Optional[str] = None
     org_name: Optional[str] = None
+    # Org owner flag + department scope — see the org-admin/department-incharge
+    # model in _dept_scope_query / _resolve_department_assignment.
+    is_admin: bool = False
+    department_id: Optional[str] = None
     # Timestamp when the user dismissed the first-login onboarding + workflow help.
     # Null means they haven't seen it yet → frontend routes them through onboarding.
     workflow_seen_at: Optional[datetime] = None
@@ -1412,7 +1439,9 @@ async def login(request: Request, user: UserLogin):
         name=db_user["name"],
         email=db_user["email"],
         role=db_user["role"],
-        profile_photo=db_user.get("profile_photo")
+        profile_photo=db_user.get("profile_photo"),
+        is_admin=db_user.get("is_admin", False),
+        department_id=db_user.get("department_id"),
     )
 
     await log_access(
@@ -1455,6 +1484,8 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         org_id=org_id,
         org_type=org_type,
         org_name=org_name,
+        is_admin=current_user.get("is_admin", False),
+        department_id=current_user.get("department_id"),
     )
 
 # --- "What's New" changelog ─────────────────────────────────────────────────
@@ -1686,7 +1717,7 @@ async def register_push_token(
 # User Routes
 @api_router.get("/users")
 async def get_users(role: Optional[str] = None, current_user: dict = Depends(get_current_user)):
-    query = {} if current_user.get("is_super_admin") else {"org_id": current_user.get("org_id")}
+    query = {} if current_user.get("is_super_admin") else _dept_scope_query(current_user)
     if role:
         query["role"] = role
 
@@ -1694,8 +1725,33 @@ async def get_users(role: Optional[str] = None, current_user: dict = Depends(get
     for user in users:
         user["_id"] = str(user["_id"])
         user["id"] = user["_id"]
-    
+
     return users
+
+
+async def _resolve_department_assignment(
+    current_user: dict, org_id: str, target_role: str, requested_department_id: Optional[str]
+) -> Optional[str]:
+    """Decide the department_id for a newly created/invited user.
+    - Org admin (is_admin=True) / super_admin: may target any department in the org
+      explicitly, or leave None for org-wide (back-compat for orgs with no departments).
+    - Department incharge (department_id set, is_admin False): can only create/invite
+      into their OWN department — requested_department_id is ignored — and can never
+      grant implant_incharge (only the org admin assigns department incharges)."""
+    if current_user.get("is_admin") or current_user.get("is_super_admin"):
+        if requested_department_id:
+            try:
+                dept = await db.departments.find_one({"_id": ObjectId(requested_department_id), "org_id": org_id})
+            except Exception:
+                dept = None
+            if not dept:
+                raise HTTPException(status_code=400, detail="Department not found")
+        return requested_department_id
+
+    if target_role == "implant_incharge":
+        raise HTTPException(status_code=403, detail="Only the organization admin can assign an Implant In-Charge")
+    return current_user.get("department_id")
+
 
 # User Management (Admin/Implant Incharge only)
 class UserCreate(BaseModel):
@@ -1706,6 +1762,9 @@ class UserCreate(BaseModel):
     # Only honoured for super_admin, who has no org_id of their own and must pick
     # a target organization explicitly. Ignored (uses the caller's own org) otherwise.
     org_id: Optional[str] = Field(None, max_length=64)
+    # Only honoured for the org admin (is_admin=True) targeting a specific department.
+    # A department incharge's created users always inherit their own department instead.
+    department_id: Optional[str] = Field(None, max_length=64)
 
     @field_validator('name')
     @classmethod
@@ -1741,11 +1800,19 @@ async def create_user(user: UserCreate, current_user: dict = Depends(get_current
     if user.role not in allowed_roles:
         raise HTTPException(status_code=400, detail=f"Role '{user.role}' not valid for {org['org_type']} workspace")
 
-    # Enforce max 2 per incharge/chief_dentist role
+    department_id = await _resolve_department_assignment(current_user, org_id, user.role, user.department_id)
+
+    # Enforce max 2 per incharge/chief_dentist role — scoped per-department for
+    # implant_incharge (each department gets its own 2-incharge cap) so multi-department
+    # orgs aren't capped at 2 incharges total; chief_dentist (clinics have no departments)
+    # stays capped org-wide.
     if user.role in MAX_2_ROLES:
-        count = await db.users.count_documents({"org_id": org_id, "role": user.role})
+        cap_query = {"org_id": org_id, "role": user.role}
+        if user.role == "implant_incharge":
+            cap_query["department_id"] = department_id
+        count = await db.users.count_documents(cap_query)
         if count >= 2:
-            raise HTTPException(status_code=400, detail=f"Maximum 2 users allowed with role '{user.role}'")
+            raise HTTPException(status_code=400, detail=f"Maximum 2 users allowed with role '{user.role}'" + (f" in this department" if user.role == "implant_incharge" and department_id else ""))
 
     # Create user
     user_dict = {
@@ -1754,6 +1821,8 @@ async def create_user(user: UserCreate, current_user: dict = Depends(get_current
         "password_hash": hash_password(user.password),
         "role": user.role,
         "org_id": org_id,
+        "department_id": department_id,
+        "is_admin": False,
         "created_at": datetime.utcnow()
     }
 
@@ -1769,6 +1838,20 @@ async def create_user(user: UserCreate, current_user: dict = Depends(get_current
 
     return {"id": str(result.inserted_id), "message": "User created successfully", "email_sent": email_sent}
 
+def _assert_can_manage_target(target: dict, current_user: dict) -> None:
+    """Org + department boundary for user management actions (delete/update/resend-creds).
+    A department incharge (department_id set, is_admin False) may only manage users
+    within their own department; the org admin and super_admin are unrestricted
+    within (and, for super_admin, across) orgs."""
+    if current_user.get("is_super_admin"):
+        return
+    if target.get("org_id") != current_user.get("org_id"):
+        raise HTTPException(status_code=403, detail="Cannot manage users outside your organization")
+    dept_id = current_user.get("department_id")
+    if dept_id and not current_user.get("is_admin") and target.get("department_id") != dept_id:
+        raise HTTPException(status_code=403, detail="Cannot manage users outside your department")
+
+
 @api_router.delete("/users/{user_id}")
 async def delete_user(user_id: str, current_user: dict = Depends(get_current_user)):
     # Only administrators can delete users
@@ -1782,8 +1865,7 @@ async def delete_user(user_id: str, current_user: dict = Depends(get_current_use
     target = await db.users.find_one({"_id": ObjectId(user_id)})
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
-    if not current_user.get("is_super_admin") and target.get("org_id") != current_user.get("org_id"):
-        raise HTTPException(status_code=403, detail="Cannot manage users outside your organization")
+    _assert_can_manage_target(target, current_user)
 
     result = await db.users.delete_one({"_id": ObjectId(user_id)})
 
@@ -1796,6 +1878,11 @@ class UserUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=100)
     role: Optional[str] = Field(None, max_length=30)
     password: Optional[str] = Field(None, max_length=128)
+    # Reassign an existing user to a different department (or org-wide via "").
+    # Org-admin-only — see update_user. Distinguishes "not provided" (None, leave
+    # unchanged) from "clear it" (empty string) since Optional[str]=None already
+    # means the field was omitted from the request body.
+    department_id: Optional[str] = Field(None, max_length=64)
 
     @field_validator('name')
     @classmethod
@@ -1808,12 +1895,11 @@ class UserUpdate(BaseModel):
 async def update_user(user_id: str, user: UserUpdate, current_user: dict = Depends(get_current_user)):
     if current_user["role"] not in ["administrator", "implant_incharge"]:
         raise HTTPException(status_code=403, detail="Only administrators and implant incharge can update users")
-    
+
     existing = await db.users.find_one({"_id": ObjectId(user_id)})
     if not existing:
         raise HTTPException(status_code=404, detail="User not found")
-    if not current_user.get("is_super_admin") and existing.get("org_id") != current_user.get("org_id"):
-        raise HTTPException(status_code=403, detail="Cannot manage users outside your organization")
+    _assert_can_manage_target(existing, current_user)
 
     update_fields = {}
     if user.name and user.name.strip():
@@ -1821,13 +1907,27 @@ async def update_user(user_id: str, user: UserUpdate, current_user: dict = Depen
     if user.role:
         if user.role not in VALID_ROLES:
             raise HTTPException(status_code=400, detail="Invalid role")
+        if user.role in INCHARGE_ROLES and not (current_user.get("is_admin") or current_user.get("is_super_admin")):
+            raise HTTPException(status_code=403, detail="Only the organization admin can assign an Implant In-Charge")
         update_fields["role"] = user.role
     if user.password and user.password.strip():
         update_fields["password_hash"] = hash_password(user.password)
-    
+    if "department_id" in user.model_fields_set:
+        if not (current_user.get("is_admin") or current_user.get("is_super_admin")):
+            raise HTTPException(status_code=403, detail="Only the organization admin can reassign a user's department")
+        new_dept_id = user.department_id or None
+        if new_dept_id:
+            try:
+                dept = await db.departments.find_one({"_id": ObjectId(new_dept_id), "org_id": existing.get("org_id")})
+            except Exception:
+                dept = None
+            if not dept:
+                raise HTTPException(status_code=400, detail="Department not found")
+        update_fields["department_id"] = new_dept_id
+
     if not update_fields:
         raise HTTPException(status_code=400, detail="No fields to update")
-    
+
     await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": update_fields})
 
     return {"message": "User updated successfully"}
@@ -1844,8 +1944,7 @@ async def resend_user_credentials(user_id: str, current_user: dict = Depends(get
     target = await db.users.find_one({"_id": ObjectId(user_id)})
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
-    if not current_user.get("is_super_admin") and target.get("org_id") != current_user.get("org_id"):
-        raise HTTPException(status_code=403, detail="Cannot manage users outside your organization")
+    _assert_can_manage_target(target, current_user)
 
     new_password = _secrets_mod.token_urlsafe(9)
     await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": {"password_hash": hash_password(new_password)}})
@@ -2194,6 +2293,11 @@ class InviteCreate(BaseModel):
     # Only honoured for super_admin, who has no org_id of their own and must pick
     # a target organization explicitly. Ignored (uses the caller's own org) otherwise.
     org_id: Optional[str] = Field(None, max_length=64)
+    # Only honoured when the inviter is the org admin (is_admin=True) picking a
+    # department explicitly. A department incharge's invites always inherit the
+    # inviter's own department_id instead (see send_invite) — this field is ignored
+    # for them, so a dept incharge can never place a user into a different department.
+    department_id: Optional[str] = Field(None, max_length=64)
 
     @field_validator("name")
     @classmethod
@@ -2206,6 +2310,95 @@ class InviteActivate(BaseModel):
     mobile: Optional[str] = Field(None, max_length=20)
 
 
+class DepartmentCreate(BaseModel):
+    name: str = Field(..., max_length=100)
+
+    @field_validator("name")
+    @classmethod
+    def sanitize(cls, v: str) -> str:
+        v = sanitize_input(v).strip()
+        if not v:
+            raise ValueError("Department name cannot be empty")
+        return v
+
+
+class DepartmentUpdate(BaseModel):
+    name: str = Field(..., max_length=100)
+
+    @field_validator("name")
+    @classmethod
+    def sanitize(cls, v: str) -> str:
+        v = sanitize_input(v).strip()
+        if not v:
+            raise ValueError("Department name cannot be empty")
+        return v
+
+
+def _require_org_admin(current_user: dict) -> str:
+    """Org-admin-only gate for department management. Returns the caller's org_id.
+    super_admin bypasses (platform-wide); everyone else must have is_admin=True —
+    a department incharge (implant_incharge with department_id set) is explicitly
+    NOT enough, since dept incharges must not be able to create/rename departments
+    or reassign other incharges across departments."""
+    if current_user.get("is_super_admin"):
+        raise HTTPException(status_code=400, detail="super_admin must act within an organization context")
+    if not current_user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Only the organization admin can manage departments")
+    org_id = current_user.get("org_id")
+    if not org_id:
+        raise HTTPException(status_code=400, detail="Your account is not linked to an organization")
+    return org_id
+
+
+@api_router.post("/departments")
+async def create_department(payload: DepartmentCreate, current_user: dict = Depends(get_current_user)):
+    org_id = _require_org_admin(current_user)
+    existing = await db.departments.find_one({
+        "org_id": org_id,
+        "name": {"$regex": f"^{re.escape(payload.name)}$", "$options": "i"},
+    })
+    if existing:
+        raise HTTPException(status_code=400, detail="A department with this name already exists")
+    doc = {"org_id": org_id, "name": payload.name, "created_at": datetime.utcnow()}
+    result = await db.departments.insert_one(doc)
+    return {"id": str(result.inserted_id), "name": payload.name}
+
+
+@api_router.get("/departments")
+async def list_departments(current_user: dict = Depends(get_current_user)):
+    """Any org member can list departments (needed for invite/assignment pickers)."""
+    if current_user.get("is_super_admin"):
+        raise HTTPException(status_code=400, detail="super_admin must act within an organization context")
+    org_id = current_user.get("org_id")
+    if not org_id:
+        raise HTTPException(status_code=400, detail="Your account is not linked to an organization")
+    departments = []
+    async for d in db.departments.find({"org_id": org_id}).sort("name", 1):
+        departments.append({"id": str(d["_id"]), "name": d["name"]})
+    return {"departments": departments}
+
+
+@api_router.put("/departments/{department_id}")
+async def update_department(department_id: str, payload: DepartmentUpdate, current_user: dict = Depends(get_current_user)):
+    org_id = _require_org_admin(current_user)
+    try:
+        obj_id = ObjectId(department_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid department ID")
+    existing = await db.departments.find_one({"_id": obj_id, "org_id": org_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Department not found")
+    dup = await db.departments.find_one({
+        "org_id": org_id,
+        "_id": {"$ne": obj_id},
+        "name": {"$regex": f"^{re.escape(payload.name)}$", "$options": "i"},
+    })
+    if dup:
+        raise HTTPException(status_code=400, detail="A department with this name already exists")
+    await db.departments.update_one({"_id": obj_id}, {"$set": {"name": payload.name}})
+    return {"id": department_id, "name": payload.name}
+
+
 # ── Helper to assert index exists on startup ──
 
 async def _ensure_org_indexes() -> None:
@@ -2216,6 +2409,8 @@ async def _ensure_org_indexes() -> None:
         await db.invites.create_index("org_id")
         await db.invites.create_index("expires_at", expireAfterSeconds=0)
         await db.users.create_index("org_id")
+        await db.users.create_index("department_id")
+        await db.departments.create_index([("org_id", 1), ("name", 1)])
         await db.procedures.create_index("org_id")
         await db.procedures.create_index("department_id")
         await db.otp_verifications.create_index("email", unique=True)
@@ -2785,6 +2980,12 @@ async def workspace_signup(payload: WorkspaceSignup):
         "password_hash": hash_password(payload.password),
         "role": admin_role,
         "org_id": org_id,
+        # First user of the org — the org owner. Distinct from `role`, which stays
+        # the clinical role (implant_incharge/chief_dentist) so all existing
+        # permission checks keyed on role are unaffected. is_admin is never
+        # settable through invite/create-user payloads — only set here.
+        "is_admin": True,
+        "department_id": None,
         "created_at": now,
     }
     user_result = await db.users.insert_one(user_doc)
@@ -2812,6 +3013,8 @@ async def workspace_signup(payload: WorkspaceSignup):
             "org_id": org_id,
             "org_name": org_doc["name"],
             "org_type": payload.org_type,
+            "is_admin": True,
+            "department_id": None,
         }
     }
 
@@ -2841,11 +3044,17 @@ async def send_invite(payload: InviteCreate, current_user: dict = Depends(get_cu
     if payload.role not in allowed_roles:
         raise HTTPException(400, f"Role '{payload.role}' not valid for {org['org_type']} workspace")
 
-    # Enforce max 2 per incharge/chief_dentist role
+    department_id = await _resolve_department_assignment(current_user, org_id, payload.role, payload.department_id)
+
+    # Enforce max 2 per incharge/chief_dentist role — scoped per-department for
+    # implant_incharge (see create_user for the same rule + rationale).
     if payload.role in MAX_2_ROLES:
-        count = await db.users.count_documents({"org_id": org_id, "role": payload.role})
+        cap_query = {"org_id": org_id, "role": payload.role}
+        if payload.role == "implant_incharge":
+            cap_query["department_id"] = department_id
+        count = await db.users.count_documents(cap_query)
         if count >= 2:
-            raise HTTPException(400, f"Maximum 2 users allowed with role '{payload.role}'")
+            raise HTTPException(400, f"Maximum 2 users allowed with role '{payload.role}'" + (" in this department" if payload.role == "implant_incharge" and department_id else ""))
 
     existing_user = await db.users.find_one({"email": payload.email})
     if existing_user:
@@ -2873,6 +3082,7 @@ async def send_invite(payload: InviteCreate, current_user: dict = Depends(get_cu
         "mobile": payload.mobile,
         "role": payload.role,
         "sub_role": payload.sub_role,
+        "department_id": department_id,
         "invited_by": current_user["_id"],
         "invited_by_name": current_user.get("name", ""),
         "created_at": now,
@@ -2946,6 +3156,8 @@ async def activate_invite(token: str, payload: InviteActivate):
         "sub_role": invite.get("sub_role"),
         "mobile": payload.mobile or invite.get("mobile"),
         "org_id": invite["org_id"],
+        "department_id": invite.get("department_id"),
+        "is_admin": False,
         "created_at": now,
     }
     user_result = await db.users.insert_one(user_doc)
@@ -2977,6 +3189,8 @@ async def activate_invite(token: str, payload: InviteActivate):
             "org_id": invite["org_id"],
             "org_name": invite["org_name"],
             "org_type": invite["org_type"],
+            "is_admin": False,
+            "department_id": invite.get("department_id"),
         }
     }
 
@@ -2992,8 +3206,10 @@ async def list_org_members(current_user: dict = Depends(get_current_user)):
     if not org_id:
         raise HTTPException(400, "Account not linked to an organization")
 
+    dept_query = _dept_scope_query(current_user)
+
     # Active + disabled users
-    users_cursor = db.users.find({"org_id": org_id}, {"password_hash": 0})
+    users_cursor = db.users.find(dept_query, {"password_hash": 0})
     users = []
     async for u in users_cursor:
         u["id"] = str(u.pop("_id"))
@@ -3001,12 +3217,16 @@ async def list_org_members(current_user: dict = Depends(get_current_user)):
 
     # Pending invites (not accepted, not revoked, not expired)
     now = datetime.utcnow()
-    pending_cursor = db.invites.find({
+    invite_query = {
         "org_id": org_id,
         "accepted": False,
         "revoked": False,
         "expires_at": {"$gt": now},
-    })
+    }
+    dept_id = current_user.get("department_id")
+    if dept_id and not current_user.get("is_admin"):
+        invite_query["department_id"] = dept_id
+    pending_cursor = db.invites.find(invite_query)
     pending = []
     async for inv in pending_cursor:
         inv["id"] = str(inv.pop("_id"))
@@ -3016,6 +3236,16 @@ async def list_org_members(current_user: dict = Depends(get_current_user)):
 
 
 # ── Endpoint 6: Revoke invite ──
+
+def _assert_can_manage_invite(invite: dict, current_user: dict) -> None:
+    """Department incharges may only revoke/resend invites they (or another
+    incharge in their own department) sent — mirrors _assert_can_manage_target."""
+    if current_user.get("is_super_admin"):
+        return
+    dept_id = current_user.get("department_id")
+    if dept_id and not current_user.get("is_admin") and invite.get("department_id") != dept_id:
+        raise HTTPException(status_code=403, detail="Cannot manage invites outside your department")
+
 
 @api_router.delete("/organizations/invites/{invite_id}")
 async def revoke_invite(invite_id: str, current_user: dict = Depends(get_current_user)):
@@ -3031,6 +3261,7 @@ async def revoke_invite(invite_id: str, current_user: dict = Depends(get_current
     invite = await db.invites.find_one({"_id": obj_id, "org_id": org_id})
     if not invite:
         raise HTTPException(404, "Invite not found")
+    _assert_can_manage_invite(invite, current_user)
     if invite.get("accepted"):
         raise HTTPException(400, "Invite already accepted — cannot revoke")
 
@@ -3054,6 +3285,7 @@ async def resend_invite(invite_id: str, current_user: dict = Depends(get_current
     invite = await db.invites.find_one({"_id": obj_id, "org_id": org_id})
     if not invite:
         raise HTTPException(404, "Invite not found")
+    _assert_can_manage_invite(invite, current_user)
     if invite.get("accepted"):
         raise HTTPException(400, "Invite already accepted")
     if invite.get("revoked"):
@@ -3392,7 +3624,7 @@ async def create_procedure_with_existing_implants(
     procedure_dict["created_by_id"] = current_user["_id"]
     procedure_dict["created_by_name"] = current_user["name"]
     procedure_dict["org_id"] = current_user.get("org_id")
-    procedure_dict["department_id"] = None
+    procedure_dict["department_id"] = current_user.get("department_id")
 
     # iter-228: Mirror routine `POST /procedures` behaviour for Phase 1
     # approval auto-stamping when the case is being routed through the
@@ -3689,7 +3921,7 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
     procedure_dict["augmentation_checklist_generated_at"] = datetime.now(timezone.utc).isoformat()
     procedure_dict["augmentation_checklist_generated_by"] = current_user.get("id") or current_user.get("_id") or ""
     procedure_dict["org_id"] = current_user.get("org_id")
-    procedure_dict["department_id"] = None
+    procedure_dict["department_id"] = current_user.get("department_id")
 
     result = await db.procedures.insert_one(procedure_dict)
     procedure_id = str(result.inserted_id)
@@ -4020,7 +4252,7 @@ async def list_students_analytics(current_user: dict = Depends(get_current_user)
     elif current_user.get("is_super_admin"):
         student_filter = {"role": "student"}
     else:
-        student_filter = {"role": "student", "org_id": current_user.get("org_id")}
+        student_filter = {"role": "student", **_dept_scope_query(current_user)}
 
     students_cursor = db.users.find(student_filter, {"password_hash": 0})
     students = []
@@ -4104,6 +4336,15 @@ async def get_student_summary(student_id: str, current_user: dict = Depends(get_
         and u and u.get("org_id") != current_user.get("org_id")
     ):
         raise HTTPException(status_code=403, detail="Cannot view students outside your organization")
+
+    if (
+        role in ("implant_incharge", "administrator")
+        and not current_user.get("is_super_admin")
+        and current_user.get("department_id")
+        and not current_user.get("is_admin")
+        and u and u.get("department_id") != current_user.get("department_id")
+    ):
+        raise HTTPException(status_code=403, detail="Cannot view students outside your department")
 
     # Aggregations across this student's procedures
     base_match: Dict[str, Any] = {"student_id": student_id, "archived": {"$ne": True}}
@@ -12892,9 +13133,9 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
                 student_id_match: Dict[str, Any] = {"$exists": True, "$nin": [None, ""]}
                 supervisor_id_match: Dict[str, Any] = {"$exists": True, "$nin": [None, ""]}
             else:
-                _org_ids = await _org_member_ids(current_user.get("org_id"))
-                student_id_match = {"$in": _org_ids}
-                supervisor_id_match = {"$in": _org_ids}
+                _scoped_ids = await _scope_member_ids(current_user)
+                student_id_match = {"$in": _scoped_ids}
+                supervisor_id_match = {"$in": _scoped_ids}
 
             student_pipeline = [
                 {"$match": {"student_id": student_id_match}},

@@ -132,7 +132,7 @@ function Header({ user, router }: any) {
         ) : null}
 
         {/* Role Badge Pill */}
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
           <View style={[s.roleBadgeCard, { backgroundColor: badgeColors.bg, borderColor: badgeColors.border }]}>
             <View style={[s.roleBadgeIconCircle, { backgroundColor: roleColor }]}>
               <Ionicons name={roleIcon} size={11} color="#FFF" />
@@ -141,6 +141,19 @@ function Header({ user, router }: any) {
               {getRoleLabel(role).toUpperCase()}
             </Text>
           </View>
+          {user?.is_admin && (
+            <View
+              style={[s.roleBadgeCard, { backgroundColor: '#FFF8E1', borderColor: '#FFECB3' }]}
+              data-testid="dashboard-org-admin-badge"
+            >
+              <View style={[s.roleBadgeIconCircle, { backgroundColor: '#B8860B' }]}>
+                <Ionicons name="star" size={11} color="#FFF" />
+              </View>
+              <Text style={[s.roleBadgeCardText, { color: '#B8860B' }]}>
+                ORG ADMIN
+              </Text>
+            </View>
+          )}
         </View>
 
         <WhatsNewBadge />

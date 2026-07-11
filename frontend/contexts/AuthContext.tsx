@@ -13,6 +13,13 @@ interface User {
   org_type?: 'college' | 'clinic' | null;
   org_name?: string | null;
   profile_photo?: string | null;
+  /** Org owner flag — set only on the org's founding user (via /auth/signup).
+   *  Distinct from `role`: an is_admin user can create/edit departments and
+   *  assign any user (incl. Implant In-Charges) to any department. */
+  is_admin?: boolean;
+  /** Department this user is scoped to. Null/undefined = org-wide (the
+   *  behavior every account had before departments existed). */
+  department_id?: string | null;
   /** ISO timestamp set when the user first dismisses the onboarding + workflow
    *  help. Null/undefined means they haven't seen it → frontend routes them
    *  through /onboarding → /help-workflow once before the dashboard. */

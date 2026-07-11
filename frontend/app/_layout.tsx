@@ -71,6 +71,7 @@ export default function RootLayout() {
               <Stack.Screen name="help-workflow" />
               <Stack.Screen name="whatsnew" />
               <Stack.Screen name="admin/audit-log" options={{ headerShown: false }} />
+              <Stack.Screen name="admin/departments" options={{ headerShown: false }} />
               <Stack.Screen name="admin/implant-catalog" options={{ headerShown: false }} />
               <Stack.Screen name="admin/implant-catalog-edit" options={{ headerShown: false }} />
               <Stack.Screen name="admin/implant-compare" options={{ headerShown: false }} />
@@ -82,6 +83,8 @@ export default function RootLayout() {
               <Stack.Screen name="forum/chat/index" options={{ headerShown: false }} />
               <Stack.Screen name="forum/chat/create" options={{ headerShown: false }} />
               <Stack.Screen name="forum/chat/[groupId]" options={{ headerShown: false }} />
+              <Stack.Screen name="admin/survival-analytics" options={{ headerShown: false }} />
+              <Stack.Screen name="procedures/survival-review/[id]" options={{ headerShown: false }} />
             </Stack>
             <AttachPickerModalRoot />
           </ActivityTracker>
