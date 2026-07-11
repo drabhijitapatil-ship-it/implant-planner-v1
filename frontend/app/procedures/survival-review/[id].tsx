@@ -28,7 +28,16 @@ type FailureEntry = {
   reason: string;
   removed: boolean;
   replaced: boolean;
-  replacement: { system: string; diameter: string; length: string };
+  replacement: {
+    system: string;
+    diameter: string;
+    length: string;
+    lot_number: string;
+    insertion_torque_ncm: string;
+    isq: string;
+    healing_protocol: string;
+    placement_date: string;
+  };
 };
 
 export default function SurvivalReview() {
@@ -60,7 +69,11 @@ export default function SurvivalReview() {
         [idx]: prev[idx] || {
           implant_idx: idx, tooth: imp.tooth_number || imp.tooth || '',
           reason: 'Unknown', removed: true, replaced: false,
-          replacement: { system: '', diameter: '', length: '' },
+          replacement: {
+            system: '', diameter: '', length: '',
+            lot_number: '', insertion_torque_ncm: '', isq: '',
+            healing_protocol: '', placement_date: '',
+          },
         },
       }));
     }
@@ -69,7 +82,7 @@ export default function SurvivalReview() {
   const setField = (idx: number, key: keyof FailureEntry, value: any) => {
     setFailures(prev => ({ ...prev, [idx]: { ...prev[idx], [key]: value } }));
   };
-  const setReplField = (idx: number, key: 'system' | 'diameter' | 'length', value: string) => {
+  const setReplField = (idx: number, key: 'system' | 'diameter' | 'length' | 'lot_number' | 'insertion_torque_ncm' | 'isq' | 'healing_protocol' | 'placement_date', value: string) => {
     setFailures(prev => ({
       ...prev,
       [idx]: { ...prev[idx], replacement: { ...prev[idx].replacement, [key]: value } },
@@ -105,6 +118,11 @@ export default function SurvivalReview() {
             system: f.replacement.system,
             diameter: Number(f.replacement.diameter),
             length: Number(f.replacement.length),
+            lot_number: f.replacement.lot_number || null,
+            insertion_torque_ncm: f.replacement.insertion_torque_ncm ? Number(f.replacement.insertion_torque_ncm) : null,
+            isq: f.replacement.isq ? Number(f.replacement.isq) : null,
+            healing_protocol: f.replacement.healing_protocol || null,
+            placement_date: f.replacement.placement_date || null,
           } : null,
         }));
       }
@@ -171,12 +189,25 @@ export default function SurvivalReview() {
                   </View>
                   {f.replaced && (
                     <View style={{marginTop:12,gap:8,padding:12,backgroundColor:'#F1F8E9',borderRadius:10,borderWidth:1,borderColor:'#C5E1A5'}}>
-                      <Text style={[s.lbl,{fontWeight:'700',color:'#2E7D32'}]}>Replacement implant</Text>
+                      <Text style={[s.lbl,{fontWeight:'700',color:'#2E7D32'}]}>Replacement implant (revision)</Text>
                       <TextInput style={s.input} placeholder="System (e.g. Straumann BLT)" value={f.replacement.system} onChangeText={v => setReplField(i, 'system', v)} data-testid={`imp-${i}-repl-system`} />
                       <View style={{flexDirection:'row',gap:8}}>
                         <TextInput style={[s.input,{flex:1}]} placeholder="Diameter (mm)" keyboardType="decimal-pad" value={f.replacement.diameter} onChangeText={v => setReplField(i, 'diameter', v)} data-testid={`imp-${i}-repl-diameter`} />
                         <TextInput style={[s.input,{flex:1}]} placeholder="Length (mm)" keyboardType="decimal-pad" value={f.replacement.length} onChangeText={v => setReplField(i, 'length', v)} data-testid={`imp-${i}-repl-length`} />
                       </View>
+                      <TextInput style={s.input} placeholder="Lot # (optional)" value={f.replacement.lot_number} onChangeText={v => setReplField(i, 'lot_number', v)} data-testid={`imp-${i}-repl-lot`} />
+                      <View style={{flexDirection:'row',gap:8}}>
+                        <TextInput style={[s.input,{flex:1}]} placeholder="Insertion torque (Ncm)" keyboardType="decimal-pad" value={f.replacement.insertion_torque_ncm} onChangeText={v => setReplField(i, 'insertion_torque_ncm', v)} data-testid={`imp-${i}-repl-torque`} />
+                        <TextInput style={[s.input,{flex:1}]} placeholder="ISQ" keyboardType="decimal-pad" value={f.replacement.isq} onChangeText={v => setReplField(i, 'isq', v)} data-testid={`imp-${i}-repl-isq`} />
+                      </View>
+                      <View style={{flexDirection:'row',gap:8,flexWrap:'wrap'}}>
+                        {['One-stage','Two-stage','Immediate loading'].map(hp => (
+                          <TouchableOpacity key={hp} style={[s.chip, f.replacement.healing_protocol === hp && s.chipOn]} onPress={() => setReplField(i, 'healing_protocol', hp)} data-testid={`imp-${i}-repl-heal-${hp.replace(/\s+/g,'-')}`}>
+                            <Text style={[s.chipT, f.replacement.healing_protocol === hp && s.chipTOn]}>{hp}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                      <TextInput style={s.input} placeholder="Placement date (YYYY-MM-DD)" value={f.replacement.placement_date} onChangeText={v => setReplField(i, 'placement_date', v)} data-testid={`imp-${i}-repl-date`} />
                     </View>
                   )}
                 </View>

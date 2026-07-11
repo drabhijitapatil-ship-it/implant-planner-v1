@@ -261,6 +261,16 @@ export default function ProfileScreen() {
               <Text style={styles.legalRowText}>Backfill treatment timeline</Text>
               <Ionicons name="chevron-forward" size={18} color="#999" />
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.legalRow}
+              onPress={() => router.push('/admin/survival-analytics' as any)}
+              data-testid="link-survival-analytics"
+              testID="link-survival-analytics"
+            >
+              <Ionicons name="bar-chart-outline" size={22} color="#1565C0" />
+              <Text style={styles.legalRowText}>Implant survival analytics</Text>
+              <Ionicons name="chevron-forward" size={18} color="#999" />
+            </TouchableOpacity>
           </View>
         )}
 

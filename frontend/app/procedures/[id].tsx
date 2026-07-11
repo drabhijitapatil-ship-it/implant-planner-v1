@@ -44,6 +44,7 @@ import CaseImplantPlanning from '../../components/CaseImplantPlanning';// iter-2
 import ExportPrintMenu from '../../components/ExportPrintMenu';
 import Phase2EditModal from '../../components/Phase2EditModal';
 import RescheduleModal from '../../components/RescheduleModal';
+import ImplantLifecycleTimeline from '../../components/ImplantLifecycleTimeline';
 import AugmentationChecklist from '../../components/AugmentationChecklist';
 import ClinicalEvaluationBanner from '../../components/ClinicalEvaluationBanner';
 import PulsingDoubleArrow from '../../components/onboarding/primitives/PulsingDoubleArrow';
@@ -1125,6 +1126,14 @@ export default function ProcedureDetailScreen() {
               <Ionicons name="chevron-forward" size={20} color="#90A4AE" />
             </View>
           </TouchableOpacity>
+        ) : null}
+
+        {/* iter-342 Phase B: Implant Lifecycle Timeline — full revision
+            history (Placed → Failed → Replaced → Healed → Loaded). Auto-
+            hides when no survival review has been submitted or when no
+            revisions exist. */}
+        {procedure?.phase2_completed_at ? (
+          <ImplantLifecycleTimeline procedureId={String(procedure.id || procedure._id)} />
         ) : null}
 
         {/* Treatment Timeline / Progress Tracker */}

@@ -1,0 +1,46 @@
+{
+  "summary": "iter-342 Phase B (extended replacement fields + R1/R2 chain) and Phase C (Analytics dashboard + CSV export + RBAC) — backend 19/19 pass. Frontend admin analytics page + Access denied gate + Compliance link all rendered/behaving correctly by soft navigation (avatar → profile → link). Direct hard-nav (page.goto) loses in-memory token as expected per iter-341 note. One testability issue found: several `data-testid` attributes on React Native `View`/`TextInput` in survival-analytics.tsx and ImplantLifecycleTimeline.tsx are NOT forwarded to the web DOM because RN Web only forwards `testID` prop for View primitives — profile link works because it sets BOTH `data-testid` and `testID`.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/analytics/survival", "issue": "Response `filters` object echoes date range keys as `from`/`to` while the request query params are `from_date`/`to_date`. Inconsistent — either rename the response keys to match, or document. Currently frontend doesn't consume filters echo, so no user-facing impact."},
+      {"endpoint": "GET /api/analytics/survival?system=SPI", "issue": "Filter value is lowercased in the response echo (`system: 'spi'`) — while data rows preserve original casing (`SPI`). Matching against DB values must therefore be case-insensitive; verify that internally in `_compute_analytics` (currently appears correct: SPI row still gets counted)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "app/admin/survival-analytics.tsx CounterCard/BarRow/monthRow (lines 258, 270, 235)", "issue": "`data-testid` set directly on RN `<View>` is dropped by React Native Web. Automated tests cannot find [data-testid='metric-placed'], [data-testid='metric-active'], [data-testid='metric-failed'], [data-testid='metric-survival'], [data-testid='metric-repl-success'], [data-testid='metric-repl-refail'], [data-testid='metric-repl-rate'], [data-testid='analytics-export-csv'], [data-testid='filter-system'], [data-testid='filter-from-date'], [data-testid='filter-to-date'], [data-testid='filter-apply'], [data-testid='filter-tooth-*'], [data-testid='row-system-*'], [data-testid='row-tooth-*'], [data-testid='row-reason-*'], [data-testid='row-month-*']. Fix: add `testID={testid}` alongside `data-testid={testid}` (mirror the pattern used in profile.tsx line 267-268).", "selector": "[data-testid='metric-*']", "priority": "MEDIUM"},
+      {"component": "components/ImplantLifecycleTimeline.tsx (lines 95, 105, 126)", "issue": "Same testID/data-testid gap — `implant-lifecycle-timeline`, `lifecycle-position-{tooth}`, `lifecycle-event-{tooth}-{idx}` all invisible to Playwright. Add `testID` prop alongside `data-testid`.", "selector": "[data-testid='implant-lifecycle-timeline']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/admin/survival-analytics", "issues": ["Tooth-bucket chip labels shown in UI as 'Anterior maxilla / Posterior maxilla / Anterior mandible / Posterior mandible' but backend + review-request document them as 'Anterior Max / Posterior Max / Anterior Mand / Posterior Mand'. Consistent copy would help downstream docs; functionally identical."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_survival_engine_iter342.py",
+    "/app/test_reports/pytest/iter342_survival.xml"
+  ],
+  "action_items": [
+    "Add `testID={testid}` in addition to `data-testid={testid}` in /app/frontend/app/admin/survival-analytics.tsx (CounterCard, BarRow, monthly row, TextInput filters, TouchableOpacity chips & buttons) so Playwright/RTL selectors work on web (RN Web forwards `testID` to `data-testid` for primitives).",
+    "Same fix for /app/frontend/components/ImplantLifecycleTimeline.tsx — add `testID` for outer container, per-position cards, and per-event rows.",
+    "Consider aligning /api/analytics/survival `filters` echo keys with request param names (`from_date`/`to_date` instead of `from`/`to`) for API contract consistency."
+  ],
+  "critical_code_review_comments": [
+    "server.py ~L4262: `survival_map: Dict[int, Dict[str, Any]]` is keyed by int and re-stringified at L4327 for Mongo. This works but violates the type annotation. Prefer `Dict[str, ...]` from the start.",
+    "server.py ~L4285-L4295: When R2 arrives, the code moves prior replacement into the chain with `status: 'Failed'`. However for R3 the chain will only contain the direct prior — because it does `chain = list(prior.get('chain') or [])` then `append`. Verify R3+ preserves full history; the current pattern should work but add a test that submits R3 to confirm chain length becomes 2.",
+    "survival-analytics.tsx L107: CSV filename hardcoded `implanr-survival-analytics.csv` — the backend supplies a timestamped filename in Content-Disposition; use that or embed timestamp on the client to avoid overwrite when downloading twice.",
+    "survival-analytics.tsx AuthContext-loading race: While loading, the page currently renders the role gate block card ('Access denied') if user role isn't yet resolved. Confirm the `loading` flag from AuthContext is honored — a hard reload without a token flashes 'Access denied' before router redirect. Acceptable but could be smoother with an ActivityIndicator during loading state."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_survival_engine_iter342.py"
+  ],
+  "success_rate": {"backend": "100% (19/19)", "frontend": "~85% — page renders correctly for admin and blocks student; only automated data-testid selectors miss because of the RN Web View forwarding gap (visual verification via screenshots covers what selectors couldn't)."},
+  "test_credentials": "Admin/Implant In-Charge: Abhijit.patil / Admin@123 ; Student: Gaurav.pandey / Student@123 (per /app/memory/test_credentials.md)",
+  "seed_data_creation": "Reused existing procedure 6a01da5afaa288be26abd086 (SPI, tooth 16). Test fixture `reset_survival_state` resets `phase2_survival_review` before and after the R1/R2 mutation tests via `all_survived=True` POST. State left clean.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Pytest suite at /app/backend/tests/test_survival_engine_iter342.py — reuse. If revision chain tests run twice in a row, the R2 chain assertion may need adjustment because state is now R2; the fixture resets state before test collection. If frontend data-testids get fixed with `testID` prop, add Playwright selector coverage for metric-*, filter-*, filter-tooth-*, and lifecycle-* elements. Note also that hard navigation (page.goto) drops the in-memory access token — always use soft in-app nav (avatar → profile → link) for UI tests. The DA/GP header pill (initials-based) is the profile entrypoint on the dashboard.",
+  "rca of the issue": "Frontend data-testid selectors returned count=0 for metric-placed/active/failed/survival/repl-*/analytics-export-csv/filter-system. Root cause: React Native Web only forwards `testID` prop to the resulting DOM element for View/TextInput primitives; the `data-testid` prop passed directly is treated as an unknown React prop and dropped. Fix: add `testID` alongside `data-testid` (see profile.tsx L267-268 for the working dual-attribute pattern). No fix applied — this is business/component-level code and belongs to the main agent."
+}
