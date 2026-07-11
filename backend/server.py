@@ -685,26 +685,19 @@ class Phase4Step2Submit(BaseModel):
 # validator below enforces: not in future, not before previous phase,
 # not more than 30 days back. Stored as ISO YYYY-MM-DD strings.
 def _validate_done_date(d, prev_date, label):
-    """Return validated YYYY-MM-DD date or raise HTTPException."""
-    from datetime import date as _date, timedelta as _td
+    """Return validated YYYY-MM-DD date or default to today.
+    iter-343: Constraints relaxed for testing — the survival & revision
+    engine spans months, so we no longer clamp to the 30-day back-date
+    window, forbid future dates, or enforce chronological ordering
+    against the previous phase. We still validate the ISO format so a
+    malformed string doesn't corrupt downstream aggregations."""
+    from datetime import date as _date
     if not d:
         return _date.today().isoformat()
     try:
         parsed = _date.fromisoformat(d)
     except Exception:
         raise HTTPException(status_code=400, detail=f"{label}: invalid date format, expected YYYY-MM-DD")
-    today = _date.today()
-    if parsed > today:
-        raise HTTPException(status_code=400, detail=f"{label}: date cannot be in the future")
-    if parsed < today - _td(days=30):
-        raise HTTPException(status_code=400, detail=f"{label}: cannot be more than 30 days in the past")
-    if prev_date:
-        try:
-            prev = _date.fromisoformat(prev_date)
-            if parsed < prev:
-                raise HTTPException(status_code=400, detail=f"{label}: cannot be before the previous phase ({prev_date})")
-        except (ValueError, TypeError):
-            pass
     return parsed.isoformat()
 
 
@@ -4964,10 +4957,10 @@ async def admin_backfill_timeline(
         "phase4_step1_done_date": body.phase4_step1_done_date,
         "phase4_step2_done_date": body.phase4_step2_done_date,
     }
-    # Use existing value when the caller didn't override that field — keeps
-    # the chronological check honest even with partial updates.
+    # iter-343: relaxed for testing — accept any valid ISO date. Future
+    # dates and out-of-order phases are now allowed so the survival
+    # engine can be exercised across simulated multi-month timelines.
     merged: Dict[str, Optional[str]] = {}
-    today = _d.today()
     for k, v in incoming.items():
         chosen = v if v is not None else procedure.get(k)
         if chosen:
@@ -4975,33 +4968,12 @@ async def admin_backfill_timeline(
                 parsed = _d.fromisoformat(chosen)
             except Exception:
                 raise HTTPException(status_code=400, detail=f"{k}: invalid date format, expected YYYY-MM-DD")
-            if parsed > today:
-                raise HTTPException(status_code=400, detail=f"{k}: date cannot be in the future")
             merged[k] = parsed.isoformat()
         else:
             merged[k] = None
 
-    # Chronological order across phases
-    order = [
-        "procedure_date",
-        "phase2_actual_done_date",
-        "phase3_done_date",
-        "phase4_step1_done_date",
-        "phase4_step2_done_date",
-    ]
-    prev_date = None
-    prev_key = None
-    for k in order:
-        cur = merged.get(k)
-        if not cur:
-            continue
-        if prev_date and cur < prev_date:
-            raise HTTPException(
-                status_code=400,
-                detail=f"{k} ({cur}) cannot be before {prev_key} ({prev_date}). Adjust the dates so each phase ≥ previous phase.",
-            )
-        prev_date = cur
-        prev_key = k
+    # iter-343: chronological order check disabled for testing so
+    # simulated multi-month timelines can be entered in any order.
 
     update_data: Dict[str, Any] = {}
     for k, v in incoming.items():

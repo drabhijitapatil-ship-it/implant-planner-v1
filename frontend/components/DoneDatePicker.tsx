@@ -36,12 +36,11 @@ export default function DoneDatePicker({
   value,
   onChange,
   minDate,
-  required = true,
+  required = false,
   testID = 'done-date-picker',
   helperText,
 }: DoneDatePickerProps) {
   const today = todayIso();
-  const computedMin = minDate && minDate > thirtyDaysAgoIso() ? minDate : thirtyDaysAgoIso();
   return (
     <View style={styles.box} data-testid={`${testID}-wrap`}>
       <Text style={styles.label}>
@@ -56,8 +55,6 @@ export default function DoneDatePicker({
           onChangeText={onChange}
           // @ts-ignore — RN-Web converts these to attributes on the input.
           type="date"
-          min={computedMin}
-          max={today}
           data-testid={testID}
           testID={testID}
         />
@@ -73,7 +70,7 @@ export default function DoneDatePicker({
         />
       )}
       <Text style={styles.helper}>
-        {helperText || 'Defaults to today. You can back-date up to 30 days; future dates are not allowed.'}
+        {helperText || 'Defaults to today. Any date allowed (back-date freely for testing).'}
       </Text>
     </View>
   );
