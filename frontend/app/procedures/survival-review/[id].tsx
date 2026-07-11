@@ -486,11 +486,20 @@ export default function SurvivalReview() {
                         )}
                       </View>
 
+                      {/* iter-345: Torque relocated right after Diameter/Length,
+                          matching the Phase 2 default input style. */}
+                      <TextInput
+                        style={s.input}
+                        placeholder="Torque (Ncm)"
+                        keyboardType="decimal-pad"
+                        value={f.replacement.insertion_torque_ncm}
+                        onChangeText={v => setReplField(i, { insertion_torque_ncm: v })}
+                        data-testid={`imp-${i}-repl-torque`}
+                        testID={`imp-${i}-repl-torque`}
+                      />
+
                       <TextInput style={s.input} placeholder="Lot # (optional)" value={f.replacement.lot_number} onChangeText={v => setReplField(i, { lot_number: v })} data-testid={`imp-${i}-repl-lot`} testID={`imp-${i}-repl-lot`} />
-                      <View style={{flexDirection:'row',gap:8}}>
-                        <TextInput style={[s.input,{flex:1}]} placeholder="Insertion torque (Ncm)" keyboardType="decimal-pad" value={f.replacement.insertion_torque_ncm} onChangeText={v => setReplField(i, { insertion_torque_ncm: v })} data-testid={`imp-${i}-repl-torque`} testID={`imp-${i}-repl-torque`} />
-                        <TextInput style={[s.input,{flex:1}]} placeholder="ISQ" keyboardType="decimal-pad" value={f.replacement.isq} onChangeText={v => setReplField(i, { isq: v })} data-testid={`imp-${i}-repl-isq`} testID={`imp-${i}-repl-isq`} />
-                      </View>
+                      <TextInput style={s.input} placeholder="ISQ (optional)" keyboardType="decimal-pad" value={f.replacement.isq} onChangeText={v => setReplField(i, { isq: v })} data-testid={`imp-${i}-repl-isq`} testID={`imp-${i}-repl-isq`} />
                       <TextInput style={s.input} placeholder="Placement date (YYYY-MM-DD)" value={f.replacement.placement_date} onChangeText={v => setReplField(i, { placement_date: v })} data-testid={`imp-${i}-repl-date`} testID={`imp-${i}-repl-date`} />
 
                       {/* Type of Procedure */}
