@@ -148,14 +148,14 @@ export default function SurvivalAnalyticsScreen() {
   return (
     <SafeAreaView style={s.c} edges={['top', 'bottom']}>
       <View style={s.h}>
-        <TouchableOpacity onPress={() => router.back()} style={{ padding: 8 }} data-testid="analytics-back">
+        <TouchableOpacity onPress={() => router.back()} style={{ padding: 8 }} data-testid="analytics-back" testID="analytics-back">
           <Ionicons name="arrow-back" size={22} color="#1565C0" />
         </TouchableOpacity>
         <View style={{ flex: 1, marginLeft: 8 }}>
           <Text style={s.title}>Implant Survival Analytics</Text>
           <Text style={s.sub}>Institutional outcomes across all cases</Text>
         </View>
-        <TouchableOpacity style={s.exportBtn} onPress={handleExportCsv} disabled={exporting} data-testid="analytics-export-csv">
+        <TouchableOpacity style={s.exportBtn} onPress={handleExportCsv} disabled={exporting} data-testid="analytics-export-csv" testID="analytics-export-csv">
           {exporting ? <ActivityIndicator color="#FFF" size="small" /> : <><Ionicons name="download-outline" size={16} color="#FFF" /><Text style={s.exportBtnT}>CSV</Text></>}
         </TouchableOpacity>
       </View>
@@ -165,18 +165,18 @@ export default function SurvivalAnalyticsScreen() {
         <View style={s.card}>
           <Text style={s.sectionTitle}>Filters</Text>
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-            <TextInput style={[s.input, { flex: 1 }]} placeholder="From (YYYY-MM-DD)" value={fromDate} onChangeText={setFromDate} data-testid="filter-from-date" />
-            <TextInput style={[s.input, { flex: 1 }]} placeholder="To (YYYY-MM-DD)" value={toDate} onChangeText={setToDate} data-testid="filter-to-date" />
+            <TextInput style={[s.input, { flex: 1 }]} placeholder="From (YYYY-MM-DD)" value={fromDate} onChangeText={setFromDate} data-testid="filter-from-date" testID="filter-from-date" />
+            <TextInput style={[s.input, { flex: 1 }]} placeholder="To (YYYY-MM-DD)" value={toDate} onChangeText={setToDate} data-testid="filter-to-date" testID="filter-to-date" />
           </View>
-          <TextInput style={s.input} placeholder="System (e.g. Straumann BLT)" value={systemFilter} onChangeText={setSystemFilter} data-testid="filter-system" />
+          <TextInput style={s.input} placeholder="System (e.g. Straumann BLT)" value={systemFilter} onChangeText={setSystemFilter} data-testid="filter-system" testID="filter-system" />
           <View style={{ flexDirection: 'row', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
             {['', 'anterior_max', 'posterior_max', 'anterior_mand', 'posterior_mand'].map(b => (
-              <TouchableOpacity key={b || 'all'} style={[s.chip, toothBucket === b && s.chipOn]} onPress={() => setToothBucket(b)} data-testid={`filter-tooth-${b || 'all'}`}>
+              <TouchableOpacity key={b || 'all'} style={[s.chip, toothBucket === b && s.chipOn]} onPress={() => setToothBucket(b)} data-testid={`filter-tooth-${b || 'all'}`} testID={`filter-tooth-${b || 'all'}`}>
                 <Text style={[s.chipT, toothBucket === b && s.chipTOn]}>{b ? TOOTH_BUCKET_LABEL[b] : 'All positions'}</Text>
               </TouchableOpacity>
             ))}
           </View>
-          <TouchableOpacity style={s.applyBtn} onPress={load} disabled={refreshing} data-testid="filter-apply">
+          <TouchableOpacity style={s.applyBtn} onPress={load} disabled={refreshing} data-testid="filter-apply" testID="filter-apply">
             {refreshing ? <ActivityIndicator color="#FFF" /> : <><Ionicons name="funnel-outline" size={16} color="#FFF" /><Text style={s.applyBtnT}>Apply filters</Text></>}
           </TouchableOpacity>
         </View>
@@ -232,7 +232,7 @@ export default function SurvivalAnalyticsScreen() {
           {timeSeries.length === 0 ? <EmptyRow /> : (
             <View style={{ marginTop: 12 }}>
               {timeSeries.map(m => (
-                <View key={m.month} style={s.monthRow} data-testid={`row-month-${m.month}`}>
+                <View key={m.month} style={s.monthRow} data-testid={`row-month-${m.month}`} testID={`row-month-${m.month}`}>
                   <Text style={s.monthLabel}>{m.month}</Text>
                   <View style={s.monthBars}>
                     <View style={[s.monthBar, { width: `${(m.placed / maxMonthPlaced) * 60}%`, backgroundColor: '#1565C0' }]} />
@@ -255,7 +255,7 @@ export default function SurvivalAnalyticsScreen() {
 
 function CounterCard({ label, value, color, testid, wide }: { label: string; value: string | number; color: string; testid: string; wide?: boolean }) {
   return (
-    <View style={[s.counter, wide && { flex: 1 }]} data-testid={testid}>
+    <View style={[s.counter, wide && { flex: 1 }]} data-testid={testid} testID={testid}>
       <Text style={[s.counterValue, { color }]}>{value}</Text>
       <Text style={s.counterLabel}>{label}</Text>
     </View>
@@ -267,7 +267,7 @@ function BarRow({ label, value, max, tag, tagColor, subtitle, testid }: {
 }) {
   const pct = Math.max(4, (value / max) * 100);
   return (
-    <View style={s.barRow} data-testid={testid}>
+    <View style={s.barRow} data-testid={testid} testID={testid}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <Text style={s.barLabel} numberOfLines={1}>{label}</Text>
         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'baseline' }}>

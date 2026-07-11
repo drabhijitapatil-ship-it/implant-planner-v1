@@ -4769,9 +4769,9 @@ def _compute_analytics(procs: List[Dict[str, Any]], filters: Dict[str, Any]) -> 
         "case_rows": case_rows,
         "filters": {
             "system": system_filter,
-            "tooth_bucket": tooth_filter,
-            "from": filters.get("from_date"),
-            "to": filters.get("to_date"),
+            "tooth_bucket": filters.get("tooth_bucket"),
+            "from_date": filters.get("from_date"),
+            "to_date": filters.get("to_date"),
         },
     }
 
