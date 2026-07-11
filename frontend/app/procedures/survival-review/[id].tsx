@@ -141,6 +141,8 @@ export default function SurvivalReview() {
   const [allSurvived, setAllSurvived] = useState<'yes' | 'no' | null>(null);
   const [failures, setFailures] = useState<Record<number, FailureEntry>>({});
 
+  const [survivalReviewState, setSurvivalReviewState] = useState<any | null>(null);
+
   useEffect(() => {
     (async () => {
       try {
@@ -156,6 +158,8 @@ export default function SurvivalReview() {
             || (procRes.data?.implant_plans?.length || procRes.data?.implants?.length || procRes.data?.existing_implants?.length || 0),
         });
         setCatalog(Array.isArray(catRes.data) ? catRes.data : (catRes.data?.systems || []));
+        // iter-346: load prior review so history + multi-round submission works
+        setSurvivalReviewState(procRes.data?.phase2_survival_review || null);
       } catch (e: any) {
         Alert.alert('Error', e?.response?.data?.detail || 'Failed to load survival review data');
       } finally { setLoading(false); }
@@ -269,8 +273,8 @@ export default function SurvivalReview() {
     return true;
   };
 
-  const handleSubmit = async () => {
-    if (!canSubmit()) { Alert.alert('Incomplete', 'Please fill all required fields (reason, site change target, and replacement details).'); return; }
+  const handleSubmit = async (afterSave: 'phase3' | 'back') => {
+    if (allSurvived && !canSubmit()) { Alert.alert('Incomplete', 'Please fill all required fields (reason, site change target, and replacement details).'); return; }
     setSaving(true);
     try {
       const body: any = { all_survived: allSurvived === 'yes', failures: [] };
@@ -297,7 +301,6 @@ export default function SurvivalReview() {
               insertion_torque_ncm: r.insertion_torque_ncm ? Number(r.insertion_torque_ncm) : null,
               isq: r.isq ? Number(r.isq) : null,
               placement_date: r.placement_date || null,
-              // Type of Procedure block
               procedure_type: r.procedure_type,
               prosthetic_component: r.procedure_type === 'Two Stage' ? r.prosthetic_component : null,
               healing_abutment_mm: (r.procedure_type === 'Two Stage' && r.prosthetic_component === 'Healing Abutment' && r.healing_abutment_mm)
@@ -307,7 +310,6 @@ export default function SurvivalReview() {
                     ? `Other: ${r.immediate_loading_prosthesis_other.trim()}`
                     : r.immediate_loading_prosthesis)
                 : null,
-              // Legacy field kept for backwards compatibility with older readers.
               healing_protocol: r.procedure_type === 'Single Stage'
                 ? 'Single Stage'
                 : (r.procedure_type === 'Two Stage'
@@ -318,8 +320,11 @@ export default function SurvivalReview() {
         });
       }
       await api.post(`/procedures/${id}/survival-review`, body);
-      Alert.alert('Saved', 'Survival review recorded.',
-        [{ text: 'Continue to Phase 3', onPress: () => router.replace(`/procedures/submit-stage2-surgical/${id}`) }]);
+      if (afterSave === 'phase3') {
+        router.replace(`/procedures/submit-stage2-surgical/${id}`);
+      } else {
+        router.replace(`/procedures/${id}`);
+      }
     } catch (e: any) {
       Alert.alert('Save failed', e?.response?.data?.detail || 'Please try again');
     } finally { setSaving(false); }
@@ -341,6 +346,32 @@ export default function SurvivalReview() {
         </View>
       </View>
       <ScrollView contentContainerStyle={{padding:16,paddingBottom:40}}>
+        {/* iter-346: Prior review history (audit trail) — read-only. */}
+        {survivalReviewState?.events && survivalReviewState.events.length > 0 ? (
+          <View style={s.histCard} data-testid="survival-history" testID="survival-history">
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+              <Ionicons name="time-outline" size={16} color="#0D47A1" />
+              <Text style={s.histTitle}>Previous survival reviews ({survivalReviewState.events.length})</Text>
+            </View>
+            {survivalReviewState.events.map((ev: any, i: number) => (
+              <View key={i} style={s.histRow} data-testid={`survival-history-event-${i}`}>
+                <Text style={s.histWhen}>{(ev.at || '').slice(0, 10)}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.histWho}>{ev.by || 'Reviewer'}</Text>
+                  {ev.all_survived && (!ev.failures || ev.failures.length === 0)
+                    ? <Text style={s.histBody}>All implants confirmed survived.</Text>
+                    : <Text style={s.histBody}>
+                        {ev.failures.length} failure{ev.failures.length > 1 ? 's' : ''} reported:
+                        {ev.failures.map((f: any, j: number) => (
+                          ` #${f.tooth} — ${f.reason}${f.replaced ? ' → replaced' : ''}${f.site_changed ? ` (site → ${f.new_tooth_number})` : ''}${j < ev.failures.length - 1 ? ';' : ''}`
+                        )).join('')}
+                      </Text>}
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
         <View style={s.card}>
           <Text style={s.q}>{label}?</Text>
           <View style={{flexDirection:'row',gap:12,marginTop:12}}>
@@ -575,9 +606,26 @@ export default function SurvivalReview() {
         })}
 
         {allSurvived && (
-          <TouchableOpacity style={[s.submit, (!canSubmit() || saving) && {opacity:0.5}]} disabled={!canSubmit() || saving} onPress={handleSubmit} data-testid="survival-submit" testID="survival-submit">
-            {saving ? <ActivityIndicator color="#fff"/> : <><Ionicons name="checkmark-done" size={18} color="#fff"/><Text style={s.submitT}>Submit &amp; continue to Phase 3</Text></>}
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity
+              style={[s.submitAlt, saving && {opacity:0.5}]}
+              disabled={saving}
+              onPress={() => handleSubmit('back')}
+              data-testid="survival-submit-back"
+              testID="survival-submit-back"
+            >
+              {saving ? <ActivityIndicator color="#1565C0" size="small"/> : <><Ionicons name="save-outline" size={16} color="#1565C0"/><Text style={s.submitAltT}>Update &amp; go back</Text></>}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.submit, { flex: 1 }, (!canSubmit() || saving) && {opacity:0.5}]}
+              disabled={!canSubmit() || saving}
+              onPress={() => handleSubmit('phase3')}
+              data-testid="survival-submit-phase3"
+              testID="survival-submit-phase3"
+            >
+              {saving ? <ActivityIndicator color="#fff"/> : <><Ionicons name="arrow-forward" size={16} color="#fff"/><Text style={s.submitT}>Continue to Phase 3</Text></>}
+            </TouchableOpacity>
+          </View>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -612,6 +660,14 @@ const s = StyleSheet.create({
   fdiHelp: { fontSize: 11, color: '#0277BD', marginBottom: 8, fontStyle: 'italic' },
   submit: { marginTop: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1565C0', borderRadius: 12, paddingVertical: 14 },
   submitT: { color: '#FFF', fontWeight: '800', fontSize: 14 },
+  submitAlt: { marginTop: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1.5, borderColor: '#1565C0', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 14, backgroundColor: '#FFF' },
+  submitAltT: { color: '#1565C0', fontWeight: '800', fontSize: 13 },
+  histCard: { backgroundColor: '#F8FAFF', borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#BBDEFB' },
+  histTitle: { fontSize: 13, fontWeight: '800', color: '#0D47A1' },
+  histRow: { flexDirection: 'row', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#E3F2FD' },
+  histWhen: { fontSize: 11, color: '#546E7A', fontWeight: '700', minWidth: 80 },
+  histWho: { fontSize: 12, fontWeight: '700', color: '#1A237E' },
+  histBody: { fontSize: 11, color: '#37474F', marginTop: 2 },
   mBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   mSheet: { backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 16, maxHeight: '70%' },
   mTitle: { fontSize: 14, fontWeight: '800', color: '#0D47A1', marginBottom: 12 },

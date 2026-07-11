@@ -4304,12 +4304,25 @@ async def submit_survival_review(
 
     now = datetime.now(timezone.utc)
     implants = _extract_procedure_implants(proc)
-    survival_map: Dict[int, Dict[str, Any]] = {}   # idx -> status
+    # iter-346: incremental / multi-round survival reviews. Load the
+    # existing `phase2_survival_review.implants` (per-implant snapshot)
+    # and merge only the newly-referenced idx values into it. Untouched
+    # implants keep their prior state so multiple failures over time
+    # correctly compose into a single per-implant record with a
+    # growing revision chain.
+    prev_review = proc.get("phase2_survival_review") or {}
+    prev_impl_state: Dict[str, Any] = dict(prev_review.get("implants") or {})
+    survival_map: Dict[int, Dict[str, Any]] = {}  # only touched idx values this round
     site_changes: List[Dict[str, Any]] = []  # iter-344: apply after loop
 
     if body.all_survived:
-        for i, imp in enumerate(implants):
-            survival_map[i] = {"status": "Active", "reviewed_at": now.isoformat()}
+        # iter-346: an "all survived" submission is a no-op for any
+        # implant that already has a persisted state — we do NOT wipe
+        # a prior R1/R2 replacement record. Only implants that have
+        # never been reviewed are stamped as "Active" this round.
+        for i, _imp in enumerate(implants):
+            if str(i) not in prev_impl_state:
+                survival_map[i] = {"status": "Active", "reviewed_at": now.isoformat()}
     else:
         # Every failure entry must reference an implant_idx
         for f in body.failures:
@@ -4340,7 +4353,7 @@ async def submit_survival_review(
                 repl = f.get("replacement") or {}
                 if not all(repl.get(k) for k in ("system", "diameter", "length")):
                     raise HTTPException(status_code=400, detail="Replacement requires system, diameter, length")
-                existing_chain = (proc.get("phase2_survival_review") or {}).get("implants", {}).get(str(idx)) or {}
+                existing_chain = prev_impl_state.get(str(idx)) or {}
                 prior = existing_chain.get("replacement")
                 revision_number = 1
                 chain: List[Dict[str, Any]] = []
@@ -4391,15 +4404,39 @@ async def submit_survival_review(
             if i not in survival_map:
                 survival_map[i] = {"status": "Active", "reviewed_at": now.isoformat()}
 
-    # Persist review + implant lifecycle
+    # iter-346: Persist merged review + audit event.
     # Mongo requires string keys on nested documents.
     survival_map_str = {str(k): v for k, v in survival_map.items()}
+    merged_impl = dict(prev_impl_state)
+    for k, v in survival_map_str.items():
+        merged_impl[k] = v
+    if body.all_survived:
+        for i in range(len(implants)):
+            if str(i) not in merged_impl:
+                merged_impl[str(i)] = {"status": "Active", "reviewed_at": now.isoformat()}
+    prior_events = list((prev_review.get("events") or []))
+    prior_events.append({
+        "at": now.isoformat(),
+        "by": current_user.get("name") or current_user.get("username"),
+        "by_id": str(current_user.get("_id")),
+        "all_survived": body.all_survived,
+        "failures": [{"implant_idx": f.get("implant_idx"), "tooth": f.get("tooth"),
+                      "reason": (f.get("reason") or "Unknown"),
+                      "replaced": bool(f.get("replaced")),
+                      "site_changed": bool(f.get("site_changed")),
+                      "new_tooth_number": f.get("new_tooth_number")}
+                     for f in (body.failures or [])],
+    })
+    is_fully_survived = not any(v.get("status") in ("Failed", "Replaced") for v in merged_impl.values())
     update_set: Dict[str, Any] = {
         "phase2_survival_review": {
-            "all_survived": body.all_survived,
-            "reviewed_at": now.isoformat(),
-            "reviewed_by": current_user.get("name") or current_user.get("username"),
-            "implants": survival_map_str,
+            "all_survived": is_fully_survived,
+            "reviewed_at": prev_review.get("reviewed_at") or now.isoformat(),
+            "last_reviewed_at": now.isoformat(),
+            "last_reviewed_by": current_user.get("name") or current_user.get("username"),
+            "reviewed_by": prev_review.get("reviewed_by") or (current_user.get("name") or current_user.get("username")),
+            "implants": merged_impl,
+            "events": prior_events,
         },
         "phase2_survival_review_at": now,
     }
@@ -4439,7 +4476,7 @@ async def submit_survival_review(
         request=request,
         extra={"all_survived": body.all_survived, "failure_count": len(body.failures)},
     )
-    return {"ok": True, "review": survival_map}
+    return {"ok": True, "review": survival_map, "merged": merged_impl, "events": prior_events}
 
 
 @api_router.get("/procedures/{procedure_id}/active-implants")
