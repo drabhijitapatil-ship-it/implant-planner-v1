@@ -92,7 +92,7 @@ export function ImplantLifecycleTimeline({ procedureId }: { procedureId: string 
   if (!hasRevisions) return null;
 
   return (
-    <View style={styles.container} data-testid="implant-lifecycle-timeline">
+    <View style={styles.container} data-testid="implant-lifecycle-timeline" testID="implant-lifecycle-timeline">
       <View style={styles.header}>
         <Ionicons name="git-network-outline" size={18} color="#0D47A1" />
         <Text style={styles.title}>Implant Lifecycle</Text>
@@ -102,7 +102,7 @@ export function ImplantLifecycleTimeline({ procedureId }: { procedureId: string 
       {positions.map(pos => {
         const pill = statusPillStyle(pos.current_status);
         return (
-          <View key={pos.implant_idx} style={styles.positionCard} data-testid={`lifecycle-position-${pos.tooth}`}>
+          <View key={pos.implant_idx} style={styles.positionCard} data-testid={`lifecycle-position-${pos.tooth}`} testID={`lifecycle-position-${pos.tooth}`}>
             <View style={styles.positionHeader}>
               <View style={styles.toothBadge}>
                 <Text style={styles.toothBadgeText}>{pos.tooth}</Text>
@@ -123,7 +123,7 @@ export function ImplantLifecycleTimeline({ procedureId }: { procedureId: string 
                 const meta = KIND_META[ev.kind];
                 const isLast = idx === pos.events.length - 1;
                 return (
-                  <View key={idx} style={styles.eventRow} data-testid={`lifecycle-event-${pos.tooth}-${idx}`}>
+                  <View key={idx} style={styles.eventRow} data-testid={`lifecycle-event-${pos.tooth}-${idx}`} testID={`lifecycle-event-${pos.tooth}-${idx}`}>
                     <View style={styles.eventGutter}>
                       <View style={[styles.eventDot, { backgroundColor: meta.bg, borderColor: meta.color }]}>
                         <Ionicons name={meta.icon} size={12} color={meta.color} />

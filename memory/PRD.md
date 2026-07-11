@@ -1,6 +1,54 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
 
+## Iteration 342 (Feb 2026) — Implant Survival & Revision Engine: Phase B (Full Revision) + Phase C (Analytics)
+
+User choices: 1a (Phase B → C sequential), 2b (lighter replacement subset), 3c (full analytics with time-series + filters), 4a (Admin + Implant In-Charge role gate).
+
+### Phase B — Full Revision
+1. **`POST /api/procedures/{id}/survival-review`** now accepts extended replacement fields — `system`, `diameter`, `length`, `lot_number` (optional), `insertion_torque_ncm` (optional), `isq` (optional), `healing_protocol` (optional: One-stage / Two-stage / Immediate loading), `surface` (optional), `placement_date`.
+2. **Revision numbering** — first replacement is R1. When R1 fails and is re-replaced, the failed R1 moves into a `chain[]` array on the new replacement and the new revision is R2, and so on. Chain items retain `revision_number`, `failure_reason`, `failure_date`.
+3. **New endpoint `GET /api/procedures/{id}/implant-lifecycle`** — returns `{ positions: [{ implant_idx, tooth, current_status, current_revision, events[] }] }` where events are `placed → failed → replaced (R1) → ... → healed → loaded` in chronological order.
+4. **Case Detail lifecycle UI** — new `<ImplantLifecycleTimeline>` component renders per-tooth cards with status pill and event dots (colored per kind), showing torque/ISQ/lot/healing chips on replacement events and failure reason on failed events. Auto-hides when no revisions.
+5. **Frontend survival-review form** — replacement input expanded with Lot #, Torque, ISQ, Healing protocol chips, Placement date. `data-testid` values: `imp-{i}-repl-{lot,torque,isq,heal-*,date}`.
+
+### Phase C — Analytics
+1. **`GET /api/analytics/survival`** (role gate: `administrator` + `implant_incharge`) returns:
+   - `counters`: `{ placed, active, failed, replaced_success, replaced_refailed }`
+   - `rates`: `{ survival_rate, replacement_success_rate }`
+   - `failure_reasons[]`: `[{ reason, count }, ...]` (chain failures included)
+   - `by_system[]`: per-system placed/active/failed/replaced + survival %
+   - `by_tooth[]`: buckets `anterior_max / posterior_max / anterior_mand / posterior_mand / unknown`
+   - `time_series[]`: monthly `{ month: YYYY-MM, placed, failed, survival_rate }`
+   - `filters`: echo of applied filters
+2. **Filters:** query params `system=<name>`, `tooth_bucket=<bucket>`, `from_date=YYYY-MM-DD`, `to_date=YYYY-MM-DD` — filter both DB fetch (date range) and in-memory aggregation.
+3. **`GET /api/analytics/survival/export.csv`** — same role gate, returns CSV with sections: Summary Counters, Failure Reasons, By System, By Tooth Bucket, Monthly Time Series, Case Rows. Attachment header includes timestamped filename.
+4. **Frontend `/admin/survival-analytics`** — 7 counter cards (Placed / Active / Failed / Survival % / Repl Success / Repl Re-failed / Repl Success %), 3 bar charts (by system, by tooth, failure reasons), monthly bar chart, CSV button, and filters block (date range + system + tooth chips). Access denied card for other roles. Access via Profile → Compliance → "Implant survival analytics".
+
+### Testing
+- **Backend**: 19/19 pass (iter-342 pytest suite at `/app/backend/tests/test_survival_engine_iter342.py`).
+- **Frontend**: Admin analytics page renders and passes visual QA (all counters + bars + monthly trend). Student → Access denied confirmed. Full `testID + data-testid` dual attrs applied for RN Web forwarding.
+- **Curl E2E**: R1 + R2 revision chain verified; analytics counters + CSV export verified for admin, 403 for student.
+
+### Files touched
+- `/app/backend/server.py` — expanded `/survival-review` writer, `/active-implants` chain-aware, new `/implant-lifecycle`, new `/analytics/survival` + `.csv`, `_compute_analytics` helper, tooth-bucket helpers.
+- NEW `/app/frontend/components/ImplantLifecycleTimeline.tsx`.
+- NEW `/app/frontend/app/admin/survival-analytics.tsx`.
+- EDIT `/app/frontend/app/procedures/survival-review/[id].tsx` — added Lot/Torque/ISQ/Heal/Date fields.
+- EDIT `/app/frontend/app/procedures/[id].tsx` — injected `<ImplantLifecycleTimeline>` under Phase 2 completion.
+- EDIT `/app/frontend/app/_layout.tsx` — registered `admin/survival-analytics`.
+- EDIT `/app/frontend/app/(tabs)/profile.tsx` — added `link-survival-analytics` under Compliance.
+
+### Backlog (post-iter-342)
+- P1 — Multi-tenant backend core + Platform Super Admin dashboard.
+- P1 — Microsoft OAuth login.
+- P1 — Swap `EMERGENT_LLM_KEY` for production OpenAI key.
+- P2 — Full Phase 2 mirror in replacement form (currently lighter subset per user pick 2b).
+- P2 — Chart rendering upgrade (currently text bars — could use victory-native or reanimated).
+- P2 — Aggregations pre-computed nightly for dashboards at scale.
+
+
+
 
 ## Iteration 341b (Jul 2026) — Phase 3 + Phase 4 forms filter to active implants
 
