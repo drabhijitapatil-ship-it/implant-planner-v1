@@ -2,6 +2,18 @@
 
 
 
+## Iteration 341b (Jul 2026) — Phase 3 + Phase 4 forms filter to active implants
+
+### What shipped
+Wired all 3 downstream clinical forms to `GET /api/procedures/{id}/active-implants` so failed non-replaced implants disappear from Phase 3 and Phase 4 questions automatically.
+
+**Files touched:**
+- `/app/frontend/app/procedures/submit-stage2-surgical/[id].tsx` — Phase 3 (healing / 2nd stage) — filters `implant_plans` by active tooth set.
+- `/app/frontend/app/procedures/submit-stage2-prosthetic/[id].tsx` — Phase 4 Step 1 (impressions / try-in) — filters both `implant_plans` and `existing_implants` fallback.
+- `/app/frontend/app/procedures/submit-phase4-step2/[id].tsx` — Phase 4 Step 2 (final delivery) — added `activeTeeth` state populated in parallel with case load; filters both derivation paths.
+
+**Safety net (unchanged):** the `/active-implants` backend endpoint returns every Phase 2 implant when no survival review is submitted, so legacy cases + cases where user picked "All Implants Survived" render unchanged. Failed-non-replaced tooth positions vanish from the form. Replaced implants take the same tooth position with the revision number.
+
 ## Iteration 341 (Jul 2026) — Implant Survival & Revision Engine MVP (Phase A)
 
 ### What shipped

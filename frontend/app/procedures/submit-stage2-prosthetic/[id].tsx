@@ -98,9 +98,19 @@ export default function Phase4Step1Screen() {
       const livePlans: any[] = (planRes.data?.implant_plans || []);
       const existingImplants: any[] = procRes.data?.existing_implants || [];
       const fromExisting = procRes.data?.case_origin === 'existing_implants' && livePlans.length === 0 && existingImplants.length > 0;
-      const positions = fromExisting
+      // iter-341: filter to active implants (survivors + revisions).
+      let activeTeeth: Set<string> | null = null;
+      try {
+        const act = await api.get(`/procedures/${id}/active-implants`);
+        const teeth = (act.data?.active || []).map((im: any) => String(im.tooth_number || im.tooth || im.position || '').trim()).filter(Boolean);
+        if (teeth.length > 0) activeTeeth = new Set(teeth);
+      } catch {}
+      const rawPositions = fromExisting
         ? existingImplants.map((r: any) => String(r?.tooth || '').trim())
         : livePlans.map((p: any) => getImplantSite(p, ''));
+      const positions = activeTeeth
+        ? rawPositions.filter((pos: string) => activeTeeth!.has(pos))
+        : rawPositions;
       setImplantPositions(positions);
       // Initialize per-implant plans if needed
       if (positions.length > 1) {

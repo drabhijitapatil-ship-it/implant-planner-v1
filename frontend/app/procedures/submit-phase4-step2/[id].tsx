@@ -53,11 +53,24 @@ export default function Phase4Step2Screen() {
   const [photoLabels, setPhotoLabels] = useState<string[]>(['Frontal view', 'Occlusal view']);
   const [photoUploadingIdx, setPhotoUploadingIdx] = useState<number | null>(null);
 
+  // iter-341: active-implants set — populated in parallel with the case load
+  // so failed-non-replaced implants disappear from Phase 4 Step 2 questions.
+  const [activeTeeth, setActiveTeeth] = useState<Set<string> | null>(null);
+
   useEffect(() => {
     (async () => {
       try {
         const res = await api.get(`/procedures/${id}`);
         setProcedure(res.data);
+        // Fetch active implants; if the survival review hasn't been submitted
+        // the backend returns every Phase 2 implant so behavior is unchanged.
+        try {
+          const act = await api.get(`/procedures/${id}/active-implants`);
+          const teeth = (act.data?.active || [])
+            .map((im: any) => String(im.tooth_number || im.tooth || im.position || '').trim())
+            .filter(Boolean);
+          if (teeth.length > 0) setActiveTeeth(new Set(teeth));
+        } catch {/* non-fatal */}
       } catch (e: any) {
         Alert.alert('Error', e?.response?.data?.detail || 'Failed to load case');
       } finally {
@@ -76,17 +89,17 @@ export default function Phase4Step2Screen() {
   // iter-225: implant positions fall back to existing_implants[].tooth when
   // the case originated as "Existing Implant" — implant_plans[] is empty
   // for those cases because the surgery was historical.
+  // iter-341: filter to active implants (survivors + revisions).
   const implantPositions: string[] = (() => {
     const fromPlans = (procedure?.implant_plans || [])
       .map((p: any) => String(p.position || ''))
       .filter(Boolean);
-    if (fromPlans.length > 0) return fromPlans;
-    if (procedure?.case_origin === 'existing_implants') {
-      return (procedure?.existing_implants || [])
-        .map((r: any) => String(r.tooth || ''))
-        .filter(Boolean);
-    }
-    return [];
+    const raw = fromPlans.length > 0
+      ? fromPlans
+      : procedure?.case_origin === 'existing_implants'
+        ? (procedure?.existing_implants || []).map((r: any) => String(r.tooth || '')).filter(Boolean)
+        : [];
+    return activeTeeth ? raw.filter((pos: string) => activeTeeth.has(pos)) : raw;
   })();
   const isInchargeSelfCreated =
     user?.role === 'implant_incharge'
