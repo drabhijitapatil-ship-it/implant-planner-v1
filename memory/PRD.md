@@ -2,6 +2,26 @@
 
 
 
+## Iteration 340 (Jul 2026) — Posterior length: hard block → soft confirmation
+
+### What shipped
+1. **Rule engine downgrade** (`/app/frontend/utils/implantSafety.ts`) — `length_block` verdict kind renamed to `length_warning`. Same threshold (`bone_height - implant_length < 1.5 mm`), same anatomical logic (sinus for max posteriors 14–17 / 24–27, IAN for mand posteriors 34–37 / 44–47), but downstream code now treats it as a soft warning.
+2. **2-button confirmation dialog** wired in all 3 tap handlers:
+   - `implant-selection.tsx` — "Let Me Choose" list
+   - `implant-selection.tsx` — "Suggest Me" list
+   - `CaseImplantPlanning.tsx` — Phase 1 Step 2 form
+   
+   Dialog: **"Bone height conflict"** · body includes actual lengths + anatomical structure at risk · buttons: **Exit** (cancel) · **Continue** (proceeds AND logs override).
+3. **HIPAA audit override log** — every `Continue` posts to `/api/audit/safety-override` with `verdict_kind: 'length_warning'`, `short_by`, tooth position, implant dimensions, and system name. Full audit trail preserved.
+4. **Chip UI downgrade** — the safety chip on affected cards now renders amber (warning) instead of red (block). No more `opacity: 0.55` dim on the card — the user can freely tap.
+5. **Sinus Lift exemption preserved** — Rule 2 still intentionally skipped when `procedureType === 'Sinus Lift'` (the lift restores vertical bone). Anterior teeth still bypass this rule entirely.
+6. **Verified with 14/14 automated checks** — Rule engine renamed, sinus/IAN both covered, dialog text exact, Continue/Exit buttons present in all 3 spots, audit override logs `verdict_kind`, no `length_block` or 'Selection blocked' strings remain anywhere.
+
+### Files touched
+- EDIT `/app/frontend/utils/implantSafety.ts` — `length_block` → `length_warning`, message copy updated, doc comments updated, `shortSafetyChip` returns "Bone height conflict".
+- EDIT `/app/frontend/app/(tabs)/implant-selection.tsx` — Let Me Choose + Suggest Me tap handlers now show soft confirmation + audit-log on Continue; chip styling amber; opacity dim removed.
+- EDIT `/app/frontend/components/CaseImplantPlanning.tsx` — Phase 1 Step 2 tap handler same soft dialog + audit log.
+
 ## Iteration 339 (Jul 2026) — HIPAA: extended PHI scrubber (name + phone + email + DOB + address)
 
 ### What shipped
