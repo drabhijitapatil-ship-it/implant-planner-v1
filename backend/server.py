@@ -4220,6 +4220,171 @@ async def admin_export_access_logs_csv(
     )
 
 
+# ── Implant Survival & Revision Engine (iter-341) ───────────────────
+# New "implant_records" collection stores each implant as a first-class
+# document with lifecycle status + revision chain. Only new cases (Phase 2
+# submitted from iter-341 onward) create records; existing cases keep
+# working via the legacy embedded array (per user pick 2b).
+
+FAILURE_REASONS = [
+    "Early failure", "Lack of Osseointegration", "Infection", "Peri-implantitis",
+    "Mobility", "Implant fracture", "Unknown", "Removed elsewhere", "Other",
+]
+
+class ImplantSurvivalReviewBody(BaseModel):
+    all_survived: bool = Field(...)
+    failures: List[Dict[str, Any]] = Field(default_factory=list)
+    # Each failure: { implant_idx, tooth, reason, removed(bool), replaced(bool),
+    #                 replacement: { system, diameter, length, placement_date } | null }
+
+
+@api_router.post("/procedures/{procedure_id}/survival-review")
+async def submit_survival_review(
+    procedure_id: str,
+    body: ImplantSurvivalReviewBody,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Save the Phase 2 -> Phase 3 survival review. If all_survived=True,
+    the review is short-circuited and Phase 3 proceeds untouched. If not,
+    each failure updates the corresponding implant record (or creates a
+    revision if replaced)."""
+    try:
+        proc_oid = ObjectId(procedure_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid procedure id")
+    proc = await db.procedures.find_one({"_id": proc_oid})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    now = datetime.now(timezone.utc)
+    implants = proc.get("implants") or proc.get("existing_implants") or []
+    survival_map: Dict[int, Dict[str, Any]] = {}   # idx -> status
+
+    if body.all_survived:
+        for i, imp in enumerate(implants):
+            survival_map[i] = {"status": "Active", "reviewed_at": now.isoformat()}
+    else:
+        # Every failure entry must reference an implant_idx
+        for f in body.failures:
+            idx = f.get("implant_idx")
+            if idx is None or not (0 <= idx < len(implants)):
+                raise HTTPException(status_code=400, detail=f"Invalid implant_idx {idx}")
+            reason = f.get("reason") or "Unknown"
+            if reason not in FAILURE_REASONS:
+                raise HTTPException(status_code=400, detail=f"Unknown failure reason: {reason}")
+            replaced = bool(f.get("replaced"))
+            survival_map[idx] = {
+                "status": "Replaced" if replaced else "Failed",
+                "reason": reason,
+                "removed": bool(f.get("removed", True)),
+                "replaced": replaced,
+                "failure_date": now.isoformat(),
+            }
+            if replaced:
+                repl = f.get("replacement") or {}
+                if not all(repl.get(k) for k in ("system", "diameter", "length")):
+                    raise HTTPException(status_code=400, detail="Replacement requires system, diameter, length")
+                survival_map[idx]["replacement"] = {
+                    "system": repl["system"],
+                    "diameter": float(repl["diameter"]),
+                    "length": float(repl["length"]),
+                    "placement_date": repl.get("placement_date") or now.isoformat()[:10],
+                    "revision_number": 1,
+                    "parent_implant_idx": idx,
+                    "status": "Active",
+                    "created_at": now.isoformat(),
+                }
+        # Any implant not listed in failures is treated as Active.
+        for i in range(len(implants)):
+            if i not in survival_map:
+                survival_map[i] = {"status": "Active", "reviewed_at": now.isoformat()}
+
+    # Persist review + implant lifecycle
+    await db.procedures.update_one(
+        {"_id": proc_oid},
+        {"$set": {
+            "phase2_survival_review": {
+                "all_survived": body.all_survived,
+                "reviewed_at": now.isoformat(),
+                "reviewed_by": current_user.get("name") or current_user.get("username"),
+                "implants": survival_map,
+            },
+            "phase2_survival_review_at": now,
+        }},
+    )
+    await log_access(
+        action="survival_review_submitted",
+        outcome="success",
+        resource_type="procedure",
+        resource_id=procedure_id,
+        user=current_user,
+        request=request,
+        extra={"all_survived": body.all_survived, "failure_count": len(body.failures)},
+    )
+    return {"ok": True, "review": survival_map}
+
+
+@api_router.get("/procedures/{procedure_id}/active-implants")
+async def get_active_implants(
+    procedure_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Return the currently ACTIVE implants for this procedure (survivors +
+    replacement revisions). Phase 3 / Phase 4 forms consume this so they
+    only render clinical questions for implants that still exist."""
+    try:
+        proc_oid = ObjectId(procedure_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid procedure id")
+    proc = await db.procedures.find_one({"_id": proc_oid})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    implants = proc.get("implants") or proc.get("existing_implants") or []
+    review = proc.get("phase2_survival_review")
+    active: List[Dict[str, Any]] = []
+    archived: List[Dict[str, Any]] = []
+
+    if not review:
+        # No survival review submitted yet — treat every Phase 2 implant as Active.
+        for i, imp in enumerate(implants):
+            active.append({**imp, "implant_idx": i, "status": "Active", "revision_number": 0})
+    else:
+        smap = review.get("implants") or {}
+        for i, imp in enumerate(implants):
+            entry = smap.get(str(i)) or smap.get(i) or {"status": "Active"}
+            status = entry.get("status", "Active")
+            if status == "Active":
+                active.append({**imp, "implant_idx": i, "status": "Active", "revision_number": 0})
+            elif status == "Replaced":
+                repl = entry.get("replacement") or {}
+                # Original goes to archived
+                archived.append({**imp, "implant_idx": i, "status": "Replaced",
+                                 "failure_reason": entry.get("reason"),
+                                 "failure_date": entry.get("failure_date")})
+                # Replacement takes its place in active
+                active.append({
+                    "implant_idx": i,
+                    "tooth_number": imp.get("tooth_number") or imp.get("tooth"),
+                    "system": repl.get("system"),
+                    "diameter": repl.get("diameter"),
+                    "length": repl.get("length"),
+                    "status": "Active",
+                    "revision_number": repl.get("revision_number", 1),
+                    "parent_implant_idx": i,
+                    "placement_date": repl.get("placement_date"),
+                })
+            else:  # Failed / Explanted
+                archived.append({**imp, "implant_idx": i, "status": status,
+                                 "failure_reason": entry.get("reason"),
+                                 "failure_date": entry.get("failure_date")})
+
+    return {"active": active, "archived": archived,
+            "review_submitted": bool(review),
+            "failure_reasons": FAILURE_REASONS}
+
+
 # ── Treatment Timeline Backfill (iter-332) ─────────────────────────
 # Lets the Implant In-Charge / Administrator retroactively fill in the
 # clinical "Done On" dates on legacy cases that were submitted before

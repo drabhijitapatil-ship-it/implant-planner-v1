@@ -2,6 +2,30 @@
 
 
 
+## Iteration 341 (Jul 2026) — Implant Survival & Revision Engine MVP (Phase A)
+
+### What shipped
+1. **Backend model** (`server.py`) — new `phase2_survival_review` field on procedures + `FAILURE_REASONS` constant (9 reasons including new **Peri-implantitis**).
+2. **`POST /api/procedures/{id}/survival-review`** — accepts `{all_survived, failures[]}` with full validation (invalid reason → 400, missing replacement fields → 400, invalid procedure id → 400). Logs to access log.
+3. **`GET /api/procedures/{id}/active-implants`** — returns `{active[], archived[], review_submitted, failure_reasons}`. Falls back to Phase 2 array (all Active) if review not yet submitted → **preserves existing cases (per pick 2b)**.
+4. **Frontend survival review screen** (`/app/procedures/survival-review/[id].tsx`):
+   - **Single Yes/No gate** at the top — "Implant Survived" (1 implant) or "All Implants Survived" (multiple) per pick 3b
+   - **Yes** → submits `all_survived=true` and routes straight to Phase 3
+   - **No** → expands per-implant cards with Survived/Failed toggle, reason chips (all 9), removed Y/N, replaced Y/N, and full replacement input (system + diameter + length)
+5. **Case Detail card** — persistent "Implant Survival Review" card renders between Phase 2 completion and Phase 3 submission (per pick 4c). Once submitted, shows "submitted" state.
+6. **5/5 backend curl tests pass** — get active implants, submit all-survived, invalid reason rejected (400), missing replacement fields rejected (400), invalid procedure id rejected (400).
+
+### Files touched
+- EDIT `/app/backend/server.py` (~line 4193) — `ImplantSurvivalReviewBody`, `POST /api/procedures/{id}/survival-review`, `GET /api/procedures/{id}/active-implants`, `FAILURE_REASONS` constant.
+- NEW `/app/frontend/app/procedures/survival-review/[id].tsx` — the survival review UI.
+- EDIT `/app/frontend/app/_layout.tsx` — registered the survival-review Stack.Screen.
+- EDIT `/app/frontend/app/procedures/[id].tsx` — added persistent Case Detail card.
+
+### Not yet shipped (deferred per pick 5a)
+- Phase B: revision numbering (R1/R2/R3), timeline view, life-cycle re-check on every follow-up phase.
+- Phase C: dashboard analytics (survival rate, replacement success, failure-reason breakdown, CSV export).
+- Phase 3 / Phase 4 forms filtering to `active_implants` — currently they still render every Phase 2 implant. Wiring the forms to `GET /active-implants` is a small next step once the review flow is validated in the wild.
+
 ## Iteration 340 (Jul 2026) — Posterior length: hard block → soft confirmation
 
 ### What shipped
