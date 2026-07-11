@@ -151,8 +151,8 @@ export default function SurvivalReview() {
         <View style={s.card}>
           <Text style={s.q}>{label}?</Text>
           <View style={{flexDirection:'row',gap:12,marginTop:12}}>
-            <TouchableOpacity style={[s.pill, allSurvived === 'yes' && s.pillOn]} onPress={() => setAllSurvived('yes')} data-testid="survival-all-yes"><Text style={[s.pillT, allSurvived === 'yes' && s.pillTOn]}>Yes</Text></TouchableOpacity>
-            <TouchableOpacity style={[s.pill, allSurvived === 'no' && s.pillOn]} onPress={() => setAllSurvived('no')} data-testid="survival-all-no"><Text style={[s.pillT, allSurvived === 'no' && s.pillTOn]}>No</Text></TouchableOpacity>
+            <TouchableOpacity style={[s.pill, allSurvived === 'yes' && s.pillOn]} onPress={() => setAllSurvived('yes')} data-testid="survival-all-yes" testID="survival-all-yes"><Text style={[s.pillT, allSurvived === 'yes' && s.pillTOn]}>Yes</Text></TouchableOpacity>
+            <TouchableOpacity style={[s.pill, allSurvived === 'no' && s.pillOn]} onPress={() => setAllSurvived('no')} data-testid="survival-all-no" testID="survival-all-no"><Text style={[s.pillT, allSurvived === 'no' && s.pillTOn]}>No</Text></TouchableOpacity>
           </View>
         </View>
 
@@ -164,8 +164,8 @@ export default function SurvivalReview() {
               <Text style={s.itH}>Implant {i + 1} · Tooth {imp.tooth_number || imp.tooth || '-'}</Text>
               <Text style={s.itSub}>{imp.system || ''}  {imp.diameter}×{imp.length}mm</Text>
               <View style={{flexDirection:'row',gap:12,marginTop:12}}>
-                <TouchableOpacity style={[s.pillSm, !failed && s.pillOn]} onPress={() => toggleFailure(i, imp, 'yes')} data-testid={`imp-${i}-survived-yes`}><Text style={[s.pillTSm, !failed && s.pillTOn]}>Survived</Text></TouchableOpacity>
-                <TouchableOpacity style={[s.pillSm, failed && s.pillOnR]} onPress={() => toggleFailure(i, imp, 'no')} data-testid={`imp-${i}-survived-no`}><Text style={[s.pillTSm, failed && s.pillTOn]}>Failed</Text></TouchableOpacity>
+                <TouchableOpacity style={[s.pillSm, !failed && s.pillOn]} onPress={() => toggleFailure(i, imp, 'yes')} data-testid={`imp-${i}-survived-yes`} testID={`imp-${i}-survived-yes`}><Text style={[s.pillTSm, !failed && s.pillTOn]}>Survived</Text></TouchableOpacity>
+                <TouchableOpacity style={[s.pillSm, failed && s.pillOnR]} onPress={() => toggleFailure(i, imp, 'no')} data-testid={`imp-${i}-survived-no`} testID={`imp-${i}-survived-no`}><Text style={[s.pillTSm, failed && s.pillTOn]}>Failed</Text></TouchableOpacity>
               </View>
               {failed && (
                 <View style={{marginTop:14,gap:10}}>
@@ -184,30 +184,30 @@ export default function SurvivalReview() {
                   </View>
                   <View style={{flexDirection:'row',alignItems:'center',gap:12,marginTop:6}}>
                     <Text style={s.lbl}>Was it replaced?</Text>
-                    <TouchableOpacity style={[s.pillTiny, f.replaced && s.pillOn]} onPress={() => setField(i, 'replaced', true)} data-testid={`imp-${i}-replaced-yes`}><Text style={[s.pillTT, f.replaced && s.pillTOn]}>Yes</Text></TouchableOpacity>
-                    <TouchableOpacity style={[s.pillTiny, !f.replaced && s.pillOn]} onPress={() => setField(i, 'replaced', false)} data-testid={`imp-${i}-replaced-no`}><Text style={[s.pillTT, !f.replaced && s.pillTOn]}>No</Text></TouchableOpacity>
+                    <TouchableOpacity style={[s.pillTiny, f.replaced && s.pillOn]} onPress={() => setField(i, 'replaced', true)} data-testid={`imp-${i}-replaced-yes`} testID={`imp-${i}-replaced-yes`}><Text style={[s.pillTT, f.replaced && s.pillTOn]}>Yes</Text></TouchableOpacity>
+                    <TouchableOpacity style={[s.pillTiny, !f.replaced && s.pillOn]} onPress={() => setField(i, 'replaced', false)} data-testid={`imp-${i}-replaced-no`} testID={`imp-${i}-replaced-no`}><Text style={[s.pillTT, !f.replaced && s.pillTOn]}>No</Text></TouchableOpacity>
                   </View>
                   {f.replaced && (
                     <View style={{marginTop:12,gap:8,padding:12,backgroundColor:'#F1F8E9',borderRadius:10,borderWidth:1,borderColor:'#C5E1A5'}}>
                       <Text style={[s.lbl,{fontWeight:'700',color:'#2E7D32'}]}>Replacement implant (revision)</Text>
-                      <TextInput style={s.input} placeholder="System (e.g. Straumann BLT)" value={f.replacement.system} onChangeText={v => setReplField(i, 'system', v)} data-testid={`imp-${i}-repl-system`} />
+                      <TextInput style={s.input} placeholder="System (e.g. Straumann BLT)" value={f.replacement.system} onChangeText={v => setReplField(i, 'system', v)} data-testid={`imp-${i}-repl-system`} testID={`imp-${i}-repl-system`} />
                       <View style={{flexDirection:'row',gap:8}}>
-                        <TextInput style={[s.input,{flex:1}]} placeholder="Diameter (mm)" keyboardType="decimal-pad" value={f.replacement.diameter} onChangeText={v => setReplField(i, 'diameter', v)} data-testid={`imp-${i}-repl-diameter`} />
-                        <TextInput style={[s.input,{flex:1}]} placeholder="Length (mm)" keyboardType="decimal-pad" value={f.replacement.length} onChangeText={v => setReplField(i, 'length', v)} data-testid={`imp-${i}-repl-length`} />
+                        <TextInput style={[s.input,{flex:1}]} placeholder="Diameter (mm)" keyboardType="decimal-pad" value={f.replacement.diameter} onChangeText={v => setReplField(i, 'diameter', v)} data-testid={`imp-${i}-repl-diameter`} testID={`imp-${i}-repl-diameter`} />
+                        <TextInput style={[s.input,{flex:1}]} placeholder="Length (mm)" keyboardType="decimal-pad" value={f.replacement.length} onChangeText={v => setReplField(i, 'length', v)} data-testid={`imp-${i}-repl-length`} testID={`imp-${i}-repl-length`} />
                       </View>
-                      <TextInput style={s.input} placeholder="Lot # (optional)" value={f.replacement.lot_number} onChangeText={v => setReplField(i, 'lot_number', v)} data-testid={`imp-${i}-repl-lot`} />
+                      <TextInput style={s.input} placeholder="Lot # (optional)" value={f.replacement.lot_number} onChangeText={v => setReplField(i, 'lot_number', v)} data-testid={`imp-${i}-repl-lot`} testID={`imp-${i}-repl-lot`} />
                       <View style={{flexDirection:'row',gap:8}}>
-                        <TextInput style={[s.input,{flex:1}]} placeholder="Insertion torque (Ncm)" keyboardType="decimal-pad" value={f.replacement.insertion_torque_ncm} onChangeText={v => setReplField(i, 'insertion_torque_ncm', v)} data-testid={`imp-${i}-repl-torque`} />
-                        <TextInput style={[s.input,{flex:1}]} placeholder="ISQ" keyboardType="decimal-pad" value={f.replacement.isq} onChangeText={v => setReplField(i, 'isq', v)} data-testid={`imp-${i}-repl-isq`} />
+                        <TextInput style={[s.input,{flex:1}]} placeholder="Insertion torque (Ncm)" keyboardType="decimal-pad" value={f.replacement.insertion_torque_ncm} onChangeText={v => setReplField(i, 'insertion_torque_ncm', v)} data-testid={`imp-${i}-repl-torque`} testID={`imp-${i}-repl-torque`} />
+                        <TextInput style={[s.input,{flex:1}]} placeholder="ISQ" keyboardType="decimal-pad" value={f.replacement.isq} onChangeText={v => setReplField(i, 'isq', v)} data-testid={`imp-${i}-repl-isq`} testID={`imp-${i}-repl-isq`} />
                       </View>
                       <View style={{flexDirection:'row',gap:8,flexWrap:'wrap'}}>
                         {['One-stage','Two-stage','Immediate loading'].map(hp => (
-                          <TouchableOpacity key={hp} style={[s.chip, f.replacement.healing_protocol === hp && s.chipOn]} onPress={() => setReplField(i, 'healing_protocol', hp)} data-testid={`imp-${i}-repl-heal-${hp.replace(/\s+/g,'-')}`}>
+                          <TouchableOpacity key={hp} style={[s.chip, f.replacement.healing_protocol === hp && s.chipOn]} onPress={() => setReplField(i, 'healing_protocol', hp)} data-testid={`imp-${i}-repl-heal-${hp.replace(/\s+/g,'-')}`} testID={`imp-${i}-repl-heal-${hp.replace(/\s+/g,'-')}`}>
                             <Text style={[s.chipT, f.replacement.healing_protocol === hp && s.chipTOn]}>{hp}</Text>
                           </TouchableOpacity>
                         ))}
                       </View>
-                      <TextInput style={s.input} placeholder="Placement date (YYYY-MM-DD)" value={f.replacement.placement_date} onChangeText={v => setReplField(i, 'placement_date', v)} data-testid={`imp-${i}-repl-date`} />
+                      <TextInput style={s.input} placeholder="Placement date (YYYY-MM-DD)" value={f.replacement.placement_date} onChangeText={v => setReplField(i, 'placement_date', v)} data-testid={`imp-${i}-repl-date`} testID={`imp-${i}-repl-date`} />
                     </View>
                   )}
                 </View>
@@ -217,7 +217,7 @@ export default function SurvivalReview() {
         })}
 
         {allSurvived && (
-          <TouchableOpacity style={[s.submit, (!canSubmit() || saving) && {opacity:0.5}]} disabled={!canSubmit() || saving} onPress={handleSubmit} data-testid="survival-submit">
+          <TouchableOpacity style={[s.submit, (!canSubmit() || saving) && {opacity:0.5}]} disabled={!canSubmit() || saving} onPress={handleSubmit} data-testid="survival-submit" testID="survival-submit">
             {saving ? <ActivityIndicator color="#fff"/> : <><Ionicons name="checkmark-done" size={18} color="#fff"/><Text style={s.submitT}>Submit &amp; continue to Phase 3</Text></>}
           </TouchableOpacity>
         )}
