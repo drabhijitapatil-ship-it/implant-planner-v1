@@ -1095,6 +1095,38 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
+        {/* iter-341: Implant Survival Review card — shows between Phase 2 & Phase 3.
+            Persistent card on Case Detail (per user pick 4c). Only rendered
+            once Phase 2 is complete AND Phase 3 not yet submitted. */}
+        {procedure?.phase2_completed_at &&
+         !procedure?.stage2_surgical_completed_at &&
+         (procedure?.implants?.length || procedure?.existing_implants?.length) ? (
+          <TouchableOpacity
+            style={styles.timelineContainer}
+            testID="survival-review-card"
+            data-testid="survival-review-card"
+            onPress={() => router.push(`/procedures/survival-review/${procedure.id || procedure._id}` as any)}
+            activeOpacity={0.7}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: '#E3F2FD', alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="pulse-outline" size={22} color="#1565C0" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: '#0D47A1' }}>
+                  {procedure.phase2_survival_review ? 'Implant Survival Review — submitted' : 'Implant Survival Review'}
+                </Text>
+                <Text style={{ fontSize: 12, color: '#546E7A', marginTop: 3 }}>
+                  {procedure.phase2_survival_review
+                    ? 'Tap to review the recorded survival status'
+                    : 'Verify implant survival before proceeding to Phase 3'}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#90A4AE" />
+            </View>
+          </TouchableOpacity>
+        ) : null}
+
         {/* Treatment Timeline / Progress Tracker */}
         {/* iter-332: now keyed on the clinical "Done On" dates the
             student/clinician picks at each phase submission. Falls back
