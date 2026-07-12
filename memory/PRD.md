@@ -1,5 +1,34 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 348 (Feb 2026) — End Implant Treatment + Historical Tile Chain + Analytics Access & Metric
+
+User choices (Message 557): Q1-b entire case terminated when End Implant Treatment chosen, Q2-a permanent (no reopen), Q3-a inactive tile with distinct red "Treatment Ended" chip, Q4-b table format (Procedure Type / Total / Failed / Failure %), Q5-c+students — all clinical roles see Analytics; students & supervisors read-only, no CSV export.
+
+### Features
+1. **End Implant Treatment (survival review)** — new red button on each failed implant. Requires `decision_maker ∈ {Patient, Operator}` + free-text `reason`. Hides "Was it replaced?" question. On submit sets procedure `status = "treatment_ended"`, mirrors `treatment_ended_at`, `treatment_ended_decision_maker`, `treatment_ended_reason` on the procedure doc; per-implant `status = "Treatment Ended"`. Reflected in Survival Analytics via new `counters.treatment_ended` and `by_procedure_type[i].treatment_ended` fields.
+2. **Compulsory replacement placement date** — replacement now requires `placement_date`. Server returns HTTP 400 `"Replacement requires a placement date"` if missing. UI adds label "Placement date *" and gates the submit button until date is filled.
+3. **Historical tile chain (CaseImplantPlanning)** — implants with survival status `Failed / Replaced / Treatment Ended` render as inactive tiles with a status chip (grey "Inactive" or red "Treatment Ended"). Edit / Delete / Drilling Protocol buttons are hidden on inactive tiles; a "Historical record — read-only" chip replaces them.
+4. **Home-tab Survival Analytics quick-link** — visible to all non-nurse roles (implant_incharge / administrator / supervisor / student). Students & supervisors get a scoped, read-only view (`scope.role`, `scope.read_only` in response) — CSV export button hidden.
+5. **Procedure-wise Implant Failure metric** — new analytics section (`by_procedure_type[]`) grouped by `implant_procedure_type` (Single Conventional Implant, All on 4, Immediate Implant, …). Table columns: Procedure Type / Total / Failed / Failure %. Also increments `counters.treatment_ended` at case level.
+
+### RBAC
+- `GET /api/analytics/survival` — administrator, implant_incharge, supervisor, student (scoped).
+- `GET /api/analytics/survival/export.csv` — administrator + implant_incharge only (patient identifiers).
+- Scope filter in `_load_analytics_procedures(scope_user=…)` narrows procedures by `student_id/student_name` for students and by `supervisor_id/supervisor_name` for supervisors.
+
+### Testing
+- Backend pytest: 13/13 pass (`/app/backend/tests/test_survival_iter348.py`).
+- Frontend flows verified via testing_agent (iteration_299.json): home quick-link visibility across implant_incharge/student/nurse, End Treatment button toggle + validation gates, Placement date * label + gate.
+- No regressions to prior multi-round survival flow / Phase 3 gating / Phase 4 filtering.
+
+### Files touched
+- EDIT `/app/backend/server.py` — extended `ImplantSurvivalReviewBody` payload handling, case-level `treatment_ended` state, `_compute_analytics` returns `treatment_ended` counter + `by_procedure_type[]` with `failure_rate`, `_load_analytics_procedures(scope_user=…)`, RBAC gate relaxed on `/analytics/survival`.
+- EDIT `/app/frontend/app/procedures/survival-review/[id].tsx` — new End Implant Treatment red button (data-testid=`imp-{i}-end-treatment-toggle`) + decision maker dropdown + reason textarea + placement_date required + label "Placement date *".
+- EDIT `/app/frontend/components/CaseImplantPlanning.tsx` — per-tile `tileEditable` gate, "Treatment Ended" red chip, "Historical record — read-only" chip on inactive tiles.
+- EDIT `/app/frontend/app/(tabs)/dashboard.tsx` — new home-tab quick-link card (data-testid=`home-survival-analytics-btn`) for all non-nurse roles.
+- EDIT `/app/frontend/app/admin/survival-analytics.tsx` — canAccess opens to student/supervisor; canExport limited to admin/incharge; new Treatment Ended counter (data-testid=`metric-treatment-ended`); new Procedure-wise Failure table (data-testid=`procedure-failure-table`); role-based subtitle.
+
+
 
 ## Iteration 342 (Feb 2026) — Implant Survival & Revision Engine: Phase B (Full Revision) + Phase C (Analytics)
 
