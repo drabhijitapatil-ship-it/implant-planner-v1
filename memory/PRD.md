@@ -5974,3 +5974,48 @@ A comprehensive mobile application for managing dental implant procedures at the
 - Backend refactoring: Decompose server.py into modular routers, models, services
 - Frontend refactoring: Modularize CaseImplantPlanning.tsx and [id].tsx
 - Data cleanup: Remove duplicate user entries
+
+## Iteration 344–348 (Feb 2026) — Implant Survival & Revision Engine polish
+
+### iter-344 — UX refresh on Survival Review page
+- Reason for failure → dropdown (9 options). "Other" → 100-word text box with live counter.
+- New question "Was the Implant Site Changed?" — Yes/No. On Yes → FDI chart limited to the same quadrant as the failed tooth. Selected new tooth carries forward to Phase 3/4 (backend updates the source implant array).
+- Replacement Implant System → dropdown of all catalog systems from `/implant-library/systems` + "Other" text box.
+- Diameter/Length → dropdowns of the selected system's official diameters/lengths (fallback to manual for "Other").
+- Healing protocol chips replaced by "Type of Procedure" dropdown: Single Stage / Two Stage / Immediate Loading.
+    - Two Stage → prosthetic component (Cover Screw / Healing Abutment). Healing Abutment → mm input.
+    - Immediate Loading → prosthesis options resolved by implant_procedure_type + tooth count (excludes All-on-4/6/X).
+- Duplicate amber survival card removed — only the blue "IMPLANT SURVIVAL REVIEW" CTA remains under Treatment Progress.
+
+### iter-345 — Torque relocation + Implant Planning card status badges
+- Torque input (Ncm) moved to sit right after Diameter/Length in the Replacement block, matching Phase 2 default style.
+- `CaseImplantPlanning` renders Active/Inactive chip per card + appends replacement (revision) cards at the bottom.
+
+### iter-346 — Multi-round survival reviews
+- Backend `/survival-review` now delta-merges each submission instead of overwriting. `phase2_survival_review.events[]` audit trail grows per submission with `{at, by, all_survived, failures[]}`.
+- Frontend shows "Previous survival reviews (N)" history card at the top of the review page.
+- Two submit buttons at the bottom: "Update & go back" (secondary) and "Continue to Phase 3" (primary).
+- No cap on rounds. Chain grows R1 → R2 → R3+ naturally as previous replacements re-fail.
+
+### iter-347 / 347b — Bug fixes on survival review UX
+- CTA now permanently "IMPLANT SURVIVAL REVIEW" until Phase 3 is submitted (persists after "Update & go back").
+- Active/Inactive chip inline next to implant title on both primary and revision cards (no overlap).
+- KeyboardAvoidingView + paddingBottom 120 + keyboardShouldPersistTaps='handled' so text inputs no longer hide behind the mobile keyboard.
+- Placement date renders as raw HTML5 `<input type="date">` on web (via React.createElement) for a native calendar picker; masked TextInput on native.
+
+### iter-348 — Deep-link auth token hydration
+- `utils/api.ts` mirrors tokens to `window.localStorage` on web + rehydrates the in-memory cache at module load. Fixes 403 errors when users deep-link to a route (e.g. `/procedures/{id}`) from a fresh browser tab.
+
+### Testing
+- iter-347: iteration_297.json — backend 7/7, frontend 50% (2 bugs remained).
+- iter-347b: iteration_298.json — frontend 100% pass, no ui_bugs remaining.
+
+### Backlog / Next
+- P1 — Multi-tenant backend core + Platform Super Admin dashboard.
+- P1 — Microsoft OAuth login (needs Azure Client ID/Secret from user).
+- P1 — Swap EMERGENT_LLM_KEY for production OpenAI key (blocked — awaiting user key).
+- P2 — Tablet responsive split-view refactor.
+- P2 — Existing-implants summary card gets Active/Inactive chip too.
+- P2 — Implanr AI Forum semantic search + IOPA vision context.
+- P2 — Proper phased Dark Mode.
+- P3 — Admin "Add Implant Size" UI, Group chat templates.

@@ -10,6 +10,27 @@ const api = axios.create({
 // Secure token storage helpers (fallback to in-memory for unsupported platforms)
 let memoryTokens: Record<string, string> = {};
 
+// iter-348: Web token persistence — RN-Web has no SecureStore, so tokens
+// previously lived only in a module-scope `memoryTokens` object that
+// evaporated on every full-page reload. This caused a 403 race whenever
+// a user deep-linked to a route (e.g. /procedures/{id}) — the first
+// axios request fired before AuthContext hydrated the tokens back into
+// memory. We now mirror tokens into window.localStorage on web and
+// re-hydrate the in-memory cache at module load time so the very first
+// authenticated request already carries the Bearer header.
+const WEB_STORAGE_PREFIX = 'implanr_';
+function isBrowser() {
+  return Platform.OS === 'web' && typeof window !== 'undefined' && !!window.localStorage;
+}
+if (isBrowser()) {
+  try {
+    for (const key of ['access_token', 'refresh_token', 'user']) {
+      const stored = window.localStorage.getItem(`${WEB_STORAGE_PREFIX}${key}`);
+      if (stored) memoryTokens[key] = stored;
+    }
+  } catch { /* localStorage unavailable — fall back to in-memory */ }
+}
+
 export async function getToken(key: string): Promise<string | null> {
   if (Platform.OS === 'web') return memoryTokens[key] || null;
   try {
@@ -21,6 +42,9 @@ export async function getToken(key: string): Promise<string | null> {
 
 export async function setToken(key: string, value: string): Promise<void> {
   memoryTokens[key] = value;
+  if (isBrowser()) {
+    try { window.localStorage.setItem(`${WEB_STORAGE_PREFIX}${key}`, value); } catch {}
+  }
   if (Platform.OS !== 'web') {
     try { await SecureStore.setItemAsync(key, value); } catch {}
   }
@@ -28,6 +52,9 @@ export async function setToken(key: string, value: string): Promise<void> {
 
 export async function removeToken(key: string): Promise<void> {
   delete memoryTokens[key];
+  if (isBrowser()) {
+    try { window.localStorage.removeItem(`${WEB_STORAGE_PREFIX}${key}`); } catch {}
+  }
   if (Platform.OS !== 'web') {
     try { await SecureStore.deleteItemAsync(key); } catch {}
   }
