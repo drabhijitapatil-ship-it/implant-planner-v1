@@ -1,5 +1,48 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 352 (Feb 2026) — End Treatment Approval Workflow + R0→R{n} Data Substitution
+
+User choices: Q1-a rejection with mandatory comment reverts case, Q2-a case frozen while pending, Q3-a pending queue integration, Q4-a substitute everywhere (Phase 2 readback + Phase 3 pre-fill + Phase 4 + PDFs), Q5-a R0 tile keeps its historical detail.
+
+### Features
+1. **Role-based approval on End Implant Treatment** — mirrors Phase 1/2 approval chain:
+   - Student → `pending_end_treatment_supervisor` → Supervisor approves → `pending_end_treatment_incharge` → In-Charge approves → `treatment_ended`
+   - Supervisor initiator → `pending_end_treatment_incharge` → In-Charge approves → `treatment_ended`
+   - Implant In-Charge initiator → self-approved, immediate `treatment_ended`
+   - Same-person-both (supervisor==in-charge) collapses to a single approval step
+   - Rejection requires a mandatory comment; case reverts to `pending_end_treatment.prior_status`, per-implant statuses downgraded `Treatment Ended → Failed`, rejection metadata surfaced on the case detail
+   - `POST /api/procedures/{id}/end-treatment/approve` with body `{action:'approve'|'reject', comment?}` — 403 for wrong approver, 400 for missing rejection comment
+   - Dashboard `pending_my_approval` + `/procedures?filter=pending_all` now include the two new pending statuses; the assigned approver sees the case in their queue with a distinct icon.
+2. **R0 → R{n} data substitution** — new `_resolve_active_implants_inline` helper wired into `GET /api/procedures/{id}` merges the currently-active revision over R0 in `implants[]`:
+   - R{n}-only fields (system, brand, diameter, length, procedure_type, prosthetic_component, healing_abutment_mm, immediate_loading_prosthesis, cover_screw, isq, insertion_torque_ncm, lot_number, placement_date, healing_protocol, surface) — explicit-overwrite semantics (a missing R{n} value CLEARS the R0 leftover, e.g., `healing_abutment_mm` becomes null when R{n} switches to Cover Screw)
+   - Anatomy fields (bone_type, bone_width, bone_height) — preserved unless R{n} overrides
+   - R0 snapshot preserved as `_r0` on each implant entry for the CaseImplantPlanning historical tile
+   - `_active_revision=true` flag when a replacement exists so the frontend can style tiles / print correctly
+   - Downstream benefit: Phase 3 form pre-fill, Phase 2 readback, PDFs, and Survival Analytics all automatically reflect the ACTIVE implant instead of the dead R0
+
+### Frontend
+- New `<EndTreatmentPendingBanner/>` (orange, hourglass icon) rendered on the case detail while pending — meta box + Approve/Reject buttons for the assigned approver, read-only text for others.
+- Reject modal with mandatory comment textarea + confirm button.
+- New "End treatment rejected" red banner on case detail surfaces the last rejection.
+- Existing "Implant Treatment Terminated" banner continues to render when status hits `treatment_ended`.
+
+### Backend files touched
+- EDIT `/app/backend/server.py`:
+  - Added `_resolve_active_implants_inline` helper (~L4310).
+  - Wired substitution into `GET /procedures/{procedure_id}` (~L2789).
+  - Rewrote end-treatment branch inside `submit_survival_review` to set pending states instead of terminating immediately.
+  - Added `EndTreatmentApprovalBody` model + `POST /procedures/{id}/end-treatment/approve` endpoint (~L4649-4818).
+  - Extended dashboard pending queries (L2182, L2325, L2421).
+
+### Frontend files touched
+- ADD `/app/frontend/components/EndTreatmentPendingBanner.tsx` — banner + reject modal.
+- EDIT `/app/frontend/app/procedures/[id].tsx` — pending + rejected banners inserted before termination banner + styles.
+- EDIT `/app/frontend/app/procedures/survival-review/[id].tsx` — `handleEndTreatment` now routes back to case detail in all cases (case detail chooses banner by status).
+
+### Testing
+- Backend: 13/13 pytest pass (`/app/backend/tests/test_end_treatment_approval_iter352.py`) — student/supervisor/in-charge initiators, same-person-both collapse, 403 role gates, reject 400 + reject 200 with revert, dashboard pending counts, R0→R{n} substitution semantics including field-clear on procedure_type change.
+- Frontend: 4/4 Playwright flows pass — pending banner render, reject-with-comment flow, approve → termination banner, student read-only view.
+
 ## Iteration 351 (Feb 2026) — Revision Comparison Modal
 
 Teaching aid: any historical tile in Implant Planning can now be compared side-by-side with the current active revision to visually understand what changed between revisions.
