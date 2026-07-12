@@ -23,7 +23,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput,
-  ActivityIndicator, Alert, Modal, Pressable,
+  ActivityIndicator, Alert, Modal, Pressable, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -345,7 +345,15 @@ export default function SurvivalReview() {
           <Text style={s.sub}>Between Phase 2 and Phase 3</Text>
         </View>
       </View>
-      <ScrollView contentContainerStyle={{padding:16,paddingBottom:40}}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
+      >
+      <ScrollView
+        contentContainerStyle={{padding:16,paddingBottom:120}}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* iter-346: Prior review history (audit trail) — read-only. */}
         {survivalReviewState?.events && survivalReviewState.events.length > 0 ? (
           <View style={s.histCard} data-testid="survival-history" testID="survival-history">
@@ -531,7 +539,32 @@ export default function SurvivalReview() {
 
                       <TextInput style={s.input} placeholder="Lot # (optional)" value={f.replacement.lot_number} onChangeText={v => setReplField(i, { lot_number: v })} data-testid={`imp-${i}-repl-lot`} testID={`imp-${i}-repl-lot`} />
                       <TextInput style={s.input} placeholder="ISQ (optional)" keyboardType="decimal-pad" value={f.replacement.isq} onChangeText={v => setReplField(i, { isq: v })} data-testid={`imp-${i}-repl-isq`} testID={`imp-${i}-repl-isq`} />
-                      <TextInput style={s.input} placeholder="Placement date (YYYY-MM-DD)" value={f.replacement.placement_date} onChangeText={v => setReplField(i, { placement_date: v })} data-testid={`imp-${i}-repl-date`} testID={`imp-${i}-repl-date`} />
+                      {/* iter-347: Placement date uses a native calendar picker
+                          on web (RN Web forwards type="date" to <input>) and a
+                          formatted text input on native. */}
+                      {Platform.OS === 'web' ? (
+                        // @ts-ignore — RN-Web passes <input> attrs through TextInput.
+                        <TextInput
+                          style={s.input}
+                          value={f.replacement.placement_date}
+                          onChangeText={v => setReplField(i, { placement_date: v })}
+                          // @ts-ignore
+                          type="date"
+                          data-testid={`imp-${i}-repl-date`}
+                          testID={`imp-${i}-repl-date`}
+                        />
+                      ) : (
+                        <TextInput
+                          style={s.input}
+                          placeholder="Placement date (YYYY-MM-DD)"
+                          value={f.replacement.placement_date}
+                          onChangeText={v => setReplField(i, { placement_date: v })}
+                          inputMode="numeric"
+                          maxLength={10}
+                          data-testid={`imp-${i}-repl-date`}
+                          testID={`imp-${i}-repl-date`}
+                        />
+                      )}
 
                       {/* Type of Procedure */}
                       <View style={{ marginTop: 6 }}>
@@ -628,6 +661,7 @@ export default function SurvivalReview() {
           </View>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

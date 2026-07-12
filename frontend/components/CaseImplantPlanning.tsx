@@ -886,17 +886,18 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
         const systemName = repl.system_name || (repl.system || '').split(' — ')[1] || repl.system || '';
         return (
           <View key={`revision-${keyStr}`} style={st.implantCard} data-testid={`implant-revision-${keyStr}`}>
-            <View style={[st.statusBadge, st.statusBadgeActive]}>
-              <Ionicons name="checkmark-circle" size={12} color="#FFF" />
-              <Text style={st.statusBadgeText}>Active</Text>
-            </View>
             <View style={st.implantCardHeader}>
               <View style={[st.positionBadge, { backgroundColor: '#2E7D32' }]}>
                 <Text style={st.positionText}>{tooth}</Text>
               </View>
               <ColorStripe brand={brand} system={systemName} diameter={repl.diameter} active testID={`implant-revision-stripe-${keyStr}`} />
               <View style={st.implantInfo}>
-                <Text style={st.implantTitle}>{brand} {systemName ? `- ${systemName}` : ''}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <Text style={st.implantTitle} numberOfLines={2}>{brand} {systemName ? `- ${systemName}` : ''}</Text>
+                  <View style={[st.statusChip, st.statusChipActive]}>
+                    <Text style={st.statusChipText}>Active</Text>
+                  </View>
+                </View>
                 <Text style={st.implantSpecs}>D: {repl.diameter}mm | L: {repl.length}mm</Text>
                 <Text style={st.revisionNote}>Revision R{repl.revision_number || 1} · replaced #{originalPlan?.position || tooth}</Text>
               </View>
@@ -2271,6 +2272,10 @@ const st = StyleSheet.create({
   statusBadgeActive: { backgroundColor: '#2E7D32' },
   statusBadgeInactive: { backgroundColor: '#90A4AE' },
   statusBadgeText: { color: '#FFF', fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.4 },
+  statusChip: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 },
+  statusChipActive: { backgroundColor: '#2E7D32' },
+  statusChipInactive: { backgroundColor: '#90A4AE' },
+  statusChipText: { color: '#FFF', fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.3 },
   implantCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   positionBadge: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#E3F2FD', alignItems: 'center', justifyContent: 'center' },
   positionText: { fontSize: 14, fontWeight: '700', color: '#1565C0' },
