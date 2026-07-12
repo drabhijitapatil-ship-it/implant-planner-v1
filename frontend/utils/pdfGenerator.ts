@@ -981,6 +981,27 @@ export const buildTerminationSummaryHtml = (procedure: any): string => {
     </p>
   </div>
 
+  ${(() => {
+    // iter-355: AI Exit Summary — soft clinical recommendations from GPT-5.2
+    // (PHI-redacted), optionally edited by clinician. Rendered as a distinct
+    // card so downstream dentists can find the hand-off note quickly.
+    const s = p.ai_exit_summary || {};
+    const txt = (s.text || '').trim();
+    if (!txt) return '';
+    const edited = s.edited
+      ? ` · <span style="color:#AD1457;font-weight:700;">Edited by ${_esc(s.edited_by || 'clinician')}</span>`
+      : '';
+    const genAt = _fmtDateTime(s.edited_at || s.generated_at || null);
+    return `
+      <div class="card" style="border-color:#F8BBD0; background:#FFF8FA;">
+        <h2 style="color:#AD1457;">AI Exit Summary — Clinical Hand-off Recommendation</h2>
+        <p style="margin:0 0 6px; font-size:11px; color:#546E7A;">
+          Auto-drafted by the platform's clinical AI on ${_esc(genAt)}${edited}. Verify before acting.
+        </p>
+        <div style="background:#FFF; border-left:3px solid #C62828; border-radius:0 6px 6px 0; padding:10px 12px; color:#263238; font-size:12px; line-height:1.55; white-space:pre-wrap;">${_esc(txt)}</div>
+      </div>`;
+  })()}
+
   <!-- Implants -->
   <div class="card">
     <h2>Implants Placed &amp; Final Status</h2>

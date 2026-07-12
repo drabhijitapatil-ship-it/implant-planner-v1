@@ -289,6 +289,13 @@ export default function ProcedureDetailScreen() {
   // Phase 2 edit-request (reviewer side — supervisor/in-charge open modal when student flags an issue)
   const [showPhase2EditModal, setShowPhase2EditModal] = useState(false);
 
+  // iter-355: AI Exit Summary (only for `treatment_ended` cases). Auto-generated
+  // on first load, editable by case owner / supervisor / in-charge / admin.
+  const [exitSummaryLoading, setExitSummaryLoading] = useState(false);
+  const [editingExitSummary, setEditingExitSummary] = useState(false);
+  const [exitSummaryDraft, setExitSummaryDraft] = useState('');
+  const [savingExitSummary, setSavingExitSummary] = useState(false);
+
   const uploadConsentForProcedure = async () => {
     try {
       const picked = await showUploadPicker(['application/pdf', 'image/png', 'image/jpeg', 'image/heic', 'image/heif']);
@@ -415,6 +422,24 @@ export default function ProcedureDetailScreen() {
       if (response.data?.ai_chat_history) {
         setAiChatHistory(response.data.ai_chat_history);
       }
+      // iter-355: Auto-generate the AI Exit Summary for terminated cases.
+      // Silent, best-effort — the summary is cached on the procedure doc so
+      // subsequent loads just hydrate. Never blocks the UI on failure.
+      if (response.data?.status === 'treatment_ended' && !response.data?.ai_exit_summary?.text) {
+        (async () => {
+          try {
+            setExitSummaryLoading(true);
+            const r = await api.post(`/procedures/${id}/generate-exit-summary`, {});
+            if (r?.data?.ai_exit_summary) {
+              setProcedure((prev: any) => (prev ? { ...prev, ai_exit_summary: r.data.ai_exit_summary } : prev));
+            }
+          } catch (e) {
+            console.warn('Exit summary auto-generate skipped:', e);
+          } finally {
+            setExitSummaryLoading(false);
+          }
+        })();
+      }
     } catch (error) {
       console.error('Failed to load procedure:', error);
       Alert.alert('Error', 'Failed to load procedure details');
@@ -435,6 +460,50 @@ export default function ProcedureDetailScreen() {
       setSmartPlannerLoading(false);
     }
   };
+
+  // iter-355: AI Exit Summary helpers ──────────────────────────────────
+  const regenerateExitSummary = async () => {
+    try {
+      setExitSummaryLoading(true);
+      const r = await api.post(`/procedures/${id}/generate-exit-summary`, { force: true });
+      if (r?.data?.ai_exit_summary) {
+        setProcedure((prev: any) => (prev ? { ...prev, ai_exit_summary: r.data.ai_exit_summary } : prev));
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e?.response?.data?.detail || 'Failed to regenerate the AI Exit Summary');
+    } finally {
+      setExitSummaryLoading(false);
+    }
+  };
+
+  const saveExitSummaryEdit = async () => {
+    const t = (exitSummaryDraft || '').trim();
+    if (!t) {
+      Alert.alert('Empty', 'Please enter the summary text.');
+      return;
+    }
+    try {
+      setSavingExitSummary(true);
+      const r = await api.patch(`/procedures/${id}/exit-summary`, { text: t });
+      if (r?.data?.ai_exit_summary) {
+        setProcedure((prev: any) => (prev ? { ...prev, ai_exit_summary: r.data.ai_exit_summary } : prev));
+      }
+      setEditingExitSummary(false);
+    } catch (e: any) {
+      Alert.alert('Error', e?.response?.data?.detail || 'Failed to save exit summary edit');
+    } finally {
+      setSavingExitSummary(false);
+    }
+  };
+
+  const canEditExitSummary = () => {
+    const role = user?.role;
+    if (!role) return false;
+    if (role === 'supervisor' || role === 'implant_incharge' || role === 'administrator') return true;
+    if (role === 'student' && String(procedure?.student_id || '') === String(user?._id || user?.id || '')) return true;
+    return false;
+  };
+
 
   // ── AI Summary helpers (Clinical + Surgical) ──────────────────────
   const generateAiSurgicalSummary = async () => {
@@ -1034,6 +1103,119 @@ export default function ProcedureDetailScreen() {
             <Text style={styles.terminationFoot}>
               No further replacement, healing or prosthetic phases can be recorded on this case.
             </Text>
+
+            {/* iter-355: AI Exit Summary — soft clinical recommendations
+                auto-generated on first load and editable by case-owner /
+                supervisor / in-charge / administrator. */}
+            <View style={styles.exitSummaryCard} testID="ai-exit-summary-card">
+              <View style={styles.exitSummaryHeader}>
+                <View style={styles.exitSummaryTitleRow}>
+                  <Ionicons name="sparkles-outline" size={16} color="#B71C1C" />
+                  <Text style={styles.exitSummaryTitle}>AI Exit Summary</Text>
+                  {procedure.ai_exit_summary?.edited && (
+                    <View style={styles.exitSummaryEditedPill}>
+                      <Text style={styles.exitSummaryEditedText}>edited</Text>
+                    </View>
+                  )}
+                </View>
+                {canEditExitSummary() && !editingExitSummary && !!procedure.ai_exit_summary?.text && (
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setExitSummaryDraft(procedure.ai_exit_summary?.text || '');
+                        setEditingExitSummary(true);
+                      }}
+                      style={styles.exitSummaryActionBtn}
+                      testID="exit-summary-edit-btn"
+                      data-testid="exit-summary-edit-btn"
+                    >
+                      <Ionicons name="create-outline" size={13} color="#B71C1C" />
+                      <Text style={styles.exitSummaryActionText}>Edit</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={regenerateExitSummary}
+                      disabled={exitSummaryLoading}
+                      style={[styles.exitSummaryActionBtn, exitSummaryLoading && { opacity: 0.5 }]}
+                      testID="exit-summary-regenerate-btn"
+                      data-testid="exit-summary-regenerate-btn"
+                    >
+                      <Ionicons name="refresh" size={13} color="#B71C1C" />
+                      <Text style={styles.exitSummaryActionText}>Regenerate</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+
+              {exitSummaryLoading && !procedure.ai_exit_summary?.text ? (
+                <View style={styles.exitSummaryLoading} testID="exit-summary-loading">
+                  <ActivityIndicator size="small" color="#B71C1C" />
+                  <Text style={styles.exitSummaryLoadingText}>Drafting clinical recommendations…</Text>
+                </View>
+              ) : editingExitSummary ? (
+                <View testID="exit-summary-editor">
+                  <TextInput
+                    value={exitSummaryDraft}
+                    onChangeText={setExitSummaryDraft}
+                    style={styles.exitSummaryInput}
+                    multiline
+                    editable={!savingExitSummary}
+                    placeholder="Clinical exit summary..."
+                    placeholderTextColor="#B0BEC5"
+                    testID="exit-summary-input"
+                    data-testid="exit-summary-input"
+                  />
+                  <View style={styles.exitSummaryEditActions}>
+                    <TouchableOpacity
+                      onPress={() => { setEditingExitSummary(false); setExitSummaryDraft(''); }}
+                      style={[styles.exitSummaryActionBtn, { borderColor: '#B0BEC5' }]}
+                      disabled={savingExitSummary}
+                    >
+                      <Text style={[styles.exitSummaryActionText, { color: '#546E7A' }]}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={saveExitSummaryEdit}
+                      style={[styles.exitSummaryActionBtn, styles.exitSummaryActionBtnPrimary, savingExitSummary && { opacity: 0.6 }]}
+                      disabled={savingExitSummary}
+                      testID="exit-summary-save-btn"
+                      data-testid="exit-summary-save-btn"
+                    >
+                      {savingExitSummary ? (
+                        <ActivityIndicator size="small" color="#FFF" />
+                      ) : (
+                        <>
+                          <Ionicons name="checkmark" size={13} color="#FFF" />
+                          <Text style={[styles.exitSummaryActionText, { color: '#FFF' }]}>Save</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : procedure.ai_exit_summary?.text ? (
+                <Text style={styles.exitSummaryBody} testID="exit-summary-text">
+                  {procedure.ai_exit_summary.text}
+                </Text>
+              ) : (
+                <View style={styles.exitSummaryEmpty}>
+                  <Text style={styles.exitSummaryEmptyText}>
+                    Exit summary not yet generated.
+                  </Text>
+                  {canEditExitSummary() && (
+                    <TouchableOpacity
+                      onPress={regenerateExitSummary}
+                      style={[styles.exitSummaryActionBtn, styles.exitSummaryActionBtnPrimary]}
+                      testID="exit-summary-generate-btn"
+                      data-testid="exit-summary-generate-btn"
+                    >
+                      <Ionicons name="sparkles" size={13} color="#FFF" />
+                      <Text style={[styles.exitSummaryActionText, { color: '#FFF' }]}>Generate</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+              <Text style={styles.exitSummaryDisclaimer}>
+                AI-drafted recommendation · verify clinically before acting · included in the Termination Summary PDF.
+              </Text>
+            </View>
           </View>
         )}
 
@@ -5119,6 +5301,34 @@ const styles = StyleSheet.create({
   terminationBtnGhost: { backgroundColor: '#FFF', borderWidth: 1.5, borderColor: '#C62828' },
   terminationBtnText: { color: '#FFF', fontSize: 13, fontWeight: '800', letterSpacing: 0.4 },
   terminationFoot: { fontSize: 11, color: '#8E1B1B', fontStyle: 'italic', textAlign: 'center' },
+  // iter-355: AI Exit Summary card (embedded in the termination banner)
+  exitSummaryCard: {
+    marginTop: 12, backgroundColor: '#FFF5F5', borderWidth: 1, borderColor: '#FFCDD2',
+    borderRadius: 10, padding: 12, gap: 8,
+  },
+  exitSummaryHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  exitSummaryTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
+  exitSummaryTitle: { fontSize: 12, fontWeight: '800', color: '#B71C1C', letterSpacing: 0.4, textTransform: 'uppercase' },
+  exitSummaryEditedPill: { backgroundColor: '#FFF', borderColor: '#F48FB1', borderWidth: 1, borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1 },
+  exitSummaryEditedText: { fontSize: 9, fontWeight: '700', color: '#AD1457', letterSpacing: 0.3, textTransform: 'uppercase' },
+  exitSummaryBody: { fontSize: 12.5, lineHeight: 19, color: '#37474F' },
+  exitSummaryLoading: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
+  exitSummaryLoadingText: { fontSize: 12, color: '#B71C1C', fontStyle: 'italic' },
+  exitSummaryEmpty: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' },
+  exitSummaryEmptyText: { fontSize: 12, color: '#78909C', fontStyle: 'italic', flex: 1 },
+  exitSummaryInput: {
+    backgroundColor: '#FFF', borderColor: '#F8BBD0', borderWidth: 1, borderRadius: 8,
+    padding: 10, fontSize: 12.5, color: '#263238', minHeight: 120, textAlignVertical: 'top',
+  },
+  exitSummaryEditActions: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end', marginTop: 8 },
+  exitSummaryActionBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#FFF', borderWidth: 1, borderColor: '#F8BBD0',
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6,
+  },
+  exitSummaryActionBtnPrimary: { backgroundColor: '#C62828', borderColor: '#C62828' },
+  exitSummaryActionText: { fontSize: 11, fontWeight: '700', color: '#B71C1C', letterSpacing: 0.2 },
+  exitSummaryDisclaimer: { fontSize: 10, color: '#B71C1C', fontStyle: 'italic', opacity: 0.75 },
   // iter-352: End treatment rejected banner (last-rejection surfaced to the initiator)
   rejectedBanner: {
     marginHorizontal: 16, marginTop: 8, marginBottom: 8,
