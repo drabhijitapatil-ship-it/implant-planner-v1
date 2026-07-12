@@ -31,6 +31,8 @@ import {
   type BridgeCandidate,
   clusterOfTooth,
 } from '../utils/implantValidation';
+import RevisionComparisonModal, { type ComparisonRevision } from './RevisionComparisonModal';
+
 
 // ── Drilling Protocol PDF helpers (A4, backend-rendered) ────────────────────
 type DrillingPdfPayload = {
@@ -575,6 +577,15 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
   /** One-shot tooth pre-selection when opening the Add-Implant modal from a "Pending" card. */
   const [pendingPreset, setPendingPreset] = useState<string | undefined>(undefined);
   const [expandedProtocol, setExpandedProtocol] = useState<number | null>(null);
+  // iter-351: Revision comparison modal — tapping any historical tile in
+  // Implant Planning opens a side-by-side compare vs the current active
+  // revision.
+  const [compareState, setCompareState] = useState<{
+    open: boolean;
+    site: string | number;
+    historical: ComparisonRevision | null;
+    active: ComparisonRevision | null;
+  }>({ open: false, site: '', historical: null, active: null });
   // Bridge prompt — surfaced after a save reveals a new pontic between implants.
   const [bridgePrompt, setBridgePrompt] = useState<BridgeCandidate | null>(null);
   const [bridgeMaterialFor, setBridgeMaterialFor] = useState<BridgeCandidate | null>(null);
@@ -738,6 +749,80 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
         // Total revisions = R0 + chain items + current active (if any)
         const siteRevisionCount = 1 + chainArr.length + (hasActiveReplacement ? 1 : 0);
         const showRevisionChips = siteRevisionCount > 1;
+        // iter-351: helpers to build ComparisonRevision objects for the
+        // side-by-side modal. Defined per-site inside render so they close
+        // over `plan`, `surv`, `chainArr`, etc.
+        const buildActiveRev = (): ComparisonRevision | null => {
+          if (!hasActiveReplacement) return null;
+          const repl = surv.replacement;
+          const revNum = repl.revision_number || (chainArr.length + 1);
+          const brand = repl.brand || (repl.system || '').split(' — ')[0] || 'System';
+          const systemName = repl.system_name || (repl.system || '').split(' — ')[1] || repl.system || '';
+          return {
+            label: `R${revNum}`, isActive: true,
+            tooth: repl.tooth_number || plan.position,
+            brand, system: systemName,
+            diameter: repl.diameter, length: repl.length,
+            bone_type: repl.bone_type,
+            insertion_torque_ncm: repl.insertion_torque_ncm,
+            isq: repl.isq,
+            placement_date: repl.placement_date,
+            procedure_type: repl.procedure_type,
+            prosthetic_component: repl.prosthetic_component,
+            lot_number: repl.lot_number,
+          };
+        };
+        const buildR0Rev = (): ComparisonRevision => ({
+          label: 'R0', isActive: false,
+          tooth: plan.position,
+          brand: plan.brand, system: plan.system,
+          diameter: plan.diameter, length: plan.length,
+          bone_type: plan.bone_type,
+          insertion_torque_ncm: (plan as any).insertion_torque_ncm,
+          isq: (plan as any).isq,
+          placement_date: (plan as any).placement_date,
+          lot_number: (plan as any).lot_number,
+          failure_reason: surv?.reason,
+          failure_date: surv?.failure_date,
+        });
+        const buildChainRev = (c: any): ComparisonRevision => {
+          const revNum = c.revision_number || (chainArr.indexOf(c) + 1);
+          const brand = c.brand || (c.system || '').split(' — ')[0] || 'System';
+          const systemName = c.system_name || (c.system || '').split(' — ')[1] || c.system || '';
+          return {
+            label: `R${revNum}`, isActive: false,
+            tooth: c.tooth_number || plan.position,
+            brand, system: systemName,
+            diameter: c.diameter, length: c.length,
+            bone_type: c.bone_type,
+            insertion_torque_ncm: c.insertion_torque_ncm,
+            isq: c.isq,
+            placement_date: c.placement_date,
+            procedure_type: c.procedure_type,
+            prosthetic_component: c.prosthetic_component,
+            lot_number: c.lot_number,
+            failure_reason: c.failure_reason,
+            failure_date: c.failure_date,
+          };
+        };
+        const openCompareR0 = () => {
+          const active = buildActiveRev();
+          if (!active) return;
+          setCompareState({ open: true, site: plan.position, historical: buildR0Rev(), active });
+        };
+        const openCompareChain = (c: any) => {
+          const active = buildActiveRev();
+          if (!active) return;
+          setCompareState({ open: true, site: plan.position, historical: buildChainRev(c), active });
+        };
+        const openCompareActive = () => {
+          const active = buildActiveRev();
+          if (!active) return;
+          const historical = chainArr.length > 0
+            ? buildChainRev(chainArr[chainArr.length - 1])
+            : buildR0Rev();
+          setCompareState({ open: true, site: plan.position, historical, active });
+        };
         return (
           <React.Fragment key={`site-${plan.position}-${idx}`}>
             {/* iter-350: group divider — only rendered when the site has more
@@ -857,6 +942,19 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
                   <Ionicons name="lock-closed" size={12} color="#78909C" />
                   <Text style={st.inactiveHistoryText}>Historical record — read-only</Text>
                 </View>
+                {/* iter-351: Compare with current revision — teaching aid. */}
+                {hasActiveReplacement && (
+                  <TouchableOpacity
+                    style={st.compareChip}
+                    onPress={openCompareR0}
+                    activeOpacity={0.7}
+                    data-testid={`compare-r0-${idx}`}
+                    testID={`compare-r0-${idx}`}
+                  >
+                    <Ionicons name="git-compare" size={12} color="#0D47A1" />
+                    <Text style={st.compareChipText}>Compare with current</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
             {expandedProtocol === idx && !isInactive && plan.bone_type && (
@@ -968,6 +1066,17 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
                     <Ionicons name="lock-closed" size={12} color="#78909C" />
                     <Text style={st.inactiveHistoryText}>Historical record — read-only</Text>
                   </View>
+                  {/* iter-351: Compare chain revision vs current. */}
+                  <TouchableOpacity
+                    style={st.compareChip}
+                    onPress={() => openCompareChain(c)}
+                    activeOpacity={0.7}
+                    data-testid={`compare-chain-${idx}-r${revNum}`}
+                    testID={`compare-chain-${idx}-r${revNum}`}
+                  >
+                    <Ionicons name="git-compare" size={12} color="#0D47A1" />
+                    <Text style={st.compareChipText}>Compare with current</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             );
@@ -1016,6 +1125,19 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
                   </Text>}
                   {repl.lot_number && <Text style={st.detailText}>Lot: {repl.lot_number}</Text>}
                   {repl.placement_date && <Text style={st.detailText}>Placed on: {repl.placement_date}</Text>}
+                </View>
+                {/* iter-351: Compare current active vs previous revision. */}
+                <View style={st.implantActions}>
+                  <TouchableOpacity
+                    style={st.compareChip}
+                    onPress={openCompareActive}
+                    activeOpacity={0.7}
+                    data-testid={`compare-active-${idx}`}
+                    testID={`compare-active-${idx}`}
+                  >
+                    <Ionicons name="git-compare" size={12} color="#0D47A1" />
+                    <Text style={st.compareChipText}>Compare with previous</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             );
@@ -1102,6 +1224,16 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
         defaultOcclusocervical={defaultOcclusocervical}
         defaultMesiodistal={defaultMesiodistal}
         procedureStatus={procedureStatus}
+      />
+
+      {/* iter-351: Revision Comparison Modal — opened by "Compare with current"
+          / "Compare with previous" chips on tiles in the site's revision chain. */}
+      <RevisionComparisonModal
+        visible={compareState.open}
+        onClose={() => setCompareState((c) => ({ ...c, open: false }))}
+        historical={compareState.historical}
+        active={compareState.active}
+        site={compareState.site}
       />
 
       {/* ── Bridge nudge — fired after a save reveals an implant-supported pontic ── */}
@@ -2390,6 +2522,13 @@ const st = StyleSheet.create({
     borderWidth: 1, borderColor: '#CFD8DC', backgroundColor: '#ECEFF1',
   },
   inactiveHistoryText: { fontSize: 11, color: '#78909C', fontWeight: '700', letterSpacing: 0.2 },
+  // iter-351: Compare-revision chip
+  compareChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999,
+    borderWidth: 1, borderColor: '#90CAF9', backgroundColor: '#E3F2FD',
+  },
+  compareChipText: { fontSize: 11, color: '#0D47A1', fontWeight: '800', letterSpacing: 0.2 },
   // iter-350: Site group header + revision chip (Q1-a + Q2-a)
   siteGroupHeader: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
