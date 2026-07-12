@@ -1,5 +1,23 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 350 (Feb 2026) — Full Revision Chain + Calendar Picker + Global End Treatment
+
+User choices (Message 561): Q1-a group per site oldest-first, Q2-a per-tile revision chip (R0/R1/R2), Q3-a full timeline chain per revision. End Implant Treatment moved to a solid-red global button BELOW both "Update & go back" and "Continue to Phase 3", centered.
+
+### Features
+1. **Multi-round chain rendering (CaseImplantPlanning)** — For every implant site, the full R0 → R1 → R2 … N revision chain is now rendered inline, oldest-first, with a "SITE #X · N REVISIONS" group header (data-testid=`site-group-<pos>`) and R{n} chips on each tile (data-testid=`implant-plan-rev-<idx>` / `implant-revision-<idx>-r<n>` / `implant-revision-active-<idx>`). Intermediate failed replacements pulled from `surv.replacement.chain[]` render as read-only inactive tiles ("Historical record — read-only"). Sites with just R0 (never failed) do NOT show a group header or revision chip.
+2. **Placement date calendar picker** — New `<PlacementDatePicker/>` component (react-native-calendars) matching the Phase-1 Reschedule modal style. Replaces the mixed native/HTML5 input fallback. Trigger button shows calendar icon + human-readable date, Modal displays a full month grid with red-border invalid state until a date is picked.
+3. **Global End Implant Treatment button + modal** — Repositioned per user request: solid-red / white-text button (data-testid=`survival-end-treatment-btn`) centered BELOW both "Update & go back" and "Continue to Phase 3". Tapping it opens a confirmation modal capturing Failure reason + Whose decision? (Patient/Operator) + Reason for ending treatment. On confirm submits `end_treatment=true` on ALL implants → backend sets `procedure.status='treatment_ended'`.
+
+### Files touched
+- EDIT `/app/frontend/components/CaseImplantPlanning.tsx` — expanded plans.map into a chain-rendering React.Fragment; deleted the legacy trailing revision block; added `siteGroupHeader`, `siteGroupDot`, `siteGroupText`, `siteGroupLine`, `revChip`, `revChipText` styles.
+- ADD `/app/frontend/components/PlacementDatePicker.tsx` — reusable Phase-1-style calendar date picker.
+- EDIT `/app/frontend/app/procedures/survival-review/[id].tsx` — wired PlacementDatePicker for the replacement date; removed per-implant End Treatment inline UI + fields; added bottom global button + confirmation modal + `handleEndTreatment()` submit handler.
+
+### Testing
+- Backend: 5/5 pytest pass (`/app/backend/tests/test_survival_iter350.py`) — replacement placement_date required, end_treatment gates work, R0→R1→R2 chain build-up verified (chain[0] properly stores prior failed replacement).
+- Frontend E2E manual: Site #16 tile stack shows R0 (Alpha Bio ICE, Inactive), R1 (Straumann BLX, Inactive with placed/failed dates), R2 (Nobel Active, Active) with correct group header + chips. Global End Treatment button + modal confirmed via screenshot. Termination banner + PDF download from iter-349 still work.
+
 ## Iteration 349 (Feb 2026) — Treatment Termination Summary PDF
 
 Auto-generated one-page medico-legal document for cases in the terminal `treatment_ended` state. Handoff copy for the patient's next dentist + institutional audit.
