@@ -1,5 +1,43 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 355 (Feb 2026) — AI Exit Summary on Treatment Termination PDF
+
+User choices: Q1-a auto-generated once + cached, Q2-a editable by case owner (student/supervisor/in-charge), Q3-a GPT-5.2, Q4-a PHI-redacted before LLM call.
+
+### Feature Delivered
+1. **AI Exit Summary** — When a case status becomes `treatment_ended`, the app now auto-drafts a 150-220 word clinical hand-off note (soft recommendations: prosthodontist referral, bone-augmentation, systemic risk-factor counselling, etc.) grounded in the case's failure history + termination reason.
+2. **Cached on the procedure doc** at `ai_exit_summary.{text, generated_at, generated_by, model, edited, edited_at, edited_by, edited_by_role}` so we don't re-bill the LLM on every view.
+3. **Editable by the case owner** — student who owns the case, supervisor, implant_incharge or administrator can rewrite the summary; edits stamp `edited: true` with attribution. Non-owner students receive 403.
+4. **Force-regenerate** via `POST /generate-exit-summary` with `{"force": true}` (owner-visible "Regenerate" button).
+5. **PHI redaction** — patient_name / phone / registration / address / email are replaced with `[PATIENT]` / `[REDACTED]` before the prompt is sent to GPT-5.2.
+6. **PDF integration** — `buildTerminationSummaryHtml` in `/app/frontend/utils/pdfGenerator.ts` renders a distinct pink card under Termination Details, with the AI disclaimer and edit attribution.
+
+### Endpoints Added
+- `POST /api/procedures/{id}/generate-exit-summary` (body `{force?: bool}`) — idempotent generation with cache-hit shortcut.
+- `PATCH /api/procedures/{id}/exit-summary` (body `{text}`) — owner-only edit endpoint.
+- Access log actions: `ai_exit_summary_generated`, `ai_exit_summary_edited`.
+
+### DB Restoration
+- Restored `Dr. Riddhi Sabane` back to `administrator` role (previous rollback stripped this).
+
+### Env Change
+- Added `EMERGENT_LLM_KEY=sk-emergent-950A998B90c8f3f3aB` to `/app/backend/.env` (was missing — AI features would have silently no-op'd otherwise).
+
+### Tests
+- `/app/backend/tests/test_ai_exit_summary_iter355.py` — 3 passing regression tests:
+  1. Generate → Cache → Edit → Force-regenerate lifecycle.
+  2. Non-owner student receives 403 on PATCH.
+  3. Non-terminated case receives 400 on POST.
+
+### Files Changed
+- `/app/backend/server.py` — added `_phi_redact_procedure`, `_build_exit_summary_prompt`, `_ensure_exit_summary`, `generate_exit_summary`, `edit_exit_summary` (~200 lines after `ai_explain_recommendation`).
+- `/app/backend/.env` — added `EMERGENT_LLM_KEY`.
+- `/app/frontend/app/procedures/[id].tsx` — new state + helpers (`regenerateExitSummary`, `saveExitSummaryEdit`, `canEditExitSummary`), auto-fetch inside `loadProcedure`, new UI card inside the termination banner, styles block (`exitSummaryCard`, etc.).
+- `/app/frontend/utils/pdfGenerator.ts` — inline `ai_exit_summary` card in Termination Summary HTML.
+- `/app/backend/tests/test_ai_exit_summary_iter355.py` — new pytest regression.
+
+---
+
 ## Iteration 354 (Feb 2026) — IOPA Upload Bugfix + Phase-2 Style Labels + Failed-No-Repl Inactive Flow
 
 User choices: Q1-a exclude from Phase 3, Q2-a exclude from PDFs + Phase 4, Q3-a still counts as Failed in analytics, Q4-a auto-terminate when all implants failed-no-repl.

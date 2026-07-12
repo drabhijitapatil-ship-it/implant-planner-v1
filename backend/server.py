@@ -7416,6 +7416,215 @@ Provide a clinical explanation in professional scientific language. Do not menti
     return {"explanation": response}
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# iter-355: AI Exit Summary for the Treatment Termination PDF
+#
+# When a case reaches `status = "treatment_ended"`, generate a short clinical
+# hand-off note that drafts soft recommendations (referrals, augmentation
+# considerations, patient counselling points) based on the failure history +
+# termination reason. Cached on the procedure doc; regenerated only if the
+# cache is missing. Editable by case owner (student), supervisor, in-charge or
+# administrator. PHI (patient name / phone / registration) is redacted before
+# the LLM call — HIPAA safe (Option 4a).
+# ─────────────────────────────────────────────────────────────────────────────
+def _phi_redact_procedure(proc: dict) -> dict:
+    """Return a shallow copy with obvious PHI fields replaced by placeholders."""
+    redacted = dict(proc)
+    if redacted.get("patient_name"):
+        redacted["patient_name"] = "[PATIENT]"
+    for k in ("patient_phone", "patient_contact", "phone", "contact_number",
+              "registration_number", "aadhar", "aadhaar", "email", "address"):
+        if redacted.get(k):
+            redacted[k] = "[REDACTED]"
+    return redacted
+
+
+def _build_exit_summary_prompt(proc: dict) -> str:
+    """Build the LLM prompt for the AI Exit Summary. PHI-redacted."""
+    p = _phi_redact_procedure(proc)
+    age = p.get("patient_age") or "—"
+    sex = p.get("patient_gender") or "—"
+    chief = p.get("chief_complaint") or "—"
+    ended_reason = p.get("treatment_ended_reason") or "—"
+    ended_by = p.get("treatment_ended_decision_maker") or "—"
+    procedure_type = p.get("implant_procedure_type") or "—"
+
+    # Original implants (R0) + revision chain
+    originals = (p.get("implants") or p.get("implant_plans") or
+                 p.get("existing_implants") or [])
+    surv = (p.get("phase2_survival_review") or {}).get("implants") or {}
+    events = (p.get("phase2_survival_review") or {}).get("events") or []
+
+    imp_lines = []
+    for i, imp in enumerate(originals):
+        s = surv.get(str(i)) or surv.get(i) or {}
+        tooth = imp.get("tooth_number") or imp.get("tooth") or imp.get("position") or "—"
+        system = " / ".join([str(x) for x in [imp.get("brand"), imp.get("system")] if x]) or "—"
+        size = " · ".join([
+            f"Ø{imp.get('diameter')}mm" if imp.get("diameter") else "",
+            f"L{imp.get('length')}mm" if imp.get("length") else "",
+        ]).strip(" ·") or "—"
+        status = s.get("status") or "Active"
+        reason = s.get("reason") or ""
+        rline = f"  - Tooth #{tooth} | {system} | {size} | Final: {status}"
+        if reason:
+            rline += f" — {reason}"
+        imp_lines.append(rline)
+
+    ev_lines = []
+    for ev in events:
+        at = ev.get("at") or "—"
+        failures = ev.get("failures") or []
+        if not failures:
+            ev_lines.append(f"  - {at}: All implants surviving")
+            continue
+        for f in failures:
+            tag = ("END TREATMENT" if f.get("end_treatment")
+                   else "replaced" if f.get("replaced")
+                   else "removed" if f.get("removed") else "reviewed")
+            ev_lines.append(
+                f"  - {at}: Tooth #{f.get('tooth','?')} — {f.get('reason','?')} ({tag})"
+            )
+
+    imp_block = "\n".join(imp_lines) or "  (none on record)"
+    ev_block = "\n".join(ev_lines) or "  (none on record)"
+
+    return f"""You are an experienced implantologist writing a clinical hand-off note for a case where implant therapy has been terminated. The document goes to the patient's next dentist AND lives in the institutional record.
+
+Patient profile (PHI redacted): Age {age}, Sex {sex}
+Chief complaint at intake: {chief}
+Procedure type: {procedure_type}
+Termination decision by: {ended_by}
+Termination reason on record: {ended_reason}
+
+Implants placed and final status:
+{imp_block}
+
+Survival-review lifecycle events:
+{ev_block}
+
+Task — write a concise clinical Exit Summary (150–220 words, plain prose, no headings, no lists) that:
+1. Restates the clinical picture in one sentence (why therapy was terminated).
+2. Suggests 2–4 SOFT, non-prescriptive next-step recommendations. Draw from the failure pattern: e.g. residual ridge deficiency → bone-augmentation before any future implant attempt; multiple biological failures → screen for bruxism, occlusal overload, uncontrolled diabetes, smoking; peri-implantitis chain → prosthodontist referral for a removable partial denture or tooth-supported bridge; single-site failure → soft-tissue augmentation and delayed re-entry.
+3. Suggests any counselling points for the patient (realistic expectations, hygiene, systemic-risk optimisation) if warranted.
+4. Ends with a one-line disclaimer that this is an AI-drafted recommendation and the treating clinician must verify before acting.
+
+Rules:
+- Do NOT invent implant sizes, brand names, or clinical facts that are not in the input above.
+- Do NOT cite guideline names, textbooks, or organisations.
+- Use professional prose. Avoid bullet points and headings.
+- Never reference the patient by name — the input has already been redacted."""
+
+
+async def _ensure_exit_summary(procedure_id: str, proc: dict, current_user: dict, force: bool = False) -> str:
+    """Idempotently generate + persist the AI Exit Summary. Returns the text."""
+    existing = proc.get("ai_exit_summary") or {}
+    if not force and isinstance(existing, dict) and existing.get("text"):
+        return existing["text"]
+
+    prompt = _build_exit_summary_prompt(proc)
+    chat = LlmChat(
+        api_key=_get_llm_key(),
+        session_id=f"exit-summary-{procedure_id}-{uuid.uuid4().hex[:8]}",
+        system_message="You are an expert implant dentistry clinician writing a medico-legal hand-off note. Be conservative and evidence-anchored."
+    ).with_model("openai", "gpt-5.2")
+
+    text = await chat.send_message(UserMessage(text=prompt))
+    text = (text or "").strip()
+
+    now = datetime.now(timezone.utc)
+    payload = {
+        "text": text,
+        "generated_at": now,
+        "generated_by": current_user.get("name") or current_user.get("username") or "system",
+        "model": "openai/gpt-5.2",
+        "edited": False,
+    }
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"ai_exit_summary": payload}}
+    )
+    await log_access(
+        action="ai_exit_summary_generated",
+        outcome="success",
+        resource_type="procedure",
+        resource_id=procedure_id,
+        user=current_user,
+    )
+    return text
+
+
+@api_router.post("/procedures/{procedure_id}/generate-exit-summary")
+async def generate_exit_summary(procedure_id: str, request: Request, current_user: dict = Depends(get_current_user)):
+    """Auto-generate (or return cached) AI Exit Summary for a terminated case."""
+    if not ObjectId.is_valid(procedure_id):
+        raise HTTPException(status_code=400, detail="Invalid procedure id")
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if proc.get("status") != "treatment_ended":
+        raise HTTPException(status_code=400, detail="AI Exit Summary is only available for terminated cases")
+
+    force = False
+    try:
+        body = await request.json()
+        force = bool(body.get("force"))
+    except Exception:
+        pass
+
+    text = await _ensure_exit_summary(procedure_id, proc, current_user, force=force)
+    proc2 = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"ai_exit_summary": 1})
+    return {"ai_exit_summary": proc2.get("ai_exit_summary") if proc2 else {"text": text}}
+
+
+@api_router.patch("/procedures/{procedure_id}/exit-summary")
+async def edit_exit_summary(procedure_id: str, request: Request, current_user: dict = Depends(get_current_user)):
+    """Owner-of-case edit for the AI Exit Summary. Allowed roles: student
+    (case owner), supervisor, implant_incharge, administrator."""
+    if not ObjectId.is_valid(procedure_id):
+        raise HTTPException(status_code=400, detail="Invalid procedure id")
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if proc.get("status") != "treatment_ended":
+        raise HTTPException(status_code=400, detail="AI Exit Summary is only available for terminated cases")
+
+    role = current_user.get("role")
+    is_case_student = str(proc.get("student_id") or "") == str(current_user.get("_id") or "")
+    if role not in ("supervisor", "implant_incharge", "administrator") and not (role == "student" and is_case_student):
+        raise HTTPException(status_code=403, detail="Only the case owner (student), supervisor, implant in-charge or administrator can edit the exit summary")
+
+    body = await request.json()
+    new_text = (body.get("text") or "").strip()
+    if not new_text:
+        raise HTTPException(status_code=400, detail="Summary text cannot be empty")
+    if len(new_text) > 4000:
+        raise HTTPException(status_code=400, detail="Summary text exceeds 4000 characters")
+
+    now = datetime.now(timezone.utc)
+    existing = proc.get("ai_exit_summary") or {}
+    payload = {
+        **existing,
+        "text": new_text,
+        "edited": True,
+        "edited_at": now,
+        "edited_by": current_user.get("name") or current_user.get("username") or "user",
+        "edited_by_role": role,
+    }
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"ai_exit_summary": payload}}
+    )
+    await log_access(
+        action="ai_exit_summary_edited",
+        outcome="success",
+        resource_type="procedure",
+        resource_id=procedure_id,
+        user=current_user,
+    )
+    return {"ai_exit_summary": payload}
+
+
 @api_router.post("/ai/explain-standalone")
 async def ai_explain_standalone(request: Request, current_user: dict = Depends(get_current_user)):
     """Generate AI explanation for standalone implant selection (no procedure ID required)."""
