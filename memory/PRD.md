@@ -1,5 +1,20 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 351 (Feb 2026) — Revision Comparison Modal
+
+Teaching aid: any historical tile in Implant Planning can now be compared side-by-side with the current active revision to visually understand what changed between revisions.
+
+### Features
+- **"Compare with current" chip** on every inactive (R0/R1/…) tile — data-testid=`compare-r0-<idx>` / `compare-chain-<idx>-r<n>`.
+- **"Compare with previous" chip** on the active tile (R<n>) — data-testid=`compare-active-<idx>`. Compares vs. the most recent historical revision (last chain item, or R0 if no chain).
+- **`RevisionComparisonModal`** — side-by-side columns rendering system, size, tooth, bone type, insertion torque, ISQ, procedure type, prosthetic component, placement date, lot #, and (for the historical column) the Failed reason + date badge.
+- **Field-diff amber highlights** — rows where the two revisions differ (system, size, bone type, torque, ISQ) get an amber left-border and orange value text so students spot changes instantly.
+- **"What changed" insights card** — auto-generated bullet list summarizing every material change ("System changed from A → B", "Size changed from … → …", "Torque increased by N Ncm", "ISQ improved from … → …").
+
+### Files touched
+- ADD `/app/frontend/components/RevisionComparisonModal.tsx` — self-contained modal.
+- EDIT `/app/frontend/components/CaseImplantPlanning.tsx` — added `compareState`, per-tile helpers (`buildActiveRev`, `buildR0Rev`, `buildChainRev`), tap chips on R0/chain/active tiles, modal render, `compareChip` + `compareChipText` styles.
+
 ## Iteration 350 (Feb 2026) — Full Revision Chain + Calendar Picker + Global End Treatment
 
 User choices (Message 561): Q1-a group per site oldest-first, Q2-a per-tile revision chip (R0/R1/R2), Q3-a full timeline chain per revision. End Implant Treatment moved to a solid-red global button BELOW both "Update & go back" and "Continue to Phase 3", centered.
