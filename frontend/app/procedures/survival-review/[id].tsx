@@ -29,6 +29,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import PlacementDatePicker from '../../../components/PlacementDatePicker';
+import { showUploadPicker } from '../../../utils/uploadPicker';
+import RadiographThumb from '../../../components/RadiographThumb';
 import api from '../../../utils/api';
 import FDIChart from '../../../components/FDIChart';
 import {
@@ -310,7 +312,7 @@ export default function SurvivalReview() {
       if (!picked) return;
       setReplField(idx, { iopa_uploading: true });
       const fd = new FormData();
-      if (_Platform.OS === 'web') {
+      if (Platform.OS === 'web') {
         const resp = await fetch(picked.uri);
         const blob = await resp.blob();
         // @ts-ignore RN-web FormData accepts File.
@@ -573,9 +575,9 @@ export default function SurvivalReview() {
                       inline entry point was removed to match the user's
                       preferred single-action layout. */}
 
-                  {/* Was it replaced? */}
+                  {/* Was the Implant Replaced? */}
                   <View style={{flexDirection:'row',alignItems:'center',gap:12}}>
-                    <Text style={s.lbl}>Was it replaced?</Text>
+                    <Text style={s.lbl}>Was the Implant Replaced?</Text>
                     <TouchableOpacity style={[s.pillTiny, f.replaced && s.pillOn]} onPress={() => setField(i, 'replaced', true)} data-testid={`imp-${i}-replaced-yes`} testID={`imp-${i}-replaced-yes`}><Text style={[s.pillTT, f.replaced && s.pillTOn]}>Yes</Text></TouchableOpacity>
                     <TouchableOpacity style={[s.pillTiny, !f.replaced && s.pillOn]} onPress={() => setField(i, 'replaced', false)} data-testid={`imp-${i}-replaced-no`} testID={`imp-${i}-replaced-no`}><Text style={[s.pillTT, !f.replaced && s.pillTOn]}>No</Text></TouchableOpacity>
                   </View>
@@ -663,9 +665,11 @@ export default function SurvivalReview() {
 
                       {/* iter-345: Torque relocated right after Diameter/Length,
                           matching the Phase 2 default input style. */}
+                      {/* iter-354: Phase 2-style label above each input. */}
+                      <Text style={s.lbl}>Torque Value (Ncm)</Text>
                       <TextInput
                         style={s.input}
-                        placeholder="Torque (Ncm)"
+                        placeholder="e.g. 35"
                         keyboardType="decimal-pad"
                         value={f.replacement.insertion_torque_ncm}
                         onChangeText={v => setReplField(i, { insertion_torque_ncm: v })}
@@ -673,8 +677,11 @@ export default function SurvivalReview() {
                         testID={`imp-${i}-repl-torque`}
                       />
 
-                      <TextInput style={s.input} placeholder="Lot # (optional)" value={f.replacement.lot_number} onChangeText={v => setReplField(i, { lot_number: v })} data-testid={`imp-${i}-repl-lot`} testID={`imp-${i}-repl-lot`} />
-                      <TextInput style={s.input} placeholder="ISQ (optional)" keyboardType="decimal-pad" value={f.replacement.isq} onChangeText={v => setReplField(i, { isq: v })} data-testid={`imp-${i}-repl-isq`} testID={`imp-${i}-repl-isq`} />
+                      <Text style={[s.lbl, { marginTop: 6 }]}>Lot Number <Text style={s.lblOpt}>(optional)</Text></Text>
+                      <TextInput style={s.input} placeholder="e.g. K12345" value={f.replacement.lot_number} onChangeText={v => setReplField(i, { lot_number: v })} data-testid={`imp-${i}-repl-lot`} testID={`imp-${i}-repl-lot`} />
+
+                      <Text style={[s.lbl, { marginTop: 6 }]}>ISQ Value <Text style={s.lblOpt}>(optional)</Text></Text>
+                      <TextInput style={s.input} placeholder="e.g. 72" keyboardType="decimal-pad" value={f.replacement.isq} onChangeText={v => setReplField(i, { isq: v })} data-testid={`imp-${i}-repl-isq`} testID={`imp-${i}-repl-isq`} />
                       {/* iter-348 → iter-350: Placement date is compulsory and
                           uses the same react-native-calendars picker as
                           Phase 1 Schedule > Procedure date. */}
@@ -924,6 +931,8 @@ const s = StyleSheet.create({
   },
   iopaBtnInvalid: { borderColor: '#EF9A9A', backgroundColor: '#FFF5F5' },
   iopaBtnT: { fontSize: 13, fontWeight: '800', color: '#0D47A1', letterSpacing: 0.3 },
+  // iter-354: Phase 2-style optional-marker inside a label.
+  lblOpt: { fontSize: 11, color: '#78909C', fontStyle: 'italic', fontWeight: '500' },
   // iter-350: Global End Implant Treatment button (centered, red, below actions)
   endTreatmentGlobalWrap: { marginTop: 16, marginBottom: 24, alignItems: 'center', gap: 6 },
   endTreatmentGlobalBtn: {

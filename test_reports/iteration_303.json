@@ -1,0 +1,43 @@
+{
+  "summary": "iter-354 RE-TEST after main agent applied the two P0 backend fixes. ALL 7 tests in /app/backend/tests/test_survival_iter354.py now pass (previously failing). Added a new focused seed-case pytest suite /app/backend/tests/test_survival_iter354_seedcase.py covering the exact scenarios from the review_request against 699fc5c2248100e8a0d87265 — 4/4 pass (fresh start, Q4-a auto-terminate with 2× Failed-no-repl, Q4-a boundary with 1× Failed + 1× Replaced, fresh case has NO _active_in_treatment key). iter-353 regression 8/8 pass. iter-352 regression 12/13 (single failure is the KNOWN test_seed_case_has_rn_substitution which depends on the seed being pre-submitted — irrelevant since the handoff explicitly reset the seed to fresh phase2_approved). Frontend Playwright end-to-end pass: login as Abhijit.patil → survival-review/699fc5c2 → click 'No' renders BOTH per-implant cards (Implant 1 · Tooth 16 Alpha Bio ICE 5×13mm and Implant 2 · Tooth 26 Alpha Bio ICE 4.5×11.5mm). Failed → Peri-implantitis → 'Was the Implant Replaced?' exact-match label present → tap Yes shows the replacement form with 'IOPA Radiograph *' label + Upload IOPA Radiograph button, Phase-2-style labels 'Torque Value (Ncm)', 'Lot Number (optional)', 'ISQ Value (optional)' ABOVE inputs, placeholders 'e.g. 35', 'e.g. K12345', 'e.g. 72'. Tapping imp-0-repl-iopa-btn opens the AttachPickerModal ('Add attachment / Photo Library / Take Photo or Video / Choose Files / Cancel') with NO ShowUploadPicker error in DOM or console. All backend flag matrix expectations verified via pytest.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_survival_iter354.py",
+    "/app/backend/tests/test_survival_iter354_seedcase.py",
+    "/app/test_reports/pytest/iter354_retest.xml",
+    "/app/test_reports/pytest/iter354_seedcase.xml",
+    "/app/test_reports/pytest/iter352_353_regression_iter354retest.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py L4708-4715 _idx_active: `merged_impl.get(str(idx)) or merged_impl.get(idx)` handles both string- and int-keyed lookups — correct fix. Verified by TestAutoTerminateAllFailed and TestSeedCaseQ4aAutoTerminate both passing.",
+    "server.py L4365-4368 Replaced branch sets `merged['_active_in_treatment'] = True` — correct fix. Verified by TestAutoTerminateBoundaryReplacedKeepsCaseActive and TestSeedCaseQ4aBoundary — implants[1] (Replaced) shows _active_in_treatment=True + _active_revision=True; implants[0] (Failed no repl) shows _active_in_treatment=False + _survival_failed=True.",
+    "server.py resolver: Fresh case (no phase2_survival_review) correctly has NO `_active_in_treatment` / `_r0` / `_survival_status` annotations — verified by test_fresh_case_no_active_in_treatment_key. No spurious mutation.",
+    "frontend/app/procedures/survival-review/[id].tsx L32-33: showUploadPicker + RadiographThumb imports restored — no compile errors. L580 label 'Was the Implant Replaced?' — verified rendering in DOM. L669-684 Phase-2-style labels above Torque/Lot/ISQ with placeholders e.g. 35 / e.g. K12345 / e.g. 72 — all verified in DOM.",
+    "AttachPickerModal opens correctly on IOPA button tap — 'Photo Library', 'Take Photo or Video', 'Choose Files', 'Cancel' options visible. No 'Property ShowUploadPicker doesn't exist' error anywhere.",
+    "Login form data-testid attributes (`login-email-input`, `login-password-input`, `login-submit-btn`) don't propagate to the underlying HTML input elements for RN-Web (test had to fallback to input tag selectors). Not a functional bug but a testability gap — worth fixing so Playwright/tests can use the intended testids.",
+    "iter-352 regression file has one stale test (test_seed_case_has_rn_substitution) that hard-codes the expectation that the seed 699fc5c2 was already submitted with Nobel Active. Since main agent resets the seed between iterations, this test will keep failing. Recommend either marking it @pytest.mark.skip with a note or seeding the R1 submission inside the test itself."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_survival_iter354_seedcase.py (new — 4 tests, all pass; auto-restores seed on module teardown)"
+  ],
+  "success_rate": {
+    "backend": "100% (iter-354: 7/7, iter-354-seedcase: 4/4, iter-353: 8/8, iter-352: 12/13 — 1 known stale test)",
+    "frontend": "100% for all iter-354 UI + integration requirements — per-implant cards render, exact label match, Phase-2-style labels/placeholders present, IOPA Upload button opens AttachPickerModal, zero ShowUploadPicker errors"
+  },
+  "test_credentials": "Abhijit.patil / Admin@123 (supervisor + implant_incharge on 699fc5c2248100e8a0d87265). Gaurav.pandey / Student@123 verified as student.",
+  "seed_data_creation": "The new /app/backend/tests/test_survival_iter354_seedcase.py takes a snapshot of the seed at start and restores it (deep-copy replace_one + $unset phase2_survival_review/auto_terminated/treatment_ended_reason/phase2_data_original + $set status=phase2_approved) on module teardown, so seed remains at fresh phase2_approved after the suite. Confirmed via direct Mongo query after test run: status=phase2_approved, phase2_survival_review=absent, auto_terminated=None.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The seed case 699fc5c2248100e8a0d87265 is currently in fresh phase2_approved state with 2 implants (tooth 16 + tooth 26 Alpha Bio ICE) and NO survival review — ready for further FE/BE tests. To re-run all iter-354 backend checks: `pytest /app/backend/tests/test_survival_iter354.py /app/backend/tests/test_survival_iter354_seedcase.py -v` — 11 tests, all pass. Frontend flow that renders per-implant cards requires (a) real login (data-testid selectors on TextInput don't render as HTML input attrs on RN-Web — fallback to `input` tag selectors) and (b) using data-testid=`survival-all-no` NOT `all-survived-no` for the No pill.",
+  "rca of the issue": "Both P0 backend bugs from iter-354 are RESOLVED: (1) _idx_active string/int key mismatch — merged_impl was built with string keys (str(idx)) but _idx_active was looking up with int idx → Q4-a auto-terminate never fired. Fix: `merged_impl.get(str(idx)) or merged_impl.get(idx)`. (2) Replaced branch missing _active_in_treatment=True — the resolver was silently omitting the flag so Replaced implants appeared inactive downstream. Fix: explicit `merged['_active_in_treatment'] = True` in the Replaced branch. Both verified by dedicated pytests and end-to-end FE flow."
+}
