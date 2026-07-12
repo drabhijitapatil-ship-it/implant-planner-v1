@@ -539,20 +539,25 @@ export default function SurvivalReview() {
 
                       <TextInput style={s.input} placeholder="Lot # (optional)" value={f.replacement.lot_number} onChangeText={v => setReplField(i, { lot_number: v })} data-testid={`imp-${i}-repl-lot`} testID={`imp-${i}-repl-lot`} />
                       <TextInput style={s.input} placeholder="ISQ (optional)" keyboardType="decimal-pad" value={f.replacement.isq} onChangeText={v => setReplField(i, { isq: v })} data-testid={`imp-${i}-repl-isq`} testID={`imp-${i}-repl-isq`} />
-                      {/* iter-347: Placement date uses a native calendar picker
-                          on web (RN Web forwards type="date" to <input>) and a
-                          formatted text input on native. */}
+                      {/* iter-347b: Placement date — RN Web silently drops
+                          `type=date` when passed via <TextInput>, so on web
+                          we render a raw native <input type=date> element
+                          to get a real HTML5 calendar picker. Native app
+                          keeps the masked YYYY-MM-DD text input. */}
                       {Platform.OS === 'web' ? (
-                        // @ts-ignore — RN-Web passes <input> attrs through TextInput.
-                        <TextInput
-                          style={s.input}
-                          value={f.replacement.placement_date}
-                          onChangeText={v => setReplField(i, { placement_date: v })}
-                          // @ts-ignore
-                          type="date"
-                          data-testid={`imp-${i}-repl-date`}
-                          testID={`imp-${i}-repl-date`}
-                        />
+                        React.createElement('input', {
+                          type: 'date',
+                          value: f.replacement.placement_date || '',
+                          onChange: (e: any) => setReplField(i, { placement_date: e.target.value }),
+                          'data-testid': `imp-${i}-repl-date`,
+                          'aria-label': 'Placement date',
+                          style: {
+                            borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 8,
+                            padding: 10, fontSize: 13, color: '#1e2a44',
+                            backgroundColor: '#FFF', fontFamily: 'inherit',
+                            width: '100%', boxSizing: 'border-box',
+                          },
+                        })
                       ) : (
                         <TextInput
                           style={s.input}

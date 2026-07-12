@@ -1,0 +1,29 @@
+{
+  "summary": "iter-347b re-fix verification for Implant Survival Review. Both remaining bugs from iteration_297 are now FIXED. Bug 2 (Active/Inactive chip on primary planning cards): VERIFIED FIXED — chip is inline next to implant title (position:relative), on both 1280px and 375px viewports the ACTIVE chip renders after 'Alpha Bio - ICE' with no overlap. Bug 4 (Placement date picker on web): VERIFIED FIXED — the input now has type='date', displays 'mm/dd/yyyy' placeholder with a calendar icon, supports .showPicker(), and setting value programmatically (2026-06-15) correctly updates the input display. Regression: Bug 1 CTA persistence still green — 'IMPLANT SURVIVAL REVIEW' is the ONLY primary CTA under Treatment Progress; Bug 1b history block ('Previous survival reviews (5)') visible on the survival page.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Direct URL navigation to /procedures/{id}", "issue": "Deep-link (page.goto()) still returns 403 due to auth token hydration race (same as iter-297). Workaround: navigate via My Cases → search → click. Not blocking, but consumer of the app cannot share direct URLs to a case reliably.", "affected_selectors": ["Procedure not found"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "OPTIONAL/LOW — Consider a global axios interceptor that awaits AsyncStorage/localStorage token hydration before the first request. This would fix the deep-link 403 issue reported in iter-297 and above."
+  ],
+  "critical_code_review_comments": [
+    "CaseImplantPlanning.tsx L746-748: inline statusChip inside implantInfo with data-testid + testID. Correct pattern. The orphan `st.statusBadge` style (L2271) is unused now — consider removing to reduce dead code, but not urgent.",
+    "survival-review/[id].tsx L547-572: React.createElement('input', { type: 'date', ... }) is a clean Platform.OS==='web' escape hatch that bypasses RN TextInput and exposes the raw HTML5 date picker. The style object uses valid CSS (boxSizing, width:'100%'). Good.",
+    "Existing (from prior review): app/procedures/[id].tsx CTA gate remains sound; keyboardAvoidingView still in place on survival review."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "not tested (frontend-only per request)", "frontend": "100% — both re-fixed bugs verified; Bug 1 CTA regression green" },
+  "test_credentials": "Abhijit.patil / Admin@123 (admin), Gaurav.pandey / Student@123 (student). Both verified working via login.",
+  "seed_data_creation": "None. No writes were committed to the survival review form — only DOM inspection + programmatic value set (no submit). Case state on server is unchanged from iter-297 (7 events).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Bugs 2 & 4 fixed and verified. Case IDs used: REG-P2B (699fc5c2248100e8a0d87265) as student, TR-RES-99 (6a01da5afaa288be26abd086) as admin. Navigation via My Cases search+click reliably works; deep-link goto returns 403. Assertions used for Bug 4: `document.querySelector('[data-testid=\"imp-0-repl-date\"]').type === 'date'` and setting value via HTMLInputElement value-setter + input/change events → value persists in DOM. Assertions used for Bug 2: chip.position=='relative', chip.x > title.x (chip after title), overlap=false at both 1280 and 375px.",
+  "rca of the issue": "N/A — both bugs are RESOLVED. Prior RCA (iter-297): Bug 2 required moving statusBadge inline into implantInfo; Bug 4 required bypassing RN-Web TextInput (which drops arbitrary props like `type`) via React.createElement('input', ...). Both fixes are now in place."
+}
