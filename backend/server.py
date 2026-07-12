@@ -4362,10 +4362,21 @@ def _resolve_active_implants_inline(proc: Dict[str, Any]) -> List[Dict[str, Any]
                     merged[f] = repl[f]
             merged["revision_number"] = repl.get("revision_number") or 1
             merged["_active_revision"] = True
+            # iter-354 fix: Replaced implants ARE still active-in-treatment
+            # (the R{n} is the live implant). Only Failed-no-replacement +
+            # Treatment Ended are inactive-in-treatment.
+            merged["_active_in_treatment"] = True
         elif status == "Treatment Ended":
             merged["_treatment_ended"] = True
+            merged["_active_in_treatment"] = False
         elif status == "Failed":
             merged["_survival_failed"] = True
+            # iter-354: Failed-with-no-replacement implants are excluded from
+            # Phase 3 onwards (per user Q1-a). Downstream filters key off this
+            # flag; Phase 2 readback still renders the entry as Inactive.
+            merged["_active_in_treatment"] = False
+        else:
+            merged["_active_in_treatment"] = True
         out.append(merged)
     return out
 
@@ -4688,6 +4699,22 @@ async def submit_survival_review(
     # In-Charge → self-approved. Same-person-both-roles collapses to a
     # single approval step (mirrors Phase 1/2 pattern).
     case_treatment_ended = any(v.get("status") == "Treatment Ended" for v in merged_impl.values())
+    # iter-354 (Q4-a): If EVERY implant is now inactive-in-treatment (Failed
+    # with no replacement, or Treatment Ended), the case is de-facto over —
+    # auto-terminate to `treatment_ended` without waiting for an explicit
+    # End Treatment approval. `implants[]` here is the ORIGINAL R0 list; a
+    # given index is "active-in-treatment" when survival_map[i] is missing
+    # (never touched → Active) OR when status==Replaced (R{n} is live).
+    def _idx_active(idx: int) -> bool:
+        # iter-354 fix: merged_impl uses string keys (see build above);
+        # coerce the numeric index before lookup so 0/"0" collide correctly.
+        e = merged_impl.get(str(idx)) or merged_impl.get(idx) or {}
+        st = e.get("status")
+        if st is None:
+            return True  # never reviewed → still Active by default
+        return st == "Replaced"  # Replaced → R{n} live; Failed/TreatmentEnded → inactive
+    all_inactive_after_review = len(implants) > 0 and not any(_idx_active(i) for i in range(len(implants)))
+    auto_terminate_all_failed = all_inactive_after_review and not case_treatment_ended
     update_set: Dict[str, Any] = {
         "phase2_survival_review": {
             "all_survived": is_fully_survived,
@@ -4747,6 +4774,17 @@ async def submit_survival_review(
                 "incharge_approved_at": None,
                 "incharge_approved_by": None,
             }
+    elif auto_terminate_all_failed:
+        # iter-354 (Q4-a): All implants Failed-with-no-replacement → the case
+        # is de-facto over. Auto-terminate without approval workflow.
+        update_set["status"] = "treatment_ended"
+        update_set["treatment_ended_at"] = now
+        update_set["treatment_ended_decision_maker"] = "Operator"
+        update_set["treatment_ended_reason"] = "All implants failed with no replacement — case auto-terminated"
+        update_set["treatment_ended_by_name"] = current_user.get("name") or current_user.get("username")
+        update_set["treatment_ended_by_role"] = current_user.get("role")
+        update_set["auto_terminated"] = True
+        update_set["pending_end_treatment"] = None
     # iter-344: apply site-change carry-forward — update the tooth number
     # on the source implant lists so downstream forms (Phase 3 second-stage
     # surgical, Phase 4 impressions/delivery) key off the new position.
