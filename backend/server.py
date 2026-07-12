@@ -2179,7 +2179,7 @@ async def get_procedures(
             query["status"] = {"$in": phase_status_map[phase]}
     elif status and current_user["role"] != "nurse":
         if status == "pending":
-            query["status"] = {"$in": ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic"]}
+            query["status"] = {"$in": ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic", "pending_end_treatment_supervisor", "pending_end_treatment_incharge"]}
         elif status == "completed":
             query["status"] = {"$in": ["phase2_approved", "stage2_surgical_approved", "completed"]}
         elif status == "rejected":
@@ -2322,7 +2322,7 @@ async def get_student_summary(student_id: str, current_user: dict = Depends(get_
             "completed": {"$sum": {"$cond": [{"$eq": ["$status", "completed"]}, 1, 0]}},
             "rejected": {"$sum": {"$cond": [{"$in": ["$status", ["rejected", "permanently_rejected", "stage2_surgical_rejected", "stage2_prosthetic_rejected"]]}, 1, 0]}},
             "active": {"$sum": {"$cond": [{"$not": {"$in": ["$status", ["completed", "rejected", "permanently_rejected"]]}}, 1, 0]}},
-            "pending_approval": {"$sum": {"$cond": [{"$in": ["$status", ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic"]]}, 1, 0]}},
+            "pending_approval": {"$sum": {"$cond": [{"$in": ["$status", ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic", "pending_end_treatment_supervisor", "pending_end_treatment_incharge"]]}, 1, 0]}},
         }},
     ]
     kpi_doc = None
@@ -2418,7 +2418,7 @@ async def get_supervisor_summary(supervisor_id: str, current_user: dict = Depend
 
     # KPI counts (supervisor's view: how many cases under them, decided how)
     REJECTED = ["rejected", "permanently_rejected", "stage2_surgical_rejected", "stage2_prosthetic_rejected"]
-    PENDING = ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic"]
+    PENDING = ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic", "pending_end_treatment_supervisor", "pending_end_treatment_incharge"]
     total = await db.procedures.count_documents(base_match)
     approved = await db.procedures.count_documents({**base_match, "supervisor_phase1_approved": True})
     rejected = await db.procedures.count_documents({**base_match, "status": {"$in": REJECTED}})
@@ -2787,6 +2787,12 @@ async def get_procedure(procedure_id: str, request: Request, current_user: dict 
     
     procedure["_id"] = str(procedure["_id"])
     procedure["id"] = procedure["_id"]
+    # iter-352: R0 → R{n} data substitution. Once an implant is replaced,
+    # the ACTIVE revision (chain[-1] or `replacement`) becomes the ground
+    # truth for Phase 2 readback + Phase 3/4 form pre-fill + PDFs. R0's raw
+    # data is preserved under `implants_original` for the history views
+    # (CaseImplantPlanning uses the survival_review chain[] itself).
+    procedure["implants"] = _resolve_active_implants_inline(procedure)
     # Normalise instruments_autoclaved payload so "unmarked" always looks like None/null,
     # keeping the response contract identical to POST mark-instruments-autoclaved and
     # GET /procedures/nurse/scheduled-cases.
@@ -4283,6 +4289,83 @@ def _extract_procedure_implants(proc: Dict[str, Any]) -> List[Dict[str, Any]]:
     ]
 
 
+# iter-352: R0 → R{n} substitution helper. When an implant has been replaced
+# (via the Survival Review flow), the ACTIVE revision (current `replacement`
+# object) is the ground truth for Phase 2 readback, Phase 3 form pre-fill,
+# Phase 4 forms, and the case-report PDF. R0 details remain intact in the
+# survival_review chain[] for historical rendering; this helper only mutates
+# the outward-facing `implants[]` shape.
+_REPL_FIELDS_TO_MERGE = (
+    "system", "system_name", "brand",
+    "diameter", "length",
+    "bone_type", "bone_width", "bone_height",
+    "insertion_torque_ncm", "isq",
+    "lot_number", "placement_date",
+    "procedure_type", "prosthetic_component",
+    "healing_abutment_mm", "immediate_loading_prosthesis",
+    "healing_protocol", "cover_screw", "surface",
+)
+
+
+def _resolve_active_implants_inline(proc: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Merge the currently-active revision (chain[-1] or `replacement`) over
+    each R0 entry in `implants[]`. Non-replaced implants pass through
+    unchanged. Treatment-ended entries are annotated but not removed (Phase
+    2 readback still shows the terminal state).
+    """
+    implants = _extract_procedure_implants(proc)
+    review = proc.get("phase2_survival_review") or {}
+    smap = review.get("implants") or {}
+    if not smap:
+        return list(implants)
+    out: List[Dict[str, Any]] = []
+    for i, imp in enumerate(implants):
+        entry = smap.get(str(i)) or smap.get(i) or {}
+        status = entry.get("status", "Active")
+        merged = dict(imp)
+        # Preserve the R0 snapshot so views that want the historical value can
+        # still access it (e.g. "R0 tile" in CaseImplantPlanning).
+        merged["_r0"] = dict(imp)
+        merged["_survival_status"] = status
+        if status == "Replaced" and isinstance(entry.get("replacement"), dict):
+            repl = entry["replacement"]
+            # If site changed, the FDI position also moves.
+            if repl.get("tooth_number"):
+                merged["tooth_number"] = repl["tooth_number"]
+                merged["tooth"] = repl["tooth_number"]
+            # iter-352: Fields specific to the ACTUAL placed implant + its
+            # prosthetic protocol are OVERWRITTEN by R1 (a null / missing
+            # value in R1 CLEARS the R0 value). Anatomy-only fields
+            # (bone_type / bone_width / bone_height) are preserved unless
+            # explicitly overridden by R1.
+            _r1_only = (
+                "system", "system_name", "brand",
+                "diameter", "length",
+                "insertion_torque_ncm", "isq",
+                "lot_number", "placement_date",
+                "procedure_type", "prosthetic_component",
+                "healing_abutment_mm", "immediate_loading_prosthesis",
+                "healing_protocol", "cover_screw", "surface",
+            )
+            for f in _r1_only:
+                # Explicit overwrite — None from R1 clears the R0 leftover.
+                merged[f] = repl.get(f) if repl.get(f) not in ("",) else None
+            # Anatomy fields — merge only when R1 provides them.
+            for f in ("bone_type", "bone_width", "bone_height"):
+                if repl.get(f) not in (None, ""):
+                    merged[f] = repl[f]
+            merged["revision_number"] = repl.get("revision_number") or 1
+            merged["_active_revision"] = True
+        elif status == "Treatment Ended":
+            merged["_treatment_ended"] = True
+        elif status == "Failed":
+            merged["_survival_failed"] = True
+        out.append(merged)
+    return out
+
+
+
+
 @api_router.post("/procedures/{procedure_id}/survival-review")
 async def submit_survival_review(
     procedure_id: str,
@@ -4447,9 +4530,11 @@ async def submit_survival_review(
                      for f in (body.failures or [])],
     })
     is_fully_survived = not any(v.get("status") in ("Failed", "Replaced", "Treatment Ended") for v in merged_impl.values())
-    # iter-348: If ANY implant is marked "Treatment Ended", the whole case is
-    # terminated (per user Q1-b: entire case → treatment_ended). Track the
-    # ending reason(s) at case level so Analytics can surface them.
+    # iter-348→iter-352: If ANY implant is marked "Treatment Ended", the case
+    # enters a role-based approval workflow rather than terminating
+    # immediately. Student → Supervisor → In-Charge, Supervisor → In-Charge,
+    # In-Charge → self-approved. Same-person-both-roles collapses to a
+    # single approval step (mirrors Phase 1/2 pattern).
     case_treatment_ended = any(v.get("status") == "Treatment Ended" for v in merged_impl.values())
     update_set: Dict[str, Any] = {
         "phase2_survival_review": {
@@ -4465,14 +4550,51 @@ async def submit_survival_review(
         "phase2_survival_review_at": now,
     }
     if case_treatment_ended:
-        update_set["status"] = "treatment_ended"
-        update_set["treatment_ended_at"] = now
-        # Snapshot the ending metadata (decision maker + reason) at the case root
         ended_entries = [v for v in merged_impl.values() if v.get("status") == "Treatment Ended"]
-        if ended_entries:
-            e0 = ended_entries[0]
+        e0 = ended_entries[0] if ended_entries else {}
+        initiator_role = current_user.get("role")
+        same_person_both_roles = str(proc.get("supervisor_id") or "") == str(proc.get("implant_incharge_id") or "")
+        prior_status = proc.get("status")
+        # Determine initial pending state based on initiator role.
+        # NOTE: `same_person_both_roles` only auto-terminates when the
+        # INITIATOR is one of the two approval roles (supervisor or
+        # in-charge). A student initiator always requires at least one
+        # explicit approval, even if supervisor==in-charge on this case
+        # (that combined approver will handle the request in a single tap).
+        if initiator_role == "implant_incharge":
+            new_status = "treatment_ended"
+        elif initiator_role == "supervisor":
+            if same_person_both_roles:
+                new_status = "treatment_ended"  # self-approved (holds both roles)
+            else:
+                new_status = "pending_end_treatment_incharge"
+        else:
+            # student or any other role
+            new_status = "pending_end_treatment_supervisor"
+        update_set["status"] = new_status
+        if new_status == "treatment_ended":
+            update_set["treatment_ended_at"] = now
             update_set["treatment_ended_decision_maker"] = e0.get("end_treatment_decision_maker")
             update_set["treatment_ended_reason"] = e0.get("end_treatment_reason")
+            update_set["treatment_ended_by_name"] = current_user.get("name") or current_user.get("username")
+            update_set["treatment_ended_by_role"] = initiator_role
+            # Clear any pending marker leftover from earlier round-trip.
+            update_set["pending_end_treatment"] = None
+        else:
+            # Store the pending metadata so approvers see full context.
+            update_set["pending_end_treatment"] = {
+                "initiated_by_id": current_user.get("_id"),
+                "initiated_by_name": current_user.get("name") or current_user.get("username"),
+                "initiated_by_role": initiator_role,
+                "initiated_at": now,
+                "decision_maker": e0.get("end_treatment_decision_maker"),
+                "reason": e0.get("end_treatment_reason"),
+                "prior_status": prior_status,
+                "supervisor_approved_at": None,
+                "supervisor_approved_by": None,
+                "incharge_approved_at": None,
+                "incharge_approved_by": None,
+            }
     # iter-344: apply site-change carry-forward — update the tooth number
     # on the source implant lists so downstream forms (Phase 3 second-stage
     # surgical, Phase 4 impressions/delivery) key off the new position.
@@ -4510,6 +4632,193 @@ async def submit_survival_review(
         extra={"all_survived": body.all_survived, "failure_count": len(body.failures)},
     )
     return {"ok": True, "review": survival_map, "merged": merged_impl, "events": prior_events}
+
+
+# iter-352: End Implant Treatment approval workflow.
+# --------------------------------------------------
+# When a student or supervisor initiates End Implant Treatment via the
+# Survival Review flow, the case enters `pending_end_treatment_supervisor`
+# or `pending_end_treatment_incharge`. The next approver in the chain hits
+# this endpoint to Approve (advance / terminate) or Reject (revert to prior
+# status with an audit comment).
+class EndTreatmentApprovalBody(BaseModel):
+    action: str  # "approve" | "reject"
+    comment: Optional[str] = None
+
+
+@api_router.post("/procedures/{procedure_id}/end-treatment/approve")
+async def approve_end_treatment(
+    procedure_id: str,
+    body: EndTreatmentApprovalBody,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    action = (body.action or "").strip().lower()
+    if action not in ("approve", "reject"):
+        raise HTTPException(status_code=400, detail="action must be 'approve' or 'reject'")
+    try:
+        proc_oid = ObjectId(procedure_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid procedure id")
+    proc = await db.procedures.find_one({"_id": proc_oid})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    status = proc.get("status")
+    if status not in ("pending_end_treatment_supervisor", "pending_end_treatment_incharge"):
+        raise HTTPException(status_code=400, detail="No end-treatment request is pending on this case")
+
+    role = current_user.get("role")
+    uid = str(current_user.get("_id") or "")
+    assigned_supervisor = str(proc.get("supervisor_id") or "")
+    assigned_incharge = str(proc.get("implant_incharge_id") or "")
+    is_supervisor = uid == assigned_supervisor
+    is_incharge = uid == assigned_incharge
+    same_person_both = assigned_supervisor and assigned_supervisor == assigned_incharge
+
+    # Role gate — only the currently-expected approver may act.
+    if status == "pending_end_treatment_supervisor":
+        if not (is_supervisor or same_person_both):
+            raise HTTPException(status_code=403, detail="Only the assigned Supervisor can act on this request")
+    else:  # pending_end_treatment_incharge
+        if not (is_incharge or same_person_both):
+            raise HTTPException(status_code=403, detail="Only the assigned Implant In-Charge can act on this request")
+
+    pending = proc.get("pending_end_treatment") or {}
+    now = datetime.now(timezone.utc)
+
+    if action == "reject":
+        comment = (body.comment or "").strip()
+        if not comment:
+            raise HTTPException(status_code=400, detail="A rejection reason is required")
+        prior_status = pending.get("prior_status") or "phase2_approved"
+        # Revert the per-implant Treatment Ended entries back to Failed so
+        # the review still records that a failure occurred (audit intact)
+        # but the case is no longer terminal.
+        review = dict(proc.get("phase2_survival_review") or {})
+        impls_map = dict(review.get("implants") or {})
+        for k, v in list(impls_map.items()):
+            if isinstance(v, dict) and v.get("status") == "Treatment Ended":
+                v = dict(v)
+                v["status"] = "Failed"
+                v["end_treatment"] = False
+                v["end_treatment_rejected"] = True
+                impls_map[k] = v
+        review["implants"] = impls_map
+        review["treatment_ended"] = False
+        update = {
+            "status": prior_status,
+            "pending_end_treatment": None,
+            "phase2_survival_review": review,
+            "end_treatment_rejected": {
+                "by_id": uid,
+                "by_name": current_user.get("name") or current_user.get("username"),
+                "by_role": role,
+                "at": now,
+                "comment": comment,
+                "initiated_by": pending.get("initiated_by_name"),
+                "initiated_at": pending.get("initiated_at"),
+            },
+            "updated_at": now,
+        }
+        await db.procedures.update_one({"_id": proc_oid}, {"$set": update})
+        await log_access(
+            action="end_treatment_rejected",
+            outcome="success",
+            resource_type="procedure",
+            resource_id=procedure_id,
+            user=current_user,
+            request=request,
+            extra={"comment": comment[:200]},
+        )
+        # Notify the initiator so they see the rejection.
+        try:
+            initiator_id = pending.get("initiated_by_id")
+            if initiator_id:
+                await db.notifications.insert_one({
+                    "user_id": initiator_id,
+                    "procedure_id": procedure_id,
+                    "type": "end_treatment_rejected",
+                    "message": f"Your End Implant Treatment request was rejected by {current_user.get('name') or role}: {comment[:120]}",
+                    "created_at": now,
+                    "read": False,
+                })
+        except Exception:
+            pass
+        return {"ok": True, "status": prior_status}
+
+    # action == "approve"
+    stamp_supervisor = status == "pending_end_treatment_supervisor" and (is_supervisor or same_person_both)
+    stamp_incharge = status == "pending_end_treatment_incharge" and (is_incharge or same_person_both)
+    new_pending = dict(pending)
+    if stamp_supervisor:
+        new_pending["supervisor_approved_at"] = now
+        new_pending["supervisor_approved_by"] = current_user.get("name") or current_user.get("username")
+    if stamp_incharge:
+        new_pending["incharge_approved_at"] = now
+        new_pending["incharge_approved_by"] = current_user.get("name") or current_user.get("username")
+
+    # Determine next status.
+    if status == "pending_end_treatment_supervisor":
+        if same_person_both:
+            # Supervisor & In-Charge held by same person → single-step terminate.
+            next_status = "treatment_ended"
+            new_pending["incharge_approved_at"] = now
+            new_pending["incharge_approved_by"] = current_user.get("name") or current_user.get("username")
+        else:
+            next_status = "pending_end_treatment_incharge"
+    else:  # pending_end_treatment_incharge
+        next_status = "treatment_ended"
+
+    update: Dict[str, Any] = {
+        "status": next_status,
+        "pending_end_treatment": new_pending,
+        "updated_at": now,
+    }
+    if next_status == "treatment_ended":
+        update["treatment_ended_at"] = now
+        update["treatment_ended_decision_maker"] = pending.get("decision_maker")
+        update["treatment_ended_reason"] = pending.get("reason")
+        update["treatment_ended_by_name"] = pending.get("initiated_by_name")
+        update["treatment_ended_by_role"] = pending.get("initiated_by_role")
+    await db.procedures.update_one({"_id": proc_oid}, {"$set": update})
+    await log_access(
+        action="end_treatment_approved" if next_status == "treatment_ended" else "end_treatment_supervisor_ok",
+        outcome="success",
+        resource_type="procedure",
+        resource_id=procedure_id,
+        user=current_user,
+        request=request,
+        extra={"next_status": next_status},
+    )
+    # Notify the next actor in the chain.
+    try:
+        if next_status == "pending_end_treatment_incharge" and assigned_incharge:
+            await db.notifications.insert_one({
+                "user_id": assigned_incharge,
+                "procedure_id": procedure_id,
+                "type": "end_treatment_pending_incharge",
+                "message": "An End Implant Treatment request is awaiting your final approval.",
+                "created_at": now,
+                "read": False,
+            })
+        elif next_status == "treatment_ended":
+            initiator_id = pending.get("initiated_by_id")
+            if initiator_id:
+                await db.notifications.insert_one({
+                    "user_id": initiator_id,
+                    "procedure_id": procedure_id,
+                    "type": "end_treatment_approved",
+                    "message": "Your End Implant Treatment request has been approved. The case is now terminated.",
+                    "created_at": now,
+                    "read": False,
+                })
+    except Exception:
+        pass
+    return {"ok": True, "status": next_status}
+
+
+
 
 
 @api_router.get("/procedures/{procedure_id}/active-implants")
