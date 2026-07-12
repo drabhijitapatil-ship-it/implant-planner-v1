@@ -1,0 +1,52 @@
+{
+  "summary": "iter-353 verification: (A) R{n} → phase2_data substitution on GET /procedures/{id} and (B) mandatory replacement IOPA in POST /survival-review. Backend: created new pytest file /app/backend/tests/test_survival_iter353.py — 8/8 tests pass covering: 400 when iopa_url missing on replacement, 400 when placement_date missing, 200 for full replacement, Cover Screw path (phase2_data.prosthetic_component → 'Cover Screw Placed', iopa_files/radiographs.iopas/existing_implants[0].iopa_url/implants[0].iopa_url all substituted to r1.jpg, healing_abutment_cuff_height cleared, phase2_data_original preserved with R0 snapshot), Immediate Loading path (prosthetic_component → 'Immediate Loading Done', prosthesis_type[0] populated), Healing Abutment 6mm path (cuff height retained as 6.0), and no-review path (phase2_data untouched, no phase2_data_original). Regression: iter-352 pytest 12/13 pass — the single failure (test_seed_case_has_rn_substitution) is EXPECTED because main agent intentionally reset seed 699fc5c2248100e8a0d87265 to fresh phase2_approved state for iter-353 handoff (no survival review yet); not a regression. Frontend (Playwright): confirmed the survival-review page renders the new 'IOPA Radiograph *' red label + 'Upload IOPA Radiograph' button with data-testid=imp-0-repl-iopa-btn placed IMMEDIATELY below Diameter/Length inputs and ABOVE Torque (Ncm) — exactly per spec. Red-invalid border applied while iopa_url is empty. Uploaded a test JPG through /api/uploads/media-temp (returns unique filename), then submitted a full survival-review payload (Nobel Active, 4.3×11.5, Single Stage, Cover Screw, placement 2026-02-08, iopa_url set) → HTTP 200. Fetched /api/procedures/{id} and confirmed via evaluate(): phase2_data.prosthetic_component='Cover Screw Placed', phase2_data.iopa_files=[<new filename>], phase2_data.healing_abutment_cuff_height=[''] (cleared), radiographs.iopas / existing_implants[0].iopa_url / implants[0].iopa_url all set to the new filename, and phase2_data_original preserves 'Healing Abutment Placed' + 'r0_original.jpg'. Navigated to /procedures/{id} on the browser and screenshot confirms the Phase 2 — Implant Surgery card now renders 'Prosthetic Component: Cover Screw Placed', empty Healing Abutment Cuff Height, and IOPA thumb — the R0 'Healing Abutment Placed' is no longer shown in the readback. Implant Lifecycle chain correctly renders R0 → Failed → R1 (Nobel Active 4.3×11.5). All iter-353 requirements pass.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Case Detail",
+        "issues": [
+          "Cosmetic (pre-existing, tracked from iter-352): console error 'Unexpected text node: . A text node cannot be a child of a <View>.' still emitted twice on case detail render. Non-functional."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_survival_iter353.py",
+    "/app/test_reports/pytest/iter353_results.xml"
+  ],
+  "action_items": [
+    "None blocking. Optional: track down the 'Unexpected text node' RN-web warning on case detail (carry-over from iter-352 — likely stray whitespace inside a <View> in one of the Phase 2/lifecycle/banner components).",
+    "Note: the seeded case 699fc5c2248100e8a0d87265 has now been SUBMITTED with a full R1 replacement (Nobel Active 4.3×11.5, Cover Screw, iopa_url=18e7262622c04756bb541d4218495482.jpg) as part of end-to-end verification. If the next iteration needs a fresh state, main agent should re-seed."
+  ],
+  "critical_code_review_comments": [
+    "server.py L4378-4508: _resolve_phase2_data_inline is correctly wired into GET /procedures/{id} at L2800. Helper is defensive: no-op when smap is empty, no-op when phase2_data is missing, uses _ensure_arr to normalize scalar-or-list-or-missing into length-n arrays. Per-position substitution correctly handles i-index for multi-implant cases. Case-level prosthetic_component only overwritten when all populated positions agree (protects multi-implant mixed states) — thoughtful defensive design.",
+    "server.py L4415-4424: _phase2_prosthetic_component mapping is explicit — Immediate Loading → 'Immediate Loading Done', Single Stage OR pcomp==Cover Screw → 'Cover Screw Placed', pcomp==Healing Abutment → 'Healing Abutment Placed'. Good separation from the raw R{n} enum.",
+    "server.py L4441-4462: healing cuff / prosthesis_type clearing logic — sets to '' when new R{n} switches away from Healing Abutment or Immediate Loading. Correctly clears leftover R0 values when the new prosthetic protocol doesn't need them.",
+    "server.py L4483-4506: also mirrors substitution into radiographs.iopas[] and existing_implants[i].iopa_url so per-implant readback thumbnails render R{n}. Positional consistency preserved.",
+    "server.py L4604: submit_survival_review now enforces `replacement.iopa_url` present (400 'Replacement requires an IOPA radiograph upload') — matches Q1-a mandatory rule. Correctly placed after diameter/length + placement_date checks.",
+    "server.py L4354: '_r1_only' tuple extended to include 'iopa_url' — R{n}'s radiograph correctly replaces R0's per-implant IOPA thumbnail in implants[] merged view.",
+    "frontend/app/procedures/survival-review/[id].tsx L307-330: handleReplIopaUpload uses api.post('/uploads/media-temp') with proper FormData construction for both web (File object) and native (blob shape). Sets iopa_uploading flag before/after. Error path shows Alert + resets flag. Good.",
+    "frontend/app/procedures/survival-review/[id].tsx L636-662: IOPA UI correctly placed BELOW Diameter/Length and BEFORE Torque, per spec. Red label 'IOPA Radiograph *', red-invalid button border while empty, activity indicator during upload, RadiographThumb preview below with testID=imp-{i}-repl-iopa-thumb.",
+    "frontend/app/procedures/survival-review/[id].tsx L287, L361: canSubmit gate blocks 'Continue to Phase 3' until iopa_url is populated; payload construction sends iopa_url: r.iopa_url || null. Correct integration."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_survival_iter353.py (new — 8 tests, all pass)"
+  ],
+  "success_rate": {
+    "backend": "100% (8/8 iter-353 pytest); iter-352 regression: 12/13 (1 outdated seed dependency — not a regression)",
+    "frontend": "100% for all iter-353 UI + integration requirements. IOPA button placement, red-invalid state, and end-to-end phase2_data substitution on case detail all verified."
+  },
+  "test_credentials": "Abhijit.patil / Admin@123 (supervisor + implant_incharge on 699fc5c2248100e8a0d87265). Confirmed working via login flow + JWT retrieval from localStorage.",
+  "seed_data_creation": "pytest fixtures create/delete TEST_iter353 procedures automatically. During FE verification the seed 699fc5c2248100e8a0d87265 was submitted with a real R1 replacement (details above) — if the next iteration needs a clean phase2_approved state, main agent should re-seed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression: run `pytest /app/backend/tests/test_survival_iter353.py -v` — 8 tests, all green. For iter-352: run test_end_treatment_approval_iter352.py; only test_seed_case_has_rn_substitution fails because seed was reset for iter-353 handoff (harmless). AttachPickerModal in this app is a globally-mounted RN-web modal — Playwright cannot easily drive the Expo DocumentPicker file dialog, so E2E upload was verified via direct /api/uploads/media-temp POST followed by /api/procedures/{id}/survival-review submit (which is exactly what the FE does under the hood). Case detail visually confirmed 'Cover Screw Placed' + cleared cuff height + R1 IOPA thumb.",
+  "rca of the issue": "N/A — all iter-353 (A) + (B) requirements verified passing at code, API, and UI-render level."
+}

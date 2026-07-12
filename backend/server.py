@@ -2793,6 +2793,11 @@ async def get_procedure(procedure_id: str, request: Request, current_user: dict 
     # data is preserved under `implants_original` for the history views
     # (CaseImplantPlanning uses the survival_review chain[] itself).
     procedure["implants"] = _resolve_active_implants_inline(procedure)
+    # iter-353: also substitute the matching Phase 2 case-level fields
+    # (prosthetic_component, healing_abutment_cuff_height[i], prosthesis_type,
+    # iopa_files[i], radiographs.iopas[i]) so the Phase 2 readback + Phase 3
+    # form pre-fill immediately reflect R{n} data.
+    _resolve_phase2_data_inline(procedure)
     # Normalise instruments_autoclaved payload so "unmarked" always looks like None/null,
     # keeping the response contract identical to POST mark-instruments-autoclaved and
     # GET /procedures/nurse/scheduled-cases.
@@ -4346,6 +4351,7 @@ def _resolve_active_implants_inline(proc: Dict[str, Any]) -> List[Dict[str, Any]
                 "procedure_type", "prosthetic_component",
                 "healing_abutment_mm", "immediate_loading_prosthesis",
                 "healing_protocol", "cover_screw", "surface",
+                "iopa_url",  # iter-353: R{n}'s radiograph replaces R0's per-implant IOPA thumbnail.
             )
             for f in _r1_only:
                 # Explicit overwrite — None from R1 clears the R0 leftover.
@@ -4362,6 +4368,145 @@ def _resolve_active_implants_inline(proc: Dict[str, Any]) -> List[Dict[str, Any]
             merged["_survival_failed"] = True
         out.append(merged)
     return out
+
+
+
+# iter-353: Phase 2 readback and Phase 3 pre-fill pull from `phase2_data.*`
+# (case-level), not from `implants[]`. This helper mirrors the R0 → R{n}
+# substitution into the matching Phase 2 fields per-implant position so the
+# case detail immediately shows the active revision's clinical protocol.
+def _resolve_phase2_data_inline(proc: Dict[str, Any]) -> None:
+    review = proc.get("phase2_survival_review") or {}
+    smap = review.get("implants") or {}
+    if not smap:
+        return
+    pdata = dict(proc.get("phase2_data") or {})
+    if not pdata and "phase2_data" not in proc:
+        # No Phase 2 filled yet — nothing to substitute.
+        return
+    # iter-353: keep the R0 snapshot so the UI can still surface it if needed.
+    proc["phase2_data_original"] = dict(pdata)
+
+    implants = _extract_procedure_implants(proc)
+    n = len(implants)
+
+    # Helper — ensure arrays exist and have length n so we can safely index.
+    def _ensure_arr(key: str, default_val: Any = "") -> List[Any]:
+        cur = pdata.get(key)
+        if isinstance(cur, list):
+            arr = list(cur)
+        elif cur in (None, ""):
+            arr = []
+        else:
+            # Single scalar — expand to length-n array with the same value.
+            arr = [cur] * n
+        while len(arr) < n:
+            arr.append(default_val)
+        return arr
+
+    iopa_arr = _ensure_arr("iopa_files", "")
+    heal_arr = _ensure_arr("healing_abutment_cuff_height", "")
+    pros_arr = _ensure_arr("prosthesis_type", "")
+    prostheic_comp_arr = _ensure_arr("prosthetic_component", "")
+
+    # iter-353: mapping between R{n}'s procedure_type / prosthetic_component
+    # and the Phase 2 "prosthetic_component" enum. Kept explicit for clarity
+    # and easy tweaks per institutional taxonomy.
+    def _phase2_prosthetic_component(repl: Dict[str, Any]) -> Optional[str]:
+        ptype = (repl.get("procedure_type") or "").strip()
+        pcomp = (repl.get("prosthetic_component") or "").strip()
+        if ptype == "Immediate Loading":
+            return "Immediate Loading Done"
+        if ptype == "Single Stage" or pcomp == "Cover Screw":
+            return "Cover Screw Placed"
+        if pcomp == "Healing Abutment":
+            return "Healing Abutment Placed"
+        return None
+
+    changed = False
+    for i in range(n):
+        entry = smap.get(str(i)) or smap.get(i) or {}
+        if entry.get("status") != "Replaced":
+            continue
+        repl = entry.get("replacement") or {}
+
+        # IOPA — R{n}'s new radiograph replaces the R0 position.
+        if repl.get("iopa_url"):
+            iopa_arr[i] = repl["iopa_url"]
+            changed = True
+
+        # Healing abutment cuff height (mm) — set from R{n} when present, else
+        # clear if the new prosthetic component doesn't use a cuff height
+        # (e.g. R{n} switched to Cover Screw or Immediate Loading).
+        if repl.get("healing_abutment_mm") not in (None, ""):
+            heal_arr[i] = repl["healing_abutment_mm"]
+            changed = True
+        else:
+            new_pc = (repl.get("prosthetic_component") or "").strip()
+            new_pt = (repl.get("procedure_type") or "").strip()
+            if new_pc and new_pc != "Healing Abutment":
+                heal_arr[i] = ""
+                changed = True
+            elif new_pt == "Single Stage" or new_pt == "Immediate Loading":
+                heal_arr[i] = ""
+                changed = True
+
+        # Immediate-loading prosthesis (Phase 2 stores this under prosthesis_type)
+        if repl.get("immediate_loading_prosthesis") not in (None, ""):
+            pros_arr[i] = repl["immediate_loading_prosthesis"]
+            changed = True
+        else:
+            new_pt = (repl.get("procedure_type") or "").strip()
+            if new_pt and new_pt != "Immediate Loading":
+                pros_arr[i] = ""
+                changed = True
+
+        # Prosthetic component enum (case-level string too when single-implant)
+        mapped_pc = _phase2_prosthetic_component(repl)
+        if mapped_pc:
+            prostheic_comp_arr[i] = mapped_pc
+            changed = True
+
+    if not changed:
+        return
+
+    pdata["iopa_files"] = iopa_arr
+    pdata["healing_abutment_cuff_height"] = heal_arr
+    pdata["prosthesis_type"] = pros_arr
+
+    # Case-level `prosthetic_component`: only overwrite when all populated
+    # positions agree (typical single-implant case). Preserve original
+    # otherwise so multi-implant mixed states don't lose their signal.
+    filled = [v for v in prostheic_comp_arr if v]
+    if filled and len(set(filled)) == 1:
+        pdata["prosthetic_component"] = filled[0]
+
+    # Also patch the positional `radiographs.iopas[i]` + `existing_implants[i].iopa_url`
+    # so the per-implant readback thumbnails on the case detail render R{n}.
+    radiographs = dict(proc.get("radiographs") or {})
+    r_iopas = list(radiographs.get("iopas") or [])
+    while len(r_iopas) < n:
+        r_iopas.append("")
+    ex_impls = list(proc.get("existing_implants") or [])
+    while len(ex_impls) < n:
+        ex_impls.append({})
+    for i in range(n):
+        entry = smap.get(str(i)) or smap.get(i) or {}
+        if entry.get("status") != "Replaced":
+            continue
+        new_iopa = (entry.get("replacement") or {}).get("iopa_url")
+        if not new_iopa:
+            continue
+        r_iopas[i] = new_iopa
+        if isinstance(ex_impls[i], dict):
+            ex_impls[i] = dict(ex_impls[i])
+            ex_impls[i]["iopa_url"] = new_iopa
+    radiographs["iopas"] = r_iopas
+    proc["radiographs"] = radiographs
+    proc["existing_implants"] = ex_impls
+
+    proc["phase2_data"] = pdata
+
 
 
 
@@ -4455,6 +4600,9 @@ async def submit_survival_review(
                 # iter-348: replacement date is now mandatory (calendar picker on UI).
                 if not (repl.get("placement_date") or "").strip():
                     raise HTTPException(status_code=400, detail="Replacement requires a placement date")
+                # iter-353: replacement IOPA radiograph is mandatory (per Q1-a).
+                if not (repl.get("iopa_url") or "").strip():
+                    raise HTTPException(status_code=400, detail="Replacement requires an IOPA radiograph upload")
                 existing_chain = prev_impl_state.get(str(idx)) or {}
                 prior = existing_chain.get("replacement")
                 revision_number = 1
@@ -4486,6 +4634,10 @@ async def submit_survival_review(
                     "healing_protocol": (repl.get("healing_protocol") or "").strip() or None,
                     "surface": (repl.get("surface") or "").strip() or None,
                     "placement_date": repl.get("placement_date") or now.isoformat()[:10],
+                    # iter-353: R{n}'s IOPA radiograph (uploaded via
+                    # /uploads/media-temp). REQUIRED — the survival-review
+                    # form enforces upload before submit.
+                    "iopa_url": (repl.get("iopa_url") or "").strip() or None,
                     "revision_number": revision_number,
                     "parent_implant_idx": idx,
                     "status": "Active",

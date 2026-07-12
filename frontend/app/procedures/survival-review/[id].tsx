@@ -76,6 +76,10 @@ type FailureEntry = {
     insertion_torque_ncm: string;
     isq: string;
     placement_date: string;
+    // iter-353: mandatory IOPA radiograph for the new (R{n}) implant.
+    // Replaces R0's IOPA in Phase 2/3 readbacks on submit.
+    iopa_url: string;
+    iopa_uploading: boolean;
     // iter-344: Type of Procedure
     procedure_type: ProcType | '';
     prosthetic_component: string;                    // Cover Screw | Healing Abutment
@@ -216,6 +220,8 @@ export default function SurvivalReview() {
             diameter: '', length: '',
             lot_number: '', insertion_torque_ncm: '', isq: '',
             placement_date: '',
+            iopa_url: '',
+            iopa_uploading: false,
             procedure_type: '',
             prosthetic_component: '',
             healing_abutment_mm: '',
@@ -277,6 +283,8 @@ export default function SurvivalReview() {
         if (!r.diameter || !r.length) return false;
         // iter-348: placement date is compulsory for replacements.
         if (!r.placement_date) return false;
+        // iter-353: R{n} IOPA radiograph is compulsory (per user Q1-a).
+        if (!r.iopa_url) return false;
         // Procedure type required + branch validation
         if (!r.procedure_type) return false;
         if (r.procedure_type === 'Two Stage') {
@@ -291,6 +299,36 @@ export default function SurvivalReview() {
     }
     return true;
   };
+
+
+  // iter-353: Upload the R{n} IOPA radiograph via /uploads/media-temp — same
+  // pattern as Phase 2 / ExistingImplantSection. Persists the returned
+  // filename onto the replacement so the payload carries `iopa_url`.
+  const handleReplIopaUpload = async (idx: number) => {
+    try {
+      const picked = await showUploadPicker(['application/pdf', 'image/png', 'image/jpeg', 'image/heic', 'image/heif']);
+      if (!picked) return;
+      setReplField(idx, { iopa_uploading: true });
+      const fd = new FormData();
+      if (_Platform.OS === 'web') {
+        const resp = await fetch(picked.uri);
+        const blob = await resp.blob();
+        // @ts-ignore RN-web FormData accepts File.
+        fd.append('file', new File([blob], picked.name || 'iopa', { type: picked.type || 'image/jpeg' }));
+      } else {
+        // @ts-ignore native FormData blob shape.
+        fd.append('file', { uri: picked.uri, name: picked.name || 'iopa.jpg', type: picked.type || 'image/jpeg' });
+      }
+      const up = await api.post('/uploads/media-temp', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      const filename = up.data?.filename;
+      if (!filename) throw new Error('Upload returned no filename');
+      setReplField(idx, { iopa_url: filename, iopa_uploading: false });
+    } catch (e: any) {
+      Alert.alert('Upload failed', e?.response?.data?.detail || e?.message || 'Could not upload the IOPA.');
+      setReplField(idx, { iopa_uploading: false });
+    }
+  };
+
 
   const handleSubmit = async (afterSave: 'phase3' | 'back') => {
     if (allSurvived && !canSubmit()) { Alert.alert('Incomplete', 'Please fill all required fields (reason, site change target, and replacement details).'); return; }
@@ -320,6 +358,7 @@ export default function SurvivalReview() {
               insertion_torque_ncm: r.insertion_torque_ncm ? Number(r.insertion_torque_ncm) : null,
               isq: r.isq ? Number(r.isq) : null,
               placement_date: r.placement_date || null,
+              iopa_url: r.iopa_url || null,
               procedure_type: r.procedure_type,
               prosthetic_component: r.procedure_type === 'Two Stage' ? r.prosthetic_component : null,
               healing_abutment_mm: (r.procedure_type === 'Two Stage' && r.prosthetic_component === 'Healing Abutment' && r.healing_abutment_mm)
@@ -594,6 +633,34 @@ export default function SurvivalReview() {
                         )}
                       </View>
 
+                      {/* iter-353: IOPA radiograph upload for the new R{n}
+                          implant. Same UX as Phase 2. On submit this URL
+                          replaces R0's IOPA everywhere (Phase 2 readback,
+                          Phase 3 pre-fill, PDFs). REQUIRED. */}
+                      <Text style={[s.lbl, { marginTop: 4, color: '#C62828' }]}>IOPA Radiograph *</Text>
+                      <TouchableOpacity
+                        style={[s.iopaBtn, !f.replacement.iopa_url && s.iopaBtnInvalid]}
+                        onPress={() => handleReplIopaUpload(i)}
+                        disabled={f.replacement.iopa_uploading}
+                        activeOpacity={0.7}
+                        data-testid={`imp-${i}-repl-iopa-btn`}
+                        testID={`imp-${i}-repl-iopa-btn`}
+                      >
+                        {f.replacement.iopa_uploading ? (
+                          <ActivityIndicator size="small" color="#1565C0" />
+                        ) : (
+                          <>
+                            <Ionicons name="cloud-upload-outline" size={18} color="#1565C0" />
+                            <Text style={s.iopaBtnT}>{f.replacement.iopa_url ? 'Re-upload IOPA' : 'Upload IOPA Radiograph'}</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                      {f.replacement.iopa_url ? (
+                        <View style={{ marginTop: 6 }}>
+                          <RadiographThumb filename={f.replacement.iopa_url} testID={`imp-${i}-repl-iopa-thumb`} label="R-Revision IOPA" />
+                        </View>
+                      ) : null}
+
                       {/* iter-345: Torque relocated right after Diameter/Length,
                           matching the Phase 2 default input style. */}
                       <TextInput
@@ -849,6 +916,14 @@ const s = StyleSheet.create({
   mItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: '#F0F2F5' },
   mItemOn: { backgroundColor: '#E3F2FD', borderRadius: 8 },
   mItemT: { fontSize: 13, color: '#1e2a44' },
+  // iter-353: IOPA upload button
+  iopaBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    borderWidth: 1.5, borderColor: '#90CAF9', borderRadius: 10,
+    paddingVertical: 12, backgroundColor: '#E3F2FD',
+  },
+  iopaBtnInvalid: { borderColor: '#EF9A9A', backgroundColor: '#FFF5F5' },
+  iopaBtnT: { fontSize: 13, fontWeight: '800', color: '#0D47A1', letterSpacing: 0.3 },
   // iter-350: Global End Implant Treatment button (centered, red, below actions)
   endTreatmentGlobalWrap: { marginTop: 16, marginBottom: 24, alignItems: 'center', gap: 6 },
   endTreatmentGlobalBtn: {
