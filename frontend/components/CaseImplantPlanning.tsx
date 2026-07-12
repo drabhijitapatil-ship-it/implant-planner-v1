@@ -2561,7 +2561,7 @@ const st = StyleSheet.create({
   torqueRow: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FFF3E0', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
   torqueText: { fontSize: 11, color: '#BF360C', fontWeight: '500' },
   torqueValue: { fontSize: 13, fontWeight: '700', color: '#E65100' },
-  implantActions: { flexDirection: 'row', gap: 12, marginTop: 10, paddingLeft: 48 },
+  implantActions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 10, paddingLeft: 48, paddingRight: 8 },
   editBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   editBtnText: { fontSize: 12, color: '#1E88E5', fontWeight: '600' },
   deleteBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
