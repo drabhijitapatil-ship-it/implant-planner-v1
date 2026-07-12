@@ -729,11 +729,6 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
         const isInactive = surv?.status === 'Failed' || surv?.status === 'Replaced';
         return (
           <View key={`${plan.position}-${idx}`} style={[st.implantCard, isInactive && st.implantCardInactive]} data-testid={`implant-plan-${idx}`}>
-            {/* Active/Inactive badge */}
-            <View style={[st.statusBadge, isInactive ? st.statusBadgeInactive : st.statusBadgeActive]} data-testid={`implant-plan-status-${idx}`}>
-              <Ionicons name={isInactive ? 'close-circle' : 'checkmark-circle'} size={12} color="#FFF" />
-              <Text style={st.statusBadgeText}>{isInactive ? 'Inactive' : 'Active'}</Text>
-            </View>
             <View style={st.implantCardHeader}>
               <View style={st.positionBadge}>
                 <Text style={st.positionText}>{plan.position}</Text>
@@ -746,7 +741,12 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
                 testID={`implant-plan-stripe-${idx}`}
               />
               <View style={st.implantInfo}>
-                <Text style={[st.implantTitle, isInactive && st.textMuted]}>{plan.brand} - {plan.system}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <Text style={[st.implantTitle, isInactive && st.textMuted]} numberOfLines={2}>{plan.brand} - {plan.system}</Text>
+                  <View style={[st.statusChip, isInactive ? st.statusChipInactive : st.statusChipActive]} data-testid={`implant-plan-status-${idx}`} testID={`implant-plan-status-${idx}`}>
+                    <Text style={st.statusChipText}>{isInactive ? 'Inactive' : 'Active'}</Text>
+                  </View>
+                </View>
                 <Text style={[st.implantSpecs, isInactive && st.textMuted]}>
                   D: {plan.diameter}mm | L: {plan.length}mm
                   {rec ? ` | ${rec.region}` : ''}
