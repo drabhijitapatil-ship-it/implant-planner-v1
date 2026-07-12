@@ -1,5 +1,29 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 354 (Feb 2026) — IOPA Upload Bugfix + Phase-2 Style Labels + Failed-No-Repl Inactive Flow
+
+User choices: Q1-a exclude from Phase 3, Q2-a exclude from PDFs + Phase 4, Q3-a still counts as Failed in analytics, Q4-a auto-terminate when all implants failed-no-repl.
+
+### Bugs Fixed
+1. **IOPA upload "Property 'ShowUploadPicker' doesn't exist" error** — 3 imports (`showUploadPicker`, `RadiographThumb`, and the redundant `Platform as _Platform`) had been silently dropped from the survival-review file. Restored them and changed `_Platform.OS` → `Platform.OS`.
+2. **"Three text boxes below Upload IOPA appear blank"** — Torque/Lot/ISQ had only placeholder text. Added Phase-2-style labels ABOVE each input with italic '(optional)' marker and canonical Phase-2 placeholders ('e.g. 35', 'e.g. K12345', 'e.g. 72').
+3. **Torque + ISQ UI must exactly match Phase 2** — labels + placeholders now identical.
+4. **Q4-a auto-terminate broken** — int-vs-str key mismatch in `_idx_active` inside `submit_survival_review` — `merged_impl` uses string keys but code was doing int lookups → auto-terminate never fired. Fixed with `merged_impl.get(str(idx)) or merged_impl.get(idx)`.
+5. **Replaced implants missing `_active_in_treatment=True`** in `_resolve_active_implants_inline` — Replaced branch never set the flag, causing downstream views to treat Replaced (R{n} live) implants as inactive. Explicit `merged['_active_in_treatment'] = True` added.
+
+### Features
+6. **Rename question label** — "Was it replaced?" → "Was the Implant Replaced?".
+7. **Failed-no-replacement → Inactive** — resolver now flags `_active_in_treatment=False` on Failed(no repl) and Treatment Ended implants, and `_active_in_treatment=True` on Active + Replaced. Phase 3/4 forms filter these out via the flag.
+8. **Auto-terminate case when ALL implants are inactive-in-treatment** (Failed-no-repl or Treatment Ended) — new `auto_terminate_all_failed` branch sets status=treatment_ended + auto_terminated=True + generic reason without waiting for approval workflow (per Q4-a).
+
+### Files touched
+- EDIT `/app/backend/server.py` — `_idx_active` key coercion (~L4705), Replaced branch flag (~L4365), auto_terminate branch inside submit_survival_review.
+- EDIT `/app/frontend/app/procedures/survival-review/[id].tsx` — restored imports, `Platform.OS`, Phase-2 style labels, question label rename, new `lblOpt` style.
+
+### Testing
+- Backend: 7/7 iter-354 pytest + 4/4 seedcase + 8/8 iter-353 + 12/13 iter-352 regression (1 known stale test).
+- Frontend E2E: per-implant cards render, exact label match, IOPA upload button opens AttachPickerModal cleanly, no `ShowUploadPicker` runtime errors.
+
 ## Iteration 353 (Feb 2026) — R{n} → phase2_data Substitution + IOPA Upload on Replacement
 
 User choices: Q1-a required IOPA, Q2-a single file, Q3-a R0 IOPA stays reachable in R0 tile, Q4-a position-specific array replacement.
