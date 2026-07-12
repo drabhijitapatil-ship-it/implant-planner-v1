@@ -1,5 +1,19 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 349 (Feb 2026) — Treatment Termination Summary PDF
+
+Auto-generated one-page medico-legal document for cases in the terminal `treatment_ended` state. Handoff copy for the patient's next dentist + institutional audit.
+
+### Features
+1. **Red "Implant Treatment Terminated" banner** rendered on the case detail (`/procedures/[id]`) whenever `procedure.status === 'treatment_ended'`. Shows termination date, decision maker (Patient/Operator) and the recorded reason quote.
+2. **Download Summary PDF button** (data-testid=`termination-download-btn`) — HTML→PDF flow using `expo-print` on native and browser Save-As-PDF on web.
+3. **Print button** (data-testid=`termination-print-btn`) — hidden iframe print flow on web, native print dialog on device.
+4. **PDF Contents**: Banner + Case ID + timestamp; Patient Information; Clinician Chain; Termination Details (date/decision maker/reason quote); Implants Placed & Final Status table (with per-tile status chip); Survival Review Timeline (all events R0→R1→R2 with actor & outcome); Signature block (Operator + Patient acknowledgement); HIPAA footer.
+
+### Files touched
+- EDIT `/app/frontend/utils/pdfGenerator.ts` — new `buildTerminationSummaryHtml`, `generateTerminationSummaryPDF`, `printTerminationSummaryPDF`.
+- EDIT `/app/frontend/app/procedures/[id].tsx` — new termination banner block + styles.
+
 ## Iteration 348 (Feb 2026) — End Implant Treatment + Historical Tile Chain + Analytics Access & Metric
 
 User choices (Message 557): Q1-b entire case terminated when End Implant Treatment chosen, Q2-a permanent (no reopen), Q3-a inactive tile with distinct red "Treatment Ended" chip, Q4-b table format (Procedure Type / Total / Failed / Failure %), Q5-c+students — all clinical roles see Analytics; students & supervisors read-only, no CSV export.

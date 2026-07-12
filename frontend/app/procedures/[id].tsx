@@ -37,7 +37,7 @@ import {
   getProstheticOptions,
 } from '../../constants/checklist';
 import { format } from 'date-fns';
-import { generateProcedurePDF, printProcedurePDF, generateLabSlipPDF } from '../../utils/pdfGenerator';
+import { generateProcedurePDF, printProcedurePDF, generateLabSlipPDF, generateTerminationSummaryPDF, printTerminationSummaryPDF } from '../../utils/pdfGenerator';
 import { downloadPreopBriefing } from '../../utils/preopBriefingPdf';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';// iter-209: removed CaseCompletionBadge — its facts merged into the green
 // Treatment Complete banner above the timeline.
@@ -941,6 +941,72 @@ export default function ProcedureDetailScreen() {
               </Text>
             </View>
           </>
+        )}
+
+        {/* iter-349: Treatment Termination Summary banner — rendered when the
+            case status is `treatment_ended` (End Implant Treatment on the
+            Survival Review). Provides the download / print entry-point for
+            the medico-legal termination PDF. */}
+        {procedure.status === 'treatment_ended' && (
+          <View style={styles.terminationBanner} testID="termination-banner">
+            <View style={styles.terminationTopRow}>
+              <View style={styles.terminationIconWrap}>
+                <Ionicons name="close-circle" size={22} color="#FFF" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.terminationTitle}>Implant Treatment Terminated</Text>
+                <Text style={styles.terminationSubtitle}>
+                  Ended by {procedure.treatment_ended_decision_maker || '—'}
+                  {procedure.treatment_ended_at ? ` · ${new Date(procedure.treatment_ended_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}` : ''}
+                </Text>
+              </View>
+            </View>
+            {procedure.treatment_ended_reason && (
+              <View style={styles.terminationReasonBox} testID="termination-reason">
+                <Text style={styles.terminationReasonLabel}>Reason on record</Text>
+                <Text style={styles.terminationReasonText}>"{procedure.treatment_ended_reason}"</Text>
+              </View>
+            )}
+            <View style={styles.terminationActions}>
+              <TouchableOpacity
+                style={[styles.terminationBtn, styles.terminationBtnPrimary, pdfLoading && styles.buttonDisabled]}
+                onPress={async () => {
+                  setPdfLoading(true);
+                  try { await generateTerminationSummaryPDF(procedure); }
+                  finally { setPdfLoading(false); }
+                }}
+                disabled={pdfLoading}
+                testID="termination-download-btn"
+                data-testid="termination-download-btn"
+              >
+                {pdfLoading ? (
+                  <ActivityIndicator color="#FFF" size="small" />
+                ) : (
+                  <>
+                    <Ionicons name="download-outline" size={16} color="#FFF" />
+                    <Text style={styles.terminationBtnText}>Download Summary PDF</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.terminationBtn, styles.terminationBtnGhost]}
+                onPress={async () => {
+                  setPdfLoading(true);
+                  try { await printTerminationSummaryPDF(procedure); }
+                  finally { setPdfLoading(false); }
+                }}
+                disabled={pdfLoading}
+                testID="termination-print-btn"
+                data-testid="termination-print-btn"
+              >
+                <Ionicons name="print-outline" size={16} color="#C62828" />
+                <Text style={[styles.terminationBtnText, { color: '#C62828' }]}>Print</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.terminationFoot}>
+              No further replacement, healing or prosthetic phases can be recorded on this case.
+            </Text>
+          </View>
         )}
 
         {/* iter-211: Existing Implants readback — only renders for Path A
@@ -4991,6 +5057,40 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#4CAF50',
   },
+  // iter-349: Treatment Termination banner (red terminal state)
+  terminationBanner: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 16,
+    padding: 16,
+    backgroundColor: '#FFEBEE',
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#C62828',
+    gap: 12,
+  },
+  terminationTopRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  terminationIconWrap: {
+    width: 40, height: 40, borderRadius: 20, backgroundColor: '#C62828',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  terminationTitle: { fontSize: 16, fontWeight: '800', color: '#B71C1C', letterSpacing: 0.3 },
+  terminationSubtitle: { fontSize: 12, color: '#8E1B1B', marginTop: 2 },
+  terminationReasonBox: {
+    backgroundColor: '#FFF', borderLeftWidth: 3, borderLeftColor: '#C62828',
+    padding: 10, borderRadius: 6, gap: 4,
+  },
+  terminationReasonLabel: { fontSize: 10, color: '#B71C1C', fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
+  terminationReasonText: { fontSize: 13, color: '#37474F', fontStyle: 'italic', lineHeight: 18 },
+  terminationActions: { flexDirection: 'row', gap: 10 },
+  terminationBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingVertical: 12, borderRadius: 10,
+  },
+  terminationBtnPrimary: { backgroundColor: '#C62828' },
+  terminationBtnGhost: { backgroundColor: '#FFF', borderWidth: 1.5, borderColor: '#C62828' },
+  terminationBtnText: { color: '#FFF', fontSize: 13, fontWeight: '800', letterSpacing: 0.4 },
+  terminationFoot: { fontSize: 11, color: '#8E1B1B', fontStyle: 'italic', textAlign: 'center' },
   completedText: {
     fontSize: 20,
     fontWeight: '700',
