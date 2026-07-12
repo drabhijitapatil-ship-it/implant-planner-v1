@@ -38,6 +38,7 @@ import {
 } from '../../constants/checklist';
 import { format } from 'date-fns';
 import { generateProcedurePDF, printProcedurePDF, generateLabSlipPDF, generateTerminationSummaryPDF, printTerminationSummaryPDF } from '../../utils/pdfGenerator';
+import EndTreatmentPendingBanner from '../../components/EndTreatmentPendingBanner';
 import { downloadPreopBriefing } from '../../utils/preopBriefingPdf';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';// iter-209: removed CaseCompletionBadge — its facts merged into the green
 // Treatment Complete banner above the timeline.
@@ -941,6 +942,33 @@ export default function ProcedureDetailScreen() {
               </Text>
             </View>
           </>
+        )}
+
+        {/* iter-352: End Treatment PENDING approval banner. Shown while the
+            case is awaiting the next approver in the chain. Approver sees
+            Approve / Reject buttons; everyone else sees a status-only view. */}
+        {(procedure.status === 'pending_end_treatment_supervisor' || procedure.status === 'pending_end_treatment_incharge') && (
+          <EndTreatmentPendingBanner
+            procedure={procedure}
+            currentUser={user}
+            onResolved={() => loadProcedure()}
+          />
+        )}
+
+        {/* iter-352: End Treatment REJECTED banner. Shown when the last
+            end-treatment request was rejected; auto-hides once a new
+            survival review or approval cycle overwrites it. */}
+        {procedure.end_treatment_rejected && procedure.status !== 'treatment_ended' && (
+          <View style={styles.rejectedBanner} testID="end-treatment-rejected-banner">
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <Ionicons name="alert-circle" size={18} color="#B71C1C" />
+              <Text style={styles.rejectedTitle}>End treatment rejected</Text>
+            </View>
+            <Text style={styles.rejectedBody}>
+              Rejected by {procedure.end_treatment_rejected.by_name || '—'} · {procedure.end_treatment_rejected.by_role || ''}
+            </Text>
+            <Text style={styles.rejectedReason}>"{procedure.end_treatment_rejected.comment}"</Text>
+          </View>
         )}
 
         {/* iter-349: Treatment Termination Summary banner — rendered when the
@@ -5091,6 +5119,15 @@ const styles = StyleSheet.create({
   terminationBtnGhost: { backgroundColor: '#FFF', borderWidth: 1.5, borderColor: '#C62828' },
   terminationBtnText: { color: '#FFF', fontSize: 13, fontWeight: '800', letterSpacing: 0.4 },
   terminationFoot: { fontSize: 11, color: '#8E1B1B', fontStyle: 'italic', textAlign: 'center' },
+  // iter-352: End treatment rejected banner (last-rejection surfaced to the initiator)
+  rejectedBanner: {
+    marginHorizontal: 16, marginTop: 8, marginBottom: 8,
+    padding: 12, borderRadius: 12,
+    backgroundColor: '#FFEBEE', borderLeftWidth: 4, borderLeftColor: '#C62828', gap: 4,
+  },
+  rejectedTitle: { fontSize: 13, fontWeight: '800', color: '#B71C1C', letterSpacing: 0.3 },
+  rejectedBody: { fontSize: 12, color: '#8E1B1B', fontWeight: '600' },
+  rejectedReason: { fontSize: 12.5, color: '#3E2723', fontStyle: 'italic', marginTop: 2 },
   completedText: {
     fontSize: 20,
     fontWeight: '700',

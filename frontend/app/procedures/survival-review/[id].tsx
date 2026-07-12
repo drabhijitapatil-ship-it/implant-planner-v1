@@ -383,6 +383,10 @@ export default function SurvivalReview() {
       };
       await api.post(`/procedures/${id}/survival-review`, body);
       setEndModal({ open: false, reason: 'Peri-implantitis', decision_maker: '', end_reason: '', submitting: false });
+      // iter-352: The case may be `treatment_ended` (if In-Charge or
+      // Supervisor with same-person-both) OR pending approval. Either way
+      // we route back to the case detail — it renders the correct banner
+      // based on procedure.status.
       router.replace(`/procedures/${id}`);
     } catch (e: any) {
       Alert.alert('End treatment failed', e?.response?.data?.detail || 'Please try again');
