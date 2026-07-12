@@ -4335,10 +4335,22 @@ async def submit_survival_review(
             if reason_base not in FAILURE_REASONS:
                 raise HTTPException(status_code=400, detail=f"Unknown failure reason: {reason_base}")
             replaced = bool(f.get("replaced"))
+            # iter-348: "End Implant Treatment" — abandons implant therapy for this
+            # site (and for the whole case, per user pick Q1-b). Requires decision
+            # maker (Patient/Operator) + reason. Overrides `replaced`.
+            end_treatment = bool(f.get("end_treatment"))
+            decision_maker = (f.get("end_treatment_decision_maker") or "").strip() or None
+            end_reason = (f.get("end_treatment_reason") or "").strip() or None
+            if end_treatment:
+                if decision_maker not in ("Patient", "Operator"):
+                    raise HTTPException(status_code=400, detail="End treatment requires decision maker (Patient or Operator)")
+                if not end_reason:
+                    raise HTTPException(status_code=400, detail="End treatment requires a reason")
+                replaced = False  # cannot replace and end at the same time
             site_changed = bool(f.get("site_changed"))
             new_tooth = (f.get("new_tooth_number") or "").strip() or None
             survival_map[idx] = {
-                "status": "Replaced" if replaced else "Failed",
+                "status": ("Treatment Ended" if end_treatment else ("Replaced" if replaced else "Failed")),
                 "reason": reason_base,
                 "reason_detail": reason_detail.strip() or None,
                 "removed": bool(f.get("removed", True)),
@@ -4346,6 +4358,10 @@ async def submit_survival_review(
                 "site_changed": site_changed,
                 "new_tooth_number": new_tooth,
                 "failure_date": f.get("failure_date") or now.isoformat(),
+                "end_treatment": end_treatment,
+                "end_treatment_decision_maker": decision_maker,
+                "end_treatment_reason": end_reason,
+                "end_treatment_at": now.isoformat() if end_treatment else None,
             }
             if site_changed and new_tooth:
                 site_changes.append({"implant_idx": idx, "old_tooth": (implants[idx].get("tooth_number") or implants[idx].get("tooth")), "new_tooth": new_tooth})
@@ -4353,6 +4369,9 @@ async def submit_survival_review(
                 repl = f.get("replacement") or {}
                 if not all(repl.get(k) for k in ("system", "diameter", "length")):
                     raise HTTPException(status_code=400, detail="Replacement requires system, diameter, length")
+                # iter-348: replacement date is now mandatory (calendar picker on UI).
+                if not (repl.get("placement_date") or "").strip():
+                    raise HTTPException(status_code=400, detail="Replacement requires a placement date")
                 existing_chain = prev_impl_state.get(str(idx)) or {}
                 prior = existing_chain.get("replacement")
                 revision_number = 1
@@ -4427,7 +4446,11 @@ async def submit_survival_review(
                       "new_tooth_number": f.get("new_tooth_number")}
                      for f in (body.failures or [])],
     })
-    is_fully_survived = not any(v.get("status") in ("Failed", "Replaced") for v in merged_impl.values())
+    is_fully_survived = not any(v.get("status") in ("Failed", "Replaced", "Treatment Ended") for v in merged_impl.values())
+    # iter-348: If ANY implant is marked "Treatment Ended", the whole case is
+    # terminated (per user Q1-b: entire case → treatment_ended). Track the
+    # ending reason(s) at case level so Analytics can surface them.
+    case_treatment_ended = any(v.get("status") == "Treatment Ended" for v in merged_impl.values())
     update_set: Dict[str, Any] = {
         "phase2_survival_review": {
             "all_survived": is_fully_survived,
@@ -4437,9 +4460,19 @@ async def submit_survival_review(
             "reviewed_by": prev_review.get("reviewed_by") or (current_user.get("name") or current_user.get("username")),
             "implants": merged_impl,
             "events": prior_events,
+            "treatment_ended": case_treatment_ended,
         },
         "phase2_survival_review_at": now,
     }
+    if case_treatment_ended:
+        update_set["status"] = "treatment_ended"
+        update_set["treatment_ended_at"] = now
+        # Snapshot the ending metadata (decision maker + reason) at the case root
+        ended_entries = [v for v in merged_impl.values() if v.get("status") == "Treatment Ended"]
+        if ended_entries:
+            e0 = ended_entries[0]
+            update_set["treatment_ended_decision_maker"] = e0.get("end_treatment_decision_maker")
+            update_set["treatment_ended_reason"] = e0.get("end_treatment_reason")
     # iter-344: apply site-change carry-forward — update the tooth number
     # on the source implant lists so downstream forms (Phase 3 second-stage
     # surgical, Phase 4 impressions/delivery) key off the new position.
@@ -4715,7 +4748,11 @@ def _tooth_bucket(t: Optional[int]) -> str:
     return "unknown"
 
 
-async def _load_analytics_procedures(from_date: Optional[str], to_date: Optional[str]) -> List[Dict[str, Any]]:
+async def _load_analytics_procedures(
+    from_date: Optional[str],
+    to_date: Optional[str],
+    scope_user: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
     match: Dict[str, Any] = {"archived": {"$ne": True}}
     # Placement date range = phase2_actual_done_date if present, else procedure_date
     date_clause: Dict[str, Any] = {}
@@ -4728,6 +4765,20 @@ async def _load_analytics_procedures(from_date: Optional[str], to_date: Optional
             {"phase2_actual_done_date": date_clause},
             {"procedure_date": date_clause},
         ]
+    # iter-348: scope by role — students see only their own cases; supervisors
+    # see cases they are assigned to; administrators + implant_incharge see all.
+    if scope_user:
+        role = scope_user.get("role")
+        uid = str(scope_user.get("_id") or scope_user.get("id") or "")
+        uname = scope_user.get("name") or scope_user.get("username")
+        if role == "student":
+            match["$and"] = [
+                {"$or": [{"student_id": uid}, {"student_name": uname}]},
+            ]
+        elif role == "supervisor":
+            match["$and"] = [
+                {"$or": [{"supervisor_id": uid}, {"supervisor_name": uname}]},
+            ]
     return await db.procedures.find(match, {
         "implants": 1, "existing_implants": 1, "implant_plans": 1, "torque_values": 1, "phase2_data": 1,
         "phase2_survival_review": 1,
@@ -4756,9 +4807,11 @@ def _compute_analytics(procs: List[Dict[str, Any]], filters: Dict[str, Any]) -> 
     failed = 0
     replaced_success = 0
     replaced_refailed = 0
+    treatment_ended_count = 0
     reason_counts: Dict[str, int] = {r: 0 for r in FAILURE_REASONS}
     system_stats: Dict[str, Dict[str, int]] = {}
     tooth_stats: Dict[str, Dict[str, int]] = {}
+    proc_type_stats: Dict[str, Dict[str, int]] = {}  # iter-348: Procedure-wise Implant Failure metric
     monthly_placed: Dict[str, int] = {}
     monthly_failed: Dict[str, int] = {}
     monthly_survival: Dict[str, Dict[str, int]] = {}
@@ -4770,6 +4823,7 @@ def _compute_analytics(procs: List[Dict[str, Any]], filters: Dict[str, Any]) -> 
         smap = review.get("implants") or {}
         placed_date = p.get("phase2_actual_done_date") or p.get("procedure_date")
         month = _month_key(placed_date)
+        proc_type = (p.get("implant_procedure_type") or "Unknown").strip() or "Unknown"
         for i, imp in enumerate(implants):
             system = (imp.get("system") or "Unknown").strip()
             tooth = _tooth_int(imp.get("tooth_number") or imp.get("tooth"))
@@ -4788,15 +4842,33 @@ def _compute_analytics(procs: List[Dict[str, Any]], filters: Dict[str, Any]) -> 
             sys_bucket["placed"] += 1
             tb = tooth_stats.setdefault(bucket, {"placed": 0, "failed": 0, "active": 0, "replaced": 0})
             tb["placed"] += 1
+            pt = proc_type_stats.setdefault(proc_type, {"placed": 0, "failed": 0, "active": 0, "replaced": 0, "treatment_ended": 0})
+            pt["placed"] += 1
 
             if status == "Active":
                 active += 1
                 sys_bucket["active"] += 1
                 tb["active"] += 1
+                pt["active"] += 1
             elif status == "Failed":
                 failed += 1
                 sys_bucket["failed"] += 1
                 tb["failed"] += 1
+                pt["failed"] += 1
+                reason = entry.get("reason") or "Unknown"
+                reason_counts[reason] = reason_counts.get(reason, 0) + 1
+                fd_month = _month_key(entry.get("failure_date"))
+                if fd_month:
+                    monthly_failed[fd_month] = monthly_failed.get(fd_month, 0) + 1
+            elif status == "Treatment Ended":
+                # iter-348: counted as failed for survival math and captured
+                # separately so the dashboard can surface abandonment cases.
+                failed += 1
+                sys_bucket["failed"] += 1
+                tb["failed"] += 1
+                pt["failed"] += 1
+                pt["treatment_ended"] += 1
+                treatment_ended_count += 1
                 reason = entry.get("reason") or "Unknown"
                 reason_counts[reason] = reason_counts.get(reason, 0) + 1
                 fd_month = _month_key(entry.get("failure_date"))
@@ -4807,6 +4879,7 @@ def _compute_analytics(procs: List[Dict[str, Any]], filters: Dict[str, Any]) -> 
                 failed += 1
                 sys_bucket["failed"] += 1
                 tb["failed"] += 1
+                pt["failed"] += 1
                 reason = entry.get("reason") or "Unknown"
                 reason_counts[reason] = reason_counts.get(reason, 0) + 1
                 fd_month = _month_key(entry.get("failure_date"))
@@ -4828,8 +4901,10 @@ def _compute_analytics(procs: List[Dict[str, Any]], filters: Dict[str, Any]) -> 
                     replaced_success += 1
                     sys_bucket["replaced"] += 1
                     tb["replaced"] += 1
+                    pt["replaced"] += 1
                     sys_bucket["active"] += 1
                     tb["active"] += 1
+                    pt["active"] += 1
 
             # Monthly survival snapshot: for each month, track placed vs still active
             if month:
@@ -4880,6 +4955,7 @@ def _compute_analytics(procs: List[Dict[str, Any]], filters: Dict[str, Any]) -> 
             "failed": failed,
             "replaced_success": replaced_success,
             "replaced_refailed": replaced_refailed,
+            "treatment_ended": treatment_ended_count,
         },
         "rates": {
             "survival_rate": survival_rate,
@@ -4895,6 +4971,15 @@ def _compute_analytics(procs: List[Dict[str, Any]], filters: Dict[str, Any]) -> 
         "by_tooth": [
             {"bucket": b, **v, "survival_rate": (round(100.0 * v["active"] / v["placed"], 1) if v["placed"] else 0.0)}
             for b, v in tooth_stats.items()
+        ],
+        "by_procedure_type": [
+            {
+                "procedure_type": pt_name,
+                **v,
+                "failure_rate": (round(100.0 * v["failed"] / v["placed"], 1) if v["placed"] else 0.0),
+                "survival_rate": (round(100.0 * v["active"] / v["placed"], 1) if v["placed"] else 0.0),
+            }
+            for pt_name, v in sorted(proc_type_stats.items(), key=lambda kv: -kv[1]["placed"])
         ],
         "time_series": time_series,
         "case_rows": case_rows,
@@ -4916,14 +5001,22 @@ async def get_survival_analytics(
     to_date: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
 ):
-    if current_user.get("role") not in ("administrator", "implant_incharge"):
-        raise HTTPException(status_code=403, detail="Administrator or Implant In-Charge role required")
-    procs = await _load_analytics_procedures(from_date, to_date)
+    # iter-348: opened to supervisors + students. Students see only their own
+    # cases (read-only); supervisors see cases assigned to them; admin +
+    # implant_incharge see the full institution.
+    if current_user.get("role") not in ("administrator", "implant_incharge", "supervisor", "student"):
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    procs = await _load_analytics_procedures(from_date, to_date, scope_user=current_user)
     result = _compute_analytics(procs, {
         "system": system, "tooth_bucket": tooth_bucket,
         "from_date": from_date, "to_date": to_date,
     })
     result.pop("case_rows", None)  # Trimmed for the summary endpoint
+    # Expose scope so the UI can render "Your cases only" hints for students.
+    result["scope"] = {
+        "role": current_user.get("role"),
+        "read_only": current_user.get("role") in ("student", "supervisor"),
+    }
     await log_access(
         action="analytics_view",
         outcome="success",
@@ -4945,9 +5038,12 @@ async def export_survival_analytics_csv(
     to_date: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
 ):
+    # iter-348: only administrator + implant_incharge may export the full CSV
+    # (patient identifiers are included in case rows). Students / supervisors
+    # can still view the dashboard scoped to their own cases.
     if current_user.get("role") not in ("administrator", "implant_incharge"):
         raise HTTPException(status_code=403, detail="Administrator or Implant In-Charge role required")
-    procs = await _load_analytics_procedures(from_date, to_date)
+    procs = await _load_analytics_procedures(from_date, to_date, scope_user=current_user)
     result = _compute_analytics(procs, {
         "system": system, "tooth_bucket": tooth_bucket,
         "from_date": from_date, "to_date": to_date,

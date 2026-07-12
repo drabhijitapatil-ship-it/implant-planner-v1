@@ -1,0 +1,44 @@
+{
+  "summary": "iter-348 full regression on 4 features from user Message 557 (End Implant Treatment button, mandatory replacement placement date, home Analytics quick-link across all clinical roles + new metrics). Backend: 13/13 pytest tests pass (validation errors, end-treatment happy path, replacement placement_date required, analytics shape+scope for admin/student/supervisor, CSV RBAC). Frontend: Home quick-link visibility verified for implant_incharge (visible, navigates to analytics), student (visible, subtitle 'Your cases · read-only', CSV export hidden), nurse (hidden on dashboard AND direct URL shows 'Access denied — Nurses cannot access implant survival analytics'). Survival Review UI: red 'End Implant Treatment' button toggles correctly — 'Was it replaced?' disappears and decision-maker dropdown + reason textarea appear; Continue-to-Phase-3 button stays aria-disabled=true until both are filled, then becomes enabled (aria-disabled=null). Replacement path: 'Placement date *' label + native HTML5 date input (type='date') present; Continue button remains aria-disabled=true until placement_date + all other required fields (system, diameter, length, procedure_type) are supplied. CaseImplantPlanning inactive-tile chip could not be observed end-to-end because the only 2 candidate cases (699fc5c2 phase2_approved and 6a01da5 treatment_ended) are both 'existing_implants' case_origin which renders through the Prosthesis History card, not through CaseImplantPlanning; the source-level logic (lines 729-836) is correct (isInactive covers Failed/Replaced/Treatment Ended, Edit/Delete/Drilling Protocol are only rendered when tileEditable, 'Historical record — read-only' chip is rendered for inactive tiles).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_survival_iter348.py",
+    "/app/test_reports/pytest/iter348_results.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: Seed at least one regular (non-existing_implants) case with phase2_details.implants length >=1 that has been survival-reviewed (one Failed and one Active), so future testers can visually validate CaseImplantPlanning inactive-vs-active tile rendering end-to-end.",
+    "OPTIONAL/LOW carried forward from iter-298: deep-link goto('/procedures/{id}') still occasionally 403s until auth token hydrates from AsyncStorage. A global axios interceptor that awaits token hydration would eliminate this."
+  ],
+  "critical_code_review_comments": [
+    "server.py L4344-4349: end_treatment validation correctly enforces decision_maker ∈ {Patient, Operator} AND non-empty reason; overrides replaced when set. Good.",
+    "server.py L4373-4374: replaced=true now requires placement_date. Clean 400 with a specific detail string. Aligns with UI canSubmit gate.",
+    "server.py L4467-4475: case-level treatment_ended state is set once any implant has 'Treatment Ended' status; decision_maker+reason mirrored to procedure doc for downstream display. Per user Q1-b (entire case terminated) — correct.",
+    "server.py L5007-5019: /analytics/survival now permits student/supervisor + returns scope.role and scope.read_only=true. RBAC is symmetrical with UI canAccess / canExport.",
+    "survival-review/[id].tsx L263-266 + L274-275: canSubmit gates on end_treatment_decision_maker+reason AND on placement_date when replaced. Matches server-side 400 conditions perfectly, so users are never allowed to submit an invalid payload.",
+    "CaseImplantPlanning.tsx L729-836: isTreatmentEnded / isInactive / tileEditable branching is clean; Edit/Delete/Drilling Protocol are strictly hidden on inactive tiles; 'Historical record — read-only' chip has data-testid=`inactive-history-{idx}`.",
+    "dashboard.tsx L915: quick-link card is guarded by `!isNurse`. Correct for user pick Q5-c+students.",
+    "survival-analytics.tsx L56-60: canAccess opens to student/supervisor; canExport limited to admin/incharge. Matches server-side 403 on export.csv."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_survival_iter348.py (new — 13 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13 pytest)",
+    "frontend": "100% for the parts verifiable end-to-end (home quick-link across 3 roles + survival-review end-treatment + placement-date UI). CaseImplantPlanning inactive-tile is 'code-review-verified' only because the test data has no phase2_details.implants tile that has been survival-reviewed."
+  },
+  "test_credentials": "Abhijit.patil / Admin@123 (server role: implant_incharge — note: credentials doc says administrator, but server responds implant_incharge; both are canExport-eligible), Gaurav.pandey / Student@123 (student, read-only + no export), Paresh.gandhi / Supervisor@123 (supervisor, read-only + no export), nurse.1@dental.edu / Nurse@123 (nurse, blocked from analytics).",
+  "seed_data_creation": "None (no new cases created). One idempotent-ish re-post to CASE_ENDED=6a01da5afaa288be26abd086 which was already status=treatment_ended — the case still ends terminated with implant[0].status='Treatment Ended', decision_maker='Operator', reason='Regression re-post — iter-348 test'. Survival review event count on that case increased by 1.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "iter-348 verified. Cases used: CASE_LIVE=699fc5c2248100e8a0d87265 (existing_implants, phase2_approved, 1 active implant on tooth 16 Alpha Bio ICE 5.0×13.0 — safe for validation-error POSTs which don't mutate). CASE_ENDED=6a01da5afaa288be26abd086 (existing_implants, treatment_ended, per-implant status='Treatment Ended'). Login page selectors: input[placeholder^='Login ID'] and input[placeholder='Password'], then click element with exact text 'Login' — the data-testid login-email-input/login-password-input attributes are rendered by RN-Web but Playwright's [data-testid=...] selector times out because Expo Web renders TextInput as a nested structure; placeholder selectors are reliable. Deep-link goto('/procedures/{id}') can 403 until token hydration — visit /dashboard or /my-cases first. The Dropdown component (survival-review + analytics) opens a modal with options — use get_by_text with exact match; system labels use em-dash '—', not hyphen '-'.",
+  "rca of the issue": "N/A — all iter-348 features implemented correctly per Message 557 user choices."
+}
