@@ -1,5 +1,23 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 353 (Feb 2026) — R{n} → phase2_data Substitution + IOPA Upload on Replacement
+
+User choices: Q1-a required IOPA, Q2-a single file, Q3-a R0 IOPA stays reachable in R0 tile, Q4-a position-specific array replacement.
+
+### Features
+1. **Phase 2 data substitution fix** — the iter-352 resolver only touched `implants[]` but the case-detail Phase 2 readback reads from `phase2_data.*`. Added `_resolve_phase2_data_inline()` wired into GET /procedures/{id} that substitutes per-position:
+   - `phase2_data.prosthetic_component` (mapped from R{n}.procedure_type + prosthetic_component → 'Cover Screw Placed' / 'Healing Abutment Placed' / 'Immediate Loading Done')
+   - `phase2_data.healing_abutment_cuff_height[i]` (cleared when R{n} doesn't need it)
+   - `phase2_data.prosthesis_type[i]` (from R{n}.immediate_loading_prosthesis; cleared when procedure_type isn't Immediate Loading)
+   - `phase2_data.iopa_files[i]`, `radiographs.iopas[i]`, `existing_implants[i].iopa_url` (from R{n}.iopa_url)
+   - `implants[i].iopa_url` (also merged in the main resolver)
+   - R0 snapshot preserved as `phase2_data_original` for reference views.
+2. **IOPA upload in Survival Review Replacement form** — new "IOPA Radiograph *" required field placed directly below Diameter/Length inputs. Uses the Phase-2 `/uploads/media-temp` endpoint via `showUploadPicker` + FormData. Backend now returns HTTP 400 if `replacement.iopa_url` is empty. Preview via `<RadiographThumb/>` after upload. Button turns red-invalid until file is selected.
+
+### Files touched
+- EDIT `/app/backend/server.py` — new `_resolve_phase2_data_inline()` (~L4372) wired into GET /procedures/{id}; added `iopa_url` to `_r1_only` list and to survival-review replacement writer; added 400 gate for missing IOPA.
+- EDIT `/app/frontend/app/procedures/survival-review/[id].tsx` — new iopa_url/iopa_uploading fields, canSubmit gate, payload key, upload handler (`handleReplIopaUpload`), IOPA button + thumbnail UI, styles (iopaBtn/iopaBtnInvalid/iopaBtnT). Imported RadiographThumb + showUploadPicker.
+
 ## Iteration 352 (Feb 2026) — End Treatment Approval Workflow + R0→R{n} Data Substitution
 
 User choices: Q1-a rejection with mandatory comment reverts case, Q2-a case frozen while pending, Q3-a pending queue integration, Q4-a substitute everywhere (Phase 2 readback + Phase 3 pre-fill + Phase 4 + PDFs), Q5-a R0 tile keeps its historical detail.
