@@ -726,9 +726,13 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
         const rec = toothRecs[plan.position];
         // iter-345: derive Active/Inactive from survival review data.
         const surv = (survivalReview?.implants || {})[String(idx)] || {};
-        const isInactive = surv?.status === 'Failed' || surv?.status === 'Replaced';
+        const isTreatmentEnded = surv?.status === 'Treatment Ended';
+        const isInactive = surv?.status === 'Failed' || surv?.status === 'Replaced' || isTreatmentEnded;
+        // iter-348: per-tile edit/delete/drilling protocol gate — historical
+        // (inactive) tiles are read-only regardless of the case-wide `canEdit`.
+        const tileEditable = canEdit && !isInactive;
         return (
-          <View key={`${plan.position}-${idx}`} style={[st.implantCard, isInactive && st.implantCardInactive]} data-testid={`implant-plan-${idx}`}>
+          <View key={`${plan.position}-${idx}`} style={[st.implantCard, isInactive && st.implantCardInactive, isTreatmentEnded && st.implantCardEnded]} data-testid={`implant-plan-${idx}`}>
             <View style={st.implantCardHeader}>
               <View style={st.positionBadge}>
                 <Text style={st.positionText}>{plan.position}</Text>
@@ -743,8 +747,17 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
               <View style={st.implantInfo}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <Text style={[st.implantTitle, isInactive && st.textMuted]} numberOfLines={2}>{plan.brand} - {plan.system}</Text>
-                  <View style={[st.statusChip, isInactive ? st.statusChipInactive : st.statusChipActive]} data-testid={`implant-plan-status-${idx}`} testID={`implant-plan-status-${idx}`}>
-                    <Text style={st.statusChipText}>{isInactive ? 'Inactive' : 'Active'}</Text>
+                  <View
+                    style={[
+                      st.statusChip,
+                      isTreatmentEnded ? st.statusChipEnded : (isInactive ? st.statusChipInactive : st.statusChipActive),
+                    ]}
+                    data-testid={`implant-plan-status-${idx}`}
+                    testID={`implant-plan-status-${idx}`}
+                  >
+                    <Text style={st.statusChipText}>
+                      {isTreatmentEnded ? 'Treatment Ended' : (isInactive ? 'Inactive' : 'Active')}
+                    </Text>
                   </View>
                 </View>
                 <Text style={[st.implantSpecs, isInactive && st.textMuted]}>
@@ -752,9 +765,11 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
                   {rec ? ` | ${rec.region}` : ''}
                 </Text>
                 {isInactive && (
-                  <Text style={st.inactiveNote}>
-                    {surv?.status === 'Replaced' ? 'Failed — replaced' : 'Failed'}
-                    {surv?.reason ? ` · ${surv.reason}` : ''}
+                  <Text style={[st.inactiveNote, isTreatmentEnded && { color: '#B71C1C', fontWeight: '700' }]}>
+                    {isTreatmentEnded
+                      ? `Treatment ended — ${surv?.end_treatment_decision_maker || 'decision'}${surv?.end_treatment_reason ? ` · ${surv.end_treatment_reason}` : ''}`
+                      : (surv?.status === 'Replaced' ? 'Failed — replaced' : 'Failed')}
+                    {!isTreatmentEnded && surv?.reason ? ` · ${surv.reason}` : ''}
                   </Text>
                 )}
               </View>
@@ -777,7 +792,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
                 </View>
               )}
             </View>
-            {canEdit && (
+            {tileEditable && (
               <View style={st.implantActions}>
                 <TouchableOpacity style={st.editBtn} onPress={() => handleEditImplant(idx)} data-testid={`edit-implant-${idx}`}>
                   <Ionicons name="pencil" size={16} color="#1E88E5" />
@@ -799,7 +814,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
                 </TouchableOpacity>
               </View>
             )}
-            {!canEdit && (
+            {!tileEditable && !isInactive && (
               <View style={st.implantActions}>
                 <TouchableOpacity
                   style={st.protocolBtn}
@@ -811,7 +826,15 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
                 </TouchableOpacity>
               </View>
             )}
-            {expandedProtocol === idx && plan.bone_type && (
+            {isInactive && (
+              <View style={st.implantActions}>
+                <View style={st.inactiveHistoryChip} data-testid={`inactive-history-${idx}`}>
+                  <Ionicons name="lock-closed" size={12} color="#78909C" />
+                  <Text style={st.inactiveHistoryText}>Historical record — read-only</Text>
+                </View>
+              </View>
+            )}
+            {expandedProtocol === idx && !isInactive && plan.bone_type && (
               <View style={st.inlineProtocol}>
                 <View style={st.inlineProtocolHeader}>
                   <Ionicons name="construct" size={16} color="#1565C0" />
@@ -858,7 +881,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
                 </View>
               </View>
             )}
-            {expandedProtocol === idx && !plan.bone_type && (
+            {expandedProtocol === idx && !isInactive && !plan.bone_type && (
               <View style={st.inlineProtocol}>
                 <Text style={{ fontSize: 12, color: '#C62828', textAlign: 'center', padding: 8, fontWeight: '600' }}>
                   Bone type is not set for this implant.
@@ -2275,7 +2298,15 @@ const st = StyleSheet.create({
   statusChip: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 },
   statusChipActive: { backgroundColor: '#2E7D32' },
   statusChipInactive: { backgroundColor: '#90A4AE' },
+  statusChipEnded: { backgroundColor: '#C62828' },
   statusChipText: { color: '#FFF', fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.3 },
+  implantCardEnded: { backgroundColor: '#FFEBEE', opacity: 0.85, borderLeftWidth: 3, borderLeftColor: '#C62828' },
+  inactiveHistoryChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999,
+    borderWidth: 1, borderColor: '#CFD8DC', backgroundColor: '#ECEFF1',
+  },
+  inactiveHistoryText: { fontSize: 11, color: '#78909C', fontWeight: '700', letterSpacing: 0.2 },
   implantCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   positionBadge: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#E3F2FD', alignItems: 'center', justifyContent: 'center' },
   positionText: { fontSize: 14, fontWeight: '700', color: '#1565C0' },

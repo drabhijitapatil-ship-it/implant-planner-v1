@@ -908,6 +908,34 @@ export default function DashboardScreen() {
           <StudentDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
         )}
 
+        {/* iter-348: Implant Survival Analytics quick-link — visible to
+            implant_incharge / administrator / supervisor / student (nurse
+            excluded — clinical outcomes are outside their scope). Students
+            see their own cases only (read-only, no export). */}
+        {!isNurse && (
+          <View style={s.section} data-testid="home-survival-analytics">
+            <TouchableOpacity
+              style={s.analyticsCard}
+              onPress={() => router.push('/admin/survival-analytics')}
+              data-testid="home-survival-analytics-btn"
+              testID="home-survival-analytics-btn"
+            >
+              <View style={s.analyticsIcon}>
+                <Ionicons name="analytics-outline" size={22} color="#0D47A1" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.analyticsTitle}>Implant Survival Analytics</Text>
+                <Text style={s.analyticsSub}>
+                  {isStudent
+                    ? 'View survival outcomes across your cases'
+                    : 'Institutional survival, failure & procedure-type outcomes'}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#546E7A" />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* iter-280: Smart Clinical Tip banner — hidden for nurses (they
             don't drive the surgical workflow, so daily clinical tips add noise). */}
         {!isNurse && <SmartTipBanner />}
@@ -1048,4 +1076,18 @@ const s = StyleSheet.create({
   quickActions: { flexDirection: 'row', gap: 10 },
   quickBtn: { flex: 1, backgroundColor: '#FFF', borderRadius: 14, padding: 14, alignItems: 'center', gap: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
   quickBtnText: { fontSize: 11, fontWeight: '600', color: '#37474F' },
+
+  // iter-348: Survival Analytics home quick-link (all roles except nurse)
+  analyticsCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#FFF', borderRadius: 14, padding: 14,
+    borderLeftWidth: 4, borderLeftColor: '#0D47A1',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
+  },
+  analyticsIcon: {
+    width: 44, height: 44, borderRadius: 12, backgroundColor: '#E3F2FD',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  analyticsTitle: { fontSize: 14, fontWeight: '800', color: '#0D47A1', letterSpacing: 0.2 },
+  analyticsSub: { fontSize: 11, color: '#546E7A', marginTop: 3 },
 });

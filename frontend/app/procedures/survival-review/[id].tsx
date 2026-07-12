@@ -60,6 +60,11 @@ type FailureEntry = {
   site_changed: boolean;
   new_tooth_number: string | null;
   replaced: boolean;
+  // iter-348: End Implant Treatment (abandons implant therapy on this site
+  // AND terminates the case per user pick Q1-b).
+  end_treatment: boolean;
+  end_treatment_decision_maker: '' | 'Patient' | 'Operator';
+  end_treatment_reason: string;
   replacement: {
     system: string;
     system_is_other: boolean;
@@ -194,6 +199,9 @@ export default function SurvivalReview() {
           site_changed: false,
           new_tooth_number: null,
           replaced: false,
+          end_treatment: false,
+          end_treatment_decision_maker: '',
+          end_treatment_reason: '',
           replacement: {
             system: '', system_is_other: false, system_other_text: '',
             diameter: '', length: '',
@@ -251,6 +259,11 @@ export default function SurvivalReview() {
         if (!f.new_tooth_number) return false;
         if (String(f.new_tooth_number) === String(f.tooth)) return false;
       }
+      // iter-348: End Implant Treatment requires decision maker + reason.
+      if (f.end_treatment) {
+        if (!f.end_treatment_decision_maker) return false;
+        if (!f.end_treatment_reason.trim()) return false;
+      }
       if (f.replaced) {
         const r = f.replacement;
         // System required
@@ -258,6 +271,8 @@ export default function SurvivalReview() {
         if (r.system_is_other && !r.system_other_text.trim()) return false;
         // Diameter / length required
         if (!r.diameter || !r.length) return false;
+        // iter-348: placement date is compulsory for replacements.
+        if (!r.placement_date) return false;
         // Procedure type required + branch validation
         if (!r.procedure_type) return false;
         if (r.procedure_type === 'Two Stage') {
@@ -292,8 +307,12 @@ export default function SurvivalReview() {
             removed: f.removed,
             site_changed: f.site_changed,
             new_tooth_number: f.site_changed ? f.new_tooth_number : null,
-            replaced: f.replaced,
-            replacement: f.replaced ? {
+            // iter-348: End Implant Treatment overrides replacement.
+            end_treatment: f.end_treatment,
+            end_treatment_decision_maker: f.end_treatment ? f.end_treatment_decision_maker : null,
+            end_treatment_reason: f.end_treatment ? f.end_treatment_reason.trim() : null,
+            replaced: f.end_treatment ? false : f.replaced,
+            replacement: (f.end_treatment || !f.replaced) ? null : {
               system: finalSystem,
               diameter: Number(r.diameter),
               length: Number(r.length),
@@ -315,7 +334,7 @@ export default function SurvivalReview() {
                 : (r.procedure_type === 'Two Stage'
                     ? `Two Stage - ${r.prosthetic_component || ''}`.trim()
                     : (r.procedure_type === 'Immediate Loading' ? 'Immediate Loading' : null)),
-            } : null,
+            },
           };
         });
       }
@@ -465,14 +484,59 @@ export default function SurvivalReview() {
                     </View>
                   )}
 
-                  {/* Replaced Yes/No */}
+                  {/* iter-348: End Implant Treatment — abandons implant therapy
+                      for this site (and the whole case). Requires decision
+                      maker + reason. Overrides "Was it replaced?" below. */}
+                  <View style={s.endTreatmentWrap}>
+                    <TouchableOpacity
+                      style={[s.endTreatmentBtn, f.end_treatment && s.endTreatmentBtnOn]}
+                      onPress={() => setField(i, 'end_treatment', !f.end_treatment)}
+                      data-testid={`imp-${i}-end-treatment-toggle`}
+                      testID={`imp-${i}-end-treatment-toggle`}
+                    >
+                      <Ionicons name="close-circle" size={16} color={f.end_treatment ? '#FFF' : '#C62828'} />
+                      <Text style={[s.endTreatmentBtnT, f.end_treatment && { color: '#FFF' }]}>
+                        {f.end_treatment ? 'Ending implant treatment' : 'End Implant Treatment'}
+                      </Text>
+                    </TouchableOpacity>
+                    {f.end_treatment && (
+                      <View style={s.endTreatmentForm}>
+                        <Text style={s.endTreatmentHelp}>
+                          Choosing to end implant treatment will TERMINATE this entire case. No further replacements or phases can be recorded for this patient.
+                        </Text>
+                        <Text style={s.lbl}>Whose decision?</Text>
+                        <Dropdown
+                          value={f.end_treatment_decision_maker || ''}
+                          options={['Patient', 'Operator']}
+                          placeholder="Select decision maker"
+                          onChange={(v) => setField(i, 'end_treatment_decision_maker', v as 'Patient' | 'Operator')}
+                          testID={`imp-${i}-end-treatment-decision`}
+                        />
+                        <Text style={[s.lbl, { marginTop: 8 }]}>Reason for ending treatment</Text>
+                        <TextInput
+                          style={[s.input, { minHeight: 72, textAlignVertical: 'top' }]}
+                          multiline
+                          numberOfLines={4}
+                          placeholder="Describe the clinical / patient-preference rationale"
+                          value={f.end_treatment_reason}
+                          onChangeText={v => setField(i, 'end_treatment_reason', v)}
+                          data-testid={`imp-${i}-end-treatment-reason`}
+                          testID={`imp-${i}-end-treatment-reason`}
+                        />
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Replaced Yes/No — hidden when End Implant Treatment is active. */}
+                  {!f.end_treatment && (
                   <View style={{flexDirection:'row',alignItems:'center',gap:12}}>
                     <Text style={s.lbl}>Was it replaced?</Text>
                     <TouchableOpacity style={[s.pillTiny, f.replaced && s.pillOn]} onPress={() => setField(i, 'replaced', true)} data-testid={`imp-${i}-replaced-yes`} testID={`imp-${i}-replaced-yes`}><Text style={[s.pillTT, f.replaced && s.pillTOn]}>Yes</Text></TouchableOpacity>
                     <TouchableOpacity style={[s.pillTiny, !f.replaced && s.pillOn]} onPress={() => setField(i, 'replaced', false)} data-testid={`imp-${i}-replaced-no`} testID={`imp-${i}-replaced-no`}><Text style={[s.pillTT, !f.replaced && s.pillTOn]}>No</Text></TouchableOpacity>
                   </View>
+                  )}
 
-                  {f.replaced && (
+                  {f.replaced && !f.end_treatment && (
                     <View style={s.replBox}>
                       <Text style={[s.lbl,{fontWeight:'700',color:'#2E7D32'}]}>Replacement implant (revision)</Text>
 
@@ -539,6 +603,8 @@ export default function SurvivalReview() {
 
                       <TextInput style={s.input} placeholder="Lot # (optional)" value={f.replacement.lot_number} onChangeText={v => setReplField(i, { lot_number: v })} data-testid={`imp-${i}-repl-lot`} testID={`imp-${i}-repl-lot`} />
                       <TextInput style={s.input} placeholder="ISQ (optional)" keyboardType="decimal-pad" value={f.replacement.isq} onChangeText={v => setReplField(i, { isq: v })} data-testid={`imp-${i}-repl-isq`} testID={`imp-${i}-repl-isq`} />
+                      {/* iter-348: Placement date is now compulsory (calendar picker). */}
+                      <Text style={[s.lbl, { marginTop: 4, color: '#C62828' }]}>Placement date *</Text>
                       {/* iter-347b: Placement date — RN Web silently drops
                           `type=date` when passed via <TextInput>, so on web
                           we render a raw native <input type=date> element
@@ -713,4 +779,18 @@ const s = StyleSheet.create({
   mItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: '#F0F2F5' },
   mItemOn: { backgroundColor: '#E3F2FD', borderRadius: 8 },
   mItemT: { fontSize: 13, color: '#1e2a44' },
+  // iter-348: End Implant Treatment styles
+  endTreatmentWrap: { marginTop: 4 },
+  endTreatmentBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    borderWidth: 1.5, borderColor: '#C62828', borderRadius: 10,
+    paddingVertical: 12, backgroundColor: '#FFF',
+  },
+  endTreatmentBtnOn: { backgroundColor: '#C62828', borderColor: '#C62828' },
+  endTreatmentBtnT: { fontSize: 13, fontWeight: '800', color: '#C62828', letterSpacing: 0.3 },
+  endTreatmentForm: {
+    marginTop: 10, padding: 12, backgroundColor: '#FFEBEE', borderRadius: 10,
+    borderWidth: 1, borderColor: '#EF9A9A', gap: 8,
+  },
+  endTreatmentHelp: { fontSize: 12, color: '#B71C1C', fontStyle: 'italic', lineHeight: 17 },
 });
