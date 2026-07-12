@@ -731,7 +731,26 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
         // iter-348: per-tile edit/delete/drilling protocol gate — historical
         // (inactive) tiles are read-only regardless of the case-wide `canEdit`.
         const tileEditable = canEdit && !isInactive;
+        // iter-350: build the full revision chain per site so R0 → R1 → R2 …
+        // are all rendered grouped together, oldest-first (user pick Q1-a).
+        const chainArr: any[] = Array.isArray(surv?.replacement?.chain) ? surv.replacement.chain : [];
+        const hasActiveReplacement = surv?.status === 'Replaced' && surv?.replacement;
+        // Total revisions = R0 + chain items + current active (if any)
+        const siteRevisionCount = 1 + chainArr.length + (hasActiveReplacement ? 1 : 0);
+        const showRevisionChips = siteRevisionCount > 1;
         return (
+          <React.Fragment key={`site-${plan.position}-${idx}`}>
+            {/* iter-350: group divider — only rendered when the site has more
+                than one revision (Q1-a: group per site, oldest-first). */}
+            {showRevisionChips && (
+              <View style={st.siteGroupHeader} data-testid={`site-group-${plan.position}`}>
+                <View style={st.siteGroupDot} />
+                <Text style={st.siteGroupText}>
+                  Site #{plan.position} · {siteRevisionCount} revisions
+                </Text>
+                <View style={st.siteGroupLine} />
+              </View>
+            )}
           <View key={`${plan.position}-${idx}`} style={[st.implantCard, isInactive && st.implantCardInactive, isTreatmentEnded && st.implantCardEnded]} data-testid={`implant-plan-${idx}`}>
             <View style={st.implantCardHeader}>
               <View style={st.positionBadge}>
@@ -747,6 +766,12 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
               <View style={st.implantInfo}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <Text style={[st.implantTitle, isInactive && st.textMuted]} numberOfLines={2}>{plan.brand} - {plan.system}</Text>
+                  {/* iter-350: revision label (R0) — only when the site has multiple revisions (Q2-a). */}
+                  {showRevisionChips && (
+                    <View style={st.revChip} data-testid={`implant-plan-rev-${idx}`}>
+                      <Text style={st.revChipText}>R0</Text>
+                    </View>
+                  )}
                   <View
                     style={[
                       st.statusChip,
@@ -892,58 +917,116 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
               </View>
             )}
           </View>
+
+          {/* iter-350: intermediate FAILED replacement tiles (R1 … R(n-1)) —
+              all past revisions accumulated in `surv.replacement.chain[]`. */}
+          {chainArr.map((c: any, ci: number) => {
+            const revNum = c.revision_number || (ci + 1);
+            const brand = c.brand || (c.system || '').split(' — ')[0] || c.system || 'System';
+            const systemName = c.system_name || (c.system || '').split(' — ')[1] || c.system || '';
+            const tooth = c.tooth_number || plan.position;
+            return (
+              <View
+                key={`chain-${idx}-${revNum}`}
+                style={[st.implantCard, st.implantCardInactive]}
+                data-testid={`implant-revision-${idx}-r${revNum}`}
+              >
+                <View style={st.implantCardHeader}>
+                  <View style={[st.positionBadge, { backgroundColor: '#90A4AE' }]}>
+                    <Text style={st.positionText}>{tooth}</Text>
+                  </View>
+                  <ColorStripe brand={brand} system={systemName} diameter={c.diameter} active={false} testID={`implant-revision-stripe-${idx}-r${revNum}`} />
+                  <View style={st.implantInfo}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <Text style={[st.implantTitle, st.textMuted]} numberOfLines={2}>{brand}{systemName ? ` - ${systemName}` : ''}</Text>
+                      <View style={st.revChip}><Text style={st.revChipText}>R{revNum}</Text></View>
+                      <View style={[st.statusChip, st.statusChipInactive]}>
+                        <Text style={st.statusChipText}>Inactive</Text>
+                      </View>
+                    </View>
+                    <Text style={[st.implantSpecs, st.textMuted]}>
+                      D: {c.diameter}mm | L: {c.length}mm
+                    </Text>
+                    <Text style={st.inactiveNote}>
+                      Failed — replaced{c.failure_reason ? ` · ${c.failure_reason}` : ''}
+                    </Text>
+                  </View>
+                </View>
+                {(c.placement_date || c.insertion_torque_ncm != null || c.isq != null || c.lot_number) && (
+                  <View style={st.implantDetails}>
+                    {c.insertion_torque_ncm != null && (
+                      <View style={st.torqueRow}><Ionicons name="speedometer" size={14} color="#FF6D00" /><Text style={st.torqueText}>Torque: <Text style={st.torqueValue}>{c.insertion_torque_ncm} Ncm</Text></Text></View>
+                    )}
+                    {c.isq != null && <Text style={st.detailText}>ISQ: {c.isq}</Text>}
+                    {c.lot_number && <Text style={st.detailText}>Lot: {c.lot_number}</Text>}
+                    {c.placement_date && <Text style={st.detailText}>Placed on: {c.placement_date}</Text>}
+                    {c.failure_date && <Text style={st.detailText}>Failed on: {String(c.failure_date).slice(0,10)}</Text>}
+                  </View>
+                )}
+                <View style={st.implantActions}>
+                  <View style={st.inactiveHistoryChip}>
+                    <Ionicons name="lock-closed" size={12} color="#78909C" />
+                    <Text style={st.inactiveHistoryText}>Historical record — read-only</Text>
+                  </View>
+                </View>
+              </View>
+            );
+          })}
+
+          {/* iter-350: current ACTIVE replacement tile (R(n)) — only when the
+              latest revision has not itself been failed/ended. */}
+          {hasActiveReplacement && (() => {
+            const repl = surv.replacement;
+            const revNum = repl.revision_number || (chainArr.length + 1);
+            const brand = repl.brand || (repl.system || '').split(' — ')[0] || repl.system || 'System';
+            const systemName = repl.system_name || (repl.system || '').split(' — ')[1] || repl.system || '';
+            const tooth = repl.tooth_number || plan.position;
+            return (
+              <View
+                key={`active-repl-${idx}`}
+                style={st.implantCard}
+                data-testid={`implant-revision-active-${idx}`}
+              >
+                <View style={st.implantCardHeader}>
+                  <View style={[st.positionBadge, { backgroundColor: '#2E7D32' }]}>
+                    <Text style={st.positionText}>{tooth}</Text>
+                  </View>
+                  <ColorStripe brand={brand} system={systemName} diameter={repl.diameter} active testID={`implant-revision-active-stripe-${idx}`} />
+                  <View style={st.implantInfo}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <Text style={st.implantTitle} numberOfLines={2}>{brand}{systemName ? ` - ${systemName}` : ''}</Text>
+                      <View style={st.revChip}><Text style={st.revChipText}>R{revNum}</Text></View>
+                      <View style={[st.statusChip, st.statusChipActive]}>
+                        <Text style={st.statusChipText}>Active</Text>
+                      </View>
+                    </View>
+                    <Text style={st.implantSpecs}>D: {repl.diameter}mm | L: {repl.length}mm</Text>
+                    <Text style={st.revisionNote}>Current implant · replaced #{plan.position}</Text>
+                  </View>
+                </View>
+                <View style={st.implantDetails}>
+                  {repl.insertion_torque_ncm != null && (
+                    <View style={st.torqueRow}><Ionicons name="speedometer" size={14} color="#FF6D00" /><Text style={st.torqueText}>Torque: <Text style={st.torqueValue}>{repl.insertion_torque_ncm} Ncm</Text></Text></View>
+                  )}
+                  {repl.isq != null && <Text style={st.detailText}>ISQ: {repl.isq}</Text>}
+                  {repl.procedure_type && <Text style={st.detailText}>Procedure: {repl.procedure_type}
+                    {repl.prosthetic_component ? ` · ${repl.prosthetic_component}` : ''}
+                    {repl.healing_abutment_mm != null ? ` (${repl.healing_abutment_mm}mm)` : ''}
+                    {repl.immediate_loading_prosthesis ? ` · ${repl.immediate_loading_prosthesis}` : ''}
+                  </Text>}
+                  {repl.lot_number && <Text style={st.detailText}>Lot: {repl.lot_number}</Text>}
+                  {repl.placement_date && <Text style={st.detailText}>Placed on: {repl.placement_date}</Text>}
+                </View>
+              </View>
+            );
+          })()}
+          </React.Fragment>
         );
       })}
 
-      {/* iter-345: Revision (replacement) implant cards from Phase 2 survival
-          review — appended at the bottom of the Implant Planning list.
-          Each card mirrors the default planning card layout with an Active
-          badge and links back to the failed original by tooth position. */}
-      {survivalReview?.implants ? Object.entries(survivalReview.implants).map(([keyStr, entry]: [string, any]) => {
-        const repl = entry?.replacement;
-        if (!repl) return null;
-        const originalIdx = Number(keyStr);
-        const originalPlan = plans[originalIdx];
-        const tooth = repl.tooth_number || originalPlan?.position || entry?.new_tooth_number || '-';
-        const brand = repl.brand || (repl.system || '').split(' — ')[0] || repl.system || 'System';
-        const systemName = repl.system_name || (repl.system || '').split(' — ')[1] || repl.system || '';
-        return (
-          <View key={`revision-${keyStr}`} style={st.implantCard} data-testid={`implant-revision-${keyStr}`}>
-            <View style={st.implantCardHeader}>
-              <View style={[st.positionBadge, { backgroundColor: '#2E7D32' }]}>
-                <Text style={st.positionText}>{tooth}</Text>
-              </View>
-              <ColorStripe brand={brand} system={systemName} diameter={repl.diameter} active testID={`implant-revision-stripe-${keyStr}`} />
-              <View style={st.implantInfo}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  <Text style={st.implantTitle} numberOfLines={2}>{brand} {systemName ? `- ${systemName}` : ''}</Text>
-                  <View style={[st.statusChip, st.statusChipActive]}>
-                    <Text style={st.statusChipText}>Active</Text>
-                  </View>
-                </View>
-                <Text style={st.implantSpecs}>D: {repl.diameter}mm | L: {repl.length}mm</Text>
-                <Text style={st.revisionNote}>Revision R{repl.revision_number || 1} · replaced #{originalPlan?.position || tooth}</Text>
-              </View>
-            </View>
-            <View style={st.implantDetails}>
-              {repl.insertion_torque_ncm != null && (
-                <View style={st.torqueRow}>
-                  <Ionicons name="speedometer" size={14} color="#FF6D00" />
-                  <Text style={st.torqueText}>Torque: <Text style={st.torqueValue}>{repl.insertion_torque_ncm} Ncm</Text></Text>
-                </View>
-              )}
-              {repl.isq != null && <Text style={st.detailText}>ISQ: {repl.isq}</Text>}
-              {repl.procedure_type && <Text style={st.detailText}>Procedure: {repl.procedure_type}
-                {repl.prosthetic_component ? ` · ${repl.prosthetic_component}` : ''}
-                {repl.healing_abutment_mm != null ? ` (${repl.healing_abutment_mm}mm)` : ''}
-                {repl.immediate_loading_prosthesis ? ` · ${repl.immediate_loading_prosthesis}` : ''}
-              </Text>}
-              {repl.lot_number && <Text style={st.detailText}>Lot: {repl.lot_number}</Text>}
-              {repl.placement_date && <Text style={st.detailText}>Placed on: {repl.placement_date}</Text>}
-            </View>
-          </View>
-        );
-      }) : null}
+      {/* iter-350: Revision tiles (chain + current active replacement) are
+          now rendered inline within each site's group above. The prior
+          separate render block was removed. */}
 
       {plans.length === 0 && (
         <View style={st.emptyState}>
@@ -2307,6 +2390,25 @@ const st = StyleSheet.create({
     borderWidth: 1, borderColor: '#CFD8DC', backgroundColor: '#ECEFF1',
   },
   inactiveHistoryText: { fontSize: 11, color: '#78909C', fontWeight: '700', letterSpacing: 0.2 },
+  // iter-350: Site group header + revision chip (Q1-a + Q2-a)
+  siteGroupHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    marginTop: 14, marginBottom: 2, paddingHorizontal: 4,
+  },
+  siteGroupDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#0D47A1' },
+  siteGroupText: {
+    fontSize: 11, fontWeight: '800', color: '#0D47A1',
+    letterSpacing: 0.6, textTransform: 'uppercase',
+  },
+  siteGroupLine: { flex: 1, height: 1, backgroundColor: '#CFD8DC' },
+  revChip: {
+    paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6,
+    backgroundColor: '#E3F2FD', borderWidth: 1, borderColor: '#90CAF9',
+  },
+  revChipText: {
+    fontSize: 10, fontWeight: '800', color: '#0D47A1',
+    letterSpacing: 0.4,
+  },
   implantCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   positionBadge: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#E3F2FD', alignItems: 'center', justifyContent: 'center' },
   positionText: { fontSize: 14, fontWeight: '700', color: '#1565C0' },

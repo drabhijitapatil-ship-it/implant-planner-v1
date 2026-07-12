@@ -1,0 +1,53 @@
+{
+  "summary": "iter-350 regression on the 3 Implant Survival Review refinements (global bottom End Implant Treatment button + modal, PlacementDatePicker matching Phase-1 calendar UX, multi-round revision chain rendering in Implant Planning). Backend: 5/5 pytest tests pass — end_treatment still validates decision_maker+reason, replacement still enforces placement_date (400 without / 200 with), and R0->R1->R2 chain build-up works (posted 2 replacements on 699fc5c2 and confirmed repl.revision_number=2, repl.chain length=1 with the intermediate 'Straumann BLX' Failed entry). Frontend verified: (a) bottom 'End Implant Treatment' button (data-testid=survival-end-treatment-btn) is BELOW both 'Update & go back' (y=221) and 'Continue to Phase 3' (y=205) at y=268, centered on the viewport (center X=700 for a 1400 wide screen), with solid red bg (rgb(198,40,40)) and white text; (b) Tapping it opens the confirmation modal that renders all 4 required test IDs — end-treatment-reason (default 'Peri-implantitis'), end-treatment-decision (Patient/Operator options), end-treatment-reason-text textarea, and end-treatment-confirm (red bg rgb(198,40,40)). PlacementDatePicker + chain-render + case-detail termination banner end-to-end UI could NOT be exercised in Playwright due to the KNOWN iter-299 deep-link 403 issue (token hydration on direct route) — code review confirms all iter-350 refactor requirements are met (see critical_code_review_comments). Direct backend REST calls confirmed the underlying data is correct (chain persisted, R2 Nobel Active as active-implants entry, R1 Straumann BLX in archived).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Deep-link navigation to /procedures/{id} and /procedures/survival-review/{id} for AUTOMATED tests",
+        "issue": "First navigation after login sometimes hits 403 on the initial /procedures/{id} and /procedures/{id}/active-implants calls because the axios auth token has not yet been hydrated from AsyncStorage. Same issue was reported in iter-298 and iter-299 (already listed as OPTIONAL/LOW). Users clicking through the app UI never see it because the token is already in memory by the time they navigate — but Playwright deep-link tests do. This blocks in-browser QA of the calendar picker + chain-render tiles for iter-350.",
+        "affected_selectors": ["[data-testid='imp-0-repl-date']", "[data-testid='site-group-16']", "[data-testid='implant-revision-0-r1']", "[data-testid='implant-revision-active-0']", "[data-testid='termination-banner']"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_survival_iter350.py",
+    "/app/test_reports/pytest/iter350_results.xml"
+  ],
+  "action_items": [
+    "OPTIONAL (carried forward from iter-298/299): add a global axios interceptor that awaits token hydration before firing the first /procedures/{id} request. Would unblock deep-link automated QA for calendar picker + chain rendering + termination banner.",
+    "OPTIONAL: seed a case with position 24 (upper right first molar) that has R0->R1->R2 so the exact 'Site #24 · 3 revisions' string mentioned in the review request is visible; the current chain seeded on 699fc5c2 uses tooth 16 (same shape, different position)."
+  ],
+  "critical_code_review_comments": [
+    "PlacementDatePicker.tsx: correctly built on react-native-calendars; renders a TouchableOpacity trigger with calendar icon + human-readable date label + chevron; Modal opens on tap with react-native-calendars grid; invalid=true applies red border (triggerInvalid). Placeholder 'Tap to select placement date' is passed from survival-review, so trigger shows it before any date is picked — matches Phase-1 UX. onDayPress sets date + closes modal — good UX.",
+    "survival-review/[id].tsx L611-618: PlacementDatePicker wired with maxDate=today, invalid={!f.replacement.placement_date}, testID=imp-{i}-repl-date. Legacy TextInput date fallback has been removed.",
+    "survival-review/[id].tsx L715-732: bottom End Implant Treatment global button is styled with solid red (s.endTreatmentGlobalBtn), white text, chevron/close-circle icon, centered via endTreatmentGlobalWrap alignItems:'center'; a red-tinted helper caption 'Terminates the entire case.' clarifies scope.",
+    "survival-review/[id].tsx L736-801: End Treatment Modal captures failure_reason (Dropdown, default 'Peri-implantitis'), decision_maker (Dropdown Patient/Operator), and end_reason (multiline TextInput). Confirm button uses same red style with 'Confirm & End Treatment' label + spinner while submitting.",
+    "server.py L4370-4374: replacement path still enforces placement_date; validation returns HTTP 400 with the string 'Replacement requires a placement date' — matches the FE canSubmit gate.",
+    "server.py L4375-4420: R0->R1->R2 chain build-up is correct — when a new replacement lands on an implant that ALREADY has a replacement, the prior replacement is moved into repl.chain[] with status='Failed' + failure_reason + failure_date; revision_number auto-increments. Confirmed via backend pytest that repl2.chain length=1 and chain[0].status='Failed' after 2 replacements.",
+    "server.py L4341-4349: end_treatment validation still enforces decision_maker + reason. Confirmed via backend pytest (test_end_treatment_missing_decision_maker + test_end_treatment_missing_reason both return 400 with the right detail).",
+    "CaseImplantPlanning.tsx L734-753: group header only renders when siteRevisionCount > 1 (i.e., hidden for a plain R0 that never failed). R0 chip on the plan tile is also gated by showRevisionChips — meets the 'sites without any revisions must NOT show group header and R0 chip' spec.",
+    "CaseImplantPlanning.tsx L921-974: chain items (R1..Rn-1) render as inactive tiles with 'Historical record — read-only' badge, R{n} chip, 'Inactive' status chip — matches spec.",
+    "CaseImplantPlanning.tsx L976-1005: current active replacement renders with R{n} chip, green 'Active' status chip, testID=implant-revision-active-{idx} — matches spec.",
+    "Positional check verified in-browser: End Treatment button center X = 700 on a 1400-wide viewport (perfectly centered); y=268 sits below Update (y=221) and Continue (y=205) buttons."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_survival_iter350.py (new — 5 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (5/5 pytest)",
+    "frontend": "In-browser end-to-end verified for: End Treatment global button (position, styling, centering) + End Treatment confirmation modal (all 4 test IDs, red styling). Not-in-browser (blocked by iter-299 deep-link 403): PlacementDatePicker calendar-modal interaction, Chain rendering site-group-16/R0/R1/R2 chips, case-detail termination banner. All three are code-review-verified because the FE source clearly matches the spec, and the backend chain state was confirmed correct via direct REST calls."
+  },
+  "test_credentials": "Abhijit.patil / Admin@123 (implant_incharge). Login endpoint POST /api/auth/login body {\"identifier\":\"Abhijit.patil\",\"password\":\"Admin@123\"} returns access_token.",
+  "seed_data_creation": "699fc5c2248100e8a0d87265 now has a 2-round revision chain on implant_idx=0 tooth 16: R0 Alpha Bio ICE (original, now marked Replaced), R1 Straumann BLX 4.0x10.0 placed 2026-01-05 (now in repl.chain as Failed with reason 'Mobility'), R2 Nobel Active 4.3x11.5 placed 2026-02-08 (currently Active). Case status remains phase2_approved so a subsequent tester CAN drive FE workflows on it. Case seed id also written to /app/test_reports/iter350_seed_case_id.txt.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "iter-350 backend regression is a 5-test pytest module at /app/backend/tests/test_survival_iter350.py — run it to verify no regressions. Chain has already been seeded on 699fc5c2 (tooth 16, R0->R1->R2). To verify Implant Planning chain rendering (site-group-16 + R0/R1/R2 chips + Historical record — read-only) in-browser, use a manual browser session (NOT Playwright deep-link) — login as Abhijit.patil, navigate via UI to Case 699fc5c2 and scroll to the Implant Planning card. The end-to-end PlacementDatePicker calendar interaction ALSO needs manual verification because Playwright direct-nav hits 403 on /active-implants. The termination banner on /procedures/6a01da5afaa288be26abd086 has the same manual-verification requirement. If you want to unblock deep-link Playwright tests, install a global axios interceptor that awaits AsyncStorage token hydration before firing the first /procedures/{id} request.",
+  "rca of the issue": "N/A — no iter-350 regression found. The one workflow item that could not be verified in Playwright (PlacementDatePicker + chain-render + termination-banner) is blocked by a pre-existing environment quirk (deep-link 403 due to token hydration timing) already documented in iter-298/299. Code + backend data are correct."
+}

@@ -28,6 +28,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import PlacementDatePicker from '../../../components/PlacementDatePicker';
 import api from '../../../utils/api';
 import FDIChart from '../../../components/FDIChart';
 import {
@@ -145,6 +146,14 @@ export default function SurvivalReview() {
   const [catalog, setCatalog] = useState<CatalogSystem[]>([]);
   const [allSurvived, setAllSurvived] = useState<'yes' | 'no' | null>(null);
   const [failures, setFailures] = useState<Record<number, FailureEntry>>({});
+  // iter-350: Global End Implant Treatment modal state (Q1-b: entire case).
+  const [endModal, setEndModal] = useState<{
+    open: boolean;
+    reason: string;
+    decision_maker: '' | 'Patient' | 'Operator';
+    end_reason: string;
+    submitting: boolean;
+  }>({ open: false, reason: 'Peri-implantitis', decision_maker: '', end_reason: '', submitting: false });
 
   const [survivalReviewState, setSurvivalReviewState] = useState<any | null>(null);
 
@@ -259,11 +268,6 @@ export default function SurvivalReview() {
         if (!f.new_tooth_number) return false;
         if (String(f.new_tooth_number) === String(f.tooth)) return false;
       }
-      // iter-348: End Implant Treatment requires decision maker + reason.
-      if (f.end_treatment) {
-        if (!f.end_treatment_decision_maker) return false;
-        if (!f.end_treatment_reason.trim()) return false;
-      }
       if (f.replaced) {
         const r = f.replacement;
         // System required
@@ -307,12 +311,8 @@ export default function SurvivalReview() {
             removed: f.removed,
             site_changed: f.site_changed,
             new_tooth_number: f.site_changed ? f.new_tooth_number : null,
-            // iter-348: End Implant Treatment overrides replacement.
-            end_treatment: f.end_treatment,
-            end_treatment_decision_maker: f.end_treatment ? f.end_treatment_decision_maker : null,
-            end_treatment_reason: f.end_treatment ? f.end_treatment_reason.trim() : null,
-            replaced: f.end_treatment ? false : f.replaced,
-            replacement: (f.end_treatment || !f.replaced) ? null : {
+            replaced: f.replaced,
+            replacement: f.replaced ? {
               system: finalSystem,
               diameter: Number(r.diameter),
               length: Number(r.length),
@@ -334,7 +334,7 @@ export default function SurvivalReview() {
                 : (r.procedure_type === 'Two Stage'
                     ? `Two Stage - ${r.prosthetic_component || ''}`.trim()
                     : (r.procedure_type === 'Immediate Loading' ? 'Immediate Loading' : null)),
-            },
+            } : null,
           };
         });
       }
@@ -347,6 +347,47 @@ export default function SurvivalReview() {
     } catch (e: any) {
       Alert.alert('Save failed', e?.response?.data?.detail || 'Please try again');
     } finally { setSaving(false); }
+  };
+
+  // iter-350: Global "End Implant Treatment" — Q1-b terminates the entire case.
+  // Called from the bottom red button + modal. Synthesizes end_treatment=true
+  // failures for every implant on the case so the backend flips
+  // procedure.status → treatment_ended in one shot.
+  const handleEndTreatment = async () => {
+    if (endModal.submitting) return;
+    if (!endModal.reason) return Alert.alert('Missing field', 'Please pick a failure reason.');
+    if (endModal.decision_maker !== 'Patient' && endModal.decision_maker !== 'Operator') {
+      return Alert.alert('Missing field', 'Please pick who decided to end treatment.');
+    }
+    if (!endModal.end_reason.trim()) return Alert.alert('Missing field', 'Please describe the rationale for ending treatment.');
+    setEndModal(m => ({ ...m, submitting: true }));
+    try {
+      const now = new Date().toISOString();
+      const impls = implants.length > 0 ? implants : [{ tooth_number: null, tooth: null }];
+      const body: any = {
+        all_survived: false,
+        failures: impls.map((imp: any, i: number) => ({
+          implant_idx: i,
+          tooth: imp.tooth_number || imp.tooth || null,
+          reason: endModal.reason,
+          removed: true,
+          site_changed: false,
+          new_tooth_number: null,
+          replaced: false,
+          end_treatment: true,
+          end_treatment_decision_maker: endModal.decision_maker,
+          end_treatment_reason: endModal.end_reason.trim(),
+          failure_date: now,
+          replacement: null,
+        })),
+      };
+      await api.post(`/procedures/${id}/survival-review`, body);
+      setEndModal({ open: false, reason: 'Peri-implantitis', decision_maker: '', end_reason: '', submitting: false });
+      router.replace(`/procedures/${id}`);
+    } catch (e: any) {
+      Alert.alert('End treatment failed', e?.response?.data?.detail || 'Please try again');
+      setEndModal(m => ({ ...m, submitting: false }));
+    }
   };
 
   if (loading) return <SafeAreaView style={s.c}><ActivityIndicator size="large" color="#1565C0" style={{marginTop:60}}/></SafeAreaView>;
@@ -484,59 +525,19 @@ export default function SurvivalReview() {
                     </View>
                   )}
 
-                  {/* iter-348: End Implant Treatment — abandons implant therapy
-                      for this site (and the whole case). Requires decision
-                      maker + reason. Overrides "Was it replaced?" below. */}
-                  <View style={s.endTreatmentWrap}>
-                    <TouchableOpacity
-                      style={[s.endTreatmentBtn, f.end_treatment && s.endTreatmentBtnOn]}
-                      onPress={() => setField(i, 'end_treatment', !f.end_treatment)}
-                      data-testid={`imp-${i}-end-treatment-toggle`}
-                      testID={`imp-${i}-end-treatment-toggle`}
-                    >
-                      <Ionicons name="close-circle" size={16} color={f.end_treatment ? '#FFF' : '#C62828'} />
-                      <Text style={[s.endTreatmentBtnT, f.end_treatment && { color: '#FFF' }]}>
-                        {f.end_treatment ? 'Ending implant treatment' : 'End Implant Treatment'}
-                      </Text>
-                    </TouchableOpacity>
-                    {f.end_treatment && (
-                      <View style={s.endTreatmentForm}>
-                        <Text style={s.endTreatmentHelp}>
-                          Choosing to end implant treatment will TERMINATE this entire case. No further replacements or phases can be recorded for this patient.
-                        </Text>
-                        <Text style={s.lbl}>Whose decision?</Text>
-                        <Dropdown
-                          value={f.end_treatment_decision_maker || ''}
-                          options={['Patient', 'Operator']}
-                          placeholder="Select decision maker"
-                          onChange={(v) => setField(i, 'end_treatment_decision_maker', v as 'Patient' | 'Operator')}
-                          testID={`imp-${i}-end-treatment-decision`}
-                        />
-                        <Text style={[s.lbl, { marginTop: 8 }]}>Reason for ending treatment</Text>
-                        <TextInput
-                          style={[s.input, { minHeight: 72, textAlignVertical: 'top' }]}
-                          multiline
-                          numberOfLines={4}
-                          placeholder="Describe the clinical / patient-preference rationale"
-                          value={f.end_treatment_reason}
-                          onChangeText={v => setField(i, 'end_treatment_reason', v)}
-                          data-testid={`imp-${i}-end-treatment-reason`}
-                          testID={`imp-${i}-end-treatment-reason`}
-                        />
-                      </View>
-                    )}
-                  </View>
+                  {/* iter-350: End Implant Treatment moved to a global button
+                      at the bottom (below Update / Continue). The per-implant
+                      inline entry point was removed to match the user's
+                      preferred single-action layout. */}
 
-                  {/* Replaced Yes/No — hidden when End Implant Treatment is active. */}
-                  {!f.end_treatment && (
+                  {/* Was it replaced? */}
                   <View style={{flexDirection:'row',alignItems:'center',gap:12}}>
                     <Text style={s.lbl}>Was it replaced?</Text>
                     <TouchableOpacity style={[s.pillTiny, f.replaced && s.pillOn]} onPress={() => setField(i, 'replaced', true)} data-testid={`imp-${i}-replaced-yes`} testID={`imp-${i}-replaced-yes`}><Text style={[s.pillTT, f.replaced && s.pillTOn]}>Yes</Text></TouchableOpacity>
                     <TouchableOpacity style={[s.pillTiny, !f.replaced && s.pillOn]} onPress={() => setField(i, 'replaced', false)} data-testid={`imp-${i}-replaced-no`} testID={`imp-${i}-replaced-no`}><Text style={[s.pillTT, !f.replaced && s.pillTOn]}>No</Text></TouchableOpacity>
                   </View>
-                  )}
 
-                  {f.replaced && !f.end_treatment && (
+                  {f.replaced && (
                     <View style={s.replBox}>
                       <Text style={[s.lbl,{fontWeight:'700',color:'#2E7D32'}]}>Replacement implant (revision)</Text>
 
@@ -603,39 +604,18 @@ export default function SurvivalReview() {
 
                       <TextInput style={s.input} placeholder="Lot # (optional)" value={f.replacement.lot_number} onChangeText={v => setReplField(i, { lot_number: v })} data-testid={`imp-${i}-repl-lot`} testID={`imp-${i}-repl-lot`} />
                       <TextInput style={s.input} placeholder="ISQ (optional)" keyboardType="decimal-pad" value={f.replacement.isq} onChangeText={v => setReplField(i, { isq: v })} data-testid={`imp-${i}-repl-isq`} testID={`imp-${i}-repl-isq`} />
-                      {/* iter-348: Placement date is now compulsory (calendar picker). */}
+                      {/* iter-348 → iter-350: Placement date is compulsory and
+                          uses the same react-native-calendars picker as
+                          Phase 1 Schedule > Procedure date. */}
                       <Text style={[s.lbl, { marginTop: 4, color: '#C62828' }]}>Placement date *</Text>
-                      {/* iter-347b: Placement date — RN Web silently drops
-                          `type=date` when passed via <TextInput>, so on web
-                          we render a raw native <input type=date> element
-                          to get a real HTML5 calendar picker. Native app
-                          keeps the masked YYYY-MM-DD text input. */}
-                      {Platform.OS === 'web' ? (
-                        React.createElement('input', {
-                          type: 'date',
-                          value: f.replacement.placement_date || '',
-                          onChange: (e: any) => setReplField(i, { placement_date: e.target.value }),
-                          'data-testid': `imp-${i}-repl-date`,
-                          'aria-label': 'Placement date',
-                          style: {
-                            borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 8,
-                            padding: 10, fontSize: 13, color: '#1e2a44',
-                            backgroundColor: '#FFF', fontFamily: 'inherit',
-                            width: '100%', boxSizing: 'border-box',
-                          },
-                        })
-                      ) : (
-                        <TextInput
-                          style={s.input}
-                          placeholder="Placement date (YYYY-MM-DD)"
-                          value={f.replacement.placement_date}
-                          onChangeText={v => setReplField(i, { placement_date: v })}
-                          inputMode="numeric"
-                          maxLength={10}
-                          data-testid={`imp-${i}-repl-date`}
-                          testID={`imp-${i}-repl-date`}
-                        />
-                      )}
+                      <PlacementDatePicker
+                        value={f.replacement.placement_date || ''}
+                        onChange={(iso: string) => setReplField(i, { placement_date: iso })}
+                        maxDate={new Date().toISOString().slice(0, 10)}
+                        placeholder="Tap to select placement date"
+                        invalid={!f.replacement.placement_date}
+                        testID={`imp-${i}-repl-date`}
+                      />
 
                       {/* Type of Procedure */}
                       <View style={{ marginTop: 6 }}>
@@ -731,8 +711,94 @@ export default function SurvivalReview() {
             </TouchableOpacity>
           </View>
         )}
+
+        {/* iter-350: Global "End Implant Treatment" — repositioned per user
+            request. Solid red pill, white text, centered on its own row
+            BELOW the Update / Continue action buttons. */}
+        <View style={s.endTreatmentGlobalWrap}>
+          <TouchableOpacity
+            style={s.endTreatmentGlobalBtn}
+            onPress={() => setEndModal(m => ({ ...m, open: true }))}
+            activeOpacity={0.85}
+            data-testid="survival-end-treatment-btn"
+            testID="survival-end-treatment-btn"
+          >
+            <Ionicons name="close-circle" size={18} color="#FFF" />
+            <Text style={s.endTreatmentGlobalT}>End Implant Treatment</Text>
+          </TouchableOpacity>
+          <Text style={s.endTreatmentGlobalHelp}>
+            Terminates the entire case. No further replacements or phases can be recorded.
+          </Text>
+        </View>
       </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* iter-350: End Implant Treatment modal (global). Collects the
+          failure reason, decision maker, and free-text ending rationale
+          in one dialog. */}
+      <Modal transparent visible={endModal.open} animationType="fade" onRequestClose={() => setEndModal(m => ({ ...m, open: false }))}>
+        <Pressable style={s.endModalBackdrop} onPress={() => setEndModal(m => ({ ...m, open: false }))}>
+          <Pressable style={s.endModalSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={s.endModalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                <Ionicons name="warning" size={20} color="#C62828" />
+                <Text style={s.endModalTitle}>End Implant Treatment</Text>
+              </View>
+              <TouchableOpacity onPress={() => setEndModal(m => ({ ...m, open: false }))} testID="end-treatment-close">
+                <Ionicons name="close" size={22} color="#37474F" />
+              </TouchableOpacity>
+            </View>
+            <Text style={s.endModalWarn}>
+              This terminates the entire case. No further replacements or phases can be recorded for this patient.
+            </Text>
+
+            <Text style={[s.lbl, { marginTop: 12 }]}>Failure reason *</Text>
+            <Dropdown
+              value={endModal.reason}
+              options={REASONS.filter(r => r !== 'Other')}
+              placeholder="Pick a reason"
+              onChange={(v) => setEndModal(m => ({ ...m, reason: v }))}
+              testID="end-treatment-reason"
+            />
+
+            <Text style={[s.lbl, { marginTop: 12 }]}>Whose decision? *</Text>
+            <Dropdown
+              value={endModal.decision_maker || ''}
+              options={['Patient', 'Operator']}
+              placeholder="Select decision maker"
+              onChange={(v) => setEndModal(m => ({ ...m, decision_maker: v as 'Patient' | 'Operator' }))}
+              testID="end-treatment-decision"
+            />
+
+            <Text style={[s.lbl, { marginTop: 12 }]}>Reason for ending treatment *</Text>
+            <TextInput
+              style={[s.input, { minHeight: 80, textAlignVertical: 'top' }]}
+              multiline
+              numberOfLines={4}
+              placeholder="Describe the clinical / patient-preference rationale"
+              value={endModal.end_reason}
+              onChangeText={(v) => setEndModal(m => ({ ...m, end_reason: v }))}
+              data-testid="end-treatment-reason-text"
+              testID="end-treatment-reason-text"
+            />
+
+            <TouchableOpacity
+              style={[s.endTreatmentGlobalBtn, { marginTop: 16 }, endModal.submitting && { opacity: 0.6 }]}
+              onPress={handleEndTreatment}
+              disabled={endModal.submitting}
+              testID="end-treatment-confirm"
+              data-testid="end-treatment-confirm"
+            >
+              {endModal.submitting ? <ActivityIndicator color="#FFF" /> : (
+                <>
+                  <Ionicons name="close-circle" size={18} color="#FFF" />
+                  <Text style={s.endTreatmentGlobalT}>Confirm &amp; End Treatment</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -779,18 +845,33 @@ const s = StyleSheet.create({
   mItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: '#F0F2F5' },
   mItemOn: { backgroundColor: '#E3F2FD', borderRadius: 8 },
   mItemT: { fontSize: 13, color: '#1e2a44' },
-  // iter-348: End Implant Treatment styles
-  endTreatmentWrap: { marginTop: 4 },
-  endTreatmentBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    borderWidth: 1.5, borderColor: '#C62828', borderRadius: 10,
-    paddingVertical: 12, backgroundColor: '#FFF',
+  // iter-350: Global End Implant Treatment button (centered, red, below actions)
+  endTreatmentGlobalWrap: { marginTop: 16, marginBottom: 24, alignItems: 'center', gap: 6 },
+  endTreatmentGlobalBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: '#C62828', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 24,
+    minWidth: 260, maxWidth: 360,
+    shadowColor: '#C62828', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 6, elevation: 4,
   },
-  endTreatmentBtnOn: { backgroundColor: '#C62828', borderColor: '#C62828' },
-  endTreatmentBtnT: { fontSize: 13, fontWeight: '800', color: '#C62828', letterSpacing: 0.3 },
-  endTreatmentForm: {
-    marginTop: 10, padding: 12, backgroundColor: '#FFEBEE', borderRadius: 10,
-    borderWidth: 1, borderColor: '#EF9A9A', gap: 8,
+  endTreatmentGlobalT: { color: '#FFF', fontSize: 14, fontWeight: '800', letterSpacing: 0.4 },
+  endTreatmentGlobalHelp: { fontSize: 11, color: '#8E1B1B', fontStyle: 'italic', textAlign: 'center', paddingHorizontal: 24 },
+  endModalBackdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center', justifyContent: 'center', padding: 16,
   },
-  endTreatmentHelp: { fontSize: 12, color: '#B71C1C', fontStyle: 'italic', lineHeight: 17 },
+  endModalSheet: {
+    width: '100%', maxWidth: 460, backgroundColor: '#FFF',
+    borderRadius: 16, padding: 18, gap: 4,
+    shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 24, elevation: 14,
+    borderTopWidth: 4, borderTopColor: '#C62828',
+  },
+  endModalHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  endModalTitle: { fontSize: 16, fontWeight: '800', color: '#B71C1C', letterSpacing: 0.3 },
+  endModalWarn: {
+    fontSize: 12, color: '#B71C1C', backgroundColor: '#FFEBEE',
+    padding: 10, borderRadius: 8, lineHeight: 17, fontStyle: 'italic',
+  },
 });
