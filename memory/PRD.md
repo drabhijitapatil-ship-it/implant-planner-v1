@@ -1,5 +1,24 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 362 (Feb 2026) — Complete Phase 1 + Phase 4 FDI-Naming Sweep
+
+**Scope**: Extend the FDI implant naming (`Tooth #<FDI>`) from iter-361 (Phase 2 + Phase 3) to the remaining Phase 1 and Phase 4 touchpoints.
+
+**Findings & changes**
+- **Phase 1 (`(tabs)/new-procedure.tsx`)** — Audited. No enumerated `Implant N` labels exist here; only category strings ("Single Implant", "Multiple Implants" etc.) which are procedure-type names, not implant enumerations. No changes required.
+- **Phase 4 (`submit-stage2-prosthetic/[id].tsx`)** — Every user-facing enumeration now prefers `Tooth #<FDI>` and falls back to `Implant N` only when the FDI position is missing:
+  - Per-implant prosthesis / material validation error messages (lines 186, 191)
+  - Shade validation error message (line 209)
+  - Per-implant prosthesis picker card header (line 369)
+  - Shade section labels (line 588)
+  - MUA row headers (line 694 — now shows `Tooth #<row.tooth>` once the clinician types it)
+- **Phase 4 PDF (`pdfGenerator.ts`)** — Shade rows in the Prosthetic Lab Slip now render `Tooth #<siteVal>` instead of `Implant N (#siteVal)` (line 587).
+
+**Result**: FDI naming is now consistent across every phase form, readback, and PDF that carries per-implant context.
+
+---
+
+
 ## Iteration 361 (Feb 2026) — Per-implant Case-Detail Readback + FDI Naming Everywhere
 
 ### Bug 1 — Phase 2 case-detail didn't reflect per-implant choices (Q1-a)
