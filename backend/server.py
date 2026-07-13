@@ -4701,9 +4701,15 @@ async def submit_survival_review(
     for k, v in survival_map_str.items():
         merged_impl[k] = v
     if body.all_survived:
+        # iter-360 fix: When the operator declares "all implants survived and
+        # proceed to Phase 3", the intent is that EVERY implant is Active RIGHT
+        # NOW. Previously we only filled missing entries, which meant a stale
+        # "Failed" from an earlier survival attempt would linger and later
+        # trigger the `auto_terminate_all_failed` guard on the very next save.
+        # That was the "case gets auto-terminated on reopen" bug. Explicitly
+        # override every implant to Active in this branch.
         for i in range(len(implants)):
-            if str(i) not in merged_impl:
-                merged_impl[str(i)] = {"status": "Active", "reviewed_at": now.isoformat()}
+            merged_impl[str(i)] = {"status": "Active", "reviewed_at": now.isoformat()}
     prior_events = list((prev_review.get("events") or []))
     prior_events.append({
         "at": now.isoformat(),
@@ -4733,11 +4739,17 @@ async def submit_survival_review(
     def _idx_active(idx: int) -> bool:
         # iter-354 fix: merged_impl uses string keys (see build above);
         # coerce the numeric index before lookup so 0/"0" collide correctly.
+        # iter-360 fix: an implant with explicit status "Active" (from an
+        # all-survived resubmission that reset a prior Failed) counts as
+        # active-in-treatment. Previously we only recognised "Replaced" (R{n}
+        # live) as active, which caused a spurious `auto_terminate_all_failed`
+        # on any case where a stale Failed was overwritten by Active.
         e = merged_impl.get(str(idx)) or merged_impl.get(idx) or {}
         st = e.get("status")
         if st is None:
             return True  # never reviewed → still Active by default
-        return st == "Replaced"  # Replaced → R{n} live; Failed/TreatmentEnded → inactive
+        # Any status that is NOT Failed / Treatment Ended is a live implant.
+        return st not in ("Failed", "Treatment Ended")
     all_inactive_after_review = len(implants) > 0 and not any(_idx_active(i) for i in range(len(implants)))
     auto_terminate_all_failed = all_inactive_after_review and not case_treatment_ended
     update_set: Dict[str, Any] = {
@@ -11665,18 +11677,52 @@ async def submit_stage2_surgical(
     is_creator = procedure.get("created_by_id") == current_user["_id"]
     if not (is_student or is_supervisor or is_incharge or is_creator):
         raise HTTPException(status_code=403, detail="You don't have permission to submit Phase 3")
-    # iter-359: Implant In-Charge submitting Phase 3 is the terminal
-    # approval for the entire workflow. Allow it from any not-yet-terminated
-    # earlier status (draft/pending_phase1/phase1_approved/pending_phase2/
-    # phase2_approved/pending_stage2_surgical) — we auto-approve every
-    # missing prior step as part of this transition. Any OTHER caller
-    # (student, supervisor) still needs Phase 2 to be fully approved.
+    # iter-360: Comprehensive Phase 3 gate rewrite.
+    #
+    # OLD behavior blocked with "Phase 2 must be approved" whenever
+    # `status != "phase2_approved"`. That was too strict for the real
+    # workflow because:
+    #   • Once the case moves through survival review + Phase 3 approvals it
+    #     leaves `phase2_approved` and enters `stage2_surgical_approved`. A
+    #     re-submission (edit / retry) then failed spuriously.
+    #   • Cases that reached survival review but somehow drifted to another
+    #     status (mixed prior state, mobile-app cache staleness) failed the
+    #     same gate. Same error for students AND in-charge.
+    #   • The In-Charge "shortcut" path can jump directly from `phase1_
+    #     approved` (or draft) to Phase 3.
+    #
+    # NEW behavior:
+    #   • Terminal / abandoned statuses are still blocked (`completed`,
+    #     `cancelled`, `treatment_ended`, `rejected`, `permanently_rejected`).
+    #   • For In-Charge: allow any pre-terminal status — we auto-backfill.
+    #   • For everyone else: allow when `supervisor_phase2_approved` AND
+    #     `implant_incharge_phase2_approved` are both stamped (real
+    #     "Phase 2 approved" signal) OR when survival review is present
+    #     (Phase 2 was implicitly finalised — the case couldn't have reached
+    #     survival review otherwise).
+    #   • Idempotent: `phase2_approved`, `pending_stage2_surgical`, and
+    #     `stage2_surgical_approved` all pass so re-submissions work.
+    terminal_or_abandoned = {"completed", "cancelled", "treatment_ended",
+                             "rejected", "permanently_rejected", "closed", "removed"}
     incharge_shortcut = current_user.get("role") == "implant_incharge"
-    incharge_upgrading_phase2 = incharge_shortcut and procedure.get("status") in (
-        "draft", "pending_phase1", "phase1_approved",
-        "pending_phase2", "pending_stage2_surgical",
+    incharge_upgrading_phase2 = (
+        incharge_shortcut and procedure.get("status") not in terminal_or_abandoned
     )
-    if procedure["status"] != "phase2_approved" and not incharge_upgrading_phase2:
+    both_phase2_approved = (
+        bool(procedure.get("supervisor_phase2_approved"))
+        and bool(procedure.get("implant_incharge_phase2_approved"))
+    )
+    survival_review_done = bool(procedure.get("phase2_survival_review"))
+    allow_ok_statuses = {
+        "phase2_approved", "pending_stage2_surgical", "stage2_surgical_approved",
+    }
+    can_submit_phase3 = (
+        procedure["status"] in allow_ok_statuses
+        or incharge_upgrading_phase2
+        or (procedure["status"] not in terminal_or_abandoned
+            and (both_phase2_approved or survival_review_done))
+    )
+    if not can_submit_phase3:
         raise HTTPException(status_code=400, detail="Phase 2 must be approved before starting Phase 3")
 
     existing_checklist = procedure.get("checklist") or {}
