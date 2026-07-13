@@ -1103,3 +1103,282 @@ export const printTerminationSummaryPDF = async (procedure: any) => {
     Alert.alert('Error', 'Failed to open the print dialog.');
   }
 };
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// iter-358: Phase 3 → Phase 4 Hand-off Report
+//
+// One-page "Prosthetic Component Summary Sheet" generated at the end of
+// Phase 3. Reads the new per-implant `phase3_healing_abutment_config` (from
+// iter-357) alongside Phase-2 implant specs + Phase-3 ISQ / IOPA uploads and
+// prints a printable prosthodontist hand-off sheet.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const _resolveP3ForImplant = (procedure: any, idx: number): {
+  p2_component: string;
+  p2_cuff: string;
+  mode: string;
+  cuff_height_mm: string;
+  customised_details: string;
+  isq: string;
+} => {
+  const p2 = procedure?.phase2_data || {};
+  const p3 = procedure?.phase3_data || {};
+  const p2Components: string[] = Array.isArray(p2.prosthetic_components) ? p2.prosthetic_components : [];
+  const p2Cuffs: string[] = Array.isArray(p2.healing_abutment_cuff_height) ? p2.healing_abutment_cuff_height : [];
+  const p3Cfg: any[] = Array.isArray(p3.phase3_healing_abutment_config) ? p3.phase3_healing_abutment_config : [];
+  const p3Cuffs = Array.isArray(p3.healing_abutment_height) ? p3.healing_abutment_height : null;
+  const isqRaw = p3.isq_value;
+  const isqArr: string[] = Array.isArray(isqRaw) ? isqRaw : (isqRaw ? [String(isqRaw)] : []);
+  const cfg = p3Cfg[idx] || {};
+  const p2Component = cfg.phase2_component || p2Components[idx] || p2.prosthetic_component || '—';
+  const p2Cuff = cfg.phase2_cuff_height_mm || p2Cuffs[idx] || '';
+  const mode = cfg.mode || '';
+  const cuffHeight = cfg.cuff_height_mm || (p3Cuffs ? String(p3Cuffs[idx] || '') : '');
+  const customised = cfg.customised_details || '';
+  const isq = isqArr[idx] || (isqArr.length === 1 ? isqArr[0] : '');
+  return {
+    p2_component: String(p2Component),
+    p2_cuff: String(p2Cuff),
+    mode: String(mode),
+    cuff_height_mm: String(cuffHeight),
+    customised_details: String(customised),
+    isq: String(isq),
+  };
+};
+
+/**
+ * Build the Phase-3 hand-off HTML — a compact single-page "Prosthetic
+ * Component Summary Sheet" ready for the prosthodontist.
+ */
+export const buildPhase3HandoffHtml = (procedure: any): string => {
+  const p = procedure || {};
+  const patientName = _esc(p.patient_name || '—');
+  const age = _esc(p.patient_age ?? '—');
+  const sex = _esc(p.patient_gender || '—');
+  const regNo = _esc(p.registration_number || p.registration_no || '—');
+  const procType = _esc(p.implant_procedure_type || '—');
+  const procDate = _fmtDateTime(p.procedure_date || null);
+  const supervisorName = _esc(p.supervisor_name || '—');
+  const inchargeName = _esc(p.implant_incharge_name || '—');
+  const studentName = _esc(p.student_name || p.created_by_name || '—');
+
+  const p3 = p.phase3_data || {};
+  const implants: any[] = Array.isArray(p.implants) && p.implants.length > 0
+    ? p.implants
+    : (Array.isArray(p.implant_plans) ? p.implant_plans : []);
+
+  // Phase 3 IOPA files — used as the "healing status photograph" thumbnails.
+  const iopaFiles: any[] = Array.isArray(p3.iopa_files) ? p3.iopa_files : [];
+  const iopaByLabel: Record<string, string> = {};
+  iopaFiles.forEach(f => {
+    if (f?.tooth_label) iopaByLabel[String(f.tooth_label)] = f.filename || '';
+  });
+
+  const doneAt = _fmtDateTime(p3.done_date || p3.submitted_at || null);
+
+  const rowsHtml = implants.map((imp, i) => {
+    const cfg = _resolveP3ForImplant(p, i);
+    const tooth = imp.tooth_number || imp.tooth || imp.position || '—';
+    const system = [imp.brand, imp.system].filter(Boolean).join(' / ') || '—';
+    const size = [
+      imp.diameter ? `Ø${imp.diameter} mm` : '',
+      imp.length ? `L${imp.length} mm` : '',
+    ].filter(Boolean).join(' · ') || '—';
+    const p2ComponentBadge = cfg.p2_component ? `
+      <span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:9.5px;font-weight:700;letter-spacing:0.3px;background:#E0F2F1;color:#00695C;border:1px solid #4DB6AC;">
+        ${_esc(cfg.p2_component)}${cfg.p2_cuff ? ` · ${_esc(cfg.p2_cuff)} mm` : ''}
+      </span>` : '';
+    const p3Body = cfg.mode === 'customised'
+      ? `<div style="font-size:11px;color:#4A148C;background:#F3E5F5;border-left:3px solid #6A1B9A;padding:6px 8px;border-radius:0 6px 6px 0;white-space:pre-wrap;">
+           <strong>Customised healing abutment:</strong> ${_esc(cfg.customised_details) || '<span style="color:#B0BEC5;">(no details)</span>'}
+         </div>`
+      : cfg.mode === 'standard' && cfg.cuff_height_mm
+        ? `<div style="font-size:12px;color:#1A2332;"><strong>Standard cuff height:</strong> <span style="color:#00695C;font-weight:700;">${_esc(cfg.cuff_height_mm)} mm</span></div>`
+        : cfg.cuff_height_mm
+          ? `<div style="font-size:12px;color:#1A2332;">Cuff height: <strong>${_esc(cfg.cuff_height_mm)} mm</strong></div>`
+          : '<div style="font-size:11px;color:#B0BEC5;font-style:italic;">Not configured in Phase 3</div>';
+
+    // Thumbnail: try IOPA matched by tooth_label first
+    const iopaMatch = tooth && tooth !== '—' ? iopaByLabel[String(tooth)] : '';
+    const thumb = iopaMatch
+      ? `<div style="border:1px solid #CFD8DC;border-radius:6px;overflow:hidden;width:56px;height:56px;display:flex;align-items:center;justify-content:center;background:#F5F5F5;">
+           <span style="font-size:9px;color:#546E7A;font-weight:700;letter-spacing:0.3px;">IOPA · #${_esc(tooth)}</span>
+         </div>`
+      : `<div style="width:56px;height:56px;border:1px dashed #CFD8DC;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#B0BEC5;font-size:9px;font-style:italic;">
+           No IOPA
+         </div>`;
+
+    return `
+      <tr>
+        <td style="vertical-align:top;padding:10px 8px;border-bottom:1px solid #ECEFF1;">
+          <div style="font-weight:800;color:#1A2332;font-size:13px;">Implant ${i + 1}</div>
+          <div style="font-size:11px;color:#78909C;">Tooth #${_esc(tooth)}</div>
+        </td>
+        <td style="vertical-align:top;padding:10px 8px;border-bottom:1px solid #ECEFF1;">
+          <div style="font-size:12px;color:#37474F;">${_esc(system)}</div>
+          <div style="font-size:11px;color:#78909C;margin-top:2px;">${_esc(size)}</div>
+          <div style="margin-top:4px;">${p2ComponentBadge}</div>
+        </td>
+        <td style="vertical-align:top;padding:10px 8px;border-bottom:1px solid #ECEFF1;">
+          ${p3Body}
+        </td>
+        <td style="vertical-align:top;padding:10px 8px;border-bottom:1px solid #ECEFF1;text-align:center;">
+          <div style="font-weight:800;color:${cfg.isq ? '#0D47A1' : '#B0BEC5'};font-size:15px;">${_esc(cfg.isq || '—')}</div>
+          <div style="font-size:9px;color:#78909C;letter-spacing:0.5px;">ISQ</div>
+        </td>
+        <td style="vertical-align:top;padding:10px 8px;border-bottom:1px solid #ECEFF1;text-align:center;">
+          ${thumb}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prosthetic Component Summary — ${patientName}</title>
+  <style>
+    @page { size: A4; margin: 14mm 14mm 14mm 14mm; }
+    body { font-family: 'Helvetica', 'Arial', sans-serif; color: #1A2332; font-size: 12px; line-height: 1.45; margin: 0; }
+    .header { border-bottom: 3px solid #00695C; padding-bottom: 10px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; }
+    .header h1 { margin: 0; color: #00695C; font-size: 20px; letter-spacing: 0.5px; }
+    .header .sub { color: #546E7A; font-size: 11px; margin-top: 2px; }
+    .badge { display: inline-block; padding: 4px 10px; background: #E0F2F1; border: 1px solid #4DB6AC; border-radius: 999px; color: #00695C; font-size: 10px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; }
+    .card { border: 1px solid #E0E0E0; border-radius: 8px; padding: 12px; margin-bottom: 12px; background: #FFF; }
+    .card h2 { margin: 0 0 8px; color: #00695C; font-size: 13px; letter-spacing: 0.4px; text-transform: uppercase; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .grid .k { color: #78909C; font-size: 10px; letter-spacing: 0.3px; text-transform: uppercase; font-weight: 700; margin-bottom: 2px; }
+    .grid .v { color: #1A2332; font-size: 12.5px; font-weight: 600; }
+    table.implants { width: 100%; border-collapse: collapse; }
+    table.implants th { background: #E0F2F1; color: #00695C; text-align: left; padding: 8px 8px; font-size: 10px; letter-spacing: 0.5px; text-transform: uppercase; border-bottom: 2px solid #4DB6AC; }
+    .clinician { display: flex; gap: 24px; margin-top: 22px; }
+    .sig { flex: 1; border-top: 1px solid #90A4AE; padding-top: 6px; font-size: 10px; color: #546E7A; letter-spacing: 0.3px; }
+    .sig .name { color: #1A2332; font-weight: 700; font-size: 12px; margin-bottom: 18px; }
+    .footer { margin-top: 26px; padding-top: 10px; border-top: 1px solid #E0E0E0; font-size: 9.5px; color: #78909C; text-align: center; letter-spacing: 0.3px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1>Prosthetic Component Summary</h1>
+      <div class="sub">Phase 3 → Phase 4 hand-off · Generated ${_fmtDateTime(new Date())}</div>
+    </div>
+    <span class="badge">Phase 3 complete</span>
+  </div>
+
+  <div class="card">
+    <h2>Patient & Case</h2>
+    <div class="grid">
+      <div><div class="k">Patient</div><div class="v">${patientName}</div></div>
+      <div><div class="k">Age / Sex</div><div class="v">${age} · ${sex}</div></div>
+      <div><div class="k">Registration</div><div class="v">${regNo}</div></div>
+      <div><div class="k">Procedure Type</div><div class="v">${procType}</div></div>
+      <div><div class="k">Procedure Date</div><div class="v">${procDate}</div></div>
+      <div><div class="k">Phase 3 Done</div><div class="v">${doneAt}</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Per-implant Prosthetic Component Status</h2>
+    <table class="implants">
+      <thead>
+        <tr>
+          <th style="width: 12%;">Implant</th>
+          <th style="width: 26%;">System / Size</th>
+          <th style="width: 36%;">Phase 3 Configuration</th>
+          <th style="width: 10%; text-align: center;">ISQ</th>
+          <th style="width: 16%; text-align: center;">Healing IOPA</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml || '<tr><td colspan="5" style="padding:16px;text-align:center;color:#78909C;font-style:italic;">No implants on record for this case.</td></tr>'}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="clinician">
+    <div class="sig">
+      <div class="name">${studentName}</div>
+      Operating Student
+    </div>
+    <div class="sig">
+      <div class="name">${supervisorName}</div>
+      Supervisor
+    </div>
+    <div class="sig">
+      <div class="name">${inchargeName}</div>
+      Implant In-Charge
+    </div>
+  </div>
+
+  <div class="footer">
+    Institutional hand-off document · Please verify all data clinically before proceeding to Phase 4 (Prosthetic).
+  </div>
+</body>
+</html>`;
+};
+
+/** Export the Phase-3 hand-off — Save-As-PDF / share sheet on native, new tab on web. */
+export const generatePhase3HandoffPDF = async (procedure: any) => {
+  try {
+    const html = buildPhase3HandoffHtml(procedure);
+    if (Platform.OS === 'web') {
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 15000);
+      return url;
+    }
+    const { uri } = await Print.printToFileAsync({ html });
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: `Prosthetic_Handoff_${(procedure.patient_name || 'Patient').replace(/\s+/g, '_')}.pdf`,
+        UTI: 'com.adobe.pdf',
+      });
+    } else {
+      Alert.alert('Saved', 'PDF generated. Sharing is unavailable on this device.');
+    }
+    return uri;
+  } catch (e) {
+    console.error('Phase 3 hand-off PDF error:', e);
+    Alert.alert('Error', 'Failed to generate the Prosthetic Component Summary. Please try again.');
+    throw e;
+  }
+};
+
+/** Open the native print dialog with the Phase-3 hand-off report. */
+export const printPhase3HandoffPDF = async (procedure: any) => {
+  try {
+    const html = buildPhase3HandoffHtml(procedure);
+    if (Platform.OS === 'web') {
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const iframe = document.createElement('iframe');
+      iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+      iframe.src = url;
+      document.body.appendChild(iframe);
+      iframe.onload = () => {
+        try {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+        } catch {
+          window.open(url, '_blank');
+        }
+      };
+      setTimeout(() => {
+        try { document.body.removeChild(iframe); } catch { /* ignore */ }
+        URL.revokeObjectURL(url);
+      }, 60000);
+      return;
+    }
+    await Print.printAsync({ html });
+  } catch (e) {
+    console.error('Phase 3 hand-off print error:', e);
+    Alert.alert('Error', 'Failed to open the print dialog.');
+  }
+};

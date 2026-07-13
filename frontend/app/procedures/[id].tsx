@@ -37,7 +37,7 @@ import {
   getProstheticOptions,
 } from '../../constants/checklist';
 import { format } from 'date-fns';
-import { generateProcedurePDF, printProcedurePDF, generateLabSlipPDF, generateTerminationSummaryPDF, printTerminationSummaryPDF } from '../../utils/pdfGenerator';
+import { generateProcedurePDF, printProcedurePDF, generateLabSlipPDF, generateTerminationSummaryPDF, printTerminationSummaryPDF, generatePhase3HandoffPDF, printPhase3HandoffPDF } from '../../utils/pdfGenerator';
 import EndTreatmentPendingBanner from '../../components/EndTreatmentPendingBanner';
 import { downloadPreopBriefing } from '../../utils/preopBriefingPdf';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';// iter-209: removed CaseCompletionBadge — its facts merged into the green
@@ -3124,9 +3124,47 @@ export default function ProcedureDetailScreen() {
             data-testid="phase3-full-data-section"
             onLayout={(e) => { phaseAnchors.current['p3'] = e.nativeEvent.layout.y; }}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
               <Ionicons name="git-branch" size={22} color="#2E7D32" />
-              <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#2E7D32', fontSize: 17 }]}>Phase 3 — Healing and Second Stage Surgery</Text>
+              <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#2E7D32', fontSize: 17, flex: 1 }]}>Phase 3 — Healing and Second Stage Surgery</Text>
+              {/* iter-358: One-tap prosthodontist hand-off report — reads the
+                  per-implant Phase-3 HA config + Phase-2 implant specs +
+                  ISQs + IOPAs and generates a printable A4 summary. */}
+              {procedure.phase3_data && (
+                <View style={{ flexDirection: 'row', gap: 6 }}>
+                  <TouchableOpacity
+                    onPress={async () => {
+                      try { await generatePhase3HandoffPDF(procedure); }
+                      catch { /* error already surfaced by helper */ }
+                    }}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center', gap: 4,
+                      backgroundColor: '#00695C', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6,
+                    }}
+                    testID="phase3-handoff-download"
+                    data-testid="phase3-handoff-download"
+                  >
+                    <Ionicons name="download" size={13} color="#FFF" />
+                    <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '700', letterSpacing: 0.3 }}>Hand-off PDF</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={async () => {
+                      try { await printPhase3HandoffPDF(procedure); }
+                      catch { /* helper already logs */ }
+                    }}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center', gap: 4,
+                      backgroundColor: '#FFF', borderColor: '#00695C', borderWidth: 1,
+                      paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6,
+                    }}
+                    testID="phase3-handoff-print"
+                    data-testid="phase3-handoff-print"
+                  >
+                    <Ionicons name="print" size={13} color="#00695C" />
+                    <Text style={{ color: '#00695C', fontSize: 11, fontWeight: '700', letterSpacing: 0.3 }}>Print</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
 
             {/* Phase 3 Checklist Items */}

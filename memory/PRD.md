@@ -1,5 +1,39 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 358 (Feb 2026) — Phase 3 → Phase 4 Prosthodontist Hand-off Report
+
+### Feature Delivered
+A one-page A4 "Prosthetic Component Summary" PDF that the operating clinician can generate at the end of Phase 3. Purpose: hand the prosthodontist a single ready-to-print sheet instead of piecing the picture together from the full case report.
+
+Content per document:
+1. **Header** — "Prosthetic Component Summary · Phase 3 → Phase 4 hand-off" with generation timestamp and a "Phase 3 complete" badge.
+2. **Patient & Case card** — patient name, age/sex, registration number, procedure type, procedure date, Phase-3 done date.
+3. **Per-implant table** (main content) — one row per implant with:
+   - Implant number + tooth position
+   - Implant system / brand + Ø diameter · L length
+   - Phase-2 component badge (Cover Screw / Healing Abutment · X mm / Immediate Loading)
+   - Phase-3 configuration:
+     - **Standard cuff height** (mm, teal callout) OR
+     - **Customised healing abutment** (purple callout with the free-text description from iter-357)
+     - Legacy `healing_abutment_height` fallback for pre-iter-357 cases
+   - **ISQ reading** (bold blue callout)
+   - **Healing IOPA thumbnail badge** — matched by tooth_label from the Phase-3 IOPA uploads, or a dashed "No IOPA" placeholder
+4. **Clinician sign-off block** — Student / Supervisor / In-Charge signature lines.
+5. **Footer** — "Verify all data clinically before proceeding to Phase 4".
+
+### UI Entry Point
+Case Detail (`/app/frontend/app/procedures/[id].tsx`) — Phase 3 Full Data section header now sports two teal buttons:
+- **Hand-off PDF** (download) → `generatePhase3HandoffPDF` (Share sheet on native, new-tab HTML on web)
+- **Print** → `printPhase3HandoffPDF` (native print dialog)
+
+Buttons only render when `procedure.phase3_data` exists.
+
+### Files Changed
+- `/app/frontend/utils/pdfGenerator.ts` — added `buildPhase3HandoffHtml`, `generatePhase3HandoffPDF`, `printPhase3HandoffPDF`, and internal `_resolveP3ForImplant` reader that unifies the iter-357 per-implant config with the legacy `healing_abutment_height` array (backwards compatible).
+- `/app/frontend/app/procedures/[id].tsx` — new PDF import + Phase 3 section header buttons.
+
+---
+
 ## Iteration 357 (Feb 2026) — Per-implant Phase 3 Healing Abutment Configuration + AI Vision Context
 
 User choices: Q1-c also include Immediate Loading Done implants (with same Standard/Customised options), Q2-a hard 100-word block, Q3-a mandatory selection per implant, Q4-a vision context only on `/ai/explain-recommendation`.
