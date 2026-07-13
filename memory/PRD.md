@@ -1,5 +1,39 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 360 (Feb 2026) — Real Fix: Phase 3 Post-Survival-Review Blocker + Auto-Terminate Loop
+
+### Root cause identified (three separate bugs collapsed into one symptom)
+
+**Bug A — Phase 3 gate too strict.** The endpoint accepted `phase2_approved` only. Once the case passed through survival review or an earlier Phase 3 attempt, the status drifted to `stage2_surgical_approved`, `pending_stage2_surgical`, or some other post-approval state. A re-submission (edit / retry / mobile-app cache stale) got a 400 with "Phase 2 must be approved". Same error for students AND in-charge.
+
+**Bug B — "all_survived" didn't reset stale Failed states.** When the operator clicked "Proceed to Phase 3" (`all_survived: true`) after a prior partial survival review that had marked some implants Failed, the code only filled MISSING entries. The stale Failed entries persisted. On the very next save, the auto-terminate check saw all implants as Failed and terminated the case. That's the "case gets auto-terminated on reopen" symptom.
+
+**Bug C — `_idx_active()` treated "Active" as inactive.** Even after Bug B was fixed and merged_impl was reset to `{Active, Active}`, the `_idx_active` helper returned `False` for status "Active" (it only recognised "Replaced" as active-in-treatment). This kept `all_inactive_after_review = True` and the auto-terminate fired anyway.
+
+### Fixes
+
+1. **Phase 3 gate (`submit_stage2_surgical`)** — accepts submissions when ANY of the following is true (still blocks terminal / abandoned states):
+   - status ∈ {phase2_approved, pending_stage2_surgical, stage2_surgical_approved}
+   - In-Charge is the submitter (auto-backfills every missing prior approval)
+   - Both Phase 2 approval flags are stamped
+   - Survival review has been completed (implicit Phase 2 confirmation)
+
+2. **Survival review `all_survived` reset** — now explicitly overrides every implant to Active, discarding stale Failed states from prior partial reviews.
+
+3. **`_idx_active` semantic fix** — an implant is "active in treatment" whenever its status is NOT Failed / Treatment Ended (Active, Replaced, and unknown all count as active).
+
+### Regression tests
+
+`/app/backend/tests/test_iter360_phase3_survival_gate.py` — 4 tests:
+- `test_all_survived_resets_stale_failed_and_does_not_terminate` ✅
+- `test_phase3_gate_accepts_after_survival_review` ✅
+- `test_student_phase3_gate_uses_both_approvals_signal` ✅
+- `test_iter354_legitimate_auto_terminate_still_fires` ✅ (guards against regression on the legitimate all-failed workflow)
+
+**Cumulative: 14/14 pytest passing** (iter-355 + 356 + 357 + 359 + 360).
+
+---
+
 ## Iteration 359 (Feb 2026) — In-Charge Auto-Approve Across All Phases + Intra-oral Photos Case Readback
 
 ### Bugs Fixed
