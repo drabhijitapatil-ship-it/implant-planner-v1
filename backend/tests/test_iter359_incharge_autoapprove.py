@@ -104,31 +104,52 @@ def test_incharge_request_phase1_approval_lands_phase1_approved():
 
 
 def test_incharge_stage2_surgical_recovers_from_pending_phase2():
-    """The reported bug: even if Phase 2 is stuck in `pending_phase2`, when
-    the In-Charge submits Phase 3 the endpoint should auto-approve Phase 2
-    AND land the case in `stage2_surgical_approved`. No 400 error."""
+    """The reported bug: even if Phase 2 is stuck in `pending_phase2` (or
+    earlier like `phase1_approved`), when the In-Charge submits Phase 3 the
+    endpoint should auto-approve Phase 2 AND land the case in
+    `stage2_surgical_approved`. No 400 error, no manual approval hops."""
     tok = _login(*INCHARGE)
-    # Find any case in `pending_phase2` — otherwise skip.
-    r = requests.get(f"{API_URL}/api/procedures?status=pending_phase2",
-                     headers={"Authorization": f"Bearer {tok}"}, timeout=15)
-    data = r.json()
-    lst = data if isinstance(data, list) else data.get("procedures") or data.get("items") or []
-    if not lst:
-        return
-    pid = lst[0].get("_id") or lst[0].get("id")
-    # Send Phase 3 with a minimal but valid payload.
+    # Create a fresh In-Charge case, walk it to phase1_approved, then leap
+    # directly to Phase 3 (skipping Phase 2) — that's the bug scenario.
     payload = {
+        "patient_name": "TEST iter359 P3-leap",
+        "patient_age": 47, "patient_gender": "Male", "patient_phone": "9887766554",
+        "registration_number": "TEST-359-3",
+        "chief_complaint": "Missing #14",
+        "procedure_date": _next_weekday(), "procedure_time": "09:00",
+        "supervisor_id": SUPERVISOR_ID, "supervisor_name": "Dr. Paresh Gandhi",
+        "implant_incharge_id": INCHARGE_ID, "implant_incharge_name": "Dr. Abhijit Patil",
+        "receipt_number": "RCPT-359-3", "amount_paid": 0,
+        "implant_procedure_type": "Single Conventional Implant",
+        "missing_teeth": ["14"], "teeth_present": ["14"],
+        "loading_type": ["Delayed Loading"],
+        "medical_assessment": {"diabetes": "No", "smoking": "No", "anticoagulant": "No", "osteoporosis": "No", "radiation": "No"},
+    }
+    proc = requests.post(f"{API_URL}/api/procedures", json=payload, headers=_h(tok), timeout=15).json()
+    pid = proc.get("id") or proc.get("_id")
+    # Move to phase1_approved
+    r = requests.post(f"{API_URL}/api/procedures/{pid}/request-phase1-approval",
+                      headers=_h(tok), timeout=15)
+    assert r.status_code == 200, r.text
+    # Now jump to Phase 3 — the exact bug scenario.
+    payload3 = {
         "checklist_items": {"stability": True},
         "isq_value": "72",
         "healing_abutment_height": ["3"],
-        "iopa_files": [{"filename": "fake.jpg", "original_name": "fake.jpg", "tooth_label": "16"}],
+        "iopa_files": [{"filename": "fake.jpg", "original_name": "fake.jpg", "tooth_label": "14"}],
     }
     r2 = requests.post(f"{API_URL}/api/procedures/{pid}/stage2/surgical",
-                       json=payload, headers=_h(tok), timeout=30)
-    # We tolerate 400s that are NOT the "Phase 2 must be approved" error —
-    # e.g., patient_consent_form gate, etc. The specific regression we
-    # protect against is that message.
-    if r2.status_code == 400:
-        assert "Phase 2 must be approved" not in (r2.text or ""), r2.text
-    else:
-        assert r2.status_code == 200, r2.text
+                       json=payload3, headers=_h(tok), timeout=30)
+    assert r2.status_code == 200, r2.text
+    # Verify: no auto-termination, all approval flags stamped, case is now
+    # stage2_surgical_approved and ready for survival review.
+    doc = requests.get(f"{API_URL}/api/procedures/{pid}", headers=_h(tok), timeout=15).json()
+    assert doc.get("status") == "stage2_surgical_approved", doc.get("status")
+    assert doc.get("supervisor_phase2_approved") is True, doc
+    assert doc.get("implant_incharge_phase2_approved") is True, doc
+    assert doc.get("supervisor_stage2_surgical_approved") is True, doc
+    assert doc.get("implant_incharge_stage2_surgical_approved") is True, doc
+    assert doc.get("treatment_ended_reason") is None, "Case must NOT be auto-terminated"
+    assert doc.get("auto_terminated") is not True, "Case must NOT be auto-terminated"
+    # Cleanup
+    requests.delete(f"{API_URL}/api/procedures/{pid}", headers=_h(tok), timeout=15)

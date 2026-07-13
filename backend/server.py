@@ -11665,14 +11665,16 @@ async def submit_stage2_surgical(
     is_creator = procedure.get("created_by_id") == current_user["_id"]
     if not (is_student or is_supervisor or is_incharge or is_creator):
         raise HTTPException(status_code=403, detail="You don't have permission to submit Phase 3")
-    # iter-359: Allow the Implant In-Charge to submit Phase 3 even when the
-    # case is still stuck in `pending_phase2` — their Phase 3 submission is
-    # the terminal approval, so we auto-approve Phase 2 as part of this
-    # transition. Any OTHER caller (student, supervisor) still needs Phase 2
-    # to be fully approved before Phase 3 opens.
-    incharge_upgrading_phase2 = (
-        current_user.get("role") == "implant_incharge"
-        and procedure.get("status") == "pending_phase2"
+    # iter-359: Implant In-Charge submitting Phase 3 is the terminal
+    # approval for the entire workflow. Allow it from any not-yet-terminated
+    # earlier status (draft/pending_phase1/phase1_approved/pending_phase2/
+    # phase2_approved/pending_stage2_surgical) — we auto-approve every
+    # missing prior step as part of this transition. Any OTHER caller
+    # (student, supervisor) still needs Phase 2 to be fully approved.
+    incharge_shortcut = current_user.get("role") == "implant_incharge"
+    incharge_upgrading_phase2 = incharge_shortcut and procedure.get("status") in (
+        "draft", "pending_phase1", "phase1_approved",
+        "pending_phase2", "pending_stage2_surgical",
     )
     if procedure["status"] != "phase2_approved" and not incharge_upgrading_phase2:
         raise HTTPException(status_code=400, detail="Phase 2 must be approved before starting Phase 3")
@@ -11706,7 +11708,7 @@ async def submit_stage2_surgical(
     # iter-359: In-Charge submitting Phase 3 = terminal approval. Skip the
     # `pending_stage2_surgical` waiting-room and mark both approvals stamped.
     # Also cover the Phase-2-auto-upgrade case (case was stuck in
-    # `pending_phase2` before the in-charge intervened).
+    # `pending_phase2` or earlier before the in-charge intervened).
     if current_user.get("role") == "implant_incharge":
         update_data["status"] = "stage2_surgical_approved"
         update_data["supervisor_stage2_surgical_approved"] = True
@@ -11715,7 +11717,12 @@ async def submit_stage2_surgical(
         update_data["implant_incharge_stage2_surgical_approved_at"] = datetime.utcnow()
         update_data["stage2_surgical_completed_at"] = datetime.utcnow()
         if incharge_upgrading_phase2:
-            # Also stamp Phase 2 approval so the audit trail is complete.
+            # Backfill every skipped prior approval so the audit trail is complete.
+            update_data["supervisor_phase1_approved"] = True
+            update_data["supervisor_phase1_approved_at"] = datetime.utcnow()
+            update_data["implant_incharge_phase1_approved"] = True
+            update_data["implant_incharge_phase1_approved_at"] = datetime.utcnow()
+            update_data["phase1_completed_at"] = datetime.utcnow()
             update_data["supervisor_phase2_approved"] = True
             update_data["supervisor_phase2_approved_at"] = datetime.utcnow()
             update_data["implant_incharge_phase2_approved"] = True
