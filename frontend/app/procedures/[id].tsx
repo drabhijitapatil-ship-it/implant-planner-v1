@@ -2860,16 +2860,87 @@ export default function ProcedureDetailScreen() {
               {procedure.phase2_data.implant_other_notes && (
                 <InfoRow icon="document-text" label="Other Implant Notes" value={procedure.phase2_data.implant_other_notes} />
               )}
-              {procedure.phase2_data.prosthetic_component && (
-                <InfoRow icon="cube" label="Prosthetic Component" value={procedure.phase2_data.prosthetic_component} fieldKey="phase2_data.prosthetic_component" />
-              )}
-              {procedure.phase2_data.healing_abutment_cuff_height && (
-                Array.isArray(procedure.phase2_data.healing_abutment_cuff_height)
-                  ? procedure.phase2_data.healing_abutment_cuff_height.map((val: string, idx: number) => (
-                    <InfoRow key={idx} icon="resize" label={`Healing Abutment Cuff Height (Implant ${idx + 1})`} value={`${val} mm`} />
-                  ))
-                  : <InfoRow icon="resize" label="Healing Abutment Cuff Height" value={`${procedure.phase2_data.healing_abutment_cuff_height} mm`} />
-              )}
+              {/* iter-361: Per-implant Prosthetic Component readback.
+                  When Phase 2 stored `prosthetic_components[]` (multi-implant
+                  per-implant flow), render one card per implant showing its
+                  FDI-labelled component + only the sub-info that belongs to
+                  that implant's chosen component. Cover Screw shows no
+                  cuff height; Healing Abutment shows the mm; Immediate
+                  Loading shows the prosthesis type. */}
+              {(() => {
+                const perImplant = procedure.phase2_data.prosthetic_components;
+                const cuffs = procedure.phase2_data.healing_abutment_cuff_height;
+                const singleComponent = procedure.phase2_data.prosthetic_component;
+                const prosthesisType = procedure.phase2_data.prosthesis_type;
+                const plans = procedure.implant_plans || procedure.implants || [];
+                const _fdi = (i: number) => {
+                  const p = plans[i] || {};
+                  const t = p.tooth_number || p.tooth || p.position;
+                  return t ? `Tooth #${t}` : 'Tooth #—';
+                };
+                if (Array.isArray(perImplant) && perImplant.length > 0) {
+                  return (
+                    <View style={{ marginTop: 8, marginBottom: 8 }} data-testid="phase2-per-implant-readback">
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#37474F', marginBottom: 6, marginLeft: 4 }}>
+                        Prosthetic Component (per implant)
+                      </Text>
+                      {perImplant.map((pc: string, idx: number) => {
+                        const cuff = Array.isArray(cuffs) ? cuffs[idx] : null;
+                        const chipColor = pc === 'Cover Screw Placed' ? '#6A1B9A'
+                          : pc === 'Healing Abutment Placed' ? '#00695C'
+                          : pc === 'Immediate Loading Done' ? '#E65100' : '#546E7A';
+                        const chipBg = pc === 'Cover Screw Placed' ? '#F3E5F5'
+                          : pc === 'Healing Abutment Placed' ? '#E0F2F1'
+                          : pc === 'Immediate Loading Done' ? '#FFF3E0' : '#ECEFF1';
+                        return (
+                          <View key={idx} style={{
+                            borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 8,
+                            backgroundColor: '#FAFAFA', padding: 10, marginBottom: 8,
+                          }} data-testid={`phase2-implant-card-${idx}`}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                              <Text style={{ fontSize: 13, fontWeight: '800', color: '#1A2332' }}>
+                                {_fdi(idx)}
+                              </Text>
+                              <View style={{ backgroundColor: chipBg, borderColor: chipColor, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 }}>
+                                <Text style={{ fontSize: 10, fontWeight: '700', color: chipColor, letterSpacing: 0.3, textTransform: 'uppercase' }}>
+                                  {pc || '—'}
+                                </Text>
+                              </View>
+                            </View>
+                            {pc === 'Healing Abutment Placed' && cuff !== undefined && cuff !== null && String(cuff).trim() !== '' && (
+                              <Text style={{ marginTop: 4, fontSize: 12.5, color: '#37474F' }}>
+                                Healing abutment cuff height: <Text style={{ fontWeight: '700', color: '#00695C' }}>{cuff} mm</Text>
+                              </Text>
+                            )}
+                            {pc === 'Immediate Loading Done' && prosthesisType && (
+                              <Text style={{ marginTop: 4, fontSize: 12.5, color: '#37474F' }}>
+                                Prosthesis type: <Text style={{ fontWeight: '700', color: '#E65100' }}>{prosthesisType}</Text>
+                              </Text>
+                            )}
+                          </View>
+                        );
+                      })}
+                    </View>
+                  );
+                }
+                // Legacy single-component flow (single implant / full-arch).
+                return (
+                  <>
+                    {singleComponent && (
+                      <InfoRow icon="cube" label="Prosthetic Component" value={singleComponent} fieldKey="phase2_data.prosthetic_component" />
+                    )}
+                    {cuffs && (
+                      Array.isArray(cuffs)
+                        ? cuffs.map((val: string, idx: number) => (
+                            val !== undefined && val !== null && String(val).trim() !== '' ? (
+                              <InfoRow key={idx} icon="resize" label={`Healing Abutment Cuff Height (${_fdi(idx)})`} value={`${val} mm`} />
+                            ) : null
+                          ))
+                        : <InfoRow icon="resize" label="Healing Abutment Cuff Height" value={`${cuffs} mm`} />
+                    )}
+                  </>
+                );
+              })()}
               {/* iter-311: empty-state placeholder rows so the operator
                   can populate the child field after switching the parent
                   via inline edit.  Parent change triggers backend-side
@@ -2961,7 +3032,7 @@ export default function ProcedureDetailScreen() {
                           </View>
                         )}
                         <View style={{ flex: 1 }}>
-                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#333' }}>{f.tooth_label || `Implant ${idx + 1}`}</Text>
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#333' }}>{f.tooth_label ? `Tooth #${f.tooth_label}` : 'Tooth #—'}</Text>
                           <Text style={{ fontSize: 11, color: '#888' }} numberOfLines={1}>{f.original_name}</Text>
                         </View>
                         <TouchableOpacity
@@ -3229,7 +3300,8 @@ export default function ProcedureDetailScreen() {
             {(() => {
               const isqRaw = procedure.phase3_data?.isq_value;
               const haRaw = procedure.phase3_data?.healing_abutment_height;
-              if (!isqRaw && !haRaw) return null;
+              const haCfg = procedure.phase3_data?.phase3_healing_abutment_config;
+              if (!isqRaw && !haRaw && !(Array.isArray(haCfg) && haCfg.length > 0)) return null;
 
               const nonEmpty = (v: any) =>
                 v !== undefined && v !== null && String(v).trim() !== '';
@@ -3242,9 +3314,15 @@ export default function ProcedureDetailScreen() {
                 : nonEmpty(haRaw) ? [haRaw] : [];
 
               const isArrISQ = Array.isArray(isqRaw);
-              const isArrHA = Array.isArray(haRaw);
 
-              const hasAnything = isqArr.length > 0 || haArr.length > 0;
+              const usePerImplantHa = Array.isArray(haCfg) && haCfg.length > 0;
+              const hasAnything = isqArr.length > 0 || haArr.length > 0 || usePerImplantHa;
+              const plans = procedure.implant_plans || procedure.implants || [];
+              const _fdi = (i: number) => {
+                const p = plans[i] || {};
+                const t = p.tooth_number || p.tooth || p.position;
+                return t ? `Tooth #${t}` : 'Tooth #—';
+              };
 
               return (
                 <View style={{ marginBottom: 16 }} testID="phase3-measurements-section">
@@ -3260,16 +3338,11 @@ export default function ProcedureDetailScreen() {
                     isArrISQ ? (
                       <View style={{ backgroundColor: '#E8F5E9', borderRadius: 8, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: '#A5D6A7' }}>
                         <Text style={{ fontSize: 13, fontWeight: '700', color: '#2E7D32', marginBottom: 6 }}>ISQ Values</Text>
-                        {/* preserve the original implant index so the tooth
-                            label still maps to the correct implant_plans row */}
                         {(isqRaw as any[]).map((val: any, idx: number) => {
                           if (!nonEmpty(val)) return null;
-                          const toothLabel = procedure.implant_plans?.[idx]?.position
-                            ? `Tooth #${procedure.implant_plans[idx].position}`
-                            : `Implant ${idx + 1}`;
                           return (
                             <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1B5E20', flex: 1 }}>{toothLabel}</Text>
+                              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1B5E20', flex: 1 }}>{_fdi(idx)}</Text>
                               <Text style={{ fontSize: 16, fontWeight: '700', color: '#2E7D32' }}>{val}</Text>
                             </View>
                           );
@@ -3280,15 +3353,78 @@ export default function ProcedureDetailScreen() {
                     )
                   )}
 
-                  {haArr.length > 0 && (
-                    isArrHA
-                      ? (haRaw as any[]).map((val: any, idx: number) => {
-                          if (!nonEmpty(val)) return null;
-                          return (
-                            <InfoRow key={idx} icon="resize" label={`Healing Abutment Height (Implant ${idx + 1})`} value={`${val} mm`} />
-                          );
-                        })
-                      : <InfoRow icon="resize" label="Healing Abutment Height" value={`${haRaw} mm`} />
+                  {/* iter-361: Per-implant Phase 3 Healing Abutment Configuration.
+                      Reads `phase3_healing_abutment_config[]` when present (the
+                      new iter-357 per-implant flow) so a Customised description
+                      also appears here — not only the mm cuff height. */}
+                  {usePerImplantHa ? (
+                    <View style={{ marginBottom: 4 }} data-testid="phase3-per-implant-ha">
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#37474F', marginBottom: 6 }}>
+                        Healing Abutment Configuration (per implant)
+                      </Text>
+                      {haCfg.map((cfg: any, idx: number) => {
+                        const changed = cfg.mode === 'standard'
+                          && cfg.phase2_cuff_height_mm
+                          && cfg.cuff_height_mm
+                          && String(cfg.phase2_cuff_height_mm) !== String(cfg.cuff_height_mm);
+                        const isCustom = cfg.mode === 'customised';
+                        const chipBg = isCustom ? '#F3E5F5' : '#E0F2F1';
+                        const chipColor = isCustom ? '#6A1B9A' : '#00695C';
+                        return (
+                          <View key={idx} style={{
+                            borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 8,
+                            backgroundColor: '#FAFAFA', padding: 10, marginBottom: 8,
+                          }} data-testid={`phase3-ha-card-${idx}`}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                              <Text style={{ fontSize: 13, fontWeight: '800', color: '#1A2332' }}>
+                                {_fdi(idx)}
+                              </Text>
+                              <View style={{ backgroundColor: chipBg, borderColor: chipColor, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 }}>
+                                <Text style={{ fontSize: 10, fontWeight: '700', color: chipColor, letterSpacing: 0.3, textTransform: 'uppercase' }}>
+                                  {isCustom ? 'Customised' : 'Standard cuff height'}
+                                </Text>
+                              </View>
+                              {cfg.phase2_component && (
+                                <Text style={{ fontSize: 10, color: '#78909C', fontStyle: 'italic' }}>
+                                  Phase 2: {cfg.phase2_component}
+                                </Text>
+                              )}
+                            </View>
+                            {cfg.mode === 'standard' && cfg.cuff_height_mm && (
+                              <Text style={{ marginTop: 4, fontSize: 12.5, color: '#37474F' }}>
+                                Cuff height: <Text style={{ fontWeight: '700', color: '#00695C' }}>{cfg.cuff_height_mm} mm</Text>
+                                {changed && (
+                                  <Text style={{ color: '#E65100', fontStyle: 'italic' }}>
+                                    {'  '}(was {cfg.phase2_cuff_height_mm} mm in Phase 2)
+                                  </Text>
+                                )}
+                              </Text>
+                            )}
+                            {isCustom && cfg.customised_details && (
+                              <View style={{ marginTop: 6, backgroundColor: '#FFF', borderLeftWidth: 3, borderLeftColor: '#6A1B9A', padding: 8, borderRadius: 4 }}>
+                                <Text style={{ fontSize: 11, fontWeight: '700', color: '#6A1B9A', marginBottom: 2, letterSpacing: 0.3, textTransform: 'uppercase' }}>
+                                  Customised healing abutment
+                                </Text>
+                                <Text style={{ fontSize: 12.5, color: '#263238', lineHeight: 18 }}>
+                                  {cfg.customised_details}
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                        );
+                      })}
+                    </View>
+                  ) : (
+                    haArr.length > 0 && (
+                      Array.isArray(haRaw)
+                        ? (haRaw as any[]).map((val: any, idx: number) => {
+                            if (!nonEmpty(val)) return null;
+                            return (
+                              <InfoRow key={idx} icon="resize" label={`Healing Abutment Height (${_fdi(idx)})`} value={`${val} mm`} />
+                            );
+                          })
+                        : <InfoRow icon="resize" label="Healing Abutment Height" value={`${haRaw} mm`} />
+                    )
                   )}
                 </View>
               );
@@ -3312,7 +3448,7 @@ export default function ProcedureDetailScreen() {
                         </View>
                       )}
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#333' }}>{f.tooth_label || `Implant ${idx + 1}`}</Text>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#333' }}>{f.tooth_label ? `Tooth #${f.tooth_label}` : 'Tooth #—'}</Text>
                         <Text style={{ fontSize: 11, color: '#888' }} numberOfLines={1}>{f.original_name}</Text>
                       </View>
                       <TouchableOpacity

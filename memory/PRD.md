@@ -1,5 +1,40 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 361 (Feb 2026) — Per-implant Case-Detail Readback + FDI Naming Everywhere
+
+### Bug 1 — Phase 2 case-detail didn't reflect per-implant choices (Q1-a)
+For a case where implants have MIXED prosthetic components (Cover Screw + Healing Abutment + Immediate Loading), the readback showed only the case-level (empty for mixed) prosthetic component plus a flat cuff-height list that rendered blank rows for Cover-Screw implants.
+
+**Fix** — New per-implant Phase 2 card block on the Case Detail page. Reads `phase2_data.prosthetic_components[]` (from iter-356). One card per implant with FDI label + colour-coded component chip (purple = Cover Screw, teal = Healing Abutment, orange = Immediate Loading) + only the sub-info that belongs to that implant's chosen component:
+- Cover Screw Placed → chip only, no cuff
+- Healing Abutment Placed → chip + cuff height in mm
+- Immediate Loading Done → chip + prosthesis type
+
+Legacy single-component flow (single implant / full arch) kept for backwards compat.
+
+### Bug 2 — Phase 3 case-detail missed Customised details
+The readback only rendered the legacy flat `healing_abutment_height` array. `phase3_healing_abutment_config[]` (iter-357 per-implant flow with Standard/Customised modes) was ignored, so a Customised description entered in Phase 3 was invisible during review.
+
+**Fix** — New per-implant Phase 3 card block. One card per implant with:
+- FDI label + mode chip (teal = Standard cuff height, purple = Customised) + Phase-2 context sub-label
+- If Standard → mm value with a "was X mm in Phase 2" chip when the height was changed from the Phase 2 value
+- If Customised → full description text on a distinct purple-bordered inset card
+
+### Bug 3 — Implant naming standardized to FDI (Q2-b, Q3-a)
+Every implant reference now shows `Tooth #<FDI>`. When the FDI number is missing (edge case), shows `Tooth #—`. Scope for this iteration: Phase 2 + Phase 3 (readback + form + validators + IOPA thumbnails + case-detail chips).
+
+**Files updated** (all Phase 2 / Phase 3 touchpoints):
+- `/app/frontend/app/procedures/[id].tsx` — case-detail Phase 2 + Phase 3 readback + IOPA thumb labels
+- `/app/frontend/app/procedures/submit-phase2/[id].tsx` — form validation, Immediate-Loading confirmation Alert, per-implant labels
+- `/app/frontend/app/procedures/submit-stage2-surgical/[id].tsx` — form validation messages, HA card headers, mixed-prosthetic banner, healing-abutment banner labels
+
+Phase 1 + Phase 4 form labels not touched this iteration (per user scope).
+
+### Testing
+14/14 pytest passing (iter-355 → 360 cumulative).
+
+---
+
 ## Iteration 360 (Feb 2026) — Real Fix: Phase 3 Post-Survival-Review Blocker + Auto-Terminate Loop
 
 ### Root cause identified (three separate bugs collapsed into one symptom)
