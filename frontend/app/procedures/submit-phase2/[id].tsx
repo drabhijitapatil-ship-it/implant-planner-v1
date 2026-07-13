@@ -235,8 +235,8 @@ export default function Phase2SubmissionScreen() {
 
   // ── IOPA / OPG Upload helpers ──
   const getIopaLabel = (idx: number): string => {
-    if (isFullArch) return `Implant ${idx + 1}`;
-    return implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : `Implant ${idx + 1}`;
+    if (isFullArch) return implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : 'Tooth #—';
+    return implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : 'Tooth #—';
   };
 
   const totalIopaSlots = iopaFiles.length + extraIopaCount;
@@ -358,7 +358,7 @@ export default function Phase2SubmissionScreen() {
       if (missingIdxs.length > 0) {
         Alert.alert(
           'Missing Prosthetic Component',
-          `Please select a Prosthetic Component for: ${missingIdxs.map(i => `Implant ${i + 1}${implantPositions[i] ? ` (#${implantPositions[i]})` : ''}`).join(', ')}.`,
+          `Please select a Prosthetic Component for: ${missingIdxs.map(i => implantPositions[i] ? `Tooth #${implantPositions[i]}` : 'Tooth #—').join(', ')}.`,
         );
         return;
       }
@@ -975,7 +975,7 @@ export default function Phase2SubmissionScreen() {
                     if (phase1ImmediateLoading && conflicting) {
                       Alert.alert(
                         'Immediate Loading selected in Phase 1, Please check',
-                        `Implant ${idx + 1}${pos ? ` (#${pos})` : ''}: you picked "${next}" in Phase 2, but Phase 1 plans for Immediate Loading. Confirm if this is intentional.`,
+                        `${implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : 'Tooth #—'}: you picked "${next}" in Phase 2, but Phase 1 plans for Immediate Loading. Confirm if this is intentional.`,
                         [
                           { text: 'Cancel', style: 'cancel' },
                           { text: 'Confirm', onPress: () => setVal(next), style: 'destructive' },
