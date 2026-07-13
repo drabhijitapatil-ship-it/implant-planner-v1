@@ -584,7 +584,7 @@ export const buildLabSlipHtml = (procedure: any): string => {
       const siteVal = getImplantSite(plans[i], '');
       const lbl = shadeLayout === 'full_arch'
         ? (i === 0 ? 'Anterior' : i === 1 ? 'Posterior' : `Slot ${i + 1}`)
-        : `Implant ${i + 1}${siteVal ? ` (#${siteVal})` : ''}`;
+        : (siteVal ? `Tooth #${siteVal}` : `Implant ${i + 1}`);
       return `<tr><td class="lbl">${lbl} Shade</td><td><strong>${s || '—'}</strong></td></tr>`;
     }).join('');
     const note = p4.shade_notes ? `<tr><td class="lbl">Shade Note (to lab)</td><td style="white-space: pre-wrap;">${p4.shade_notes}</td></tr>` : '';
