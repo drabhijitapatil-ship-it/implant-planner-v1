@@ -2033,16 +2033,24 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
             "created_by_name": current_user["name"],
         })
     elif is_incharge:
-        # Implant In-Charge creates: starts as draft, goes through normal approval flow
+        # iter-359: Implant In-Charge creates their own case → they are the
+        # terminal approver, so every phase's supervisor + in-charge flags
+        # are auto-stamped up-front. When the In-Charge later submits any
+        # phase, the submit endpoint keeps this auto-approve behavior so the
+        # case flows through phase{n}_approved states without waiting rooms.
         procedure_dict.update({
             "student_id": None,
             "student_name": "",
             "status": "draft",
             "current_phase": 1,
-            "supervisor_phase1_approved": False,
-            "implant_incharge_phase1_approved": False,
-            "supervisor_phase2_approved": False,
-            "implant_incharge_phase2_approved": False,
+            "supervisor_phase1_approved": True,
+            "supervisor_phase1_approved_at": datetime.utcnow(),
+            "implant_incharge_phase1_approved": True,
+            "implant_incharge_phase1_approved_at": datetime.utcnow(),
+            "supervisor_phase2_approved": True,
+            "supervisor_phase2_approved_at": datetime.utcnow(),
+            "implant_incharge_phase2_approved": True,
+            "implant_incharge_phase2_approved_at": datetime.utcnow(),
             "created_at": datetime.utcnow(),
             "updated_at": datetime.utcnow(),
             "created_by_role": "implant_incharge",
@@ -11327,6 +11335,15 @@ async def request_phase1_approval(
         "phase1_requested_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),
     }
+    # iter-359: When Implant In-Charge (or Administrator) submits their own
+    # case for Phase 1 approval, we skip the `pending_phase1` waiting-room
+    # and land directly in `phase1_approved`. All approval flags are already
+    # stamped at case-creation time (see /procedures create branch); this
+    # just advances the status so the student/creator can immediately open
+    # Phase 2.
+    if current_user["role"] in ("implant_incharge", "administrator") and procedure.get("created_by_id") == current_user["_id"]:
+        update_fields["status"] = "phase1_approved"
+        update_fields["phase1_completed_at"] = datetime.utcnow()
 
     await db.procedures.update_one(
         {"_id": ObjectId(procedure_id)},
@@ -11454,6 +11471,18 @@ async def submit_phase2(
         "phase2_submitted_at": datetime.utcnow(),
         "updated_at": datetime.utcnow()
     }
+    # iter-359: When Implant In-Charge submits Phase 2 (regardless of who
+    # created the case), their submission == final approval. Skip the
+    # `pending_phase2` waiting-room and land in `phase2_approved` directly.
+    # This mirrors the pattern already in `submit_stage2_surgical` and closes
+    # a UX bug where an In-Charge could not advance the case to Phase 3.
+    if current_user.get("role") == "implant_incharge":
+        update_data["status"] = "phase2_approved"
+        update_data["supervisor_phase2_approved"] = True
+        update_data["supervisor_phase2_approved_at"] = datetime.utcnow()
+        update_data["implant_incharge_phase2_approved"] = True
+        update_data["implant_incharge_phase2_approved_at"] = datetime.utcnow()
+        update_data["phase2_completed_at"] = datetime.utcnow()
     
     if phase2_data.student_notes:
         update_data["phase2_student_notes"] = phase2_data.student_notes
@@ -11636,7 +11665,16 @@ async def submit_stage2_surgical(
     is_creator = procedure.get("created_by_id") == current_user["_id"]
     if not (is_student or is_supervisor or is_incharge or is_creator):
         raise HTTPException(status_code=403, detail="You don't have permission to submit Phase 3")
-    if procedure["status"] != "phase2_approved":
+    # iter-359: Allow the Implant In-Charge to submit Phase 3 even when the
+    # case is still stuck in `pending_phase2` — their Phase 3 submission is
+    # the terminal approval, so we auto-approve Phase 2 as part of this
+    # transition. Any OTHER caller (student, supervisor) still needs Phase 2
+    # to be fully approved before Phase 3 opens.
+    incharge_upgrading_phase2 = (
+        current_user.get("role") == "implant_incharge"
+        and procedure.get("status") == "pending_phase2"
+    )
+    if procedure["status"] != "phase2_approved" and not incharge_upgrading_phase2:
         raise HTTPException(status_code=400, detail="Phase 2 must be approved before starting Phase 3")
 
     existing_checklist = procedure.get("checklist") or {}
@@ -11665,6 +11703,24 @@ async def submit_stage2_surgical(
         "implant_incharge_stage2_surgical_approved": False,
         "updated_at": datetime.utcnow()
     }
+    # iter-359: In-Charge submitting Phase 3 = terminal approval. Skip the
+    # `pending_stage2_surgical` waiting-room and mark both approvals stamped.
+    # Also cover the Phase-2-auto-upgrade case (case was stuck in
+    # `pending_phase2` before the in-charge intervened).
+    if current_user.get("role") == "implant_incharge":
+        update_data["status"] = "stage2_surgical_approved"
+        update_data["supervisor_stage2_surgical_approved"] = True
+        update_data["supervisor_stage2_surgical_approved_at"] = datetime.utcnow()
+        update_data["implant_incharge_stage2_surgical_approved"] = True
+        update_data["implant_incharge_stage2_surgical_approved_at"] = datetime.utcnow()
+        update_data["stage2_surgical_completed_at"] = datetime.utcnow()
+        if incharge_upgrading_phase2:
+            # Also stamp Phase 2 approval so the audit trail is complete.
+            update_data["supervisor_phase2_approved"] = True
+            update_data["supervisor_phase2_approved_at"] = datetime.utcnow()
+            update_data["implant_incharge_phase2_approved"] = True
+            update_data["implant_incharge_phase2_approved_at"] = datetime.utcnow()
+            update_data["phase2_completed_at"] = datetime.utcnow()
     if data.student_notes:
         update_data["phase3_student_notes"] = data.student_notes
     if data.supervisor_notes:

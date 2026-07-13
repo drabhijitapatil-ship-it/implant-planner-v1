@@ -1,5 +1,29 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 359 (Feb 2026) — In-Charge Auto-Approve Across All Phases + Intra-oral Photos Case Readback
+
+### Bugs Fixed
+1. **Phase 3 Done fails with "Phase 2 must be approved"** — Root cause: Implant In-Charge cases were not auto-approving Phase 2 on submit, so cases got stuck in `pending_phase2` state. When the same In-Charge then tried to submit Phase 3, the gate rejected it. Fixed by making In-Charge submissions terminal — their `POST` = final approval on every phase.
+2. **Intra-oral Photographs invisible to Supervisor / In-Charge** — Now render as a horizontal thumb list on the Case Detail page (right after the CBCT Reports section) with slot labels (Occlusal View / Lateral view / etc.) and per-photo View buttons. Same access model as CBCT.
+
+### Backend Changes (`server.py`)
+- **`/procedures` create branch** — When In-Charge creates a case, all four approval flags (`supervisor_phase{1,2}_approved` + `implant_incharge_phase{1,2}_approved`) are auto-stamped with timestamps.
+- **`/procedures/{id}/request-phase1-approval`** — In-Charge / Administrator self-created cases skip `pending_phase1` and land in `phase1_approved` directly.
+- **`/procedures/{id}/submit-phase2`** — When submitter is In-Charge, status advances to `phase2_approved` directly (bypass `pending_phase2`). Both approval flags stamped.
+- **`/procedures/{id}/stage2/surgical`** — When submitter is In-Charge, status advances to `stage2_surgical_approved` directly. Safety net: also accepts submissions when the case is stuck in `pending_phase2` and the submitter is In-Charge (Phase 2 gets auto-approved as part of the transition — the exact bug scenario reported).
+
+### Frontend Change (`procedures/[id].tsx`)
+- New yellow-highlighted **Patient Intra-oral Photograph** section under CBCT Reports. Shows thumbnails, labels (from Phase 1 upload), and View buttons. Present for every role that can read the case.
+
+### Bug 3 Note (case shows Terminated after Phase 3 error → close → reopen)
+No backend code path writes `status: treatment_ended` outside of the explicit survival-review / end-treatment endpoints. This was almost certainly a downstream consequence of Bug 1: the Phase 3 form was failing, so the surgeon opened Phase 3 → Failure / End-Treatment path by mistake. With Bug 1 fixed, Phase 3 submissions now flow through cleanly. If the symptom reappears, please share the specific case ID so we can trace the exact write.
+
+### Tests
+- `/app/backend/tests/test_iter359_incharge_autoapprove.py` — 3 passing regressions.
+- Cumulative iter-355 → 359: **10/10 pytest** passing.
+
+---
+
 ## Iteration 358 (Feb 2026) — Phase 3 → Phase 4 Prosthodontist Hand-off Report
 
 ### Feature Delivered

@@ -2724,6 +2724,45 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
+        {/* iter-359: Patient Intra-oral Photograph Section — visible to
+            student, supervisor, in-charge, administrator (same as CBCT).
+            Renders as a horizontal thumb list. Slot labels come from the
+            Phase-1 upload (Occlusal, Lateral/Frontal, or extras). */}
+        {Array.isArray(procedure.intraoral_photos) && procedure.intraoral_photos.length > 0 && (
+          <View style={styles.section} data-testid="intraoral-photos-section">
+            <Text style={styles.sectionTitle}>Patient Intra-oral Photograph</Text>
+            {procedure.intraoral_photos.map((f: any, idx: number) => {
+              const baseUrl = api.defaults.baseURL || '';
+              const fileUrl = `${baseUrl}/uploads/${f.filename}?token=${authToken}`;
+              return (
+                <View
+                  key={idx}
+                  style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 10, backgroundColor: '#FFF8E1', padding: 8, borderRadius: 10 }}
+                  data-testid={`intraoral-thumb-${idx}`}
+                >
+                  <Image
+                    source={{ uri: fileUrl }}
+                    style={{ width: 50, height: 50, borderRadius: 8, borderWidth: 1, borderColor: '#FFD54F' }}
+                    resizeMode="cover"
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#333' }}>{f.label || `Photo ${idx + 1}`}</Text>
+                    <Text style={{ fontSize: 11, color: '#888' }} numberOfLines={1}>{f.original_name}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={{ backgroundColor: '#F57C00', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                    onPress={() => Linking.openURL(fileUrl).catch(() => Alert.alert('Error', 'Could not open file'))}
+                    data-testid={`view-intraoral-detail-${idx}`}
+                  >
+                    <Ionicons name="open-outline" size={14} color="#FFF" />
+                    <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }}>View</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
         {procedure.remark && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Phase 1 Remarks</Text>
