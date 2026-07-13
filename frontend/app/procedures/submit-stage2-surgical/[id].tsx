@@ -32,6 +32,12 @@ export default function Stage2SurgicalSubmissionScreen() {
   // we show a summary banner at the top and trim the checklist to 4 items
   // (no All-Components-Available, no Healing-Abutment-Placed rows).
   const [phase2Component, setPhase2Component] = useState<string>('');
+  // iter-356: When Phase 2 used per-implant Prosthetic Components (multi-implant
+  // non-full-arch cases), we keep the array here so Phase 3 can:
+  //   1. NOT simplify the checklist if ANY implant is 'Cover Screw Placed'
+  //      (Q5-a: full checklist required for those implants).
+  //   2. Filter which implants show up as needing second-stage uncovering.
+  const [phase2Components, setPhase2Components] = useState<string[]>([]);
   const [phase2ProsthesisType, setPhase2ProsthesisType] = useState<string>('');
   const [phase2ProsthesisOther, setPhase2ProsthesisOther] = useState<string>('');
   const [phase2HealingCuffs, setPhase2HealingCuffs] = useState<string[]>([]);
@@ -42,8 +48,13 @@ export default function Stage2SurgicalSubmissionScreen() {
   // Always drop the Healing-Abutment-Placed checklist row — by product spec, Phase 3 never
   // re-captures it. When Phase 2 had Immediate Loading / Healing Abutment, also drop the
   // All-Components-Available row so only the 4 spec'd items remain.
-  const simplifyChecklist = phase2Component === 'Immediate Loading Done'
-    || phase2Component === 'Healing Abutment Placed';
+  // iter-356 (Q5-a): If Phase 2 used per-implant Prosthetic Components and ANY
+  // implant is 'Cover Screw Placed', that implant still needs full second-stage
+  // surgery — DO NOT simplify the checklist.
+  const anyCoverScrewInMixed = phase2Components.length > 0
+    && phase2Components.some(v => v === 'Cover Screw Placed');
+  const simplifyChecklist = !anyCoverScrewInMixed
+    && (phase2Component === 'Immediate Loading Done' || phase2Component === 'Healing Abutment Placed');
   const CHECKLIST_ITEMS_FILTERED = React.useMemo(() => (
     CHECKLIST_DATA.second_stage.items.filter(i => {
       if (i.id === 'healing_abutment') return false; // never surface in Phase 3 per spec
@@ -114,6 +125,9 @@ export default function Stage2SurgicalSubmissionScreen() {
       const d = p.data || {};
       const p2 = d.phase2_data || {};
       setPhase2Component(p2.prosthetic_component || '');
+      // iter-356: hydrate per-implant Prosthetic Components (falls back to [] if
+      // Phase 2 used the single global dropdown).
+      setPhase2Components(Array.isArray(p2.prosthetic_components) ? p2.prosthetic_components : []);
       setPhase2ProsthesisType(p2.prosthesis_type || '');
       setPhase2ProsthesisOther(p2.prosthesis_type_other || '');
       setCreatedById(d.created_by_id || null);
@@ -314,6 +328,30 @@ export default function Stage2SurgicalSubmissionScreen() {
                   <Text style={s.requestEditBtnText}>Need Changes — Request Edit</Text>
                 </TouchableOpacity>
               )}
+            </View>
+          )}
+
+          {/* iter-356: Mixed Prosthetic Components banner — Phase 2 used
+              per-implant selection with more than one distinct value.
+              We surface a per-implant map so the operator knows exactly
+              which implants require second-stage uncovering and which
+              are healing-abutment / immediate-loading (no second-stage). */}
+          {phase2Components.length > 0
+            && new Set(phase2Components.filter(Boolean)).size > 1 && (
+            <View
+              style={[s.section, { borderLeftWidth: 4, borderLeftColor: '#6A1B9A', backgroundColor: '#F3E5F5' }]}
+              testID="phase3-mixed-prosthetic-banner"
+              data-testid="phase3-mixed-prosthetic-banner"
+            >
+              <Text style={{ fontSize: 15, fontWeight: '800', color: '#4A148C' }}>Mixed Prosthetic Components</Text>
+              <Text style={{ marginTop: 4, fontSize: 12, color: '#6A1B9A', fontStyle: 'italic' }}>
+                Second-stage uncovering applies only to implants marked "Cover Screw Placed".
+              </Text>
+              {phase2Components.map((pc, i) => (
+                <Text key={i} style={{ marginTop: 4, fontSize: 13, color: '#4A148C' }}>
+                  {implantPositions[i] ? `Tooth #${implantPositions[i]}` : `Implant ${i + 1}`}: <Text style={{ fontWeight: '700' }}>{pc || '—'}</Text>
+                </Text>
+              ))}
             </View>
           )}
 

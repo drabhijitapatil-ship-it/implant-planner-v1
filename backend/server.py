@@ -449,6 +449,11 @@ class ProcedureCreate(BaseModel):
     cbct_content_type: Optional[str] = Field("", max_length=100)
     # Multiple CBCT files (new format)
     cbct_files: Optional[List[Dict[str, str]]] = None  # [{filename, original_name, content_type}]
+    # iter-356: Patient Intra-oral Photograph list. Slots 0+1 use fixed
+    # labels ("Occlusal View", "Lateral view/Frontal view"); slots 2+ carry
+    # a user-authored label. Structure: [{filename, original_name,
+    # content_type, label}, ...]. Skipped for Existing Implant cases.
+    intraoral_photos: Optional[List[Dict[str, str]]] = None
     # Patient Consent Form (uploaded via /uploads/consent-temp or POST /procedures/{id}/upload-consent)
     patient_consent_form: Optional[Dict[str, Any]] = None  # {filename, original_name, content_type, uploaded_by_*, uploaded_at, version}
 
@@ -574,6 +579,10 @@ class Phase2Submit(BaseModel):
     bone_graft_details: Optional[str] = Field(None, max_length=1000)
     implant_other_notes: Optional[str] = Field(None, max_length=500)
     prosthetic_component: Optional[str] = Field(None, max_length=100)
+    # iter-356: Per-implant Prosthetic Component (multi-implant, non-full-arch,
+    # non-single cases). Length matches implants[]. For single/full-arch cases
+    # this stays None and `prosthetic_component` (case-level string) is used.
+    prosthetic_components: Optional[List[str]] = None
     # Prosthesis Type chosen when prosthetic_component == 'Immediate Loading Done'.
     # Options are gated on the client based on Phase 1 procedure_type + teeth count.
     prosthesis_type: Optional[str] = Field(None, max_length=200)
@@ -11378,6 +11387,8 @@ async def submit_phase2(
         "bone_graft_details": phase2_data.bone_graft_details,
         "implant_other_notes": phase2_data.implant_other_notes,
         "prosthetic_component": phase2_data.prosthetic_component,
+        # iter-356: per-implant Prosthetic Component (multi-implant non-full-arch).
+        "prosthetic_components": phase2_data.prosthetic_components,
         "prosthesis_type": phase2_data.prosthesis_type,
         "prosthesis_type_other": phase2_data.prosthesis_type_other,
         "healing_abutment_cuff_height": phase2_data.healing_abutment_cuff_height,

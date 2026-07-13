@@ -1,5 +1,50 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 356 (Feb 2026) — Intra-oral Photograph section + Per-implant Prosthetic Component
+
+User choices: Q1-a fixed slot labels, Q2-b editable label for extras, Q3-a skip for Existing Implant cases, Q4-b drop case-level string for mixed, Q5-a Phase 3 filters to Cover-Screw implants only.
+
+### Features Delivered
+1. **Phase 1 Step 1 — Patient Intra-oral Photograph section** (new-procedure.tsx, after CBCT):
+   - Two fixed labelled slots: `Occlusal View` and `Lateral view/Frontal view` (both mandatory).
+   - `+ Add Photograph` button below adds extra slots; each extra gets a user-editable label text input (default placeholder "e.g., Right buccal view").
+   - Same UI language as CBCT (blue upload button, green view/thumb, red remove icon).
+   - Helper text: *Minimum 2 Photographs required. Accepted: PNG, JPEG, HEIC (Max 20 MB each)*.
+   - Skipped for Existing Implant cases (consistent with CBCT).
+   - Persisted as `intraoral_photos: List[{filename, original_name, content_type, label}]` on the procedure doc.
+   - Draft resume hydrates slots 0/1 and extras with saved labels.
+   - Validation contributes to `missMedicalOrChecklist` completion tracker.
+
+2. **Phase 2 — Per-implant Prosthetic Component** (submit-phase2/[id].tsx):
+   - For multi-implant cases **NOT** in {Single Conventional Implant, All on 4, All on 6, All on X}, the single global "Prosthetic Component" dropdown is replaced by **one dropdown per implant** (same 3 options: Cover Screw Placed / Healing Abutment Placed / Immediate Loading Done).
+   - Downstream fields cascade per-implant:
+     - **Healing Abutment Cuff Height** rows render only for implants marked "Healing Abutment Placed".
+     - **Access Channel Opening** rows render only for implants marked "Immediate Loading Done".
+   - Validation blocks submit until every implant has a selection.
+   - Backend model gains `prosthetic_components: Optional[List[str]]`; case-level `prosthetic_component` is set to the shared value when all implants agree, else empty string (Q4-b).
+   - Full-arch (All-on-4/6/X) and Single-Implant cases keep the legacy single dropdown UX unchanged.
+
+3. **Phase 3 second-stage-surgical routing** (Q5-a):
+   - Reads `phase2_data.prosthetic_components[]`.
+   - When ANY implant is "Cover Screw Placed", the FULL Phase 3 checklist renders (no simplification), because at least one implant still needs second-stage uncovering.
+   - New purple **Mixed Prosthetic Components banner** lists each implant's Phase-2 selection so the operator knows which sites need second-stage vs which are already loaded/healing.
+
+### Backend
+- `ProcedureCreate.intraoral_photos: Optional[List[Dict[str, str]]]` added.
+- `Phase2SubmissionRequest.prosthetic_components: Optional[List[str]]` added.
+- Persisted in `submit-phase2` handler under `phase2_data.prosthetic_components`.
+
+### Files Changed
+- `/app/frontend/app/(tabs)/new-procedure.tsx` — intra-oral state + pickers + UI section + hydration + submit payload + validation.
+- `/app/frontend/app/procedures/submit-phase2/[id].tsx` — per-implant Prosthetic Component state, UI, cuff-height + access-channel filtering, validation, submit payload, progress-pill dependency array.
+- `/app/frontend/app/procedures/submit-stage2-surgical/[id].tsx` — reads `phase2_components[]`, keeps full checklist when any implant is Cover Screw, renders Mixed banner.
+- `/app/backend/server.py` — two new Optional fields, persistence in `submit-phase2`.
+
+### Tests
+- `/app/backend/tests/test_iter356_intraoral_perimplant.py` — 2 passing regressions (intra-oral roundtrip on create; per-implant Phase 2 field accepted).
+
+---
+
 ## Iteration 355 (Feb 2026) — AI Exit Summary on Treatment Termination PDF
 
 User choices: Q1-a auto-generated once + cached, Q2-a editable by case owner (student/supervisor/in-charge), Q3-a GPT-5.2, Q4-a PHI-redacted before LLM call.
