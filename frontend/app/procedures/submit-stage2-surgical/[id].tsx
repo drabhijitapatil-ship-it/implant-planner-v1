@@ -45,6 +45,23 @@ export default function Stage2SurgicalSubmissionScreen() {
   const [createdByRole, setCreatedByRole] = useState<string | null>(null);
   const [doneCompleted, setDoneCompleted] = useState(false);
 
+  // ─── iter-357: Per-implant Phase 3 healing-abutment configuration ───
+  // In multi-implant per-implant cases (Phase 2 stored `prosthetic_components[]`),
+  // Phase 3 shows ALL implants (Cover Screw / Healing Abutment / Immediate
+  // Loading) — the surgeon must pick "Standard cuff height" (with a mm value)
+  // OR "Customised healing abutment" (with free-text details up to 100 words).
+  // Prefilled with Phase 2's cuff height when available.
+  type HAConfig = {
+    mode: '' | 'standard' | 'customised';
+    cuff_height_mm: string;
+    customised_details: string;
+    phase2_component: string;         // read-only banner label
+    phase2_cuff_height_mm: string;    // shown for Healing-Abutment implants
+  };
+  const [haConfig, setHaConfig] = useState<HAConfig[]>([]);
+  const WORDS_MAX = 100;
+  const countWords = (t: string) => (t.trim() ? t.trim().split(/\s+/).length : 0);
+
   // Always drop the Healing-Abutment-Placed checklist row — by product spec, Phase 3 never
   // re-captures it. When Phase 2 had Immediate Loading / Healing Abutment, also drop the
   // All-Components-Available row so only the 4 spec'd items remain.
@@ -133,6 +150,31 @@ export default function Stage2SurgicalSubmissionScreen() {
       setCreatedById(d.created_by_id || null);
       setCreatedByRole(d.created_by_role || null);
       if (Array.isArray(p2.healing_abutment_cuff_height)) setPhase2HealingCuffs(p2.healing_abutment_cuff_height);
+      // iter-357: seed per-implant Phase 3 healing-abutment config from Phase 2.
+      // Only for the multi-implant per-implant flow (Phase 2 has
+      // `prosthetic_components[]`). For single/full-arch cases we leave
+      // haConfig empty — the legacy `healing_abutment_height` array is used.
+      const p2Components: string[] = Array.isArray(p2.prosthetic_components) ? p2.prosthetic_components : [];
+      const p2Cuffs: string[] = Array.isArray(p2.healing_abutment_cuff_height) ? p2.healing_abutment_cuff_height : [];
+      const p3Existing = (d.phase3_data && Array.isArray(d.phase3_data.phase3_healing_abutment_config))
+        ? d.phase3_data.phase3_healing_abutment_config : [];
+      if (p2Components.length > 0) {
+        const seeded: HAConfig[] = p2Components.map((pc, i) => {
+          const saved = p3Existing[i] || {};
+          const phase2Cuff = pc === 'Healing Abutment Placed' ? (p2Cuffs[i] || '') : '';
+          return {
+            mode: (saved.mode as any) || '',
+            // Prefill: Healing-Abutment implants get Phase 2 cuff; others start blank
+            cuff_height_mm: saved.cuff_height_mm != null ? String(saved.cuff_height_mm) : phase2Cuff,
+            customised_details: saved.customised_details || '',
+            phase2_component: pc || '',
+            phase2_cuff_height_mm: phase2Cuff,
+          };
+        });
+        setHaConfig(seeded);
+      } else {
+        setHaConfig([]);
+      }
       // Latest pending edit request (backend blocks more than one at a time).
       const reqs: any[] = Array.isArray(d.phase2_edit_requests) ? d.phase2_edit_requests : [];
       setPendingEditRequest(reqs.find(r => r?.status === 'pending') || null);
@@ -227,6 +269,24 @@ export default function Stage2SurgicalSubmissionScreen() {
     if (unanswered.length > 0) missing.push(`Checklist (${unanswered.length} item${unanswered.length > 1 ? 's' : ''} unanswered)`);
     const missingIopaCount = iopaFiles.filter(f => f === null).length;
     if (missingIopaCount > 0) missing.push(`IOPA Radiographs (${missingIopaCount} pending)`);
+    // iter-357: per-implant Phase 3 healing abutment configuration (Q3-a).
+    // Every implant must have a completed selection.
+    const haMissingIdxs: number[] = [];
+    const haOverWordsIdxs: number[] = [];
+    haConfig.forEach((cfg, i) => {
+      if (!cfg.mode) haMissingIdxs.push(i);
+      else if (cfg.mode === 'standard' && !cfg.cuff_height_mm.trim()) haMissingIdxs.push(i);
+      else if (cfg.mode === 'customised') {
+        if (!cfg.customised_details.trim()) haMissingIdxs.push(i);
+        else if (countWords(cfg.customised_details) > WORDS_MAX) haOverWordsIdxs.push(i);
+      }
+    });
+    if (haMissingIdxs.length > 0) {
+      missing.push(`Healing Abutment Configuration (${haMissingIdxs.length} implant${haMissingIdxs.length > 1 ? 's' : ''} incomplete)`);
+    }
+    if (haOverWordsIdxs.length > 0) {
+      missing.push(`Customised description exceeds ${WORDS_MAX} words on ${haOverWordsIdxs.length} implant${haOverWordsIdxs.length > 1 ? 's' : ''}`);
+    }
     if (missing.length > 1) {
       Alert.alert(
         'Incomplete sections',
@@ -251,12 +311,46 @@ export default function Stage2SurgicalSubmissionScreen() {
       return;
     }
 
+    // iter-357: single-section validation for the per-implant HA config.
+    if (haMissingIdxs.length > 0) {
+      Alert.alert(
+        'Healing Abutment Configuration Incomplete',
+        `Please complete each implant: pick "Standard cuff height" (with mm value) OR "Customised healing abutment" (with details).\n\nMissing: Implant ${haMissingIdxs.map(i => i + 1).join(', Implant ')}`,
+      );
+      return;
+    }
+    if (haOverWordsIdxs.length > 0) {
+      Alert.alert(
+        'Customised description too long',
+        `Customised healing abutment description exceeds ${WORDS_MAX} words on Implant ${haOverWordsIdxs.map(i => i + 1).join(', Implant ')}. Please shorten before submitting.`,
+      );
+      return;
+    }
+
     setLoading(true);
     try {
+      // iter-357: When haConfig is populated, we send both the legacy
+      // `healing_abutment_height` (from Standard-mode entries) so downstream
+      // PDF/analytics still render correctly, plus the rich
+      // `phase3_healing_abutment_config` for exact per-implant hand-off.
+      const legacyCuffs = haConfig.length > 0
+        ? haConfig.map(c => c.mode === 'standard' ? c.cuff_height_mm : '')
+        : healingAbutmentHeight;
+      const perImplantPayload = haConfig.length > 0
+        ? haConfig.map((c, i) => ({
+            implant_idx: i,
+            mode: c.mode,
+            cuff_height_mm: c.mode === 'standard' ? c.cuff_height_mm : '',
+            customised_details: c.mode === 'customised' ? c.customised_details.trim() : '',
+            phase2_component: c.phase2_component,
+            phase2_cuff_height_mm: c.phase2_cuff_height_mm,
+          }))
+        : null;
       await api.post(`/procedures/${id}/stage2/surgical`, {
         checklist_items: checklistState,
         isq_value: isqValues.length === 1 ? (isqValues[0] || null) : isqValues,
-        healing_abutment_height: healingAbutmentHeight || null,
+        healing_abutment_height: legacyCuffs || null,
+        phase3_healing_abutment_config: perImplantPayload,
         iopa_files: iopaFiles.filter(f => f !== null).map(f => ({
           filename: f!.filename,
           original_name: f!.original_name,
@@ -373,6 +467,139 @@ export default function Stage2SurgicalSubmissionScreen() {
             </View>
           )}
 
+          {/* ─── iter-357: Per-implant Phase 3 Healing Abutment Configuration ───
+              Renders when Phase 2 used per-implant Prosthetic Components (multi-
+              implant non-full-arch, non-single flow). For EACH implant (Cover
+              Screw, Healing Abutment or Immediate Loading), the surgeon must
+              pick one of:
+                a. Standard cuff height (mm — pre-filled from Phase 2 when
+                   Healing Abutment was already placed).
+                b. Customised healing abutment (free-text, ≤ 100 words, hard block).
+              Every implant must have a selection before submit. */}
+          {haConfig.length > 0 && (
+            <View style={s.section} data-testid="phase3-per-implant-ha-section">
+              <View style={s.sectionHeader}>
+                <Ionicons name="options-outline" size={20} color="#00695C" />
+                <Text style={s.sectionTitle}>
+                  Healing Abutment Configuration <Text style={{ color: '#DC3545' }}>*</Text>
+                </Text>
+              </View>
+              <Text style={{ fontSize: 12, color: '#546E7A', fontStyle: 'italic', marginBottom: 12 }}>
+                Per implant — pick Standard cuff height OR Customised healing abutment.
+              </Text>
+              {haConfig.map((cfg, idx) => {
+                const wc = countWords(cfg.customised_details);
+                const overWords = wc > WORDS_MAX;
+                const pos = implantPositions[idx];
+                const setMode = (mode: HAConfig['mode']) => {
+                  setHaConfig(prev => prev.map((x, i) => i === idx ? { ...x, mode } : x));
+                };
+                const setCuff = (v: string) => {
+                  setHaConfig(prev => prev.map((x, i) => i === idx ? { ...x, cuff_height_mm: v } : x));
+                };
+                const setDetails = (v: string) => {
+                  // iter-357 Q2-a: hard block — never let the user store more than
+                  // 100 words. We accept keystrokes up to the boundary but visually
+                  // flag anything longer via the counter + red border.
+                  setHaConfig(prev => prev.map((x, i) => i === idx ? { ...x, customised_details: v } : x));
+                };
+                return (
+                  <View key={idx} style={{
+                    borderWidth: 1, borderColor: '#B2DFDB', borderRadius: 10,
+                    backgroundColor: '#F0FDFC', padding: 12, marginBottom: 12,
+                  }} data-testid={`phase3-ha-card-${idx}`}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                      <Text style={{ fontSize: 14, fontWeight: '800', color: '#00695C' }}>
+                        Implant {idx + 1}{pos ? ` (#${pos})` : ''}
+                      </Text>
+                      <View style={{
+                        paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999,
+                        backgroundColor: '#E0F2F1', borderColor: '#4DB6AC', borderWidth: 1,
+                      }}>
+                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#00695C', letterSpacing: 0.3 }}>
+                          Phase 2: {cfg.phase2_component || '—'}
+                          {cfg.phase2_cuff_height_mm ? ` · ${cfg.phase2_cuff_height_mm} mm` : ''}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Mode selector */}
+                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+                      {(['standard', 'customised'] as const).map(m => (
+                        <TouchableOpacity
+                          key={m}
+                          onPress={() => setMode(m)}
+                          style={{
+                            paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
+                            borderWidth: 1.5,
+                            borderColor: cfg.mode === m ? '#00695C' : '#B2DFDB',
+                            backgroundColor: cfg.mode === m ? '#00695C' : '#FFF',
+                          }}
+                          data-testid={`phase3-ha-mode-${idx}-${m}`}
+                        >
+                          <Text style={{
+                            fontSize: 12, fontWeight: '700',
+                            color: cfg.mode === m ? '#FFF' : '#00695C',
+                          }}>
+                            {m === 'standard' ? 'Standard cuff height' : 'Customised healing abutment'}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    {cfg.mode === 'standard' && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text style={{ fontSize: 13, color: '#37474F', fontWeight: '600' }}>Cuff height</Text>
+                        <TextInput
+                          style={[s.smallInput, { minWidth: 90 }]}
+                          value={cfg.cuff_height_mm}
+                          onChangeText={setCuff}
+                          placeholder="mm"
+                          keyboardType="decimal-pad"
+                          maxLength={5}
+                          data-testid={`phase3-ha-cuff-${idx}`}
+                        />
+                        <Text style={{ fontSize: 13, color: '#78909C' }}>mm</Text>
+                        {cfg.phase2_cuff_height_mm && cfg.cuff_height_mm !== cfg.phase2_cuff_height_mm && (
+                          <Text style={{ fontSize: 11, color: '#E65100', fontStyle: 'italic' }}>
+                            (was {cfg.phase2_cuff_height_mm} mm in Phase 2)
+                          </Text>
+                        )}
+                      </View>
+                    )}
+
+                    {cfg.mode === 'customised' && (
+                      <View>
+                        <TextInput
+                          style={{
+                            borderWidth: 1,
+                            borderColor: overWords ? '#F44336' : '#B2DFDB',
+                            borderRadius: 8, backgroundColor: '#FFF',
+                            padding: 10, fontSize: 13, minHeight: 80, textAlignVertical: 'top',
+                            color: '#263238',
+                          }}
+                          value={cfg.customised_details}
+                          onChangeText={setDetails}
+                          multiline
+                          placeholder="Describe the customised healing abutment (design, brand, dimensions, occlusal considerations)…"
+                          placeholderTextColor="#90A4AE"
+                          data-testid={`phase3-ha-custom-${idx}`}
+                        />
+                        <Text style={{
+                          textAlign: 'right', marginTop: 4,
+                          fontSize: 11, fontWeight: '600',
+                          color: overWords ? '#F44336' : (wc >= WORDS_MAX - 10 ? '#E65100' : '#78909C'),
+                        }} data-testid={`phase3-ha-words-${idx}`}>
+                          {wc} / {WORDS_MAX} words{overWords ? ' — over limit' : ''}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
           {/* ── Checklist ── */}
           <View style={s.section}>
             <View style={s.sectionHeader}>
@@ -484,8 +711,10 @@ export default function Stage2SurgicalSubmissionScreen() {
                   </View>
                 )}
 
-                {/* Healing Abutment cuff height - per implant */}
-                {item.id === 'healing_abutment' && checklistState[item.id] && (
+                {/* Healing Abutment cuff height - per implant
+                    iter-357: hidden when the new per-implant HA config is
+                    active (haConfig covers this per-implant). */}
+                {item.id === 'healing_abutment' && checklistState[item.id] && haConfig.length === 0 && (
                   <View style={{ paddingLeft: 16, paddingVertical: 8, backgroundColor: '#FFF8E1', borderRadius: 8, marginBottom: 4, padding: 12, borderWidth: 1, borderColor: '#FFE082' }}>
                     <Text style={{ fontSize: 14, fontWeight: '700', color: '#E65100', marginBottom: 8 }}>Cuff Height (mm)</Text>
                     {healingAbutmentHeight.map((val, idx) => (

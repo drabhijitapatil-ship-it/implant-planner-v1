@@ -623,6 +623,14 @@ class Stage2SurgicalSubmit(BaseModel):
     # Additional data fields
     isq_value: Optional[Any] = None  # str or list of str (per implant)
     healing_abutment_height: Optional[Any] = None  # str or list of str (per implant)
+    # iter-357: Per-implant Phase 3 healing abutment configuration for multi-
+    # implant cases (multi-Prosthetic-Component workflow). Each entry:
+    #   { implant_idx: int, mode: 'standard' | 'customised',
+    #     cuff_height_mm: str, customised_details: str (<= 100 words),
+    #     phase2_component: str, phase2_cuff_height_mm: str }
+    # For single/full-arch cases this stays None and the legacy
+    # `healing_abutment_height` array is used.
+    phase3_healing_abutment_config: Optional[List[Dict[str, Any]]] = None
     # Post-surgical radiograph uploads
     iopa_files: Optional[List[Dict[str, str]]] = None  # [{filename, original_name, tooth_label}]
     # Notes
@@ -7408,13 +7416,43 @@ If the System Catalog is provided, you may briefly cite which prosthetic / surgi
 
 Provide a clinical explanation in professional scientific language. Do not mention any guideline names or references. Write as a professional clinical note."""
 
+    # iter-357 Potential Improvement: Vision context. Attach the mandatory
+    # Phase-1 intra-oral photographs (Occlusal + Lateral/Frontal + any extras)
+    # to the LLM call so the model can visually assess ridge contour, mucosal
+    # biotype, inter-arch space, and adjacent-tooth condition. PHI-safe: the
+    # images are already on our infra and only reach the LLM provider.
+    vision_attachments = []
+    vision_labels: List[str] = []
+    for photo in (proc.get("intraoral_photos") or []):
+        img = _load_radiograph_image_b64(photo.get("filename"))
+        if img and img.get("b64"):
+            vision_attachments.append(ImageContent(image_base64=img["b64"]))
+            vision_labels.append(str(photo.get("label") or "intra-oral photograph"))
+        # Cap at 4 photos to keep payload/cost bounded — Occlusal + Lateral +
+        # up to 2 extras usually cover the diagnostic story.
+        if len(vision_attachments) >= 4:
+            break
+    if vision_attachments:
+        prompt += ("\n\nVision context — you have been given "
+                   f"{len(vision_attachments)} intra-oral photograph(s) from Phase 1 "
+                   f"({', '.join(vision_labels)}). Use them to check for ridge deficiency, "
+                   "mucosal biotype, inter-arch space and adjacent-tooth condition. "
+                   "If something clinically relevant is visible, comment on it explicitly; "
+                   "if a finding is not assessable from the images, say so plainly. "
+                   "Do NOT fabricate details that are not visible.")
+
     chat = LlmChat(
         api_key=_get_llm_key(),
         session_id=f"explain-{procedure_id}-{implant_index}-{uuid.uuid4().hex[:8]}",
         system_message="You are an expert implant dentistry clinical advisor. Provide concise, evidence-based clinical explanations."
     ).with_model("openai", "gpt-5.2")
-    
-    response = await chat.send_message(UserMessage(text=prompt))
+
+    # iter-357 Potential Improvement: send prompt + vision attachments when
+    # intra-oral photographs exist on the case.
+    if vision_attachments:
+        response = await chat.send_message(UserMessage(text=prompt, file_contents=vision_attachments))
+    else:
+        response = await chat.send_message(UserMessage(text=prompt))
     
     # Store in procedure
     await db.procedures.update_one(
@@ -11608,6 +11646,8 @@ async def submit_stage2_surgical(
         "checklist_items": data.checklist_items or {},
         "isq_value": data.isq_value,
         "healing_abutment_height": data.healing_abutment_height,
+        # iter-357: per-implant Phase 3 healing abutment config (multi-implant flow).
+        "phase3_healing_abutment_config": data.phase3_healing_abutment_config,
         "iopa_files": data.iopa_files or [],
     }
     

@@ -1,5 +1,35 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 357 (Feb 2026) — Per-implant Phase 3 Healing Abutment Configuration + AI Vision Context
+
+User choices: Q1-c also include Immediate Loading Done implants (with same Standard/Customised options), Q2-a hard 100-word block, Q3-a mandatory selection per implant, Q4-a vision context only on `/ai/explain-recommendation`.
+
+### Feature Delivered
+1. **Phase 3 (`submit-stage2-surgical/[id].tsx`) new "Healing Abutment Configuration" section**:
+   - Renders when Phase 2 used per-implant Prosthetic Components (multi-implant, non-full-arch flow).
+   - Shows **every implant** (Cover Screw / Healing Abutment / Immediate Loading) with a small teal banner showing Phase 2 state (component + cuff height if applicable).
+   - Per-implant selector: **Standard cuff height** (mm input pre-filled from Phase 2's cuff height when applicable) OR **Customised healing abutment** (multiline text, hard 100-word cap with live word counter turning red above limit).
+   - Diff hint when the user changes cuff height from the Phase-2 value.
+   - Legacy `healing_abutment` checklist row is auto-hidden when the new per-implant flow is active.
+   - Validation: submit blocks until every implant has a valid selection. Word limit is a hard block.
+
+2. **Backend model** (`Stage2SurgicalSubmit`) gains `phase3_healing_abutment_config: Optional[List[Dict[str, Any]]]` — persisted under `phase3_data.phase3_healing_abutment_config`.
+
+3. **Potential Improvement — Vision context on AI Explain Recommendation**:
+   - `ai_explain_recommendation` now attaches the Phase-1 `intraoral_photos` (up to 4) as `ImageContent` to the GPT-5.2 vision call.
+   - Prompt instructs the model to check ridge deficiency, mucosal biotype, inter-arch space, adjacent-tooth condition, and to plainly say "not assessable" when the image doesn't show it (no fabrication).
+   - Gracefully degrades: cases without intra-oral photographs use the text-only path (unchanged behavior).
+
+### Files Changed
+- `/app/backend/server.py` — `Stage2SurgicalSubmit` model field + persistence; vision attachments in `ai_explain_recommendation`.
+- `/app/frontend/app/procedures/submit-stage2-surgical/[id].tsx` — new `haConfig` state, hydration from Phase 2, per-implant UI card, validation, submit payload, legacy row gated.
+
+### Tests
+- `/app/backend/tests/test_iter357_phase3_ha_config.py` — 2 passing regressions (payload roundtrip; vision-context path is optional).
+- Cumulative iter-355 + iter-356 + iter-357 → **7/7 pytest** passing.
+
+---
+
 ## Iteration 356 (Feb 2026) — Intra-oral Photograph section + Per-implant Prosthetic Component
 
 User choices: Q1-a fixed slot labels, Q2-b editable label for extras, Q3-a skip for Existing Implant cases, Q4-b drop case-level string for mixed, Q5-a Phase 3 filters to Cover-Screw implants only.
