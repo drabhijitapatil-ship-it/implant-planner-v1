@@ -1,5 +1,58 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 365 (Feb 2026) — Analytics polish: calendar picker, CSV fix, uniform tabs, per-procedure drill, failure analysis
+
+**User-driven changes (all 5 requests)**
+
+### 1. Calendar picker everywhere (was: text inputs)
+- Extracted the Phase-1 CalendarPicker into `/app/frontend/components/CalendarPicker.tsx` with `allowPast`, `compact`, and clear-button props.
+- Replaced text-input date fields in both `analytics/procedure-overview.tsx` and `analytics/advanced.tsx`.
+
+### 2. CSV downloads fixed on both screens
+- New shared util `/app/frontend/utils/csvDownload.ts` — `downloadAuthenticated(url, filename, mime)`:
+  - Web → `fetch()` with Authorization header → Blob → anchor download.
+  - Native → `FileSystem.downloadAsync` with header + `expo-sharing`.
+- Old buggy path used `Linking.openURL(?token=)` which the backend never accepted. Fixed.
+- Applied to Procedure Overview CSV, Research JSON, and new Research CSV.
+
+### 3. Uniform capsule tabs in Advanced Analytics
+- All tabs: `minWidth 118px, height 30px, justifyContent center` — visually identical size.
+- Active state remains the blue-filled capsule as before.
+
+### 4. Per-procedure deep drill on By-Procedure-Type table
+- **Backend**: `GET /analytics/procedure-drill?procedure_type=<t>` returns:
+  - Prosthesis **retention** split (Screw-Retained / Cement-Retained / Screw+Cement / Overdenture / Removable) + n + survival%.
+  - **Material** split (Zirconia / Lithium Disilicate / PFM / Metal / CoCr Framework / Ti Framework / PEEK / Acrylic / Hybrid).
+  - **Form** split (Fixed / Removable / Hybrid Overdenture) — per user choice 1b.
+  - **Retention × Material grid** (rows × cols) with survival cells.
+  - **Regions** (anterior_max / posterior_max / anterior_mand / posterior_mand).
+  - **Time-to-loading** (median, Q1-Q3, min-max, n) computed from Phase 2 → Phase 4 dates.
+  - **Clinical averages** (mean_torque, mean_isq).
+- **Parser**: `_parse_prosthesis_label(label)` orthogonalises catalog strings like `"Cement Retained Crown - Zirconia"` into `{retention, material, form}`.
+- **Frontend**: Rows in the By-Procedure-Type table are now tappable (▸/▾ chevron). Expanded panel shows retention, material, form breakdowns, the R×M grid, region rows, and time-to-loading card.
+
+### 5. Detailed Failure Analysis using Survival Review data
+- **Backend**: `GET /analytics/failure-analysis` returns:
+  - **Time-to-failure buckets** (Early <3mo · Mid 3-12mo · Late >12mo).
+  - **By system** table with n_placed, n_failed, failure_rate, **top 3 reasons per system**.
+  - **By bone type** (D1-D4), **By region**, **By supervisor** — same layout.
+  - **Replacement outcomes** — n_replaced, n_currently_active, replacement_success_rate, prior-revision chain counters.
+  - **Tooth heatmap** — FDI position → failure counts.
+  - **ISQ distribution by region** — median, mean, Q1-Q3, min-max (extra dim per user choice 5).
+- **Frontend**: New "Failure Analysis" tab in Advanced Analytics with buckets card, replacement card, 4 tables (system/bone/region/supervisor), anatomical FDI arch heatmap (upper + lower with size-scaled coloured dots per tooth), and ISQ dist table.
+
+### Value-adds (per choice 3a: all three)
+- **Kaplan-Meier v2** with Greenwood 95% CI dashed bands + **log-rank p-value** between the top-2 groups (chi-square df=1 approximation). Frontend upgraded to consume v2 endpoint. Old `/kaplan-meier` remains for backward compat.
+- **Research export CSV** (per choice 4b): `GET /analytics/research-export.csv` returns a flat de-identified per-implant table including the new `prosthesis_retention`, `prosthesis_material`, `prosthesis_form`, `prosthesis_raw` columns.
+- Predictive Risk Card auto-refine — kept the base rate for now; auto-refining with per-implant bone/region requires state lifting from `CaseImplantPlanning` and is queued as future work.
+
+### Tests — `/app/backend/tests/test_iter365_analytics_polish.py`
+- 7/7 passing (drill shape, missing type 400, failure-analysis shape, KM-v2 CI band monotonicity + log-rank keys, CSV headers + retention columns, nurse block, student scope).
+- Combined regression across analytics iterations: **27/27 pytest passing** (iter-363 + iter-364 + iter-365).
+
+---
+
+
 ## Iteration 364 (Feb 2026) — Phase Analytics-2 + Phase Analytics-3 + Predictive Risk Flag
 
 **Purpose**: Complete the Analytics module by adding advanced clinical/research widgets on top of iter-363's role-scoped foundation, plus a Phase-1 predictive-risk nudge for students.
