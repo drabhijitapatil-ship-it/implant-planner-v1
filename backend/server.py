@@ -6987,6 +6987,624 @@ async def get_research_export_json(
     }
 
 
+# ══════════════════════════════════════════════════════════════════
+# iter-365 — Analytics polish + deep drill + failure analysis
+#
+# Adds:
+#   • /analytics/procedure-drill                (per-procedure retention × material × region × time-to-loading)
+#   • /analytics/failure-analysis               (time-to-failure buckets, per-system/bone/region/supervisor, replacement outcomes, FDI heatmap)
+#   • Kaplan-Meier upgrade: Greenwood confidence bands + log-rank p-value between top 2 curves
+#   • /analytics/research-export.csv            (CSV twin of the JSON export)
+#   • ISQ distribution per tooth position       (folded into failure-analysis payload)
+# ══════════════════════════════════════════════════════════════════
+
+
+# ── Prosthesis label parser ────────────────────────────────
+# Users pick prostheses from a curated catalog like
+#   "Cement Retained Crown - Zirconia"
+#   "Screw Retained Bridge - Lithium Disilicate"
+#   "Full Arch Titanium Framework Zirconia Prosthesis"
+#   "Complete Overdenture"
+# We normalise these into three orthogonal dimensions:
+#   retention   ∈ {Screw-Retained, Cement-Retained, Screw+Cement, Overdenture, Removable, Unknown}
+#   material    ∈ {Zirconia, Lithium Disilicate, PFM, Metal, CoCr Framework,
+#                  Ti Framework, PEEK Framework, Acrylic, Hybrid, Unknown}
+#   form        ∈ {Fixed, Removable, Hybrid Overdenture, Unknown}
+def _parse_prosthesis_label(label: str) -> Dict[str, str]:
+    if not label:
+        return {"retention": "Unknown", "material": "Unknown", "form": "Unknown"}
+    s = str(label).lower()
+
+    # Retention
+    if "screw-retained" in s or "screw retained" in s:
+        retention = "Screw-Retained"
+    elif "cement-retained" in s or "cement retained" in s:
+        retention = "Cement-Retained"
+    elif "screw+cement" in s or "screw and cement" in s or "hybrid retention" in s:
+        retention = "Screw+Cement"
+    elif "overdenture" in s:
+        retention = "Overdenture"
+    elif "removable" in s or "denture" in s:
+        retention = "Removable"
+    else:
+        retention = "Unknown"
+
+    # Material
+    if "zirconia" in s:
+        material = "Zirconia"
+    elif "lithium disilicate" in s or "lisi" in s or "e.max" in s or "emax" in s:
+        material = "Lithium Disilicate"
+    elif "porcelain fused to metal" in s or "pfm" in s or "metal ceramic" in s or "metal-ceramic" in s:
+        material = "PFM"
+    elif "co-cr" in s or "co cr" in s or "cocr" in s or "cobalt" in s:
+        material = "CoCr Framework"
+    elif "titanium framework" in s or "ti framework" in s or "ti base" in s:
+        material = "Ti Framework"
+    elif "peek" in s:
+        material = "PEEK Framework"
+    elif "acrylic" in s or "pmma" in s:
+        material = "Acrylic"
+    elif "metal" in s and "ceramic" not in s:
+        material = "Metal"
+    elif "hybrid" in s:
+        material = "Hybrid"
+    else:
+        material = "Unknown"
+
+    # Form (Fixed vs Removable vs Hybrid Overdenture)
+    if "overdenture" in s:
+        form = "Hybrid Overdenture" if any(k in s for k in ("locator", "ball", "bar", "hybrid")) else "Removable"
+    elif retention == "Removable":
+        form = "Removable"
+    else:
+        form = "Fixed"
+
+    return {"retention": retention, "material": material, "form": form}
+
+
+def _implant_prosthesis(proc: Dict[str, Any], implant_seq_idx: int) -> Dict[str, str]:
+    """Best-guess prosthesis label + parsed dims for a given implant index."""
+    p4 = proc.get("stage2_prosthetic_data") or {}
+    per = p4.get("per_implant_plans") or []
+    label = None
+    if isinstance(per, list) and implant_seq_idx < len(per) and isinstance(per[implant_seq_idx], dict):
+        label = per[implant_seq_idx].get("prosthesis") or ""
+        mat = per[implant_seq_idx].get("material") or ""
+        if label and mat and mat.lower() not in label.lower():
+            label = f"{label} - {mat}"
+    if not label:
+        label = p4.get("prosthesis_type") or proc.get("final_prosthetic_plan") or ""
+    if isinstance(label, list):
+        label = label[implant_seq_idx] if implant_seq_idx < len(label) else (label[0] if label else "")
+    parsed = _parse_prosthesis_label(str(label or ""))
+    parsed["raw"] = str(label or "")
+    return parsed
+
+
+# ── /analytics/procedure-drill ───────────────────────────
+@api_router.get("/analytics/procedure-drill")
+async def get_procedure_drill(
+    request: Request,
+    procedure_type: str,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    role = current_user.get("role")
+    _role_gate(role)
+    if not procedure_type:
+        raise HTTPException(status_code=400, detail="procedure_type is required")
+
+    procs = await _load_advanced_analytics_docs(from_date, to_date, scope_user=current_user)
+    procs = [p for p in procs if _po_pick_procedure_type(p) == procedure_type]
+
+    from datetime import datetime as _dt
+
+    retention_agg: Dict[str, Dict[str, int]] = {}   # retention -> {n, failed}
+    material_agg: Dict[str, Dict[str, int]] = {}
+    form_agg: Dict[str, Dict[str, int]] = {}
+    matrix: Dict[Tuple[str, str], Dict[str, int]] = {}   # (retention, material) -> {n, failed}
+    region_agg: Dict[str, Dict[str, int]] = {}
+    loading_days: List[float] = []
+    torques: List[float] = []
+    isqs: List[float] = []
+
+    for p in procs:
+        # Time-to-loading per case: phase2_actual_done_date → phase4_step2_done_date
+        try:
+            p2 = p.get("phase2_actual_done_date")
+            p4 = p.get("phase4_step2_done_date")
+            if p2 and p4:
+                d2 = _dt.strptime(str(p2)[:10], "%Y-%m-%d")
+                d4 = _dt.strptime(str(p4)[:10], "%Y-%m-%d")
+                delta = (d4 - d2).days
+                if 0 <= delta <= 3650:
+                    loading_days.append(delta)
+        except Exception:
+            pass
+
+        for i, r in enumerate(_implant_records(p)):
+            failed = 1 if r["status"] in ("Failed", "Replaced") else 0
+            pr = _implant_prosthesis(p, i)
+
+            for key, agg in ((pr["retention"], retention_agg),
+                             (pr["material"], material_agg),
+                             (pr["form"], form_agg),
+                             (r["region"] or "unknown", region_agg)):
+                row = agg.setdefault(key, {"n": 0, "failed": 0})
+                row["n"] += 1
+                row["failed"] += failed
+
+            key2 = (pr["retention"], pr["material"])
+            cell = matrix.setdefault(key2, {"n": 0, "failed": 0})
+            cell["n"] += 1
+            cell["failed"] += failed
+
+            if r["torque"] is not None:
+                torques.append(r["torque"])
+            if r["isq"] is not None:
+                isqs.append(r["isq"])
+
+    def _as_rows(agg: Dict[str, Dict[str, int]]):
+        out = []
+        for k, v in agg.items():
+            surv = round(100.0 * (1 - v["failed"] / v["n"]), 1) if v["n"] else None
+            out.append({"key": k, "n": v["n"], "failed": v["failed"], "survival": surv})
+        out.sort(key=lambda x: -x["n"])
+        return out
+
+    retentions = _as_rows(retention_agg)
+    materials = _as_rows(material_agg)
+    forms = _as_rows(form_agg)
+    regions = _as_rows(region_agg)
+
+    ret_keys = [r["key"] for r in retentions]
+    mat_keys = [m["key"] for m in materials]
+    grid = []
+    for r in ret_keys:
+        row_cells = []
+        for m in mat_keys:
+            v = matrix.get((r, m), {"n": 0, "failed": 0})
+            surv = round(100.0 * (1 - v["failed"] / v["n"]), 1) if v["n"] else None
+            row_cells.append({"material": m, "n": v["n"], "failed": v["failed"], "survival": surv})
+        grid.append({"retention": r, "cells": row_cells})
+
+    loading_days_sorted = sorted(loading_days)
+
+    def _q(vals: List[float], q: float) -> Optional[float]:
+        if not vals: return None
+        k = (len(vals) - 1) * q
+        f = int(k); c = min(f + 1, len(vals) - 1)
+        return round(vals[f] + (vals[c] - vals[f]) * (k - f), 1)
+
+    await log_access(action="analytics_view", outcome="success",
+                     resource_type="procedure_drill", resource_id=procedure_type,
+                     user=current_user, request=request)
+    return {
+        "scope": {"role": role, "own_only": role == "student"},
+        "procedure_type": procedure_type,
+        "n_cases": len(procs),
+        "retentions": retentions,
+        "materials": materials,
+        "forms": forms,
+        "regions": regions,
+        "retention_material_grid": {"row_keys": ret_keys, "col_keys": mat_keys, "grid": grid},
+        "time_to_loading": {
+            "n": len(loading_days),
+            "median_days": _q(loading_days_sorted, 0.5),
+            "q1": _q(loading_days_sorted, 0.25),
+            "q3": _q(loading_days_sorted, 0.75),
+            "min": loading_days_sorted[0] if loading_days_sorted else None,
+            "max": loading_days_sorted[-1] if loading_days_sorted else None,
+        },
+        "clinical_averages": {"mean_torque": _mean(torques), "mean_isq": _mean(isqs)},
+    }
+
+
+# ── /analytics/failure-analysis ──────────────────────────
+_FAILURE_BUCKETS = [
+    ("early", "<3 months", 0, 90),
+    ("mid", "3-12 months", 90, 365),
+    ("late", ">12 months", 365, 10_000),
+]
+
+
+@api_router.get("/analytics/failure-analysis")
+async def get_failure_analysis(
+    request: Request,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    role = current_user.get("role")
+    _role_gate(role)
+    procs = await _load_advanced_analytics_docs(from_date, to_date, scope_user=current_user)
+
+    from datetime import datetime as _dt
+
+    buckets: Dict[str, int] = {b[0]: 0 for b in _FAILURE_BUCKETS}
+    by_system: Dict[str, Dict[str, int]] = {}
+    by_bone: Dict[str, Dict[str, int]] = {}
+    by_region: Dict[str, Dict[str, int]] = {}
+    by_supervisor: Dict[str, Dict[str, Any]] = {}
+    by_tooth: Dict[str, int] = {}   # tooth FDI -> failure count
+    isq_by_region: Dict[str, List[float]] = {}
+
+    n_failed = 0
+    n_replaced_events = 0
+    n_replacements_active = 0
+    replacement_history_active = 0
+    replacement_history_total = 0
+    top_reasons_by_system: Dict[str, Dict[str, int]] = {}
+
+    for p in procs:
+        sup_name = p.get("supervisor_name") or "—"
+        sup_id = str(p.get("supervisor_id") or sup_name)
+
+        for i, r in enumerate(_implant_records(p)):
+            # Aggregate ISQ per region
+            if r["isq"] is not None:
+                isq_by_region.setdefault(r["region"] or "unknown", []).append(r["isq"])
+
+            for tag in ("n_placed",):
+                for agg in (by_system.setdefault(r["system"], {"n_placed": 0, "n_failed": 0}),
+                            by_bone.setdefault(r["bone_type"], {"n_placed": 0, "n_failed": 0}),
+                            by_region.setdefault(r["region"], {"n_placed": 0, "n_failed": 0})):
+                    agg[tag] += 1
+                s_row = by_supervisor.setdefault(sup_id, {"name": sup_name, "n_placed": 0, "n_failed": 0})
+                s_row["n_placed"] += 1
+
+            if r["status"] not in ("Failed", "Replaced"):
+                continue
+
+            n_failed += 1
+            by_system[r["system"]]["n_failed"] += 1
+            by_bone[r["bone_type"]]["n_failed"] += 1
+            by_region[r["region"]]["n_failed"] += 1
+            by_supervisor[sup_id]["n_failed"] += 1
+
+            # Time-to-failure bucket
+            try:
+                d1 = _dt.strptime(str(r["phase2_date"])[:10], "%Y-%m-%d") if r["phase2_date"] else None
+                d2 = _dt.strptime(str(r["failure_date"])[:10], "%Y-%m-%d") if r["failure_date"] else None
+                if d1 and d2:
+                    days = max(0, (d2 - d1).days)
+                    for tag, _lbl, lo, hi in _FAILURE_BUCKETS:
+                        if lo <= days < hi:
+                            buckets[tag] += 1
+                            break
+            except Exception:
+                pass
+
+            # FDI heatmap
+            tooth = str(r.get("tooth") or "").strip()
+            if tooth:
+                by_tooth[tooth] = by_tooth.get(tooth, 0) + 1
+
+            # Top reasons per system
+            reason = r.get("failure_reason") or "Unknown"
+            trs = top_reasons_by_system.setdefault(r["system"], {})
+            trs[reason] = trs.get(reason, 0) + 1
+
+        # Replacement outcomes from survival review
+        review = (p.get("phase2_survival_review") or {}).get("implants") or []
+        for rev in review:
+            if not isinstance(rev, dict):
+                continue
+            if rev.get("status") == "Replaced":
+                n_replaced_events += 1
+                repl = rev.get("replacement") or {}
+                # Consider active if the *current* replacement isn't marked failed
+                if not repl.get("failure_date"):
+                    n_replacements_active += 1
+                # Legacy chain
+                for old in (repl.get("chain") or []):
+                    replacement_history_total += 1
+                    if not old.get("failure_date"):
+                        replacement_history_active += 1
+
+    def _rows(agg: Dict[str, Dict[str, int]]):
+        out = []
+        for k, v in agg.items():
+            rate = round(100.0 * v["n_failed"] / v["n_placed"], 1) if v["n_placed"] else None
+            out.append({"key": k, "n_placed": v["n_placed"], "n_failed": v["n_failed"], "failure_rate": rate})
+        out.sort(key=lambda x: -x["n_placed"])
+        return out
+
+    by_system_out = _rows(by_system)
+    # Attach top reasons to each system row
+    for row in by_system_out:
+        reasons = top_reasons_by_system.get(row["key"], {})
+        row["top_reasons"] = [{"reason": r, "count": c}
+                              for r, c in sorted(reasons.items(), key=lambda kv: -kv[1])][:3]
+
+    by_supervisor_out = []
+    for k, v in by_supervisor.items():
+        rate = round(100.0 * v["n_failed"] / v["n_placed"], 1) if v["n_placed"] else None
+        by_supervisor_out.append({"key": k, "name": v["name"],
+                                  "n_placed": v["n_placed"], "n_failed": v["n_failed"], "failure_rate": rate})
+    by_supervisor_out.sort(key=lambda x: -x["n_placed"])
+
+    tooth_heat = [{"tooth": t, "failures": c} for t, c in by_tooth.items()]
+    tooth_heat.sort(key=lambda x: -x["failures"])
+
+    isq_dist_by_region = []
+    for reg, vals in sorted(isq_by_region.items()):
+        vs = sorted(vals)
+        isq_dist_by_region.append({
+            "region": reg, "n": len(vs),
+            "median": _median(vs), "mean": _mean(vs),
+            "min": vs[0] if vs else None,
+            "max": vs[-1] if vs else None,
+            "q1": vs[int(len(vs) * 0.25)] if vs else None,
+            "q3": vs[int(len(vs) * 0.75)] if vs else None,
+        })
+
+    await log_access(action="analytics_view", outcome="success",
+                     resource_type="failure_analysis", resource_id=f"n_failed={n_failed}",
+                     user=current_user, request=request)
+
+    replacement_success_rate = (
+        round(100.0 * n_replacements_active / n_replaced_events, 1) if n_replaced_events else None
+    )
+    return {
+        "scope": {"role": role, "own_only": role == "student"},
+        "totals": {"n_failed_events": n_failed, "n_replacements": n_replaced_events},
+        "time_to_failure_buckets": [
+            {"key": tag, "label": lbl, "count": buckets[tag]} for tag, lbl, _, _ in _FAILURE_BUCKETS
+        ],
+        "by_system": by_system_out,
+        "by_bone": _rows(by_bone),
+        "by_region": _rows(by_region),
+        "by_supervisor": by_supervisor_out,
+        "tooth_heatmap": tooth_heat,
+        "replacement_outcomes": {
+            "n_replaced": n_replaced_events,
+            "n_currently_active": n_replacements_active,
+            "n_prior_revisions_active": replacement_history_active,
+            "n_prior_revisions_total": replacement_history_total,
+            "replacement_success_rate": replacement_success_rate,
+        },
+        "isq_distribution_by_region": isq_dist_by_region,
+    }
+
+
+# ── Upgrade Kaplan-Meier with Greenwood CI + log-rank ────
+# We shadow the existing endpoint with an enhanced version. Since Python
+# doesn't allow route redefinition at the same path cleanly, we register
+# a separate path and let the frontend upgrade to it. Old endpoint stays
+# for backwards compat.
+import math as _math_km
+
+
+def _km_greenwood(points: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Add Greenwood 95% CI bands to KM step points. Uses S(t) * exp(±1.96 * sqrt(V))."""
+    var_sum = 0.0
+    out = []
+    for p in points:
+        n = max(1, p.get("n_at_risk", 1))
+        d = p.get("events", 0)
+        if d > 0 and n > d:
+            var_sum += d / (n * (n - d))
+        s = p["s"]
+        if s <= 0 or s >= 1 or var_sum <= 0:
+            lo, hi = s, s
+        else:
+            try:
+                se = _math_km.sqrt(var_sum)
+                # Log-log transform for well-behaved CIs
+                a = _math_km.log(-_math_km.log(max(s, 1e-9)))
+                lo = _math_km.exp(-_math_km.exp(a + 1.96 * se / (_math_km.log(max(s, 1e-9)) or -1e-9)))
+                hi = _math_km.exp(-_math_km.exp(a - 1.96 * se / (_math_km.log(max(s, 1e-9)) or -1e-9)))
+                lo = max(0.0, min(1.0, lo))
+                hi = max(0.0, min(1.0, hi))
+            except Exception:
+                lo, hi = s, s
+        out.append({**p, "s_lo": round(lo, 4), "s_hi": round(hi, 4)})
+    return out
+
+
+def _log_rank_two(a: List[Dict[str, int]], b: List[Dict[str, int]]) -> Optional[float]:
+    """Log-rank chi-square p-value between two observation lists.
+    Each obs = {t: days, event: 0/1}. Returns None if either group is empty
+    or degenerate. Uses one-degree-of-freedom chi-square approximation."""
+    if not a or not b:
+        return None
+    # Unique event times sorted
+    all_events = sorted({o["t"] for o in a + b if o["event"] == 1})
+    if not all_events:
+        return None
+    n_a = len(a); n_b = len(b)
+    obs_a = 0.0
+    exp_a = 0.0
+    var = 0.0
+    for t in all_events:
+        d_a = sum(1 for o in a if o["t"] == t and o["event"] == 1)
+        d_b = sum(1 for o in b if o["t"] == t and o["event"] == 1)
+        d = d_a + d_b
+        na = sum(1 for o in a if o["t"] >= t)
+        nb = sum(1 for o in b if o["t"] >= t)
+        n = na + nb
+        if n == 0 or d == 0:
+            continue
+        obs_a += d_a
+        exp_a += d * na / n
+        if n > 1:
+            var += (d * na * nb * (n - d)) / (n * n * (n - 1))
+    if var <= 0:
+        return None
+    chi2 = (obs_a - exp_a) ** 2 / var
+    # Approximate p-value via survival function of chi-square with df=1
+    # (using error-function-based approximation of the normal tail)
+    z = _math_km.sqrt(chi2)
+    # 2-sided p (identical to chi2 with df=1)
+    p = _math_km.erfc(z / _math_km.sqrt(2))
+    return round(max(0.0, min(1.0, p)), 4)
+
+
+@api_router.get("/analytics/kaplan-meier-v2")
+async def get_kaplan_meier_v2(
+    request: Request,
+    group_by: str = "procedure_type",
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    role = current_user.get("role")
+    _role_gate(role)
+    if group_by not in ("procedure_type", "system"):
+        group_by = "procedure_type"
+
+    procs = await _load_advanced_analytics_docs(from_date, to_date, scope_user=current_user)
+    from datetime import datetime as _dt
+    groups_raw: Dict[str, List[Dict[str, Any]]] = {}
+    for p in procs:
+        for r in _implant_records(p):
+            key = r["procedure_type"] if group_by == "procedure_type" else r["system"]
+            if not key:
+                continue
+            try:
+                start = _dt.strptime(str(r.get("phase2_date") or r.get("procedure_date"))[:10], "%Y-%m-%d")
+            except Exception:
+                continue
+            end_str = r.get("failure_date") or p.get("phase4_step2_done_date") or p.get("phase3_done_date") or p.get("updated_at") or datetime.now(timezone.utc).isoformat()
+            try:
+                end = _dt.strptime(str(end_str)[:10], "%Y-%m-%d") if "T" not in str(end_str) else _dt.fromisoformat(str(end_str).replace("Z", "+00:00")).replace(tzinfo=None)
+            except Exception:
+                continue
+            t = max(0, (end - start).days)
+            event = 1 if r["status"] in ("Failed", "Replaced") else 0
+            groups_raw.setdefault(key, []).append({"t": t, "event": event})
+
+    curves = []
+    for key, obs in groups_raw.items():
+        obs_sorted = sorted(obs, key=lambda x: x["t"])
+        n_at_risk = len(obs_sorted)
+        surv = 1.0
+        pts = [{"t": 0, "s": 1.0, "n_at_risk": n_at_risk, "events": 0}]
+        i = 0
+        while i < len(obs_sorted):
+            t = obs_sorted[i]["t"]
+            d = 0
+            j = i
+            while j < len(obs_sorted) and obs_sorted[j]["t"] == t:
+                if obs_sorted[j]["event"] == 1:
+                    d += 1
+                j += 1
+            if d > 0 and n_at_risk > 0:
+                surv *= (1 - d / n_at_risk)
+            pts.append({"t": t, "s": round(surv, 4), "n_at_risk": n_at_risk, "events": d})
+            n_at_risk -= (j - i)
+            i = j
+        curves.append({
+            "key": key,
+            "n_implants": len(obs_sorted),
+            "n_events": sum(1 for x in obs_sorted if x["event"] == 1),
+            "points": _km_greenwood(pts),
+            "final_survival": round(surv, 4),
+            "_raw_obs": obs_sorted,   # kept for log-rank; stripped before return
+        })
+    curves.sort(key=lambda c: -c["n_implants"])
+
+    log_rank = None
+    if len(curves) >= 2:
+        p_val = _log_rank_two(curves[0]["_raw_obs"], curves[1]["_raw_obs"])
+        if p_val is not None:
+            log_rank = {
+                "group_a": curves[0]["key"], "group_b": curves[1]["key"],
+                "p_value": p_val,
+                "interpretation": (
+                    "Groups differ (statistically significant)" if p_val < 0.05
+                    else "No significant difference"
+                ),
+            }
+    # Strip raw obs before returning
+    for c in curves:
+        c.pop("_raw_obs", None)
+
+    await log_access(action="analytics_view", outcome="success",
+                     resource_type="kaplan_meier_v2", resource_id=group_by,
+                     user=current_user, request=request)
+    return {
+        "scope": {"role": role, "own_only": role == "student"},
+        "group_by": group_by,
+        "curves": curves,
+        "log_rank_top2": log_rank,
+    }
+
+
+# ── /analytics/research-export.csv ─────────────────────────
+@api_router.get("/analytics/research-export.csv")
+async def get_research_export_csv(
+    request: Request,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    role = current_user.get("role")
+    _role_gate(role)
+    procs = await _load_advanced_analytics_docs(from_date, to_date, scope_user=current_user)
+
+    import hashlib
+    def _hid(v: Any) -> str:
+        return hashlib.sha256(str(v).encode()).hexdigest()[:12]
+
+    import io as _io, csv as _csv
+    buf = _io.StringIO()
+    w = _csv.writer(buf)
+    w.writerow(["Implanr — Research Export (de-identified)"])
+    w.writerow(["Generated at", datetime.now(timezone.utc).isoformat()])
+    w.writerow(["Role", role])
+    w.writerow(["Filters", f"from={from_date or '-'}, to={to_date or '-'}"])
+    w.writerow([])
+    w.writerow([
+        "case_id", "implant_seq", "student_hash", "supervisor_hash",
+        "procedure_type", "procedure_date", "phase2_date",
+        "tooth", "region", "system", "diameter_mm", "length_mm",
+        "insertion_torque_ncm", "isq", "bone_type",
+        "status", "failure_reason", "failure_date",
+        "prosthesis_retention", "prosthesis_material", "prosthesis_form", "prosthesis_raw",
+    ])
+    for p in procs:
+        pid = _hid(p.get("_id"))
+        sh = _hid(p.get("student_id") or p.get("student_name") or "")
+        ph = _hid(p.get("supervisor_id") or p.get("supervisor_name") or "")
+        for i, r in enumerate(_implant_records(p)):
+            pr = _implant_prosthesis(p, i)
+            w.writerow([
+                pid, i + 1, sh, ph,
+                r["procedure_type"],
+                (r["procedure_date"] or "")[:10],
+                (r["phase2_date"] or "")[:10] if r["phase2_date"] else "",
+                str(r["tooth"] or ""),
+                r["region"],
+                r["system"],
+                r["diameter"] or "",
+                r["length"] or "",
+                r["torque"] if r["torque"] is not None else "",
+                r["isq"] if r["isq"] is not None else "",
+                r["bone_type"],
+                r["status"],
+                r["failure_reason"] or "",
+                (r["failure_date"] or "")[:10] if r["failure_date"] else "",
+                pr["retention"], pr["material"], pr["form"], pr["raw"],
+            ])
+
+    await log_access(action="analytics_export", outcome="success",
+                     resource_type="research_export_csv", resource_id="global",
+                     user=current_user, request=request)
+    csv_bytes = buf.getvalue().encode("utf-8")
+    filename = f"implanr-research-export-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}.csv"
+    return Response(
+        content=csv_bytes,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+
+
+
 
 
 

@@ -19,13 +19,15 @@
  */
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput,
-  ActivityIndicator, Alert, Platform, Linking,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import api, { getToken } from '../../utils/api';
+import api from '../../utils/api';
+import { downloadAuthenticated } from '../../utils/csvDownload';
+import CalendarPicker from '../../components/CalendarPicker';
 import { useAuth } from '../../contexts/AuthContext';
 
 type KPIs = {
@@ -121,24 +123,9 @@ export default function ProcedureOverviewScreen() {
       if (selectedTypes.length > 0) params.procedure_type = selectedTypes.join(',');
       const qs = new URLSearchParams(params).toString();
       const baseUrl = api.defaults.baseURL || '';
-      const token = await getToken();
-      const url = `${baseUrl}/analytics/procedure-overview/export.csv?${qs}&token=${token || ''}`;
-      // Fetch as blob so we can rename the file on Web; on native, deep-link opens.
-      if (Platform.OS === 'web') {
-        const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-        if (!resp.ok) throw new Error('Export failed');
-        const blob = await resp.blob();
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `procedure-overview-${new Date().toISOString().slice(0, 10)}.csv`;
-        document.body.appendChild(a); a.click(); a.remove();
-      } else {
-        // React Native — deep-link opens in browser / native download provider
-        Linking.openURL(url);
-      }
-    } catch (e: any) {
-      Alert.alert('Export failed', e?.message || 'Could not export CSV');
-    }
+      const url = `${baseUrl}/analytics/procedure-overview/export.csv?${qs}`;
+      await downloadAuthenticated(url, `procedure-overview-${new Date().toISOString().slice(0, 10)}.csv`);
+    } catch { /* alert handled inside util */ }
   };
 
   if (authLoading) {
@@ -200,30 +187,15 @@ export default function ProcedureOverviewScreen() {
         {/* Filters */}
         <View style={s.filterCard} testID="analytics-filters">
           <View style={s.filterRow}>
-            <View style={{ flex: 1, marginRight: 8 }}>
-              <Text style={s.filterLabel}>From</Text>
-              <TextInput
-                value={fromDate}
-                onChangeText={setFromDate}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor="#B0BEC5"
-                style={s.filterInput}
-                testID="analytics-from-date"
-                /* @ts-ignore */ data-testid="analytics-from-date"
-              />
-            </View>
-            <View style={{ flex: 1, marginLeft: 8 }}>
-              <Text style={s.filterLabel}>To</Text>
-              <TextInput
-                value={toDate}
-                onChangeText={setToDate}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor="#B0BEC5"
-                style={s.filterInput}
-                testID="analytics-to-date"
-                /* @ts-ignore */ data-testid="analytics-to-date"
-              />
-            </View>
+            <CalendarPicker
+              value={fromDate} onChange={setFromDate}
+              placeholder="From (YYYY-MM-DD)" allowPast compact testID="analytics-from-date"
+            />
+            <View style={{ width: 8 }} />
+            <CalendarPicker
+              value={toDate} onChange={setToDate}
+              placeholder="To (YYYY-MM-DD)" allowPast compact testID="analytics-to-date"
+            />
           </View>
 
           <View style={[s.filterRow, { marginTop: 8 }]}>
@@ -356,13 +328,14 @@ export default function ProcedureOverviewScreen() {
               </View>
             )}
 
-            {/* By Procedure Type table */}
-            <SectionHeader icon="bar-chart-outline" title="By Procedure Type" />
+            {/* By Procedure Type table (expandable rows with drill data) */}
+            <SectionHeader icon="bar-chart-outline" title="By Procedure Type · tap ▸ to drill" />
             {data.by_procedure_type.length === 0 ? (
               <EmptyRow />
             ) : (
               <View style={s.tableCard} testID="analytics-by-type-table">
                 <View style={[s.tRow, s.tHeaderRow]}>
+                  <Text style={[s.tCell, { flex: 0.4 }, s.tHeaderTxt]}> </Text>
                   <Text style={[s.tCell, s.tCellType, s.tHeaderTxt]}>Type</Text>
                   <Text style={[s.tCell, s.tCellNum, s.tHeaderTxt]}>Total</Text>
                   <Text style={[s.tCell, s.tCellNum, s.tHeaderTxt]}>✓</Text>
@@ -371,14 +344,13 @@ export default function ProcedureOverviewScreen() {
                   <Text style={[s.tCell, s.tCellNum, s.tHeaderTxt]}>Days</Text>
                 </View>
                 {data.by_procedure_type.map((r, idx) => (
-                  <View key={r.procedure_type} style={[s.tRow, idx % 2 === 1 && { backgroundColor: '#FAFCFF' }]}>
-                    <Text style={[s.tCell, s.tCellType]} numberOfLines={2}>{r.procedure_type}</Text>
-                    <Text style={[s.tCell, s.tCellNum]}>{r.total}</Text>
-                    <Text style={[s.tCell, s.tCellNum, { color: '#2E7D32', fontWeight: '700' }]}>{r.completed}</Text>
-                    <Text style={[s.tCell, s.tCellNum, { color: '#C62828', fontWeight: '700' }]}>{r.terminated}</Text>
-                    <Text style={[s.tCell, s.tCellNum]}>{FMT(r.success_rate, '%')}</Text>
-                    <Text style={[s.tCell, s.tCellNum]}>{FMT(r.mean_days)}</Text>
-                  </View>
+                  <ProcedureRow
+                    key={r.procedure_type}
+                    row={r}
+                    striped={idx % 2 === 1}
+                    fromDate={fromDate}
+                    toDate={toDate}
+                  />
                 ))}
               </View>
             )}
@@ -496,6 +468,150 @@ export default function ProcedureOverviewScreen() {
 }
 
 // ── Sub-components ─────────────────────────────────────────
+
+
+function ProcedureRow({
+  row, striped, fromDate, toDate,
+}: {
+  row: ByType; striped: boolean; fromDate: string; toDate: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [drill, setDrill] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  const toggle = async () => {
+    const willOpen = !open;
+    setOpen(willOpen);
+    if (willOpen && !drill) {
+      setLoading(true);
+      try {
+        const params: any = { procedure_type: row.procedure_type };
+        if (fromDate) params.from_date = fromDate;
+        if (toDate) params.to_date = toDate;
+        const r = await api.get('/analytics/procedure-drill', { params });
+        setDrill(r.data);
+      } catch { /* silent */ }
+      finally { setLoading(false); }
+    }
+  };
+
+  return (
+    <>
+      <TouchableOpacity
+        onPress={toggle}
+        style={[s.tRow, striped && { backgroundColor: '#FAFCFF' }]}
+        testID={`by-type-row-${row.procedure_type.replace(/\s+/g, '-').toLowerCase()}`}
+      >
+        <View style={[s.tCell, { flex: 0.4 }]}>
+          <Ionicons name={open ? 'chevron-down' : 'chevron-forward'} size={14} color="#546E7A" />
+        </View>
+        <Text style={[s.tCell, s.tCellType]} numberOfLines={2}>{row.procedure_type}</Text>
+        <Text style={[s.tCell, s.tCellNum]}>{row.total}</Text>
+        <Text style={[s.tCell, s.tCellNum, { color: '#2E7D32', fontWeight: '700' }]}>{row.completed}</Text>
+        <Text style={[s.tCell, s.tCellNum, { color: '#C62828', fontWeight: '700' }]}>{row.terminated}</Text>
+        <Text style={[s.tCell, s.tCellNum]}>{FMT(row.success_rate, '%')}</Text>
+        <Text style={[s.tCell, s.tCellNum]}>{FMT(row.mean_days)}</Text>
+      </TouchableOpacity>
+      {open && (
+        <View style={s.drillWrap} testID={`drill-${row.procedure_type.replace(/\s+/g, '-').toLowerCase()}`}>
+          {loading ? <ActivityIndicator size="small" color="#1E88E5" style={{ padding: 12 }} />
+          : !drill ? <Text style={s.drillEmpty}>No drill data.</Text>
+          : (
+            <>
+              {/* Retention */}
+              {drill.retentions?.length > 0 && (
+                <View style={s.drillBlock}>
+                  <Text style={s.drillHead}>Prosthesis retention</Text>
+                  {drill.retentions.map((x: any) => (
+                    <View key={x.key} style={s.drillLine}>
+                      <Text style={s.drillLbl}>{x.key}</Text>
+                      <Text style={s.drillVal}>n={x.n}{x.survival !== null ? ` · ${x.survival}%` : ''}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+              {/* Material */}
+              {drill.materials?.length > 0 && (
+                <View style={s.drillBlock}>
+                  <Text style={s.drillHead}>Material</Text>
+                  {drill.materials.map((x: any) => (
+                    <View key={x.key} style={s.drillLine}>
+                      <Text style={s.drillLbl}>{x.key}</Text>
+                      <Text style={s.drillVal}>n={x.n}{x.survival !== null ? ` · ${x.survival}%` : ''}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+              {/* Form (Fixed / Removable / Hybrid Overdenture) */}
+              {drill.forms?.length > 0 && (
+                <View style={s.drillBlock}>
+                  <Text style={s.drillHead}>Fixed vs Removable vs Hybrid Overdenture</Text>
+                  {drill.forms.map((x: any) => (
+                    <View key={x.key} style={s.drillLine}>
+                      <Text style={s.drillLbl}>{x.key}</Text>
+                      <Text style={s.drillVal}>n={x.n}{x.survival !== null ? ` · ${x.survival}%` : ''}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+              {/* Retention × Material grid */}
+              {drill.retention_material_grid?.grid?.length > 0 && (
+                <View style={s.drillBlock}>
+                  <Text style={s.drillHead}>Retention × Material grid</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator>
+                    <View>
+                      <View style={{ flexDirection: 'row' }}>
+                        <View style={[s.gridCell, s.gridHead, { width: 130 }]}><Text style={s.gridHeadTxt}>Retention</Text></View>
+                        {drill.retention_material_grid.col_keys.map((c: string) => (
+                          <View key={c} style={[s.gridCell, s.gridHead]}><Text style={s.gridHeadTxt} numberOfLines={2}>{c}</Text></View>
+                        ))}
+                      </View>
+                      {drill.retention_material_grid.grid.map((r: any) => (
+                        <View key={r.retention} style={{ flexDirection: 'row' }}>
+                          <View style={[s.gridCell, { width: 130, backgroundColor: '#F5F7FB' }]}><Text style={s.gridRowLbl}>{r.retention}</Text></View>
+                          {r.cells.map((c: any, ci: number) => (
+                            <View key={ci} style={s.gridCell}>
+                              <Text style={s.gridVal}>{c.survival === null ? '—' : `${c.survival}%`}</Text>
+                              <Text style={s.gridN}>n={c.n}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      ))}
+                    </View>
+                  </ScrollView>
+                </View>
+              )}
+              {/* Region + Time-to-loading */}
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {drill.regions?.length > 0 && (
+                  <View style={[s.drillBlock, { flex: 1 }]}>
+                    <Text style={s.drillHead}>By region</Text>
+                    {drill.regions.map((x: any) => (
+                      <View key={x.key} style={s.drillLine}>
+                        <Text style={s.drillLbl}>{x.key.replace(/_/g, ' ')}</Text>
+                        <Text style={s.drillVal}>n={x.n}{x.survival !== null ? ` · ${x.survival}%` : ''}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+                {drill.time_to_loading?.n > 0 && (
+                  <View style={[s.drillBlock, { flex: 1 }]}>
+                    <Text style={s.drillHead}>Time to loading</Text>
+                    <Text style={s.drillLine2}>Median: <Text style={{ fontWeight: '800' }}>{drill.time_to_loading.median_days} d</Text></Text>
+                    <Text style={s.drillLine2}>Q1-Q3: {drill.time_to_loading.q1}–{drill.time_to_loading.q3} d</Text>
+                    <Text style={s.drillLine2}>Range: {drill.time_to_loading.min}–{drill.time_to_loading.max} d</Text>
+                    <Text style={s.drillLine2}>n={drill.time_to_loading.n}</Text>
+                  </View>
+                )}
+              </View>
+            </>
+          )}
+        </View>
+      )}
+    </>
+  );
+}
+
 
 function KpiCard({ label, value, accent, testID }: { label: string; value: string; accent: string; testID?: string }) {
   return (
@@ -717,4 +833,19 @@ const s = StyleSheet.create({
     fontSize: 10, color: '#90A4AE',
     fontStyle: 'italic', textAlign: 'center', lineHeight: 15,
   },
+
+  drillWrap: { padding: 12, backgroundColor: '#F5F7FB', borderTopWidth: 1, borderTopColor: '#E1E7EF' },
+  drillEmpty: { color: '#B0BEC5', fontStyle: 'italic', textAlign: 'center', padding: 12 },
+  drillBlock: { backgroundColor: '#FFF', borderRadius: 8, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: '#E1E7EF' },
+  drillHead: { fontSize: 11, fontWeight: '800', color: '#1565C0', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 },
+  drillLine: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: '#F0F4F8' },
+  drillLbl: { fontSize: 12, color: '#37474F', flex: 1 },
+  drillVal: { fontSize: 12, color: '#546E7A', fontWeight: '700' },
+  drillLine2: { fontSize: 12, color: '#37474F', marginTop: 3 },
+  gridCell: { width: 90, minHeight: 42, borderWidth: 1, borderColor: '#F0F4F8', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  gridHead: { backgroundColor: '#F5F7FB' },
+  gridHeadTxt: { fontSize: 10, fontWeight: '800', color: '#546E7A', textAlign: 'center' },
+  gridRowLbl: { fontSize: 11, fontWeight: '700', color: '#1A2332', textAlign: 'center' },
+  gridVal: { fontSize: 12, fontWeight: '800', color: '#1A2332' },
+  gridN: { fontSize: 9, color: '#90A4AE' },
 });

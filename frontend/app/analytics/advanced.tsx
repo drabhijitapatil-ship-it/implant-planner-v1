@@ -18,25 +18,28 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput,
-  ActivityIndicator, Alert, Platform, Linking,
+  ActivityIndicator, Alert,
 } from 'react-native';
 import Svg, { Path, Circle, Line, Text as SvgText, Rect } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import api, { getToken } from '../../utils/api';
+import api from '../../utils/api';
+import { downloadAuthenticated } from '../../utils/csvDownload';
+import CalendarPicker from '../../components/CalendarPicker';
 import { useAuth } from '../../contexts/AuthContext';
 
-type Section = 'km' | 'scatter' | 'heatmap' | 'crosstab' | 'learning' | 'cmi' | 'complications' | 'benchmarks' | 'export';
+type Section = 'km' | 'scatter' | 'heatmap' | 'crosstab' | 'learning' | 'cmi' | 'complications' | 'failures' | 'benchmarks' | 'export';
 
 const SECTIONS: { key: Section; label: string; icon: keyof typeof Ionicons.glyphMap; facultyOnly?: boolean }[] = [
   { key: 'km', label: 'Kaplan-Meier', icon: 'pulse-outline' },
-  { key: 'scatter', label: 'Torque × ISQ', icon: 'scatter-chart-outline' as any },
+  { key: 'scatter', label: 'Torque × ISQ', icon: 'analytics-outline' },
   { key: 'heatmap', label: 'Bone Heatmap', icon: 'grid-outline' },
   { key: 'crosstab', label: 'Cross-tab', icon: 'apps-outline' },
   { key: 'learning', label: 'Learning Curve', icon: 'trending-up-outline' },
   { key: 'cmi', label: 'Case-Mix Index', icon: 'medal-outline', facultyOnly: true },
   { key: 'complications', label: 'Complications', icon: 'warning-outline' },
+  { key: 'failures', label: 'Failure Analysis', icon: 'sad-outline' },
   { key: 'benchmarks', label: 'Benchmarks', icon: 'ribbon-outline' },
   { key: 'export', label: 'Research Export', icon: 'download-outline' },
 ];
@@ -78,8 +81,8 @@ export default function AdvancedAnalyticsHub() {
         </View>
       </View>
 
-      {/* Section tabs */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tabsScroll} contentContainerStyle={{ paddingHorizontal: 10, gap: 6 }}>
+      {/* Section tabs (uniform capsules) */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tabsScroll} contentContainerStyle={{ paddingHorizontal: 10, gap: 6, alignItems: 'center' }}>
         {SECTIONS.filter(sec => !sec.facultyOnly || isFaculty).map(sec => {
           const active = section === sec.key;
           return (
@@ -88,25 +91,25 @@ export default function AdvancedAnalyticsHub() {
               onPress={() => setSection(sec.key)}
               style={[s.tab, active && s.tabActive]}
               testID={`adv-tab-${sec.key}`}
+              /* @ts-ignore */ data-testid={`adv-tab-${sec.key}`}
             >
               <Ionicons name={sec.icon} size={13} color={active ? '#FFF' : '#546E7A'} />
-              <Text style={[s.tabTxt, active && s.tabTxtActive]}>{sec.label}</Text>
+              <Text style={[s.tabTxt, active && s.tabTxtActive]} numberOfLines={1}>{sec.label}</Text>
             </TouchableOpacity>
           );
         })}
       </ScrollView>
 
-      {/* Date range picker (shared) */}
+      {/* Date range picker (shared, calendar-based) */}
       <View style={s.dateRow}>
-        <TextInput
-          value={fromDate} onChangeText={setFromDate}
-          placeholder="From YYYY-MM-DD" placeholderTextColor="#B0BEC5"
-          style={s.dateInput} testID="adv-from-date"
+        <CalendarPicker
+          value={fromDate} onChange={setFromDate}
+          placeholder="From (YYYY-MM-DD)" allowPast compact testID="adv-from-date"
         />
-        <TextInput
-          value={toDate} onChangeText={setToDate}
-          placeholder="To YYYY-MM-DD" placeholderTextColor="#B0BEC5"
-          style={s.dateInput} testID="adv-to-date"
+        <View style={{ width: 8 }} />
+        <CalendarPicker
+          value={toDate} onChange={setToDate}
+          placeholder="To (YYYY-MM-DD)" allowPast compact testID="adv-to-date"
         />
       </View>
 
@@ -118,6 +121,7 @@ export default function AdvancedAnalyticsHub() {
         {section === 'learning' && <LearningCurvePane isFaculty={isFaculty} />}
         {section === 'cmi' && isFaculty && <CaseMixPane fromDate={fromDate} toDate={toDate} />}
         {section === 'complications' && <ComplicationsPane fromDate={fromDate} toDate={toDate} />}
+        {section === 'failures' && <FailurePane fromDate={fromDate} toDate={toDate} />}
         {section === 'benchmarks' && <BenchmarksPane fromDate={fromDate} toDate={toDate} />}
         {section === 'export' && <ResearchExportPane fromDate={fromDate} toDate={toDate} />}
       </ScrollView>
@@ -125,7 +129,7 @@ export default function AdvancedAnalyticsHub() {
   );
 }
 
-// ─────────────────────── Kaplan-Meier ───────────────────────
+// ─────────────────────── Kaplan-Meier (v2 with CI bands + log-rank) ───────────────────────
 function KaplanMeierPane({ fromDate, toDate }: { fromDate: string; toDate: string }) {
   const [groupBy, setGroupBy] = useState<'procedure_type' | 'system'>('procedure_type');
   const [data, setData] = useState<any>(null);
@@ -136,20 +140,32 @@ function KaplanMeierPane({ fromDate, toDate }: { fromDate: string; toDate: strin
       const params: any = { group_by: groupBy };
       if (fromDate) params.from_date = fromDate;
       if (toDate) params.to_date = toDate;
-      const r = await api.get('/analytics/kaplan-meier', { params });
+      const r = await api.get('/analytics/kaplan-meier-v2', { params });
       setData(r.data);
     } finally { setLoading(false); }
   }, [groupBy, fromDate, toDate]);
   useEffect(() => { load(); }, [load]);
 
-  const width = 340, height = 220, padL = 40, padB = 30, padT = 10, padR = 10;
+  const width = 340, height = 240, padL = 40, padB = 30, padT = 10, padR = 10;
   const maxT = useMemo(() => Math.max(30, ...(data?.curves || []).flatMap((c: any) => c.points.map((p: any) => p.t))), [data]);
   const xScale = (t: number) => padL + (t / (maxT || 1)) * (width - padL - padR);
   const yScale = (s: number) => padT + (1 - s) * (height - padT - padB);
 
+  const stepPath = (points: any[], key: 's' | 's_lo' | 's_hi') => {
+    let d = `M ${xScale(0)} ${yScale(1)}`;
+    let prevY = yScale(1);
+    points.forEach((p: any) => {
+      const v = p[key] ?? p.s;
+      const x = xScale(p.t); const y = yScale(v);
+      d += ` L ${x} ${prevY} L ${x} ${y}`;
+      prevY = y;
+    });
+    return d;
+  };
+
   return (
     <View style={s.pane}>
-      <SectionCard title="Kaplan-Meier survival curves" hint="Step functions per group. Steeper drop = more early failures.">
+      <SectionCard title="Kaplan-Meier survival curves" hint="Solid line = KM estimate. Dashed lines = Greenwood 95% CI band. Steeper drop = more early failures.">
         <View style={s.pillRow}>
           {(['procedure_type', 'system'] as const).map(g => (
             <TouchableOpacity key={g} onPress={() => setGroupBy(g)}
@@ -164,29 +180,26 @@ function KaplanMeierPane({ fromDate, toDate }: { fromDate: string; toDate: strin
           !data?.curves?.length ? <EmptyMsg /> : (
             <>
               <Svg width={width} height={height} testID="km-chart">
-                {/* axes */}
                 <Line x1={padL} y1={padT} x2={padL} y2={height - padB} stroke="#CFD8DC" strokeWidth="1" />
                 <Line x1={padL} y1={height - padB} x2={width - padR} y2={height - padB} stroke="#CFD8DC" strokeWidth="1" />
-                {/* y ticks */}
                 {[0, 0.25, 0.5, 0.75, 1].map(v => (
                   <React.Fragment key={v}>
                     <Line x1={padL - 3} y1={yScale(v)} x2={padL} y2={yScale(v)} stroke="#78909C" strokeWidth="1" />
                     <SvgText x={padL - 5} y={yScale(v) + 3} fontSize="8" fill="#78909C" textAnchor="end">{Math.round(v * 100)}%</SvgText>
                   </React.Fragment>
                 ))}
-                {/* curves */}
                 {data.curves.slice(0, 6).map((c: any, idx: number) => {
-                  // Build step path
-                  let d = `M ${xScale(0)} ${yScale(1)}`;
-                  let prevY = yScale(1);
-                  c.points.forEach((p: any) => {
-                    const x = xScale(p.t); const y = yScale(p.s);
-                    d += ` L ${x} ${prevY} L ${x} ${y}`;
-                    prevY = y;
-                  });
-                  return <Path key={c.key} d={d} stroke={PALETTE[idx % PALETTE.length]} strokeWidth="1.8" fill="none" />;
+                  const color = PALETTE[idx % PALETTE.length];
+                  return (
+                    <React.Fragment key={c.key}>
+                      {/* CI bands (dashed) */}
+                      <Path d={stepPath(c.points, 's_lo')} stroke={color} strokeWidth="1" strokeDasharray="3,2" fill="none" opacity="0.5" />
+                      <Path d={stepPath(c.points, 's_hi')} stroke={color} strokeWidth="1" strokeDasharray="3,2" fill="none" opacity="0.5" />
+                      {/* Main KM */}
+                      <Path d={stepPath(c.points, 's')} stroke={color} strokeWidth="1.8" fill="none" />
+                    </React.Fragment>
+                  );
                 })}
-                {/* x label */}
                 <SvgText x={width / 2} y={height - 5} fontSize="9" fill="#546E7A" textAnchor="middle">Days from placement (max {maxT}d)</SvgText>
               </Svg>
               <View style={s.legendWrap}>
@@ -199,6 +212,17 @@ function KaplanMeierPane({ fromDate, toDate }: { fromDate: string; toDate: strin
                   </View>
                 ))}
               </View>
+              {data.log_rank_top2 && (
+                <View style={s.logRankBox} testID="km-log-rank">
+                  <Text style={s.logRankHead}>Log-rank test (top 2 groups)</Text>
+                  <Text style={s.logRankLine}>
+                    {data.log_rank_top2.group_a} vs {data.log_rank_top2.group_b}
+                  </Text>
+                  <Text style={[s.logRankLine, { fontWeight: '800', color: data.log_rank_top2.p_value < 0.05 ? '#C62828' : '#546E7A' }]}>
+                    p = {data.log_rank_top2.p_value} · {data.log_rank_top2.interpretation}
+                  </Text>
+                </View>
+              )}
             </>
           )}
       </SectionCard>
@@ -446,7 +470,8 @@ function LearningCurvePane({ isFaculty }: { isFaculty: boolean }) {
           <View style={{ marginBottom: 8 }}>
             <TextInput placeholder="Student ID (leave blank for self)" placeholderTextColor="#B0BEC5"
               value={studentId} onChangeText={setStudentId}
-              style={s.dateInput} testID="lc-student-id" />
+              style={{ borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 12, backgroundColor: '#FFF' }}
+              testID="lc-student-id" />
             <TouchableOpacity onPress={load} style={[s.applyBtn, { marginTop: 6 }]} testID="lc-load"><Text style={s.applyBtnTxt}>Load</Text></TouchableOpacity>
           </View>
         )}
@@ -576,6 +601,198 @@ function ComplicationsPane({ fromDate, toDate }: { fromDate: string; toDate: str
   );
 }
 
+// ─────────────────────── Failure Analysis ───────────────────────
+// FDI anatomical arch mini-chart (upper/lower). Failure counts render as
+// coloured circles sized by frequency + labelled with the FDI number.
+function FdiFailureArch({ toothCounts }: { toothCounts: Record<string, number> }) {
+  // 4-quadrant layout: upper (11-18, 21-28), lower (41-48, 31-38)
+  const upperRight = [18, 17, 16, 15, 14, 13, 12, 11];
+  const upperLeft = [21, 22, 23, 24, 25, 26, 27, 28];
+  const lowerLeft = [31, 32, 33, 34, 35, 36, 37, 38];
+  const lowerRight = [48, 47, 46, 45, 44, 43, 42, 41];
+  const upper = [...upperRight, ...upperLeft];
+  const lower = [...lowerRight, ...lowerLeft];
+  const maxCount = Math.max(1, ...Object.values(toothCounts));
+
+  const Tooth = ({ n }: { n: number }) => {
+    const c = toothCounts[String(n)] || 0;
+    const intensity = c / maxCount;
+    const size = 22 + intensity * 12;
+    const bg = c === 0 ? '#ECEFF1' : `rgba(198, 40, 40, ${0.3 + intensity * 0.7})`;
+    return (
+      <View style={{ alignItems: 'center', marginHorizontal: 1 }}>
+        <View style={{
+          width: size, height: size, borderRadius: size / 2,
+          backgroundColor: bg, alignItems: 'center', justifyContent: 'center',
+          borderWidth: 1, borderColor: c === 0 ? '#CFD8DC' : '#C62828',
+        }}>
+          {c > 0 && <Text style={{ fontSize: 9, fontWeight: '800', color: '#FFF' }}>{c}</Text>}
+        </View>
+        <Text style={{ fontSize: 8, color: '#78909C', marginTop: 2 }}>{n}</Text>
+      </View>
+    );
+  };
+
+  return (
+    <View>
+      <Text style={s.paneNote}>Upper arch (maxilla)</Text>
+      <View style={{ flexDirection: 'row', justifyContent: 'center', marginVertical: 6 }}>
+        {upper.map(n => <Tooth key={n} n={n} />)}
+      </View>
+      <View style={{ height: 1, backgroundColor: '#E1E7EF', marginVertical: 6 }} />
+      <View style={{ flexDirection: 'row', justifyContent: 'center', marginVertical: 6 }}>
+        {lower.map(n => <Tooth key={n} n={n} />)}
+      </View>
+      <Text style={s.paneNote}>Lower arch (mandible)</Text>
+    </View>
+  );
+}
+
+function FailurePane({ fromDate, toDate }: { fromDate: string; toDate: string }) {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const params: any = {};
+        if (fromDate) params.from_date = fromDate;
+        if (toDate) params.to_date = toDate;
+        const r = await api.get('/analytics/failure-analysis', { params });
+        setData(r.data);
+      } finally { setLoading(false); }
+    })();
+  }, [fromDate, toDate]);
+
+  const toothMap = useMemo(() => {
+    const m: Record<string, number> = {};
+    (data?.tooth_heatmap || []).forEach((x: any) => { m[x.tooth] = x.failures; });
+    return m;
+  }, [data]);
+
+  if (loading) return <View style={s.pane}><ActivityIndicator style={{ marginVertical: 40 }} /></View>;
+  if (!data) return <View style={s.pane}><EmptyMsg /></View>;
+
+  return (
+    <View style={s.pane}>
+      {/* Buckets */}
+      <SectionCard title="Time to failure" hint="When failures happen relative to placement. Early = infection/osseointegration issues; Late = biomechanical/prosthetic.">
+        <View style={s.bucketsRow}>
+          {(data.time_to_failure_buckets || []).map((b: any) => (
+            <View key={b.key} style={s.bucketCard} testID={`ttf-${b.key}`}>
+              <Text style={s.bucketCount}>{b.count}</Text>
+              <Text style={s.bucketLbl}>{b.label}</Text>
+            </View>
+          ))}
+        </View>
+        <Text style={s.paneNote}>Total events: {data.totals?.n_failed_events} · Replacements: {data.totals?.n_replacements}</Text>
+      </SectionCard>
+
+      {/* Replacement outcomes */}
+      {data.replacement_outcomes?.n_replaced > 0 && (
+        <SectionCard title="Replacement outcomes" hint="Of failed implants that were replaced, how many are currently still Active.">
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={[s.replBox, { backgroundColor: '#E8F5E9' }]}>
+              <Text style={[s.replVal, { color: '#1B5E20' }]}>{data.replacement_outcomes.replacement_success_rate ?? '—'}%</Text>
+              <Text style={s.replLbl}>Replacement success</Text>
+            </View>
+            <View style={[s.replBox, { backgroundColor: '#E3F2FD' }]}>
+              <Text style={[s.replVal, { color: '#0D47A1' }]}>{data.replacement_outcomes.n_currently_active}/{data.replacement_outcomes.n_replaced}</Text>
+              <Text style={s.replLbl}>Active / Replaced</Text>
+            </View>
+          </View>
+          {data.replacement_outcomes.n_prior_revisions_total > 0 && (
+            <Text style={[s.paneNote, { marginTop: 8 }]}>
+              Prior revision chain: {data.replacement_outcomes.n_prior_revisions_active} active of {data.replacement_outcomes.n_prior_revisions_total} revisions in history.
+            </Text>
+          )}
+        </SectionCard>
+      )}
+
+      {/* Failure by System */}
+      {data.by_system?.length > 0 && (
+        <SectionCard title="Failure by system">
+          {data.by_system.slice(0, 8).map((r: any) => (
+            <View key={r.key} style={s.failRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.failName} numberOfLines={1}>{r.key}</Text>
+                {r.top_reasons?.length > 0 && (
+                  <Text style={s.failReasons} numberOfLines={1}>
+                    {r.top_reasons.map((rr: any) => `${rr.reason} (${rr.count})`).join(' · ')}
+                  </Text>
+                )}
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={s.failRate}>{r.failure_rate === null ? '—' : `${r.failure_rate}%`}</Text>
+                <Text style={s.failN}>{r.n_failed}/{r.n_placed}</Text>
+              </View>
+            </View>
+          ))}
+        </SectionCard>
+      )}
+
+      {/* Failure by Bone Type */}
+      {data.by_bone?.length > 0 && (
+        <SectionCard title="Failure by bone type">
+          {data.by_bone.map((r: any) => (
+            <View key={r.key} style={s.failRow}>
+              <Text style={[s.failName, { flex: 1 }]}>{r.key}</Text>
+              <Text style={s.failRate}>{r.failure_rate === null ? '—' : `${r.failure_rate}%`}</Text>
+              <Text style={[s.failN, { marginLeft: 8 }]}>{r.n_failed}/{r.n_placed}</Text>
+            </View>
+          ))}
+        </SectionCard>
+      )}
+
+      {/* Failure by Region */}
+      {data.by_region?.length > 0 && (
+        <SectionCard title="Failure by tooth region">
+          {data.by_region.map((r: any) => (
+            <View key={r.key} style={s.failRow}>
+              <Text style={[s.failName, { flex: 1 }]}>{r.key.replace(/_/g, ' ')}</Text>
+              <Text style={s.failRate}>{r.failure_rate === null ? '—' : `${r.failure_rate}%`}</Text>
+              <Text style={[s.failN, { marginLeft: 8 }]}>{r.n_failed}/{r.n_placed}</Text>
+            </View>
+          ))}
+        </SectionCard>
+      )}
+
+      {/* Failure by Supervisor */}
+      {data.by_supervisor?.length > 0 && (
+        <SectionCard title="Failure by supervisor" hint="Per-supervisor institutional review.">
+          {data.by_supervisor.slice(0, 15).map((r: any) => (
+            <View key={r.key} style={s.failRow}>
+              <Text style={[s.failName, { flex: 1 }]} numberOfLines={1}>{r.name || r.key}</Text>
+              <Text style={s.failRate}>{r.failure_rate === null ? '—' : `${r.failure_rate}%`}</Text>
+              <Text style={[s.failN, { marginLeft: 8 }]}>{r.n_failed}/{r.n_placed}</Text>
+            </View>
+          ))}
+        </SectionCard>
+      )}
+
+      {/* FDI Failure Heatmap */}
+      <SectionCard title="Failure heatmap (FDI arch)" hint="Circle intensity + size scale with the number of failures per tooth position.">
+        {Object.keys(toothMap).length === 0 ? <EmptyMsg /> : <FdiFailureArch toothCounts={toothMap} />}
+      </SectionCard>
+
+      {/* ISQ Distribution by Region */}
+      {data.isq_distribution_by_region?.length > 0 && (
+        <SectionCard title="ISQ distribution by tooth position" hint="Median / interquartile range of Phase 3 ISQ values per anatomical region.">
+          {data.isq_distribution_by_region.map((r: any) => (
+            <View key={r.region} style={s.failRow}>
+              <Text style={[s.failName, { flex: 1 }]}>{r.region.replace(/_/g, ' ')}</Text>
+              <Text style={[s.failRate, { color: '#0D47A1' }]}>{r.median ?? '—'}</Text>
+              <Text style={[s.failN, { marginLeft: 8 }]}>Q1-Q3: {r.q1 ?? '—'}-{r.q3 ?? '—'} · n={r.n}</Text>
+            </View>
+          ))}
+        </SectionCard>
+      )}
+    </View>
+  );
+}
+
+
+
 // ─────────────────────── Benchmarks vs Literature ───────────────────────
 function BenchmarksPane({ fromDate, toDate }: { fromDate: string; toDate: string }) {
   const [data, setData] = useState<any>(null);
@@ -650,38 +867,45 @@ function ResearchExportPane({ fromDate, toDate }: { fromDate: string; toDate: st
     } finally { setBusy(false); }
   };
 
-  const download = async () => {
+  const _buildUrl = (fmt: 'json' | 'csv') => {
+    const params: any = {};
+    if (fromDate) params.from_date = fromDate;
+    if (toDate) params.to_date = toDate;
+    const qs = new URLSearchParams(params).toString();
+    const baseUrl = api.defaults.baseURL || '';
+    return `${baseUrl}/analytics/research-export.${fmt}${qs ? `?${qs}` : ''}`;
+  };
+
+  const downloadJson = async () => {
     try {
-      const params: any = {};
-      if (fromDate) params.from_date = fromDate;
-      if (toDate) params.to_date = toDate;
-      const qs = new URLSearchParams(params).toString();
-      const baseUrl = api.defaults.baseURL || '';
-      const token = await getToken();
-      const url = `${baseUrl}/analytics/research-export.json${qs ? `?${qs}` : ''}`;
-      if (Platform.OS === 'web') {
-        const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-        if (!resp.ok) throw new Error('Export failed');
-        const blob = await resp.blob();
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `research-export-${new Date().toISOString().slice(0, 10)}.json`;
-        document.body.appendChild(a); a.click(); a.remove();
-      } else {
-        Linking.openURL(`${url}${qs ? '&' : '?'}token=${token || ''}`);
-      }
-    } catch (e: any) { Alert.alert('Export failed', e?.message || 'Could not export'); }
+      await downloadAuthenticated(
+        _buildUrl('json'),
+        `research-export-${new Date().toISOString().slice(0, 10)}.json`,
+        'application/json',
+      );
+    } catch { /* alert handled inside util */ }
+  };
+  const downloadCsv = async () => {
+    try {
+      await downloadAuthenticated(
+        _buildUrl('csv'),
+        `research-export-${new Date().toISOString().slice(0, 10)}.csv`,
+      );
+    } catch { /* alert handled inside util */ }
   };
 
   return (
     <View style={s.pane}>
       <SectionCard title="Research export (de-identified)" hint="JSON bundle with per-implant rows + a data dictionary sheet. All identifiers are hashed. Safe for statistical analysis or publication.">
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <TouchableOpacity onPress={load} style={[s.applyBtn, { flex: 1 }]} testID="research-preview">
+        <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+          <TouchableOpacity onPress={load} style={[s.applyBtn, { flex: 1, minWidth: 90 }]} testID="research-preview">
             <Text style={s.applyBtnTxt}>{busy ? 'Loading…' : 'Preview'}</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={download} style={[s.applyBtn, { flex: 1, backgroundColor: '#2E7D32' }]} testID="research-download">
+          <TouchableOpacity onPress={downloadJson} style={[s.applyBtn, { flex: 1, minWidth: 110, backgroundColor: '#2E7D32' }]} testID="research-download-json">
             <Text style={s.applyBtnTxt}>Download JSON</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={downloadCsv} style={[s.applyBtn, { flex: 1, minWidth: 110, backgroundColor: '#0277BD' }]} testID="research-download-csv">
+            <Text style={s.applyBtnTxt}>Download CSV</Text>
           </TouchableOpacity>
         </View>
         {preview && (
@@ -722,14 +946,18 @@ const s = StyleSheet.create({
   headerTitle: { fontSize: 17, fontWeight: '800', color: '#1A2332' },
   headerSub: { fontSize: 11, color: '#78909C', marginTop: 2 },
 
-  tabsScroll: { backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E1E7EF', paddingVertical: 8 },
-  tab: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999, borderWidth: 1, borderColor: '#CFD8DC', backgroundColor: '#FAFCFF' },
+  tabsScroll: { backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E1E7EF', paddingVertical: 8, maxHeight: 46 },
+  tab: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
+    minWidth: 118, height: 30,
+    paddingHorizontal: 10,
+    borderRadius: 999, borderWidth: 1, borderColor: '#CFD8DC', backgroundColor: '#FAFCFF',
+  },
   tabActive: { borderColor: '#1E88E5', backgroundColor: '#1E88E5' },
   tabTxt: { fontSize: 11, fontWeight: '700', color: '#546E7A' },
   tabTxtActive: { color: '#FFF' },
 
-  dateRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingVertical: 10 },
-  dateInput: { flex: 1, borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 12, backgroundColor: '#FFF' },
+  dateRow: { flexDirection: 'row', paddingHorizontal: 14, paddingVertical: 10, alignItems: 'flex-start' },
 
   pane: { paddingHorizontal: 14, paddingBottom: 20 },
   card: { backgroundColor: '#FFF', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#E1E7EF', marginBottom: 12 },
@@ -796,4 +1024,23 @@ const s = StyleSheet.create({
   benchCite: { fontSize: 10, color: '#78909C', fontStyle: 'italic', marginTop: 6 },
 
   dictLine: { fontSize: 10, color: '#37474F', marginTop: 3, lineHeight: 14 },
+
+  logRankBox: { marginTop: 10, padding: 10, backgroundColor: '#F5F7FB', borderRadius: 8, borderWidth: 1, borderColor: '#E1E7EF' },
+  logRankHead: { fontSize: 10, fontWeight: '800', color: '#546E7A', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 },
+  logRankLine: { fontSize: 12, color: '#1A2332', marginTop: 2 },
+
+  bucketsRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  bucketCard: { flex: 1, backgroundColor: '#F5F7FB', borderRadius: 10, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#E1E7EF' },
+  bucketCount: { fontSize: 22, fontWeight: '800', color: '#C62828' },
+  bucketLbl: { fontSize: 10, color: '#546E7A', textAlign: 'center', marginTop: 2 },
+
+  replBox: { flex: 1, borderRadius: 10, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#E1E7EF' },
+  replVal: { fontSize: 20, fontWeight: '800' },
+  replLbl: { fontSize: 10, color: '#546E7A', marginTop: 2, textAlign: 'center' },
+
+  failRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F0F4F8' },
+  failName: { fontSize: 12, fontWeight: '700', color: '#1A2332' },
+  failReasons: { fontSize: 10, color: '#78909C', marginTop: 2 },
+  failRate: { fontSize: 14, fontWeight: '800', color: '#C62828' },
+  failN: { fontSize: 10, color: '#90A4AE' },
 });
