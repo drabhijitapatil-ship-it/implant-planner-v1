@@ -185,6 +185,15 @@ export default function ProcedureOverviewScreen() {
           <Ionicons name="download-outline" size={16} color="#1E88E5" />
           <Text style={s.exportBtnTxt}>CSV</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => router.push('/analytics/advanced')}
+          style={[s.exportBtn, { marginLeft: 6, borderColor: '#2E7D32' }]}
+          testID="analytics-advanced-link"
+          /* @ts-ignore */ data-testid="analytics-advanced-link"
+        >
+          <Ionicons name="analytics-outline" size={16} color="#2E7D32" />
+          <Text style={[s.exportBtnTxt, { color: '#2E7D32' }]}>Advanced</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>

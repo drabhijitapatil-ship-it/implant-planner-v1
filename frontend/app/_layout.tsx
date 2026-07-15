@@ -60,6 +60,7 @@ export default function RootLayout() {
               <Stack.Screen name="admin/backfill-timeline" options={{ headerShown: false }} />
               <Stack.Screen name="admin/survival-analytics" options={{ headerShown: false }} />
               <Stack.Screen name="analytics/procedure-overview" options={{ headerShown: false }} />
+              <Stack.Screen name="analytics/advanced" options={{ headerShown: false }} />
               <Stack.Screen name="procedures/survival-review/[id]" options={{ headerShown: false }} />
               <Stack.Screen name="admin/implant-catalog" options={{ headerShown: false }} />
               <Stack.Screen name="admin/implant-catalog-edit" options={{ headerShown: false }} />

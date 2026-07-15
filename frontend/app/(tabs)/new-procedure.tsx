@@ -14,6 +14,7 @@ import CaseImplantPlanning from '../../components/CaseImplantPlanning';
 import { AtrophyClassificationChip } from '../../components/AtrophyClassificationChip';
 import ExistingImplantSection from '../../components/ExistingImplantSection';
 import FdiAnatomicalChart from '../../components/FdiAnatomicalChart';
+import PredictiveRiskCard from '../../components/PredictiveRiskCard';
 import { validateImplantSelection, findMissingRuns, clusterLeader } from '../../utils/implantValidation';
 import {
   PROCEDURE_TYPES,  LOADING_TYPES,
@@ -1251,6 +1252,11 @@ export default function NewProcedureScreen() {
           </TouchableOpacity>
         </View>
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 16 }} nestedScrollEnabled={true}>
+          <PredictiveRiskCard
+            procedureType={formData.implant_procedure_type}
+            boneType={null}
+            toothRegion={null}
+          />
           <CaseImplantPlanning
             procedureId={createdProcedureId}
             procedureType={formData.implant_procedure_type}
