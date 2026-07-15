@@ -1,5 +1,55 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 363 (Feb 2026) — Procedure-Type Analytics Module (Phase Analytics-1 MVP)
+
+**Purpose**: Introduce a role-scoped analytics dashboard that slices every case by procedure type (Single Conventional, Multiple, Sinus Lift, Immediate, All-on-4/6/X, Existing Implant, etc.) and surfaces volume, success, time, clinical numerics (avg torque / avg ISQ), prosthesis mix, and monthly/yearly trend.
+
+**User choices (from ask_human)**
+- Q1: 1a — Student sees own cases + anonymised cohort median
+- Q2: 2b — Monthly + Yearly granularity only
+- Q3: 3a — De-identified exports only
+- Q4: 4a — MVP-first delivery
+
+**Backend** (`/app/backend/server.py`)
+- New endpoints:
+  - `GET /api/analytics/procedure-overview` — role-scoped KPI + by-type + prosthesis-mix + trend + cohort (student only).
+  - `GET /api/analytics/procedure-overview/export.csv` — de-identified CSV export.
+- Role scoping:
+  - `student` → own cases only + `cohort` block with anonymised medians (per-student rate + per-student median-days → median of those).
+  - `supervisor` → cases they oversee.
+  - `implant_incharge` / `administrator` → institution-wide, optional `student_id` filter.
+  - `nurse` → 403.
+- Query params: `from_date`, `to_date`, `procedure_type` (comma list), `granularity` (`monthly` | `yearly`), `student_id`.
+- All views + exports logged to `access_logs` (HIPAA).
+
+**Frontend** (`/app/frontend/app/analytics/procedure-overview.tsx`)
+- KPI grid: Total, Completed, Terminated, In Progress, Success %, Median Days.
+- Cohort compare card (students only) — "You vs anonymised cohort" with ▲ better / ▼ below deltas.
+- By-Procedure-Type table with Total, ✓ Completed, ✕ Terminated, Success %, Mean Days.
+- Clinical metrics card (Avg Torque Ncm, Avg ISQ) per procedure type.
+- Prosthesis-mix stacked-bar per procedure type + legend.
+- Trend table (monthly / yearly).
+- Filters: from/to date, procedure-type multi-select chips, granularity pills.
+- Route registered in `/app/frontend/app/_layout.tsx`.
+- Drawer tile added in `/app/frontend/app/(tabs)/_layout.tsx` (green "Analytics" tile, hidden for nurses).
+
+**Tests** — `/app/backend/tests/test_iter363_procedure_overview.py`
+- 6/6 passing: shape, role scoping (in-charge/student/nurse), yearly granularity keys, procedure-type filter narrows, CSV headers + de-identification check.
+
+**Next in Analytics roadmap** (Phase Analytics-2 / -3, deferred):
+- Kaplan-Meier survival curves per procedure type / implant system.
+- Torque × ISQ scatter with survival colouring.
+- Bone × Procedure × Outcome heatmap.
+- Cross-tab builder (pick any two dimensions, get pivot + CSV).
+- Learning-curve chart (student) + Case-Mix Index (supervisor).
+- Publication-grade research exports (Excel + JSON + data dictionary).
+- Complication catalog / root-cause pareto.
+- Benchmark-vs-Literature card.
+- Predictive risk flag on Phase 1.
+
+---
+
+
 ## Iteration 362 (Feb 2026) — Complete Phase 1 + Phase 4 FDI-Naming Sweep
 
 **Scope**: Extend the FDI implant naming (`Tooth #<FDI>`) from iter-361 (Phase 2 + Phase 3) to the remaining Phase 1 and Phase 4 touchpoints.
