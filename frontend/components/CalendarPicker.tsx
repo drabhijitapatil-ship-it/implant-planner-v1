@@ -174,6 +174,8 @@ export default function CalendarPicker({
           visible={open}
           transparent
           animationType="fade"
+          statusBarTranslucent
+          presentationStyle="overFullScreen"
           onRequestClose={() => setOpen(false)}
         >
           <Pressable style={cs.backdrop} onPress={() => setOpen(false)}>
@@ -238,15 +240,25 @@ const cs = StyleSheet.create({
   dayCellToday: { borderWidth: 1, borderColor: '#1A73E8', borderRadius: 999 },
 
   // Modal backdrop + centering
+  // The extreme zIndex/elevation values ensure the modal renders on top of
+  // Expo Web's `position: fixed` chrome (nav bars, sticky headers) and on
+  // Android where TextInput/Native components can otherwise appear above.
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.55)',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
+    zIndex: 9999,
+    elevation: 24,
+    // @ts-ignore — RN-Web accepts position:'fixed' here to escape parent transforms
+    position: (typeof document !== 'undefined' ? 'fixed' : 'absolute') as any,
+    top: 0, left: 0, right: 0, bottom: 0,
   },
   modalCenter: {
     alignSelf: 'center',
+    zIndex: 10000,
+    elevation: 25,
   },
   modalFooter: {
     flexDirection: 'row',
