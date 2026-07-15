@@ -188,14 +188,14 @@ export default function ProcedureOverviewScreen() {
         <View style={s.filterCard} testID="analytics-filters">
           <View style={s.filterRow}>
             <View style={{ flex: 1, marginRight: 6 }}>
-              <Text style={s.filterLabel}>From</Text>
+              <Text style={[s.filterLabel, { color: '#1565C0' }]}>From</Text>
               <CalendarPicker
                 value={fromDate} onChange={setFromDate}
                 placeholder="Select date" allowPast compact testID="analytics-from-date"
               />
             </View>
             <View style={{ flex: 1, marginLeft: 6 }}>
-              <Text style={s.filterLabel}>To</Text>
+              <Text style={[s.filterLabel, { color: '#1565C0' }]}>To</Text>
               <CalendarPicker
                 value={toDate} onChange={setToDate}
                 placeholder="Select date" allowPast compact testID="analytics-to-date"

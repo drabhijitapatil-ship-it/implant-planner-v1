@@ -201,12 +201,14 @@ const cs = StyleSheet.create({
   },
   triggerCompact: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 8,
-    paddingHorizontal: 10, paddingVertical: 9, backgroundColor: '#FFF',
-    minHeight: 38,
+    borderWidth: 1.5, borderColor: '#1E88E5', borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#E3F2FD',
+    minHeight: 42,
+    shadowColor: '#1E88E5', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15, shadowRadius: 4, elevation: 3,
   },
   triggerTxt: { fontSize: 13, color: '#1A2332', fontWeight: '600' },
-  triggerTxtCompact: { fontSize: 12, color: '#1A2332', fontWeight: '600', flex: 1, marginRight: 6 },
+  triggerTxtCompact: { fontSize: 13, color: '#0D47A1', fontWeight: '700', flex: 1, marginRight: 6 },
 
   // Inline calendar body (Phase-1 scheduling form)
   calendar: {

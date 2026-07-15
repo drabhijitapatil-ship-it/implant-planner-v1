@@ -962,8 +962,12 @@ const s = StyleSheet.create({
   tabTxt: { fontSize: 11, fontWeight: '700', color: '#546E7A' },
   tabTxtActive: { color: '#FFF' },
 
-  dateRow: { flexDirection: 'row', paddingHorizontal: 14, paddingVertical: 10, alignItems: 'flex-end' },
-  dateLabel: { fontSize: 10, fontWeight: '700', color: '#546E7A', letterSpacing: 0.4, marginBottom: 4, textTransform: 'uppercase' },
+  dateRow: {
+    flexDirection: 'row', paddingHorizontal: 14, paddingVertical: 12, alignItems: 'flex-end',
+    backgroundColor: '#FFF',
+    borderBottomWidth: 1, borderBottomColor: '#E1E7EF',
+  },
+  dateLabel: { fontSize: 10, fontWeight: '800', color: '#1565C0', letterSpacing: 0.6, marginBottom: 5, textTransform: 'uppercase' },
 
   pane: { paddingHorizontal: 14, paddingBottom: 20 },
   card: { backgroundColor: '#FFF', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#E1E7EF', marginBottom: 12 },
