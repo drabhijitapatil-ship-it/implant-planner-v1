@@ -133,6 +133,15 @@ function DrawerMenu({
       key: 'implant-database', icon: 'library' as const, label: 'Implant Database', route: '/admin/implant-catalog',
       bg: '#FFF8E1', chip: '#FFE082', iconColor: '#E65100',
     },
+    // iter-363: Procedure Analytics tile — visible to all clinical roles
+    // (student / supervisor / implant_incharge / administrator). Nurses
+    // are excluded via the isNurse guard below on the tile filter.
+    ...(!isNurse
+      ? [{
+          key: 'procedure-analytics', icon: 'stats-chart' as const, label: 'Analytics', route: '/analytics/procedure-overview',
+          bg: '#E8F5E9', chip: '#C8E6C9', iconColor: '#2E7D32',
+        }]
+      : []),
   ];
 
   return (

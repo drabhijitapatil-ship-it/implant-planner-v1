@@ -5643,6 +5643,509 @@ async def export_survival_analytics_csv(
     )
 
 
+# ── Procedure-Type Analytics (iter-363 · Phase Analytics-1) ────────
+# Role-scoped analytics answering: "How many of each procedure type, what
+# succeeded, how long did each take, which prosthesis was used, and how do
+# I compare to my anonymised cohort?" — the MVP surface for the new
+# Analytics module. All heavy work happens in a single pass over the
+# scoped result set, so pagination isn't needed for typical clinic
+# volumes. Students always get their own numbers + anonymised cohort
+# medians; supervisors get their students' data; in-charge / admin get
+# institution-wide data (optionally filtered to one student).
+
+# Canonical status buckets — kept in sync with /dashboard/stats.
+_ANALYTICS_TERMINATED_STATUSES = {"treatment_ended"}
+_ANALYTICS_REJECTED_STATUSES = {
+    "rejected", "stage2_surgical_rejected", "stage2_prosthetic_rejected",
+    "permanently_rejected",
+}
+_ANALYTICS_COMPLETED_STATUSES = {"completed"}
+
+
+def _po_status_bucket(status: Optional[str]) -> str:
+    s = (status or "").strip()
+    if s in _ANALYTICS_COMPLETED_STATUSES:
+        return "completed"
+    if s in _ANALYTICS_TERMINATED_STATUSES:
+        return "terminated"
+    if s in _ANALYTICS_REJECTED_STATUSES:
+        return "rejected"
+    if s == "draft":
+        return "draft"
+    return "in_progress"
+
+
+def _po_period_key(iso_date: Optional[str], granularity: str) -> Optional[str]:
+    """Return YYYY-MM for monthly, YYYY for yearly; None if unparseable."""
+    if not iso_date:
+        return None
+    s = str(iso_date)
+    if granularity == "yearly":
+        return s[:4] if len(s) >= 4 and s[:4].isdigit() else None
+    if len(s) >= 7 and s[4] == "-":
+        return s[:7]
+    return None
+
+
+def _po_lifecycle_days(p: Dict[str, Any]) -> Optional[float]:
+    """Days from procedure_date to terminal event (completed or terminated).
+    Returns None for cases still in progress or missing dates."""
+    from datetime import datetime as _dt
+    start_str = p.get("procedure_date") or ""
+    if not start_str:
+        return None
+    end_str = None
+    bucket = _po_status_bucket(p.get("status"))
+    if bucket == "completed":
+        end_str = p.get("phase4_step2_done_date") or p.get("completed_at") or p.get("updated_at")
+    elif bucket == "terminated":
+        end_str = p.get("treatment_ended_at") or p.get("updated_at")
+    if not end_str:
+        return None
+    try:
+        start = _dt.strptime(str(start_str)[:10], "%Y-%m-%d")
+        end = _dt.fromisoformat(str(end_str).replace("Z", "+00:00")) if "T" in str(end_str) else _dt.strptime(str(end_str)[:10], "%Y-%m-%d")
+        # Strip tz for naive subtraction
+        if getattr(end, "tzinfo", None) is not None:
+            end = end.replace(tzinfo=None)
+        delta = (end - start).total_seconds() / 86400.0
+        return max(0.0, round(delta, 1))
+    except Exception:
+        return None
+
+
+def _po_extract_torques(p: Dict[str, Any]) -> List[float]:
+    p2 = p.get("phase2_data") or {}
+    raw = p2.get("torque_values") or []
+    out: List[float] = []
+    if isinstance(raw, list):
+        for v in raw:
+            try:
+                if v is None or v == "":
+                    continue
+                out.append(float(v))
+            except Exception:
+                continue
+    return out
+
+
+def _po_extract_isqs(p: Dict[str, Any]) -> List[float]:
+    """ISQ values live in phase3_data.isq_value (str or list) — collect all."""
+    p3 = p.get("phase3_data") or {}
+    raw = p3.get("isq_value")
+    if raw is None or raw == "":
+        return []
+    if not isinstance(raw, list):
+        raw = [raw]
+    out: List[float] = []
+    for v in raw:
+        try:
+            if v is None or v == "":
+                continue
+            out.append(float(v))
+        except Exception:
+            continue
+    return out
+
+
+def _po_extract_prostheses(p: Dict[str, Any]) -> List[str]:
+    """Return the prosthesis labels used for a case — prefers Phase 4
+    per-implant plans, falls back to case-level final_prosthetic_plan,
+    then Phase 2 immediate-loading prosthesis_type."""
+    labels: List[str] = []
+    p4 = p.get("stage2_prosthetic_data") or {}
+    per_impl = p4.get("per_implant_plans") or []
+    if isinstance(per_impl, list) and per_impl:
+        for plan in per_impl:
+            v = (plan or {}).get("prosthesis") if isinstance(plan, dict) else None
+            if v:
+                labels.append(str(v))
+    if not labels:
+        v = p.get("final_prosthetic_plan") or p4.get("prosthesis_type")
+        if v:
+            labels.append(str(v))
+    if not labels:
+        p2 = p.get("phase2_data") or {}
+        v = p2.get("prosthesis_type")
+        if isinstance(v, list):
+            for item in v:
+                if item:
+                    labels.append(str(item))
+        elif v:
+            labels.append(str(v))
+    return labels
+
+
+def _median(values: List[float]) -> Optional[float]:
+    if not values:
+        return None
+    s = sorted(values)
+    n = len(s)
+    mid = n // 2
+    if n % 2 == 1:
+        return round(s[mid], 1)
+    return round((s[mid - 1] + s[mid]) / 2.0, 1)
+
+
+def _mean(values: List[float]) -> Optional[float]:
+    if not values:
+        return None
+    return round(sum(values) / len(values), 1)
+
+
+def _po_pick_procedure_type(p: Dict[str, Any]) -> str:
+    """Canonical procedure-type label for grouping. Uses
+    original_procedure_type for Existing-Implant cases so those are
+    counted under the treatment they historically belonged to."""
+    t = (p.get("implant_procedure_type") or "").strip()
+    if t.lower() == "existing implant" and p.get("original_procedure_type"):
+        t = str(p.get("original_procedure_type")).strip()
+    return t or "Unspecified"
+
+
+async def _load_procedure_overview_docs(
+    from_date: Optional[str],
+    to_date: Optional[str],
+    scope_user: Optional[Dict[str, Any]],
+    student_id_filter: Optional[str],
+    include_all_for_cohort: bool = False,
+) -> List[Dict[str, Any]]:
+    """Load minimal projection of procedures for procedure-overview analytics.
+    When include_all_for_cohort=True, ignores role scope (used to compute
+    student cohort medians)."""
+    match: Dict[str, Any] = {"archived": {"$ne": True}}
+    date_clause: Dict[str, Any] = {}
+    if from_date:
+        date_clause["$gte"] = from_date
+    if to_date:
+        date_clause["$lte"] = to_date
+    if date_clause:
+        match["procedure_date"] = date_clause
+
+    if scope_user and not include_all_for_cohort:
+        role = scope_user.get("role")
+        uid = str(scope_user.get("_id") or scope_user.get("id") or "")
+        uname = scope_user.get("name") or scope_user.get("username")
+        if role == "student":
+            match["$or"] = [{"student_id": uid}, {"student_name": uname}]
+        elif role == "supervisor":
+            match["$or"] = [{"supervisor_id": uid}, {"supervisor_name": uname}]
+        # In-Charge / Administrator see all — apply optional student_id filter
+        elif role in ("implant_incharge", "administrator") and student_id_filter:
+            match["student_id"] = student_id_filter
+
+    projection = {
+        "_id": 1, "status": 1,
+        "implant_procedure_type": 1, "original_procedure_type": 1,
+        "student_id": 1, "student_name": 1,
+        "supervisor_id": 1, "supervisor_name": 1,
+        "procedure_date": 1,
+        "phase2_actual_done_date": 1,
+        "phase3_done_date": 1,
+        "phase4_step2_done_date": 1,
+        "completed_at": 1, "treatment_ended_at": 1, "updated_at": 1,
+        "phase2_data.torque_values": 1,
+        "phase2_data.prosthesis_type": 1,
+        "phase3_data.isq_value": 1,
+        "stage2_prosthetic_data.per_implant_plans": 1,
+        "stage2_prosthetic_data.prosthesis_type": 1,
+        "final_prosthetic_plan": 1,
+    }
+    return await db.procedures.find(match, projection).to_list(20000)
+
+
+def _compute_procedure_overview(
+    procs: List[Dict[str, Any]],
+    granularity: str,
+    procedure_type_filter: Optional[List[str]],
+) -> Dict[str, Any]:
+    # Optional narrow to selected procedure types (applied AFTER load so we
+    # can still compute cross-type context if we ever surface it)
+    if procedure_type_filter:
+        wanted = {t.strip() for t in procedure_type_filter if t and t.strip()}
+        if wanted:
+            procs = [p for p in procs if _po_pick_procedure_type(p) in wanted]
+
+    kpi_total = len(procs)
+    bucket_counts = {"completed": 0, "terminated": 0, "rejected": 0, "in_progress": 0, "draft": 0}
+    lifecycle_days: List[float] = []
+
+    # Per-procedure-type aggregation
+    by_type: Dict[str, Dict[str, Any]] = {}
+    # Prosthesis mix per procedure type
+    prosthesis_mix: Dict[str, Dict[str, int]] = {}
+    # Trend series keyed by period
+    trend: Dict[str, Dict[str, int]] = {}
+
+    for p in procs:
+        ptype = _po_pick_procedure_type(p)
+        bucket = _po_status_bucket(p.get("status"))
+        bucket_counts[bucket] = bucket_counts.get(bucket, 0) + 1
+
+        life = _po_lifecycle_days(p)
+        if life is not None:
+            lifecycle_days.append(life)
+
+        agg = by_type.setdefault(ptype, {
+            "procedure_type": ptype,
+            "total": 0, "completed": 0, "terminated": 0,
+            "rejected": 0, "in_progress": 0, "draft": 0,
+            "_days": [], "_torques": [], "_isqs": [],
+        })
+        agg["total"] += 1
+        agg[bucket] = agg.get(bucket, 0) + 1
+        if life is not None:
+            agg["_days"].append(life)
+        agg["_torques"].extend(_po_extract_torques(p))
+        agg["_isqs"].extend(_po_extract_isqs(p))
+
+        # Prosthesis mix
+        for lbl in _po_extract_prostheses(p):
+            prosthesis_mix.setdefault(ptype, {})
+            prosthesis_mix[ptype][lbl] = prosthesis_mix[ptype].get(lbl, 0) + 1
+
+        # Trend by procedure_date
+        pk = _po_period_key(p.get("procedure_date"), granularity)
+        if pk:
+            row = trend.setdefault(pk, {"period": pk, "total": 0, "completed": 0, "terminated": 0})
+            row["total"] += 1
+            if bucket == "completed":
+                row["completed"] += 1
+            elif bucket == "terminated":
+                row["terminated"] += 1
+
+    # Finalise by_type rows
+    by_type_out: List[Dict[str, Any]] = []
+    for row in by_type.values():
+        completed = row["completed"]
+        terminated = row["terminated"]
+        denom = completed + terminated
+        success_rate = round(100.0 * completed / denom, 1) if denom else None
+        by_type_out.append({
+            "procedure_type": row["procedure_type"],
+            "total": row["total"],
+            "completed": completed,
+            "in_progress": row["in_progress"],
+            "rejected": row["rejected"],
+            "terminated": terminated,
+            "draft": row["draft"],
+            "success_rate": success_rate,
+            "mean_days": _mean(row["_days"]),
+            "avg_torque_ncm": _mean(row["_torques"]),
+            "avg_isq": _mean(row["_isqs"]),
+        })
+    by_type_out.sort(key=lambda r: (-r["total"], r["procedure_type"]))
+
+    # Prosthesis mix output
+    prosthesis_mix_out = [
+        {"procedure_type": pt, "prostheses": [
+            {"label": lbl, "count": cnt}
+            for lbl, cnt in sorted(items.items(), key=lambda kv: -kv[1])
+        ]}
+        for pt, items in prosthesis_mix.items()
+    ]
+    prosthesis_mix_out.sort(key=lambda r: r["procedure_type"])
+
+    # Trend output — sorted chronologically
+    trend_out = sorted(trend.values(), key=lambda r: r["period"])
+
+    # KPIs
+    completed = bucket_counts["completed"]
+    terminated = bucket_counts["terminated"]
+    denom = completed + terminated
+    success_rate = round(100.0 * completed / denom, 1) if denom else None
+
+    return {
+        "kpis": {
+            "total_cases": kpi_total,
+            "completed": completed,
+            "terminated": terminated,
+            "rejected": bucket_counts["rejected"],
+            "in_progress": bucket_counts["in_progress"],
+            "draft": bucket_counts["draft"],
+            "success_rate": success_rate,
+            "mean_lifecycle_days": _mean(lifecycle_days),
+            "median_lifecycle_days": _median(lifecycle_days),
+        },
+        "by_procedure_type": by_type_out,
+        "prosthesis_mix": prosthesis_mix_out,
+        "trend": trend_out,
+    }
+
+
+@api_router.get("/analytics/procedure-overview")
+async def get_procedure_overview_analytics(
+    request: Request,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    procedure_type: Optional[str] = None,      # comma-separated filter
+    granularity: str = "monthly",              # "monthly" | "yearly"
+    student_id: Optional[str] = None,          # only respected for supervisor / in-charge / admin
+    current_user: dict = Depends(get_current_user),
+):
+    role = current_user.get("role")
+    if role not in ("student", "supervisor", "implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Analytics not available for this role")
+    if granularity not in ("monthly", "yearly"):
+        granularity = "monthly"
+
+    ptype_filter = [t for t in (procedure_type or "").split(",") if t.strip()] or None
+
+    # Own scope (respects role)
+    own_procs = await _load_procedure_overview_docs(
+        from_date, to_date, scope_user=current_user,
+        student_id_filter=student_id,
+    )
+    own = _compute_procedure_overview(own_procs, granularity, ptype_filter)
+
+    result: Dict[str, Any] = {
+        "scope": {
+            "role": role,
+            "own_only": role == "student",
+            "student_id_filter": student_id if role in ("supervisor", "implant_incharge", "administrator") else None,
+        },
+        "filters": {
+            "from_date": from_date, "to_date": to_date,
+            "procedure_types": ptype_filter, "granularity": granularity,
+        },
+        **own,
+    }
+
+    # Cohort medians — students only, anonymised
+    if role == "student":
+        cohort_procs = await _load_procedure_overview_docs(
+            from_date, to_date, scope_user=None,
+            student_id_filter=None, include_all_for_cohort=True,
+        )
+        # Compute per-student success rate + median lifecycle across the
+        # cohort, then take the median of those per-student figures. This
+        # avoids one huge-caseload student dominating the "cohort" metric.
+        per_student: Dict[str, Dict[str, List[float]]] = {}
+        for p in cohort_procs:
+            if ptype_filter and _po_pick_procedure_type(p) not in ptype_filter:
+                continue
+            sid = str(p.get("student_id") or p.get("student_name") or "").strip()
+            if not sid:
+                continue
+            per_student.setdefault(sid, {"success": [], "days": []})
+            bucket = _po_status_bucket(p.get("status"))
+            if bucket == "completed":
+                per_student[sid]["success"].append(1.0)
+            elif bucket == "terminated":
+                per_student[sid]["success"].append(0.0)
+            life = _po_lifecycle_days(p)
+            if life is not None:
+                per_student[sid]["days"].append(life)
+
+        rates: List[float] = []
+        median_days_per_student: List[float] = []
+        for sid, buckets in per_student.items():
+            if buckets["success"]:
+                rates.append(100.0 * sum(buckets["success"]) / len(buckets["success"]))
+            m = _median(buckets["days"])
+            if m is not None:
+                median_days_per_student.append(m)
+
+        result["cohort"] = {
+            "student_count": len(per_student),
+            "success_rate_median": _median(rates),
+            "lifecycle_days_median": _median(median_days_per_student),
+        }
+
+    await log_access(
+        action="analytics_view",
+        outcome="success",
+        resource_type="procedure_overview",
+        resource_id="scope=" + str(role),
+        user=current_user,
+        request=request,
+        extra={"filters": result["filters"]},
+    )
+    return result
+
+
+@api_router.get("/analytics/procedure-overview/export.csv")
+async def export_procedure_overview_csv(
+    request: Request,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    procedure_type: Optional[str] = None,
+    granularity: str = "monthly",
+    student_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    role = current_user.get("role")
+    if role not in ("student", "supervisor", "implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Analytics not available for this role")
+    if granularity not in ("monthly", "yearly"):
+        granularity = "monthly"
+
+    ptype_filter = [t for t in (procedure_type or "").split(",") if t.strip()] or None
+
+    procs = await _load_procedure_overview_docs(
+        from_date, to_date, scope_user=current_user,
+        student_id_filter=student_id,
+    )
+    data = _compute_procedure_overview(procs, granularity, ptype_filter)
+
+    import io as _io
+    import csv as _csv
+    buf = _io.StringIO()
+    w = _csv.writer(buf)
+    w.writerow(["Implanr — Procedure-Type Analytics Export (de-identified)"])
+    w.writerow(["Generated at", datetime.now(timezone.utc).isoformat()])
+    w.writerow(["Role", role])
+    w.writerow(["Filters", f"from={from_date or '-'}, to={to_date or '-'}, types={','.join(ptype_filter) if ptype_filter else 'all'}, granularity={granularity}, student_id={student_id or 'all'}"])
+    w.writerow([])
+    w.writerow(["## KPIs"])
+    k = data["kpis"]
+    w.writerow(["Total Cases", "Completed", "Terminated", "Rejected", "In Progress", "Draft", "Success %", "Mean Lifecycle Days", "Median Lifecycle Days"])
+    w.writerow([k["total_cases"], k["completed"], k["terminated"], k["rejected"], k["in_progress"], k["draft"],
+                k["success_rate"] if k["success_rate"] is not None else "",
+                k["mean_lifecycle_days"] if k["mean_lifecycle_days"] is not None else "",
+                k["median_lifecycle_days"] if k["median_lifecycle_days"] is not None else ""])
+    w.writerow([])
+    w.writerow(["## By Procedure Type"])
+    w.writerow(["Procedure Type", "Total", "Completed", "In Progress", "Rejected", "Terminated", "Draft", "Success %", "Mean Days", "Avg Torque (Ncm)", "Avg ISQ"])
+    for row in data["by_procedure_type"]:
+        w.writerow([row["procedure_type"], row["total"], row["completed"], row["in_progress"],
+                    row["rejected"], row["terminated"], row["draft"],
+                    row["success_rate"] if row["success_rate"] is not None else "",
+                    row["mean_days"] if row["mean_days"] is not None else "",
+                    row["avg_torque_ncm"] if row["avg_torque_ncm"] is not None else "",
+                    row["avg_isq"] if row["avg_isq"] is not None else ""])
+    w.writerow([])
+    w.writerow(["## Prosthesis Mix (per procedure type)"])
+    w.writerow(["Procedure Type", "Prosthesis", "Count"])
+    for r in data["prosthesis_mix"]:
+        for p in r["prostheses"]:
+            w.writerow([r["procedure_type"], p["label"], p["count"]])
+    w.writerow([])
+    w.writerow([f"## Trend ({granularity})"])
+    w.writerow(["Period", "Total", "Completed", "Terminated"])
+    for r in data["trend"]:
+        w.writerow([r["period"], r["total"], r["completed"], r["terminated"]])
+
+    await log_access(
+        action="analytics_export",
+        outcome="success",
+        resource_type="procedure_overview_csv",
+        resource_id="scope=" + str(role),
+        user=current_user,
+        request=request,
+    )
+
+    csv_bytes = buf.getvalue().encode("utf-8")
+    filename = f"implanr-procedure-overview-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}.csv"
+    return Response(
+        content=csv_bytes,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+
+
 # ── Treatment Timeline Backfill (iter-332) ─────────────────────────
 # Lets the Implant In-Charge / Administrator retroactively fill in the
 # clinical "Done On" dates on legacy cases that were submitted before
