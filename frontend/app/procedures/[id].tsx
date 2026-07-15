@@ -2088,6 +2088,13 @@ export default function ProcedureDetailScreen() {
                   )}
               </View>
             )}
+         {/* iter-341/343: Implant Survival Review card. Appears once a
+            case has reached Phase 2 (any post-phase2 status) and stays
+            visible even after Phase 3+ so retrospective reviews are
+            possible. Requires at least one implant in any of the three
+            data sources (implants[], existing_implants[], implant_plans[]).
+        */}
+
             {procedure?.phase2_completed_at ? (
               <ImplantLifecycleTimeline
                 procedureId={String(procedure.id || procedure._id)}
@@ -8003,11 +8010,6 @@ export default function ProcedureDetailScreen() {
                     patientId={procedure.patient_id}
                     procedureDate={procedure.procedure_date}
                     missingTeeth={procedure.missing_teeth}
-                    edentulousSiteMeasurements={
-                      procedure.edentulous_site_measurements
-                    }
-                    defaultOcclusocervical={procedure.occlusocervical_height}
-                    defaultMesiodistal={procedure.mesiodistal_space}
                   />
                 </View>
               )}
@@ -8309,11 +8311,6 @@ export default function ProcedureDetailScreen() {
                   patientId={procedure.patient_id}
                   procedureDate={procedure.procedure_date}
                   missingTeeth={procedure.missing_teeth}
-                  edentulousSiteMeasurements={
-                    procedure.edentulous_site_measurements
-                  }
-                  defaultOcclusocervical={procedure.occlusocervical_height}
-                  defaultMesiodistal={procedure.mesiodistal_space}
                 />
               )}
 

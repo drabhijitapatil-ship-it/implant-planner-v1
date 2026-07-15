@@ -137,11 +137,45 @@
       "Bash(diff \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/backend/server.py\" \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py\" > /private/tmp/claude-501/-Users-prathmeshjadhav-Desktop-work-implant-planner-v1-main/36f702fe-c40a-41c5-a576-ab94ca34157e/scratchpad/server_diff.txt; wc -l /private/tmp/claude-501/-Users-prathmeshjadhav-Desktop-work-implant-planner-v1-main/36f702fe-c40a-41c5-a576-ab94ca34157e/scratchpad/server_diff.txt)",
       "Bash(wc -l \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/backend/server.py\" \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py\")",
       "Bash(grep -nE '^\\(async def|def|class |@api_router|@app\\\\.\\)' \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/backend/server.py\")",
-      "Bash(grep -nE '^\\(async def|def|class |@api_router|@app\\\\.\\)' \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py\")"
+      "Bash(grep -nE '^\\(async def|def|class |@api_router|@app\\\\.\\)' \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py\")",
+      "Bash(grep -n \"^async def download_implanr_theme\\\\|^async def download_implanr_elementor\\\\|^async def _internal_screenshots\\\\|^async def admin_backfill_timeline\\\\|^async def admin_cases_missing_timeline\\\\|^async def get_survival_analytics\\\\|^async def export_survival_analytics_csv\\\\|^async def submit_survival_review\\\\|^async def get_implant_lifecycle\\\\|^async def get_active_implants\\\\|^def _compute_analytics\\\\|^async def _load_analytics_procedures\\\\|^def _extract_procedure_implants\\\\|^def _tooth_bucket\\\\|^def _tooth_int\\\\|^def _month_key\\\\|^async def _build_case_context_full\\\\|^def _build_role_and_phase_block\\\\|^async def _build_implant_alternatives_block\\\\|^async def _build_program_stats_block\\\\|^async def _build_smart_tips_block\\\\|^def _validate_done_date\" \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/backend/server.py\")",
+      "Bash(awk -F: '$1>6600 && $1<8400')",
+      "Bash(python3 -c \"import fastapi\")",
+      "Bash(./venv/bin/python -c \"import server\")",
+      "Bash(grep -rhoE \"\\(analytics/survival[^\\\\\"'\\\\`]*|implant-lifecycle|active-implants|survival-review|admin/cases-missing-timeline|admin/procedures/[^\\\\\"'\\\\`]*timeline\\)\" frontend/app/admin/survival-analytics.tsx frontend/app/procedures/survival-review/ frontend/components/ImplantLifecycleTimeline.tsx)",
+      "Bash(awk 'NR==2142,NR==2445{print NR\": \"$0}' frontend/components/CaseImplantPlanning.tsx)",
+      "Bash(awk 'NR<=11736 && /^async def /{name=$0; line=NR} END{}' backend/server.py)",
+      "Bash(awk -F: '$1<11736')",
+      "Bash(awk -F: '$1<11931')",
+      "Bash(grep -n \"handleApprove\\\\|const handleApprov\\\\|/approve\\\\\"\\\\|api.post\\(\\\\`/procedures/\\\\${id}/approve\" \"frontend/app/procedures/[id].tsx\")",
+      "Bash(awk 'NR<=1148 && /const handle[A-Za-z]*\\\\s*=|async \\\\\\(\\\\\\) =>|function handle/{print NR\": \"$0}' \"frontend/app/\\(tabs\\)/new-procedure.tsx\")",
+      "Bash(grep -n \"IMPLANT SURVIVAL REVIEW\\\\|survival-review\\\\`\\\\|Survival Review\" \"frontend/app/procedures/[id].tsx\")",
+      "Bash(wc -l \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/backend/server.py\" \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py\" 2>&1)",
+      "Bash(diff \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/backend/server.py\" \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py\" > /private/tmp/claude-501/-Users-prathmeshjadhav-Desktop-work-implant-planner-v1-main/e057b30c-a70b-4cc2-9cf5-9d2dd65afa83/scratchpad/diff.txt 2>&1 *)",
+      "Bash(diff -u \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/backend/server.py\" \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py\" > /private/tmp/claude-501/-Users-prathmeshjadhav-Desktop-work-implant-planner-v1-main/e057b30c-a70b-4cc2-9cf5-9d2dd65afa83/scratchpad/udiff.txt *)",
+      "Bash(OTHER=\"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/backend/server.py\" *)",
+      "Bash(awk 'NR>=2190 && NR<=2210' /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/backend/server.py)",
+      "Bash(awk 'NR>=2320 && NR<=2352' /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/backend/server.py)",
+      "Bash(awk 'NR>=2430 && NR<=2448' /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/backend/server.py)",
+      "Bash(awk 'NR>=12560 && NR<=12585' /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/backend/server.py)",
+      "Bash(grep -n 'status == \"pending\":\\\\|\"pending_approval\": {\"\\\\$sum\"\\\\|\"pending\": {\"\\\\$sum\"' /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py)",
+      "Bash(awk 'NR>=4480 && NR<=4510' /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py)",
+      "Bash(awk 'NR>=4560 && NR<=4590' /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py)",
+      "Bash(awk 'NR>=4183 && NR<=4200' /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py)",
+      "Bash(awk 'NR>=4315 && NR<=4330' /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py)",
+      "Bash(awk 'NR>=4415 && NR<=4428' /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py)",
+      "Bash(awk -F: '$1>=18670 && $1<=19010')",
+      "Bash(sed -n 5138,5270p /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/backend/server.py)",
+      "Bash(sed -n 18681,18813p /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py)",
+      "Bash(grep -n 'return {\"ok\": True, \"review\": survival_map\\\\|@api_router.get\\(\"/procedures/{procedure_id}/active-implants\"' /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py)",
+      "Bash(grep -n 'pending_stage2_prosthetic\"\\\\]}\\\\|pending_stage2_prosthetic\"\\\\]$\\\\|pending_stage2_prosthetic\"\\\\],\\\\|PENDING = \\\\[\"pending_phase1\"' /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py)",
+      "Bash(rm -f /tmp/other_routes.txt /tmp/main_routes.txt /tmp/other_lifecycle.txt /tmp/main_lifecycle.txt /tmp/o1.txt /tmp/m1.txt /tmp/o2.txt)"
     ],
     "additionalDirectories": [
       "/dev",
-      "/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/phase1/backend"
+      "/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/phase1/backend",
+      "/tmp",
+      "/private/tmp"
     ]
   }
 }

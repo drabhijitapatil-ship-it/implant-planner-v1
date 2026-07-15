@@ -464,16 +464,7 @@ function SupervisorDashboard({ stats, procedures, selectedDate, setSelectedDate,
   const pipeline = stats.pipeline || {};
   const pipelineTotal = (pipeline.phase1 || 0) + (pipeline.phase2 || 0) + (pipeline.phase3 || 0) + (pipeline.phase4 || 0) + (pipeline.completed || 0);
 
-  const myStudents = useMemo(() => {
-    const map: Record<string, { name: string; cases: number; pending: number }> = {};
-    procedures.forEach((p: any) => {
-      const key = p.student_name || 'Unknown';
-      if (!map[key]) map[key] = { name: key, cases: 0, pending: 0 };
-      map[key].cases++;
-      if (PENDING_STATUSES.includes(p.status)) map[key].pending++;
-    });
-    return Object.values(map).sort((a, b) => b.pending - a.pending);
-  }, [procedures]);
+  const studentStats = stats.student_stats || [];
 
   const approvedByMe = stats.approved || 0;
   const rejectedByMe = stats.rejected || 0;
@@ -543,30 +534,12 @@ function SupervisorDashboard({ stats, procedures, selectedDate, setSelectedDate,
             </View>
           )}
 
-          {/* My Students */}
-          {myStudents.length > 0 && (
-            <View style={s.section}>
-              <View style={s.sectionHeader}>
-                <Ionicons name="people-outline" size={18} color="#1565C0" />
-                <Text style={[s.sectionTitle, { color: '#1565C0' }]}>My Students</Text>
-              </View>
-              {myStudents.map((st, idx) => (
-                <View key={idx} style={s.studentCard}>
-                  <View style={s.studentAvatar}>
-                    <Text style={s.studentAvatarText}>{st.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.studentName}>{st.name}</Text>
-                    <Text style={s.studentSub}>{st.cases} cases total</Text>
-                  </View>
-                  {st.pending > 0 && (
-                    <View style={s.pendingBadge}>
-                      <Text style={s.pendingBadgeText}>{st.pending} pending</Text>
-                    </View>
-                  )}
-                </View>
-              ))}
-            </View>
+          {/* Student Performance */}
+          {studentStats.length > 0 && <StudentPerformanceSection rows={studentStats.filter((st: any) => st.student_name)} router={router} />}
+
+          {/* Supervisor Performance */}
+          {(stats.supervisor_stats || []).length > 0 && (
+            <SupervisorPerformanceSection rows={(stats.supervisor_stats || []).filter((sp: any) => sp.supervisor_name)} router={router} />
           )}
 
           {/* Draft Cases */}
@@ -842,8 +815,9 @@ function RankCircle({ idx, badge }: { idx: number; badge?: LbBadge | null }) {
 }
 
 // ── Student Performance Section (interactive + Show More + Leaderboard) ───
+const PERF_PREVIEW_COUNT = 3;
+
 function StudentPerformanceSection({ rows, router }: { rows: any[]; router: any }) {
-  const [visible, setVisible] = useState(5);
   const [leaderboard, setLeaderboard] = useState(false);
   // Student leaderboard: top by completed; hot by completed/total ratio; risk by active count
   const lb = useMemo(() => pickLeaderboardBadges(rows, 'completed', 'completed', 'active'), [rows]);
@@ -861,10 +835,9 @@ function StudentPerformanceSection({ rows, router }: { rows: any[]; router: any 
     rows.forEach((r: any) => { if (!used.has(r.student_id)) { used.add(r.student_id); ordered.push(r); } });
     return ordered;
   }, [rows, leaderboard, lb]);
-  const shown = sortedRows.slice(0, visible);
-  const remaining = Math.max(0, sortedRows.length - visible);
+  const shown = sortedRows.slice(0, PERF_PREVIEW_COUNT);
+  const remaining = Math.max(0, sortedRows.length - PERF_PREVIEW_COUNT);
   const hasMore = remaining > 0;
-  const showLess = visible > 5;
   return (
     <View style={s.section}>
       <View style={s.sectionHeader}>
@@ -907,29 +880,15 @@ function StudentPerformanceSection({ rows, router }: { rows: any[]; router: any 
           </TouchableOpacity>
         );
       })}
-      {(hasMore || showLess) && (
-        <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
-          {hasMore && (
-            <TouchableOpacity
-              style={[s.showMoreBtn, { flex: 1 }]}
-              onPress={() => setVisible(v => v + 5)}
-              data-testid="student-perf-show-more"
-            >
-              <Ionicons name="chevron-down" size={14} color="#1A73E8" />
-              <Text style={s.showMoreText}>Show more ({Math.min(5, remaining)} of {remaining})</Text>
-            </TouchableOpacity>
-          )}
-          {showLess && (
-            <TouchableOpacity
-              style={[s.showMoreBtn, { flex: 1, backgroundColor: '#ECEFF1' }]}
-              onPress={() => setVisible(5)}
-              data-testid="student-perf-show-less"
-            >
-              <Ionicons name="chevron-up" size={14} color="#546E7A" />
-              <Text style={[s.showMoreText, { color: '#546E7A' }]}>Show less</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+      {hasMore && (
+        <TouchableOpacity
+          style={s.showMoreBtn}
+          onPress={() => router.push('/admin/students-performance')}
+          data-testid="student-perf-show-more"
+        >
+          <Ionicons name="chevron-down" size={14} color="#1A73E8" />
+          <Text style={s.showMoreText}>Show more ({remaining} more)</Text>
+        </TouchableOpacity>
       )}
     </View>
   );
@@ -952,7 +911,6 @@ function LeaderboardLegend() {
 
 // ── Supervisor Performance Section (interactive + Show More + Leaderboard) ───
 function SupervisorPerformanceSection({ rows, router }: { rows: any[]; router: any }) {
-  const [visible, setVisible] = useState(5);
   const [leaderboard, setLeaderboard] = useState(false);
   // Supervisor leaderboard: top by approved; hot by approved/total ratio (efficient reviewer); risk by pending count (backlog)
   const lb = useMemo(() => pickLeaderboardBadges(rows, 'approved', 'approved', 'pending'), [rows]);
@@ -970,10 +928,9 @@ function SupervisorPerformanceSection({ rows, router }: { rows: any[]; router: a
     rows.forEach((r: any) => { if (!used.has(r.supervisor_id)) { used.add(r.supervisor_id); ordered.push(r); } });
     return ordered;
   }, [rows, leaderboard, lb]);
-  const shown = sortedRows.slice(0, visible);
-  const remaining = Math.max(0, sortedRows.length - visible);
+  const shown = sortedRows.slice(0, PERF_PREVIEW_COUNT);
+  const remaining = Math.max(0, sortedRows.length - PERF_PREVIEW_COUNT);
   const hasMore = remaining > 0;
-  const showLess = visible > 5;
   return (
     <View style={s.section}>
       <View style={s.sectionHeader}>
@@ -1027,29 +984,15 @@ function SupervisorPerformanceSection({ rows, router }: { rows: any[]; router: a
           </TouchableOpacity>
         );
       })}
-      {(hasMore || showLess) && (
-        <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
-          {hasMore && (
-            <TouchableOpacity
-              style={[s.showMoreBtn, { flex: 1, backgroundColor: '#F3E5F5', borderColor: '#CE93D8' }]}
-              onPress={() => setVisible(v => v + 5)}
-              data-testid="supervisor-perf-show-more"
-            >
-              <Ionicons name="chevron-down" size={14} color="#6A1B9A" />
-              <Text style={[s.showMoreText, { color: '#6A1B9A' }]}>Show more ({Math.min(5, remaining)} of {remaining})</Text>
-            </TouchableOpacity>
-          )}
-          {showLess && (
-            <TouchableOpacity
-              style={[s.showMoreBtn, { flex: 1, backgroundColor: '#ECEFF1' }]}
-              onPress={() => setVisible(5)}
-              data-testid="supervisor-perf-show-less"
-            >
-              <Ionicons name="chevron-up" size={14} color="#546E7A" />
-              <Text style={[s.showMoreText, { color: '#546E7A' }]}>Show less</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+      {hasMore && (
+        <TouchableOpacity
+          style={[s.showMoreBtn, { backgroundColor: '#F3E5F5', borderColor: '#CE93D8' }]}
+          onPress={() => router.push('/admin/supervisors-performance')}
+          data-testid="supervisor-perf-show-more"
+        >
+          <Ionicons name="chevron-down" size={14} color="#6A1B9A" />
+          <Text style={[s.showMoreText, { color: '#6A1B9A' }]}>Show more ({remaining} more)</Text>
+        </TouchableOpacity>
       )}
     </View>
   );
@@ -1350,15 +1293,6 @@ const s = StyleSheet.create({
   approvalSub: { fontSize: 12, color: '#90A4AE', marginTop: 2 },
   reviewChip: { backgroundColor: '#E65100', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
   reviewChipText: { fontSize: 11, fontWeight: '700', color: '#FFF' },
-
-  // Students (Supervisor)
-  studentCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderRadius: 12, padding: 12, marginBottom: 8, gap: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3, elevation: 1 },
-  studentAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#E3F2FD', justifyContent: 'center', alignItems: 'center' },
-  studentAvatarText: { fontSize: 14, fontWeight: '700', color: '#1565C0' },
-  studentName: { fontSize: 15, fontWeight: '600', color: '#1A1A1A' },
-  studentSub: { fontSize: 12, color: '#90A4AE', marginTop: 1 },
-  pendingBadge: { backgroundColor: '#FFF3E0', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
-  pendingBadgeText: { fontSize: 11, fontWeight: '600', color: '#E65100' },
 
   // Pipeline (InCharge)
   pipelineCard: { flexDirection: 'row', backgroundColor: '#FFF', borderRadius: 14, padding: 16, justifyContent: 'space-around', alignItems: 'flex-end', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 },

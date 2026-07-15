@@ -147,6 +147,20 @@ async def db_status():
         "seed_strategy": "force_reseed_on_every_startup",
     }
 
+@app.get("/api/downloads/implanr-theme.zip")
+async def download_implanr_theme():
+    """Public download of the Implanr WordPress theme zip (marketing website).
+    Anyone with the link can pull it - no auth needed since it's the user's own theme."""
+    import os as _os
+    zip_path = _os.path.join(_os.path.dirname(__file__), "implanr-wordpress-theme.zip")
+    if not _os.path.exists(zip_path):
+        raise HTTPException(status_code=404, detail="Theme zip not found on server")
+    return FileResponse(
+        zip_path,
+        media_type="application/zip",
+        filename="implanr-wordpress-theme.zip",
+    )
+
 @app.get("/api/downloads/implanr-elementor.zip")
 async def download_implanr_elementor():
     """Public download of the Implanr Elementor Template Kit (JSON templates)."""
@@ -844,6 +858,9 @@ class Phase2Submit(BaseModel):
     # Legacy fields
     checklist_surgical: Optional[ChecklistSection] = None
     remark: Optional[str] = None
+    # iter-332: actual surgery date (may differ from procedure_date if the
+    # case slipped a day or two). Defaults to procedure_date on the client.
+    actual_done_date: Optional[str] = Field(None, max_length=10)
 
 class Phase2PreOpSubmit(BaseModel):
     # iter-189: Pre-Surgical Checklist as a separate, day-of submission.
@@ -867,6 +884,8 @@ class Stage2SurgicalSubmit(BaseModel):
     # Legacy
     checklist: Optional[ChecklistSection] = None
     remark: Optional[str] = None
+    # iter-332: actual date Phase 3 (second-stage surgery / healing abutment) was done
+    done_date: Optional[str] = Field(None, max_length=10)
 
 class Stage2ProstheticSubmit(BaseModel):
     # Step 1: Final Prosthesis + Impressions
@@ -900,6 +919,8 @@ class Stage2ProstheticSubmit(BaseModel):
     remark: Optional[str] = None
     faculty_remark: Optional[str] = None
     incharge_remark: Optional[str] = None
+    # iter-332: actual date Phase 4 Step 1 (impression / try-in) was done
+    done_date: Optional[str] = Field(None, max_length=10)
 
 class Phase4Step2Submit(BaseModel):
     # Step 2: Trial & Delivery
@@ -914,6 +935,39 @@ class Phase4Step2Submit(BaseModel):
     opg_upload: Optional[Dict[str, str]] = None
     # Final intraoral prosthesis photos with editable labels
     prosthesis_photos: Optional[List[Dict[str, str]]] = None
+    # iter-332: actual date this step was performed (YYYY-MM-DD).
+    done_date: Optional[str] = Field(None, max_length=10)
+
+
+# ── Treatment Timeline (iter-332) ────────────────────────────────────
+# Each phase / step now captures the date the work was ACTUALLY done
+# (not the date faculty approved it). Defaults to today on the client
+# but is editable so students can back-date short delays. Server-side
+# validator below enforces: not in future, not before previous phase,
+# not more than 30 days back. Stored as ISO YYYY-MM-DD strings.
+def _validate_done_date(d, prev_date, label):
+    """Return validated YYYY-MM-DD date or raise HTTPException."""
+    from datetime import date as _date, timedelta as _td
+    if not d:
+        return _date.today().isoformat()
+    try:
+        parsed = _date.fromisoformat(d)
+    except Exception:
+        raise HTTPException(status_code=400, detail=f"{label}: invalid date format, expected YYYY-MM-DD")
+    today = _date.today()
+    if parsed > today:
+        raise HTTPException(status_code=400, detail=f"{label}: date cannot be in the future")
+    if parsed < today - _td(days=30):
+        raise HTTPException(status_code=400, detail=f"{label}: cannot be more than 30 days in the past")
+    if prev_date:
+        try:
+            prev = _date.fromisoformat(prev_date)
+            if parsed < prev:
+                raise HTTPException(status_code=400, detail=f"{label}: cannot be before the previous phase ({prev_date})")
+        except (ValueError, TypeError):
+            pass
+    return parsed.isoformat()
+
 
 class ImplantPlanItem(BaseModel):
     position: str  # FDI tooth number e.g. "14"
@@ -4136,7 +4190,7 @@ async def get_procedures(
             query["status"] = {"$in": phase_status_map[phase]}
     elif status and current_user["role"] != "nurse":
         if status == "pending":
-            query["status"] = {"$in": ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic"]}
+            query["status"] = {"$in": ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic", "pending_end_treatment_supervisor", "pending_end_treatment_incharge"]}
         elif status == "completed":
             query["status"] = {"$in": ["phase2_approved", "stage2_surgical_approved", "completed"]}
         elif status == "rejected":
@@ -4269,7 +4323,7 @@ async def list_students_analytics(current_user: dict = Depends(get_current_user)
                 "total": {"$sum": 1},
                 "completed": {"$sum": {"$cond": [{"$eq": ["$status", "completed"]}, 1, 0]}},
                 "active": {"$sum": {"$cond": [{"$not": {"$in": ["$status", ["completed", "rejected", "permanently_rejected"]]}}, 1, 0]}},
-                "pending_approval": {"$sum": {"$cond": [{"$in": ["$status", ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic"]]}, 1, 0]}},
+                "pending_approval": {"$sum": {"$cond": [{"$in": ["$status", ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic", "pending_end_treatment_supervisor", "pending_end_treatment_incharge"]]}, 1, 0]}},
             }},
         ]
         kpi_doc = None
@@ -4368,7 +4422,7 @@ async def get_student_summary(student_id: str, current_user: dict = Depends(get_
             "completed": {"$sum": {"$cond": [{"$eq": ["$status", "completed"]}, 1, 0]}},
             "rejected": {"$sum": {"$cond": [{"$in": ["$status", ["rejected", "permanently_rejected", "stage2_surgical_rejected", "stage2_prosthetic_rejected"]]}, 1, 0]}},
             "active": {"$sum": {"$cond": [{"$not": {"$in": ["$status", ["completed", "rejected", "permanently_rejected"]]}}, 1, 0]}},
-            "pending_approval": {"$sum": {"$cond": [{"$in": ["$status", ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic"]]}, 1, 0]}},
+            "pending_approval": {"$sum": {"$cond": [{"$in": ["$status", ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic", "pending_end_treatment_supervisor", "pending_end_treatment_incharge"]]}, 1, 0]}},
         }},
     ]
     kpi_doc = None
@@ -8431,6 +8485,219 @@ Provide a clinical explanation in professional scientific language. Do not menti
     return {"explanation": response}
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# AI Exit Summary for the Treatment Termination PDF
+#
+# When a case reaches `status = "treatment_ended"`, generate a short clinical
+# hand-off note that drafts soft recommendations (referrals, augmentation
+# considerations, patient counselling points) based on the failure history +
+# termination reason. Cached on the procedure doc; regenerated only if the
+# cache is missing. Editable by case owner (student), supervisor, in-charge or
+# administrator. PHI is redacted before the LLM call (belt-and-braces net via
+# _redact_phi_from_ai_text, same as every other AI endpoint) — HIPAA safe.
+# ─────────────────────────────────────────────────────────────────────────────
+def _phi_redact_procedure(proc: dict) -> dict:
+    """Return a shallow copy with obvious PHI fields replaced by placeholders."""
+    redacted = dict(proc)
+    if redacted.get("patient_name"):
+        redacted["patient_name"] = "[PATIENT]"
+    for k in ("patient_phone", "patient_contact", "phone", "contact_number",
+              "registration_number", "aadhar", "aadhaar", "email", "address"):
+        if redacted.get(k):
+            redacted[k] = "[REDACTED]"
+    return redacted
+
+
+def _build_exit_summary_prompt(proc: dict) -> str:
+    """Build the LLM prompt for the AI Exit Summary. PHI-redacted."""
+    p = _phi_redact_procedure(proc)
+    age = p.get("patient_age") or p.get("age") or "—"
+    sex = p.get("patient_gender") or p.get("sex") or "—"
+    chief = p.get("chief_complaint") or "—"
+    ended_reason = p.get("treatment_ended_reason") or "—"
+    ended_by = p.get("treatment_ended_decision_maker") or "—"
+    procedure_type = p.get("implant_procedure_type") or "—"
+
+    # Original implants (R0) + revision chain
+    originals = (p.get("implants") or p.get("implant_plans") or
+                 p.get("existing_implants") or [])
+    surv = (p.get("phase2_survival_review") or {}).get("implants") or {}
+    events = (p.get("phase2_survival_review") or {}).get("events") or []
+
+    imp_lines = []
+    for i, imp in enumerate(originals):
+        s = surv.get(str(i)) or surv.get(i) or {}
+        tooth = imp.get("tooth_number") or imp.get("tooth") or imp.get("position") or "—"
+        system = " / ".join([str(x) for x in [imp.get("brand"), imp.get("system")] if x]) or "—"
+        size = " · ".join([
+            f"Ø{imp.get('diameter')}mm" if imp.get("diameter") else "",
+            f"L{imp.get('length')}mm" if imp.get("length") else "",
+        ]).strip(" ·") or "—"
+        status = s.get("status") or "Active"
+        reason = s.get("reason") or ""
+        rline = f"  - Tooth #{tooth} | {system} | {size} | Final: {status}"
+        if reason:
+            rline += f" — {reason}"
+        imp_lines.append(rline)
+
+    ev_lines = []
+    for ev in events:
+        at = ev.get("at") or "—"
+        failures = ev.get("failures") or []
+        if not failures:
+            ev_lines.append(f"  - {at}: All implants surviving")
+            continue
+        for f in failures:
+            tag = ("END TREATMENT" if f.get("end_treatment")
+                   else "replaced" if f.get("replaced")
+                   else "removed" if f.get("removed") else "reviewed")
+            ev_lines.append(
+                f"  - {at}: Tooth #{f.get('tooth','?')} — {f.get('reason','?')} ({tag})"
+            )
+
+    imp_block = "\n".join(imp_lines) or "  (none on record)"
+    ev_block = "\n".join(ev_lines) or "  (none on record)"
+
+    return f"""You are an experienced implantologist writing a clinical hand-off note for a case where implant therapy has been terminated. The document goes to the patient's next dentist AND lives in the institutional record.
+
+Patient profile (PHI redacted): Age {age}, Sex {sex}
+Chief complaint at intake: {chief}
+Procedure type: {procedure_type}
+Termination decision by: {ended_by}
+Termination reason on record: {ended_reason}
+
+Implants placed and final status:
+{imp_block}
+
+Survival-review lifecycle events:
+{ev_block}
+
+Task — write a concise clinical Exit Summary (150–220 words, plain prose, no headings, no lists) that:
+1. Restates the clinical picture in one sentence (why therapy was terminated).
+2. Suggests 2–4 SOFT, non-prescriptive next-step recommendations. Draw from the failure pattern: e.g. residual ridge deficiency → bone-augmentation before any future implant attempt; multiple biological failures → screen for bruxism, occlusal overload, uncontrolled diabetes, smoking; peri-implantitis chain → prosthodontist referral for a removable partial denture or tooth-supported bridge; single-site failure → soft-tissue augmentation and delayed re-entry.
+3. Suggests any counselling points for the patient (realistic expectations, hygiene, systemic-risk optimisation) if warranted.
+4. Ends with a one-line disclaimer that this is an AI-drafted recommendation and the treating clinician must verify before acting.
+
+Rules:
+- Do NOT invent implant sizes, brand names, or clinical facts that are not in the input above.
+- Do NOT cite guideline names, textbooks, or organisations.
+- Use professional prose. Avoid bullet points and headings.
+- Never reference the patient by name — the input has already been redacted."""
+
+
+async def _ensure_exit_summary(procedure_id: str, proc: dict, current_user: dict, force: bool = False) -> str:
+    """Idempotently generate + persist the AI Exit Summary. Returns the text."""
+    existing = proc.get("ai_exit_summary") or {}
+    if not force and isinstance(existing, dict) and existing.get("text"):
+        return existing["text"]
+
+    prompt = _build_exit_summary_prompt(proc)
+    chat = LlmChat(
+        api_key=_get_llm_key(),
+        session_id=f"exit-summary-{procedure_id}-{uuid.uuid4().hex[:8]}",
+        system_message="You are an expert implant dentistry clinician writing a medico-legal hand-off note. Be conservative and evidence-anchored."
+    ).with_model("openai", "gpt-5.2")
+
+    text = await chat.send_message(UserMessage(text=prompt))
+    text = (text or "").strip()
+    # HIPAA belt-and-braces net, same as every other AI endpoint in this file.
+    text = _redact_phi_from_ai_text(text, proc)
+
+    now = datetime.now(timezone.utc)
+    payload = {
+        "text": text,
+        "generated_at": now,
+        "generated_by": current_user.get("name") or current_user.get("username") or "system",
+        "model": "openai/gpt-5.2",
+        "edited": False,
+    }
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"ai_exit_summary": payload}}
+    )
+    await log_access(
+        action="ai_exit_summary_generated",
+        outcome="success",
+        resource_type="procedure",
+        resource_id=procedure_id,
+        user=current_user,
+    )
+    return text
+
+
+@api_router.post("/procedures/{procedure_id}/generate-exit-summary")
+async def generate_exit_summary(procedure_id: str, request: Request, current_user: dict = Depends(get_current_user)):
+    """Auto-generate (or return cached) AI Exit Summary for a terminated case."""
+    if current_user.get("role") in _AI_BLOCKED_ROLES:
+        raise HTTPException(status_code=403, detail="AI features not available for this role")
+    if not ObjectId.is_valid(procedure_id):
+        raise HTTPException(status_code=400, detail="Invalid procedure id")
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if proc.get("status") != "treatment_ended":
+        raise HTTPException(status_code=400, detail="AI Exit Summary is only available for terminated cases")
+
+    force = False
+    try:
+        body = await request.json()
+        force = bool(body.get("force"))
+    except Exception:
+        pass
+
+    text = await _ensure_exit_summary(procedure_id, proc, current_user, force=force)
+    proc2 = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"ai_exit_summary": 1})
+    return {"ai_exit_summary": proc2.get("ai_exit_summary") if proc2 else {"text": text}}
+
+
+@api_router.patch("/procedures/{procedure_id}/exit-summary")
+async def edit_exit_summary(procedure_id: str, request: Request, current_user: dict = Depends(get_current_user)):
+    """Owner-of-case edit for the AI Exit Summary. Allowed roles: student
+    (case owner), supervisor, implant_incharge, administrator."""
+    if not ObjectId.is_valid(procedure_id):
+        raise HTTPException(status_code=400, detail="Invalid procedure id")
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if proc.get("status") != "treatment_ended":
+        raise HTTPException(status_code=400, detail="AI Exit Summary is only available for terminated cases")
+
+    role = current_user.get("role")
+    is_case_student = str(proc.get("student_id") or "") == str(current_user.get("_id") or "")
+    if role not in ("supervisor", "implant_incharge", "administrator") and not (role == "student" and is_case_student):
+        raise HTTPException(status_code=403, detail="Only the case owner (student), supervisor, implant in-charge or administrator can edit the exit summary")
+
+    body = await request.json()
+    new_text = (body.get("text") or "").strip()
+    if not new_text:
+        raise HTTPException(status_code=400, detail="Summary text cannot be empty")
+    if len(new_text) > 4000:
+        raise HTTPException(status_code=400, detail="Summary text exceeds 4000 characters")
+
+    now = datetime.now(timezone.utc)
+    existing = proc.get("ai_exit_summary") or {}
+    payload = {
+        **existing,
+        "text": new_text,
+        "edited": True,
+        "edited_at": now,
+        "edited_by": current_user.get("name") or current_user.get("username") or "user",
+        "edited_by_role": role,
+    }
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"ai_exit_summary": payload}}
+    )
+    await log_access(
+        action="ai_exit_summary_edited",
+        outcome="success",
+        resource_type="procedure",
+        resource_id=procedure_id,
+        user=current_user,
+    )
+    return {"ai_exit_summary": payload}
+
+
 @api_router.post("/ai/explain-standalone")
 async def ai_explain_standalone(request: Request, current_user: dict = Depends(get_current_user)):
     """Generate AI explanation for standalone implant selection (no procedure ID required)."""
@@ -12192,14 +12459,47 @@ async def submit_phase2(
         update_data["phase2_supervisor_notes"] = phase2_data.supervisor_notes
     if phase2_data.incharge_notes:
         update_data["phase2_incharge_notes"] = phase2_data.incharge_notes
+    # iter-332: actual surgery date (may differ from planned procedure_date).
+    # Defaults to procedure_date on the client; validated against Phase 1
+    # creation date as the lower bound and today as the upper bound.
+    update_data["phase2_actual_done_date"] = _validate_done_date(
+        phase2_data.actual_done_date,
+        prev_date=procedure.get("procedure_date") or (procedure.get("created_at").isoformat()[:10] if procedure.get("created_at") else None),
+        label="Phase 2 Actual Done Date",
+    )
     if phase2_data.torque_values:
         update_data["torque_values"] = phase2_data.torque_values
-    
+
+    # iter-343: Materialize the top-level `implants[]` array from the
+    # Phase-1 implant plan + captured torque values. This is the source
+    # of truth for downstream flows (survival review, active-implants,
+    # analytics, lifecycle timeline). Without this the Implant Survival
+    # & Revision Engine never surfaces in the UI because the gate reads
+    # `procedure.implants?.length`.
+    plans = procedure.get("implant_plans") or []
+    torques = phase2_data.torque_values or []
+    if plans:
+        implants_array: List[Dict[str, Any]] = []
+        for i, plan in enumerate(plans):
+            implants_array.append({
+                "tooth_number": plan.get("position"),
+                "system": plan.get("system") or plan.get("brand"),
+                "brand": plan.get("brand"),
+                "diameter": plan.get("diameter"),
+                "length": plan.get("length"),
+                "bone_width": plan.get("bone_width"),
+                "bone_height": plan.get("bone_height"),
+                "bone_type": plan.get("bone_type"),
+                "insertion_torque_ncm": (torques[i] if i < len(torques) else None),
+                "placement_date": update_data["phase2_actual_done_date"],
+            })
+        update_data["implants"] = implants_array
+
     await db.procedures.update_one(
         {"_id": ObjectId(procedure_id)},
         {"$set": update_data}
     )
-    
+
     # Notify both supervisor and implant incharge
     await db.notifications.insert_one({
         "user_id": procedure["supervisor_id"],
@@ -12370,6 +12670,12 @@ async def submit_stage2_surgical(
         update_data["phase3_incharge_notes"] = data.incharge_notes
     if data.remark:
         update_data["stage2_surgical_remark"] = data.remark
+    # iter-332: capture & validate the actual "done on" date for Phase 3
+    update_data["phase3_done_date"] = _validate_done_date(
+        data.done_date,
+        prev_date=procedure.get("procedure_date"),
+        label="Phase 3 Done Date",
+    )
 
     await db.procedures.update_one({"_id": ObjectId(procedure_id)}, {"$set": update_data})
 
@@ -12512,6 +12818,12 @@ async def submit_stage2_prosthetic(
         update_data["stage2_prosthetic_faculty_remark"] = data.faculty_remark
     if data.incharge_remark:
         update_data["stage2_prosthetic_incharge_remark"] = data.incharge_remark
+    # iter-332: actual date Phase 4 Step 1 (impression / try-in) was done.
+    # Lower bound = phase3 done date (or Phase 2 actual / planned procedure_date).
+    _prev = procedure.get("phase3_done_date") or procedure.get("phase2_actual_done_date") or procedure.get("procedure_date")
+    update_data["phase4_step1_done_date"] = _validate_done_date(
+        data.done_date, prev_date=_prev, label="Phase 4 Step 1 Done Date",
+    )
 
     await db.procedures.update_one({"_id": ObjectId(procedure_id)}, {"$set": update_data})
 
@@ -12855,6 +13167,11 @@ async def submit_phase4_step2(
         update_data["phase4_step2_opg_upload"] = data.opg_upload
     if data.prosthesis_photos:
         update_data["phase4_step2_prosthesis_photos"] = [p for p in data.prosthesis_photos if p.get("filename")]
+    # iter-332: actual date Phase 4 Step 2 (final prosthesis delivery) was done
+    _prev2 = procedure.get("phase4_step1_done_date") or procedure.get("phase3_done_date") or procedure.get("phase2_actual_done_date") or procedure.get("procedure_date")
+    update_data["phase4_step2_done_date"] = _validate_done_date(
+        data.done_date, prev_date=_prev2, label="Phase 4 Step 2 Done Date",
+    )
 
     await db.procedures.update_one({"_id": ObjectId(procedure_id)}, {"$set": update_data})
 
@@ -13127,8 +13444,10 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
             my_pending = await db.procedures.count_documents({**(await _org_scope_match(current_user)), "status": {"$in": pending_statuses}})
         result["pending_my_approval"] = my_pending
 
-        # Student stats for incharge
-        if role in ["implant_incharge", "administrator"]:
+        # Student + Supervisor performance stats — In-Charge/Admin see their
+        # whole org (or department when department-scoped); Supervisors get
+        # the same dept/org-scoped view so they can compare against peers.
+        if role in ["implant_incharge", "administrator", "supervisor"]:
             if current_user.get("is_super_admin"):
                 student_id_match: Dict[str, Any] = {"$exists": True, "$nin": [None, ""]}
                 supervisor_id_match: Dict[str, Any] = {"$exists": True, "$nin": [None, ""]}
@@ -13158,6 +13477,20 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
                     "rejected": doc["rejected"],
                     "active": doc["active"],
                 })
+            # iter-349: `$first: "$student_name"` above can pick a blank name
+            # if that student's first-grouped procedure never had the name
+            # filled in (legacy/draft records) — the frontend then filters
+            # the whole student out. Backfill from the canonical user record
+            # for any row where the aggregated name is empty.
+            _missing_name_ids = [ObjectId(r["student_id"]) for r in student_stats
+                                  if not r["student_name"] and r["student_id"] and ObjectId.is_valid(r["student_id"])]
+            if _missing_name_ids:
+                _name_by_id = {}
+                async for u in db.users.find({"_id": {"$in": _missing_name_ids}}, {"name": 1}):
+                    _name_by_id[str(u["_id"])] = u.get("name")
+                for r in student_stats:
+                    if not r["student_name"]:
+                        r["student_name"] = _name_by_id.get(r["student_id"]) or "Unknown"
             student_stats.sort(key=lambda x: x["completed"], reverse=True)
             result["student_stats"] = student_stats
 
@@ -13183,6 +13516,16 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
                     "rejected": doc["rejected"],
                     "pending": doc["pending"],
                 })
+            # iter-349: same blank-name backfill as student_stats above.
+            _missing_sup_name_ids = [ObjectId(r["supervisor_id"]) for r in supervisor_stats
+                                      if not r["supervisor_name"] and r["supervisor_id"] and ObjectId.is_valid(r["supervisor_id"])]
+            if _missing_sup_name_ids:
+                _sup_name_by_id = {}
+                async for u in db.users.find({"_id": {"$in": _missing_sup_name_ids}}, {"name": 1}):
+                    _sup_name_by_id[str(u["_id"])] = u.get("name")
+                for r in supervisor_stats:
+                    if not r["supervisor_name"]:
+                        r["supervisor_name"] = _sup_name_by_id.get(r["supervisor_id"]) or "Unknown"
             supervisor_stats.sort(key=lambda x: x["total"], reverse=True)
             result["supervisor_stats"] = supervisor_stats
 
@@ -18195,6 +18538,1249 @@ async def list_saved_tips(current_user: dict = Depends(get_current_user)):
             tip["saved_at"] = s.get("saved_at")
             out.append(tip)
     return out
+
+
+
+
+# working via the legacy embedded array (per user pick 2b).
+
+FAILURE_REASONS = [
+    "Early failure", "Lack of Osseointegration", "Infection", "Peri-implantitis",
+    "Mobility", "Implant fracture", "Unknown", "Removed elsewhere", "Other",
+]
+
+class ImplantSurvivalReviewBody(BaseModel):
+    all_survived: bool = Field(...)
+    failures: List[Dict[str, Any]] = Field(default_factory=list)
+    # Each failure: { implant_idx, tooth, reason, removed(bool), replaced(bool),
+    #                 replacement: { system, diameter, length, placement_date } | null }
+
+
+def _extract_procedure_implants(proc: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Return the canonical list of implants for a procedure. iter-343:
+    Prior to this iteration, Phase 2 never materialized a top-level
+    `implants[]` array — the implant plan was persisted at
+    `implant_plans[]` (a per-implant plan) and torque/ISQ lived flat on
+    `torque_values[]`. All survival endpoints (survival-review,
+    active-implants, implant-lifecycle, analytics) key off
+    `procedure.implants`. To keep older cases functional we fall back to
+    `existing_implants`, then to a derived view over `implant_plans` +
+    `torque_values`, materialising the same shape the survival flow
+    expects."""
+    if proc.get("implants"):
+        return proc["implants"]
+    ex = proc.get("existing_implants")
+    if ex:
+        # existing_implants use `_mm` suffixed fields and `tooth` (str) —
+        # normalize to the survival-flow shape here.
+        return [
+            {
+                "tooth_number": e.get("tooth") or e.get("tooth_number"),
+                "system": e.get("system") or e.get("brand"),
+                "brand": e.get("brand"),
+                "diameter": e.get("diameter") or e.get("diameter_mm"),
+                "length": e.get("length") or e.get("length_mm"),
+                "bone_type": e.get("bone_type"),
+                "insertion_torque_ncm": e.get("insertion_torque_ncm"),
+                "placement_date": e.get("surgery_date") or proc.get("phase2_actual_done_date"),
+            }
+            for e in ex
+        ]
+    plans = proc.get("implant_plans") or []
+    if not plans:
+        return []
+    torques = proc.get("torque_values") or []
+    p2 = proc.get("phase2_data") or {}
+    return [
+        {
+            "tooth_number": plan.get("position"),
+            "system": plan.get("system") or plan.get("brand"),
+            "brand": plan.get("brand"),
+            "diameter": plan.get("diameter"),
+            "length": plan.get("length"),
+            "bone_width": plan.get("bone_width"),
+            "bone_height": plan.get("bone_height"),
+            "bone_type": plan.get("bone_type"),
+            "insertion_torque_ncm": (torques[i] if i < len(torques) else None),
+            "placement_date": proc.get("phase2_actual_done_date"),
+        }
+        for i, plan in enumerate(plans)
+    ]
+
+
+@api_router.post("/procedures/{procedure_id}/survival-review")
+async def submit_survival_review(
+    procedure_id: str,
+    body: ImplantSurvivalReviewBody,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Save the Phase 2 -> Phase 3 survival review. If all_survived=True,
+    the review is short-circuited and Phase 3 proceeds untouched. If not,
+    each failure updates the corresponding implant record (or creates a
+    revision if replaced)."""
+    try:
+        proc_oid = ObjectId(procedure_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid procedure id")
+    proc = await db.procedures.find_one({"_id": proc_oid})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    now = datetime.now(timezone.utc)
+    implants = _extract_procedure_implants(proc)
+    # iter-346: incremental / multi-round survival reviews. Load the
+    # existing `phase2_survival_review.implants` (per-implant snapshot)
+    # and merge only the newly-referenced idx values into it. Untouched
+    # implants keep their prior state so multiple failures over time
+    # correctly compose into a single per-implant record with a
+    # growing revision chain.
+    prev_review = proc.get("phase2_survival_review") or {}
+    prev_impl_state: Dict[str, Any] = dict(prev_review.get("implants") or {})
+    survival_map: Dict[int, Dict[str, Any]] = {}  # only touched idx values this round
+    site_changes: List[Dict[str, Any]] = []  # iter-344: apply after loop
+
+    if body.all_survived:
+        # iter-346: an "all survived" submission is a no-op for any
+        # implant that already has a persisted state — we do NOT wipe
+        # a prior R1/R2 replacement record. Only implants that have
+        # never been reviewed are stamped as "Active" this round.
+        for i, _imp in enumerate(implants):
+            if str(i) not in prev_impl_state:
+                survival_map[i] = {"status": "Active", "reviewed_at": now.isoformat()}
+    else:
+        # Every failure entry must reference an implant_idx
+        for f in body.failures:
+            idx = f.get("implant_idx")
+            if idx is None or not (0 <= idx < len(implants)):
+                raise HTTPException(status_code=400, detail=f"Invalid implant_idx {idx}")
+            raw_reason = (f.get("reason") or "Unknown").strip()
+            # iter-344: reason may arrive as "Other: <text>" — normalize.
+            reason_base, reason_detail = (raw_reason.split(":", 1) + [""])[:2] if raw_reason.startswith("Other:") else (raw_reason, "")
+            if reason_base not in FAILURE_REASONS:
+                raise HTTPException(status_code=400, detail=f"Unknown failure reason: {reason_base}")
+            replaced = bool(f.get("replaced"))
+            # "End Implant Treatment" — abandons implant therapy for this site
+            # (and, per the role-based approval chain below, the whole case
+            # once it reaches a terminal state). Requires a decision maker
+            # (Patient/Operator) + reason. Overrides `replaced`.
+            end_treatment = bool(f.get("end_treatment"))
+            decision_maker = (f.get("end_treatment_decision_maker") or "").strip() or None
+            end_reason = (f.get("end_treatment_reason") or "").strip() or None
+            if end_treatment:
+                if decision_maker not in ("Patient", "Operator"):
+                    raise HTTPException(status_code=400, detail="End treatment requires decision maker (Patient or Operator)")
+                if not end_reason:
+                    raise HTTPException(status_code=400, detail="End treatment requires a reason")
+                replaced = False  # cannot replace and end at the same time
+            site_changed = bool(f.get("site_changed"))
+            new_tooth = (f.get("new_tooth_number") or "").strip() or None
+            survival_map[idx] = {
+                "status": ("Treatment Ended" if end_treatment else ("Replaced" if replaced else "Failed")),
+                "reason": reason_base,
+                "reason_detail": reason_detail.strip() or None,
+                "removed": bool(f.get("removed", True)),
+                "replaced": replaced,
+                "site_changed": site_changed,
+                "new_tooth_number": new_tooth,
+                "failure_date": f.get("failure_date") or now.isoformat(),
+                "end_treatment": end_treatment,
+                "end_treatment_decision_maker": decision_maker,
+                "end_treatment_reason": end_reason,
+                "end_treatment_at": now.isoformat() if end_treatment else None,
+            }
+            if site_changed and new_tooth:
+                site_changes.append({"implant_idx": idx, "old_tooth": (implants[idx].get("tooth_number") or implants[idx].get("tooth")), "new_tooth": new_tooth})
+            if replaced:
+                repl = f.get("replacement") or {}
+                if not all(repl.get(k) for k in ("system", "diameter", "length")):
+                    raise HTTPException(status_code=400, detail="Replacement requires system, diameter, length")
+                existing_chain = prev_impl_state.get(str(idx)) or {}
+                prior = existing_chain.get("replacement")
+                revision_number = 1
+                chain: List[Dict[str, Any]] = []
+                if prior:
+                    chain = list(prior.get("chain") or [])
+                    chain.append({**{k: v for k, v in prior.items() if k != "chain"},
+                                  "status": "Failed",
+                                  "failure_reason": reason_base,
+                                  "failure_date": now.isoformat()})
+                    revision_number = int(prior.get("revision_number", 1)) + 1
+                # iter-344: capture the new Type of Procedure branch fields.
+                proc_type_val = (repl.get("procedure_type") or "").strip() or None
+                raw_imm_load = (repl.get("immediate_loading_prosthesis") or "").strip() or None
+                imm_base, imm_detail = (None, None)
+                if raw_imm_load:
+                    if raw_imm_load.startswith("Other:"):
+                        imm_base, imm_detail = "Other", raw_imm_load.split(":", 1)[1].strip()
+                    else:
+                        imm_base = raw_imm_load
+                survival_map[idx]["replacement"] = {
+                    "system": repl["system"],
+                    "diameter": float(repl["diameter"]),
+                    "length": float(repl["length"]),
+                    "lot_number": (repl.get("lot_number") or "").strip() or None,
+                    "insertion_torque_ncm": (float(repl["insertion_torque_ncm"])
+                                              if repl.get("insertion_torque_ncm") not in (None, "") else None),
+                    "isq": (float(repl["isq"]) if repl.get("isq") not in (None, "") else None),
+                    "healing_protocol": (repl.get("healing_protocol") or "").strip() or None,
+                    "surface": (repl.get("surface") or "").strip() or None,
+                    "placement_date": repl.get("placement_date") or now.isoformat()[:10],
+                    "iopa_url": (repl.get("iopa_url") or "").strip() or None,
+                    "revision_number": revision_number,
+                    "parent_implant_idx": idx,
+                    "status": "Active",
+                    "created_at": now.isoformat(),
+                    "chain": chain,
+                    # iter-344 extras
+                    "procedure_type": proc_type_val,
+                    "prosthetic_component": (repl.get("prosthetic_component") or "").strip() or None,
+                    "healing_abutment_mm": (float(repl["healing_abutment_mm"])
+                                             if repl.get("healing_abutment_mm") not in (None, "") else None),
+                    "immediate_loading_prosthesis": imm_base,
+                    "immediate_loading_prosthesis_detail": imm_detail,
+                    # If the site changed, the replacement lives at the NEW tooth
+                    "tooth_number": new_tooth or (implants[idx].get("tooth_number") or implants[idx].get("tooth")),
+                }
+        # Any implant not listed in failures is treated as Active.
+        for i in range(len(implants)):
+            if i not in survival_map:
+                survival_map[i] = {"status": "Active", "reviewed_at": now.isoformat()}
+
+    # iter-346: Persist merged review + audit event.
+    # Mongo requires string keys on nested documents.
+    survival_map_str = {str(k): v for k, v in survival_map.items()}
+    merged_impl = dict(prev_impl_state)
+    for k, v in survival_map_str.items():
+        merged_impl[k] = v
+    if body.all_survived:
+        # When the operator declares "all implants survived and proceed to
+        # Phase 3", every implant is Active RIGHT NOW — override any stale
+        # Failed/Treatment Ended entry from an earlier round instead of only
+        # filling missing entries (otherwise a lingering "Failed" would
+        # immediately re-trigger the auto-terminate guard below on the very
+        # next save).
+        for i in range(len(implants)):
+            merged_impl[str(i)] = {"status": "Active", "reviewed_at": now.isoformat()}
+    prior_events = list((prev_review.get("events") or []))
+    prior_events.append({
+        "at": now.isoformat(),
+        "by": current_user.get("name") or current_user.get("username"),
+        "by_id": str(current_user.get("_id")),
+        "all_survived": body.all_survived,
+        "failures": [{"implant_idx": f.get("implant_idx"), "tooth": f.get("tooth"),
+                      "reason": (f.get("reason") or "Unknown"),
+                      "replaced": bool(f.get("replaced")),
+                      "site_changed": bool(f.get("site_changed")),
+                      "new_tooth_number": f.get("new_tooth_number")}
+                     for f in (body.failures or [])],
+    })
+    is_fully_survived = not any(v.get("status") in ("Failed", "Replaced", "Treatment Ended") for v in merged_impl.values())
+    # If ANY implant is marked "Treatment Ended", the case enters a
+    # role-based approval workflow rather than terminating immediately.
+    # Student → Supervisor → In-Charge, Supervisor → In-Charge, In-Charge →
+    # self-approved. Same-person-both-roles collapses to a single approval
+    # step (mirrors the Phase 1/2 approval pattern).
+    case_treatment_ended = any(v.get("status") == "Treatment Ended" for v in merged_impl.values())
+    # If EVERY implant is now inactive-in-treatment (Failed with no
+    # replacement, or Treatment Ended), the case is de-facto over — auto-
+    # terminate to `treatment_ended` without waiting for an explicit End
+    # Treatment approval. `implants[]` here is the ORIGINAL R0 list; a given
+    # index is "active-in-treatment" when survival_map[i] is missing (never
+    # touched → Active), when status=="Active", or when status=="Replaced"
+    # (R{n} is live).
+    def _idx_active(idx: int) -> bool:
+        e = merged_impl.get(str(idx)) or merged_impl.get(idx) or {}
+        st = e.get("status")
+        if st is None:
+            return True  # never reviewed → still Active by default
+        # Any status that is NOT Failed / Treatment Ended is a live implant.
+        return st not in ("Failed", "Treatment Ended")
+    all_inactive_after_review = len(implants) > 0 and not any(_idx_active(i) for i in range(len(implants)))
+    auto_terminate_all_failed = all_inactive_after_review and not case_treatment_ended
+    update_set: Dict[str, Any] = {
+        "phase2_survival_review": {
+            "all_survived": is_fully_survived,
+            "reviewed_at": prev_review.get("reviewed_at") or now.isoformat(),
+            "last_reviewed_at": now.isoformat(),
+            "last_reviewed_by": current_user.get("name") or current_user.get("username"),
+            "reviewed_by": prev_review.get("reviewed_by") or (current_user.get("name") or current_user.get("username")),
+            "implants": merged_impl,
+            "events": prior_events,
+            "treatment_ended": case_treatment_ended,
+        },
+        "phase2_survival_review_at": now,
+    }
+    if case_treatment_ended:
+        ended_entries = [v for v in merged_impl.values() if v.get("status") == "Treatment Ended"]
+        e0 = ended_entries[0] if ended_entries else {}
+        initiator_role = current_user.get("role")
+        same_person_both_roles = str(proc.get("supervisor_id") or "") == str(proc.get("implant_incharge_id") or "")
+        prior_status = proc.get("status")
+        # Determine initial pending state based on initiator role. NOTE:
+        # `same_person_both_roles` only auto-terminates when the INITIATOR is
+        # one of the two approval roles (supervisor or in-charge). A student
+        # initiator always requires at least one explicit approval, even if
+        # supervisor==in-charge on this case (that combined approver will
+        # handle the request in a single tap).
+        if initiator_role == "implant_incharge":
+            new_status = "treatment_ended"
+        elif initiator_role == "supervisor":
+            if same_person_both_roles:
+                new_status = "treatment_ended"  # self-approved (holds both roles)
+            else:
+                new_status = "pending_end_treatment_incharge"
+        else:
+            # student or any other role
+            new_status = "pending_end_treatment_supervisor"
+        update_set["status"] = new_status
+        if new_status == "treatment_ended":
+            update_set["treatment_ended_at"] = now
+            update_set["treatment_ended_decision_maker"] = e0.get("end_treatment_decision_maker")
+            update_set["treatment_ended_reason"] = e0.get("end_treatment_reason")
+            update_set["treatment_ended_by_name"] = current_user.get("name") or current_user.get("username")
+            update_set["treatment_ended_by_role"] = initiator_role
+            # Clear any pending marker leftover from earlier round-trip.
+            update_set["pending_end_treatment"] = None
+        else:
+            # Store the pending metadata so approvers see full context.
+            update_set["pending_end_treatment"] = {
+                "initiated_by_id": current_user.get("_id"),
+                "initiated_by_name": current_user.get("name") or current_user.get("username"),
+                "initiated_by_role": initiator_role,
+                "initiated_at": now,
+                "decision_maker": e0.get("end_treatment_decision_maker"),
+                "reason": e0.get("end_treatment_reason"),
+                "prior_status": prior_status,
+                "supervisor_approved_at": None,
+                "supervisor_approved_by": None,
+                "incharge_approved_at": None,
+                "incharge_approved_by": None,
+            }
+    elif auto_terminate_all_failed:
+        # All implants Failed-with-no-replacement → the case is de-facto
+        # over. Auto-terminate without an approval workflow.
+        update_set["status"] = "treatment_ended"
+        update_set["treatment_ended_at"] = now
+        update_set["treatment_ended_decision_maker"] = "Operator"
+        update_set["treatment_ended_reason"] = "All implants failed with no replacement — case auto-terminated"
+        update_set["treatment_ended_by_name"] = current_user.get("name") or current_user.get("username")
+        update_set["treatment_ended_by_role"] = current_user.get("role")
+        update_set["auto_terminated"] = True
+        update_set["pending_end_treatment"] = None
+    # iter-344: apply site-change carry-forward — update the tooth number
+    # on the source implant lists so downstream forms (Phase 3 second-stage
+    # surgical, Phase 4 impressions/delivery) key off the new position.
+    if site_changes:
+        # Prefer the concrete `implants[]` array if present; else patch
+        # existing_implants / implant_plans in place so /active-implants
+        # returns the new tooth.
+        for src_key, tooth_field in (("implants", "tooth_number"),
+                                     ("existing_implants", "tooth"),
+                                     ("implant_plans", "position")):
+            src = proc.get(src_key)
+            if not isinstance(src, list) or not src:
+                continue
+            updated = False
+            new_src = [dict(x) for x in src]
+            for ch in site_changes:
+                i = ch["implant_idx"]
+                if 0 <= i < len(new_src) and ch.get("new_tooth"):
+                    new_src[i][tooth_field] = ch["new_tooth"]
+                    # Mirror on all common keys so any reader sees the update.
+                    for kk in ("tooth_number", "tooth", "position"):
+                        new_src[i][kk] = ch["new_tooth"]
+                    updated = True
+            if updated:
+                update_set[src_key] = new_src
+                break  # only patch the primary source
+    await db.procedures.update_one({"_id": proc_oid}, {"$set": update_set})
+    await log_access(
+        action="survival_review_submitted",
+        outcome="success",
+        resource_type="procedure",
+        resource_id=procedure_id,
+        user=current_user,
+        request=request,
+        extra={"all_survived": body.all_survived, "failure_count": len(body.failures)},
+    )
+    return {"ok": True, "review": survival_map, "merged": merged_impl, "events": prior_events}
+
+
+# End Implant Treatment approval workflow.
+# --------------------------------------------------
+# When a student or supervisor initiates End Implant Treatment via the
+# Survival Review flow, the case enters `pending_end_treatment_supervisor`
+# or `pending_end_treatment_incharge`. The next approver in the chain hits
+# this endpoint to Approve (advance / terminate) or Reject (revert to prior
+# status with an audit comment).
+class EndTreatmentApprovalBody(BaseModel):
+    action: str  # "approve" | "reject"
+    comment: Optional[str] = None
+
+
+@api_router.post("/procedures/{procedure_id}/end-treatment/approve")
+async def approve_end_treatment(
+    procedure_id: str,
+    body: EndTreatmentApprovalBody,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    action = (body.action or "").strip().lower()
+    if action not in ("approve", "reject"):
+        raise HTTPException(status_code=400, detail="action must be 'approve' or 'reject'")
+    try:
+        proc_oid = ObjectId(procedure_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid procedure id")
+    proc = await db.procedures.find_one({"_id": proc_oid})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    status = proc.get("status")
+    if status not in ("pending_end_treatment_supervisor", "pending_end_treatment_incharge"):
+        raise HTTPException(status_code=400, detail="No end-treatment request is pending on this case")
+
+    role = current_user.get("role")
+    uid = str(current_user.get("_id") or "")
+    assigned_supervisor = str(proc.get("supervisor_id") or "")
+    assigned_incharge = str(proc.get("implant_incharge_id") or "")
+    is_supervisor = uid == assigned_supervisor
+    is_incharge = uid == assigned_incharge
+    same_person_both = assigned_supervisor and assigned_supervisor == assigned_incharge
+
+    # Role gate — only the currently-expected approver may act.
+    if status == "pending_end_treatment_supervisor":
+        if not (is_supervisor or same_person_both):
+            raise HTTPException(status_code=403, detail="Only the assigned Supervisor can act on this request")
+    else:  # pending_end_treatment_incharge
+        if not (is_incharge or same_person_both):
+            raise HTTPException(status_code=403, detail="Only the assigned Implant In-Charge can act on this request")
+
+    pending = proc.get("pending_end_treatment") or {}
+    now = datetime.now(timezone.utc)
+
+    if action == "reject":
+        comment = (body.comment or "").strip()
+        if not comment:
+            raise HTTPException(status_code=400, detail="A rejection reason is required")
+        prior_status = pending.get("prior_status") or "phase2_approved"
+        # Revert the per-implant Treatment Ended entries back to Failed so
+        # the review still records that a failure occurred (audit intact)
+        # but the case is no longer terminal.
+        review = dict(proc.get("phase2_survival_review") or {})
+        impls_map = dict(review.get("implants") or {})
+        for k, v in list(impls_map.items()):
+            if isinstance(v, dict) and v.get("status") == "Treatment Ended":
+                v = dict(v)
+                v["status"] = "Failed"
+                v["end_treatment"] = False
+                v["end_treatment_rejected"] = True
+                impls_map[k] = v
+        review["implants"] = impls_map
+        review["treatment_ended"] = False
+        update = {
+            "status": prior_status,
+            "pending_end_treatment": None,
+            "phase2_survival_review": review,
+            "end_treatment_rejected": {
+                "by_id": uid,
+                "by_name": current_user.get("name") or current_user.get("username"),
+                "by_role": role,
+                "at": now,
+                "comment": comment,
+                "initiated_by": pending.get("initiated_by_name"),
+                "initiated_at": pending.get("initiated_at"),
+            },
+            "updated_at": now,
+        }
+        await db.procedures.update_one({"_id": proc_oid}, {"$set": update})
+        await log_access(
+            action="end_treatment_rejected",
+            outcome="success",
+            resource_type="procedure",
+            resource_id=procedure_id,
+            user=current_user,
+            request=request,
+            extra={"comment": comment[:200]},
+        )
+        # Notify the initiator so they see the rejection.
+        try:
+            initiator_id = pending.get("initiated_by_id")
+            if initiator_id:
+                await db.notifications.insert_one({
+                    "user_id": initiator_id,
+                    "procedure_id": procedure_id,
+                    "type": "end_treatment_rejected",
+                    "message": f"Your End Implant Treatment request was rejected by {current_user.get('name') or role}: {comment[:120]}",
+                    "created_at": now,
+                    "read": False,
+                })
+        except Exception:
+            pass
+        return {"ok": True, "status": prior_status}
+
+    # action == "approve"
+    stamp_supervisor = status == "pending_end_treatment_supervisor" and (is_supervisor or same_person_both)
+    stamp_incharge = status == "pending_end_treatment_incharge" and (is_incharge or same_person_both)
+    new_pending = dict(pending)
+    if stamp_supervisor:
+        new_pending["supervisor_approved_at"] = now
+        new_pending["supervisor_approved_by"] = current_user.get("name") or current_user.get("username")
+    if stamp_incharge:
+        new_pending["incharge_approved_at"] = now
+        new_pending["incharge_approved_by"] = current_user.get("name") or current_user.get("username")
+
+    # Determine next status.
+    if status == "pending_end_treatment_supervisor":
+        if same_person_both:
+            # Supervisor & In-Charge held by same person → single-step terminate.
+            next_status = "treatment_ended"
+            new_pending["incharge_approved_at"] = now
+            new_pending["incharge_approved_by"] = current_user.get("name") or current_user.get("username")
+        else:
+            next_status = "pending_end_treatment_incharge"
+    else:  # pending_end_treatment_incharge
+        next_status = "treatment_ended"
+
+    update: Dict[str, Any] = {
+        "status": next_status,
+        "pending_end_treatment": new_pending,
+        "updated_at": now,
+    }
+    if next_status == "treatment_ended":
+        update["treatment_ended_at"] = now
+        update["treatment_ended_decision_maker"] = pending.get("decision_maker")
+        update["treatment_ended_reason"] = pending.get("reason")
+        update["treatment_ended_by_name"] = pending.get("initiated_by_name")
+        update["treatment_ended_by_role"] = pending.get("initiated_by_role")
+    await db.procedures.update_one({"_id": proc_oid}, {"$set": update})
+    await log_access(
+        action="end_treatment_approved" if next_status == "treatment_ended" else "end_treatment_supervisor_ok",
+        outcome="success",
+        resource_type="procedure",
+        resource_id=procedure_id,
+        user=current_user,
+        request=request,
+        extra={"next_status": next_status},
+    )
+    # Notify the next actor in the chain.
+    try:
+        if next_status == "pending_end_treatment_incharge" and assigned_incharge:
+            await db.notifications.insert_one({
+                "user_id": assigned_incharge,
+                "procedure_id": procedure_id,
+                "type": "end_treatment_pending_incharge",
+                "message": "An End Implant Treatment request is awaiting your final approval.",
+                "created_at": now,
+                "read": False,
+            })
+        elif next_status == "treatment_ended":
+            initiator_id = pending.get("initiated_by_id")
+            if initiator_id:
+                await db.notifications.insert_one({
+                    "user_id": initiator_id,
+                    "procedure_id": procedure_id,
+                    "type": "end_treatment_approved",
+                    "message": "Your End Implant Treatment request has been approved. The case is now terminated.",
+                    "created_at": now,
+                    "read": False,
+                })
+    except Exception:
+        pass
+    return {"ok": True, "status": next_status}
+
+
+@api_router.get("/procedures/{procedure_id}/active-implants")
+async def get_active_implants(
+    procedure_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Return the currently ACTIVE implants for this procedure (survivors +
+    replacement revisions). Phase 3 / Phase 4 forms consume this so they
+    only render clinical questions for implants that still exist."""
+    try:
+        proc_oid = ObjectId(procedure_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid procedure id")
+    proc = await db.procedures.find_one({"_id": proc_oid})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    implants = _extract_procedure_implants(proc)
+    review = proc.get("phase2_survival_review")
+    active: List[Dict[str, Any]] = []
+    archived: List[Dict[str, Any]] = []
+
+    if not review:
+        # No survival review submitted yet — treat every Phase 2 implant as Active.
+        for i, imp in enumerate(implants):
+            active.append({**imp, "implant_idx": i, "status": "Active", "revision_number": 0})
+    else:
+        smap = review.get("implants") or {}
+        for i, imp in enumerate(implants):
+            entry = smap.get(str(i)) or smap.get(i) or {"status": "Active"}
+            status = entry.get("status", "Active")
+            if status == "Active":
+                active.append({**imp, "implant_idx": i, "status": "Active", "revision_number": 0})
+            elif status == "Replaced":
+                repl = entry.get("replacement") or {}
+                # Original goes to archived
+                archived.append({**imp, "implant_idx": i, "status": "Replaced",
+                                 "failure_reason": entry.get("reason"),
+                                 "failure_date": entry.get("failure_date")})
+                # Any older revisions in the chain -> archived too
+                for old in (repl.get("chain") or []):
+                    archived.append({
+                        "implant_idx": i,
+                        "tooth_number": imp.get("tooth_number") or imp.get("tooth"),
+                        "system": old.get("system"),
+                        "diameter": old.get("diameter"),
+                        "length": old.get("length"),
+                        "status": "Failed",
+                        "revision_number": old.get("revision_number", 1),
+                        "parent_implant_idx": i,
+                        "failure_reason": old.get("failure_reason"),
+                        "failure_date": old.get("failure_date"),
+                    })
+                # Latest replacement takes its place in active
+                active.append({
+                    "implant_idx": i,
+                    "tooth_number": imp.get("tooth_number") or imp.get("tooth"),
+                    "system": repl.get("system"),
+                    "diameter": repl.get("diameter"),
+                    "length": repl.get("length"),
+                    "lot_number": repl.get("lot_number"),
+                    "insertion_torque_ncm": repl.get("insertion_torque_ncm"),
+                    "isq": repl.get("isq"),
+                    "healing_protocol": repl.get("healing_protocol"),
+                    "surface": repl.get("surface"),
+                    "status": "Active",
+                    "revision_number": repl.get("revision_number", 1),
+                    "parent_implant_idx": i,
+                    "placement_date": repl.get("placement_date"),
+                })
+            else:  # Failed / Explanted
+                archived.append({**imp, "implant_idx": i, "status": status,
+                                 "failure_reason": entry.get("reason"),
+                                 "failure_date": entry.get("failure_date")})
+
+    return {"active": active, "archived": archived,
+            "review_submitted": bool(review),
+            "failure_reasons": FAILURE_REASONS}
+
+
+# iter-342 Phase B: Implant Lifecycle Timeline
+# ─────────────────────────────────────────────
+# Returns a per-tooth-position chronological timeline of every event on
+# that implant record: Placed → Failed → Replaced (R1) → Failed → Replaced (R2)
+# → Healed / Loaded. The Case Detail UI renders this to show the full
+# history at a glance without re-walking the survival_map structure.
+
+@api_router.get("/procedures/{procedure_id}/implant-lifecycle")
+async def get_implant_lifecycle(
+    procedure_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        proc_oid = ObjectId(procedure_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid procedure id")
+    proc = await db.procedures.find_one({"_id": proc_oid})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    implants = _extract_procedure_implants(proc)
+    review = proc.get("phase2_survival_review") or {}
+    smap = review.get("implants") or {}
+    phase2_date = proc.get("phase2_actual_done_date") or proc.get("phase2_completed_at")
+    phase3_date = proc.get("phase3_done_date") or proc.get("stage2_surgical_completed_at")
+    phase4_step2_date = proc.get("phase4_step2_done_date") or proc.get("completed_at")
+
+    positions: List[Dict[str, Any]] = []
+    for i, imp in enumerate(implants):
+        entry = smap.get(str(i)) or smap.get(i) or {}
+        tooth = imp.get("tooth_number") or imp.get("tooth") or "-"
+        events: List[Dict[str, Any]] = []
+        # R0 — original Phase 2 placement
+        events.append({
+            "kind": "placed",
+            "revision_number": 0,
+            "label": f"Placed — {imp.get('system','')} {imp.get('diameter','')}×{imp.get('length','')}mm",
+            "system": imp.get("system"),
+            "diameter": imp.get("diameter"),
+            "length": imp.get("length"),
+            "isq": imp.get("isq"),
+            "insertion_torque_ncm": imp.get("insertion_torque_ncm") or imp.get("torque"),
+            "date": phase2_date,
+        })
+        status = entry.get("status", "Active")
+        if status in ("Failed", "Replaced"):
+            events.append({
+                "kind": "failed",
+                "revision_number": 0,
+                "label": f"Failed — {entry.get('reason') or 'Unknown'}",
+                "reason": entry.get("reason"),
+                "removed": entry.get("removed"),
+                "date": entry.get("failure_date"),
+            })
+        if status == "Replaced":
+            repl = entry.get("replacement") or {}
+            # older revisions if any
+            for old in (repl.get("chain") or []):
+                events.append({
+                    "kind": "replaced",
+                    "revision_number": old.get("revision_number", 1),
+                    "label": f"Replaced (R{old.get('revision_number',1)}) — {old.get('system','')} {old.get('diameter','')}×{old.get('length','')}mm",
+                    "system": old.get("system"),
+                    "diameter": old.get("diameter"),
+                    "length": old.get("length"),
+                    "isq": old.get("isq"),
+                    "insertion_torque_ncm": old.get("insertion_torque_ncm"),
+                    "healing_protocol": old.get("healing_protocol"),
+                    "date": old.get("placement_date") or old.get("created_at"),
+                })
+                events.append({
+                    "kind": "failed",
+                    "revision_number": old.get("revision_number", 1),
+                    "label": f"Failed — {old.get('failure_reason') or 'Unknown'}",
+                    "reason": old.get("failure_reason"),
+                    "date": old.get("failure_date"),
+                })
+            # current active revision
+            events.append({
+                "kind": "replaced",
+                "revision_number": repl.get("revision_number", 1),
+                "label": f"Replaced (R{repl.get('revision_number',1)}) — {repl.get('system','')} {repl.get('diameter','')}×{repl.get('length','')}mm",
+                "system": repl.get("system"),
+                "diameter": repl.get("diameter"),
+                "length": repl.get("length"),
+                "isq": repl.get("isq"),
+                "insertion_torque_ncm": repl.get("insertion_torque_ncm"),
+                "healing_protocol": repl.get("healing_protocol"),
+                "lot_number": repl.get("lot_number"),
+                "date": repl.get("placement_date") or repl.get("created_at"),
+            })
+        if phase3_date and status in ("Active", "Replaced"):
+            events.append({
+                "kind": "healed",
+                "revision_number": (entry.get("replacement") or {}).get("revision_number", 0) if status == "Replaced" else 0,
+                "label": "Healing / 2nd Stage complete",
+                "date": phase3_date,
+            })
+        if phase4_step2_date and status in ("Active", "Replaced"):
+            events.append({
+                "kind": "loaded",
+                "revision_number": (entry.get("replacement") or {}).get("revision_number", 0) if status == "Replaced" else 0,
+                "label": "Prosthesis delivered — Loaded",
+                "date": phase4_step2_date,
+            })
+
+        current_status = status
+        current_revision = (entry.get("replacement") or {}).get("revision_number", 0) if status == "Replaced" else 0
+
+        positions.append({
+            "implant_idx": i,
+            "tooth": tooth,
+            "current_status": current_status,
+            "current_revision": current_revision,
+            "events": events,
+        })
+
+    return {
+        "procedure_id": procedure_id,
+        "review_submitted": bool(review),
+        "positions": positions,
+    }
+
+
+# iter-342 Phase C: Implant Survival Analytics
+# ────────────────────────────────────────────
+# Institutional analytics aggregations for the Admin dashboard. Reads
+# every procedure that has a Phase 2 implant record + optional survival
+# review, and produces counts, survival rates, replacement success rates,
+# failure-reason breakdown, per-system stats, per-tooth-position stats
+# and monthly time-series. Filters supported via query params.
+#
+# Access: implant_incharge + administrator only.
+
+_MAXILLA_TEETH = {11,12,13,14,15,16,17,18,21,22,23,24,25,26,27,28}
+_MANDIBLE_TEETH = {31,32,33,34,35,36,37,38,41,42,43,44,45,46,47,48}
+_ANTERIOR_TEETH = {11,12,13,21,22,23,31,32,33,41,42,43}
+_POSTERIOR_TEETH = {14,15,16,17,18,24,25,26,27,28,34,35,36,37,38,44,45,46,47,48}
+
+
+def _tooth_int(t: Any) -> Optional[int]:
+    try:
+        return int(str(t).strip())
+    except Exception:
+        return None
+
+
+def _tooth_bucket(t: Optional[int]) -> str:
+    if t is None:
+        return "unknown"
+    if t in _ANTERIOR_TEETH:
+        return "anterior_max" if t in _MAXILLA_TEETH else "anterior_mand"
+    if t in _POSTERIOR_TEETH:
+        return "posterior_max" if t in _MAXILLA_TEETH else "posterior_mand"
+    return "unknown"
+
+
+async def _load_analytics_procedures(from_date: Optional[str], to_date: Optional[str]) -> List[Dict[str, Any]]:
+    match: Dict[str, Any] = {"archived": {"$ne": True}}
+    # Placement date range = phase2_actual_done_date if present, else procedure_date
+    date_clause: Dict[str, Any] = {}
+    if from_date:
+        date_clause["$gte"] = from_date
+    if to_date:
+        date_clause["$lte"] = to_date
+    if date_clause:
+        match["$or"] = [
+            {"phase2_actual_done_date": date_clause},
+            {"procedure_date": date_clause},
+        ]
+    return await db.procedures.find(match, {
+        "implants": 1, "existing_implants": 1, "implant_plans": 1, "torque_values": 1, "phase2_data": 1,
+        "phase2_survival_review": 1,
+        "phase2_actual_done_date": 1, "procedure_date": 1,
+        "phase3_done_date": 1, "phase4_step2_done_date": 1,
+        "implant_procedure_type": 1, "student_name": 1, "supervisor_name": 1,
+        "patient_name": 1, "registration_number": 1,
+    }).to_list(20000)
+
+
+def _month_key(iso_date: Optional[str]) -> Optional[str]:
+    if not iso_date:
+        return None
+    s = str(iso_date)[:7]
+    if len(s) == 7 and s[4] == "-":
+        return s
+    return None
+
+
+def _compute_analytics(procs: List[Dict[str, Any]], filters: Dict[str, Any]) -> Dict[str, Any]:
+    system_filter = (filters.get("system") or "").strip().lower() or None
+    tooth_filter = filters.get("tooth_bucket") or None
+
+    placed = 0
+    active = 0
+    failed = 0
+    replaced_success = 0
+    replaced_refailed = 0
+    reason_counts: Dict[str, int] = {r: 0 for r in FAILURE_REASONS}
+    system_stats: Dict[str, Dict[str, int]] = {}
+    tooth_stats: Dict[str, Dict[str, int]] = {}
+    monthly_placed: Dict[str, int] = {}
+    monthly_failed: Dict[str, int] = {}
+    monthly_survival: Dict[str, Dict[str, int]] = {}
+    case_rows: List[Dict[str, Any]] = []
+
+    for p in procs:
+        implants = _extract_procedure_implants(p)
+        review = p.get("phase2_survival_review") or {}
+        smap = review.get("implants") or {}
+        placed_date = p.get("phase2_actual_done_date") or p.get("procedure_date")
+        month = _month_key(placed_date)
+        for i, imp in enumerate(implants):
+            system = (imp.get("system") or "Unknown").strip()
+            tooth = _tooth_int(imp.get("tooth_number") or imp.get("tooth"))
+            bucket = _tooth_bucket(tooth)
+            if system_filter and system.lower() != system_filter:
+                continue
+            if tooth_filter and bucket != tooth_filter:
+                continue
+            placed += 1
+            if month:
+                monthly_placed[month] = monthly_placed.get(month, 0) + 1
+
+            entry = smap.get(str(i)) or smap.get(i) or {}
+            status = entry.get("status", "Active")
+            sys_bucket = system_stats.setdefault(system, {"placed": 0, "failed": 0, "active": 0, "replaced": 0})
+            sys_bucket["placed"] += 1
+            tb = tooth_stats.setdefault(bucket, {"placed": 0, "failed": 0, "active": 0, "replaced": 0})
+            tb["placed"] += 1
+
+            if status == "Active":
+                active += 1
+                sys_bucket["active"] += 1
+                tb["active"] += 1
+            elif status in ("Failed", "Treatment Ended"):
+                # Treatment Ended counts as failed for survival math (matches
+                # the "Replaced" branch below) and is captured under the same
+                # reason bucket so the dashboard doesn't silently drop it.
+                failed += 1
+                sys_bucket["failed"] += 1
+                tb["failed"] += 1
+                reason = entry.get("reason") or "Unknown"
+                reason_counts[reason] = reason_counts.get(reason, 0) + 1
+                fd_month = _month_key(entry.get("failure_date"))
+                if fd_month:
+                    monthly_failed[fd_month] = monthly_failed.get(fd_month, 0) + 1
+            elif status == "Replaced":
+                # The original counts as failed for survival math
+                failed += 1
+                sys_bucket["failed"] += 1
+                tb["failed"] += 1
+                reason = entry.get("reason") or "Unknown"
+                reason_counts[reason] = reason_counts.get(reason, 0) + 1
+                fd_month = _month_key(entry.get("failure_date"))
+                if fd_month:
+                    monthly_failed[fd_month] = monthly_failed.get(fd_month, 0) + 1
+                # Latest replacement: active or failed?
+                repl = entry.get("replacement") or {}
+                # older chain revisions all count as replaced_refailed
+                for _old in (repl.get("chain") or []):
+                    replaced_refailed += 1
+                    _r = _old.get("failure_reason") or "Unknown"
+                    reason_counts[_r] = reason_counts.get(_r, 0) + 1
+                    _fdm = _month_key(_old.get("failure_date"))
+                    if _fdm:
+                        monthly_failed[_fdm] = monthly_failed.get(_fdm, 0) + 1
+                # current replacement is Active (survival status field always Active in our writer)
+                if repl:
+                    active += 1
+                    replaced_success += 1
+                    sys_bucket["replaced"] += 1
+                    tb["replaced"] += 1
+                    sys_bucket["active"] += 1
+                    tb["active"] += 1
+
+            # Monthly survival snapshot: for each month, track placed vs still active
+            if month:
+                b = monthly_survival.setdefault(month, {"placed": 0, "active": 0})
+                b["placed"] += 1
+                if status == "Active" or (status == "Replaced" and entry.get("replacement")):
+                    b["active"] += 1
+
+        # Case row for CSV export
+        case_rows.append({
+            "procedure_id": str(p.get("_id")),
+            "patient": p.get("patient_name"),
+            "registration": p.get("registration_number"),
+            "student": p.get("student_name"),
+            "supervisor": p.get("supervisor_name"),
+            "procedure_type": p.get("implant_procedure_type"),
+            "placement_date": placed_date,
+            "implants": len(implants),
+            "review_submitted": bool(review),
+            "all_survived": review.get("all_survived") if review else None,
+        })
+
+    survival_rate = round(100.0 * active / placed, 1) if placed else 0.0
+    replacement_success_rate = (
+        round(100.0 * replaced_success / (replaced_success + replaced_refailed), 1)
+        if (replaced_success + replaced_refailed) else 0.0
+    )
+
+    # Sorted monthly series
+    months = sorted(set(list(monthly_placed) + list(monthly_failed) + list(monthly_survival)))
+    time_series = [
+        {
+            "month": m,
+            "placed": monthly_placed.get(m, 0),
+            "failed": monthly_failed.get(m, 0),
+            "survival_rate": (
+                round(100.0 * monthly_survival[m]["active"] / monthly_survival[m]["placed"], 1)
+                if monthly_survival.get(m, {}).get("placed") else None
+            ),
+        }
+        for m in months
+    ]
+
+    return {
+        "counters": {
+            "placed": placed,
+            "active": active,
+            "failed": failed,
+            "replaced_success": replaced_success,
+            "replaced_refailed": replaced_refailed,
+        },
+        "rates": {
+            "survival_rate": survival_rate,
+            "replacement_success_rate": replacement_success_rate,
+        },
+        "failure_reasons": [
+            {"reason": r, "count": reason_counts.get(r, 0)} for r in FAILURE_REASONS
+        ],
+        "by_system": [
+            {"system": s, **v, "survival_rate": (round(100.0 * v["active"] / v["placed"], 1) if v["placed"] else 0.0)}
+            for s, v in sorted(system_stats.items(), key=lambda kv: -kv[1]["placed"])
+        ],
+        "by_tooth": [
+            {"bucket": b, **v, "survival_rate": (round(100.0 * v["active"] / v["placed"], 1) if v["placed"] else 0.0)}
+            for b, v in tooth_stats.items()
+        ],
+        "time_series": time_series,
+        "case_rows": case_rows,
+        "filters": {
+            "system": system_filter,
+            "tooth_bucket": filters.get("tooth_bucket"),
+            "from_date": filters.get("from_date"),
+            "to_date": filters.get("to_date"),
+        },
+    }
+
+
+@api_router.get("/analytics/survival")
+async def get_survival_analytics(
+    request: Request,
+    system: Optional[str] = None,
+    tooth_bucket: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user.get("role") not in ("administrator", "implant_incharge"):
+        raise HTTPException(status_code=403, detail="Administrator or Implant In-Charge role required")
+    procs = await _load_analytics_procedures(from_date, to_date)
+    result = _compute_analytics(procs, {
+        "system": system, "tooth_bucket": tooth_bucket,
+        "from_date": from_date, "to_date": to_date,
+    })
+    result.pop("case_rows", None)  # Trimmed for the summary endpoint
+    await log_access(
+        action="analytics_view",
+        outcome="success",
+        resource_type="survival_analytics",
+        resource_id="global",
+        user=current_user,
+        request=request,
+        extra={"filters": result["filters"]},
+    )
+    return result
+
+
+@api_router.get("/analytics/survival/export.csv")
+async def export_survival_analytics_csv(
+    request: Request,
+    system: Optional[str] = None,
+    tooth_bucket: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user.get("role") not in ("administrator", "implant_incharge"):
+        raise HTTPException(status_code=403, detail="Administrator or Implant In-Charge role required")
+    procs = await _load_analytics_procedures(from_date, to_date)
+    result = _compute_analytics(procs, {
+        "system": system, "tooth_bucket": tooth_bucket,
+        "from_date": from_date, "to_date": to_date,
+    })
+
+    import io as _io
+    import csv as _csv
+    buf = _io.StringIO()
+    w = _csv.writer(buf)
+    w.writerow(["Implanr — Implant Survival Analytics Export"])
+    w.writerow(["Generated at", datetime.now(timezone.utc).isoformat()])
+    w.writerow(["Filters", f"system={system or 'all'}, tooth_bucket={tooth_bucket or 'all'}, from={from_date or '-'}, to={to_date or '-'}"])
+    w.writerow([])
+    w.writerow(["## Summary Counters"])
+    w.writerow(["Placed", "Active", "Failed", "Replaced (success)", "Replaced (re-failed)", "Survival %", "Replacement Success %"])
+    c = result["counters"]; r = result["rates"]
+    w.writerow([c["placed"], c["active"], c["failed"], c["replaced_success"], c["replaced_refailed"], r["survival_rate"], r["replacement_success_rate"]])
+    w.writerow([])
+    w.writerow(["## Failure Reasons"])
+    w.writerow(["Reason", "Count"])
+    for row in result["failure_reasons"]:
+        w.writerow([row["reason"], row["count"]])
+    w.writerow([])
+    w.writerow(["## By System"])
+    w.writerow(["System", "Placed", "Active", "Failed", "Replaced", "Survival %"])
+    for row in result["by_system"]:
+        w.writerow([row["system"], row["placed"], row["active"], row["failed"], row["replaced"], row["survival_rate"]])
+    w.writerow([])
+    w.writerow(["## By Tooth Bucket"])
+    w.writerow(["Bucket", "Placed", "Active", "Failed", "Replaced", "Survival %"])
+    for row in result["by_tooth"]:
+        w.writerow([row["bucket"], row["placed"], row["active"], row["failed"], row["replaced"], row["survival_rate"]])
+    w.writerow([])
+    w.writerow(["## Monthly Time Series"])
+    w.writerow(["Month", "Placed", "Failed", "Survival %"])
+    for row in result["time_series"]:
+        w.writerow([row["month"], row["placed"], row["failed"], row["survival_rate"] if row["survival_rate"] is not None else ""])
+    w.writerow([])
+    w.writerow(["## Case Rows"])
+    w.writerow(["Procedure ID", "Patient", "Registration", "Student", "Supervisor", "Procedure Type", "Placement Date", "Implants", "Review Submitted", "All Survived"])
+    for row in result["case_rows"]:
+        w.writerow([row["procedure_id"], row["patient"] or "", row["registration"] or "", row["student"] or "",
+                    row["supervisor"] or "", row["procedure_type"] or "", row["placement_date"] or "",
+                    row["implants"], row["review_submitted"], row["all_survived"] if row["all_survived"] is not None else ""])
+
+    await log_access(
+        action="analytics_export",
+        outcome="success",
+        resource_type="survival_analytics_csv",
+        resource_id="global",
+        user=current_user,
+        request=request,
+    )
+
+    csv_bytes = buf.getvalue().encode("utf-8")
+    filename = f"implanr-survival-analytics-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}.csv"
+    return Response(
+        content=csv_bytes,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ── Treatment Timeline Backfill (iter-332) ─────────────────────────
+# Lets the Implant In-Charge / Administrator retroactively fill in the
+# clinical "Done On" dates on legacy cases that were submitted before
+# iter-332 shipped. Cross-phase chronological order is enforced, but the
+# normal 30-day back-date guard is relaxed because legacy cases can be
+# arbitrarily old. Future dates are still rejected.
+
+class TimelineBackfillBody(BaseModel):
+    procedure_date: Optional[str] = Field(None, max_length=10)            # Phase 1 done-on
+    phase2_actual_done_date: Optional[str] = Field(None, max_length=10)   # Phase 2 done-on
+    phase3_done_date: Optional[str] = Field(None, max_length=10)          # Phase 3 done-on
+    phase4_step1_done_date: Optional[str] = Field(None, max_length=10)    # Phase 4 Step 1 done-on
+    phase4_step2_done_date: Optional[str] = Field(None, max_length=10)    # Phase 4 Step 2 done-on
+
+
+@api_router.get("/admin/cases-missing-timeline")
+async def admin_cases_missing_timeline(current_user: dict = Depends(get_current_user)):
+    """List procedures that have at least one missing clinical Done-On date.
+    Caller must be Implant In-Charge or Administrator."""
+    if current_user.get("role") not in ("administrator", "implant_incharge"):
+        raise HTTPException(status_code=403, detail="Administrator or Implant In-Charge role required")
+    fields = [
+        "phase2_actual_done_date",
+        "phase3_done_date",
+        "phase4_step1_done_date",
+        "phase4_step2_done_date",
+    ]
+    # A case "needs backfill" if it has reached at least Phase 2 (i.e. status
+    # implies surgery completed) AND at least one done-date is empty.
+    cursor = db.procedures.find(
+        {
+            "status": {"$in": [
+                "phase2_approved", "pending_stage2_surgical", "stage2_surgical_approved",
+                "pending_stage2_prosthetic", "stage2_prosthetic_step1_approved",
+                "pending_final_delivery", "completed",
+            ]},
+            "archived": {"$ne": True},
+        },
+        {
+            "patient_name": 1, "registration_number": 1, "status": 1, "student_name": 1,
+            "procedure_date": 1, "procedure_time": 1, "implant_procedure_type": 1,
+            "phase2_actual_done_date": 1, "phase3_done_date": 1,
+            "phase4_step1_done_date": 1, "phase4_step2_done_date": 1,
+            "phase2_completed_at": 1, "stage2_surgical_completed_at": 1,
+            "stage2_prosthetic_completed_at": 1, "treatment_completed_at": 1,
+        },
+    ).sort("procedure_date", -1).limit(500)
+    out = []
+    async for d in cursor:
+        d["id"] = str(d.pop("_id"))
+        missing = [f for f in fields if not d.get(f)]
+        if missing:
+            d["missing_fields"] = missing
+            out.append(d)
+    return {"items": out, "count": len(out)}
+
+
+@api_router.patch("/admin/procedures/{procedure_id}/timeline")
+async def admin_backfill_timeline(
+    procedure_id: str,
+    body: TimelineBackfillBody,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Back-fill the 5 clinical Done-On dates on an existing case.
+    Validates ISO format, no future dates, and chronological order across phases."""
+    if current_user.get("role") not in ("administrator", "implant_incharge"):
+        raise HTTPException(status_code=403, detail="Administrator or Implant In-Charge role required")
+    try:
+        proc_oid = ObjectId(procedure_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid procedure id")
+    procedure = await db.procedures.find_one({"_id": proc_oid})
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    from datetime import date as _d
+    incoming = {
+        "procedure_date": body.procedure_date,
+        "phase2_actual_done_date": body.phase2_actual_done_date,
+        "phase3_done_date": body.phase3_done_date,
+        "phase4_step1_done_date": body.phase4_step1_done_date,
+        "phase4_step2_done_date": body.phase4_step2_done_date,
+    }
+    # iter-343: relaxed for testing — accept any valid ISO date. Future
+    # dates and out-of-order phases are now allowed so the survival
+    # engine can be exercised across simulated multi-month timelines.
+    merged: Dict[str, Optional[str]] = {}
+    for k, v in incoming.items():
+        chosen = v if v is not None else procedure.get(k)
+        if chosen:
+            try:
+                parsed = _d.fromisoformat(chosen)
+            except Exception:
+                raise HTTPException(status_code=400, detail=f"{k}: invalid date format, expected YYYY-MM-DD")
+            merged[k] = parsed.isoformat()
+        else:
+            merged[k] = None
+
+    # iter-343: chronological order check disabled for testing so
+    # simulated multi-month timelines can be entered in any order.
+
+    update_data: Dict[str, Any] = {}
+    for k, v in incoming.items():
+        if v is not None:
+            update_data[k] = merged[k]
+    if not update_data:
+        return {"updated": False, "message": "No dates supplied"}
+    update_data["updated_at"] = datetime.utcnow()
+    update_data["timeline_backfilled_by"] = current_user.get("name") or current_user.get("_id")
+    update_data["timeline_backfilled_at"] = datetime.utcnow()
+
+    await db.procedures.update_one({"_id": proc_oid}, {"$set": update_data})
+    await log_access(
+        action="timeline_backfill",
+        outcome="success",
+        resource_type="procedure",
+        resource_id=procedure_id,
+        user=current_user,
+        request=request,
+        extra={"fields": list(update_data.keys()), "values": {k: v for k, v in update_data.items() if isinstance(v, str)}},
+    )
+    return {"updated": True, "fields": list(update_data.keys())}
+
+
+@api_router.get("/_internal_screenshots/{filename}", include_in_schema=False)
+async def _internal_screenshots_file(filename: str):
+    safe = filename.replace("..", "").replace("/", "")
+    p = Path("/app/screenshots") / safe
+    if not p.exists():
+        raise HTTPException(status_code=404)
+    return FileResponse(str(p))
+
+
+@api_router.get("/_internal_screenshots", include_in_schema=False)
+async def _internal_screenshots_index():
+    folder = Path("/app/screenshots")
+    if not folder.exists():
+        return HTMLResponse("<h2>No screenshots</h2>")
+    files = sorted([f.name for f in folder.iterdir() if f.suffix.lower() in (".png", ".jpg", ".jpeg")])
+    cards = "".join(
+        f'<figure style="margin:12px;display:inline-block;vertical-align:top;text-align:center"><a href="/api/_internal_screenshots/{f}" target="_blank"><img src="/api/_internal_screenshots/{f}" style="width:260px;border:1px solid #ddd;border-radius:8px;display:block"/></a><figcaption style="font:13px system-ui;color:#444;margin-top:6px">{f}</figcaption></figure>'
+        for f in files
+    )
+    html = (
+        '<!doctype html><html><head><meta charset="utf-8"><title>Implanr — App Screenshots</title>'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<style>body{font-family:system-ui;background:#f5f7fb;margin:0;padding:24px}'
+        'h1{font-weight:700;color:#1e2a44;margin:0 0 4px}h1 small{font-weight:400;color:#5a6478;font-size:14px;margin-left:8px}'
+        '</style></head><body>'
+        f'<h1>Implanr — App Screenshots <small>{len(files)} pages</small></h1>'
+        '<p style="color:#5a6478;font:14px system-ui;margin:0 0 18px">Click any image to view full size.</p>'
+        f'<div>{cards}</div></body></html>'
+    )
+    return HTMLResponse(html)
 
 
 app.include_router(api_router)

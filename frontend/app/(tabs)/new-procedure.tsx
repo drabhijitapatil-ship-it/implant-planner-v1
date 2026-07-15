@@ -282,7 +282,12 @@ export default function NewProcedureScreen() {
   const { user } = useAuth();
   const router = useRouter();
   const params = useLocalSearchParams<{ draftId?: string }>();
-  const [step, setStep] = useState<'details' | 'implants'>('details');
+  const [step, setStep] = useState<'details' | 'implants' | 'review'>('details');
+  // iter-348: Pre-submit Review screen — shown to Supervisor / Implant
+  // In-Charge (the roles whose Phase 1 approval otherwise gets auto-stamped
+  // without an explicit review) right before the final submit. Holds the
+  // fetched implant plan so the review screen doesn't need to refetch it.
+  const [reviewPlan, setReviewPlan] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [supervisors, setSupervisors] = useState<any[]>([]);
   const [incharges, setIncharges] = useState<any[]>([]);
@@ -1239,9 +1244,6 @@ export default function NewProcedureScreen() {
             medicalAssessment={formData.medical_assessment}
             teethPresent={formData.teeth_present}
             missingTeeth={formData.missing_teeth}
-            edentulousSiteMeasurements={formData.edentulous_site_measurements}
-            defaultOcclusocervical={formData.occlusocervical_height}
-            defaultMesiodistal={formData.mesiodistal_space}
             onBridgeConfirmed={async (info) => {
               // Persist the default prosthesis on the procedure so Phase 2 can pre-fill it.
               // Student edits draft procedures via PUT (edit-fields is reviewer-only).
@@ -1274,9 +1276,11 @@ export default function NewProcedureScreen() {
           <TouchableOpacity style={styles.submitBtn} data-testid="submit-for-approval"
             onPress={async () => {
               // Final clinical-correlation summary before submission (Q2=c — also done live).
+              let fetchedPlan: any[] = [];
               try {
                 const planRes = await api.get(`/procedures/${createdProcedureId}/implant-plan`);
-                const positions: string[] = (planRes.data?.implant_plans || []).map((p: any) => p.position);
+                fetchedPlan = planRes.data?.implant_plans || [];
+                const positions: string[] = fetchedPlan.map((p: any) => p.position);
                 const finalCheck = validateImplantSelection(formData.implant_procedure_type, formData.teeth_present, positions);
                 if (finalCheck.block) {
                   Alert.alert('Cannot submit', finalCheck.block);
@@ -1305,23 +1309,25 @@ export default function NewProcedureScreen() {
                 // Plan endpoint failed — don't block submission, but log.
               }
 
-              const isInchargeUser = user?.role === 'implant_incharge';
-              Alert.alert(isInchargeUser ? 'Mark Case Done' : 'Submit for Approval',
-                isInchargeUser ? 'Submit this case and auto-approve Phase 1?' : 'Are you sure you want to submit this case?', [
+              // iter-348: Supervisor / Implant In-Charge self-created cases
+              // get auto-approved on submit with no independent second
+              // reviewer — route them through a Review screen first instead
+              // of a bare confirm dialog. Students always get real dual
+              // approval later, so they keep the plain confirm.
+              if (user?.role === 'supervisor' || user?.role === 'implant_incharge') {
+                setReviewPlan(fetchedPlan);
+                setStep('review');
+                return;
+              }
+
+              Alert.alert('Submit for Approval', 'Are you sure you want to submit this case?', [
                 { text: 'Cancel' },
                 {
-                  text: isInchargeUser ? 'Done' : 'Submit', onPress: async () => {
+                  text: 'Submit', onPress: async () => {
                     try {
-                      await api.put(`/procedures/${createdProcedureId}`,
-                        { status: 'pending_phase1' }
-                      );
-                      if (isInchargeUser) {
-                        try { await api.post(`/procedures/${createdProcedureId}/approve`, { action: 'approve', comment: '' }); } catch {}
-                        setPhase1Done(true);
-                      } else {
-                        Alert.alert('Success', 'Case submitted for approval.');
-                        router.replace('/(tabs)/dashboard');
-                      }
+                      await api.put(`/procedures/${createdProcedureId}`, { status: 'pending_phase1' });
+                      Alert.alert('Success', 'Case submitted for approval.');
+                      router.replace('/(tabs)/dashboard');
                     } catch (e: any) {
                       Alert.alert('Error', e.response?.data?.detail || 'Failed to submit');
                     }
@@ -1333,6 +1339,131 @@ export default function NewProcedureScreen() {
             <Text style={styles.submitBtnText}>{user?.role === 'implant_incharge' ? 'Done' : 'Submit for Approval'}</Text>
           </TouchableOpacity>
           )}
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Render Step: Review (Supervisor / Implant In-Charge, pre-submit) ──
+  // iter-348: shown instead of a bare confirm dialog for the two roles
+  // whose Phase 1 approval otherwise auto-stamps with no independent
+  // second reviewer. Read-only recap of everything entered, with an Edit
+  // affordance back to Step 2, before the actual submit fires.
+  if (step === 'review' && createdProcedureId) {
+    const isInchargeUser = user?.role === 'implant_incharge';
+    const row = (label: string, value?: string | number | null) => {
+      if (value === undefined || value === null || value === '') return null;
+      return (
+        <View key={label} style={{ flexDirection: 'row', paddingVertical: 4 }}>
+          <Text style={{ width: 150, fontSize: 12, color: '#78909C', fontWeight: '600' }}>{label}</Text>
+          <Text style={{ flex: 1, fontSize: 13, color: '#263238' }}>{String(value)}</Text>
+        </View>
+      );
+    };
+    const section = (title: string, children: React.ReactNode) => (
+      <View style={{ backgroundColor: '#FFF', borderRadius: 10, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#E0E0E0' }}>
+        <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', marginBottom: 8 }}>{title}</Text>
+        {children}
+      </View>
+    );
+    const checkedCount = Object.values(checklistItems).filter(Boolean).length;
+    const checklistTotal = CHECKLIST_DATA.pre_surgical.items.length;
+
+    const confirmSubmit = async () => {
+      setLoading(true);
+      try {
+        await api.put(`/procedures/${createdProcedureId}`, { status: 'pending_phase1' });
+        if (isInchargeUser) {
+          try { await api.post(`/procedures/${createdProcedureId}/approve`, { action: 'approve', comment: '' }); } catch {}
+          setPhase1Done(true);
+          setStep('implants');
+        } else {
+          Alert.alert('Success', 'Case submitted for approval.');
+          router.replace('/(tabs)/dashboard');
+        }
+      } catch (e: any) {
+        Alert.alert('Error', e.response?.data?.detail || 'Failed to submit');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#F5F7FA' }} data-testid="step-review-view">
+        <View style={styles.stepHeader}>
+          <BackButton onPress={() => setStep('implants')} testID="review-back-btn" />
+          <Text style={styles.stepTitle}>Review Phase 1</Text>
+        </View>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 16 }}>
+          <View style={{ backgroundColor: '#E3F2FD', borderRadius: 8, padding: 10, marginBottom: 14 }}>
+            <Text style={{ fontSize: 12, color: '#0D47A1' }}>
+              {isInchargeUser
+                ? 'Submitting will auto-approve Phase 1 for both Supervisor and Implant In-Charge — check everything below before confirming.'
+                : 'Your Phase 1 approval is auto-recorded on submit. Check everything below before confirming.'}
+            </Text>
+          </View>
+
+          {section('Case Details', <>
+            {row('Patient', formData.patient_name)}
+            {row('Age / Sex', [formData.age, formData.sex].filter(Boolean).join(' / '))}
+            {row('Registration #', formData.registration_number)}
+            {row('Chief Complaint', formData.chief_complaint)}
+            {row('Supervisor', formData.supervisor_name)}
+            {row('Implant In-Charge', formData.implant_incharge_name)}
+            {row('Date / Time', [formData.procedure_date, formData.procedure_time].filter(Boolean).join(' '))}
+            {row('Amount Paid', formData.amount_paid)}
+          </>)}
+
+          {section('Treatment Plan', <>
+            {row('Procedure Type', formData.implant_procedure_type)}
+            {row('Number of Implants', formData.num_implants)}
+            {row('Missing Teeth (FDI)', (formData.missing_teeth || []).join(', '))}
+            {row('Prosthetic Plan', formData.prosthetic_plan)}
+            {row('Loading Type', (formData.loading_type || []).join(', '))}
+            {row('Arch', formData.arch)}
+          </>)}
+
+          {section('Clinical Examination', <>
+            {row('Occlusocervical Height', formData.occlusocervical_height)}
+            {row('Mesiodistal Space', formData.mesiodistal_space)}
+            {row('Ridge Contour', formData.ridge_contour)}
+            {row('Soft Tissue Thickness', formData.soft_tissue_thickness)}
+            {row('Keratinized Mucosa', formData.keratinized_mucosa)}
+            {row('Per-tooth measurements', Object.keys(formData.edentulous_site_measurements || {}).length
+              ? `${Object.keys(formData.edentulous_site_measurements).length} tooth site(s) recorded`
+              : null)}
+          </>)}
+
+          {section('Medical Assessment & Checklist', <>
+            {Object.entries(formData.medical_assessment || {}).map(([k, v]) => row(k.replace(/_/g, ' '), v as string))}
+            {row('Pre-Surgical Checklist', `${checkedCount} of ${checklistTotal} items checked`)}
+          </>)}
+
+          {section('Implant Plan', reviewPlan.length === 0
+            ? <Text style={{ fontSize: 13, color: '#999' }}>No implants added yet.</Text>
+            : <>
+                {reviewPlan.map((p: any, idx: number) => (
+                  <View key={idx} style={{ flexDirection: 'row', paddingVertical: 4, borderBottomWidth: idx < reviewPlan.length - 1 ? 1 : 0, borderBottomColor: '#F0F0F0' }}>
+                    <Text style={{ width: 60, fontSize: 13, fontWeight: '700', color: '#1565C0' }}>#{p.position}</Text>
+                    <Text style={{ flex: 1, fontSize: 13, color: '#263238' }}>{p.brand} {p.system} — {p.diameter}×{p.length}mm</Text>
+                  </View>
+                ))}
+              </>)}
+        </ScrollView>
+        <View style={styles.submitContainer}>
+          <TouchableOpacity
+            style={loading ? { ...styles.submitBtn, opacity: 0.6 } : styles.submitBtn}
+            onPress={confirmSubmit}
+            disabled={loading}
+            data-testid="confirm-review-submit-btn"
+          >
+            {loading ? <ActivityIndicator color="#FFF" /> : (
+              <>
+                <Ionicons name="checkmark-circle" size={20} color="#FFF" />
+                <Text style={styles.submitBtnText}>{isInchargeUser ? 'Confirm & Mark Done' : 'Confirm & Submit'}</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
