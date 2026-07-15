@@ -1,5 +1,53 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 364 (Feb 2026) — Phase Analytics-2 + Phase Analytics-3 + Predictive Risk Flag
+
+**Purpose**: Complete the Analytics module by adding advanced clinical/research widgets on top of iter-363's role-scoped foundation, plus a Phase-1 predictive-risk nudge for students.
+
+**Backend — 10 new endpoints** (`/app/backend/server.py`, iter-364 block)
+- `GET /api/analytics/kaplan-meier?group_by=procedure_type|system` — step-function survival curves per group with n-at-risk, events, final survival.
+- `GET /api/analytics/torque-isq-scatter` — per-implant scatter with survival colouring + "sweet-spot" median/mean summary card.
+- `GET /api/analytics/bone-procedure-heatmap` — D1-D4 × procedure type × survival % heatmap.
+- `POST /api/analytics/cross-tab` — flexible pivot builder (row × col × metric). Dimensions: procedure_type, system, bone_type, region, diameter, length. Metrics: count, success_rate, mean_torque, mean_isq, mean_days.
+- `GET /api/analytics/learning-curve` — student's cases in order with running success rate + lifecycle days. Students see own; faculty pass `student_id`.
+- `GET /api/analytics/case-mix-index?scope=students|supervisors` — complexity-weighted volume per user. Weights: Zygomatic 5.0 · All-on-X 4.0 · All-on-4/6 3.5-3.8 · Sinus/GBR 2.5 · Immediate 2.0 · Multiple 1.5 · Single 1.0. Faculty-only.
+- `GET /api/analytics/complications` — reason pareto with cumulative-% column + per-procedure-type breakdown.
+- `GET /api/analytics/benchmarks` — vs curated literature (Moraschini, Chen/Buser, Malo, Ravidà, Wallace/Froum, Retzepi/Donos). Emits verdict `above`/`on_par`/`below`.
+- `POST /api/analytics/predictive-risk` — given `{procedure_type, bone_type, tooth_region}` returns institution-wide base + bone-match + region-match + combined-match survival with an insufficient-data guard (n<5) and a friendly `nudge` sentence.
+- `GET /api/analytics/research-export.json` — de-identified per-implant rows + data dictionary + safe-harbor notes. All IDs SHA-256-hashed to 12 chars.
+
+**All endpoints** respect role scope (student = own; supervisor = their students; in-charge/admin = all; nurse = 403) and log to `access_logs` for HIPAA.
+
+**Frontend — Advanced Analytics hub** (`/app/frontend/app/analytics/advanced.tsx`)
+- 9 section tabs (KM · Scatter · Heatmap · Cross-tab · Learning · CMI · Complications · Benchmarks · Research Export). CMI hidden from students.
+- All charts SVG-rendered (`react-native-svg`) — no heavy chart libs.
+- Kaplan-Meier: step-function paths per group, legend with n + final survival.
+- Torque × ISQ scatter: green survivors / red failures, dashed sweet-spot band (35-45 Ncm × 70-80 ISQ), median/mean card.
+- Heatmap: 5×N grid, colour-coded survival buckets.
+- Cross-tab: pivot builder with 6 dimensions × 5 metrics.
+- Learning curve: running success rate line + per-case status dots.
+- CMI: leaderboard with 30 rows cap.
+- Complications: 15-row pareto with 80/20 line via cum_pct.
+- Benchmarks: card per procedure type with verdict badge.
+- Research export: preview + JSON download.
+- Cross-linked from procedure-overview via green "Advanced" button.
+
+**Predictive Risk Card** (`/app/frontend/components/PredictiveRiskCard.tsx`)
+- Injected into Phase-1 Step-2 (Implant Selection) in `new-procedure.tsx`.
+- Fetches `/analytics/predictive-risk` and renders a colour-coded nudge card ("Cases like yours had X% success (n=Y)").
+- Green ≥92%, amber 80-92%, red <80%, grey when insufficient data.
+
+**Route registration** — `/app/frontend/app/_layout.tsx` gets the new `analytics/advanced` screen.
+
+**Tests** — `/app/backend/tests/test_iter364_advanced_analytics.py`
+- 14/14 passing: shape checks for every endpoint, role scoping (student self · faculty needs student_id · nurse blocked from all 10), input validation (bad row_dim → 400), pareto monotonicity, de-identification of research export.
+- Combined with iter-363: **20/20 analytics regressions passing**.
+
+**Next in Analytics**: further Phase-2/-3 polish is optional (real-time streaming, saved queries, scheduled digests). Core research + clinical dashboards now complete.
+
+---
+
+
 ## Iteration 363 (Feb 2026) — Procedure-Type Analytics Module (Phase Analytics-1 MVP)
 
 **Purpose**: Introduce a role-scoped analytics dashboard that slices every case by procedure type (Single Conventional, Multiple, Sinus Lift, Immediate, All-on-4/6/X, Existing Implant, etc.) and surfaces volume, success, time, clinical numerics (avg torque / avg ISQ), prosthesis mix, and monthly/yearly trend.
