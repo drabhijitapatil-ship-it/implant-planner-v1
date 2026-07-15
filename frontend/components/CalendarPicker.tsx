@@ -1,12 +1,17 @@
 /**
- * iter-365 — Reusable Calendar Picker
+ * iter-365 (revised iter-366) — Reusable Calendar Picker
  *
- * Extracted from `new-procedure.tsx` and generalised with an `allowPast`
- * prop so analytics screens can pick historical date ranges while
- * scheduling flows keep the "no past dates" guard.
+ * Two visual modes:
+ *   • Default (inline)  — used inside Phase-1 scheduling forms.
+ *     Calendar drops down below the trigger, blocking future/past
+ *     dates per `allowPast` / `allowFuture` flags.
+ *   • `compact` (modal) — used in the analytics filter rows where
+ *     multiple pickers sit side-by-side. Trigger takes flex:1 of its
+ *     parent row; opening the picker mounts a centered Modal that
+ *     never spills off-screen.
  */
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 type Props = {
@@ -15,9 +20,9 @@ type Props = {
   label?: string;
   placeholder?: string;
   required?: boolean;
-  allowPast?: boolean;         // default false (future dates only)
-  allowFuture?: boolean;       // default true
-  compact?: boolean;           // tighter styling for filter rows
+  allowPast?: boolean;
+  allowFuture?: boolean;
+  compact?: boolean;
   testID?: string;
 };
 
@@ -75,6 +80,65 @@ export default function CalendarPicker({
   for (let i = 0; i < firstDayOfWeek; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
 
+  // ── The calendar body — reused in both inline and modal modes ──
+  const CalendarBody = (
+    <View style={compact ? cs.calCompact : cs.calendar}>
+      <View style={cs.calHeader}>
+        <TouchableOpacity onPress={prevMonth} style={cs.navBtn} testID="cal-prev-month">
+          <Ionicons name="chevron-back" size={18} color="#1A73E8" />
+        </TouchableOpacity>
+        <Text style={cs.monthYear}>{monthNames[viewMonth]} {viewYear}</Text>
+        <TouchableOpacity onPress={nextMonth} style={cs.navBtn} testID="cal-next-month">
+          <Ionicons name="chevron-forward" size={18} color="#1A73E8" />
+        </TouchableOpacity>
+      </View>
+      <View style={cs.weekRow}>
+        {dayNames.map(dn => (
+          <View key={dn} style={cs.dayHead}><Text style={cs.dayHeadTxt}>{dn}</Text></View>
+        ))}
+      </View>
+      <View style={cs.gridWrap}>
+        {cells.map((day, idx) => {
+          if (day === null) return <View key={idx} style={cs.dayCell} />;
+          const disabled = isDisabled(day);
+          const selected = isSelected(day);
+          const todayFlag = isToday(day);
+          return (
+            <TouchableOpacity
+              key={idx}
+              disabled={disabled}
+              onPress={() => selectDate(day)}
+              style={[
+                cs.dayCell,
+                selected && cs.dayCellSelected,
+                !selected && todayFlag && cs.dayCellToday,
+              ]}
+              testID={`cal-day-${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`}
+            >
+              <Text style={[
+                cs.dayTxt,
+                disabled && { color: '#CFD8DC' },
+                selected && { color: '#FFF', fontWeight: '700' },
+                !selected && todayFlag && { color: '#1A73E8', fontWeight: '700' },
+              ]}>{day}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      {compact && (
+        <View style={cs.modalFooter}>
+          <TouchableOpacity onPress={clear} style={cs.footerBtn} testID={`${testID || 'calendar'}-modal-clear`}>
+            <Ionicons name="trash-outline" size={14} color="#78909C" />
+            <Text style={cs.footerBtnTxt}>Clear</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setOpen(false)} style={[cs.footerBtn, { backgroundColor: '#F5F7FB' }]} testID={`${testID || 'calendar'}-modal-close`}>
+            <Text style={[cs.footerBtnTxt, { color: '#1A2332', fontWeight: '700' }]}>Done</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+
   return (
     <View style={compact ? cs.wrapCompact : cs.wrap}>
       {label ? <Text style={cs.label}>{label}{required && <Text style={{ color: '#DC3545' }}> *</Text>}</Text> : null}
@@ -84,65 +148,40 @@ export default function CalendarPicker({
         testID={testID || 'calendar-trigger'}
         /* @ts-ignore */ data-testid={testID || 'calendar-trigger'}
       >
-        <Text style={[cs.triggerTxt, !value && { color: '#B0BEC5' }]}>{value || placeholder}</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Text style={[compact ? cs.triggerTxtCompact : cs.triggerTxt, !value && { color: '#B0BEC5' }]} numberOfLines={1}>
+          {value || placeholder}
+        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
           {value ? (
             <TouchableOpacity
               onPress={(e) => { e.stopPropagation(); clear(); }}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               testID={`${testID || 'calendar'}-clear`}
             >
-              <Ionicons name="close-circle" size={16} color="#90A4AE" />
+              <Ionicons name="close-circle" size={14} color="#90A4AE" />
             </TouchableOpacity>
           ) : null}
-          <Ionicons name="calendar-outline" size={16} color="#546E7A" />
+          <Ionicons name="calendar-outline" size={14} color="#546E7A" />
         </View>
       </TouchableOpacity>
-      {open && (
-        <View style={cs.calendar}>
-          <View style={cs.calHeader}>
-            <TouchableOpacity onPress={prevMonth} style={cs.navBtn} testID="cal-prev-month">
-              <Ionicons name="chevron-back" size={18} color="#1A73E8" />
-            </TouchableOpacity>
-            <Text style={cs.monthYear}>{monthNames[viewMonth]} {viewYear}</Text>
-            <TouchableOpacity onPress={nextMonth} style={cs.navBtn} testID="cal-next-month">
-              <Ionicons name="chevron-forward" size={18} color="#1A73E8" />
-            </TouchableOpacity>
-          </View>
-          <View style={cs.weekRow}>
-            {dayNames.map(dn => (
-              <View key={dn} style={cs.dayHead}><Text style={cs.dayHeadTxt}>{dn}</Text></View>
-            ))}
-          </View>
-          <View style={cs.gridWrap}>
-            {cells.map((day, idx) => {
-              if (day === null) return <View key={idx} style={cs.dayCell} />;
-              const disabled = isDisabled(day);
-              const selected = isSelected(day);
-              const todayFlag = isToday(day);
-              return (
-                <TouchableOpacity
-                  key={idx}
-                  disabled={disabled}
-                  onPress={() => selectDate(day)}
-                  style={[
-                    cs.dayCell,
-                    selected && cs.dayCellSelected,
-                    !selected && todayFlag && cs.dayCellToday,
-                  ]}
-                  testID={`cal-day-${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`}
-                >
-                  <Text style={[
-                    cs.dayTxt,
-                    disabled && { color: '#CFD8DC' },
-                    selected && { color: '#FFF', fontWeight: '700' },
-                    !selected && todayFlag && { color: '#1A73E8', fontWeight: '700' },
-                  ]}>{day}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
+
+      {/* Inline (non-compact) — drops below trigger */}
+      {!compact && open && CalendarBody}
+
+      {/* Compact — modal so it never spills off-screen */}
+      {compact && (
+        <Modal
+          visible={open}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setOpen(false)}
+        >
+          <Pressable style={cs.backdrop} onPress={() => setOpen(false)}>
+            <Pressable onPress={(e) => e.stopPropagation()} style={cs.modalCenter}>
+              {CalendarBody}
+            </Pressable>
+          </Pressable>
+        </Modal>
       )}
     </View>
   );
@@ -150,27 +189,39 @@ export default function CalendarPicker({
 
 const cs = StyleSheet.create({
   wrap: { marginBottom: 12 },
-  wrapCompact: {},
+  wrapCompact: { flex: 1 },
   label: { fontSize: 11, fontWeight: '700', color: '#546E7A', letterSpacing: 0.4, marginBottom: 4, textTransform: 'uppercase' },
+
   trigger: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 10,
     paddingHorizontal: 12, paddingVertical: 12, backgroundColor: '#FFF',
   },
   triggerCompact: {
-    flex: 1,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 8,
     paddingHorizontal: 10, paddingVertical: 9, backgroundColor: '#FFF',
+    minHeight: 38,
   },
   triggerTxt: { fontSize: 13, color: '#1A2332', fontWeight: '600' },
+  triggerTxtCompact: { fontSize: 12, color: '#1A2332', fontWeight: '600', flex: 1, marginRight: 6 },
 
+  // Inline calendar body (Phase-1 scheduling form)
   calendar: {
     marginTop: 6, backgroundColor: '#FFF',
     borderRadius: 12, borderWidth: 1, borderColor: '#E1E7EF',
     padding: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08, shadowRadius: 10, elevation: 6,
   },
+  // Compact calendar body (rendered inside centered modal)
+  calCompact: {
+    backgroundColor: '#FFF',
+    borderRadius: 14, padding: 12,
+    width: 300,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15, shadowRadius: 16, elevation: 10,
+  },
+
   calHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   navBtn: { padding: 6, borderRadius: 8, backgroundColor: '#F0F4F8' },
   monthYear: { fontSize: 14, fontWeight: '800', color: '#1A2332' },
@@ -185,4 +236,30 @@ const cs = StyleSheet.create({
   dayTxt: { fontSize: 13, color: '#37474F' },
   dayCellSelected: { backgroundColor: '#1E88E5', borderRadius: 999 },
   dayCellToday: { borderWidth: 1, borderColor: '#1A73E8', borderRadius: 999 },
+
+  // Modal backdrop + centering
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalCenter: {
+    alignSelf: 'center',
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F4F8',
+  },
+  footerBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 14, paddingVertical: 7,
+    borderRadius: 999,
+  },
+  footerBtnTxt: { fontSize: 12, fontWeight: '600', color: '#78909C' },
 });

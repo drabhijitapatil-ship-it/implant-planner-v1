@@ -102,15 +102,20 @@ export default function AdvancedAnalyticsHub() {
 
       {/* Date range picker (shared, calendar-based) */}
       <View style={s.dateRow}>
-        <CalendarPicker
-          value={fromDate} onChange={setFromDate}
-          placeholder="From (YYYY-MM-DD)" allowPast compact testID="adv-from-date"
-        />
-        <View style={{ width: 8 }} />
-        <CalendarPicker
-          value={toDate} onChange={setToDate}
-          placeholder="To (YYYY-MM-DD)" allowPast compact testID="adv-to-date"
-        />
+        <View style={{ flex: 1, marginRight: 6 }}>
+          <Text style={s.dateLabel}>From</Text>
+          <CalendarPicker
+            value={fromDate} onChange={setFromDate}
+            placeholder="Select date" allowPast compact testID="adv-from-date"
+          />
+        </View>
+        <View style={{ flex: 1, marginLeft: 6 }}>
+          <Text style={s.dateLabel}>To</Text>
+          <CalendarPicker
+            value={toDate} onChange={setToDate}
+            placeholder="Select date" allowPast compact testID="adv-to-date"
+          />
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
@@ -957,7 +962,8 @@ const s = StyleSheet.create({
   tabTxt: { fontSize: 11, fontWeight: '700', color: '#546E7A' },
   tabTxtActive: { color: '#FFF' },
 
-  dateRow: { flexDirection: 'row', paddingHorizontal: 14, paddingVertical: 10, alignItems: 'flex-start' },
+  dateRow: { flexDirection: 'row', paddingHorizontal: 14, paddingVertical: 10, alignItems: 'flex-end' },
+  dateLabel: { fontSize: 10, fontWeight: '700', color: '#546E7A', letterSpacing: 0.4, marginBottom: 4, textTransform: 'uppercase' },
 
   pane: { paddingHorizontal: 14, paddingBottom: 20 },
   card: { backgroundColor: '#FFF', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#E1E7EF', marginBottom: 12 },

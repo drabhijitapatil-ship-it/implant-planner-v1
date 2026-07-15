@@ -187,15 +187,20 @@ export default function ProcedureOverviewScreen() {
         {/* Filters */}
         <View style={s.filterCard} testID="analytics-filters">
           <View style={s.filterRow}>
-            <CalendarPicker
-              value={fromDate} onChange={setFromDate}
-              placeholder="From (YYYY-MM-DD)" allowPast compact testID="analytics-from-date"
-            />
-            <View style={{ width: 8 }} />
-            <CalendarPicker
-              value={toDate} onChange={setToDate}
-              placeholder="To (YYYY-MM-DD)" allowPast compact testID="analytics-to-date"
-            />
+            <View style={{ flex: 1, marginRight: 6 }}>
+              <Text style={s.filterLabel}>From</Text>
+              <CalendarPicker
+                value={fromDate} onChange={setFromDate}
+                placeholder="Select date" allowPast compact testID="analytics-from-date"
+              />
+            </View>
+            <View style={{ flex: 1, marginLeft: 6 }}>
+              <Text style={s.filterLabel}>To</Text>
+              <CalendarPicker
+                value={toDate} onChange={setToDate}
+                placeholder="Select date" allowPast compact testID="analytics-to-date"
+              />
+            </View>
           </View>
 
           <View style={[s.filterRow, { marginTop: 8 }]}>
