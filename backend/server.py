@@ -303,19 +303,41 @@ async def _scope_member_ids(current_user: dict) -> List[str]:
     return [str(i) for i in ids]
 
 
+async def _referred_case_ids(current_user: dict) -> List[str]:
+    """Case ids with an ACTIVE referral into the caller's department — grants a
+    department incharge visibility into a case owned by a different department
+    without moving ownership (case.department_id never changes; only the
+    referral's status does). Empty for the org admin/super_admin (already
+    unrestricted) or a caller with no department of their own."""
+    if current_user.get("is_admin") or current_user.get("is_super_admin"):
+        return []
+    dept_id = current_user.get("department_id")
+    if not dept_id:
+        return []
+    return await db.case_referrals.distinct(
+        "case_id", {"to_department_id": dept_id, "status": "active"}
+    )
+
+
 async def _org_scope_match(current_user: dict) -> Dict[str, Any]:
     """Mongo $match restricting a procedures query to the caller's org (derived from the
     linked student/supervisor/creator, since procedures don't store org_id directly),
-    narrowed to department when the caller is a department incharge.
+    narrowed to department when the caller is a department incharge. Also includes any
+    case actively referred into the caller's department (see _referred_case_ids).
     super_admin is platform-wide and gets an empty filter — i.e. no restriction."""
     if current_user.get("is_super_admin"):
         return {}
     scoped_member_ids = await _scope_member_ids(current_user)
-    return {"$or": [
+    or_clauses: List[Dict[str, Any]] = [
         {"student_id": {"$in": scoped_member_ids}},
         {"supervisor_id": {"$in": scoped_member_ids}},
         {"created_by_id": {"$in": scoped_member_ids}},
-    ]}
+    ]
+    referred_ids = await _referred_case_ids(current_user)
+    valid_referred_oids = [ObjectId(i) for i in referred_ids if ObjectId.is_valid(i)]
+    if valid_referred_oids:
+        or_clauses.append({"_id": {"$in": valid_referred_oids}})
+    return {"$or": or_clauses}
 
 
 async def _assert_procedure_org_access(proc: dict, current_user: dict) -> None:
@@ -323,7 +345,11 @@ async def _assert_procedure_org_access(proc: dict, current_user: dict) -> None:
     directly, so org membership is derived from the linked student/supervisor/creator.
     Only org-wide roles need this check — student/supervisor self-scoped access is already
     enforced by each endpoint's own identity checks and can't cross orgs. Narrows to
-    department when the caller is a department incharge (see _dept_scope_query)."""
+    department when the caller is a department incharge (see _dept_scope_query), but a
+    case actively referred into the caller's department is allowed through either way —
+    this single choke point is reused by every phase/approval/edit endpoint, so a referral
+    accept immediately unlocks the whole case lifecycle for the receiving department
+    without needing per-endpoint changes."""
     if current_user.get("is_super_admin"):
         return
     role = current_user.get("role")
@@ -334,11 +360,14 @@ async def _assert_procedure_org_access(proc: dict, current_user: dict) -> None:
         raise HTTPException(status_code=403, detail="Your account is not linked to an organization")
     owner_ids = [proc.get("student_id"), proc.get("supervisor_id"), proc.get("created_by_id")]
     valid_oids = [ObjectId(o) for o in owner_ids if o and ObjectId.is_valid(o)]
-    if not valid_oids:
-        raise HTTPException(status_code=403, detail="Cannot access procedures outside your organization")
-    match = await db.users.find_one({"_id": {"$in": valid_oids}, **_dept_scope_query(current_user)})
-    if not match:
-        raise HTTPException(status_code=403, detail="Cannot access procedures outside your organization")
+    if valid_oids:
+        match = await db.users.find_one({"_id": {"$in": valid_oids}, **_dept_scope_query(current_user)})
+        if match:
+            return
+    referred_ids = await _referred_case_ids(current_user)
+    if str(proc.get("_id")) in referred_ids:
+        return
+    raise HTTPException(status_code=403, detail="Cannot access procedures outside your organization")
 
 
 async def _get_procedure_org_name(procedure: dict) -> Optional[str]:
@@ -2464,6 +2493,283 @@ async def update_department(department_id: str, payload: DepartmentUpdate, curre
     return {"id": department_id, "name": payload.name}
 
 
+@api_router.delete("/departments/{department_id}")
+async def delete_department(department_id: str, current_user: dict = Depends(get_current_user)):
+    """Blocked while any user is still assigned — force the admin to reassign
+    them first rather than silently orphaning a department incharge/student
+    mid-department. Cases that were created under this department keep their
+    department_id (historical record) — deleting the department doesn't touch
+    procedures at all, only the department doc itself."""
+    org_id = _require_org_admin(current_user)
+    try:
+        obj_id = ObjectId(department_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid department ID")
+    existing = await db.departments.find_one({"_id": obj_id, "org_id": org_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Department not found")
+    member_count = await db.users.count_documents({"org_id": org_id, "department_id": department_id})
+    if member_count > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Reassign or remove {member_count} user(s) from this department before deleting it.",
+        )
+    await db.departments.delete_one({"_id": obj_id})
+    return {"message": "Department deleted"}
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Cross-department case referrals.
+#
+# A referral never moves case ownership — procedure.department_id (the
+# primary/originating department) never changes. Instead an ACTIVE referral
+# grants the receiving department the same access any dept member already has
+# to their own cases, via _assert_procedure_org_access / _org_scope_match
+# (_referred_case_ids). "Return" just flips status back off active — the case
+# falls straight back to originating-department-only visibility with zero
+# extra bookkeeping, matching the doc's "automatically returns" requirement.
+#
+# v1 simplification: `permission` (read/edit) is stored and shown for intent,
+# but not separately enforced — an active referral grants the full case
+# lifecycle (same as _assert_procedure_org_access grants any dept member),
+# not a read-only subset. Threading read/edit through the ~45 endpoints that
+# call _assert_procedure_org_access is a larger follow-up, not v1.
+# ─────────────────────────────────────────────────────────────────────
+
+REFERRAL_ROLES = {"implant_incharge", "administrator"}
+
+
+class ReferralCreate(BaseModel):
+    to_department_id: str = Field(..., max_length=64)
+    permission: str = Field("read", max_length=10)
+    notes: Optional[str] = Field(None, max_length=500)
+
+    @field_validator("permission")
+    @classmethod
+    def validate_permission(cls, v):
+        if v not in ("read", "edit"):
+            raise ValueError("permission must be 'read' or 'edit'")
+        return v
+
+    @field_validator("notes")
+    @classmethod
+    def sanitize_notes(cls, v):
+        return sanitize_input(v) if v else v
+
+
+class ReferralDecline(BaseModel):
+    reason: Optional[str] = Field(None, max_length=500)
+
+
+def _dept_authority_matches(current_user: dict, department_id: Optional[str]) -> bool:
+    """True if current_user has management authority over `department_id` —
+    the org admin (or super_admin) always does; a department incharge only
+    over their own department. A None department_id (org-wide case) can only
+    be acted on by the org admin."""
+    if current_user.get("is_super_admin") or current_user.get("is_admin"):
+        return True
+    return bool(department_id) and current_user.get("department_id") == department_id
+
+
+def _serialize_referral(r: dict) -> dict:
+    r = dict(r)
+    r["id"] = str(r.pop("_id"))
+    return r
+
+
+async def _get_referral_or_404(referral_id: str) -> dict:
+    try:
+        obj_id = ObjectId(referral_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid referral_id")
+    referral = await db.case_referrals.find_one({"_id": obj_id})
+    if not referral:
+        raise HTTPException(status_code=404, detail="Referral not found")
+    return referral
+
+
+def _assert_referral_org_and_authority(referral: dict, current_user: dict, side_field: str) -> None:
+    if not current_user.get("is_super_admin") and referral.get("org_id") != current_user.get("org_id"):
+        raise HTTPException(status_code=403, detail="Cannot access referrals outside your organization")
+    if not _dept_authority_matches(current_user, referral.get(side_field)):
+        raise HTTPException(status_code=403, detail="You don't have authority over that department")
+
+
+@api_router.post("/procedures/{procedure_id}/refer")
+async def refer_procedure(procedure_id: str, payload: ReferralCreate, current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") not in REFERRAL_ROLES:
+        raise HTTPException(status_code=403, detail="Only Implant In-Charge / Administrator can refer a case")
+    try:
+        obj_pid = ObjectId(procedure_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid procedure_id")
+    proc = await db.procedures.find_one({"_id": obj_pid})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(proc, current_user)
+
+    case_dept_id = proc.get("department_id")
+    if not _dept_authority_matches(current_user, case_dept_id):
+        raise HTTPException(status_code=403, detail="Only this case's own department (or the org admin) can refer it")
+
+    org_id = current_user.get("org_id")
+    if not org_id:
+        raise HTTPException(status_code=400, detail="Your account is not linked to an organization")
+
+    if payload.to_department_id == case_dept_id:
+        raise HTTPException(status_code=400, detail="Cannot refer a case to its own department")
+    try:
+        to_dept_obj = ObjectId(payload.to_department_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid to_department_id")
+    to_dept = await db.departments.find_one({"_id": to_dept_obj, "org_id": org_id})
+    if not to_dept:
+        raise HTTPException(status_code=404, detail="Target department not found")
+
+    existing = await db.case_referrals.find_one({
+        "case_id": procedure_id,
+        "to_department_id": payload.to_department_id,
+        "status": {"$in": ["pending", "active"]},
+    })
+    if existing:
+        raise HTTPException(status_code=400, detail="This case already has a pending or active referral to that department")
+
+    now = datetime.utcnow()
+    referral_doc = {
+        "org_id": org_id,
+        "case_id": procedure_id,
+        "from_department_id": case_dept_id,
+        "to_department_id": payload.to_department_id,
+        "to_department_name": to_dept["name"],
+        "permission": payload.permission,
+        "notes": payload.notes,
+        "status": "pending",
+        "requested_by_id": current_user["_id"],
+        "requested_by_name": current_user.get("name", ""),
+        "requested_at": now,
+        # Denormalized so the receiving department can triage from the list
+        # screen without needing case access before they've even accepted.
+        "patient_name": proc.get("patient_name"),
+        "implant_procedure_type": proc.get("implant_procedure_type"),
+        "case_status": proc.get("status"),
+    }
+    result = await db.case_referrals.insert_one(referral_doc)
+    return {"id": str(result.inserted_id), "message": "Referral sent"}
+
+
+@api_router.get("/referrals/incoming")
+async def list_incoming_referrals(current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") not in REFERRAL_ROLES:
+        raise HTTPException(status_code=403, detail="Only Implant In-Charge / Administrator can view referrals")
+    org_id = current_user.get("org_id")
+    if not org_id:
+        raise HTTPException(status_code=400, detail="Your account is not linked to an organization")
+    query: Dict[str, Any] = {"org_id": org_id, "status": {"$in": ["pending", "active"]}}
+    if not current_user.get("is_admin"):
+        dept_id = current_user.get("department_id")
+        if not dept_id:
+            return {"referrals": []}
+        query["to_department_id"] = dept_id
+    referrals = [_serialize_referral(r) async for r in db.case_referrals.find(query).sort("requested_at", -1)]
+    return {"referrals": referrals}
+
+
+@api_router.get("/referrals/outgoing")
+async def list_outgoing_referrals(current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") not in REFERRAL_ROLES:
+        raise HTTPException(status_code=403, detail="Only Implant In-Charge / Administrator can view referrals")
+    org_id = current_user.get("org_id")
+    if not org_id:
+        raise HTTPException(status_code=400, detail="Your account is not linked to an organization")
+    query: Dict[str, Any] = {"org_id": org_id}
+    if not current_user.get("is_admin"):
+        dept_id = current_user.get("department_id")
+        if not dept_id:
+            return {"referrals": []}
+        query["from_department_id"] = dept_id
+    referrals = [_serialize_referral(r) async for r in db.case_referrals.find(query).sort("requested_at", -1)]
+    return {"referrals": referrals}
+
+
+@api_router.get("/procedures/{procedure_id}/referrals")
+async def list_case_referrals(procedure_id: str, current_user: dict = Depends(get_current_user)):
+    try:
+        obj_pid = ObjectId(procedure_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid procedure_id")
+    proc = await db.procedures.find_one({"_id": obj_pid})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(proc, current_user)
+    referrals = [_serialize_referral(r) async for r in db.case_referrals.find({"case_id": procedure_id}).sort("requested_at", -1)]
+    return {"referrals": referrals}
+
+
+@api_router.post("/referrals/{referral_id}/accept")
+async def accept_referral(referral_id: str, current_user: dict = Depends(get_current_user)):
+    referral = await _get_referral_or_404(referral_id)
+    _assert_referral_org_and_authority(referral, current_user, "to_department_id")
+    if referral.get("status") != "pending":
+        raise HTTPException(status_code=400, detail=f"Referral is already {referral.get('status')}")
+    now = datetime.utcnow()
+    await db.case_referrals.update_one({"_id": referral["_id"]}, {"$set": {
+        "status": "active",
+        "responded_by_id": current_user["_id"],
+        "responded_by_name": current_user.get("name", ""),
+        "responded_at": now,
+    }})
+    return {"message": "Referral accepted"}
+
+
+@api_router.post("/referrals/{referral_id}/decline")
+async def decline_referral(referral_id: str, payload: ReferralDecline, current_user: dict = Depends(get_current_user)):
+    referral = await _get_referral_or_404(referral_id)
+    _assert_referral_org_and_authority(referral, current_user, "to_department_id")
+    if referral.get("status") != "pending":
+        raise HTTPException(status_code=400, detail=f"Referral is already {referral.get('status')}")
+    now = datetime.utcnow()
+    await db.case_referrals.update_one({"_id": referral["_id"]}, {"$set": {
+        "status": "declined",
+        "responded_by_id": current_user["_id"],
+        "responded_by_name": current_user.get("name", ""),
+        "responded_at": now,
+        "decline_reason": payload.reason,
+    }})
+    return {"message": "Referral declined"}
+
+
+@api_router.post("/referrals/{referral_id}/return")
+async def return_referral(referral_id: str, current_user: dict = Depends(get_current_user)):
+    """Receiving department marks treatment complete — case visibility falls
+    straight back to the originating department (status leaves "active", so
+    _referred_case_ids no longer includes it). Nothing on the procedure
+    document itself changes; department_id was never touched."""
+    referral = await _get_referral_or_404(referral_id)
+    _assert_referral_org_and_authority(referral, current_user, "to_department_id")
+    if referral.get("status") != "active":
+        raise HTTPException(status_code=400, detail=f"Referral is not active (status: {referral.get('status')})")
+    now = datetime.utcnow()
+    await db.case_referrals.update_one({"_id": referral["_id"]}, {"$set": {
+        "status": "returned",
+        "returned_by_id": current_user["_id"],
+        "returned_by_name": current_user.get("name", ""),
+        "returned_at": now,
+    }})
+    return {"message": "Case returned to originating department"}
+
+
+@api_router.post("/referrals/{referral_id}/cancel")
+async def cancel_referral(referral_id: str, current_user: dict = Depends(get_current_user)):
+    """Originating department withdraws a still-pending referral before the
+    other side has responded."""
+    referral = await _get_referral_or_404(referral_id)
+    _assert_referral_org_and_authority(referral, current_user, "from_department_id")
+    if referral.get("status") != "pending":
+        raise HTTPException(status_code=400, detail=f"Referral is already {referral.get('status')}")
+    await db.case_referrals.delete_one({"_id": referral["_id"]})
+    return {"message": "Referral cancelled"}
+
+
 # ── Helper to assert index exists on startup ──
 
 async def _ensure_org_indexes() -> None:
@@ -2478,6 +2784,9 @@ async def _ensure_org_indexes() -> None:
         await db.departments.create_index([("org_id", 1), ("name", 1)])
         await db.procedures.create_index("org_id")
         await db.procedures.create_index("department_id")
+        await db.case_referrals.create_index("case_id")
+        await db.case_referrals.create_index([("to_department_id", 1), ("status", 1)])
+        await db.case_referrals.create_index([("from_department_id", 1), ("status", 1)])
         await db.otp_verifications.create_index("email", unique=True)
         await db.otp_verifications.create_index("expires_at", expireAfterSeconds=3600)
     except Exception as e:

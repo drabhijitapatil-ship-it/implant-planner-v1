@@ -126,6 +126,12 @@ function DrawerMenu({
           bg: '#E3F2FD', chip: '#BBDEFB', iconColor: '#1565C0',
         }]
       : []),
+    ...(isAdmin
+      ? [{
+          key: 'referrals', icon: 'git-branch' as const, label: 'Referrals', route: '/referrals',
+          bg: '#F3E5F5', chip: '#E1BEE7', iconColor: '#6A1B9A',
+        }]
+      : []),
     ...(isSuperAdmin
       ? [{
           key: 'organizations', icon: 'business' as const, label: 'Organizations', route: '/admin/organizations',

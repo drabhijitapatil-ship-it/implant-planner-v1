@@ -199,14 +199,19 @@
       "Bash(python3 - /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py /private/tmp/claude-501/-Users-prathmeshjadhav-Desktop-work-implant-planner-v1-main/e057b30c-a70b-4cc2-9cf5-9d2dd65afa83/scratchpad/analytics_block.py)",
       "Bash(rm -f /private/tmp/claude-501/-Users-prathmeshjadhav-Desktop-work-implant-planner-v1-main/e057b30c-a70b-4cc2-9cf5-9d2dd65afa83/scratchpad/analytics_block.py *)",
       "Bash(OTHER=\"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/frontend\" *)",
-      "Bash(rm -f /tmp/baseline_errors.txt /tmp/current_errors.txt /tmp/other_files.txt /tmp/main_files.txt *)"
+      "Bash(rm -f /tmp/baseline_errors.txt /tmp/current_errors.txt /tmp/other_files.txt /tmp/main_files.txt *)",
+      "Bash(sort -u -t- -k2 -n)",
+      "Bash(diff -u /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/frontend/app/procedures/[id].tsx /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/frontend/app/procedures/[id].tsx)",
+      "Bash(diff /tmp/id_baseline.txt /tmp/id_current.txt *)",
+      "Bash(grep -E \"procedures/\\\\[id\\\\]\\\\.tsx.*does not exist on type|procedures/\\\\[id\\\\]\\\\.tsx.*implicitly has an 'any'\" /tmp/tsc_out3.txt /tmp/tsc_out2.txt)"
     ],
     "additionalDirectories": [
       "/dev",
       "/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/phase1/backend",
       "/tmp",
       "/private/tmp",
-      "/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/frontend/app/procedures"
+      "/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/frontend/app/procedures",
+      "/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/frontend/app/procedures"
     ]
   }
 }

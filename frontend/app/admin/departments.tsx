@@ -149,6 +149,33 @@ export default function DepartmentsScreen() {
     }
   };
 
+  const handleDeleteDepartment = () => {
+    if (!editingDept) return;
+    Alert.alert(
+      'Delete Department',
+      `Delete "${editingDept.name}"? This only works if no users are assigned to it — cases already created under it keep their history either way.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setSaving(true);
+            try {
+              await api.delete(`/departments/${editingDept.id}`);
+              setShowModal(false);
+              loadDepartments();
+            } catch (error: any) {
+              Alert.alert('Error', error.response?.data?.detail || 'Failed to delete department');
+            } finally {
+              setSaving(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const handleAssignExisting = async (u: InchargeUser) => {
     if (!editingDept) return;
     setAssigning(true);
@@ -399,6 +426,18 @@ export default function DepartmentsScreen() {
                   )}
                 </View>
               )}
+
+              {editingDept && (
+                <TouchableOpacity
+                  style={[styles.deleteBtn, saving && styles.btnDisabled]}
+                  onPress={handleDeleteDepartment}
+                  disabled={saving}
+                  data-testid="delete-department-btn"
+                >
+                  <Ionicons name="trash-outline" size={16} color="#EF5350" />
+                  <Text style={styles.deleteBtnText}>Delete Department</Text>
+                </TouchableOpacity>
+              )}
             </ScrollView>
           </View>
         </View>
@@ -605,6 +644,19 @@ const styles = StyleSheet.create({
   },
   saveBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
   btnDisabled: { opacity: 0.6 },
+  deleteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FFCDD2',
+    backgroundColor: '#FFEBEE',
+  },
+  deleteBtnText: { fontSize: 13, fontWeight: '700', color: '#EF5350' },
   inchargeSection: {
     marginTop: 8,
     paddingTop: 16,

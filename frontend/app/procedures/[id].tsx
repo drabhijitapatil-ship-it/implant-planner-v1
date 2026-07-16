@@ -43,6 +43,7 @@ import {
 } from "../../utils/consentPdf";
 import BackButton from "../../components/BackButton";
 import RadiographThumb from "../../components/RadiographThumb";
+import ReferCaseButton from "../../components/ReferCaseButton";
 import {
   STATUS_COLORS,
   STATUS_LABELS,
@@ -1071,7 +1072,10 @@ export default function ProcedureDetailScreen() {
           <Text style={styles.pageHeaderTitle} numberOfLines={1}>
             Case Details
           </Text>
-          <View style={{ width: 44 }} />
+          <ReferCaseButton
+            procedureId={String(id)}
+            caseDepartmentId={procedure?.department_id}
+          />
         </View>
         {/* KeyboardAvoidingView so inline inputs (approval/rejection comments,
           field edits) aren't hidden behind the keyboard — the comment box sits
@@ -3280,31 +3284,61 @@ export default function ProcedureDetailScreen() {
               </View>
             )}
 
-            {/* Start Stage 2 Surgical Button */}
-            {canSubmitStage2Surgical() && (
-              <View style={styles.phase2ButtonContainer}>
-                <TouchableOpacity
-                  style={[styles.phase2Button, { backgroundColor: "#2196F3" }]}
-                  onPress={() =>
-                    router.push(`/procedures/submit-stage2-surgical/${id}`)
-                  }
-                  data-testid="stage2-surgical-btn"
-                >
-                  <Ionicons name="medkit" size={24} color="#FFF" />
-                  <View style={styles.phase2ButtonTextContainer}>
-                    <Text style={styles.phase2ButtonTitle}>
-                      {procedure.case_origin === "existing_implants"
-                        ? "PHASE 1 APPROVED"
-                        : "PHASE 2 APPROVED"}
-                    </Text>
-                    <Text style={styles.phase2ButtonSubtitle}>
-                      Tap to start Phase 3 - Healing and Second Stage Surgery
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={24} color="#FFF" />
-                </TouchableOpacity>
-              </View>
-            )}
+            {/* Start Stage 2 Surgical Button — gated behind Implant Survival
+                Review. When Phase 2 is approved and implants exist but the
+                survival review hasn't been submitted, this button routes to
+                the survival review screen instead of Phase 3 directly. Once
+                submitted (or if there are no implants), it behaves like the
+                original Phase 3 CTA. */}
+            {canSubmitStage2Surgical() && (() => {
+              const hasImplants = !!(procedure.implants?.length || procedure.existing_implants?.length || procedure.implant_plans?.length);
+              return (
+                <View style={styles.phase2ButtonContainer}>
+                  <TouchableOpacity
+                    style={[styles.phase2Button, { backgroundColor: "#1565C0" }]}
+                    onPress={() =>
+                      router.push(`/procedures/survival-review/${procedure.id || procedure._id}` as any)
+                    }
+                    data-testid="survival-review-cta"
+                    testID="survival-review-cta"
+                  >
+                    <Ionicons name="pulse" size={24} color="#FFF" />
+                    <View style={styles.phase2ButtonTextContainer}>
+                      <Text style={styles.phase2ButtonTitle}>IMPLANT SURVIVAL REVIEW</Text>
+                      <Text style={styles.phase2ButtonSubtitle}>
+                        {hasImplants
+                          ? "Tap to record a new failure or continue to Phase 3"
+                          : "Continue to Phase 3"}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={24} color="#FFF" />
+                  </TouchableOpacity>
+                  {!hasImplants && (
+                    <TouchableOpacity
+                      style={[styles.phase2Button, { backgroundColor: "#2196F3", marginTop: 8 }]}
+                      onPress={() =>
+                        router.push(`/procedures/submit-stage2-surgical/${id}`)
+                      }
+                      data-testid="stage2-surgical-btn"
+                      testID="stage2-surgical-btn"
+                    >
+                      <Ionicons name="medkit" size={24} color="#FFF" />
+                      <View style={styles.phase2ButtonTextContainer}>
+                        <Text style={styles.phase2ButtonTitle}>
+                          {procedure.case_origin === "existing_implants"
+                            ? "PHASE 1 APPROVED"
+                            : "PHASE 2 APPROVED"}
+                        </Text>
+                        <Text style={styles.phase2ButtonSubtitle}>
+                          Tap to start Phase 3
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={24} color="#FFF" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })()}
 
             {/* Start Stage 2 Prosthetic Button */}
             {canSubmitStage2Prosthetic() && (
@@ -5378,36 +5412,107 @@ export default function ProcedureDetailScreen() {
                         value={procedure.phase2_data.implant_other_notes}
                       />
                     )}
-                    {procedure.phase2_data.prosthetic_component && (
-                      <InfoRow
-                        icon="cube"
-                        label="Prosthetic Component"
-                        value={procedure.phase2_data.prosthetic_component}
-                        fieldKey="phase2_data.prosthetic_component"
-                      />
-                    )}
-                    {procedure.phase2_data.healing_abutment_cuff_height &&
-                      (Array.isArray(
-                        procedure.phase2_data.healing_abutment_cuff_height,
-                      ) ? (
-                        procedure.phase2_data.healing_abutment_cuff_height.map(
-                          (val: string, idx: number) => (
+                    {/* Per-implant Prosthetic Component readback. When
+                        Phase 2 stored `prosthetic_components[]` (multi-implant
+                        per-implant flow), render one card per implant showing
+                        its FDI-labelled component + only the sub-info that
+                        belongs to that implant's chosen component. Cover
+                        Screw shows no cuff height; Healing Abutment shows the
+                        mm; Immediate Loading shows the prosthesis type. */}
+                    {(() => {
+                      const perImplant = procedure.phase2_data.prosthetic_components;
+                      const cuffs = procedure.phase2_data.healing_abutment_cuff_height;
+                      const singleComponent = procedure.phase2_data.prosthetic_component;
+                      const prosthesisType = procedure.phase2_data.prosthesis_type;
+                      const plans = procedure.implant_plans || procedure.implants || [];
+                      const _fdi = (i: number) => {
+                        const p = plans[i] || {};
+                        const t = p.tooth_number || p.tooth || p.position;
+                        return t ? `Tooth #${t}` : "Tooth #—";
+                      };
+                      if (Array.isArray(perImplant) && perImplant.length > 0) {
+                        return (
+                          <View style={{ marginTop: 8, marginBottom: 8 }} data-testid="phase2-per-implant-readback">
+                            <Text style={{ fontSize: 13, fontWeight: "700", color: "#37474F", marginBottom: 6, marginLeft: 4 }}>
+                              Prosthetic Component (per implant)
+                            </Text>
+                            {perImplant.map((pc: string, idx: number) => {
+                              const cuff = Array.isArray(cuffs) ? cuffs[idx] : null;
+                              const chipColor = pc === "Cover Screw Placed" ? "#6A1B9A"
+                                : pc === "Healing Abutment Placed" ? "#00695C"
+                                : pc === "Immediate Loading Done" ? "#E65100" : "#546E7A";
+                              const chipBg = pc === "Cover Screw Placed" ? "#F3E5F5"
+                                : pc === "Healing Abutment Placed" ? "#E0F2F1"
+                                : pc === "Immediate Loading Done" ? "#FFF3E0" : "#ECEFF1";
+                              return (
+                                <View
+                                  key={idx}
+                                  style={{
+                                    borderWidth: 1, borderColor: "#E0E0E0", borderRadius: 8,
+                                    backgroundColor: "#FAFAFA", padding: 10, marginBottom: 8,
+                                  }}
+                                  data-testid={`phase2-implant-card-${idx}`}
+                                >
+                                  <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
+                                    <Text style={{ fontSize: 13, fontWeight: "800", color: "#1A2332" }}>
+                                      {_fdi(idx)}
+                                    </Text>
+                                    <View style={{ backgroundColor: chipBg, borderColor: chipColor, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 }}>
+                                      <Text style={{ fontSize: 10, fontWeight: "700", color: chipColor, letterSpacing: 0.3, textTransform: "uppercase" }}>
+                                        {pc || "—"}
+                                      </Text>
+                                    </View>
+                                  </View>
+                                  {pc === "Healing Abutment Placed" && cuff !== undefined && cuff !== null && String(cuff).trim() !== "" && (
+                                    <Text style={{ marginTop: 4, fontSize: 12.5, color: "#37474F" }}>
+                                      Healing abutment cuff height: <Text style={{ fontWeight: "700", color: "#00695C" }}>{cuff} mm</Text>
+                                    </Text>
+                                  )}
+                                  {pc === "Immediate Loading Done" && prosthesisType && (
+                                    <Text style={{ marginTop: 4, fontSize: 12.5, color: "#37474F" }}>
+                                      Prosthesis type: <Text style={{ fontWeight: "700", color: "#E65100" }}>{prosthesisType}</Text>
+                                    </Text>
+                                  )}
+                                </View>
+                              );
+                            })}
+                          </View>
+                        );
+                      }
+                      // Legacy single-component flow (single implant / full-arch).
+                      return (
+                        <>
+                          {singleComponent && (
                             <InfoRow
-                              key={idx}
-                              icon="resize"
-                              label={`Healing Abutment Cuff Height (Implant ${idx + 1})`}
-                              value={`${val} mm`}
+                              icon="cube"
+                              label="Prosthetic Component"
+                              value={singleComponent}
+                              fieldKey="phase2_data.prosthetic_component"
                             />
-                          ),
-                        )
-                      ) : (
-                        <InfoRow
-                          icon="resize"
-                          label="Healing Abutment Cuff Height"
-                          value={`${procedure.phase2_data.healing_abutment_cuff_height} mm`}
-                          fieldKey="phase2_data.healing_abutment_cuff_height"
-                        />
-                      ))}
+                          )}
+                          {cuffs &&
+                            (Array.isArray(cuffs) ? (
+                              cuffs.map((val: string, idx: number) =>
+                                val !== undefined && val !== null && String(val).trim() !== "" ? (
+                                  <InfoRow
+                                    key={idx}
+                                    icon="resize"
+                                    label={`Healing Abutment Cuff Height (${_fdi(idx)})`}
+                                    value={`${val} mm`}
+                                  />
+                                ) : null,
+                              )
+                            ) : (
+                              <InfoRow
+                                icon="resize"
+                                label="Healing Abutment Cuff Height"
+                                value={`${cuffs} mm`}
+                                fieldKey="phase2_data.healing_abutment_cuff_height"
+                              />
+                            ))}
+                        </>
+                      );
+                    })()}
                     {/* iter-311: empty-state placeholder rows so the operator
                   can populate the child field after switching the parent
                   via inline edit.  Parent change triggers backend-side
