@@ -2095,45 +2095,69 @@ EMAIL_WEBSITE_URL = os.environ.get("WEBSITE_URL", "https://implanr.com")
 EMAIL_APP_DOWNLOAD_URL = os.environ.get("APP_DOWNLOAD_URL", EMAIL_WEBSITE_URL)
 
 
+_ses_client = None
+
+
+def _get_ses_client():
+    """Lazy boto3 SES client — reuses the same AWS_ACCESS_KEY_ID /
+    AWS_SECRET_ACCESS_KEY / AWS_REGION env vars already used for S3
+    (see s3_storage.py) so no separate credential set is needed, as long
+    as that IAM identity also has ses:SendRawEmail permission."""
+    global _ses_client
+    if _ses_client is None:
+        import boto3
+        _ses_client = boto3.client(
+            "ses",
+            region_name=os.environ.get("AWS_REGION", "ap-south-1"),
+            aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
+        )
+    return _ses_client
+
+
 async def _send_smtp_email(to_email: str, subject: str, html_body: str, text_body: str, log_tag: str = "email", inline_logo: bool = False) -> bool:
-    """Send an email via Resend. Returns False (and logs) on missing config or
-    failure. Name kept as `_send_smtp_email` (not renamed) so every existing
-    caller — invite, OTP, credentials-resend — needs zero changes."""
-    resend_api_key = os.environ.get("RESEND_API_KEY")
+    """Send an email via Amazon SES. Returns False (and logs) on missing
+    config or failure. Name kept as `_send_smtp_email` (not renamed) so every
+    existing caller — invite, OTP, credentials-resend — needs zero changes.
+
+    Note: while the SES account is in sandbox mode, sends only succeed to
+    email addresses that are themselves verified in SES — request production
+    access (SES > Account dashboard > "Request a limit increase" / production
+    access) to send to arbitrary recipients."""
     email_from = os.environ.get("EMAIL_FROM") or "noreply@implanr.com"
 
-    if not resend_api_key:
-        logging.warning(f"[{log_tag}] RESEND_API_KEY not configured — skipping email to {to_email}")
-        return False
-
     try:
-        import resend
-        resend.api_key = resend_api_key
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        from email.mime.image import MIMEImage
 
-        params: Dict[str, Any] = {
-            "from": email_from,
-            "to": [to_email],
-            "subject": subject,
-            "html": html_body,
-            "text": text_body,
-        }
+        msg = MIMEMultipart("related")
+        msg["Subject"] = subject
+        msg["From"] = email_from
+        msg["To"] = to_email
+
+        alt = MIMEMultipart("alternative")
+        alt.attach(MIMEText(text_body, "plain"))
+        alt.attach(MIMEText(html_body, "html"))
+        msg.attach(alt)
+
         if inline_logo and EMAIL_LOGO_PATH.exists():
             with open(EMAIL_LOGO_PATH, "rb") as f:
-                logo_bytes = f.read()
-            # Resend's Python SDK takes attachment content as a byte list, and
-            # `content_id` wires it up to the `cid:implanr_logo` reference
-            # already used in the HTML body below (unchanged from the SMTP path).
-            params["attachments"] = [{
-                "filename": "logo.png",
-                "content": list(logo_bytes),
-                "content_id": "implanr_logo",
-            }]
+                logo_img = MIMEImage(f.read())
+            logo_img.add_header("Content-ID", "<implanr_logo>")
+            logo_img.add_header("Content-Disposition", "inline", filename="logo.png")
+            msg.attach(logo_img)
 
+        raw_bytes = msg.as_bytes()
         loop = asyncio.get_event_loop()
         def _send():
-            resend.Emails.send(params)
-        # Transient network/API hiccups can happen with any HTTP provider —
-        # keep the same retry-with-backoff behavior the SMTP path had.
+            _get_ses_client().send_raw_email(
+                Source=email_from,
+                Destinations=[to_email],
+                RawMessage={"Data": raw_bytes},
+            )
+        # Transient network/API hiccups can happen with any provider — keep
+        # the same retry-with-backoff behavior the previous providers had.
         last_err = None
         for attempt in range(1, 4):
             try:

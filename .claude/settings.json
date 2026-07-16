@@ -203,7 +203,13 @@
       "Bash(sort -u -t- -k2 -n)",
       "Bash(diff -u /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/frontend/app/procedures/[id].tsx /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/frontend/app/procedures/[id].tsx)",
       "Bash(diff /tmp/id_baseline.txt /tmp/id_current.txt *)",
-      "Bash(grep -E \"procedures/\\\\[id\\\\]\\\\.tsx.*does not exist on type|procedures/\\\\[id\\\\]\\\\.tsx.*implicitly has an 'any'\" /tmp/tsc_out3.txt /tmp/tsc_out2.txt)"
+      "Bash(grep -E \"procedures/\\\\[id\\\\]\\\\.tsx.*does not exist on type|procedures/\\\\[id\\\\]\\\\.tsx.*implicitly has an 'any'\" /tmp/tsc_out3.txt /tmp/tsc_out2.txt)",
+      "Bash(lsof -i :8000 -sTCP:LISTEN)",
+      "Bash(ps -p 41532 -o pid,ppid,command)",
+      "Bash(xargs -I{} sh -c 'echo \"== {} ==\"; cat {}')",
+      "Bash(lsof -i :8001 -sTCP:LISTEN)",
+      "Bash(ps -p 41533 -o pid,ppid,command)",
+      "Bash(ps -p 89794,89796 -o pid,ppid,command)"
     ],
     "additionalDirectories": [
       "/dev",
