@@ -946,12 +946,12 @@ function EmptyMsg() { return <Text style={{ color: '#B0BEC5', fontStyle: 'italic
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F7FB' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F5F7FB' },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E1E7EF' },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E1E7EF', flexShrink: 0, zIndex: 10 },
   headerIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F0F4F8', alignItems: 'center', justifyContent: 'center', marginRight: 8 },
   headerTitle: { fontSize: 17, fontWeight: '800', color: '#1A2332' },
   headerSub: { fontSize: 11, color: '#78909C', marginTop: 2 },
 
-  tabsScroll: { backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E1E7EF', paddingVertical: 8, maxHeight: 46 },
+  tabsScroll: { backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E1E7EF', paddingVertical: 8, maxHeight: 46, flexShrink: 0, zIndex: 8 },
   tab: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
     minWidth: 118, height: 30,
@@ -966,6 +966,9 @@ const s = StyleSheet.create({
     flexDirection: 'row', paddingHorizontal: 14, paddingVertical: 12, alignItems: 'flex-end',
     backgroundColor: '#FFF',
     borderBottomWidth: 1, borderBottomColor: '#E1E7EF',
+    flexShrink: 0,
+    zIndex: 6,
+    minHeight: 84,
   },
   dateLabel: { fontSize: 10, fontWeight: '800', color: '#1565C0', letterSpacing: 0.6, marginBottom: 5, textTransform: 'uppercase' },
 
