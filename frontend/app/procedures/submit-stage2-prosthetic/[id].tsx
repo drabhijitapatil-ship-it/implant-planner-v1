@@ -12,6 +12,7 @@ import { getImplantSite } from '../../../utils/implantPlan';
 import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
 import { PhaseHeader } from '../../../components/PhaseHeader';
+import DoneDatePicker, { todayIso } from '../../../components/DoneDatePicker';
 import { Ionicons } from '@expo/vector-icons';
 import {
   PHASE4_SINGLE_MULTIPLE_OPTIONS,
@@ -31,6 +32,8 @@ export default function Phase4Step1Screen() {
   const isFaculty = user?.role === 'supervisor' || user?.role === 'implant_incharge';
   const notesLabel = isFaculty ? "Operator's Notes" : "Student Notes";
   const [loading, setLoading] = useState(false);
+  // iter-332: actual date Phase 4 Step 1 was performed
+  const [doneDate, setDoneDate] = useState<string>(todayIso());
   const [procedure, setProcedure] = useState<any>(null);
   const [doneCompleted, setDoneCompleted] = useState(false);
 
@@ -95,7 +98,7 @@ export default function Phase4Step1Screen() {
       const livePlans: any[] = (planRes.data?.implant_plans || []);
       const existingImplants: any[] = procRes.data?.existing_implants || [];
       const fromExisting = procRes.data?.case_origin === 'existing_implants' && livePlans.length === 0 && existingImplants.length > 0;
-         // iter-341: filter to active implants (survivors + revisions).
+      // iter-341: filter to active implants (survivors + revisions).
       let activeTeeth: Set<string> | null = null;
       try {
         const act = await api.get(`/procedures/${id}/active-implants`);
@@ -180,11 +183,13 @@ export default function Phase4Step1Screen() {
     if (isPerImplantMode) {
       for (let i = 0; i < perImplantPlans.length; i++) {
         if (!perImplantPlans[i].prosthesis) {
-          return `Please select prosthesis for Implant ${i + 1}${implantPositions[i] ? ` (#${implantPositions[i]})` : ''}`;
+          const _lbl = implantPositions[i] ? `Tooth #${implantPositions[i]}` : `Implant ${i + 1}`;
+          return `Please select prosthesis for ${_lbl}`;
         }
         const showMat = perImplantPlans[i].prosthesis.includes('FP1') || perImplantPlans[i].prosthesis.includes('FP2') || perImplantPlans[i].prosthesis.includes('FP3');
         if (showMat && !perImplantPlans[i].material) {
-          return `Please select material for Implant ${i + 1}${implantPositions[i] ? ` (#${implantPositions[i]})` : ''}`;
+          const _lbl = implantPositions[i] ? `Tooth #${implantPositions[i]}` : `Implant ${i + 1}`;
+          return `Please select material for ${_lbl}`;
         }
       }
     } else {
@@ -201,8 +206,8 @@ export default function Phase4Step1Screen() {
       const slots = Math.max(1, implantPositions.length || 1);
       for (let i = 0; i < slots; i++) {
         if (!shadeValues[i]?.trim()) {
-          const lbl = implantPositions[i] ? ` (#${implantPositions[i]})` : '';
-          return `Please enter the shade for Implant ${i + 1}${lbl}`;
+          const _lbl = implantPositions[i] ? `Tooth #${implantPositions[i]}` : `Implant ${i + 1}`;
+          return `Please enter the shade for ${_lbl}`;
         }
       }
     }
@@ -212,6 +217,8 @@ export default function Phase4Step1Screen() {
   // iter-194: assemble the POST body. Used by both Submit and Generate-Lab-Slip.
   const buildPayload = () => {
     const payload: any = {
+      // iter-332: actual date Phase 4 Step 1 (impression / try-in) was done
+      done_date: doneDate || null,
       custom_abutment: customAbutment || null,
       overdenture_attachment: overdentureAttachment || null,
       payment_complete: paymentComplete,
@@ -359,7 +366,7 @@ export default function Phase4Step1Screen() {
                   return (
                     <View key={idx} style={{ backgroundColor: '#F8F9FE', borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#E0E7EE' }}>
                       <Text style={{ fontSize: 14, fontWeight: '700', color: '#6A1B9A', marginBottom: 8 }}>
-                        Implant {idx + 1}{implantPositions[idx] ? ` (#${implantPositions[idx]})` : ''}
+                        {implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : `Implant ${idx + 1}`}
                       </Text>
 
                       {/* Prosthesis Type */}
@@ -578,7 +585,7 @@ export default function Phase4Step1Screen() {
                 ? 'Full-arch case — record one shade for the anterior segment and one for the posterior segment.'
                 : 'Record one shade per implant. Use the natural standard (Vita Classic / Vita 3D-Master / chairside reference).'}
             </Text>
-            {(isFullArch ? ['Anterior', 'Posterior'] : implantPositions.map((p, i) => `Implant ${i + 1}${p ? ` (#${p})` : ''}`))
+            {(isFullArch ? ['Anterior', 'Posterior'] : implantPositions.map((p, i) => p ? `Tooth #${p}` : `Implant ${i + 1}`))
               .map((label, idx) => (
                 <View key={idx} style={s.field}>
                   <Text style={[s.label, { color: '#5D4037' }]}>
@@ -684,7 +691,7 @@ export default function Phase4Step1Screen() {
                   muaRows.map((row, idx) => (
                     <View key={idx} style={s.muaRow} testID={`mua-row-${idx}`}>
                       <View style={s.muaRowHeader}>
-                        <Text style={s.muaRowTitle}>Implant {idx + 1}</Text>
+                        <Text style={s.muaRowTitle}>{row.tooth ? `Tooth #${row.tooth}` : `Implant ${idx + 1}`}</Text>
                         <TouchableOpacity
                           onPress={() => removeRow(idx)}
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -839,6 +846,14 @@ export default function Phase4Step1Screen() {
                 <Text style={s.labSlipText}>Generate Lab Slip</Text></>
               )}
             </TouchableOpacity>
+            {/* iter-332: actual date Phase 4 Step 1 (impression / try-in) was done. */}
+            <DoneDatePicker
+              label="Done On (Phase 4 Step 1 — Impressions / Try-In)"
+              value={doneDate}
+              onChange={setDoneDate}
+              testID="phase4-step1-done-date"
+              helperText="Pick the date you actually performed this step. Defaults to today; back-date up to 30 days; future dates not allowed."
+            />
             {/* iter-262: visually disabled when validateForm() returns a message. */}
             {(() => {
               const validationError = validateForm();

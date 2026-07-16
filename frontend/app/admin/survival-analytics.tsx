@@ -25,12 +25,17 @@ import { useAuth } from '../../contexts/AuthContext';
 type Counters = {
   placed: number; active: number; failed: number;
   replaced_success: number; replaced_refailed: number;
+  treatment_ended?: number;
 };
 type Rates = { survival_rate: number; replacement_success_rate: number };
 type SystemRow = { system: string; placed: number; active: number; failed: number; replaced: number; survival_rate: number };
 type ToothRow = { bucket: string; placed: number; active: number; failed: number; replaced: number; survival_rate: number };
 type ReasonRow = { reason: string; count: number };
 type MonthRow = { month: string; placed: number; failed: number; survival_rate: number | null };
+type ProcTypeRow = {
+  procedure_type: string; placed: number; active: number; failed: number;
+  replaced: number; treatment_ended: number; failure_rate: number; survival_rate: number;
+};
 
 const TOOTH_BUCKET_LABEL: Record<string, string> = {
   anterior_max: 'Anterior maxilla',
@@ -43,7 +48,16 @@ const TOOTH_BUCKET_LABEL: Record<string, string> = {
 export default function SurvivalAnalyticsScreen() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
-  const canAccess = user?.role === 'implant_incharge' || user?.role === 'administrator';
+  // iter-348: dashboard now accessible to all clinical roles.
+  //   - administrator / implant_incharge → full institutional view + CSV export
+  //   - supervisor → cases they oversee (read-only)
+  //   - student → their own cases only (read-only)
+  //   - nurse → blocked
+  const canAccess = user?.role === 'implant_incharge'
+    || user?.role === 'administrator'
+    || user?.role === 'supervisor'
+    || user?.role === 'student';
+  const canExport = user?.role === 'implant_incharge' || user?.role === 'administrator';
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -54,6 +68,7 @@ export default function SurvivalAnalyticsScreen() {
   const [byTooth, setByTooth] = useState<ToothRow[]>([]);
   const [reasons, setReasons] = useState<ReasonRow[]>([]);
   const [timeSeries, setTimeSeries] = useState<MonthRow[]>([]);
+  const [byProcType, setByProcType] = useState<ProcTypeRow[]>([]);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [systemFilter, setSystemFilter] = useState('');
@@ -74,6 +89,7 @@ export default function SurvivalAnalyticsScreen() {
       setByTooth(res.data?.by_tooth || []);
       setReasons(res.data?.failure_reasons || []);
       setTimeSeries(res.data?.time_series || []);
+      setByProcType(res.data?.by_procedure_type || []);
     } catch (e: any) {
       Alert.alert('Failed to load analytics', e?.response?.data?.detail || 'Please try again');
     } finally {
@@ -129,7 +145,7 @@ export default function SurvivalAnalyticsScreen() {
         <View style={s.blockedCard}>
           <Ionicons name="lock-closed-outline" size={36} color="#C62828" />
           <Text style={s.blockedTitle}>Access denied</Text>
-          <Text style={s.blockedBody}>Only Administrator and Implant In-Charge accounts can view survival analytics.</Text>
+          <Text style={s.blockedBody}>Nurses cannot access implant survival analytics.</Text>
           <TouchableOpacity style={s.blockedBtn} onPress={() => router.back()}><Text style={s.blockedBtnT}>Go back</Text></TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -153,11 +169,17 @@ export default function SurvivalAnalyticsScreen() {
         </TouchableOpacity>
         <View style={{ flex: 1, marginLeft: 8 }}>
           <Text style={s.title}>Implant Survival Analytics</Text>
-          <Text style={s.sub}>Institutional outcomes across all cases</Text>
+          <Text style={s.sub}>
+            {user?.role === 'student' ? 'Your cases · read-only'
+              : user?.role === 'supervisor' ? 'Cases you oversee · read-only'
+              : 'Institutional outcomes across all cases'}
+          </Text>
         </View>
-        <TouchableOpacity style={s.exportBtn} onPress={handleExportCsv} disabled={exporting} data-testid="analytics-export-csv" testID="analytics-export-csv">
-          {exporting ? <ActivityIndicator color="#FFF" size="small" /> : <><Ionicons name="download-outline" size={16} color="#FFF" /><Text style={s.exportBtnT}>CSV</Text></>}
-        </TouchableOpacity>
+        {canExport && (
+          <TouchableOpacity style={s.exportBtn} onPress={handleExportCsv} disabled={exporting} data-testid="analytics-export-csv" testID="analytics-export-csv">
+            {exporting ? <ActivityIndicator color="#FFF" size="small" /> : <><Ionicons name="download-outline" size={16} color="#FFF" /><Text style={s.exportBtnT}>CSV</Text></>}
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
@@ -192,6 +214,43 @@ export default function SurvivalAnalyticsScreen() {
           <CounterCard label="Replacements Successful" value={counters?.replaced_success ?? 0} color="#EF6C00" testid="metric-repl-success" />
           <CounterCard label="Replacements Re-failed" value={counters?.replaced_refailed ?? 0} color="#B71C1C" testid="metric-repl-refail" />
           <CounterCard label="Replacement Success %" value={`${rates?.replacement_success_rate ?? 0}%`} color="#00695C" testid="metric-repl-rate" wide />
+        </View>
+        <View style={s.grid}>
+          <CounterCard label="Treatment Ended" value={counters?.treatment_ended ?? 0} color="#C62828" testid="metric-treatment-ended" wide />
+        </View>
+
+        {/* iter-348: Procedure-wise Implant Failure — table form */}
+        <View style={s.card}>
+          <Text style={s.sectionTitle}>Procedure-wise Implant Failure</Text>
+          <Text style={s.sectionSub}>Failure rate segmented by implant procedure type</Text>
+          {byProcType.length === 0 ? <EmptyRow /> : (
+            <View style={{ marginTop: 12 }} data-testid="procedure-failure-table" testID="procedure-failure-table">
+              <View style={s.tableHeaderRow}>
+                <Text style={[s.tableHeaderCell, { flex: 2.2 }]}>Procedure Type</Text>
+                <Text style={s.tableHeaderCell}>Total</Text>
+                <Text style={s.tableHeaderCell}>Failed</Text>
+                <Text style={[s.tableHeaderCell, { flex: 1.2 }]}>Failure %</Text>
+              </View>
+              {byProcType.map(row => (
+                <View
+                  key={row.procedure_type}
+                  style={s.tableRow}
+                  data-testid={`row-proctype-${row.procedure_type.replace(/\s+/g,'-')}`}
+                  testID={`row-proctype-${row.procedure_type.replace(/\s+/g,'-')}`}
+                >
+                  <Text style={[s.tableCell, { flex: 2.2, fontWeight: '700' }]} numberOfLines={2}>{row.procedure_type}</Text>
+                  <Text style={s.tableCell}>{row.placed}</Text>
+                  <Text style={[s.tableCell, { color: '#C62828', fontWeight: '700' }]}>{row.failed}</Text>
+                  <Text style={[
+                    s.tableCell, { flex: 1.2, fontWeight: '800' },
+                    { color: row.failure_rate === 0 ? '#2E7D32' : row.failure_rate < 10 ? '#EF6C00' : '#C62828' },
+                  ]}>
+                    {row.failure_rate}%
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
 
         {/* By System */}
@@ -328,4 +387,18 @@ const s = StyleSheet.create({
   blockedBody: { fontSize: 13, color: '#546E7A', textAlign: 'center', marginTop: 8 },
   blockedBtn: { marginTop: 16, backgroundColor: '#1565C0', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
   blockedBtnT: { color: '#FFF', fontWeight: '800' },
+  // iter-348: Procedure-wise Failure table
+  tableHeaderRow: {
+    flexDirection: 'row', paddingVertical: 8, borderBottomWidth: 1,
+    borderBottomColor: '#CFD8DC', backgroundColor: '#F5F7FA', paddingHorizontal: 6,
+  },
+  tableHeaderCell: {
+    flex: 1, fontSize: 11, fontWeight: '800', color: '#37474F',
+    textTransform: 'uppercase', letterSpacing: 0.4,
+  },
+  tableRow: {
+    flexDirection: 'row', paddingVertical: 10, borderBottomWidth: 1,
+    borderBottomColor: '#F0F2F5', paddingHorizontal: 6, alignItems: 'center',
+  },
+  tableCell: { flex: 1, fontSize: 12, color: '#37474F' },
 });

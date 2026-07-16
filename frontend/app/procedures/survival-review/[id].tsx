@@ -23,11 +23,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput,
-  ActivityIndicator, Alert, Modal, Pressable,
+  ActivityIndicator, Alert, Modal, Pressable, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import PlacementDatePicker from '../../../components/PlacementDatePicker';
+import { showUploadPicker } from '../../../utils/uploadPicker';
+import RadiographThumb from '../../../components/RadiographThumb';
 import api from '../../../utils/api';
 import FDIChart from '../../../components/FDIChart';
 import {
@@ -60,6 +63,11 @@ type FailureEntry = {
   site_changed: boolean;
   new_tooth_number: string | null;
   replaced: boolean;
+  // iter-348: End Implant Treatment (abandons implant therapy on this site
+  // AND terminates the case per user pick Q1-b).
+  end_treatment: boolean;
+  end_treatment_decision_maker: '' | 'Patient' | 'Operator';
+  end_treatment_reason: string;
   replacement: {
     system: string;
     system_is_other: boolean;
@@ -70,6 +78,10 @@ type FailureEntry = {
     insertion_torque_ncm: string;
     isq: string;
     placement_date: string;
+    // iter-353: mandatory IOPA radiograph for the new (R{n}) implant.
+    // Replaces R0's IOPA in Phase 2/3 readbacks on submit.
+    iopa_url: string;
+    iopa_uploading: boolean;
     // iter-344: Type of Procedure
     procedure_type: ProcType | '';
     prosthetic_component: string;                    // Cover Screw | Healing Abutment
@@ -140,6 +152,14 @@ export default function SurvivalReview() {
   const [catalog, setCatalog] = useState<CatalogSystem[]>([]);
   const [allSurvived, setAllSurvived] = useState<'yes' | 'no' | null>(null);
   const [failures, setFailures] = useState<Record<number, FailureEntry>>({});
+  // iter-350: Global End Implant Treatment modal state (Q1-b: entire case).
+  const [endModal, setEndModal] = useState<{
+    open: boolean;
+    reason: string;
+    decision_maker: '' | 'Patient' | 'Operator';
+    end_reason: string;
+    submitting: boolean;
+  }>({ open: false, reason: 'Peri-implantitis', decision_maker: '', end_reason: '', submitting: false });
 
   const [survivalReviewState, setSurvivalReviewState] = useState<any | null>(null);
 
@@ -194,11 +214,16 @@ export default function SurvivalReview() {
           site_changed: false,
           new_tooth_number: null,
           replaced: false,
+          end_treatment: false,
+          end_treatment_decision_maker: '',
+          end_treatment_reason: '',
           replacement: {
             system: '', system_is_other: false, system_other_text: '',
             diameter: '', length: '',
             lot_number: '', insertion_torque_ncm: '', isq: '',
             placement_date: '',
+            iopa_url: '',
+            iopa_uploading: false,
             procedure_type: '',
             prosthetic_component: '',
             healing_abutment_mm: '',
@@ -258,6 +283,10 @@ export default function SurvivalReview() {
         if (r.system_is_other && !r.system_other_text.trim()) return false;
         // Diameter / length required
         if (!r.diameter || !r.length) return false;
+        // iter-348: placement date is compulsory for replacements.
+        if (!r.placement_date) return false;
+        // iter-353: R{n} IOPA radiograph is compulsory (per user Q1-a).
+        if (!r.iopa_url) return false;
         // Procedure type required + branch validation
         if (!r.procedure_type) return false;
         if (r.procedure_type === 'Two Stage') {
@@ -272,6 +301,36 @@ export default function SurvivalReview() {
     }
     return true;
   };
+
+
+  // iter-353: Upload the R{n} IOPA radiograph via /uploads/media-temp — same
+  // pattern as Phase 2 / ExistingImplantSection. Persists the returned
+  // filename onto the replacement so the payload carries `iopa_url`.
+  const handleReplIopaUpload = async (idx: number) => {
+    try {
+      const picked = await showUploadPicker(['application/pdf', 'image/png', 'image/jpeg', 'image/heic', 'image/heif']);
+      if (!picked) return;
+      setReplField(idx, { iopa_uploading: true });
+      const fd = new FormData();
+      if (Platform.OS === 'web') {
+        const resp = await fetch(picked.uri);
+        const blob = await resp.blob();
+        // @ts-ignore RN-web FormData accepts File.
+        fd.append('file', new File([blob], picked.name || 'iopa', { type: picked.type || 'image/jpeg' }));
+      } else {
+        // @ts-ignore native FormData blob shape.
+        fd.append('file', { uri: picked.uri, name: picked.name || 'iopa.jpg', type: picked.type || 'image/jpeg' });
+      }
+      const up = await api.post('/uploads/media-temp', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      const filename = up.data?.filename;
+      if (!filename) throw new Error('Upload returned no filename');
+      setReplField(idx, { iopa_url: filename, iopa_uploading: false });
+    } catch (e: any) {
+      Alert.alert('Upload failed', e?.response?.data?.detail || e?.message || 'Could not upload the IOPA.');
+      setReplField(idx, { iopa_uploading: false });
+    }
+  };
+
 
   const handleSubmit = async (afterSave: 'phase3' | 'back') => {
     if (allSurvived && !canSubmit()) { Alert.alert('Incomplete', 'Please fill all required fields (reason, site change target, and replacement details).'); return; }
@@ -301,6 +360,7 @@ export default function SurvivalReview() {
               insertion_torque_ncm: r.insertion_torque_ncm ? Number(r.insertion_torque_ncm) : null,
               isq: r.isq ? Number(r.isq) : null,
               placement_date: r.placement_date || null,
+              iopa_url: r.iopa_url || null,
               procedure_type: r.procedure_type,
               prosthetic_component: r.procedure_type === 'Two Stage' ? r.prosthetic_component : null,
               healing_abutment_mm: (r.procedure_type === 'Two Stage' && r.prosthetic_component === 'Healing Abutment' && r.healing_abutment_mm)
@@ -330,6 +390,51 @@ export default function SurvivalReview() {
     } finally { setSaving(false); }
   };
 
+  // iter-350: Global "End Implant Treatment" — Q1-b terminates the entire case.
+  // Called from the bottom red button + modal. Synthesizes end_treatment=true
+  // failures for every implant on the case so the backend flips
+  // procedure.status → treatment_ended in one shot.
+  const handleEndTreatment = async () => {
+    if (endModal.submitting) return;
+    if (!endModal.reason) return Alert.alert('Missing field', 'Please pick a failure reason.');
+    if (endModal.decision_maker !== 'Patient' && endModal.decision_maker !== 'Operator') {
+      return Alert.alert('Missing field', 'Please pick who decided to end treatment.');
+    }
+    if (!endModal.end_reason.trim()) return Alert.alert('Missing field', 'Please describe the rationale for ending treatment.');
+    setEndModal(m => ({ ...m, submitting: true }));
+    try {
+      const now = new Date().toISOString();
+      const impls = implants.length > 0 ? implants : [{ tooth_number: null, tooth: null }];
+      const body: any = {
+        all_survived: false,
+        failures: impls.map((imp: any, i: number) => ({
+          implant_idx: i,
+          tooth: imp.tooth_number || imp.tooth || null,
+          reason: endModal.reason,
+          removed: true,
+          site_changed: false,
+          new_tooth_number: null,
+          replaced: false,
+          end_treatment: true,
+          end_treatment_decision_maker: endModal.decision_maker,
+          end_treatment_reason: endModal.end_reason.trim(),
+          failure_date: now,
+          replacement: null,
+        })),
+      };
+      await api.post(`/procedures/${id}/survival-review`, body);
+      setEndModal({ open: false, reason: 'Peri-implantitis', decision_maker: '', end_reason: '', submitting: false });
+      // iter-352: The case may be `treatment_ended` (if In-Charge or
+      // Supervisor with same-person-both) OR pending approval. Either way
+      // we route back to the case detail — it renders the correct banner
+      // based on procedure.status.
+      router.replace(`/procedures/${id}`);
+    } catch (e: any) {
+      Alert.alert('End treatment failed', e?.response?.data?.detail || 'Please try again');
+      setEndModal(m => ({ ...m, submitting: false }));
+    }
+  };
+
   if (loading) return <SafeAreaView style={s.c}><ActivityIndicator size="large" color="#1565C0" style={{marginTop:60}}/></SafeAreaView>;
 
   const label = implants.length === 1 ? 'Implant Survived' : 'All Implants Survived';
@@ -345,7 +450,15 @@ export default function SurvivalReview() {
           <Text style={s.sub}>Between Phase 2 and Phase 3</Text>
         </View>
       </View>
-      <ScrollView contentContainerStyle={{padding:16,paddingBottom:40}}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
+      >
+      <ScrollView
+        contentContainerStyle={{padding:16,paddingBottom:120}}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* iter-346: Prior review history (audit trail) — read-only. */}
         {survivalReviewState?.events && survivalReviewState.events.length > 0 ? (
           <View style={s.histCard} data-testid="survival-history" testID="survival-history">
@@ -457,9 +570,14 @@ export default function SurvivalReview() {
                     </View>
                   )}
 
-                  {/* Replaced Yes/No */}
+                  {/* iter-350: End Implant Treatment moved to a global button
+                      at the bottom (below Update / Continue). The per-implant
+                      inline entry point was removed to match the user's
+                      preferred single-action layout. */}
+
+                  {/* Was the Implant Replaced? */}
                   <View style={{flexDirection:'row',alignItems:'center',gap:12}}>
-                    <Text style={s.lbl}>Was it replaced?</Text>
+                    <Text style={s.lbl}>Was the Implant Replaced?</Text>
                     <TouchableOpacity style={[s.pillTiny, f.replaced && s.pillOn]} onPress={() => setField(i, 'replaced', true)} data-testid={`imp-${i}-replaced-yes`} testID={`imp-${i}-replaced-yes`}><Text style={[s.pillTT, f.replaced && s.pillTOn]}>Yes</Text></TouchableOpacity>
                     <TouchableOpacity style={[s.pillTiny, !f.replaced && s.pillOn]} onPress={() => setField(i, 'replaced', false)} data-testid={`imp-${i}-replaced-no`} testID={`imp-${i}-replaced-no`}><Text style={[s.pillTT, !f.replaced && s.pillTOn]}>No</Text></TouchableOpacity>
                   </View>
@@ -517,11 +635,41 @@ export default function SurvivalReview() {
                         )}
                       </View>
 
+                      {/* iter-353: IOPA radiograph upload for the new R{n}
+                          implant. Same UX as Phase 2. On submit this URL
+                          replaces R0's IOPA everywhere (Phase 2 readback,
+                          Phase 3 pre-fill, PDFs). REQUIRED. */}
+                      <Text style={[s.lbl, { marginTop: 4, color: '#C62828' }]}>IOPA Radiograph *</Text>
+                      <TouchableOpacity
+                        style={[s.iopaBtn, !f.replacement.iopa_url && s.iopaBtnInvalid]}
+                        onPress={() => handleReplIopaUpload(i)}
+                        disabled={f.replacement.iopa_uploading}
+                        activeOpacity={0.7}
+                        data-testid={`imp-${i}-repl-iopa-btn`}
+                        testID={`imp-${i}-repl-iopa-btn`}
+                      >
+                        {f.replacement.iopa_uploading ? (
+                          <ActivityIndicator size="small" color="#1565C0" />
+                        ) : (
+                          <>
+                            <Ionicons name="cloud-upload-outline" size={18} color="#1565C0" />
+                            <Text style={s.iopaBtnT}>{f.replacement.iopa_url ? 'Re-upload IOPA' : 'Upload IOPA Radiograph'}</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                      {f.replacement.iopa_url ? (
+                        <View style={{ marginTop: 6 }}>
+                          <RadiographThumb filename={f.replacement.iopa_url} testID={`imp-${i}-repl-iopa-thumb`} label="R-Revision IOPA" />
+                        </View>
+                      ) : null}
+
                       {/* iter-345: Torque relocated right after Diameter/Length,
                           matching the Phase 2 default input style. */}
+                      {/* iter-354: Phase 2-style label above each input. */}
+                      <Text style={s.lbl}>Torque Value (Ncm)</Text>
                       <TextInput
                         style={s.input}
-                        placeholder="Torque (Ncm)"
+                        placeholder="e.g. 35"
                         keyboardType="decimal-pad"
                         value={f.replacement.insertion_torque_ncm}
                         onChangeText={v => setReplField(i, { insertion_torque_ncm: v })}
@@ -529,9 +677,23 @@ export default function SurvivalReview() {
                         testID={`imp-${i}-repl-torque`}
                       />
 
-                      <TextInput style={s.input} placeholder="Lot # (optional)" value={f.replacement.lot_number} onChangeText={v => setReplField(i, { lot_number: v })} data-testid={`imp-${i}-repl-lot`} testID={`imp-${i}-repl-lot`} />
-                      <TextInput style={s.input} placeholder="ISQ (optional)" keyboardType="decimal-pad" value={f.replacement.isq} onChangeText={v => setReplField(i, { isq: v })} data-testid={`imp-${i}-repl-isq`} testID={`imp-${i}-repl-isq`} />
-                      <TextInput style={s.input} placeholder="Placement date (YYYY-MM-DD)" value={f.replacement.placement_date} onChangeText={v => setReplField(i, { placement_date: v })} data-testid={`imp-${i}-repl-date`} testID={`imp-${i}-repl-date`} />
+                      <Text style={[s.lbl, { marginTop: 6 }]}>Lot Number <Text style={s.lblOpt}>(optional)</Text></Text>
+                      <TextInput style={s.input} placeholder="e.g. K12345" value={f.replacement.lot_number} onChangeText={v => setReplField(i, { lot_number: v })} data-testid={`imp-${i}-repl-lot`} testID={`imp-${i}-repl-lot`} />
+
+                      <Text style={[s.lbl, { marginTop: 6 }]}>ISQ Value <Text style={s.lblOpt}>(optional)</Text></Text>
+                      <TextInput style={s.input} placeholder="e.g. 72" keyboardType="decimal-pad" value={f.replacement.isq} onChangeText={v => setReplField(i, { isq: v })} data-testid={`imp-${i}-repl-isq`} testID={`imp-${i}-repl-isq`} />
+                      {/* iter-348 → iter-350: Placement date is compulsory and
+                          uses the same react-native-calendars picker as
+                          Phase 1 Schedule > Procedure date. */}
+                      <Text style={[s.lbl, { marginTop: 4, color: '#C62828' }]}>Placement date *</Text>
+                      <PlacementDatePicker
+                        value={f.replacement.placement_date || ''}
+                        onChange={(iso: string) => setReplField(i, { placement_date: iso })}
+                        maxDate={new Date().toISOString().slice(0, 10)}
+                        placeholder="Tap to select placement date"
+                        invalid={!f.replacement.placement_date}
+                        testID={`imp-${i}-repl-date`}
+                      />
 
                       {/* Type of Procedure */}
                       <View style={{ marginTop: 6 }}>
@@ -627,7 +789,94 @@ export default function SurvivalReview() {
             </TouchableOpacity>
           </View>
         )}
+
+        {/* iter-350: Global "End Implant Treatment" — repositioned per user
+            request. Solid red pill, white text, centered on its own row
+            BELOW the Update / Continue action buttons. */}
+        <View style={s.endTreatmentGlobalWrap}>
+          <TouchableOpacity
+            style={s.endTreatmentGlobalBtn}
+            onPress={() => setEndModal(m => ({ ...m, open: true }))}
+            activeOpacity={0.85}
+            data-testid="survival-end-treatment-btn"
+            testID="survival-end-treatment-btn"
+          >
+            <Ionicons name="close-circle" size={18} color="#FFF" />
+            <Text style={s.endTreatmentGlobalT}>End Implant Treatment</Text>
+          </TouchableOpacity>
+          <Text style={s.endTreatmentGlobalHelp}>
+            Terminates the entire case. No further replacements or phases can be recorded.
+          </Text>
+        </View>
       </ScrollView>
+      </KeyboardAvoidingView>
+
+      {/* iter-350: End Implant Treatment modal (global). Collects the
+          failure reason, decision maker, and free-text ending rationale
+          in one dialog. */}
+      <Modal transparent visible={endModal.open} animationType="fade" onRequestClose={() => setEndModal(m => ({ ...m, open: false }))}>
+        <Pressable style={s.endModalBackdrop} onPress={() => setEndModal(m => ({ ...m, open: false }))}>
+          <Pressable style={s.endModalSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={s.endModalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                <Ionicons name="warning" size={20} color="#C62828" />
+                <Text style={s.endModalTitle}>End Implant Treatment</Text>
+              </View>
+              <TouchableOpacity onPress={() => setEndModal(m => ({ ...m, open: false }))} testID="end-treatment-close">
+                <Ionicons name="close" size={22} color="#37474F" />
+              </TouchableOpacity>
+            </View>
+            <Text style={s.endModalWarn}>
+              This terminates the entire case. No further replacements or phases can be recorded for this patient.
+            </Text>
+
+            <Text style={[s.lbl, { marginTop: 12 }]}>Failure reason *</Text>
+            <Dropdown
+              value={endModal.reason}
+              options={REASONS.filter(r => r !== 'Other')}
+              placeholder="Pick a reason"
+              onChange={(v) => setEndModal(m => ({ ...m, reason: v }))}
+              testID="end-treatment-reason"
+            />
+
+            <Text style={[s.lbl, { marginTop: 12 }]}>Whose decision? *</Text>
+            <Dropdown
+              value={endModal.decision_maker || ''}
+              options={['Patient', 'Operator']}
+              placeholder="Select decision maker"
+              onChange={(v) => setEndModal(m => ({ ...m, decision_maker: v as 'Patient' | 'Operator' }))}
+              testID="end-treatment-decision"
+            />
+
+            <Text style={[s.lbl, { marginTop: 12 }]}>Reason for ending treatment *</Text>
+            <TextInput
+              style={[s.input, { minHeight: 80, textAlignVertical: 'top' }]}
+              multiline
+              numberOfLines={4}
+              placeholder="Describe the clinical / patient-preference rationale"
+              value={endModal.end_reason}
+              onChangeText={(v) => setEndModal(m => ({ ...m, end_reason: v }))}
+              data-testid="end-treatment-reason-text"
+              testID="end-treatment-reason-text"
+            />
+
+            <TouchableOpacity
+              style={[s.endTreatmentGlobalBtn, { marginTop: 16 }, endModal.submitting && { opacity: 0.6 }]}
+              onPress={handleEndTreatment}
+              disabled={endModal.submitting}
+              testID="end-treatment-confirm"
+              data-testid="end-treatment-confirm"
+            >
+              {endModal.submitting ? <ActivityIndicator color="#FFF" /> : (
+                <>
+                  <Ionicons name="close-circle" size={18} color="#FFF" />
+                  <Text style={s.endTreatmentGlobalT}>Confirm &amp; End Treatment</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -674,4 +923,43 @@ const s = StyleSheet.create({
   mItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: '#F0F2F5' },
   mItemOn: { backgroundColor: '#E3F2FD', borderRadius: 8 },
   mItemT: { fontSize: 13, color: '#1e2a44' },
+  // iter-353: IOPA upload button
+  iopaBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    borderWidth: 1.5, borderColor: '#90CAF9', borderRadius: 10,
+    paddingVertical: 12, backgroundColor: '#E3F2FD',
+  },
+  iopaBtnInvalid: { borderColor: '#EF9A9A', backgroundColor: '#FFF5F5' },
+  iopaBtnT: { fontSize: 13, fontWeight: '800', color: '#0D47A1', letterSpacing: 0.3 },
+  // iter-354: Phase 2-style optional-marker inside a label.
+  lblOpt: { fontSize: 11, color: '#78909C', fontStyle: 'italic', fontWeight: '500' },
+  // iter-350: Global End Implant Treatment button (centered, red, below actions)
+  endTreatmentGlobalWrap: { marginTop: 16, marginBottom: 24, alignItems: 'center', gap: 6 },
+  endTreatmentGlobalBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: '#C62828', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 24,
+    minWidth: 260, maxWidth: 360,
+    shadowColor: '#C62828', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 6, elevation: 4,
+  },
+  endTreatmentGlobalT: { color: '#FFF', fontSize: 14, fontWeight: '800', letterSpacing: 0.4 },
+  endTreatmentGlobalHelp: { fontSize: 11, color: '#8E1B1B', fontStyle: 'italic', textAlign: 'center', paddingHorizontal: 24 },
+  endModalBackdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center', justifyContent: 'center', padding: 16,
+  },
+  endModalSheet: {
+    width: '100%', maxWidth: 460, backgroundColor: '#FFF',
+    borderRadius: 16, padding: 18, gap: 4,
+    shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 24, elevation: 14,
+    borderTopWidth: 4, borderTopColor: '#C62828',
+  },
+  endModalHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  endModalTitle: { fontSize: 16, fontWeight: '800', color: '#B71C1C', letterSpacing: 0.3 },
+  endModalWarn: {
+    fontSize: 12, color: '#B71C1C', backgroundColor: '#FFEBEE',
+    padding: 10, borderRadius: 8, lineHeight: 17, fontStyle: 'italic',
+  },
 });

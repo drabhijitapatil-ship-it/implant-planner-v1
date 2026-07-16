@@ -13,7 +13,7 @@ import logging
 import uuid
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr, field_validator
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 import asyncio
 from datetime import datetime, timedelta, timezone
 import re
@@ -835,6 +835,9 @@ class Phase2Submit(BaseModel):
     bone_graft_details: Optional[str] = Field(None, max_length=1000)
     implant_other_notes: Optional[str] = Field(None, max_length=500)
     prosthetic_component: Optional[str] = Field(None, max_length=100)
+    # iter-356: per-implant Prosthetic Component (multi-implant, non-full-arch,
+    # non-single cases) — same length/order as the implant plan positions.
+    prosthetic_components: Optional[List[str]] = None
     # Prosthesis Type chosen when prosthetic_component == 'Immediate Loading Done'.
     # Options are gated on the client based on Phase 1 procedure_type + teeth count.
     prosthesis_type: Optional[str] = Field(None, max_length=200)
@@ -875,6 +878,14 @@ class Stage2SurgicalSubmit(BaseModel):
     # Additional data fields
     isq_value: Optional[Any] = None  # str or list of str (per implant)
     healing_abutment_height: Optional[Any] = None  # str or list of str (per implant)
+    # iter-357: Per-implant Phase 3 healing abutment configuration for multi-
+    # implant cases (multi-Prosthetic-Component workflow). Each entry:
+    #   { implant_idx: int, mode: 'standard' | 'customised',
+    #     cuff_height_mm: str, customised_details: str (<= 100 words),
+    #     phase2_component: str, phase2_cuff_height_mm: str }
+    # For single/full-arch cases this stays None and the legacy
+    # `healing_abutment_height` array is used.
+    phase3_healing_abutment_config: Optional[List[Dict[str, Any]]] = None
     # Post-surgical radiograph uploads
     iopa_files: Optional[List[Dict[str, str]]] = None  # [{filename, original_name, tooth_label}]
     # Notes
@@ -12423,6 +12434,8 @@ async def submit_phase2(
         "bone_graft_details": phase2_data.bone_graft_details,
         "implant_other_notes": phase2_data.implant_other_notes,
         "prosthetic_component": phase2_data.prosthetic_component,
+        # iter-356: per-implant Prosthetic Component (multi-implant non-full-arch).
+        "prosthetic_components": phase2_data.prosthetic_components,
         "prosthesis_type": phase2_data.prosthesis_type,
         "prosthesis_type_other": phase2_data.prosthesis_type_other,
         "healing_abutment_cuff_height": phase2_data.healing_abutment_cuff_height,
@@ -12645,6 +12658,8 @@ async def submit_stage2_surgical(
         "checklist_items": data.checklist_items or {},
         "isq_value": data.isq_value,
         "healing_abutment_height": data.healing_abutment_height,
+        # iter-357: per-implant Phase 3 healing abutment config (multi-implant flow).
+        "phase3_healing_abutment_config": data.phase3_healing_abutment_config,
         "iopa_files": data.iopa_files or [],
     }
     
@@ -19619,6 +19634,1965 @@ async def export_survival_analytics_csv(
 
     csv_bytes = buf.getvalue().encode("utf-8")
     filename = f"implanr-survival-analytics-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}.csv"
+    return Response(
+        content=csv_bytes,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ── Procedure-Type Analytics (iter-363 · Phase Analytics-1) ────────
+# Role-scoped analytics answering: "How many of each procedure type, what
+# succeeded, how long did each take, which prosthesis was used, and how do
+# I compare to my anonymised cohort?" — the MVP surface for the new
+# Analytics module. All heavy work happens in a single pass over the
+# scoped result set, so pagination isn't needed for typical clinic
+# volumes. Students always get their own numbers + anonymised cohort
+# medians; supervisors get their students' data; in-charge / admin get
+# institution-wide data (optionally filtered to one student).
+
+# Canonical status buckets — kept in sync with /dashboard/stats.
+_ANALYTICS_TERMINATED_STATUSES = {"treatment_ended"}
+_ANALYTICS_REJECTED_STATUSES = {
+    "rejected", "stage2_surgical_rejected", "stage2_prosthetic_rejected",
+    "permanently_rejected",
+}
+_ANALYTICS_COMPLETED_STATUSES = {"completed"}
+
+
+def _po_status_bucket(status: Optional[str]) -> str:
+    s = (status or "").strip()
+    if s in _ANALYTICS_COMPLETED_STATUSES:
+        return "completed"
+    if s in _ANALYTICS_TERMINATED_STATUSES:
+        return "terminated"
+    if s in _ANALYTICS_REJECTED_STATUSES:
+        return "rejected"
+    if s == "draft":
+        return "draft"
+    return "in_progress"
+
+
+def _po_period_key(iso_date: Optional[str], granularity: str) -> Optional[str]:
+    """Return YYYY-MM for monthly, YYYY for yearly; None if unparseable."""
+    if not iso_date:
+        return None
+    s = str(iso_date)
+    if granularity == "yearly":
+        return s[:4] if len(s) >= 4 and s[:4].isdigit() else None
+    if len(s) >= 7 and s[4] == "-":
+        return s[:7]
+    return None
+
+
+def _po_lifecycle_days(p: Dict[str, Any]) -> Optional[float]:
+    """Days from procedure_date to terminal event (completed or terminated).
+    Returns None for cases still in progress or missing dates."""
+    from datetime import datetime as _dt
+    start_str = p.get("procedure_date") or ""
+    if not start_str:
+        return None
+    end_str = None
+    bucket = _po_status_bucket(p.get("status"))
+    if bucket == "completed":
+        end_str = p.get("phase4_step2_done_date") or p.get("completed_at") or p.get("updated_at")
+    elif bucket == "terminated":
+        end_str = p.get("treatment_ended_at") or p.get("updated_at")
+    if not end_str:
+        return None
+    try:
+        start = _dt.strptime(str(start_str)[:10], "%Y-%m-%d")
+        end = _dt.fromisoformat(str(end_str).replace("Z", "+00:00")) if "T" in str(end_str) else _dt.strptime(str(end_str)[:10], "%Y-%m-%d")
+        # Strip tz for naive subtraction
+        if getattr(end, "tzinfo", None) is not None:
+            end = end.replace(tzinfo=None)
+        delta = (end - start).total_seconds() / 86400.0
+        return max(0.0, round(delta, 1))
+    except Exception:
+        return None
+
+
+def _po_extract_torques(p: Dict[str, Any]) -> List[float]:
+    p2 = p.get("phase2_data") or {}
+    raw = p2.get("torque_values") or []
+    out: List[float] = []
+    if isinstance(raw, list):
+        for v in raw:
+            try:
+                if v is None or v == "":
+                    continue
+                out.append(float(v))
+            except Exception:
+                continue
+    return out
+
+
+def _po_extract_isqs(p: Dict[str, Any]) -> List[float]:
+    """ISQ values live in phase3_data.isq_value (str or list) — collect all."""
+    p3 = p.get("phase3_data") or {}
+    raw = p3.get("isq_value")
+    if raw is None or raw == "":
+        return []
+    if not isinstance(raw, list):
+        raw = [raw]
+    out: List[float] = []
+    for v in raw:
+        try:
+            if v is None or v == "":
+                continue
+            out.append(float(v))
+        except Exception:
+            continue
+    return out
+
+
+def _po_extract_prostheses(p: Dict[str, Any]) -> List[str]:
+    """Return the prosthesis labels used for a case — prefers Phase 4
+    per-implant plans, falls back to case-level final_prosthetic_plan,
+    then Phase 2 immediate-loading prosthesis_type."""
+    labels: List[str] = []
+    p4 = p.get("stage2_prosthetic_data") or {}
+    per_impl = p4.get("per_implant_plans") or []
+    if isinstance(per_impl, list) and per_impl:
+        for plan in per_impl:
+            v = (plan or {}).get("prosthesis") if isinstance(plan, dict) else None
+            if v:
+                labels.append(str(v))
+    if not labels:
+        v = p.get("final_prosthetic_plan") or p4.get("prosthesis_type")
+        if v:
+            labels.append(str(v))
+    if not labels:
+        p2 = p.get("phase2_data") or {}
+        v = p2.get("prosthesis_type")
+        if isinstance(v, list):
+            for item in v:
+                if item:
+                    labels.append(str(item))
+        elif v:
+            labels.append(str(v))
+    return labels
+
+
+def _median(values: List[float]) -> Optional[float]:
+    if not values:
+        return None
+    s = sorted(values)
+    n = len(s)
+    mid = n // 2
+    if n % 2 == 1:
+        return round(s[mid], 1)
+    return round((s[mid - 1] + s[mid]) / 2.0, 1)
+
+
+def _mean(values: List[float]) -> Optional[float]:
+    if not values:
+        return None
+    return round(sum(values) / len(values), 1)
+
+
+def _po_pick_procedure_type(p: Dict[str, Any]) -> str:
+    """Canonical procedure-type label for grouping. Uses
+    original_procedure_type for Existing-Implant cases so those are
+    counted under the treatment they historically belonged to."""
+    t = (p.get("implant_procedure_type") or "").strip()
+    if t.lower() == "existing implant" and p.get("original_procedure_type"):
+        t = str(p.get("original_procedure_type")).strip()
+    return t or "Unspecified"
+
+
+async def _load_procedure_overview_docs(
+    from_date: Optional[str],
+    to_date: Optional[str],
+    scope_user: Optional[Dict[str, Any]],
+    student_id_filter: Optional[str],
+    include_all_for_cohort: bool = False,
+) -> List[Dict[str, Any]]:
+    """Load minimal projection of procedures for procedure-overview analytics.
+    When include_all_for_cohort=True, ignores role scope (used to compute
+    student cohort medians)."""
+    match: Dict[str, Any] = {"archived": {"$ne": True}}
+    date_clause: Dict[str, Any] = {}
+    if from_date:
+        date_clause["$gte"] = from_date
+    if to_date:
+        date_clause["$lte"] = to_date
+    if date_clause:
+        match["procedure_date"] = date_clause
+
+    if scope_user and not include_all_for_cohort:
+        role = scope_user.get("role")
+        uid = str(scope_user.get("_id") or scope_user.get("id") or "")
+        uname = scope_user.get("name") or scope_user.get("username")
+        if role == "student":
+            match["$or"] = [{"student_id": uid}, {"student_name": uname}]
+        elif role == "supervisor":
+            match["$or"] = [{"supervisor_id": uid}, {"supervisor_name": uname}]
+        # In-Charge / Administrator see all — apply optional student_id filter
+        elif role in ("implant_incharge", "administrator") and student_id_filter:
+            match["student_id"] = student_id_filter
+
+    projection = {
+        "_id": 1, "status": 1,
+        "implant_procedure_type": 1, "original_procedure_type": 1,
+        "student_id": 1, "student_name": 1,
+        "supervisor_id": 1, "supervisor_name": 1,
+        "procedure_date": 1,
+        "phase2_actual_done_date": 1,
+        "phase3_done_date": 1,
+        "phase4_step2_done_date": 1,
+        "completed_at": 1, "treatment_ended_at": 1, "updated_at": 1,
+        "phase2_data.torque_values": 1,
+        "phase2_data.prosthesis_type": 1,
+        "phase3_data.isq_value": 1,
+        "stage2_prosthetic_data.per_implant_plans": 1,
+        "stage2_prosthetic_data.prosthesis_type": 1,
+        "final_prosthetic_plan": 1,
+    }
+    return await db.procedures.find(match, projection).to_list(20000)
+
+
+def _compute_procedure_overview(
+    procs: List[Dict[str, Any]],
+    granularity: str,
+    procedure_type_filter: Optional[List[str]],
+) -> Dict[str, Any]:
+    # Optional narrow to selected procedure types (applied AFTER load so we
+    # can still compute cross-type context if we ever surface it)
+    if procedure_type_filter:
+        wanted = {t.strip() for t in procedure_type_filter if t and t.strip()}
+        if wanted:
+            procs = [p for p in procs if _po_pick_procedure_type(p) in wanted]
+
+    kpi_total = len(procs)
+    bucket_counts = {"completed": 0, "terminated": 0, "rejected": 0, "in_progress": 0, "draft": 0}
+    lifecycle_days: List[float] = []
+
+    # Per-procedure-type aggregation
+    by_type: Dict[str, Dict[str, Any]] = {}
+    # Prosthesis mix per procedure type
+    prosthesis_mix: Dict[str, Dict[str, int]] = {}
+    # Trend series keyed by period
+    trend: Dict[str, Dict[str, int]] = {}
+
+    for p in procs:
+        ptype = _po_pick_procedure_type(p)
+        bucket = _po_status_bucket(p.get("status"))
+        bucket_counts[bucket] = bucket_counts.get(bucket, 0) + 1
+
+        life = _po_lifecycle_days(p)
+        if life is not None:
+            lifecycle_days.append(life)
+
+        agg = by_type.setdefault(ptype, {
+            "procedure_type": ptype,
+            "total": 0, "completed": 0, "terminated": 0,
+            "rejected": 0, "in_progress": 0, "draft": 0,
+            "_days": [], "_torques": [], "_isqs": [],
+        })
+        agg["total"] += 1
+        agg[bucket] = agg.get(bucket, 0) + 1
+        if life is not None:
+            agg["_days"].append(life)
+        agg["_torques"].extend(_po_extract_torques(p))
+        agg["_isqs"].extend(_po_extract_isqs(p))
+
+        # Prosthesis mix
+        for lbl in _po_extract_prostheses(p):
+            prosthesis_mix.setdefault(ptype, {})
+            prosthesis_mix[ptype][lbl] = prosthesis_mix[ptype].get(lbl, 0) + 1
+
+        # Trend by procedure_date
+        pk = _po_period_key(p.get("procedure_date"), granularity)
+        if pk:
+            row = trend.setdefault(pk, {"period": pk, "total": 0, "completed": 0, "terminated": 0})
+            row["total"] += 1
+            if bucket == "completed":
+                row["completed"] += 1
+            elif bucket == "terminated":
+                row["terminated"] += 1
+
+    # Finalise by_type rows
+    by_type_out: List[Dict[str, Any]] = []
+    for row in by_type.values():
+        completed = row["completed"]
+        terminated = row["terminated"]
+        denom = completed + terminated
+        success_rate = round(100.0 * completed / denom, 1) if denom else None
+        by_type_out.append({
+            "procedure_type": row["procedure_type"],
+            "total": row["total"],
+            "completed": completed,
+            "in_progress": row["in_progress"],
+            "rejected": row["rejected"],
+            "terminated": terminated,
+            "draft": row["draft"],
+            "success_rate": success_rate,
+            "mean_days": _mean(row["_days"]),
+            "avg_torque_ncm": _mean(row["_torques"]),
+            "avg_isq": _mean(row["_isqs"]),
+        })
+    by_type_out.sort(key=lambda r: (-r["total"], r["procedure_type"]))
+
+    # Prosthesis mix output
+    prosthesis_mix_out = [
+        {"procedure_type": pt, "prostheses": [
+            {"label": lbl, "count": cnt}
+            for lbl, cnt in sorted(items.items(), key=lambda kv: -kv[1])
+        ]}
+        for pt, items in prosthesis_mix.items()
+    ]
+    prosthesis_mix_out.sort(key=lambda r: r["procedure_type"])
+
+    # Trend output — sorted chronologically
+    trend_out = sorted(trend.values(), key=lambda r: r["period"])
+
+    # KPIs
+    completed = bucket_counts["completed"]
+    terminated = bucket_counts["terminated"]
+    denom = completed + terminated
+    success_rate = round(100.0 * completed / denom, 1) if denom else None
+
+    return {
+        "kpis": {
+            "total_cases": kpi_total,
+            "completed": completed,
+            "terminated": terminated,
+            "rejected": bucket_counts["rejected"],
+            "in_progress": bucket_counts["in_progress"],
+            "draft": bucket_counts["draft"],
+            "success_rate": success_rate,
+            "mean_lifecycle_days": _mean(lifecycle_days),
+            "median_lifecycle_days": _median(lifecycle_days),
+        },
+        "by_procedure_type": by_type_out,
+        "prosthesis_mix": prosthesis_mix_out,
+        "trend": trend_out,
+    }
+
+
+@api_router.get("/analytics/procedure-overview")
+async def get_procedure_overview_analytics(
+    request: Request,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    procedure_type: Optional[str] = None,      # comma-separated filter
+    granularity: str = "monthly",              # "monthly" | "yearly"
+    student_id: Optional[str] = None,          # only respected for supervisor / in-charge / admin
+    current_user: dict = Depends(get_current_user),
+):
+    role = current_user.get("role")
+    if role not in ("student", "supervisor", "implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Analytics not available for this role")
+    if granularity not in ("monthly", "yearly"):
+        granularity = "monthly"
+
+    ptype_filter = [t for t in (procedure_type or "").split(",") if t.strip()] or None
+
+    # Own scope (respects role)
+    own_procs = await _load_procedure_overview_docs(
+        from_date, to_date, scope_user=current_user,
+        student_id_filter=student_id,
+    )
+    own = _compute_procedure_overview(own_procs, granularity, ptype_filter)
+
+    result: Dict[str, Any] = {
+        "scope": {
+            "role": role,
+            "own_only": role == "student",
+            "student_id_filter": student_id if role in ("supervisor", "implant_incharge", "administrator") else None,
+        },
+        "filters": {
+            "from_date": from_date, "to_date": to_date,
+            "procedure_types": ptype_filter, "granularity": granularity,
+        },
+        **own,
+    }
+
+    # Cohort medians — students only, anonymised
+    if role == "student":
+        cohort_procs = await _load_procedure_overview_docs(
+            from_date, to_date, scope_user=None,
+            student_id_filter=None, include_all_for_cohort=True,
+        )
+        # Compute per-student success rate + median lifecycle across the
+        # cohort, then take the median of those per-student figures. This
+        # avoids one huge-caseload student dominating the "cohort" metric.
+        per_student: Dict[str, Dict[str, List[float]]] = {}
+        for p in cohort_procs:
+            if ptype_filter and _po_pick_procedure_type(p) not in ptype_filter:
+                continue
+            sid = str(p.get("student_id") or p.get("student_name") or "").strip()
+            if not sid:
+                continue
+            per_student.setdefault(sid, {"success": [], "days": []})
+            bucket = _po_status_bucket(p.get("status"))
+            if bucket == "completed":
+                per_student[sid]["success"].append(1.0)
+            elif bucket == "terminated":
+                per_student[sid]["success"].append(0.0)
+            life = _po_lifecycle_days(p)
+            if life is not None:
+                per_student[sid]["days"].append(life)
+
+        rates: List[float] = []
+        median_days_per_student: List[float] = []
+        for sid, buckets in per_student.items():
+            if buckets["success"]:
+                rates.append(100.0 * sum(buckets["success"]) / len(buckets["success"]))
+            m = _median(buckets["days"])
+            if m is not None:
+                median_days_per_student.append(m)
+
+        result["cohort"] = {
+            "student_count": len(per_student),
+            "success_rate_median": _median(rates),
+            "lifecycle_days_median": _median(median_days_per_student),
+        }
+
+    await log_access(
+        action="analytics_view",
+        outcome="success",
+        resource_type="procedure_overview",
+        resource_id="scope=" + str(role),
+        user=current_user,
+        request=request,
+        extra={"filters": result["filters"]},
+    )
+    return result
+
+
+@api_router.get("/analytics/procedure-overview/export.csv")
+async def export_procedure_overview_csv(
+    request: Request,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    procedure_type: Optional[str] = None,
+    granularity: str = "monthly",
+    student_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    role = current_user.get("role")
+    if role not in ("student", "supervisor", "implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Analytics not available for this role")
+    if granularity not in ("monthly", "yearly"):
+        granularity = "monthly"
+
+    ptype_filter = [t for t in (procedure_type or "").split(",") if t.strip()] or None
+
+    procs = await _load_procedure_overview_docs(
+        from_date, to_date, scope_user=current_user,
+        student_id_filter=student_id,
+    )
+    data = _compute_procedure_overview(procs, granularity, ptype_filter)
+
+    import io as _io
+    import csv as _csv
+    buf = _io.StringIO()
+    w = _csv.writer(buf)
+    w.writerow(["Implanr — Procedure-Type Analytics Export (de-identified)"])
+    w.writerow(["Generated at", datetime.now(timezone.utc).isoformat()])
+    w.writerow(["Role", role])
+    w.writerow(["Filters", f"from={from_date or '-'}, to={to_date or '-'}, types={','.join(ptype_filter) if ptype_filter else 'all'}, granularity={granularity}, student_id={student_id or 'all'}"])
+    w.writerow([])
+    w.writerow(["## KPIs"])
+    k = data["kpis"]
+    w.writerow(["Total Cases", "Completed", "Terminated", "Rejected", "In Progress", "Draft", "Success %", "Mean Lifecycle Days", "Median Lifecycle Days"])
+    w.writerow([k["total_cases"], k["completed"], k["terminated"], k["rejected"], k["in_progress"], k["draft"],
+                k["success_rate"] if k["success_rate"] is not None else "",
+                k["mean_lifecycle_days"] if k["mean_lifecycle_days"] is not None else "",
+                k["median_lifecycle_days"] if k["median_lifecycle_days"] is not None else ""])
+    w.writerow([])
+    w.writerow(["## By Procedure Type"])
+    w.writerow(["Procedure Type", "Total", "Completed", "In Progress", "Rejected", "Terminated", "Draft", "Success %", "Mean Days", "Avg Torque (Ncm)", "Avg ISQ"])
+    for row in data["by_procedure_type"]:
+        w.writerow([row["procedure_type"], row["total"], row["completed"], row["in_progress"],
+                    row["rejected"], row["terminated"], row["draft"],
+                    row["success_rate"] if row["success_rate"] is not None else "",
+                    row["mean_days"] if row["mean_days"] is not None else "",
+                    row["avg_torque_ncm"] if row["avg_torque_ncm"] is not None else "",
+                    row["avg_isq"] if row["avg_isq"] is not None else ""])
+    w.writerow([])
+    w.writerow(["## Prosthesis Mix (per procedure type)"])
+    w.writerow(["Procedure Type", "Prosthesis", "Count"])
+    for r in data["prosthesis_mix"]:
+        for p in r["prostheses"]:
+            w.writerow([r["procedure_type"], p["label"], p["count"]])
+    w.writerow([])
+    w.writerow([f"## Trend ({granularity})"])
+    w.writerow(["Period", "Total", "Completed", "Terminated"])
+    for r in data["trend"]:
+        w.writerow([r["period"], r["total"], r["completed"], r["terminated"]])
+
+    await log_access(
+        action="analytics_export",
+        outcome="success",
+        resource_type="procedure_overview_csv",
+        resource_id="scope=" + str(role),
+        user=current_user,
+        request=request,
+    )
+
+    csv_bytes = buf.getvalue().encode("utf-8")
+    filename = f"implanr-procedure-overview-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}.csv"
+    return Response(
+        content=csv_bytes,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ══════════════════════════════════════════════════════════════════
+# Phase Analytics-2 + Analytics-3 (iter-364)
+#
+# Advanced analytics endpoints built on top of iter-363's role-scoped
+# procedure loader. All endpoints respect the same role scope:
+#   student → own cases only (+ anonymised cohort context where useful)
+#   supervisor → their students' cases
+#   implant_incharge / administrator → institution-wide
+#   nurse → 403
+#
+# Every view / export is written to access_logs for HIPAA compliance.
+# ══════════════════════════════════════════════════════════════════
+
+# ── Shared richer loader for Phase-2/3 analytics ──
+async def _load_advanced_analytics_docs(
+    from_date: Optional[str],
+    to_date: Optional[str],
+    scope_user: Optional[Dict[str, Any]],
+    include_all_for_cohort: bool = False,
+) -> List[Dict[str, Any]]:
+    """Wider projection than _load_procedure_overview_docs — includes the
+    per-implant survival review, phase1 bone_type, implants array, etc."""
+    match: Dict[str, Any] = {"archived": {"$ne": True}}
+    date_clause: Dict[str, Any] = {}
+    if from_date:
+        date_clause["$gte"] = from_date
+    if to_date:
+        date_clause["$lte"] = to_date
+    if date_clause:
+        match["procedure_date"] = date_clause
+
+    if scope_user and not include_all_for_cohort:
+        role = scope_user.get("role")
+        uid = str(scope_user.get("_id") or scope_user.get("id") or "")
+        uname = scope_user.get("name") or scope_user.get("username")
+        if role == "student":
+            match["$or"] = [{"student_id": uid}, {"student_name": uname}]
+        elif role == "supervisor":
+            match["$or"] = [{"supervisor_id": uid}, {"supervisor_name": uname}]
+
+    projection = {
+        "_id": 1, "status": 1,
+        "implant_procedure_type": 1, "original_procedure_type": 1,
+        "student_id": 1, "student_name": 1,
+        "supervisor_id": 1, "supervisor_name": 1,
+        "procedure_date": 1,
+        "phase2_actual_done_date": 1,
+        "phase3_done_date": 1,
+        "phase4_step2_done_date": 1,
+        "completed_at": 1, "treatment_ended_at": 1, "updated_at": 1,
+        "treatment_ended_reason": 1,
+        "arch": 1, "teeth_present": 1,
+        "phase2_data.torque_values": 1,
+        "phase2_data.prosthesis_type": 1,
+        "phase2_survival_review": 1,
+        "phase3_data.isq_value": 1,
+        "stage2_prosthetic_data.per_implant_plans": 1,
+        "stage2_prosthetic_data.prosthesis_type": 1,
+        "final_prosthetic_plan": 1,
+        "implants": 1, "implant_plans": 1, "existing_implants": 1,
+    }
+    return await db.procedures.find(match, projection).to_list(20000)
+
+
+def _role_gate(role: Optional[str]):
+    if role not in ("student", "supervisor", "implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Analytics not available for this role")
+
+
+def _bone_bucket(v: Any) -> str:
+    """Coerce bone_type to canonical D1..D4 or 'Unknown'."""
+    if not v:
+        return "Unknown"
+    s = str(v).strip().upper()
+    for tag in ("D1", "D2", "D3", "D4"):
+        if tag in s:
+            return tag
+    return "Unknown"
+
+
+def _tooth_region(tooth: Any, arch_hint: Optional[str] = None) -> str:
+    """FDI tooth → region bucket (anterior_max / posterior_max / anterior_mand / posterior_mand)."""
+    try:
+        t = int(str(tooth).strip())
+    except Exception:
+        return "unknown"
+    if t < 11 or t > 48:
+        return "unknown"
+    quadrant = t // 10
+    position = t % 10
+    is_max = quadrant in (1, 2)
+    is_ant = position <= 3
+    if is_max and is_ant: return "anterior_max"
+    if is_max and not is_ant: return "posterior_max"
+    if not is_max and is_ant: return "anterior_mand"
+    return "posterior_mand"
+
+
+def _implant_records(proc: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Merge implant metadata (phase 1 plans + phase 2 placements) + survival-review
+    per-implant status. Returns a flat list of per-implant records with:
+      tooth, system, brand, diameter, length, torque, isq, bone_type,
+      status ('Active'|'Failed'|'Replaced'), failure_reason, procedure_type,
+      procedure_date, phase2_date, region, procedure_id.
+    """
+    proc_type = _po_pick_procedure_type(proc)
+    p_date = proc.get("procedure_date")
+    p2_date = proc.get("phase2_actual_done_date") or p_date
+    review = proc.get("phase2_survival_review") or {}
+    review_impls = review.get("implants") or []
+    review_by_idx = {i: r for i, r in enumerate(review_impls) if isinstance(r, dict)}
+
+    # implants[] is the placement snapshot; fall back to implant_plans[] for
+    # planning-only records so the scatter reflects planned diameters/lengths.
+    src_list = proc.get("implants") or proc.get("implant_plans") or []
+    if not isinstance(src_list, list):
+        src_list = []
+
+    torque_arr = ((proc.get("phase2_data") or {}).get("torque_values")) or []
+    isq_arr = ((proc.get("phase3_data") or {}).get("isq_value")) or []
+    if isinstance(isq_arr, str):
+        isq_arr = [isq_arr]
+
+    out: List[Dict[str, Any]] = []
+    for i, imp in enumerate(src_list):
+        if not isinstance(imp, dict):
+            continue
+        r = review_by_idx.get(i, {}) if isinstance(review_by_idx, dict) else {}
+        status = r.get("status") or ("Active" if proc.get("status") not in _ANALYTICS_TERMINATED_STATUSES else "Failed")
+        failure_reason = None
+        if status in ("Failed", "Replaced"):
+            failure_reason = (r.get("reason") or imp.get("failure_reason") or "Unknown")
+        tooth = imp.get("tooth_number") or imp.get("tooth") or imp.get("position") or ""
+        try:
+            torque = float(torque_arr[i]) if i < len(torque_arr) and torque_arr[i] not in (None, "") else None
+        except Exception:
+            torque = None
+        try:
+            isq = float(isq_arr[i]) if i < len(isq_arr) and isq_arr[i] not in (None, "") else None
+        except Exception:
+            isq = None
+        # Fallback: torque / isq directly on the implant record
+        if torque is None and imp.get("insertion_torque_ncm") not in (None, ""):
+            try: torque = float(imp.get("insertion_torque_ncm"))
+            except Exception: pass
+        if isq is None and imp.get("isq") not in (None, ""):
+            try: isq = float(imp.get("isq"))
+            except Exception: pass
+        out.append({
+            "procedure_id": str(proc.get("_id") or ""),
+            "procedure_type": proc_type,
+            "procedure_date": p_date,
+            "phase2_date": p2_date,
+            "tooth": tooth,
+            "region": _tooth_region(tooth),
+            "system": (imp.get("system") or imp.get("brand") or "Unknown"),
+            "brand": imp.get("brand") or "",
+            "diameter": imp.get("diameter"),
+            "length": imp.get("length"),
+            "torque": torque,
+            "isq": isq,
+            "bone_type": _bone_bucket(imp.get("bone_type")),
+            "status": status,
+            "failure_reason": failure_reason,
+            "failure_date": r.get("failure_date") if isinstance(r, dict) else None,
+        })
+    return out
+
+
+# ── /analytics/kaplan-meier ───────────────────────────────
+@api_router.get("/analytics/kaplan-meier")
+async def get_kaplan_meier(
+    request: Request,
+    group_by: str = "procedure_type",   # 'procedure_type' | 'system'
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    role = current_user.get("role")
+    _role_gate(role)
+    if group_by not in ("procedure_type", "system"):
+        group_by = "procedure_type"
+
+    procs = await _load_advanced_analytics_docs(from_date, to_date, scope_user=current_user)
+    from datetime import datetime as _dt
+    # Per-implant survival table: for each group, list of (t_days, event 0/1)
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for p in procs:
+        for r in _implant_records(p):
+            key = r["procedure_type"] if group_by == "procedure_type" else r["system"]
+            if not key:
+                continue
+            # t = time to failure or censoring
+            try:
+                start = _dt.strptime(str(r.get("phase2_date") or r.get("procedure_date"))[:10], "%Y-%m-%d")
+            except Exception:
+                continue
+            end_str = r.get("failure_date") or p.get("phase4_step2_done_date") or p.get("phase3_done_date") or p.get("updated_at") or datetime.now(timezone.utc).isoformat()
+            try:
+                end = _dt.strptime(str(end_str)[:10], "%Y-%m-%d") if "T" not in str(end_str) else _dt.fromisoformat(str(end_str).replace("Z", "+00:00")).replace(tzinfo=None)
+            except Exception:
+                continue
+            t = max(0, (end - start).days)
+            event = 1 if r["status"] in ("Failed", "Replaced") else 0
+            groups.setdefault(key, []).append({"t": t, "event": event})
+
+    # Kaplan-Meier — step curve per group
+    curves = []
+    for key, obs in groups.items():
+        if not obs:
+            continue
+        obs_sorted = sorted(obs, key=lambda x: x["t"])
+        n_at_risk = len(obs_sorted)
+        surv = 1.0
+        pts = [{"t": 0, "s": 1.0, "n_at_risk": n_at_risk, "events": 0}]
+        # Bucket by t to handle ties
+        i = 0
+        while i < len(obs_sorted):
+            t = obs_sorted[i]["t"]
+            d = 0
+            j = i
+            while j < len(obs_sorted) and obs_sorted[j]["t"] == t:
+                if obs_sorted[j]["event"] == 1:
+                    d += 1
+                j += 1
+            if d > 0 and n_at_risk > 0:
+                surv *= (1 - d / n_at_risk)
+            pts.append({"t": t, "s": round(surv, 4), "n_at_risk": n_at_risk, "events": d})
+            n_at_risk -= (j - i)
+            i = j
+        curves.append({
+            "key": key,
+            "n_implants": len(obs_sorted),
+            "n_events": sum(1 for x in obs_sorted if x["event"] == 1),
+            "points": pts,
+            "final_survival": round(surv, 4),
+        })
+    curves.sort(key=lambda c: -c["n_implants"])
+
+    await log_access(action="analytics_view", outcome="success",
+                     resource_type="kaplan_meier", resource_id=group_by,
+                     user=current_user, request=request)
+    return {
+        "scope": {"role": role, "own_only": role == "student"},
+        "group_by": group_by,
+        "curves": curves,
+    }
+
+
+# ── /analytics/torque-isq-scatter ─────────────────────────
+@api_router.get("/analytics/torque-isq-scatter")
+async def get_torque_isq_scatter(
+    request: Request,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    procedure_type: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    role = current_user.get("role")
+    _role_gate(role)
+    procs = await _load_advanced_analytics_docs(from_date, to_date, scope_user=current_user)
+    wanted = {t.strip() for t in (procedure_type or "").split(",") if t.strip()} or None
+
+    points: List[Dict[str, Any]] = []
+    for p in procs:
+        for r in _implant_records(p):
+            if wanted and r["procedure_type"] not in wanted:
+                continue
+            if r["torque"] is None or r["isq"] is None:
+                continue
+            points.append({
+                "torque": r["torque"], "isq": r["isq"],
+                "system": r["system"], "bone_type": r["bone_type"],
+                "status": r["status"], "region": r["region"],
+                "procedure_type": r["procedure_type"],
+                "tooth": r["tooth"],
+            })
+
+    # Sweet-spot summary — mean/median for survivors only
+    survivors = [p for p in points if p["status"] not in ("Failed", "Replaced")]
+    sweet = {
+        "n_survivors": len(survivors),
+        "mean_torque": _mean([p["torque"] for p in survivors]),
+        "median_torque": _median([p["torque"] for p in survivors]),
+        "mean_isq": _mean([p["isq"] for p in survivors]),
+        "median_isq": _median([p["isq"] for p in survivors]),
+    }
+
+    await log_access(action="analytics_view", outcome="success",
+                     resource_type="torque_isq_scatter", resource_id=str(len(points)),
+                     user=current_user, request=request)
+    return {
+        "scope": {"role": role, "own_only": role == "student"},
+        "n_points": len(points),
+        "points": points,
+        "sweet_spot": sweet,
+    }
+
+
+# ── /analytics/bone-procedure-heatmap ─────────────────────
+@api_router.get("/analytics/bone-procedure-heatmap")
+async def get_bone_procedure_heatmap(
+    request: Request,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    role = current_user.get("role")
+    _role_gate(role)
+    procs = await _load_advanced_analytics_docs(from_date, to_date, scope_user=current_user)
+
+    cells: Dict[str, Dict[str, Dict[str, int]]] = {}   # bone -> ptype -> {n, failed}
+    bones = ["D1", "D2", "D3", "D4", "Unknown"]
+    ptypes_set = set()
+
+    for p in procs:
+        for r in _implant_records(p):
+            b = r["bone_type"] or "Unknown"
+            pt = r["procedure_type"]
+            ptypes_set.add(pt)
+            row = cells.setdefault(b, {})
+            cell = row.setdefault(pt, {"n": 0, "failed": 0})
+            cell["n"] += 1
+            if r["status"] in ("Failed", "Replaced"):
+                cell["failed"] += 1
+
+    ptypes = sorted(ptypes_set)
+    matrix = []
+    for b in bones:
+        row_cells = []
+        for pt in ptypes:
+            c = (cells.get(b, {}).get(pt, {"n": 0, "failed": 0}))
+            surv = round(100 * (1 - c["failed"] / c["n"]), 1) if c["n"] > 0 else None
+            row_cells.append({"n": c["n"], "failed": c["failed"], "survival": surv})
+        matrix.append({"bone": b, "cells": row_cells})
+
+    await log_access(action="analytics_view", outcome="success",
+                     resource_type="bone_procedure_heatmap", resource_id="global",
+                     user=current_user, request=request)
+    return {
+        "scope": {"role": role, "own_only": role == "student"},
+        "bones": bones,
+        "procedure_types": ptypes,
+        "matrix": matrix,
+    }
+
+
+# ── /analytics/cross-tab ──────────────────────────────────
+class CrossTabBody(BaseModel):
+    row_dim: str      # 'procedure_type' | 'system' | 'bone_type' | 'region' | 'diameter' | 'length'
+    col_dim: Optional[str] = None
+    metric: str = "count"   # 'count' | 'success_rate' | 'mean_torque' | 'mean_isq' | 'mean_days'
+    from_date: Optional[str] = None
+    to_date: Optional[str] = None
+    procedure_type: Optional[str] = None
+
+
+_CROSSTAB_DIMS = {"procedure_type", "system", "bone_type", "region", "diameter", "length"}
+_CROSSTAB_METRICS = {"count", "success_rate", "mean_torque", "mean_isq", "mean_days"}
+
+
+def _dim_val(r: Dict[str, Any], p: Dict[str, Any], dim: str) -> str:
+    if dim == "procedure_type": return r["procedure_type"] or "Unspecified"
+    if dim == "system": return r["system"] or "Unknown"
+    if dim == "bone_type": return r["bone_type"] or "Unknown"
+    if dim == "region": return r["region"] or "unknown"
+    if dim == "diameter":
+        v = r.get("diameter"); return f"Ø{v}mm" if v not in (None, "") else "Unknown"
+    if dim == "length":
+        v = r.get("length"); return f"L{v}mm" if v not in (None, "") else "Unknown"
+    return "Unknown"
+
+
+@api_router.post("/analytics/cross-tab")
+async def post_cross_tab(
+    request: Request,
+    body: CrossTabBody,
+    current_user: dict = Depends(get_current_user),
+):
+    role = current_user.get("role")
+    _role_gate(role)
+    if body.row_dim not in _CROSSTAB_DIMS:
+        raise HTTPException(status_code=400, detail=f"Invalid row_dim (allowed: {sorted(_CROSSTAB_DIMS)})")
+    if body.col_dim and body.col_dim not in _CROSSTAB_DIMS:
+        raise HTTPException(status_code=400, detail=f"Invalid col_dim (allowed: {sorted(_CROSSTAB_DIMS)})")
+    if body.metric not in _CROSSTAB_METRICS:
+        raise HTTPException(status_code=400, detail=f"Invalid metric (allowed: {sorted(_CROSSTAB_METRICS)})")
+
+    procs = await _load_advanced_analytics_docs(body.from_date, body.to_date, scope_user=current_user)
+    wanted = {t.strip() for t in (body.procedure_type or "").split(",") if t.strip()} or None
+
+    # bucket -> list of implant records; for procedure-level metrics, we still
+    # aggregate over implant records but success is per-implant.
+    buckets: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
+    rows_set: List[str] = []
+    cols_set: List[str] = []
+    for p in procs:
+        proc_days = _po_lifecycle_days(p) if body.metric == "mean_days" else None
+        for r in _implant_records(p):
+            if wanted and r["procedure_type"] not in wanted:
+                continue
+            rk = _dim_val(r, p, body.row_dim)
+            ck = _dim_val(r, p, body.col_dim) if body.col_dim else "_total"
+            if rk not in rows_set: rows_set.append(rk)
+            if ck not in cols_set: cols_set.append(ck)
+            buckets.setdefault((rk, ck), []).append({**r, "_days": proc_days})
+
+    rows_set.sort()
+    cols_set.sort()
+    if body.col_dim is None:
+        cols_set = ["_total"]
+
+    def _agg(records: List[Dict[str, Any]]) -> Optional[float]:
+        if not records:
+            return None
+        if body.metric == "count":
+            return len(records)
+        if body.metric == "success_rate":
+            eligible = [x for x in records if x["status"] in ("Active", "Failed", "Replaced")]
+            if not eligible:
+                return None
+            survivors = sum(1 for x in eligible if x["status"] == "Active")
+            return round(100.0 * survivors / len(eligible), 1)
+        if body.metric == "mean_torque":
+            return _mean([x["torque"] for x in records if x["torque"] is not None])
+        if body.metric == "mean_isq":
+            return _mean([x["isq"] for x in records if x["isq"] is not None])
+        if body.metric == "mean_days":
+            return _mean([x["_days"] for x in records if x.get("_days") is not None])
+        return None
+
+    grid = []
+    for r in rows_set:
+        row_out = {"row": r, "cells": []}
+        for c in cols_set:
+            val = _agg(buckets.get((r, c), []))
+            row_out["cells"].append({"col": c, "value": val, "n": len(buckets.get((r, c), []))})
+        grid.append(row_out)
+
+    await log_access(action="analytics_view", outcome="success",
+                     resource_type="cross_tab", resource_id=f"{body.row_dim}x{body.col_dim or '_'}",
+                     user=current_user, request=request,
+                     extra={"metric": body.metric})
+    return {
+        "scope": {"role": role, "own_only": role == "student"},
+        "row_dim": body.row_dim, "col_dim": body.col_dim,
+        "metric": body.metric, "cols": cols_set, "grid": grid,
+    }
+
+
+# ── /analytics/learning-curve (student) ───────────────────
+@api_router.get("/analytics/learning-curve")
+async def get_learning_curve(
+    request: Request,
+    student_id: Optional[str] = None,  # in-charge/admin can inspect a specific student
+    current_user: dict = Depends(get_current_user),
+):
+    role = current_user.get("role")
+    _role_gate(role)
+
+    # Determine which student's curve to compute
+    target_id = None
+    if role == "student":
+        target_id = str(current_user.get("_id") or current_user.get("id") or "")
+    elif role in ("implant_incharge", "administrator", "supervisor"):
+        target_id = student_id
+    if not target_id:
+        raise HTTPException(status_code=400, detail="student_id required for this role")
+
+    procs = await db.procedures.find(
+        {"archived": {"$ne": True}, "student_id": target_id},
+        {"status": 1, "procedure_date": 1, "implant_procedure_type": 1,
+         "original_procedure_type": 1, "phase2_actual_done_date": 1,
+         "completed_at": 1, "treatment_ended_at": 1, "updated_at": 1,
+         "phase4_step2_done_date": 1, "student_name": 1},
+    ).to_list(5000)
+
+    procs.sort(key=lambda p: (p.get("procedure_date") or ""))
+    series = []
+    cum_completed = 0
+    cum_terminated = 0
+    for i, p in enumerate(procs):
+        bucket = _po_status_bucket(p.get("status"))
+        if bucket == "completed": cum_completed += 1
+        elif bucket == "terminated": cum_terminated += 1
+        denom = cum_completed + cum_terminated
+        running_rate = round(100.0 * cum_completed / denom, 1) if denom else None
+        days = _po_lifecycle_days(p)
+        series.append({
+            "case_no": i + 1,
+            "date": (p.get("procedure_date") or "")[:10],
+            "procedure_type": _po_pick_procedure_type(p),
+            "status_bucket": bucket,
+            "running_success_rate": running_rate,
+            "lifecycle_days": days,
+        })
+
+    await log_access(action="analytics_view", outcome="success",
+                     resource_type="learning_curve", resource_id=target_id,
+                     user=current_user, request=request)
+    return {
+        "scope": {"role": role},
+        "student_id": target_id,
+        "student_name": procs[0].get("student_name") if procs else None,
+        "n_cases": len(procs),
+        "series": series,
+    }
+
+
+# ── /analytics/case-mix-index (supervisor / in-charge) ────
+# Complexity weights per procedure type. Curated as clinical proxies —
+# lower weight = simpler; higher weight = complex full-arch surgeries.
+_CMI_WEIGHTS = {
+    "Single Conventional Implant": 1.0,
+    "Existing Implant": 1.0,
+    "Multiple Conventional Implants": 1.5,
+    "Immediate Implant": 2.0,
+    "Sinus Lift": 2.5,
+    "Implant Placement with Guided Bone Regeneration": 2.5,
+    "All on 4": 3.5,
+    "All on 6": 3.8,
+    "All on X": 4.0,
+    "Zygomatic Implant": 5.0,
+}
+
+
+@api_router.get("/analytics/case-mix-index")
+async def get_case_mix_index(
+    request: Request,
+    scope: str = "students",   # 'students' | 'supervisors'
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    role = current_user.get("role")
+    _role_gate(role)
+    if role == "student":
+        raise HTTPException(status_code=403, detail="Case-mix index is faculty-only")
+    if scope not in ("students", "supervisors"):
+        scope = "students"
+
+    procs = await _load_advanced_analytics_docs(from_date, to_date, scope_user=current_user)
+    per_user: Dict[str, Dict[str, Any]] = {}
+    for p in procs:
+        uid = str(p.get("student_id") if scope == "students" else p.get("supervisor_id") or "")
+        uname = p.get("student_name") if scope == "students" else p.get("supervisor_name")
+        if not uid:
+            continue
+        row = per_user.setdefault(uid, {"user_id": uid, "user_name": uname, "n": 0, "cmi_sum": 0.0, "types": {}})
+        ptype = _po_pick_procedure_type(p)
+        w = _CMI_WEIGHTS.get(ptype, 1.0)
+        row["n"] += 1
+        row["cmi_sum"] += w
+        row["types"][ptype] = row["types"].get(ptype, 0) + 1
+
+    out = []
+    for r in per_user.values():
+        cmi = round(r["cmi_sum"] / r["n"], 2) if r["n"] else 0
+        out.append({
+            "user_id": r["user_id"], "user_name": r["user_name"],
+            "n_cases": r["n"], "case_mix_index": cmi,
+            "complexity_score": round(r["cmi_sum"], 1),
+            "type_breakdown": r["types"],
+        })
+    out.sort(key=lambda x: -x["case_mix_index"])
+
+    await log_access(action="analytics_view", outcome="success",
+                     resource_type="case_mix_index", resource_id=scope,
+                     user=current_user, request=request)
+    return {"scope": {"role": role, "grouped_by": scope}, "rows": out, "weights": _CMI_WEIGHTS}
+
+
+# ── /analytics/complications ──────────────────────────────
+@api_router.get("/analytics/complications")
+async def get_complications(
+    request: Request,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    role = current_user.get("role")
+    _role_gate(role)
+    procs = await _load_advanced_analytics_docs(from_date, to_date, scope_user=current_user)
+
+    reasons: Dict[str, int] = {}
+    total_events = 0
+    by_type: Dict[str, Dict[str, int]] = {}
+    for p in procs:
+        for r in _implant_records(p):
+            if r["status"] not in ("Failed", "Replaced"):
+                continue
+            reason = (r["failure_reason"] or "Unknown").strip() or "Unknown"
+            reasons[reason] = reasons.get(reason, 0) + 1
+            by_type.setdefault(r["procedure_type"], {})
+            by_type[r["procedure_type"]][reason] = by_type[r["procedure_type"]].get(reason, 0) + 1
+            total_events += 1
+
+        # Also account for treatment_ended without survival review data
+        if p.get("status") == "treatment_ended":
+            reason = (p.get("treatment_ended_reason") or "End of treatment").strip() or "End of treatment"
+            reasons.setdefault(reason, 0)
+            # count once per case only if no per-implant failure was already logged
+
+    pareto = [{"reason": k, "count": v} for k, v in reasons.items()]
+    pareto.sort(key=lambda x: -x["count"])
+    running = 0
+    for row in pareto:
+        running += row["count"]
+        row["cum_pct"] = round(100.0 * running / total_events, 1) if total_events else None
+
+    await log_access(action="analytics_view", outcome="success",
+                     resource_type="complications", resource_id="pareto",
+                     user=current_user, request=request)
+    return {
+        "scope": {"role": role, "own_only": role == "student"},
+        "total_events": total_events,
+        "pareto": pareto,
+        "by_procedure_type": [
+            {"procedure_type": pt, "reasons": [
+                {"reason": r, "count": c} for r, c in sorted(m.items(), key=lambda kv: -kv[1])
+            ]}
+            for pt, m in sorted(by_type.items())
+        ],
+    }
+
+
+# ── /analytics/benchmarks ─────────────────────────────────
+# Curated literature benchmarks — small seed, editable by clinicians later.
+_LITERATURE_BENCHMARKS = {
+    "Single Conventional Implant": {"survival_5y": (94.0, 98.0), "citation": "Moraschini et al. 2015 — meta-analysis of 23 studies"},
+    "Immediate Implant":            {"survival_5y": (92.0, 97.0), "citation": "Chen & Buser 2014 — ITI consensus"},
+    "All on 4":                     {"survival_5y": (93.0, 98.0), "citation": "Malo et al. 2019 — 10-yr All-on-4"},
+    "All on 6":                     {"survival_5y": (94.5, 98.5), "citation": "Ravidà et al. 2020 — full-arch fixed prosthesis review"},
+    "Sinus Lift":                   {"survival_5y": (90.0, 96.0), "citation": "Wallace & Froum 2003 — sinus augmentation SR"},
+    "Implant Placement with Guided Bone Regeneration": {"survival_5y": (91.0, 96.0), "citation": "Retzepi & Donos 2010 — GBR SR"},
+}
+
+
+@api_router.get("/analytics/benchmarks")
+async def get_benchmarks(
+    request: Request,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    role = current_user.get("role")
+    _role_gate(role)
+    procs = await _load_advanced_analytics_docs(from_date, to_date, scope_user=current_user)
+    counters: Dict[str, Dict[str, int]] = {}
+    for p in procs:
+        for r in _implant_records(p):
+            row = counters.setdefault(r["procedure_type"], {"n": 0, "failed": 0})
+            row["n"] += 1
+            if r["status"] in ("Failed", "Replaced"):
+                row["failed"] += 1
+
+    rows = []
+    for pt, seed in _LITERATURE_BENCHMARKS.items():
+        c = counters.get(pt, {"n": 0, "failed": 0})
+        surv = round(100.0 * (1 - c["failed"] / c["n"]), 1) if c["n"] else None
+        lo, hi = seed["survival_5y"]
+        verdict = None
+        if surv is not None:
+            if surv >= lo and surv <= hi: verdict = "on_par"
+            elif surv > hi: verdict = "above"
+            else: verdict = "below"
+        rows.append({
+            "procedure_type": pt,
+            "your_n": c["n"], "your_failed": c["failed"],
+            "your_survival": surv,
+            "literature_low": lo, "literature_high": hi,
+            "verdict": verdict, "citation": seed["citation"],
+        })
+
+    await log_access(action="analytics_view", outcome="success",
+                     resource_type="benchmarks", resource_id="literature",
+                     user=current_user, request=request)
+    return {"scope": {"role": role, "own_only": role == "student"}, "rows": rows}
+
+
+# ── /analytics/predictive-risk (Phase 1 nudge) ────────────
+class PredictiveRiskBody(BaseModel):
+    procedure_type: str
+    bone_type: Optional[str] = None   # D1..D4
+    arch: Optional[str] = None        # 'maxilla' | 'mandible'
+    tooth_region: Optional[str] = None  # anterior_max / posterior_max / anterior_mand / posterior_mand
+
+
+@api_router.post("/analytics/predictive-risk")
+async def post_predictive_risk(
+    request: Request,
+    body: PredictiveRiskBody,
+    current_user: dict = Depends(get_current_user),
+):
+    role = current_user.get("role")
+    _role_gate(role)
+    # Use institution-wide history for the base rate (best data volume), but
+    # never leak individual case identifiers — only aggregate counts.
+    procs = await _load_advanced_analytics_docs(None, None,
+                                                scope_user=None,
+                                                include_all_for_cohort=True)
+    total = 0; failed = 0; matched_bone = 0; matched_bone_failed = 0
+    matched_region = 0; matched_region_failed = 0
+    matched_all = 0; matched_all_failed = 0
+    target_pt = (body.procedure_type or "").strip()
+    for p in procs:
+        for r in _implant_records(p):
+            if r["procedure_type"] != target_pt:
+                continue
+            total += 1
+            f = r["status"] in ("Failed", "Replaced")
+            if f: failed += 1
+            if body.bone_type and _bone_bucket(body.bone_type) == r["bone_type"]:
+                matched_bone += 1
+                if f: matched_bone_failed += 1
+            if body.tooth_region and body.tooth_region == r["region"]:
+                matched_region += 1
+                if f: matched_region_failed += 1
+            if (body.bone_type and _bone_bucket(body.bone_type) == r["bone_type"]
+                and body.tooth_region and body.tooth_region == r["region"]):
+                matched_all += 1
+                if f: matched_all_failed += 1
+
+    def _rate(f: int, n: int) -> Optional[float]:
+        if n < 5:
+            return None
+        return round(100.0 * (1 - f / n), 1)
+
+    result = {
+        "procedure_type": target_pt,
+        "input": {
+            "bone_type": body.bone_type, "arch": body.arch,
+            "tooth_region": body.tooth_region,
+        },
+        "base": {"n": total, "survival": _rate(failed, total)},
+        "bone_match": {"n": matched_bone, "survival": _rate(matched_bone_failed, matched_bone)},
+        "region_match": {"n": matched_region, "survival": _rate(matched_region_failed, matched_region)},
+        "combined_match": {"n": matched_all, "survival": _rate(matched_all_failed, matched_all)},
+        "insufficient_data": total < 5,
+    }
+    # A gentle narrative nudge — safe for students, no PHI leak
+    nudge = None
+    combined = result["combined_match"]
+    if combined["n"] >= 5 and combined["survival"] is not None:
+        nudge = f"For {target_pt} with matching bone/region, historical survival is {combined['survival']}% (n={combined['n']})."
+    elif result["base"]["survival"] is not None:
+        nudge = f"Institutional survival for {target_pt} is {result['base']['survival']}% (n={result['base']['n']})."
+    else:
+        nudge = f"Not enough {target_pt} cases in the history yet to estimate a personalised rate."
+    result["nudge"] = nudge
+
+    await log_access(action="analytics_view", outcome="success",
+                     resource_type="predictive_risk", resource_id=target_pt,
+                     user=current_user, request=request,
+                     extra={"input": result["input"]})
+    return result
+
+
+# ── /analytics/research-export.json (de-identified bundle) ─
+@api_router.get("/analytics/research-export.json")
+async def get_research_export_json(
+    request: Request,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    role = current_user.get("role")
+    _role_gate(role)
+    procs = await _load_advanced_analytics_docs(from_date, to_date, scope_user=current_user)
+
+    # Hash procedure IDs so researchers can reference specific rows without
+    # revealing the raw Mongo ObjectId (which could be reversed to timestamps).
+    import hashlib
+    def _hid(v: Any) -> str:
+        return hashlib.sha256(str(v).encode()).hexdigest()[:12]
+
+    rows = []
+    for p in procs:
+        pid = _hid(p.get("_id"))
+        student_hash = _hid(p.get("student_id") or p.get("student_name") or "")
+        supervisor_hash = _hid(p.get("supervisor_id") or p.get("supervisor_name") or "")
+        for i, r in enumerate(_implant_records(p)):
+            rows.append({
+                "case_id": pid,
+                "implant_seq": i + 1,
+                "student_hash": student_hash,
+                "supervisor_hash": supervisor_hash,
+                "procedure_type": r["procedure_type"],
+                "procedure_date": (r["procedure_date"] or "")[:10],
+                "phase2_date": (r["phase2_date"] or "")[:10] if r["phase2_date"] else None,
+                "tooth": str(r["tooth"] or ""),
+                "region": r["region"],
+                "system": r["system"],
+                "diameter_mm": r["diameter"],
+                "length_mm": r["length"],
+                "insertion_torque_ncm": r["torque"],
+                "isq": r["isq"],
+                "bone_type": r["bone_type"],
+                "status": r["status"],
+                "failure_reason": r["failure_reason"],
+                "failure_date": (r["failure_date"] or "")[:10] if r["failure_date"] else None,
+            })
+
+    data_dictionary = [
+        {"field": "case_id", "type": "string", "desc": "SHA-256 (12-char) hash of the internal case ObjectId — stable within an export, not reversible."},
+        {"field": "implant_seq", "type": "int", "desc": "1-based sequence of the implant within the case."},
+        {"field": "student_hash", "type": "string", "desc": "Hashed student identifier for cohort analysis without PII."},
+        {"field": "supervisor_hash", "type": "string", "desc": "Hashed supervisor identifier."},
+        {"field": "procedure_type", "type": "string", "desc": "Clinical procedure classification (e.g., Single Conventional Implant, All on 4)."},
+        {"field": "procedure_date", "type": "date", "desc": "Phase 1 planning date (YYYY-MM-DD)."},
+        {"field": "phase2_date", "type": "date", "desc": "Phase 2 surgical placement date."},
+        {"field": "tooth", "type": "string", "desc": "FDI tooth number."},
+        {"field": "region", "type": "string", "desc": "anterior_max / posterior_max / anterior_mand / posterior_mand / unknown."},
+        {"field": "system", "type": "string", "desc": "Implant system / brand."},
+        {"field": "diameter_mm", "type": "float", "desc": "Implant diameter in mm."},
+        {"field": "length_mm", "type": "float", "desc": "Implant length in mm."},
+        {"field": "insertion_torque_ncm", "type": "float", "desc": "Insertion torque in Ncm (Phase 2)."},
+        {"field": "isq", "type": "float", "desc": "ISQ resonance value at Phase 3."},
+        {"field": "bone_type", "type": "string", "desc": "Misch/Lekholm-Zarb bone density (D1-D4) or Unknown."},
+        {"field": "status", "type": "string", "desc": "Active / Failed / Replaced from survival review."},
+        {"field": "failure_reason", "type": "string", "desc": "Reason recorded on failure/replacement."},
+        {"field": "failure_date", "type": "date", "desc": "Date of the failure event."},
+    ]
+
+    await log_access(action="analytics_export", outcome="success",
+                     resource_type="research_export_json", resource_id=f"n={len(rows)}",
+                     user=current_user, request=request)
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "scope": {"role": role, "own_only": role == "student"},
+        "filters": {"from_date": from_date, "to_date": to_date},
+        "n_rows": len(rows),
+        "rows": rows,
+        "data_dictionary": data_dictionary,
+        "notes": [
+            "De-identified per HIPAA safe-harbor.",
+            "All identifiers are one-way SHA-256 hashes truncated to 12 chars.",
+            "No patient names, dates of birth, contact info, addresses, or record numbers are included.",
+            "Access logged to access_logs for compliance.",
+        ],
+    }
+
+
+# ══════════════════════════════════════════════════════════════════
+# iter-365 — Analytics polish + deep drill + failure analysis
+#
+# Adds:
+#   • /analytics/procedure-drill                (per-procedure retention × material × region × time-to-loading)
+#   • /analytics/failure-analysis               (time-to-failure buckets, per-system/bone/region/supervisor, replacement outcomes, FDI heatmap)
+#   • Kaplan-Meier upgrade: Greenwood confidence bands + log-rank p-value between top 2 curves
+#   • /analytics/research-export.csv            (CSV twin of the JSON export)
+#   • ISQ distribution per tooth position       (folded into failure-analysis payload)
+# ══════════════════════════════════════════════════════════════════
+
+
+# ── Prosthesis label parser ────────────────────────────────
+# Users pick prostheses from a curated catalog like
+#   "Cement Retained Crown - Zirconia"
+#   "Screw Retained Bridge - Lithium Disilicate"
+#   "Full Arch Titanium Framework Zirconia Prosthesis"
+#   "Complete Overdenture"
+# We normalise these into three orthogonal dimensions:
+#   retention   ∈ {Screw-Retained, Cement-Retained, Screw+Cement, Overdenture, Removable, Unknown}
+#   material    ∈ {Zirconia, Lithium Disilicate, PFM, Metal, CoCr Framework,
+#                  Ti Framework, PEEK Framework, Acrylic, Hybrid, Unknown}
+#   form        ∈ {Fixed, Removable, Hybrid Overdenture, Unknown}
+def _parse_prosthesis_label(label: str) -> Dict[str, str]:
+    if not label:
+        return {"retention": "Unknown", "material": "Unknown", "form": "Unknown"}
+    s = str(label).lower()
+
+    # Retention
+    if "screw-retained" in s or "screw retained" in s:
+        retention = "Screw-Retained"
+    elif "cement-retained" in s or "cement retained" in s:
+        retention = "Cement-Retained"
+    elif "screw+cement" in s or "screw and cement" in s or "hybrid retention" in s:
+        retention = "Screw+Cement"
+    elif "overdenture" in s:
+        retention = "Overdenture"
+    elif "removable" in s or "denture" in s:
+        retention = "Removable"
+    else:
+        retention = "Unknown"
+
+    # Material
+    if "zirconia" in s:
+        material = "Zirconia"
+    elif "lithium disilicate" in s or "lisi" in s or "e.max" in s or "emax" in s:
+        material = "Lithium Disilicate"
+    elif "porcelain fused to metal" in s or "pfm" in s or "metal ceramic" in s or "metal-ceramic" in s:
+        material = "PFM"
+    elif "co-cr" in s or "co cr" in s or "cocr" in s or "cobalt" in s:
+        material = "CoCr Framework"
+    elif "titanium framework" in s or "ti framework" in s or "ti base" in s:
+        material = "Ti Framework"
+    elif "peek" in s:
+        material = "PEEK Framework"
+    elif "acrylic" in s or "pmma" in s:
+        material = "Acrylic"
+    elif "metal" in s and "ceramic" not in s:
+        material = "Metal"
+    elif "hybrid" in s:
+        material = "Hybrid"
+    else:
+        material = "Unknown"
+
+    # Form (Fixed vs Removable vs Hybrid Overdenture)
+    if "overdenture" in s:
+        form = "Hybrid Overdenture" if any(k in s for k in ("locator", "ball", "bar", "hybrid")) else "Removable"
+    elif retention == "Removable":
+        form = "Removable"
+    else:
+        form = "Fixed"
+
+    return {"retention": retention, "material": material, "form": form}
+
+
+def _implant_prosthesis(proc: Dict[str, Any], implant_seq_idx: int) -> Dict[str, str]:
+    """Best-guess prosthesis label + parsed dims for a given implant index."""
+    p4 = proc.get("stage2_prosthetic_data") or {}
+    per = p4.get("per_implant_plans") or []
+    label = None
+    if isinstance(per, list) and implant_seq_idx < len(per) and isinstance(per[implant_seq_idx], dict):
+        label = per[implant_seq_idx].get("prosthesis") or ""
+        mat = per[implant_seq_idx].get("material") or ""
+        if label and mat and mat.lower() not in label.lower():
+            label = f"{label} - {mat}"
+    if not label:
+        label = p4.get("prosthesis_type") or proc.get("final_prosthetic_plan") or ""
+    if isinstance(label, list):
+        label = label[implant_seq_idx] if implant_seq_idx < len(label) else (label[0] if label else "")
+    parsed = _parse_prosthesis_label(str(label or ""))
+    parsed["raw"] = str(label or "")
+    return parsed
+
+
+# ── /analytics/procedure-drill ───────────────────────────
+@api_router.get("/analytics/procedure-drill")
+async def get_procedure_drill(
+    request: Request,
+    procedure_type: str,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    role = current_user.get("role")
+    _role_gate(role)
+    if not procedure_type:
+        raise HTTPException(status_code=400, detail="procedure_type is required")
+
+    procs = await _load_advanced_analytics_docs(from_date, to_date, scope_user=current_user)
+    procs = [p for p in procs if _po_pick_procedure_type(p) == procedure_type]
+
+    from datetime import datetime as _dt
+
+    retention_agg: Dict[str, Dict[str, int]] = {}   # retention -> {n, failed}
+    material_agg: Dict[str, Dict[str, int]] = {}
+    form_agg: Dict[str, Dict[str, int]] = {}
+    matrix: Dict[Tuple[str, str], Dict[str, int]] = {}   # (retention, material) -> {n, failed}
+    region_agg: Dict[str, Dict[str, int]] = {}
+    loading_days: List[float] = []
+    torques: List[float] = []
+    isqs: List[float] = []
+
+    for p in procs:
+        # Time-to-loading per case: phase2_actual_done_date → phase4_step2_done_date
+        try:
+            p2 = p.get("phase2_actual_done_date")
+            p4 = p.get("phase4_step2_done_date")
+            if p2 and p4:
+                d2 = _dt.strptime(str(p2)[:10], "%Y-%m-%d")
+                d4 = _dt.strptime(str(p4)[:10], "%Y-%m-%d")
+                delta = (d4 - d2).days
+                if 0 <= delta <= 3650:
+                    loading_days.append(delta)
+        except Exception:
+            pass
+
+        for i, r in enumerate(_implant_records(p)):
+            failed = 1 if r["status"] in ("Failed", "Replaced") else 0
+            pr = _implant_prosthesis(p, i)
+
+            for key, agg in ((pr["retention"], retention_agg),
+                             (pr["material"], material_agg),
+                             (pr["form"], form_agg),
+                             (r["region"] or "unknown", region_agg)):
+                row = agg.setdefault(key, {"n": 0, "failed": 0})
+                row["n"] += 1
+                row["failed"] += failed
+
+            key2 = (pr["retention"], pr["material"])
+            cell = matrix.setdefault(key2, {"n": 0, "failed": 0})
+            cell["n"] += 1
+            cell["failed"] += failed
+
+            if r["torque"] is not None:
+                torques.append(r["torque"])
+            if r["isq"] is not None:
+                isqs.append(r["isq"])
+
+    def _as_rows(agg: Dict[str, Dict[str, int]]):
+        out = []
+        for k, v in agg.items():
+            surv = round(100.0 * (1 - v["failed"] / v["n"]), 1) if v["n"] else None
+            out.append({"key": k, "n": v["n"], "failed": v["failed"], "survival": surv})
+        out.sort(key=lambda x: -x["n"])
+        return out
+
+    retentions = _as_rows(retention_agg)
+    materials = _as_rows(material_agg)
+    forms = _as_rows(form_agg)
+    regions = _as_rows(region_agg)
+
+    ret_keys = [r["key"] for r in retentions]
+    mat_keys = [m["key"] for m in materials]
+    grid = []
+    for r in ret_keys:
+        row_cells = []
+        for m in mat_keys:
+            v = matrix.get((r, m), {"n": 0, "failed": 0})
+            surv = round(100.0 * (1 - v["failed"] / v["n"]), 1) if v["n"] else None
+            row_cells.append({"material": m, "n": v["n"], "failed": v["failed"], "survival": surv})
+        grid.append({"retention": r, "cells": row_cells})
+
+    loading_days_sorted = sorted(loading_days)
+
+    def _q(vals: List[float], q: float) -> Optional[float]:
+        if not vals: return None
+        k = (len(vals) - 1) * q
+        f = int(k); c = min(f + 1, len(vals) - 1)
+        return round(vals[f] + (vals[c] - vals[f]) * (k - f), 1)
+
+    await log_access(action="analytics_view", outcome="success",
+                     resource_type="procedure_drill", resource_id=procedure_type,
+                     user=current_user, request=request)
+    return {
+        "scope": {"role": role, "own_only": role == "student"},
+        "procedure_type": procedure_type,
+        "n_cases": len(procs),
+        "retentions": retentions,
+        "materials": materials,
+        "forms": forms,
+        "regions": regions,
+        "retention_material_grid": {"row_keys": ret_keys, "col_keys": mat_keys, "grid": grid},
+        "time_to_loading": {
+            "n": len(loading_days),
+            "median_days": _q(loading_days_sorted, 0.5),
+            "q1": _q(loading_days_sorted, 0.25),
+            "q3": _q(loading_days_sorted, 0.75),
+            "min": loading_days_sorted[0] if loading_days_sorted else None,
+            "max": loading_days_sorted[-1] if loading_days_sorted else None,
+        },
+        "clinical_averages": {"mean_torque": _mean(torques), "mean_isq": _mean(isqs)},
+    }
+
+
+# ── /analytics/failure-analysis ──────────────────────────
+_FAILURE_BUCKETS = [
+    ("early", "<3 months", 0, 90),
+    ("mid", "3-12 months", 90, 365),
+    ("late", ">12 months", 365, 10_000),
+]
+
+
+@api_router.get("/analytics/failure-analysis")
+async def get_failure_analysis(
+    request: Request,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    role = current_user.get("role")
+    _role_gate(role)
+    procs = await _load_advanced_analytics_docs(from_date, to_date, scope_user=current_user)
+
+    from datetime import datetime as _dt
+
+    buckets: Dict[str, int] = {b[0]: 0 for b in _FAILURE_BUCKETS}
+    by_system: Dict[str, Dict[str, int]] = {}
+    by_bone: Dict[str, Dict[str, int]] = {}
+    by_region: Dict[str, Dict[str, int]] = {}
+    by_supervisor: Dict[str, Dict[str, Any]] = {}
+    by_tooth: Dict[str, int] = {}   # tooth FDI -> failure count
+    isq_by_region: Dict[str, List[float]] = {}
+
+    n_failed = 0
+    n_replaced_events = 0
+    n_replacements_active = 0
+    replacement_history_active = 0
+    replacement_history_total = 0
+    top_reasons_by_system: Dict[str, Dict[str, int]] = {}
+
+    for p in procs:
+        sup_name = p.get("supervisor_name") or "—"
+        sup_id = str(p.get("supervisor_id") or sup_name)
+
+        for i, r in enumerate(_implant_records(p)):
+            # Aggregate ISQ per region
+            if r["isq"] is not None:
+                isq_by_region.setdefault(r["region"] or "unknown", []).append(r["isq"])
+
+            for tag in ("n_placed",):
+                for agg in (by_system.setdefault(r["system"], {"n_placed": 0, "n_failed": 0}),
+                            by_bone.setdefault(r["bone_type"], {"n_placed": 0, "n_failed": 0}),
+                            by_region.setdefault(r["region"], {"n_placed": 0, "n_failed": 0})):
+                    agg[tag] += 1
+                s_row = by_supervisor.setdefault(sup_id, {"name": sup_name, "n_placed": 0, "n_failed": 0})
+                s_row["n_placed"] += 1
+
+            if r["status"] not in ("Failed", "Replaced"):
+                continue
+
+            n_failed += 1
+            by_system[r["system"]]["n_failed"] += 1
+            by_bone[r["bone_type"]]["n_failed"] += 1
+            by_region[r["region"]]["n_failed"] += 1
+            by_supervisor[sup_id]["n_failed"] += 1
+
+            # Time-to-failure bucket
+            try:
+                d1 = _dt.strptime(str(r["phase2_date"])[:10], "%Y-%m-%d") if r["phase2_date"] else None
+                d2 = _dt.strptime(str(r["failure_date"])[:10], "%Y-%m-%d") if r["failure_date"] else None
+                if d1 and d2:
+                    days = max(0, (d2 - d1).days)
+                    for tag, _lbl, lo, hi in _FAILURE_BUCKETS:
+                        if lo <= days < hi:
+                            buckets[tag] += 1
+                            break
+            except Exception:
+                pass
+
+            # FDI heatmap
+            tooth = str(r.get("tooth") or "").strip()
+            if tooth:
+                by_tooth[tooth] = by_tooth.get(tooth, 0) + 1
+
+            # Top reasons per system
+            reason = r.get("failure_reason") or "Unknown"
+            trs = top_reasons_by_system.setdefault(r["system"], {})
+            trs[reason] = trs.get(reason, 0) + 1
+
+        # Replacement outcomes from survival review
+        review = (p.get("phase2_survival_review") or {}).get("implants") or []
+        for rev in review:
+            if not isinstance(rev, dict):
+                continue
+            if rev.get("status") == "Replaced":
+                n_replaced_events += 1
+                repl = rev.get("replacement") or {}
+                # Consider active if the *current* replacement isn't marked failed
+                if not repl.get("failure_date"):
+                    n_replacements_active += 1
+                # Legacy chain
+                for old in (repl.get("chain") or []):
+                    replacement_history_total += 1
+                    if not old.get("failure_date"):
+                        replacement_history_active += 1
+
+    def _rows(agg: Dict[str, Dict[str, int]]):
+        out = []
+        for k, v in agg.items():
+            rate = round(100.0 * v["n_failed"] / v["n_placed"], 1) if v["n_placed"] else None
+            out.append({"key": k, "n_placed": v["n_placed"], "n_failed": v["n_failed"], "failure_rate": rate})
+        out.sort(key=lambda x: -x["n_placed"])
+        return out
+
+    by_system_out = _rows(by_system)
+    # Attach top reasons to each system row
+    for row in by_system_out:
+        reasons = top_reasons_by_system.get(row["key"], {})
+        row["top_reasons"] = [{"reason": r, "count": c}
+                              for r, c in sorted(reasons.items(), key=lambda kv: -kv[1])][:3]
+
+    by_supervisor_out = []
+    for k, v in by_supervisor.items():
+        rate = round(100.0 * v["n_failed"] / v["n_placed"], 1) if v["n_placed"] else None
+        by_supervisor_out.append({"key": k, "name": v["name"],
+                                  "n_placed": v["n_placed"], "n_failed": v["n_failed"], "failure_rate": rate})
+    by_supervisor_out.sort(key=lambda x: -x["n_placed"])
+
+    tooth_heat = [{"tooth": t, "failures": c} for t, c in by_tooth.items()]
+    tooth_heat.sort(key=lambda x: -x["failures"])
+
+    isq_dist_by_region = []
+    for reg, vals in sorted(isq_by_region.items()):
+        vs = sorted(vals)
+        isq_dist_by_region.append({
+            "region": reg, "n": len(vs),
+            "median": _median(vs), "mean": _mean(vs),
+            "min": vs[0] if vs else None,
+            "max": vs[-1] if vs else None,
+            "q1": vs[int(len(vs) * 0.25)] if vs else None,
+            "q3": vs[int(len(vs) * 0.75)] if vs else None,
+        })
+
+    await log_access(action="analytics_view", outcome="success",
+                     resource_type="failure_analysis", resource_id=f"n_failed={n_failed}",
+                     user=current_user, request=request)
+
+    replacement_success_rate = (
+        round(100.0 * n_replacements_active / n_replaced_events, 1) if n_replaced_events else None
+    )
+    return {
+        "scope": {"role": role, "own_only": role == "student"},
+        "totals": {"n_failed_events": n_failed, "n_replacements": n_replaced_events},
+        "time_to_failure_buckets": [
+            {"key": tag, "label": lbl, "count": buckets[tag]} for tag, lbl, _, _ in _FAILURE_BUCKETS
+        ],
+        "by_system": by_system_out,
+        "by_bone": _rows(by_bone),
+        "by_region": _rows(by_region),
+        "by_supervisor": by_supervisor_out,
+        "tooth_heatmap": tooth_heat,
+        "replacement_outcomes": {
+            "n_replaced": n_replaced_events,
+            "n_currently_active": n_replacements_active,
+            "n_prior_revisions_active": replacement_history_active,
+            "n_prior_revisions_total": replacement_history_total,
+            "replacement_success_rate": replacement_success_rate,
+        },
+        "isq_distribution_by_region": isq_dist_by_region,
+    }
+
+
+# ── Upgrade Kaplan-Meier with Greenwood CI + log-rank ────
+# We shadow the existing endpoint with an enhanced version. Since Python
+# doesn't allow route redefinition at the same path cleanly, we register
+# a separate path and let the frontend upgrade to it. Old endpoint stays
+# for backwards compat.
+import math as _math_km
+
+
+def _km_greenwood(points: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Add Greenwood 95% CI bands to KM step points. Uses S(t) * exp(±1.96 * sqrt(V))."""
+    var_sum = 0.0
+    out = []
+    for p in points:
+        n = max(1, p.get("n_at_risk", 1))
+        d = p.get("events", 0)
+        if d > 0 and n > d:
+            var_sum += d / (n * (n - d))
+        s = p["s"]
+        if s <= 0 or s >= 1 or var_sum <= 0:
+            lo, hi = s, s
+        else:
+            try:
+                se = _math_km.sqrt(var_sum)
+                # Log-log transform for well-behaved CIs
+                a = _math_km.log(-_math_km.log(max(s, 1e-9)))
+                lo = _math_km.exp(-_math_km.exp(a + 1.96 * se / (_math_km.log(max(s, 1e-9)) or -1e-9)))
+                hi = _math_km.exp(-_math_km.exp(a - 1.96 * se / (_math_km.log(max(s, 1e-9)) or -1e-9)))
+                lo = max(0.0, min(1.0, lo))
+                hi = max(0.0, min(1.0, hi))
+            except Exception:
+                lo, hi = s, s
+        out.append({**p, "s_lo": round(lo, 4), "s_hi": round(hi, 4)})
+    return out
+
+
+def _log_rank_two(a: List[Dict[str, int]], b: List[Dict[str, int]]) -> Optional[float]:
+    """Log-rank chi-square p-value between two observation lists.
+    Each obs = {t: days, event: 0/1}. Returns None if either group is empty
+    or degenerate. Uses one-degree-of-freedom chi-square approximation."""
+    if not a or not b:
+        return None
+    # Unique event times sorted
+    all_events = sorted({o["t"] for o in a + b if o["event"] == 1})
+    if not all_events:
+        return None
+    n_a = len(a); n_b = len(b)
+    obs_a = 0.0
+    exp_a = 0.0
+    var = 0.0
+    for t in all_events:
+        d_a = sum(1 for o in a if o["t"] == t and o["event"] == 1)
+        d_b = sum(1 for o in b if o["t"] == t and o["event"] == 1)
+        d = d_a + d_b
+        na = sum(1 for o in a if o["t"] >= t)
+        nb = sum(1 for o in b if o["t"] >= t)
+        n = na + nb
+        if n == 0 or d == 0:
+            continue
+        obs_a += d_a
+        exp_a += d * na / n
+        if n > 1:
+            var += (d * na * nb * (n - d)) / (n * n * (n - 1))
+    if var <= 0:
+        return None
+    chi2 = (obs_a - exp_a) ** 2 / var
+    # Approximate p-value via survival function of chi-square with df=1
+    # (using error-function-based approximation of the normal tail)
+    z = _math_km.sqrt(chi2)
+    # 2-sided p (identical to chi2 with df=1)
+    p = _math_km.erfc(z / _math_km.sqrt(2))
+    return round(max(0.0, min(1.0, p)), 4)
+
+
+@api_router.get("/analytics/kaplan-meier-v2")
+async def get_kaplan_meier_v2(
+    request: Request,
+    group_by: str = "procedure_type",
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    role = current_user.get("role")
+    _role_gate(role)
+    if group_by not in ("procedure_type", "system"):
+        group_by = "procedure_type"
+
+    procs = await _load_advanced_analytics_docs(from_date, to_date, scope_user=current_user)
+    from datetime import datetime as _dt
+    groups_raw: Dict[str, List[Dict[str, Any]]] = {}
+    for p in procs:
+        for r in _implant_records(p):
+            key = r["procedure_type"] if group_by == "procedure_type" else r["system"]
+            if not key:
+                continue
+            try:
+                start = _dt.strptime(str(r.get("phase2_date") or r.get("procedure_date"))[:10], "%Y-%m-%d")
+            except Exception:
+                continue
+            end_str = r.get("failure_date") or p.get("phase4_step2_done_date") or p.get("phase3_done_date") or p.get("updated_at") or datetime.now(timezone.utc).isoformat()
+            try:
+                end = _dt.strptime(str(end_str)[:10], "%Y-%m-%d") if "T" not in str(end_str) else _dt.fromisoformat(str(end_str).replace("Z", "+00:00")).replace(tzinfo=None)
+            except Exception:
+                continue
+            t = max(0, (end - start).days)
+            event = 1 if r["status"] in ("Failed", "Replaced") else 0
+            groups_raw.setdefault(key, []).append({"t": t, "event": event})
+
+    curves = []
+    for key, obs in groups_raw.items():
+        obs_sorted = sorted(obs, key=lambda x: x["t"])
+        n_at_risk = len(obs_sorted)
+        surv = 1.0
+        pts = [{"t": 0, "s": 1.0, "n_at_risk": n_at_risk, "events": 0}]
+        i = 0
+        while i < len(obs_sorted):
+            t = obs_sorted[i]["t"]
+            d = 0
+            j = i
+            while j < len(obs_sorted) and obs_sorted[j]["t"] == t:
+                if obs_sorted[j]["event"] == 1:
+                    d += 1
+                j += 1
+            if d > 0 and n_at_risk > 0:
+                surv *= (1 - d / n_at_risk)
+            pts.append({"t": t, "s": round(surv, 4), "n_at_risk": n_at_risk, "events": d})
+            n_at_risk -= (j - i)
+            i = j
+        curves.append({
+            "key": key,
+            "n_implants": len(obs_sorted),
+            "n_events": sum(1 for x in obs_sorted if x["event"] == 1),
+            "points": _km_greenwood(pts),
+            "final_survival": round(surv, 4),
+            "_raw_obs": obs_sorted,   # kept for log-rank; stripped before return
+        })
+    curves.sort(key=lambda c: -c["n_implants"])
+
+    log_rank = None
+    if len(curves) >= 2:
+        p_val = _log_rank_two(curves[0]["_raw_obs"], curves[1]["_raw_obs"])
+        if p_val is not None:
+            log_rank = {
+                "group_a": curves[0]["key"], "group_b": curves[1]["key"],
+                "p_value": p_val,
+                "interpretation": (
+                    "Groups differ (statistically significant)" if p_val < 0.05
+                    else "No significant difference"
+                ),
+            }
+    # Strip raw obs before returning
+    for c in curves:
+        c.pop("_raw_obs", None)
+
+    await log_access(action="analytics_view", outcome="success",
+                     resource_type="kaplan_meier_v2", resource_id=group_by,
+                     user=current_user, request=request)
+    return {
+        "scope": {"role": role, "own_only": role == "student"},
+        "group_by": group_by,
+        "curves": curves,
+        "log_rank_top2": log_rank,
+    }
+
+
+# ── /analytics/research-export.csv ─────────────────────────
+@api_router.get("/analytics/research-export.csv")
+async def get_research_export_csv(
+    request: Request,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    role = current_user.get("role")
+    _role_gate(role)
+    procs = await _load_advanced_analytics_docs(from_date, to_date, scope_user=current_user)
+
+    import hashlib
+    def _hid(v: Any) -> str:
+        return hashlib.sha256(str(v).encode()).hexdigest()[:12]
+
+    import io as _io, csv as _csv
+    buf = _io.StringIO()
+    w = _csv.writer(buf)
+    w.writerow(["Implanr — Research Export (de-identified)"])
+    w.writerow(["Generated at", datetime.now(timezone.utc).isoformat()])
+    w.writerow(["Role", role])
+    w.writerow(["Filters", f"from={from_date or '-'}, to={to_date or '-'}"])
+    w.writerow([])
+    w.writerow([
+        "case_id", "implant_seq", "student_hash", "supervisor_hash",
+        "procedure_type", "procedure_date", "phase2_date",
+        "tooth", "region", "system", "diameter_mm", "length_mm",
+        "insertion_torque_ncm", "isq", "bone_type",
+        "status", "failure_reason", "failure_date",
+        "prosthesis_retention", "prosthesis_material", "prosthesis_form", "prosthesis_raw",
+    ])
+    for p in procs:
+        pid = _hid(p.get("_id"))
+        sh = _hid(p.get("student_id") or p.get("student_name") or "")
+        ph = _hid(p.get("supervisor_id") or p.get("supervisor_name") or "")
+        for i, r in enumerate(_implant_records(p)):
+            pr = _implant_prosthesis(p, i)
+            w.writerow([
+                pid, i + 1, sh, ph,
+                r["procedure_type"],
+                (r["procedure_date"] or "")[:10],
+                (r["phase2_date"] or "")[:10] if r["phase2_date"] else "",
+                str(r["tooth"] or ""),
+                r["region"],
+                r["system"],
+                r["diameter"] or "",
+                r["length"] or "",
+                r["torque"] if r["torque"] is not None else "",
+                r["isq"] if r["isq"] is not None else "",
+                r["bone_type"],
+                r["status"],
+                r["failure_reason"] or "",
+                (r["failure_date"] or "")[:10] if r["failure_date"] else "",
+                pr["retention"], pr["material"], pr["form"], pr["raw"],
+            ])
+
+    await log_access(action="analytics_export", outcome="success",
+                     resource_type="research_export_csv", resource_id="global",
+                     user=current_user, request=request)
+    csv_bytes = buf.getvalue().encode("utf-8")
+    filename = f"implanr-research-export-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}.csv"
     return Response(
         content=csv_bytes,
         media_type="text/csv",

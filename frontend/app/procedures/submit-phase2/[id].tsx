@@ -11,6 +11,7 @@ import { showUploadPicker } from '../../../utils/uploadPicker';
 import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
 import { PhaseHeader } from '../../../components/PhaseHeader';
+import DoneDatePicker, { todayIso } from '../../../components/DoneDatePicker';
 import { Ionicons } from '@expo/vector-icons';
 import {
   CHECKLIST_DATA,
@@ -27,6 +28,8 @@ export default function Phase2SubmissionScreen() {
   const isFaculty = user?.role === 'supervisor' || user?.role === 'implant_incharge';
   const notesLabel = isFaculty ? "Operator's Notes" : "Student Notes";
   const [loading, setLoading] = useState(false);
+  // iter-332: actual surgery date (may differ from planned procedure_date)
+  const [phase2ActualDoneDate, setPhase2ActualDoneDate] = useState<string>(todayIso());
 
   // Pre-Surgery Checklist
   const [preSurgeryChecklist, setPreSurgeryChecklist] = useState<Record<string, boolean>>({});
@@ -54,6 +57,11 @@ export default function Phase2SubmissionScreen() {
   const [implantOtherNotes, setImplantOtherNotes] = useState('');
   const [prostheticComponent, setProstheticComponent] = useState('');
   const [prostheticOpen, setProstheticOpen] = useState(false);
+  // iter-356: Per-implant Prosthetic Component (multi-implant, non-full-arch,
+  // non-single cases). Length is kept in sync with implantPositions.length in
+  // loadImplantPlan().
+  const [prostheticComponents, setProstheticComponents] = useState<string[]>([]);
+  const [perImplantProstheticOpen, setPerImplantProstheticOpen] = useState<number | null>(null);
   // Immediate Loading prosthesis type (visible only when Prosthetic Component === 'Immediate Loading Done').
   // Option set depends on Phase 1 procedure_type + teeth count per user spec.
   const [prosthesisType, setProsthesisType] = useState('');
@@ -100,6 +108,23 @@ export default function Phase2SubmissionScreen() {
   const FULL_ARCH_SET = new Set(['All on 4', 'All on 6', 'All on X']);
   const isFullArch = FULL_ARCH_SET.has(procedureType);
   const isSingleImplant = procedureType === 'Single Conventional Implant';
+  // iter-356: per-implant Prosthetic Component applies to multi-implant
+  // cases except Single-Conventional and full-arch (All-on-4/6/X). Those
+  // three cases keep the single global dropdown (unchanged UX).
+  const usePerImplantProsthetic = !isFullArch && !isSingleImplant && implantPositions.length > 1;
+  // Derived: the effective per-implant selection (falls back to the global
+  // `prostheticComponent` for single/full-arch cases so downstream gated
+  // sections keep working with a single source of truth).
+  const effectivePcAt = (idx: number): string =>
+    (usePerImplantProsthetic ? (prostheticComponents[idx] || '') : (prostheticComponent || ''));
+  const anyImplantHas = (target: string): boolean =>
+    (usePerImplantProsthetic
+      ? prostheticComponents.some(v => v === target)
+      : prostheticComponent === target);
+  const allImplantsHave = (target: string): boolean =>
+    (usePerImplantProsthetic
+      ? prostheticComponents.length > 0 && prostheticComponents.every(v => v === target)
+      : prostheticComponent === target);
 
   // Notes
   const [studentNotes, setStudentNotes] = useState('');
@@ -119,6 +144,8 @@ export default function Phase2SubmissionScreen() {
       setTorqueValues(new Array(count).fill(''));
       setHealingAbutmentCuffHeight(new Array(count).fill(''));
       setAccessChannelOpenings(new Array(count).fill(''));
+      // iter-356: seed per-implant prosthetic components (empty selections).
+      setProstheticComponents(new Array(count).fill(''));
       // iter-139: seed MUA arrays to match implant count. Resets on every load.
       setMuaAngulation(new Array(count).fill(''));
       setMuaCuffHeight(new Array(count).fill(''));
@@ -208,8 +235,8 @@ export default function Phase2SubmissionScreen() {
 
   // ── IOPA / OPG Upload helpers ──
   const getIopaLabel = (idx: number): string => {
-    if (isFullArch) return `Implant ${idx + 1}`;
-    return implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : `Implant ${idx + 1}`;
+    if (isFullArch) return implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : 'Tooth #—';
+    return implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : 'Tooth #—';
   };
 
   const totalIopaSlots = iopaFiles.length + extraIopaCount;
@@ -322,11 +349,34 @@ export default function Phase2SubmissionScreen() {
         return;
       }
     }
-    if (!prostheticComponent) { Alert.alert('Missing', 'Please select Prosthetic Component'); return; }
-    if (prostheticComponent === 'Immediate Loading Done') {
-      if (!prosthesisType) { Alert.alert('Missing', 'Please select a Prosthesis Type'); return; }
-      if (prosthesisType === 'Other' && !prosthesisTypeOther.trim()) {
-        Alert.alert('Missing', 'Please describe the prosthesis type in the text box'); return;
+    if (usePerImplantProsthetic) {
+      // iter-356: every implant must have a Prosthetic Component selected.
+      const missingIdxs: number[] = [];
+      for (let i = 0; i < implantPositions.length; i++) {
+        if (!prostheticComponents[i]) missingIdxs.push(i);
+      }
+      if (missingIdxs.length > 0) {
+        Alert.alert(
+          'Missing Prosthetic Component',
+          `Please select a Prosthetic Component for: ${missingIdxs.map(i => implantPositions[i] ? `Tooth #${implantPositions[i]}` : 'Tooth #—').join(', ')}.`,
+        );
+        return;
+      }
+      // If any implant is Immediate Loading, prosthesis-type must be picked
+      // when the full-arch validation still applies (unchanged).
+      if (anyImplantHas('Immediate Loading Done')
+          && isFullArch
+          && !prosthesisType) {
+        Alert.alert('Missing', 'Please select a Prosthesis Type');
+        return;
+      }
+    } else {
+      if (!prostheticComponent) { Alert.alert('Missing', 'Please select Prosthetic Component'); return; }
+      if (prostheticComponent === 'Immediate Loading Done') {
+        if (!prosthesisType) { Alert.alert('Missing', 'Please select a Prosthesis Type'); return; }
+        if (prosthesisType === 'Other' && !prosthesisTypeOther.trim()) {
+          Alert.alert('Missing', 'Please describe the prosthesis type in the text box'); return;
+        }
       }
     }
 
@@ -341,8 +391,39 @@ export default function Phase2SubmissionScreen() {
 
     setLoading(true);
     try {
+      // iter-356: Compute payload for per-implant Prosthetic Component (Q4-b).
+      // - When usePerImplantProsthetic AND all implants agree → set case-level
+      //   `prosthetic_component` to that shared value (still one source of
+      //   truth for legacy downstream code).
+      // - When mixed → drop the case-level string entirely (send '') and rely
+      //   on `prosthetic_components[]` for per-implant behavior.
+      const distinctPcs = usePerImplantProsthetic
+        ? Array.from(new Set(prostheticComponents.filter(v => !!v)))
+        : [];
+      const caseLevelPc = usePerImplantProsthetic
+        ? (distinctPcs.length === 1 ? distinctPcs[0] : '')
+        : prostheticComponent;
+      const perImplantPcArr = usePerImplantProsthetic
+        ? [...prostheticComponents]
+        : null;
+      // iter-356: Filter healing/access arrays to only implants that picked
+      // the matching component (in per-implant mode). In single-mode this is
+      // a no-op — we send the full array as before.
+      const cuffHeightPayload = usePerImplantProsthetic
+        ? (anyImplantHas('Healing Abutment Placed')
+            ? healingAbutmentCuffHeight.map((v, i) => (prostheticComponents[i] === 'Healing Abutment Placed' ? v : ''))
+            : null)
+        : (prostheticComponent === 'Healing Abutment Placed' ? healingAbutmentCuffHeight : null);
+      const accessChannelPayload = usePerImplantProsthetic
+        ? (anyImplantHas('Immediate Loading Done')
+            ? accessChannelOpenings.map((v, i) => (prostheticComponents[i] === 'Immediate Loading Done' ? v : ''))
+            : null)
+        : (prostheticComponent === 'Immediate Loading Done' ? accessChannelOpenings : null);
+
       await api.post(`/procedures/${id}/submit-phase2`, {
         pre_surgery_checklist: preSurgeryChecklist,
+        // iter-332: actual surgery date (may differ from planned procedure_date)
+        actual_done_date: phase2ActualDoneDate || null,
         anesthesia_adequate: anesthesiaAdequate,
         anesthesia_details: anesthesiaAdequate === 'No' ? anesthesiaDetails : null,
         flap_design: flapDesign,
@@ -353,12 +434,14 @@ export default function Phase2SubmissionScreen() {
         bone_graft_used: boneGraftUsed,
         bone_graft_details: boneGraftUsed ? boneGraftDetails || null : null,
         implant_other_notes: implantOtherNotes || null,
-        prosthetic_component: prostheticComponent,
-        prosthesis_type: prostheticComponent === 'Immediate Loading Done' ? prosthesisType : null,
-        prosthesis_type_other: (prostheticComponent === 'Immediate Loading Done' && prosthesisType === 'Other')
+        prosthetic_component: caseLevelPc,
+        // iter-356: per-implant array. null when single/full-arch (unchanged flow).
+        prosthetic_components: perImplantPcArr,
+        prosthesis_type: anyImplantHas('Immediate Loading Done') ? prosthesisType : null,
+        prosthesis_type_other: (anyImplantHas('Immediate Loading Done') && prosthesisType === 'Other')
           ? prosthesisTypeOther.trim() : null,
-        healing_abutment_cuff_height: prostheticComponent === 'Healing Abutment Placed' ? healingAbutmentCuffHeight : null,
-        access_channel_openings: prostheticComponent === 'Immediate Loading Done' ? accessChannelOpenings : null,
+        healing_abutment_cuff_height: cuffHeightPayload,
+        access_channel_openings: accessChannelPayload,
         sutures_placed: suturesPlaced,
         hemostasis_achieved: hemostasisAchieved,
         iopa_files: [...iopaFiles, ...new Array(extraIopaCount).fill(null)]
@@ -464,10 +547,25 @@ export default function Phase2SubmissionScreen() {
       const v = parseFloat(torqueValues[i]);
       if (isNaN(v) || v < 10 || v > 90) missSurgery.push(`Torque for implant ${i + 1} (10-90 Ncm)`);
     }
-    if (!prostheticComponent) missSurgery.push('Prosthetic Component');
-    if (prostheticComponent === 'Immediate Loading Done') {
-      if (!prosthesisType) missSurgery.push('Prosthesis Type');
-      if (prosthesisType === 'Other' && !prosthesisTypeOther.trim()) missSurgery.push('Prosthesis Type description');
+    if (usePerImplantProsthetic) {
+      // iter-356: per-implant validation for the progress pill.
+      const missIdxs: number[] = [];
+      for (let i = 0; i < implantPositions.length; i++) {
+        if (!prostheticComponents[i]) missIdxs.push(i);
+      }
+      if (missIdxs.length > 0) {
+        missSurgery.push(`Prosthetic Component (${missIdxs.length} implant${missIdxs.length > 1 ? 's' : ''} unset)`);
+      }
+      if (anyImplantHas('Immediate Loading Done') && isFullArch) {
+        if (!prosthesisType) missSurgery.push('Prosthesis Type');
+        if (prosthesisType === 'Other' && !prosthesisTypeOther.trim()) missSurgery.push('Prosthesis Type description');
+      }
+    } else {
+      if (!prostheticComponent) missSurgery.push('Prosthetic Component');
+      if (prostheticComponent === 'Immediate Loading Done') {
+        if (!prosthesisType) missSurgery.push('Prosthesis Type');
+        if (prosthesisType === 'Other' && !prosthesisTypeOther.trim()) missSurgery.push('Prosthesis Type description');
+      }
     }
 
     const missRadiographs: string[] = [];
@@ -491,7 +589,7 @@ export default function Phase2SubmissionScreen() {
 
     // Notes pill is informational — never "missing" (notes are optional).
     return [missPreop, missSurgery, missRadiographs, missPostOp, []];
-  }, [isPreopUnlocked, flapDesign, drillingType, torqueValues, prostheticComponent,
+  }, [isPreopUnlocked, flapDesign, drillingType, torqueValues, prostheticComponent, prostheticComponents, usePerImplantProsthetic, implantPositions,
       prosthesisType, prosthesisTypeOther, iopaFiles, isFullArch, opgFile, postOpChecklist]);
   const stepDone = stepMissing.map(arr => arr.length === 0);
 
@@ -820,38 +918,126 @@ export default function Phase2SubmissionScreen() {
                 loading_type but the operator now picks Cover Screw or
                 Healing Abutment Placed (both non-loading paths), show a
                 confirmation Alert so the picker doesn't silently
-                contradict the Phase-1 plan. */}
-            {renderDropdown('Prosthetic Component', prostheticComponent, PROSTHETIC_COMPONENT_OPTIONS,
-              prostheticOpen, setProstheticOpen, (next: string) => {
-                const phase1ImmediateLoading = Array.isArray(loadingType)
-                  ? loadingType.includes('Immediate Loading')
-                  : loadingType === 'Immediate Loading';
-                const conflicting = next === 'Cover Screw Placed' || next === 'Healing Abutment Placed';
-                if (phase1ImmediateLoading && conflicting) {
-                  Alert.alert(
-                    'Immediate Loading selected in Phase 1, Please check',
-                    `You picked "${next}" in Phase 2, but Phase 1 plans for Immediate Loading. Confirm if this is intentional.`,
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      {
-                        text: 'Confirm',
-                        onPress: () => setProstheticComponent(next),
-                        style: 'destructive',
-                      },
-                    ],
+                contradict the Phase-1 plan.
+                iter-356: For multi-implant, non-full-arch, non-single cases
+                we render ONE dropdown PER implant (so a case can have
+                Implant 1 = Cover Screw, Implant 2 = Healing Abutment, etc.).
+                Full-arch / single cases keep the legacy single dropdown. */}
+            {!usePerImplantProsthetic ? (
+              renderDropdown('Prosthetic Component', prostheticComponent, PROSTHETIC_COMPONENT_OPTIONS,
+                prostheticOpen, setProstheticOpen, (next: string) => {
+                  const phase1ImmediateLoading = Array.isArray(loadingType)
+                    ? loadingType.includes('Immediate Loading')
+                    : loadingType === 'Immediate Loading';
+                  const conflicting = next === 'Cover Screw Placed' || next === 'Healing Abutment Placed';
+                  if (phase1ImmediateLoading && conflicting) {
+                    Alert.alert(
+                      'Immediate Loading selected in Phase 1, Please check',
+                      `You picked "${next}" in Phase 2, but Phase 1 plans for Immediate Loading. Confirm if this is intentional.`,
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Confirm',
+                          onPress: () => setProstheticComponent(next),
+                          style: 'destructive',
+                        },
+                      ],
+                    );
+                    return;
+                  }
+                  setProstheticComponent(next);
+                })
+            ) : (
+              <View style={{ marginTop: 8, marginBottom: 4 }} testID="per-implant-prosthetic-block">
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#1A2332', marginBottom: 8, letterSpacing: 0.2 }}>
+                  Prosthetic Component <Text style={{ color: '#E53935' }}>*</Text>
+                </Text>
+                <Text style={{ fontSize: 11, color: '#78909C', fontStyle: 'italic', marginBottom: 10 }}>
+                  Select per implant — a case can mix Cover Screw, Healing Abutment and Immediate Loading across sites.
+                </Text>
+                {implantPositions.map((pos, idx) => {
+                  const val = prostheticComponents[idx] || '';
+                  const isOpen = perImplantProstheticOpen === idx;
+                  const setVal = (next: string) => {
+                    setProstheticComponents(prev => {
+                      const u = [...prev];
+                      while (u.length <= idx) u.push('');
+                      u[idx] = next;
+                      return u;
+                    });
+                  };
+                  const handleSelect = (next: string) => {
+                    const phase1ImmediateLoading = Array.isArray(loadingType)
+                      ? loadingType.includes('Immediate Loading')
+                      : loadingType === 'Immediate Loading';
+                    const conflicting = next === 'Cover Screw Placed' || next === 'Healing Abutment Placed';
+                    setPerImplantProstheticOpen(null);
+                    if (phase1ImmediateLoading && conflicting) {
+                      Alert.alert(
+                        'Immediate Loading selected in Phase 1, Please check',
+                        `${implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : 'Tooth #—'}: you picked "${next}" in Phase 2, but Phase 1 plans for Immediate Loading. Confirm if this is intentional.`,
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Confirm', onPress: () => setVal(next), style: 'destructive' },
+                        ],
+                      );
+                      return;
+                    }
+                    setVal(next);
+                  };
+                  return (
+                    <View key={idx} style={{ marginBottom: 10 }} testID={`per-implant-prosthetic-row-${idx}`}>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#37474F', marginBottom: 6 }}>
+                        Implant {idx + 1}{pos ? ` (#${pos})` : ''}
+                      </Text>
+                      <TouchableOpacity
+                        style={{
+                          borderWidth: 1, borderColor: '#B3D4FC', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 12,
+                          backgroundColor: '#FFF', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                        }}
+                        onPress={() => setPerImplantProstheticOpen(isOpen ? null : idx)}
+                        testID={`per-implant-prosthetic-picker-${idx}`}
+                        /* @ts-ignore */ data-testid={`per-implant-prosthetic-picker-${idx}`}
+                      >
+                        <Text style={{ color: val ? '#1A2332' : '#90A4AE', fontSize: 14 }}>
+                          {val || 'Select Prosthetic Component'}
+                        </Text>
+                        <Ionicons name={isOpen ? 'chevron-up' : 'chevron-down'} size={18} color="#546E7A" />
+                      </TouchableOpacity>
+                      {isOpen && (
+                        <View style={{ borderWidth: 1, borderColor: '#B3D4FC', borderRadius: 8, marginTop: 6, backgroundColor: '#FFF', overflow: 'hidden' }}>
+                          {PROSTHETIC_COMPONENT_OPTIONS.map(opt => (
+                            <TouchableOpacity
+                              key={opt}
+                              style={{
+                                paddingVertical: 12, paddingHorizontal: 14,
+                                borderBottomWidth: 1, borderBottomColor: '#ECEFF1',
+                                backgroundColor: val === opt ? '#E3F2FD' : '#FFF',
+                              }}
+                              onPress={() => handleSelect(opt)}
+                              testID={`per-implant-prosthetic-${idx}-option-${opt.replace(/\s+/g, '-')}`}
+                              /* @ts-ignore */ data-testid={`per-implant-prosthetic-${idx}-option-${opt.replace(/\s+/g, '-')}`}
+                            >
+                              <Text style={{ fontWeight: val === opt ? '700' : '500', color: '#1A2332', fontSize: 14 }}>{opt}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      )}
+                    </View>
                   );
-                  return;
-                }
-                setProstheticComponent(next);
-              })}
+                })}
+              </View>
+            )}
 
             {/* Healing Abutment Cuff Height - per implant
                 iter-138: when the Phase-1 attachment has a known manufacturer
                 catalogue (e.g. Locator R-Tx ships 1-6 mm), we swap the free
                 TextInput for a dropdown constrained to stocked SKUs. When no
                 catalogue applies (bar-type, Other, missing), we fall back to
-                the legacy numeric TextInput so bespoke cases still work. */}
-            {prostheticComponent === 'Healing Abutment Placed' && (() => {
+                the legacy numeric TextInput so bespoke cases still work.
+                iter-356: In per-implant mode, only render cuff-height inputs
+                for implants that selected "Healing Abutment Placed". */}
+            {anyImplantHas('Healing Abutment Placed') && (() => {
               const catalogue = getCuffHeightsFor(attachmentType);
               return (
               <View style={s.torqueSection}>
@@ -861,7 +1047,13 @@ export default function Phase2SubmissionScreen() {
                     Catalogue: {attachmentType} · {catalogue.length} SKU{catalogue.length === 1 ? '' : 's'}
                   </Text>
                 )}
-                {healingAbutmentCuffHeight.map((val, idx) => (
+                {healingAbutmentCuffHeight.map((val, idx) => {
+                  // iter-356: in per-implant mode, only render rows for
+                  // implants that selected "Healing Abutment Placed".
+                  if (usePerImplantProsthetic && effectivePcAt(idx) !== 'Healing Abutment Placed') {
+                    return null;
+                  }
+                  return (
                   <View key={idx} style={[s.torqueRow, { flexWrap: 'wrap' }]}>
                     <View style={s.torqueLabel}>
                       <Text style={s.torqueLabelText}>
@@ -908,7 +1100,8 @@ export default function Phase2SubmissionScreen() {
                     )}
                     <Text style={s.torqueUnit}>mm</Text>
                   </View>
-                ))}
+                  );
+                })}
               </View>
             );})()}
 
@@ -1029,11 +1222,16 @@ export default function Phase2SubmissionScreen() {
               );
             })()}
 
-            {/* Access Channel Opening - shown when Immediate Loading Done */}
-            {prostheticComponent === 'Immediate Loading Done' && implantPositions.length > 0 && (
+            {/* Access Channel Opening - shown when Immediate Loading Done
+                iter-356: in per-implant mode, only render rows for implants
+                that selected "Immediate Loading Done". */}
+            {anyImplantHas('Immediate Loading Done') && implantPositions.length > 0 && (
               <View style={s.torqueSection}>
                 <Text style={s.torqueTitle}>Access Channel Opening</Text>
                 {implantPositions.map((pos, idx) => {
+                  if (usePerImplantProsthetic && effectivePcAt(idx) !== 'Immediate Loading Done') {
+                    return null;
+                  }
                   const toothNum = parseInt(pos, 10) || 0;
                   const anteriorTeeth = new Set([11,12,13,21,22,23,31,32,33,41,42,43]);
                   const upperPosterior = new Set([14,15,16,17,24,25,26,27]);
@@ -1286,6 +1484,16 @@ export default function Phase2SubmissionScreen() {
               const isInchargeSelf = (user?.role === 'implant_incharge' && createdByRole === 'implant_incharge' && user?.id === createdById);
               return (
                 <>
+                  {/* iter-332: actual surgery date — defaults to today,
+                      editable to back-date if it slipped from the planned
+                      procedure_date. */}
+                  <DoneDatePicker
+                    label="Actual Surgery Date (Phase 2)"
+                    value={phase2ActualDoneDate}
+                    onChange={setPhase2ActualDoneDate}
+                    testID="phase2-actual-done-date"
+                    helperText="When did the surgery actually happen? Defaults to today; back-date up to 30 days if it slipped from the planned date."
+                  />
                   <TouchableOpacity
                     style={[s.submitBtn, loading && { opacity: 0.6 }, !canSubmit && { backgroundColor: '#B0BEC5' }]}
                     onPress={handleSubmit}

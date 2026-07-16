@@ -610,7 +610,7 @@ export const buildLabSlipHtml = (procedure: any, org?: OrgBranding | null): stri
       const siteVal = getImplantSite(plans[i], '');
       const lbl = shadeLayout === 'full_arch'
         ? (i === 0 ? 'Anterior' : i === 1 ? 'Posterior' : `Slot ${i + 1}`)
-        : `Implant ${i + 1}${siteVal ? ` (#${siteVal})` : ''}`;
+        : (siteVal ? `Tooth #${siteVal}` : `Implant ${i + 1}`);
       return `<tr><td class="lbl">${lbl} Shade</td><td><strong>${s || '—'}</strong></td></tr>`;
     }).join('');
     const note = p4.shade_notes ? `<tr><td class="lbl">Shade Note (to lab)</td><td style="white-space: pre-wrap;">${p4.shade_notes}</td></tr>` : '';
@@ -841,4 +841,289 @@ const getChecklistLabel = (section: string, id: string): string => {
   };
 
   return labels[section]?.[id] || id;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Treatment Termination Summary — generated when a case reaches
+// `status = "treatment_ended"` (End Implant Treatment on the Survival Review).
+// Purpose: hand-off document for the patient's next dentist + institutional
+// audit copy. Includes patient info, clinician chain, termination metadata
+// (date / decision maker / reason) and the full implant lifecycle events.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const _fmtDateTime = (val: any): string => {
+  if (!val) return '—';
+  try {
+    const d = typeof val === 'string' ? new Date(val) : val;
+    if (Number.isNaN(d?.getTime?.())) return String(val);
+    return format(d, 'dd MMM yyyy, HH:mm');
+  } catch { return String(val); }
+};
+
+const _esc = (s: any): string => String(s ?? '').replace(/[&<>"']/g, (c) => (
+  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] || c
+));
+
+/**
+ * Build the Termination Summary HTML. Consumed by both the export (Save-As-PDF
+ * / share sheet) and the native print flow.
+ */
+export const buildTerminationSummaryHtml = (procedure: any): string => {
+  const p = procedure || {};
+  const caseId = p.badge_case_id || (p.id || p._id || '').toString().slice(-6).toUpperCase();
+  const endedAt = p.treatment_ended_at || p.phase2_survival_review?.last_reviewed_at;
+  const decisionMaker = p.treatment_ended_decision_maker || '—';
+  const endReason = p.treatment_ended_reason || '—';
+
+  // Aggregate ALL implants ever associated with this case (original placements
+  // + revision chain items pulled from the survival-review implants map).
+  const originalImplants: any[] = Array.isArray(p.implants) && p.implants.length
+    ? p.implants
+    : (Array.isArray(p.implant_plans) ? p.implant_plans : (Array.isArray(p.existing_implants) ? p.existing_implants : []));
+  const smap = (p.phase2_survival_review || {}).implants || {};
+  const events: any[] = ((p.phase2_survival_review || {}).events) || [];
+
+  const implantRows = originalImplants.map((imp: any, i: number) => {
+    const surv = smap[String(i)] || {};
+    const status = surv.status || 'Active';
+    const tooth = imp.tooth_number || imp.tooth || imp.position || '—';
+    const system = [imp.brand, imp.system].filter(Boolean).join(' / ') || imp.system || '—';
+    const size = [imp.diameter && `Ø${imp.diameter}mm`, imp.length && `L${imp.length}mm`].filter(Boolean).join(' · ') || '—';
+    const badgeColor = status === 'Treatment Ended' ? '#C62828'
+      : status === 'Failed' ? '#EF6C00'
+      : status === 'Replaced' ? '#795548'
+      : '#2E7D32';
+    const reason = surv.reason ? _esc(surv.reason) : '';
+    return `
+      <tr>
+        <td style="padding:6px 8px; border-bottom:1px solid #ECEFF1;">${_esc(tooth)}</td>
+        <td style="padding:6px 8px; border-bottom:1px solid #ECEFF1;">${_esc(system)}</td>
+        <td style="padding:6px 8px; border-bottom:1px solid #ECEFF1;">${_esc(size)}</td>
+        <td style="padding:6px 8px; border-bottom:1px solid #ECEFF1;">
+          <span style="background:${badgeColor}; color:#FFF; padding:2px 8px; border-radius:999px; font-size:10px; font-weight:700; letter-spacing:0.4px;">${_esc(status.toUpperCase())}</span>
+          ${reason ? `<div style="color:#546E7A; font-size:10px; margin-top:3px;">${reason}</div>` : ''}
+        </td>
+      </tr>`;
+  }).join('') || `<tr><td colspan="4" style="padding:12px; text-align:center; color:#78909C; font-style:italic;">No implants on record</td></tr>`;
+
+  const timelineRows = events.map((ev: any) => {
+    const at = _fmtDateTime(ev.at);
+    const who = ev.by || '—';
+    const failuresTxt = Array.isArray(ev.failures) && ev.failures.length
+      ? ev.failures.map((f: any) => {
+          const flags: string[] = [];
+          if (f.end_treatment) flags.push('END TREATMENT');
+          else if (f.replaced) flags.push('replaced');
+          else if (f.removed) flags.push('removed');
+          if (f.site_changed && f.new_tooth_number) flags.push(`site → #${f.new_tooth_number}`);
+          const flagsStr = flags.length ? ` (${flags.join(' · ')})` : '';
+          return `Tooth #${_esc(f.tooth)} — ${_esc(f.reason || 'Unknown')}${_esc(flagsStr)}`;
+        }).join('<br />')
+      : (ev.all_survived ? 'All implants surviving' : '—');
+    return `
+      <tr>
+        <td style="padding:6px 8px; border-bottom:1px solid #ECEFF1; white-space:nowrap; vertical-align:top; color:#37474F; font-weight:600;">${_esc(at)}</td>
+        <td style="padding:6px 8px; border-bottom:1px solid #ECEFF1; color:#546E7A; vertical-align:top;">${_esc(who)}</td>
+        <td style="padding:6px 8px; border-bottom:1px solid #ECEFF1; color:#263238; vertical-align:top;">${failuresTxt}</td>
+      </tr>`;
+  }).join('') || `<tr><td colspan="3" style="padding:12px; text-align:center; color:#78909C; font-style:italic;">No survival review events recorded</td></tr>`;
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Treatment Termination Summary — ${_esc(p.patient_name || 'Patient')}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Helvetica', 'Arial', sans-serif; margin: 0; padding: 24px; color: #263238; font-size: 12px; line-height: 1.45; }
+    .banner { background: #C62828; color: #FFF; padding: 14px 18px; border-radius: 8px; margin-bottom: 18px; }
+    .banner h1 { margin: 0; font-size: 20px; letter-spacing: 0.6px; }
+    .banner p { margin: 4px 0 0; font-size: 11px; opacity: 0.9; }
+    .meta { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 16px; font-size: 11px; color: #546E7A; }
+    .card { border: 1px solid #ECEFF1; border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; }
+    .card.danger { border-color: #EF9A9A; background: #FFF5F5; }
+    .card h2 { margin: 0 0 8px; font-size: 12px; color: #0D47A1; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 800; }
+    .card.danger h2 { color: #B71C1C; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 20px; }
+    .grid .k { color: #78909C; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.3px; }
+    .grid .v { color: #263238; font-size: 12px; font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th { background: #F5F7FA; color: #37474F; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.4px; padding: 8px; text-align: left; border-bottom: 1px solid #CFD8DC; }
+    tbody td { font-size: 11px; }
+    .sig { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 18px; }
+    .sig-box { border: 1px solid #ECEFF1; border-radius: 6px; padding: 30px 12px 10px; text-align: center; color: #78909C; font-size: 10.5px; min-height: 90px; }
+    .sig-line { border-bottom: 1px solid #37474F; height: 24px; margin-bottom: 8px; }
+    .foot { margin-top: 18px; padding-top: 10px; border-top: 1px dashed #CFD8DC; text-align: center; color: #90A4AE; font-size: 9.5px; font-style: italic; }
+    .reason-quote { background: #FFEBEE; border-left: 3px solid #C62828; padding: 8px 12px; margin-top: 8px; font-style: italic; color: #B71C1C; border-radius: 0 6px 6px 0; }
+  </style>
+</head>
+<body>
+  <div class="banner">
+    <h1>TREATMENT TERMINATION SUMMARY</h1>
+    <p>Case #${_esc(caseId)} · Generated ${_fmtDateTime(new Date())}</p>
+  </div>
+
+  <div class="meta">
+    <div><strong>Institution:</strong> Implanr Prosthodontic Records</div>
+    <div><strong>Document type:</strong> Terminal-state medico-legal summary</div>
+  </div>
+
+  <!-- Patient -->
+  <div class="card">
+    <h2>Patient Information</h2>
+    <div class="grid">
+      <div><div class="k">Full name</div><div class="v">${_esc(p.patient_name || '—')}</div></div>
+      <div><div class="k">Registration #</div><div class="v">${_esc(p.registration_number || '—')}</div></div>
+      <div><div class="k">Age / Sex</div><div class="v">${_esc([p.patient_age, p.patient_gender].filter(Boolean).join(' / ') || '—')}</div></div>
+      <div><div class="k">Contact</div><div class="v">${_esc(p.patient_phone || p.patient_contact || '—')}</div></div>
+      <div style="grid-column: 1 / -1;"><div class="k">Chief complaint</div><div class="v" style="font-weight:500;">${_esc(p.chief_complaint || '—')}</div></div>
+    </div>
+  </div>
+
+  <!-- Clinician Chain -->
+  <div class="card">
+    <h2>Clinician Chain</h2>
+    <div class="grid">
+      <div><div class="k">Operating Student</div><div class="v">${_esc(p.student_name || '—')}</div></div>
+      <div><div class="k">Supervising Consultant</div><div class="v">${_esc(p.supervisor_name || '—')}</div></div>
+      <div><div class="k">Implant In-Charge</div><div class="v">${_esc(p.incharge_name || p.implant_incharge_name || '—')}</div></div>
+      <div><div class="k">Procedure Type</div><div class="v">${_esc(p.implant_procedure_type || '—')}</div></div>
+    </div>
+  </div>
+
+  <!-- Termination Details -->
+  <div class="card danger">
+    <h2>Termination Details</h2>
+    <div class="grid">
+      <div><div class="k">Terminated on</div><div class="v">${_esc(_fmtDateTime(endedAt))}</div></div>
+      <div><div class="k">Decision by</div><div class="v" style="color:#B71C1C;">${_esc(decisionMaker)}</div></div>
+    </div>
+    <div class="reason-quote">${_esc(endReason)}</div>
+    <p style="margin: 10px 0 0; font-size: 10.5px; color: #78909C;">
+      Implant therapy for this patient has been <strong style="color:#B71C1C;">discontinued</strong>. No further replacement, healing or prosthetic phases will be recorded in this case file. Alternative therapy discussions and referrals (if any) are documented in the patient's clinical notes.
+    </p>
+  </div>
+
+  ${(() => {
+    // AI Exit Summary — soft clinical recommendations from GPT-5.2
+    // (PHI-redacted), optionally edited by clinician. Rendered as a distinct
+    // card so downstream dentists can find the hand-off note quickly.
+    const s = p.ai_exit_summary || {};
+    const txt = (s.text || '').trim();
+    if (!txt) return '';
+    const edited = s.edited
+      ? ` · <span style="color:#AD1457;font-weight:700;">Edited by ${_esc(s.edited_by || 'clinician')}</span>`
+      : '';
+    const genAt = _fmtDateTime(s.edited_at || s.generated_at || null);
+    return `
+      <div class="card" style="border-color:#F8BBD0; background:#FFF8FA;">
+        <h2 style="color:#AD1457;">AI Exit Summary — Clinical Hand-off Recommendation</h2>
+        <p style="margin:0 0 6px; font-size:11px; color:#546E7A;">
+          Auto-drafted by the platform's clinical AI on ${_esc(genAt)}${edited}. Verify before acting.
+        </p>
+        <div style="background:#FFF; border-left:3px solid #C62828; border-radius:0 6px 6px 0; padding:10px 12px; color:#263238; font-size:12px; line-height:1.55; white-space:pre-wrap;">${_esc(txt)}</div>
+      </div>`;
+  })()}
+
+  <!-- Implants -->
+  <div class="card">
+    <h2>Implants Placed &amp; Final Status</h2>
+    <table>
+      <thead>
+        <tr><th>Site (FDI)</th><th>System</th><th>Size</th><th>Final Status &amp; Reason</th></tr>
+      </thead>
+      <tbody>${implantRows}</tbody>
+    </table>
+  </div>
+
+  <!-- Lifecycle -->
+  <div class="card">
+    <h2>Survival Review Timeline</h2>
+    <table>
+      <thead>
+        <tr><th style="width:150px;">When</th><th style="width:170px;">By</th><th>Outcome</th></tr>
+      </thead>
+      <tbody>${timelineRows}</tbody>
+    </table>
+  </div>
+
+  <!-- Signatures -->
+  <div class="sig">
+    <div class="sig-box">
+      <div class="sig-line"></div>
+      Operator signature<br /><strong>${_esc(p.student_name || p.supervisor_name || '—')}</strong>
+    </div>
+    <div class="sig-box">
+      <div class="sig-line"></div>
+      Patient acknowledgement<br /><strong>${_esc(p.patient_name || '—')}</strong>
+    </div>
+  </div>
+
+  <div class="foot">
+    Generated by Implanr · This document contains PHI — handle per HIPAA safeguards. Access to this record is audit-logged.
+  </div>
+</body>
+</html>`;
+};
+
+/** Export the Termination Summary — opens Share sheet on native, new-tab HTML on web. */
+export const generateTerminationSummaryPDF = async (procedure: any) => {
+  try {
+    const html = buildTerminationSummaryHtml(procedure);
+    if (Platform.OS === 'web') {
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 15000);
+      return url;
+    }
+    const { uri } = await Print.printToFileAsync({ html });
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: `Termination_${(procedure.patient_name || 'Patient').replace(/\s+/g, '_')}.pdf`,
+        UTI: 'com.adobe.pdf',
+      });
+    } else {
+      Alert.alert('Saved', 'PDF generated. Sharing is unavailable on this device.');
+    }
+    return uri;
+  } catch (e) {
+    console.error('Termination PDF error:', e);
+    Alert.alert('Error', 'Failed to generate the Termination Summary. Please try again.');
+    throw e;
+  }
+};
+
+/** Open the native print dialog with the Termination Summary. */
+export const printTerminationSummaryPDF = async (procedure: any) => {
+  try {
+    const html = buildTerminationSummaryHtml(procedure);
+    if (Platform.OS === 'web') {
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const iframe = document.createElement('iframe');
+      iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+      iframe.src = url;
+      document.body.appendChild(iframe);
+      iframe.onload = () => {
+        try {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+        } catch {
+          window.open(url, '_blank');
+        }
+      };
+      setTimeout(() => {
+        try { document.body.removeChild(iframe); } catch {}
+        URL.revokeObjectURL(url);
+      }, 60000);
+      return;
+    }
+    await Print.printAsync({ html });
+  } catch (e) {
+    console.error('Termination print error:', e);
+    Alert.alert('Error', 'Failed to open the print dialog.');
+  }
 };

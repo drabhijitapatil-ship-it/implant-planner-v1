@@ -169,13 +169,44 @@
       "Bash(sed -n 18681,18813p /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py)",
       "Bash(grep -n 'return {\"ok\": True, \"review\": survival_map\\\\|@api_router.get\\(\"/procedures/{procedure_id}/active-implants\"' /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py)",
       "Bash(grep -n 'pending_stage2_prosthetic\"\\\\]}\\\\|pending_stage2_prosthetic\"\\\\]$\\\\|pending_stage2_prosthetic\"\\\\],\\\\|PENDING = \\\\[\"pending_phase1\"' /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py)",
-      "Bash(rm -f /tmp/other_routes.txt /tmp/main_routes.txt /tmp/other_lifecycle.txt /tmp/main_lifecycle.txt /tmp/o1.txt /tmp/m1.txt /tmp/o2.txt)"
+      "Bash(rm -f /tmp/other_routes.txt /tmp/main_routes.txt /tmp/other_lifecycle.txt /tmp/main_lifecycle.txt /tmp/o1.txt /tmp/m1.txt /tmp/o2.txt)",
+      "Bash(wc -l \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/frontend/app/procedures/[id].tsx\" \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/frontend/app/procedures/[id].tsx\")",
+      "Read(//Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/frontend/app/procedures/**)",
+      "Bash(OTHER=\"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/frontend/app/procedures/[id].tsx\" *)",
+      "Bash(find \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/frontend/components\" -iname \"*endtreatment*\" *)",
+      "Read(//Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/frontend/components/**)",
+      "Bash(MAIN=\"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/frontend/app/procedures/[id].tsx\" *)",
+      "Read(//Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/frontend/**)",
+      "Bash(grep -n \"generateTerminationSummaryPDF\\\\|printTerminationSummaryPDF\" \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/frontend/utils/pdfGenerator.ts\" | head *)",
+      "Read(//Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/frontend/utils/**)",
+      "Read(//Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/frontend/app/**)",
+      "Read(//Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/frontend/app/procedures/submit-phase2/**)",
+      "Bash(OTHER=\"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/frontend/app/procedures/submit-phase2/[id].tsx\" *)",
+      "Bash(diff -u /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/frontend/app/procedures/submit-phase2/[id].tsx /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/frontend/app/procedures/submit-phase2/[id].tsx)",
+      "Read(//private/tmp/**)",
+      "Bash(grep -n \"^                \\)\\)}$\" \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/frontend/app/procedures/submit-phase2/[id].tsx\")",
+      "Bash(grep -n \"isInchargeSelf = \\(user?.role\\\\|style={\\\\[s.submitBtn, loading\" \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/frontend/app/procedures/submit-phase2/[id].tsx\")",
+      "Bash(echo \"=== diff exit: $? ===\")",
+      "Bash(find \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/frontend/app\" -iname \"*stage2*surgical*\" -o -ipath \"*submit-stage2-surgical*\" 2>/dev/null *)",
+      "Read(//Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/frontend/app/procedures/submit-stage2-surgical/**)",
+      "Bash(diff -u /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/frontend/app/procedures/submit-stage2-surgical/[id].tsx /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/frontend/app/procedures/submit-stage2-surgical/[id].tsx)",
+      "Bash(grep -n '`Implant \\\\${i + 1}`\\\\|`Implant \\\\${idx + 1}`' \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/frontend/app/procedures/submit-stage2-surgical/[id].tsx\")",
+      "Bash(grep -n '`Implant \\\\${idx + 1}`' \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/frontend/app/procedures/submit-stage2-surgical/[id].tsx\")",
+      "Bash(grep -n '<View style={{ padding: 16, paddingBottom: 32 }}>' \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/frontend/app/procedures/submit-stage2-surgical/[id].tsx\")",
+      "Bash(echo \"=== ROUTES IN OTHER NOT IN MAIN ===\")",
+      "Bash(awk -F: '$1>=5976 && $1<=7900')",
+      "Bash(awk 'NR>=7590 && NR<=7613 {print NR\": [\"$0\"]\"}' /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/backend/server.py)",
+      "Bash(python3 - /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py /private/tmp/claude-501/-Users-prathmeshjadhav-Desktop-work-implant-planner-v1-main/e057b30c-a70b-4cc2-9cf5-9d2dd65afa83/scratchpad/analytics_block.py)",
+      "Bash(rm -f /private/tmp/claude-501/-Users-prathmeshjadhav-Desktop-work-implant-planner-v1-main/e057b30c-a70b-4cc2-9cf5-9d2dd65afa83/scratchpad/analytics_block.py *)",
+      "Bash(OTHER=\"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/frontend\" *)",
+      "Bash(rm -f /tmp/baseline_errors.txt /tmp/current_errors.txt /tmp/other_files.txt /tmp/main_files.txt *)"
     ],
     "additionalDirectories": [
       "/dev",
       "/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/phase1/backend",
       "/tmp",
-      "/private/tmp"
+      "/private/tmp",
+      "/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/frontend/app/procedures"
     ]
   }
 }

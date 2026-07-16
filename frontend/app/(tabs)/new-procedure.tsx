@@ -14,6 +14,7 @@ import { showUploadPicker } from '../../utils/uploadPicker';
 import { useAuth } from '../../contexts/AuthContext';
 import BackButton from '../../components/BackButton';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';
+import PredictiveRiskCard from '../../components/PredictiveRiskCard';
 import { AtrophyClassificationChip } from '../../components/AtrophyClassificationChip';
 import ExistingImplantSection from '../../components/ExistingImplantSection';
 import FdiAnatomicalChart from '../../components/FdiAnatomicalChart';
@@ -1234,6 +1235,11 @@ export default function NewProcedureScreen() {
           </TouchableOpacity>
         </View>
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 16 }} nestedScrollEnabled={true}>
+          <PredictiveRiskCard
+            procedureType={formData.implant_procedure_type}
+            boneType={null}
+            toothRegion={null}
+          />
           <CaseImplantPlanning
             procedureId={createdProcedureId}
             procedureType={formData.implant_procedure_type}
