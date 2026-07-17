@@ -12,6 +12,8 @@ import { getImplantSite } from '../../../utils/implantPlan';
 import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
 import { PhaseHeader } from '../../../components/PhaseHeader';
+import SaveDraftButton from '../../../components/SaveDraftButton';
+import { draftStorageKey, loadDraft, clearDraft, useDraftAutosave, useUnsavedChangesGuard } from '../../../utils/draftAutosave';
 import DoneDatePicker, { todayIso } from '../../../components/DoneDatePicker';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -82,6 +84,47 @@ export default function Phase4Step1Screen() {
   const [perImplantPlans, setPerImplantPlans] = useState<{ prosthesis: string; material: string; openProsthesis: boolean; openMaterial: boolean }[]>([]);
   const [implantPositions, setImplantPositions] = useState<string[]>([]);
 
+  // ── Local draft autosave (survives backgrounding / navigating away before
+  // final Submit) — see utils/draftAutosave.ts. Only user-edited fields are
+  // captured; server-sourced reference data (`procedure`, implant positions)
+  // is re-fetched fresh every time via loadProcedure().
+  const [screenLoaded, setScreenLoaded] = useState(false);
+  const draftKey = draftStorageKey('phase4step1', String(id), user?.id);
+  const getDraftSnapshot = () => ({
+    doneDate, finalProsthesis, prostheticMaterial, customAbutment, overdentureAttachment,
+    paymentComplete, componentsAvailable, impressionType, conventionalTrayType, impressionMaterial,
+    shadeValues, shadeNotes, labSlipNote, studentNotes, muaRows, muaTouched, perImplantPlans,
+  });
+  const applyDraftSnapshot = (d: Record<string, any>) => {
+    if (d.doneDate !== undefined) setDoneDate(d.doneDate);
+    if (d.finalProsthesis !== undefined) setFinalProsthesis(d.finalProsthesis);
+    if (d.prostheticMaterial !== undefined) setProstheticMaterial(d.prostheticMaterial);
+    if (d.customAbutment !== undefined) setCustomAbutment(d.customAbutment);
+    if (d.overdentureAttachment !== undefined) setOverdentureAttachment(d.overdentureAttachment);
+    if (d.paymentComplete !== undefined) setPaymentComplete(d.paymentComplete);
+    if (d.componentsAvailable !== undefined) setComponentsAvailable(d.componentsAvailable);
+    if (d.impressionType !== undefined) setImpressionType(d.impressionType);
+    if (d.conventionalTrayType !== undefined) setConventionalTrayType(d.conventionalTrayType);
+    if (d.impressionMaterial !== undefined) setImpressionMaterial(d.impressionMaterial);
+    if (d.shadeValues !== undefined) setShadeValues(d.shadeValues);
+    if (d.shadeNotes !== undefined) setShadeNotes(d.shadeNotes);
+    if (d.labSlipNote !== undefined) setLabSlipNote(d.labSlipNote);
+    if (d.studentNotes !== undefined) setStudentNotes(d.studentNotes);
+    if (d.muaRows !== undefined) setMuaRows(d.muaRows);
+    if (d.muaTouched !== undefined) setMuaTouched(d.muaTouched);
+    if (d.perImplantPlans !== undefined) setPerImplantPlans(d.perImplantPlans);
+  };
+  const { saveNow } = useDraftAutosave({
+    enabled: screenLoaded,
+    storageKey: draftKey,
+    getSnapshot: getDraftSnapshot,
+  });
+  useUnsavedChangesGuard({
+    enabled: screenLoaded,
+    hasUnsavedChanges: true,
+    onSave: saveNow,
+  });
+
   useEffect(() => { loadProcedure(); }, []);
 
   const loadProcedure = async () => {
@@ -138,6 +181,11 @@ export default function Phase4Step1Screen() {
         setMuaTouched(true);
       }
     } catch {}
+
+    // Overlay any locally-saved draft on top of the server prefill.
+    const draft = await loadDraft(draftKey);
+    if (draft) applyDraftSnapshot(draft);
+    setScreenLoaded(true);
   };
 
   // iter-194: helpers
@@ -270,6 +318,7 @@ export default function Phase4Step1Screen() {
     try {
       const payload = buildPayload();
       await api.post(`/procedures/${id}/stage2/prosthetic`, payload);
+      await clearDraft(draftKey);
       const isInchargeSelfCreated = user?.role === 'implant_incharge' && procedure?.created_by_role === 'implant_incharge' && user?.id === procedure?.created_by_id;
       if (isInchargeSelfCreated) {
         try { await api.post(`/procedures/${id}/stage2/prosthetic/approve`, { action: 'approve', comment: '' }); } catch {}
@@ -337,6 +386,7 @@ export default function Phase4Step1Screen() {
         subtitle="Step 1 of 2: Prosthetic Planning"
         testID="phase4-step1-submit-header"
       />
+      <SaveDraftButton onSave={saveNow} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} nestedScrollEnabled>
           {/* ── Final Prosthesis Selection ── */}

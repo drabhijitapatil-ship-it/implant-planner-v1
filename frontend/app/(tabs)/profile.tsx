@@ -430,7 +430,7 @@ export default function ProfileScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Compliance</Text>
             <TouchableOpacity
-              style={[styles.rowItem, styles.rowItemLast]}
+              style={styles.rowItem}
               onPress={() => router.push('/admin/audit-log')}
               data-testid="link-audit-log"
               testID="link-audit-log"
@@ -442,14 +442,16 @@ export default function ProfileScreen() {
               <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
             </TouchableOpacity>
             <TouchableOpacity
-        style={[styles.rowItem, styles.rowItemLast]}
+              style={styles.rowItem}
               onPress={() => router.push('/admin/backfill-timeline' as any)}
               data-testid="link-backfill-timeline"
               testID="link-backfill-timeline"
             >
-              <Ionicons name="calendar-outline" size={22} color="#1565C0" />
+              <View style={[styles.iconBadge, { backgroundColor: '#E3F2FD' }]}>
+                <Ionicons name="calendar" size={20} color="#1565C0" />
+              </View>
               <Text style={styles.photoButtonText}>Backfill treatment timeline</Text>
-              <Ionicons name="chevron-forward" size={18} color="#999" />
+              <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.rowItem, styles.rowItemLast]}
@@ -457,9 +459,11 @@ export default function ProfileScreen() {
               data-testid="link-survival-analytics"
               testID="link-survival-analytics"
             >
-              <Ionicons name="bar-chart-outline" size={22} color="#1565C0" />
+              <View style={[styles.iconBadge, { backgroundColor: '#E0F7FA' }]}>
+                <Ionicons name="stats-chart" size={20} color="#00838F" />
+              </View>
               <Text style={styles.photoButtonText}>Implant survival analytics</Text>
-              <Ionicons name="chevron-forward" size={18} color="#999" />
+              <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
             </TouchableOpacity>
           </View>
         )}

@@ -116,7 +116,7 @@ export default function TimelineBackfillScreen() {
   return (
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <BackToDashboard />
+        <BackToDashboard floating={false} />
         <View style={{ flex: 1, marginLeft: 12 }}>
           <Text style={s.headerTitle}>Treatment Timeline — Backfill</Text>
           <Text style={s.headerSub}>Fill in the clinical &ldquo;Done On&rdquo; dates on legacy cases.</Text>
@@ -220,12 +220,12 @@ const s = StyleSheet.create({
   caseTitle: { fontSize: 15, fontWeight: '800', color: '#1A1A2E' },
   caseSub: { fontSize: 12, color: '#546E7A', marginTop: 2 },
   caseStatus: { fontSize: 11, color: '#90A4AE', marginTop: 4, fontStyle: 'italic' },
-  row: { marginBottom: 8 },
-  fieldLabel: { fontSize: 12, fontWeight: '700', color: '#37474F', marginBottom: 4 },
+  row: { marginBottom: 12 },
+  fieldLabel: { fontSize: 12, fontWeight: '700', color: '#37474F', marginBottom: 6 },
   input: {
     borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 8,
-    paddingVertical: 8, paddingHorizontal: 10, fontSize: 13, color: '#1e2a44',
-    backgroundColor: '#FAFAFA',
+    paddingVertical: 10, paddingHorizontal: 10, fontSize: 13, color: '#1e2a44',
+    backgroundColor: '#FAFAFA', width: '100%', alignSelf: 'stretch',
   },
   saveBtn: {
     marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',

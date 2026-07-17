@@ -615,6 +615,22 @@ export default function NewProcedureScreen() {
                   null,
                 ]);
               }
+              // Hydrate intra-oral photographs on draft resume.
+              if (Array.isArray(proc.intraoral_photos) && proc.intraoral_photos.length > 0) {
+                const restored: (null | { filename: string; original_name: string; content_type: string; label: string })[] = [null, null];
+                proc.intraoral_photos.forEach((f: any, i: number) => {
+                  const rec = {
+                    filename: f.filename,
+                    original_name: f.original_name || f.filename,
+                    content_type: f.content_type || '',
+                    label: f.label || (i < INTRAORAL_LABELS.length ? INTRAORAL_LABELS[i] : `Photo ${i + 1}`),
+                  };
+                  if (i < 2) restored[i] = rec;
+                  else restored.push(rec);
+                });
+                setIntraoralPhotos(restored);
+                if (proc.intraoral_photos.length > 2) setExtraIntraoralCount(proc.intraoral_photos.length - 2);
+              }
               // iter-222/224: For existing-implant drafts, the backend stored
               // `implant_procedure_type` as the underlying procedure label
               // ("Single Conventional Implant" etc.) so legacy widgets keep
@@ -670,6 +686,8 @@ export default function NewProcedureScreen() {
         setChecklistItems({});
         setCbctFiles([null, null]);
         setExtraCbctCount(0);
+        setIntraoralPhotos([null, null]);
+        setExtraIntraoralCount(0);
         setCreatedProcedureId(null);
         setIsDraftResume(false);
         setStep('details');
@@ -749,6 +767,14 @@ export default function NewProcedureScreen() {
   const [cbctFiles, setCbctFiles] = useState<(null | { filename: string; original_name: string; content_type: string })[]>([null, null]);
   const [cbctUploadingIdx, setCbctUploadingIdx] = useState<number | null>(null);
   const [extraCbctCount, setExtraCbctCount] = useState(0);
+  // Patient Intra-oral Photograph section — same UI/interaction as CBCT,
+  // but 2 fixed labelled slots ("Occlusal View", "Lateral view/Frontal
+  // view") and extras get a free-text label input. Skipped for Existing
+  // Implant cases (consistent with CBCT).
+  const INTRAORAL_LABELS = ['Occlusal View', 'Lateral view/Frontal view'];
+  const [intraoralPhotos, setIntraoralPhotos] = useState<(null | { filename: string; original_name: string; content_type: string; label: string })[]>([null, null]);
+  const [intraoralUploadingIdx, setIntraoralUploadingIdx] = useState<number | null>(null);
+  const [extraIntraoralCount, setExtraIntraoralCount] = useState(0);
   const [authToken, setAuthToken] = useState('');
   const [consentFile, setConsentFile] = useState<null | { filename: string; original_name: string; content_type: string }>(null);
   const [consentUploading, setConsentUploading] = useState(false);
@@ -932,14 +958,20 @@ export default function NewProcedureScreen() {
       const res = await api.post('/uploads/cbct-temp', formPayload, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      const updated = [...cbctFiles];
-      while (updated.length <= idx) updated.push(null);
-      updated[idx] = {
-        filename: res.data.cbct_file,
-        original_name: res.data.cbct_original_name,
-        content_type: res.data.cbct_content_type,
-      };
-      setCbctFiles(updated);
+      // Functional update — a concurrent upload for another slot (started
+      // while this one was still in flight) may have set newer state in the
+      // meantime; reading off `prev` instead of the stale `cbctFiles` closure
+      // avoids clobbering it.
+      setCbctFiles(prev => {
+        const updated = [...prev];
+        while (updated.length <= idx) updated.push(null);
+        updated[idx] = {
+          filename: res.data.cbct_file,
+          original_name: res.data.cbct_original_name,
+          content_type: res.data.cbct_content_type,
+        };
+        return updated;
+      });
     } catch (err: any) {
       Alert.alert('Upload Failed', err.response?.data?.detail || 'Could not upload CBCT file');
     } finally {
@@ -956,6 +988,62 @@ export default function NewProcedureScreen() {
     updated.splice(idx, 1);
     setCbctFiles(updated);
     setExtraCbctCount(prev => Math.max(0, prev - 1));
+  };
+
+  // ── Patient Intra-oral Photograph helpers ──
+  // Slots 0 + 1 use the fixed labels above (mandatory). Extras (idx >= 2)
+  // start with an empty custom label input.
+  const pickIntraoralAtIndex = async (idx: number) => {
+    try {
+      const picked = await showUploadPicker(['image/png', 'image/jpeg', 'image/heic', 'image/heif']);
+      if (!picked) return;
+      setIntraoralUploadingIdx(idx);
+      const formPayload = new FormData();
+      formPayload.append('file', {
+        uri: picked.uri,
+        name: picked.name || 'intraoral.jpg',
+        type: picked.type || 'image/jpeg',
+      } as any);
+      const res = await api.post('/uploads/cbct-temp', formPayload, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      // Functional update — see pickCbctFileAtIndex for why.
+      setIntraoralPhotos(prev => {
+        const updated = [...prev];
+        while (updated.length <= idx) updated.push(null);
+        const priorLabel = updated[idx]?.label
+          || (idx < INTRAORAL_LABELS.length ? INTRAORAL_LABELS[idx] : '');
+        updated[idx] = {
+          filename: res.data.cbct_file,
+          original_name: res.data.cbct_original_name,
+          content_type: res.data.cbct_content_type,
+          label: priorLabel,
+        };
+        return updated;
+      });
+    } catch (err: any) {
+      Alert.alert('Upload Failed', err.response?.data?.detail || 'Could not upload intra-oral photograph');
+    } finally {
+      setIntraoralUploadingIdx(null);
+    }
+  };
+
+  const addExtraIntraoral = () => {
+    setExtraIntraoralCount(prev => prev + 1);
+    setIntraoralPhotos(prev => [...prev, null]);
+  };
+  const removeExtraIntraoral = (idx: number) => {
+    const updated = [...intraoralPhotos];
+    updated.splice(idx, 1);
+    setIntraoralPhotos(updated);
+    setExtraIntraoralCount(prev => Math.max(0, prev - 1));
+  };
+  const updateIntraoralLabel = (idx: number, next: string) => {
+    setIntraoralPhotos(prev => {
+      const u = [...prev];
+      if (u[idx]) u[idx] = { ...u[idx]!, label: next };
+      return u;
+    });
   };
 
   // ── Continue to Implant Selection ──
@@ -1148,6 +1236,16 @@ export default function NewProcedureScreen() {
           cbct_file: cbctFiles[0]?.filename || '',
           cbct_original_name: cbctFiles[0]?.original_name || '',
           cbct_content_type: cbctFiles[0]?.content_type || '',
+        } : {}),
+        // Patient Intra-oral Photograph payload — includes the fixed labels
+        // for slots 0 + 1 and the user-entered labels for extras.
+        ...(intraoralPhotos.filter(f => f !== null).length > 0 ? {
+          intraoral_photos: intraoralPhotos.filter(f => f !== null).map((f, i) => ({
+            filename: f!.filename,
+            original_name: f!.original_name,
+            content_type: f!.content_type,
+            label: f!.label || (i < INTRAORAL_LABELS.length ? INTRAORAL_LABELS[i] : `Photo ${i + 1}`),
+          })),
         } : {}),
       };
 
@@ -1605,6 +1703,7 @@ export default function NewProcedureScreen() {
       if (!ma.radiation) missMedicalOrChecklist.push('Radiation therapy');
     } else {
       if (!cbctFiles[0] || !cbctFiles[1]) missMedicalOrChecklist.push('Both CBCT Reports');
+      if (!intraoralPhotos[0] || !intraoralPhotos[1]) missMedicalOrChecklist.push('Both Patient Intra-oral Photographs');
       if (!formData.loading_type || formData.loading_type.length === 0) missMedicalOrChecklist.push('Type of Loading');
       const ma = formData.medical_assessment || {};
       if (!ma.diabetes) missMedicalOrChecklist.push('Diabetes (medical assessment)');
@@ -3087,6 +3186,104 @@ export default function NewProcedureScreen() {
         </TouchableOpacity>
         <Text style={{ fontSize: 11, color: '#999', marginTop: 2 }}>
           Minimum 2 CBCT Reports required. Accepted: PDF, PNG, JPG, HEIC (Max 25MB each)
+        </Text>
+      </View>
+      )}
+
+      {/* ─── Patient Intra-oral Photograph (Mandatory: 2 minimum) ─── */}
+      {/* Skipped for Existing Implant cases (consistent with CBCT). Same
+          slot-based UX as CBCT but slots 0+1 have fixed labels ("Occlusal
+          View" / "Lateral view/Frontal view"). Extras get an editable custom
+          label. */}
+      {!isExistingImplantCase && (
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Patient Intra-oral Photograph <Text style={{ color: '#DC3545' }}>*</Text></Text>
+        {intraoralPhotos.map((file, idx) => {
+          const isExtra = idx >= 2;
+          const baseUrl = api.defaults.baseURL || '';
+          const fixedLabel = idx < INTRAORAL_LABELS.length ? INTRAORAL_LABELS[idx] : '';
+          return (
+            <View key={idx} style={{ marginBottom: 12 }} data-testid={`intraoral-slot-${idx}`}>
+              {isExtra ? (
+                <TextInput
+                  style={{
+                    fontSize: 13, fontWeight: '700', color: '#1565C0',
+                    marginBottom: 6, paddingVertical: 6, paddingHorizontal: 10,
+                    borderWidth: 1, borderColor: '#B3D4FC', borderRadius: 8,
+                    backgroundColor: '#F5FAFF',
+                  }}
+                  value={file?.label || ''}
+                  onChangeText={(t) => updateIntraoralLabel(idx, t)}
+                  placeholder="e.g., Right buccal view"
+                  placeholderTextColor="#90A4AE"
+                  editable={!!file}
+                  data-testid={`intraoral-label-${idx}`}
+                />
+              ) : (
+                <Text style={{ fontSize: 13, fontWeight: '800', color: '#1565C0', marginBottom: 6, letterSpacing: 0.3 }}>
+                  Tab {idx + 1} — {fixedLabel}
+                </Text>
+              )}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={{ flex: 1 }}>
+                  {file ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Image
+                        source={{ uri: `${baseUrl}/uploads/${file.filename}?token=${authToken}`, headers: { Authorization: `Bearer ${authToken}` } }}
+                        style={{ width: 36, height: 36, borderRadius: 6 }}
+                        resizeMode="cover"
+                      />
+                      <TouchableOpacity
+                        style={styles.cbctViewBtn}
+                        onPress={() => Linking.openURL(`${baseUrl}/uploads/${file.filename}?token=${authToken}`).catch(() => Alert.alert('Error', 'Could not open file'))}
+                        data-testid={`view-intraoral-${idx}`}
+                      >
+                        <Text style={styles.cbctViewBtnText} numberOfLines={1}>View Photograph</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => { const u = [...intraoralPhotos]; u[idx] = null; setIntraoralPhotos(u); }}
+                        data-testid={`remove-intraoral-${idx}`}
+                      >
+                        <Ionicons name="close-circle" size={22} color="#E53935" />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.cbctUploadBtn}
+                      onPress={() => pickIntraoralAtIndex(idx)}
+                      disabled={intraoralUploadingIdx === idx}
+                      data-testid={`upload-intraoral-${idx}`}
+                    >
+                      {intraoralUploadingIdx === idx ? (
+                        <ActivityIndicator color="#FFF" size="small" />
+                      ) : (
+                        <>
+                          <Ionicons name="cloud-upload" size={18} color="#FFF" />
+                          <Text style={styles.cbctUploadBtnText}>Upload Photograph</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </View>
+                {isExtra && (
+                  <TouchableOpacity onPress={() => removeExtraIntraoral(idx)} data-testid={`remove-extra-intraoral-${idx}`}>
+                    <Ionicons name="remove-circle" size={26} color="#E53935" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          );
+        })}
+        <TouchableOpacity
+          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10 }}
+          onPress={addExtraIntraoral}
+          data-testid="add-extra-intraoral-btn"
+        >
+          <Ionicons name="add-circle" size={26} color="#4CAF50" />
+          <Text style={{ color: '#4CAF50', fontWeight: '700', fontSize: 14 }}>Add Photograph</Text>
+        </TouchableOpacity>
+        <Text style={{ fontSize: 11, color: '#999', marginTop: 2 }}>
+          Minimum 2 Photographs required. Accepted: PNG, JPEG, HEIC (Max 20 MB each)
         </Text>
       </View>
       )}

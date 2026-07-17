@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect, useRef, useCallback } from 'react';
-import { Alert } from 'react-native';
+import { Alert, AppState } from 'react-native';
 import api, { getToken, setToken, removeToken, setOnAuthFailure, setOnActivity } from '../utils/api';
 import { BACKEND_URL } from '../utils/config';
 import { router } from 'expo-router';
@@ -133,6 +133,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [user, expireSession]);
 
+  // Persist the in-memory activity timestamp when the app backgrounds — the
+  // restart check in loadStoredAuth() below reads this from storage, but
+  // until now nothing ever wrote it after login. That left it pinned to the
+  // login time, so any resume more than 15 minutes after login (regardless
+  // of how recently the user was actually active) wiped the session and
+  // left the current screen stranded with no token instead of a clean
+  // logout — the "screen goes black" symptom.
+  useEffect(() => {
+    if (!user) return;
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'background' || next === 'inactive') {
+        setToken('last_activity_at', String(lastActivityRef.current)).catch(() => {});
+      }
+    });
+    return () => sub.remove();
+  }, [user]);
+
   const loadStoredAuth = async () => {
     try {
       const storedAccessToken = await getToken('access_token');
@@ -147,7 +164,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await removeToken('refresh_token');
           await removeToken('user');
           await removeToken('last_activity_at');
-          return; // index route sends the user to /auth/login
+          // Explicit redirect rather than relying on whatever screen happens
+          // to re-render on `user` going null — if the app resumed straight
+          // into a non-index route (e.g. the OS restored the last-open
+          // screen after a background suspend), that screen has no reason
+          // to know the session was just wiped and would otherwise sit
+          // there with a dead token instead of bouncing to login.
+          router.replace('/auth/login');
+          return;
         }
         try {
           const resp = await api.get('/auth/me');

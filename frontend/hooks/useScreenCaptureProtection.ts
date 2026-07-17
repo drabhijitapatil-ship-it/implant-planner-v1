@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import * as ScreenCapture from 'expo-screen-capture';
 
 /**
@@ -15,23 +15,31 @@ import * as ScreenCapture from 'expo-screen-capture';
  * We enable protection once the user is authenticated and leave it on for
  * the whole session — the app only ever renders PHI on authenticated
  * routes, and toggling on every navigation causes flicker on Android.
+ *
+ * Re-applying on every foreground transition (not just once on mount)
+ * guards against a known Android FLAG_SECURE quirk where the secure window
+ * surface can fail to redraw after the screen has been off/idle for a
+ * while, leaving the app rendering solid black until the Activity is
+ * recreated (previously "fixed" by force-closing and reopening).
  */
 export function useScreenCaptureProtection(enabled: boolean): void {
   useEffect(() => {
     if (!enabled) return;
     if (Platform.OS === 'web') return;
     let cancelled = false;
-    (async () => {
-      try {
-        await ScreenCapture.preventScreenCaptureAsync('hipaa-phi-guard');
-      } catch {
+    const apply = () => {
+      ScreenCapture.preventScreenCaptureAsync('hipaa-phi-guard').catch(() => {
         // Non-fatal — continue even if the native module isn't available
         // (e.g. in Expo Go on very old OS versions).
-      }
-    })();
+      });
+    };
+    apply();
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active' && !cancelled) apply();
+    });
     return () => {
-      if (cancelled) return;
       cancelled = true;
+      sub.remove();
       ScreenCapture.allowScreenCaptureAsync('hipaa-phi-guard').catch(() => {});
     };
   }, [enabled]);

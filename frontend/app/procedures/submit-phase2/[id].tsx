@@ -11,6 +11,8 @@ import { showUploadPicker } from '../../../utils/uploadPicker';
 import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
 import { PhaseHeader } from '../../../components/PhaseHeader';
+import SaveDraftButton from '../../../components/SaveDraftButton';
+import { draftStorageKey, loadDraft, clearDraft, useDraftAutosave, useUnsavedChangesGuard } from '../../../utils/draftAutosave';
 import DoneDatePicker, { todayIso } from '../../../components/DoneDatePicker';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -129,6 +131,68 @@ export default function Phase2SubmissionScreen() {
   // Notes
   const [studentNotes, setStudentNotes] = useState('');
 
+  // ── Local draft autosave (survives backgrounding / navigating away before
+  // final Submit) — see utils/draftAutosave.ts. Only user-edited fields are
+  // captured; server-sourced reference data (implant positions, procedure
+  // type, etc.) is re-fetched fresh every time via loadImplantPlan().
+  const [screenLoaded, setScreenLoaded] = useState(false);
+  const draftKey = draftStorageKey('phase2', String(id), user?.id);
+  const getDraftSnapshot = () => ({
+    phase2ActualDoneDate, preSurgeryChecklist, preopNotes,
+    anesthesiaAdequate, anesthesiaDetails, flapDesign, drillingType,
+    implantSeated, implantSeatedComment, torqueValues,
+    boneGraftUsed, boneGraftDetails, implantOtherNotes,
+    prostheticComponent, prostheticComponents, prosthesisType, prosthesisTypeOther,
+    healingAbutmentCuffHeight, accessChannelOpenings,
+    suturesPlaced, hemostasisAchieved, postOpChecklist,
+    iopaFiles, opgFile, extraIopaCount, studentNotes,
+    multiUnitPlaced, muaAngulation, muaCuffHeight,
+  });
+  const applyDraftSnapshot = (d: Record<string, any>) => {
+    if (d.phase2ActualDoneDate !== undefined) setPhase2ActualDoneDate(d.phase2ActualDoneDate);
+    if (d.preSurgeryChecklist !== undefined) setPreSurgeryChecklist(d.preSurgeryChecklist);
+    if (d.preopNotes !== undefined) setPreopNotes(d.preopNotes);
+    if (d.anesthesiaAdequate !== undefined) setAnesthesiaAdequate(d.anesthesiaAdequate);
+    if (d.anesthesiaDetails !== undefined) setAnesthesiaDetails(d.anesthesiaDetails);
+    if (d.flapDesign !== undefined) setFlapDesign(d.flapDesign);
+    if (d.drillingType !== undefined) setDrillingType(d.drillingType);
+    if (d.implantSeated !== undefined) setImplantSeated(d.implantSeated);
+    if (d.implantSeatedComment !== undefined) setImplantSeatedComment(d.implantSeatedComment);
+    if (d.torqueValues !== undefined) setTorqueValues(d.torqueValues);
+    if (d.boneGraftUsed !== undefined) setBoneGraftUsed(d.boneGraftUsed);
+    if (d.boneGraftDetails !== undefined) setBoneGraftDetails(d.boneGraftDetails);
+    if (d.implantOtherNotes !== undefined) setImplantOtherNotes(d.implantOtherNotes);
+    if (d.prostheticComponent !== undefined) setProstheticComponent(d.prostheticComponent);
+    if (d.prostheticComponents !== undefined) setProstheticComponents(d.prostheticComponents);
+    if (d.prosthesisType !== undefined) setProsthesisType(d.prosthesisType);
+    if (d.prosthesisTypeOther !== undefined) setProsthesisTypeOther(d.prosthesisTypeOther);
+    if (d.healingAbutmentCuffHeight !== undefined) setHealingAbutmentCuffHeight(d.healingAbutmentCuffHeight);
+    if (d.accessChannelOpenings !== undefined) setAccessChannelOpenings(d.accessChannelOpenings);
+    if (d.suturesPlaced !== undefined) setSuturesPlaced(d.suturesPlaced);
+    if (d.hemostasisAchieved !== undefined) setHemostasisAchieved(d.hemostasisAchieved);
+    if (d.postOpChecklist !== undefined) setPostOpChecklist(d.postOpChecklist);
+    if (d.iopaFiles !== undefined) setIopaFiles(d.iopaFiles);
+    if (d.opgFile !== undefined) setOpgFile(d.opgFile);
+    if (d.extraIopaCount !== undefined) setExtraIopaCount(d.extraIopaCount);
+    if (d.studentNotes !== undefined) setStudentNotes(d.studentNotes);
+    if (d.multiUnitPlaced !== undefined) setMultiUnitPlaced(d.multiUnitPlaced);
+    if (d.muaAngulation !== undefined) setMuaAngulation(d.muaAngulation);
+    if (d.muaCuffHeight !== undefined) setMuaCuffHeight(d.muaCuffHeight);
+  };
+  const { saveNow } = useDraftAutosave({
+    enabled: screenLoaded,
+    storageKey: draftKey,
+    getSnapshot: getDraftSnapshot,
+  });
+  // User asked for the "Save?" prompt on every exit from this screen (not
+  // just when a heuristic thinks something changed) — simplest and most
+  // reliable given how many independent fields this form has.
+  useUnsavedChangesGuard({
+    enabled: screenLoaded,
+    hasUnsavedChanges: true,
+    onSave: saveNow,
+  });
+
   useEffect(() => { loadImplantPlan(); }, []);
 
   const loadImplantPlan = async () => {
@@ -164,12 +228,12 @@ export default function Phase2SubmissionScreen() {
       const teeth = Array.isArray(procRes.data.teeth_present) ? procRes.data.teeth_present : [];
       setTeethCount(teeth.length);
 
-      // Determine IOPA slot count
-      let iopaCount: number;
-      if (pType === 'All on 4') iopaCount = 4;
-      else if (pType === 'All on 6') iopaCount = 6;
-      else if (pType === 'All on X') iopaCount = 5;
-      else iopaCount = count;
+      // Determine IOPA slot count. Full-arch cases (All on 4/6/X) use a
+      // single OPG as the standard post-surgical radiograph — individual
+      // IOPAs are optional there, so no slots are pre-seeded; the student
+      // can still add them voluntarily via "Add IOPA Radiograph".
+      const FULL_ARCH_TYPES_LOCAL = new Set(['All on 4', 'All on 6', 'All on X']);
+      const iopaCount = FULL_ARCH_TYPES_LOCAL.has(pType) ? 0 : count;
       setIopaFiles(new Array(iopaCount).fill(null));
 
       // iter-189: hydrate Pre-Op state if it was already completed.
@@ -183,10 +247,19 @@ export default function Phase2SubmissionScreen() {
       // Auto-collapse the checklist once it's signed off (saves real-estate
       // for the much-longer Surgical Procedure section).
       if (preopAt) setPreopExpanded(false);
+
+      // Overlay any locally-saved draft on top of the server prefill — the
+      // draft represents edits the user made after the last thing that
+      // actually reached the server (e.g. typed notes, uploaded IOPAs)
+      // before the app was backgrounded or they navigated away.
+      const draft = await loadDraft(draftKey);
+      if (draft) applyDraftSnapshot(draft);
     } catch {
       setTorqueValues(['']);
       setHealingAbutmentCuffHeight(['']);
       setIopaFiles([null]);
+    } finally {
+      setScreenLoaded(true);
     }
   };
 
@@ -253,15 +326,20 @@ export default function Phase2SubmissionScreen() {
       const res = await api.post('/uploads/cbct-temp', formPayload, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      const allFiles = [...iopaFiles];
-      // Expand if extra slot
-      while (allFiles.length <= idx) allFiles.push(null);
-      allFiles[idx] = {
-        filename: res.data.cbct_file,
-        original_name: res.data.cbct_original_name,
-        tooth_label: getIopaLabel(idx),
-      };
-      setIopaFiles(allFiles);
+      // Functional update — a concurrent upload for another slot (started
+      // while this one was still in flight) may have set newer state in the
+      // meantime; reading off `prev` instead of the stale `iopaFiles`
+      // closure avoids clobbering it.
+      setIopaFiles(prev => {
+        const allFiles = [...prev];
+        while (allFiles.length <= idx) allFiles.push(null);
+        allFiles[idx] = {
+          filename: res.data.cbct_file,
+          original_name: res.data.cbct_original_name,
+          tooth_label: getIopaLabel(idx),
+        };
+        return allFiles;
+      });
     } catch (err: any) {
       Alert.alert('Upload Failed', err.response?.data?.detail || 'Could not upload IOPA');
     } finally {
@@ -380,13 +458,22 @@ export default function Phase2SubmissionScreen() {
       }
     }
 
-    // Validate mandatory IOPA uploads
-    const allIopaSlots = [...iopaFiles, ...new Array(extraIopaCount).fill(null)];
-    const baseIopaCount = iopaFiles.length;
-    const missingIopa = allIopaSlots.slice(0, baseIopaCount).filter(f => f === null);
-    if (missingIopa.length > 0) {
-      Alert.alert('Missing IOPA', `Please upload all ${baseIopaCount} IOPA Radiographs before submitting.`);
-      return;
+    // Full-arch (All on 4/6/X) cases use a single OPG as the standard
+    // post-surgical radiograph — individual per-tooth IOPAs are optional
+    // there. Every other case still requires all IOPA slots filled.
+    if (isFullArch) {
+      if (!opgFile) {
+        Alert.alert('Missing OPG', 'Please upload the OPG Radiograph before submitting.');
+        return;
+      }
+    } else {
+      const allIopaSlots = [...iopaFiles, ...new Array(extraIopaCount).fill(null)];
+      const baseIopaCount = iopaFiles.length;
+      const missingIopa = allIopaSlots.slice(0, baseIopaCount).filter(f => f === null);
+      if (missingIopa.length > 0) {
+        Alert.alert('Missing IOPA', `Please upload all ${baseIopaCount} IOPA Radiographs before submitting.`);
+        return;
+      }
     }
 
     setLoading(true);
@@ -471,6 +558,7 @@ export default function Phase2SubmissionScreen() {
               }))
             : null,
       });
+      await clearDraft(draftKey);
       const isInchargeSelfCreated = user?.role === 'implant_incharge' && createdByRole === 'implant_incharge' && user?.id === createdById;
       if (isInchargeSelfCreated) {
         try { await api.post(`/procedures/${id}/approve`, { action: 'approve', comment: '' }); } catch {}
@@ -569,11 +657,16 @@ export default function Phase2SubmissionScreen() {
     }
 
     const missRadiographs: string[] = [];
-    const baseIopaCount = iopaFiles.length;
-    const missingIopa = iopaFiles.slice(0, baseIopaCount).filter(f => f === null).length;
-    if (baseIopaCount === 0) missRadiographs.push('At least one IOPA Radiograph');
-    if (missingIopa > 0) missRadiographs.push(`${missingIopa} IOPA upload${missingIopa > 1 ? 's' : ''} pending`);
-    if (isFullArch && !opgFile) missRadiographs.push('OPG Radiograph (full-arch case)');
+    if (isFullArch) {
+      // Full-arch cases use a single OPG as the standard post-surgical
+      // radiograph — individual IOPAs are optional here.
+      if (!opgFile) missRadiographs.push('OPG Radiograph (full-arch case)');
+    } else {
+      const baseIopaCount = iopaFiles.length;
+      const missingIopa = iopaFiles.slice(0, baseIopaCount).filter(f => f === null).length;
+      if (baseIopaCount === 0) missRadiographs.push('At least one IOPA Radiograph');
+      if (missingIopa > 0) missRadiographs.push(`${missingIopa} IOPA upload${missingIopa > 1 ? 's' : ''} pending`);
+    }
 
     const missPostOp: string[] = [];
     ['post_op_radiograph', 'post_op_instructions', 'medications_prescribed'].forEach(k => {
@@ -601,6 +694,7 @@ export default function Phase2SubmissionScreen() {
         subtitle="Surgical Checklist"
         testID="phase2-submit-header"
       />
+      <SaveDraftButton onSave={saveNow} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView ref={scrollRef} contentContainerStyle={s.scroll} nestedScrollEnabled
           stickyHeaderIndices={[0]} onScroll={onScrollPhase2} scrollEventThrottle={64}>
@@ -864,7 +958,7 @@ export default function Phase2SubmissionScreen() {
                 <View key={idx} style={s.torqueRow}>
                   <View style={s.torqueLabel}>
                     <Text style={s.torqueLabelText}>
-                      Implant {idx + 1}{implantPositions[idx] ? ` (#${implantPositions[idx]})` : ''}
+                      {implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : 'Tooth #—'}
                     </Text>
                   </View>
                   <TextInput style={s.torqueInput} value={val}
@@ -988,7 +1082,7 @@ export default function Phase2SubmissionScreen() {
                   return (
                     <View key={idx} style={{ marginBottom: 10 }} testID={`per-implant-prosthetic-row-${idx}`}>
                       <Text style={{ fontSize: 13, fontWeight: '700', color: '#37474F', marginBottom: 6 }}>
-                        Implant {idx + 1}{pos ? ` (#${pos})` : ''}
+                        {pos ? `Tooth #${pos}` : 'Tooth #—'}
                       </Text>
                       <TouchableOpacity
                         style={{
@@ -1057,7 +1151,7 @@ export default function Phase2SubmissionScreen() {
                   <View key={idx} style={[s.torqueRow, { flexWrap: 'wrap' }]}>
                     <View style={s.torqueLabel}>
                       <Text style={s.torqueLabelText}>
-                        Implant {idx + 1}{implantPositions[idx] ? ` (#${implantPositions[idx]})` : ''}
+                        {implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : 'Tooth #—'}
                       </Text>
                     </View>
                     {catalogue ? (
@@ -1144,7 +1238,7 @@ export default function Phase2SubmissionScreen() {
                     <Text style={s.muaSubTitle}>Multi-unit Abutment Details</Text>
                     {implantPositions.map((pos, idx) => (
                       <View key={idx} style={s.muaToothCard}>
-                        <Text style={s.muaToothHeader}>Implant {idx + 1} (#{pos})</Text>
+                        <Text style={s.muaToothHeader}>{pos ? `Tooth #${pos}` : 'Tooth #—'}</Text>
                         <View style={s.muaParamRow}>
                           <View style={s.muaParamLabelPill}>
                             <Text style={s.muaParamLabelText}>Angulation</Text>
@@ -1245,7 +1339,7 @@ export default function Phase2SubmissionScreen() {
                   return (
                     <View key={idx} style={{ marginBottom: 12 }}>
                       <Text style={{ fontSize: 13, fontWeight: '600', color: '#BF360C', marginBottom: 6 }}>
-                        Implant {idx + 1}{pos ? ` (#${pos})` : ''} <Text style={{ color: '#DC3545' }}>*</Text>
+                        {pos ? `Tooth #${pos}` : 'Tooth #—'} <Text style={{ color: '#DC3545' }}>*</Text>
                       </Text>
                       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                         {options.map(opt => (
@@ -1293,7 +1387,9 @@ export default function Phase2SubmissionScreen() {
 
             {/* IOPA upload slots */}
             <View style={s.uploadSection}>
-              <Text style={s.uploadTitle}>Upload IOPA Radiograph</Text>
+              <Text style={s.uploadTitle}>
+                Upload IOPA Radiograph{isFullArch ? ' (optional)' : ''}
+              </Text>
               {Array.from({ length: totalIopaSlots }).map((_, idx) => {
                 const baseCount = iopaFiles.length;
                 const isExtra = idx >= baseCount;
@@ -1354,8 +1450,8 @@ export default function Phase2SubmissionScreen() {
                   </View>
                 );
               })}
-              {/* Add extra IOPA button for All on X */}
-              {procedureType === 'All on X' && (
+              {/* Add extra (optional) IOPA button for full-arch cases */}
+              {isFullArch && (
                 <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10 }}
                   onPress={addExtraIopa} data-testid="add-extra-iopa-btn">
                   <Ionicons name="add-circle" size={26} color="#4CAF50" />
@@ -1367,7 +1463,9 @@ export default function Phase2SubmissionScreen() {
             {/* OPG upload for Full Arch cases */}
             {isFullArch && (
               <View style={[s.uploadSection, { marginTop: 12 }]}>
-                <Text style={s.uploadTitle}>Upload OPG</Text>
+                <Text style={s.uploadTitle}>
+                  Upload OPG <Text style={{ color: '#DC3545' }}>*</Text>
+                </Text>
                 <View style={{ paddingHorizontal: 12, paddingBottom: 12 }}>
                   {opgFile ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>

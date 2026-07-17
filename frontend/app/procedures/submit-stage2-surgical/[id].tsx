@@ -23,6 +23,8 @@ import { showUploadPicker } from "../../../utils/uploadPicker";
 import { useAuth } from "../../../contexts/AuthContext";
 import BackToDashboard from "../../../components/BackToDashboard";
 import { PhaseHeader } from "../../../components/PhaseHeader";
+import SaveDraftButton from "../../../components/SaveDraftButton";
+import { draftStorageKey, loadDraft, clearDraft, useDraftAutosave, useUnsavedChangesGuard } from "../../../utils/draftAutosave";
 import { Ionicons } from "@expo/vector-icons";
 import { CHECKLIST_DATA } from "../../../constants/checklist";
 import DoneDatePicker, { todayIso } from "../../../components/DoneDatePicker";
@@ -113,6 +115,36 @@ export default function Stage2SurgicalSubmissionScreen() {
   }, []);
   // Notes
   const [studentNotes, setStudentNotes] = useState("");
+
+  // ── Local draft autosave (survives backgrounding / navigating away before
+  // final Submit) — see utils/draftAutosave.ts. Only user-edited fields are
+  // captured; server-sourced reference data (Phase 2 readback, implant
+  // positions) is re-fetched fresh every time via loadImplantPlan().
+  const [screenLoaded, setScreenLoaded] = useState(false);
+  const draftKey = draftStorageKey("stage2surgical", String(id), user?.id);
+  const getDraftSnapshot = () => ({
+    doneDate, checklistState, isqValues, healingAbutmentHeight,
+    iopaFiles, studentNotes, haConfig,
+  });
+  const applyDraftSnapshot = (d: Record<string, any>) => {
+    if (d.doneDate !== undefined) setDoneDate(d.doneDate);
+    if (d.checklistState !== undefined) setChecklistState(d.checklistState);
+    if (d.isqValues !== undefined) setIsqValues(d.isqValues);
+    if (d.healingAbutmentHeight !== undefined) setHealingAbutmentHeight(d.healingAbutmentHeight);
+    if (d.iopaFiles !== undefined) setIopaFiles(d.iopaFiles);
+    if (d.studentNotes !== undefined) setStudentNotes(d.studentNotes);
+    if (d.haConfig !== undefined) setHaConfig(d.haConfig);
+  };
+  const { saveNow } = useDraftAutosave({
+    enabled: screenLoaded,
+    storageKey: draftKey,
+    getSnapshot: getDraftSnapshot,
+  });
+  useUnsavedChangesGuard({
+    enabled: screenLoaded,
+    hasUnsavedChanges: true,
+    onSave: saveNow,
+  });
 
   // ── Phase 2 edit-request workflow ──
   // Student can flag wrong prosthesis/cuff data locked in Phase 2.
@@ -220,6 +252,11 @@ export default function Stage2SurgicalSubmissionScreen() {
         : [];
       setPendingEditRequest(reqs.find((r) => r?.status === "pending") || null);
     } catch {}
+
+    // Overlay any locally-saved draft on top of the server prefill.
+    const draft = await loadDraft(draftKey);
+    if (draft) applyDraftSnapshot(draft);
+    setScreenLoaded(true);
   };
 
   // ── Phase 2 edit-request handlers (student only) ──
@@ -311,13 +348,19 @@ export default function Stage2SurgicalSubmissionScreen() {
       const res = await api.post("/uploads/cbct-temp", formPayload, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-      const updated = [...iopaFiles];
-      updated[idx] = {
-        filename: res.data.cbct_file,
-        original_name: res.data.cbct_original_name,
-        tooth_label: getIopaLabel(idx),
-      };
-      setIopaFiles(updated);
+      // Functional update — a concurrent upload for another slot (started
+      // while this one was still in flight) may have set newer state in the
+      // meantime; reading off `prev` instead of the stale `iopaFiles`
+      // closure avoids clobbering it.
+      setIopaFiles((prev) => {
+        const updated = [...prev];
+        updated[idx] = {
+          filename: res.data.cbct_file,
+          original_name: res.data.cbct_original_name,
+          tooth_label: getIopaLabel(idx),
+        };
+        return updated;
+      });
     } catch (err: any) {
       Alert.alert(
         "Upload Failed",
@@ -448,6 +491,7 @@ export default function Stage2SurgicalSubmissionScreen() {
         student_notes: studentNotes || null,
         done_date: doneDate || null,
       });
+      await clearDraft(draftKey);
       const isInchargeSelfCreated =
         user?.role === "implant_incharge" &&
         createdByRole === "implant_incharge" &&
@@ -483,6 +527,7 @@ export default function Stage2SurgicalSubmissionScreen() {
         title="Phase 3 - Healing and Second Stage Surgery"
         testID="phase3-submit-header"
       />
+      <SaveDraftButton onSave={saveNow} />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
@@ -773,8 +818,7 @@ export default function Stage2SurgicalSubmissionScreen() {
                       <Text
                         style={{ fontSize: 14, fontWeight: "800", color: "#00695C" }}
                       >
-                        Implant {idx + 1}
-                        {pos ? ` (#${pos})` : ""}
+                        {pos ? `Tooth #${pos}` : "Tooth #—"}
                       </Text>
                       <View
                         style={{
@@ -1310,10 +1354,9 @@ export default function Stage2SurgicalSubmissionScreen() {
                               color: "#BF360C",
                             }}
                           >
-                            Implant {idx + 1}
                             {implantPositions[idx]
-                              ? ` (#${implantPositions[idx]})`
-                              : ""}
+                              ? `Tooth #${implantPositions[idx]}`
+                              : "Tooth #—"}
                           </Text>
                         </View>
                         <TextInput

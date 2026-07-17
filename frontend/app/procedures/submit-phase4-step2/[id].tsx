@@ -16,6 +16,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import api, { getAuthFileUrl } from "../../../utils/api";
 import { useAuth } from "../../../contexts/AuthContext";
 import { PhaseHeader } from "../../../components/PhaseHeader";
+import SaveDraftButton from "../../../components/SaveDraftButton";
+import { draftStorageKey, loadDraft, clearDraft, useDraftAutosave, useUnsavedChangesGuard } from "../../../utils/draftAutosave";
 import { Ionicons } from "@expo/vector-icons";
 import { CHECKLIST_DATA } from "../../../constants/checklist";
 import { showUploadPicker } from "../../../utils/uploadPicker";
@@ -68,6 +70,36 @@ export default function Phase4Step2Screen() {
 
   const [activeTeeth, setActiveTeeth] = useState<Set<string> | null>(null);
 
+  // ── Local draft autosave (survives backgrounding / navigating away before
+  // final Submit) — see utils/draftAutosave.ts. Only user-edited fields are
+  // captured; server-sourced reference data (`procedure`, activeTeeth) is
+  // re-fetched fresh every time.
+  const [screenLoaded, setScreenLoaded] = useState(false);
+  const draftKey = draftStorageKey('phase4step2', String(id), user?.id);
+  const getDraftSnapshot = () => ({
+    trialChecklist, studentNotes, confirmed, iopaUploads, opgUpload,
+    prosthesisPhotos, photoLabels,
+  });
+  const applyDraftSnapshot = (d: Record<string, any>) => {
+    if (d.trialChecklist !== undefined) setTrialChecklist(d.trialChecklist);
+    if (d.studentNotes !== undefined) setStudentNotes(d.studentNotes);
+    if (d.confirmed !== undefined) setConfirmed(d.confirmed);
+    if (d.iopaUploads !== undefined) setIopaUploads(d.iopaUploads);
+    if (d.opgUpload !== undefined) setOpgUpload(d.opgUpload);
+    if (d.prosthesisPhotos !== undefined) setProsthesisPhotos(d.prosthesisPhotos);
+    if (d.photoLabels !== undefined) setPhotoLabels(d.photoLabels);
+  };
+  const { saveNow } = useDraftAutosave({
+    enabled: screenLoaded,
+    storageKey: draftKey,
+    getSnapshot: getDraftSnapshot,
+  });
+  useUnsavedChangesGuard({
+    enabled: screenLoaded,
+    hasUnsavedChanges: true,
+    onSave: saveNow,
+  });
+
   useEffect(() => {
     (async () => {
       try {
@@ -92,6 +124,10 @@ export default function Phase4Step2Screen() {
       } finally {
         setLoadingProc(false);
       }
+      // Overlay any locally-saved draft on top of the server prefill.
+      const draft = await loadDraft(draftKey);
+      if (draft) applyDraftSnapshot(draft);
+      setScreenLoaded(true);
     })();
   }, [id]);
 
@@ -319,6 +355,7 @@ export default function Phase4Step2Screen() {
         opg_upload: isFullArch ? opgUpload : null,
         prosthesis_photos: validPhotos,
       });
+      await clearDraft(draftKey);
 
       if (isInchargeSelfCreated) {
         await callApproveForSelfCreated();
@@ -407,6 +444,7 @@ export default function Phase4Step2Screen() {
         subtitle="Step 2 of 2: Final Restoration"
         testID="phase4-step2-submit-header"
       />
+      <SaveDraftButton onSave={saveNow} />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}

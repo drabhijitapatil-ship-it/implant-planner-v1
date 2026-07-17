@@ -742,6 +742,11 @@ class ProcedureCreate(BaseModel):
     cbct_content_type: Optional[str] = Field("", max_length=100)
     # Multiple CBCT files (new format)
     cbct_files: Optional[List[Dict[str, str]]] = None  # [{filename, original_name, content_type}]
+    # Patient Intra-oral Photograph list. Slots 0+1 use fixed labels
+    # ("Occlusal View", "Lateral view/Frontal view"); slots 2+ carry a
+    # user-authored label. Structure: [{filename, original_name,
+    # content_type, label}, ...]. Skipped for Existing Implant cases.
+    intraoral_photos: Optional[List[Dict[str, str]]] = None
     # Patient Consent Form (uploaded via /uploads/consent-temp or POST /procedures/{id}/upload-consent)
     patient_consent_form: Optional[Dict[str, Any]] = None  # {filename, original_name, content_type, uploaded_by_*, uploaded_at, version}
 
@@ -19675,7 +19680,11 @@ def _tooth_bucket(t: Optional[int]) -> str:
     return "unknown"
 
 
-async def _load_analytics_procedures(from_date: Optional[str], to_date: Optional[str]) -> List[Dict[str, Any]]:
+async def _load_analytics_procedures(
+    from_date: Optional[str],
+    to_date: Optional[str],
+    scope_user: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
     match: Dict[str, Any] = {"archived": {"$ne": True}}
     # Placement date range = phase2_actual_done_date if present, else procedure_date
     date_clause: Dict[str, Any] = {}
@@ -19688,6 +19697,20 @@ async def _load_analytics_procedures(from_date: Optional[str], to_date: Optional
             {"phase2_actual_done_date": date_clause},
             {"procedure_date": date_clause},
         ]
+    # Scope by role — students see only their own cases; supervisors see
+    # cases they are assigned to; administrators + implant_incharge see all.
+    if scope_user:
+        role = scope_user.get("role")
+        uid = str(scope_user.get("_id") or scope_user.get("id") or "")
+        uname = scope_user.get("name") or scope_user.get("username")
+        if role == "student":
+            match["$and"] = [
+                {"$or": [{"student_id": uid}, {"student_name": uname}]},
+            ]
+        elif role == "supervisor":
+            match["$and"] = [
+                {"$or": [{"supervisor_id": uid}, {"supervisor_name": uname}]},
+            ]
     return await db.procedures.find(match, {
         "implants": 1, "existing_implants": 1, "implant_plans": 1, "torque_values": 1, "phase2_data": 1,
         "phase2_survival_review": 1,
@@ -19879,14 +19902,22 @@ async def get_survival_analytics(
     to_date: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
 ):
-    if current_user.get("role") not in ("administrator", "implant_incharge"):
-        raise HTTPException(status_code=403, detail="Administrator or Implant In-Charge role required")
-    procs = await _load_analytics_procedures(from_date, to_date)
+    # Opened to supervisors + students. Students see only their own cases
+    # (read-only); supervisors see cases assigned to them; admin +
+    # implant_incharge see the full institution.
+    if current_user.get("role") not in ("administrator", "implant_incharge", "supervisor", "student"):
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    procs = await _load_analytics_procedures(from_date, to_date, scope_user=current_user)
     result = _compute_analytics(procs, {
         "system": system, "tooth_bucket": tooth_bucket,
         "from_date": from_date, "to_date": to_date,
     })
     result.pop("case_rows", None)  # Trimmed for the summary endpoint
+    # Expose scope so the UI can render "Your cases only" hints for students.
+    result["scope"] = {
+        "role": current_user.get("role"),
+        "read_only": current_user.get("role") in ("student", "supervisor"),
+    }
     await log_access(
         action="analytics_view",
         outcome="success",
@@ -19908,9 +19939,12 @@ async def export_survival_analytics_csv(
     to_date: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
 ):
+    # Only administrator + implant_incharge may export the full CSV (patient
+    # identifiers are included in case rows). Students / supervisors can
+    # still view the dashboard scoped to their own cases.
     if current_user.get("role") not in ("administrator", "implant_incharge"):
         raise HTTPException(status_code=403, detail="Administrator or Implant In-Charge role required")
-    procs = await _load_analytics_procedures(from_date, to_date)
+    procs = await _load_analytics_procedures(from_date, to_date, scope_user=current_user)
     result = _compute_analytics(procs, {
         "system": system, "tooth_bucket": tooth_bucket,
         "from_date": from_date, "to_date": to_date,
