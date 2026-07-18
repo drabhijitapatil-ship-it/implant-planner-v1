@@ -619,3 +619,8 @@ After build completes, EAS gives a download link. Download the .aab file.
 eas build --platform ios --profile production
 
 eas submit --platform ios --latest
+
+cd /opt/implant-backend/repo/backend
+
+sudo systemctl restart implant-backend
+sudo systemctl status implant-backend
