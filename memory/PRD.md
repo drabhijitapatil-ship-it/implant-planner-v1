@@ -6605,3 +6605,17 @@ A comprehensive mobile application for managing dental implant procedures at the
 - **Regression:** 8 new tests in `tests/test_iter370_global_d_indications.py` (all 8 pass; combined with iter-368: 19/19).
 - **Testing:** Backend verified via curl + pytest. Frontend preview verified: searching "Global" in the Implant Selection dropdown now shows all three systems with populated indication subtitles.
 
+### iter-371 — Global D prosthetic components (Feb 2026)
+- **Trigger:** User provided Global D "In-Kone & twinkone 4 Prosthesis Components" brochure (Feb 2026).
+- **Ask:** Extract every prosthetic SKU + categorise by system + expose restoration-type paths (cement-retained, single screw-retained, multi-unit screw-retained, removable/overdenture).
+- **Delivered:**
+  - `/app/backend/global_d_components.py` — component generator (192 In-Kone Universal + 24 twinkone 4 + 17 3.0 Implant = 233 total SKUs).
+  - `/app/backend/_seed_global_d_components.py` — idempotent MongoDB upsert.
+  - Coverage: healing_abutment (flat + high-head × 3 platforms × 6 GH), impression_coping, analog, temporary_abutment, final_abutment (cement — Ø × angulation × GH grid), multi_unit_abutment (straight + 17°/30° indexed/non-indexed conical for bridge/bar/All-on-X), ti_base (single screw-retained CAD/CAM), locator_abutment + 6 colored inserts (removable OD), premilled_blank, temporary/burnout/gold cylinders, protective_caps, prosthetic_screws.
+  - Every SKU carries a `retention` list that flags the restoration mode (cement | screw | locator | snap) so Compare and Ask Implanr AI can filter accordingly.
+- **User confirmation captured:** 1a (seed every SKU individually), 2 (each Locator colour as separate SKU), 3 (no surgical instruments/drivers).
+- **Regression:** 13 new tests in `tests/test_iter371_global_d_components.py` — cement grid, single-screw ti-base grid, MUA angulation grid, twinkone-4 screw-only enforcement, 3.0-implant incisor-only enforcement, Locator 6-colour insert coverage, Compare-tool cross-brand visibility, SKU uniqueness. Combined Global-D suite (iter-368 + 370 + 371) = **32/32 pass**.
+- **Verified in UI:** Implant Database → Global D → In-Kone Universal now renders `Components (192)` with every SKU showing GH, retention, material, and indication.
+
+### Backlog / Next
+
