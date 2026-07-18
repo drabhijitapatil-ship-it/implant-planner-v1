@@ -14956,6 +14956,36 @@ IMPLANT_INDICATIONS = {
         "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy"],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
+    # ── Global D (iter-370, Feb 2026) ─────────────────────────────────────
+    # Backend indication entries so Global D systems (In-Kone Universal, 3.0
+    # Implant, twinkone 4) appear in Suggest Me and show a proper subtitle in
+    # Let Me Choose. Long-form indications & features remain in the frontend
+    # constants/implantIndications.ts for the AI Explain card.
+    "Global D|In-Kone Universal": {
+        "indication": "Universal Ø3.5–5.0 mm × 6–15 mm bone-level implant. D1–D4 bone. Single tooth, multi-unit and full-arch rehabilitation. Immediate, delayed, guided and freehand placement. 8° Morse taper internal conical connection with universal prosthetic platform. SA² surface.",
+        "indicated_procedures": [
+            "Single Conventional Implant",
+            "Multiple Conventional Implants",
+            "Immediate Implant",
+            "Partial Extraction Therapy",
+            "All on 4",
+            "All on 6",
+            "All on X",
+        ],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Global D|3.0 Implant": {
+        "indication": "Ø3.0 small-diameter implant for narrow ridges and reduced mesio-distal spaces. Indicated for maxillary lateral incisors (12, 22) and mandibular incisors (31, 32, 41, 42). 5° Morse taper internal conical connection on a dedicated 3.0 prosthetic platform. SA² surface.",
+        "restricted_teeth": ["12", "22", "31", "32", "41", "42"],
+        "indicated_procedures": ["Single Conventional Implant"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Global D|twinkone 4": {
+        "indication": "Ultra-short (L = 4 mm) cylindrical implant (Ø4.0 / Ø4.5) for severely resorbed posterior maxilla and mandible (16, 17, 26, 27, 36, 37, 46, 47). Enables restoration where residual bone height is insufficient for standard implants — avoids sinus lift in the maxilla and stays clear of the inferior alveolar nerve in the mandible. External Conical Connection. SA² surface.",
+        "restricted_teeth": ["16", "17", "26", "27", "36", "37", "46", "47"],
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants"],
+        "indicated_bone_types": ["D3", "D4"],
+    },
 }
 
 # Map Suggest Me procedure types → New Case procedure types for indication matching
