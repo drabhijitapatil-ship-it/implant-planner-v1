@@ -16059,6 +16059,29 @@ for _blt_sys in ("BLT Roxolid SLActive", "BLT Roxolid SLA", "BLT Ti SLA"):
     }
 del _blt_sys
 
+# ── Global D Drilling Protocols (iter-369, Feb 2026) ─────────────────────
+# Ultimate Surgical Kit (DKITULTI-INK) shared by In-Kone Universal + 3.0
+# Implant; twinkone 4 uses its own DKITTWK4 depth-stop kit. Sequences are
+# per-Ø × per-bone as published in the Global D catalog.
+for _gd_sys, _gd_kit in (
+    ("In-Kone Universal", "Ultimate Surgical Kit (DKITULTI-INK)"),
+    ("3.0 Implant", "3.0 Implant Surgical Kit (DKITTZ)"),
+    ("twinkone 4", "twinkone 4 Surgical Kit (DKITTWK4)"),
+):
+    DRILLING_PROTOCOLS[f"Global D|{_gd_sys}"] = {
+        "system_name": f"Global D {_gd_sys}",
+        "protocol_family": "global_d",
+        "connection": (
+            "External Conical" if _gd_sys == "twinkone 4"
+            else "Internal Conical (8° Morse)" if _gd_sys == "In-Kone Universal"
+            else "Internal Conical (5° Morse)"
+        ),
+        "material": "Titanium",
+        "surface": "SA²",
+        "kit": _gd_kit,
+    }
+del _gd_sys, _gd_kit
+
 def _generate_ankylos_protocol(proto, implant_diameter, implant_length, bone):
     """Generate drilling protocol for Dentsply Sirona Ankylos C/X system.
     Per document: D1 = Full drilling + Tap, D2 = Standard, D3/D4 = Skip full reaming (under-preparation).
@@ -17553,6 +17576,9 @@ async def generate_drilling_protocol(
     elif proto.get("protocol_family") == "adin":
         from adin_data import generate_adin_protocol
         steps = generate_adin_protocol(system, diameter, length, bone)
+    elif proto.get("protocol_family") == "global_d":
+        from global_d_data import generate_global_d_protocol
+        steps = generate_global_d_protocol(system, diameter, length, bone)
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
@@ -17836,6 +17862,9 @@ async def export_drilling_pdf(
     elif proto.get("protocol_family") == "adin":
         from adin_data import generate_adin_protocol
         steps = generate_adin_protocol(system, diameter, length, bone)
+    elif proto.get("protocol_family") == "global_d":
+        from global_d_data import generate_global_d_protocol
+        steps = generate_global_d_protocol(system, diameter, length, bone)
     else:
         steps = _generate_pro_protocol(proto, diameter, length, bone)
 
