@@ -1075,6 +1075,8 @@ export default function ProcedureDetailScreen() {
           <ReferCaseButton
             procedureId={String(id)}
             caseDepartmentId={procedure?.department_id}
+            caseStudentId={procedure?.student_id}
+            caseSupervisorId={procedure?.supervisor_id}
           />
         </View>
         {/* KeyboardAvoidingView so inline inputs (approval/rejection comments,

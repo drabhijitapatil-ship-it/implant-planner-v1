@@ -164,13 +164,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await removeToken('refresh_token');
           await removeToken('user');
           await removeToken('last_activity_at');
-          // Explicit redirect rather than relying on whatever screen happens
-          // to re-render on `user` going null — if the app resumed straight
-          // into a non-index route (e.g. the OS restored the last-open
-          // screen after a background suspend), that screen has no reason
-          // to know the session was just wiped and would otherwise sit
-          // there with a dead token instead of bouncing to login.
-          router.replace('/auth/login');
+          // Same "Session Expired" confirmation as the live in-app timeout
+          // (expireSession below) — don't silently dump the user on the
+          // login screen with no explanation just because they reopened
+          // the app after being away.
+          Alert.alert(
+            'Session Expired',
+            'You have been logged out after 15 minutes of inactivity. Please log in again.',
+            [{ text: 'OK', onPress: () => router.replace('/auth/login') }],
+            { cancelable: false }
+          );
           return;
         }
         try {

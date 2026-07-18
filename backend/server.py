@@ -74,6 +74,50 @@ async def _s3_ensure_local_async(local_path: Path, uploads_root: Path = None) ->
         logging.warning(f"[s3] async fetch failed for {local_path}: {e}")
         return False
 
+
+def _sweep_local_upload_cache(max_age_days: int) -> int:
+    """Delete local files under UPLOADS_DIR whose mtime is older than
+    `max_age_days`. Safe to run repeatedly: local disk is only ever a warm
+    cache in front of S3 (see s3_storage.py) — anything evicted here gets
+    re-downloaded on next view via `_s3_ensure_local_async`, which also
+    refreshes the file's mtime, so actively-viewed files never get swept.
+
+    Only runs when S3 is configured — if it isn't, local disk is the ONLY
+    copy of every upload and must never be touched here."""
+    if not s3_storage.is_configured():
+        return 0
+    cutoff = datetime.now().timestamp() - (max_age_days * 86400)
+    deleted = 0
+    for path in UPLOADS_DIR.rglob("*"):
+        if not path.is_file():
+            continue
+        try:
+            if path.stat().st_mtime < cutoff:
+                path.unlink()
+                deleted += 1
+        except Exception as e:
+            logging.warning(f"[upload-cache-sweep] failed to remove {path}: {e}")
+    return deleted
+
+
+async def run_local_upload_cache_sweep(max_age_days: int) -> None:
+    try:
+        deleted = await asyncio.to_thread(_sweep_local_upload_cache, max_age_days)
+        if deleted:
+            logging.info(f"[upload-cache-sweep] evicted {deleted} local file(s) older than {max_age_days}d (still on S3).")
+    except Exception as e:
+        logging.error(f"[upload-cache-sweep] sweep failed: {e}")
+
+
+async def local_upload_cache_sweep_loop(interval_seconds: int = 21600, max_age_days: int = 30):
+    """Background task that periodically evicts stale local upload-cache
+    files (every 6h by default) — keeps backend/uploads/ from growing
+    unbounded now that every S3 cache-miss re-populates it on view."""
+    await asyncio.sleep(60)
+    while True:
+        await run_local_upload_cache_sweep(max_age_days)
+        await asyncio.sleep(interval_seconds)
+
 # MongoDB connection
 mongo_url = os.environ.get('MONGO_URL', '')
 if not mongo_url:
@@ -2554,40 +2598,96 @@ async def delete_department(department_id: str, current_user: dict = Depends(get
 # primary/originating department) never changes. Instead an ACTIVE referral
 # grants the receiving department the same access any dept member already has
 # to their own cases, via _assert_procedure_org_access / _org_scope_match
-# (_referred_case_ids). "Return" just flips status back off active — the case
-# falls straight back to originating-department-only visibility with zero
-# extra bookkeeping, matching the doc's "automatically returns" requirement.
+# (_referred_case_ids). Completion (return / treatment-complete / transfer
+# further / cancelled / patient-did-not-report) just flips status off
+# "active" — the case falls straight back to originating-department-only
+# visibility with zero extra bookkeeping.
 #
-# v1 simplification: `permission` (read/edit) is stored and shown for intent,
-# but not separately enforced — an active referral grants the full case
-# lifecycle (same as _assert_procedure_org_access grants any dept member),
-# not a read-only subset. Threading read/edit through the ~45 endpoints that
-# call _assert_procedure_org_access is a larger follow-up, not v1.
+# Role-based approval chain mirrors Phase 1-4 submission approval: a
+# student's referral needs their case's own supervisor to approve; a
+# supervisor's referral needs their own department's Implant Incharge;
+# Incharge/Admin referrals go straight out (same self-approval bypass used
+# elsewhere for incharge-created cases). Only once approved (or if no
+# approval was needed) does a referral become visible to the receiving
+# department as "pending".
+#
+# Phase ownership IS enforced (not just labeled) — see
+# _assert_phase_edit_allowed, called from each phase-submit endpoint. Phase 1
+# always stays with the primary department; Phases 2-4 transfer to the
+# receiving department's ownership for the duration of an active referral
+# whose assigned_phase covers that phase number.
 # ─────────────────────────────────────────────────────────────────────
 
-REFERRAL_ROLES = {"implant_incharge", "administrator"}
+# Who may initiate a referral (student/supervisor go through internal
+# approval first; incharge/admin go straight out).
+REFERRAL_CREATE_ROLES = {"student", "supervisor", "implant_incharge", "administrator"}
+# Who manages the department-level referral inbox/outbox dashboard and acts
+# on behalf of the receiving department (accept/decline/complete).
+REFERRAL_MANAGE_ROLES = {"implant_incharge", "administrator"}
+
+PHASE_LABEL_TO_NUM = {"Phase 1": 1, "Phase 2": 2, "Phase 3": 3, "Phase 4": 4}
+REFERRAL_INTERNAL_APPROVAL_STATUSES = {"pending_supervisor_approval", "pending_incharge_approval"}
+REFERRAL_OUTCOME_TO_STATUS = {
+    "returned": "returned",
+    "treatment_complete": "completed",
+    "transfer_further": "transferred",
+    "cancelled": "cancelled",
+    "patient_did_not_report": "closed",
+}
 
 
 class ReferralCreate(BaseModel):
     to_department_id: str = Field(..., max_length=64)
-    permission: str = Field("read", max_length=10)
-    notes: Optional[str] = Field(None, max_length=500)
+    reason: str = Field(..., max_length=200)
+    assigned_phase: str = Field(..., max_length=20)
+    priority: str = Field("routine", max_length=10)
+    expected_return_date: Optional[str] = Field(None, max_length=30)
+    notes: Optional[str] = Field(None, max_length=1000)
 
-    @field_validator("permission")
+    @field_validator("assigned_phase")
     @classmethod
-    def validate_permission(cls, v):
-        if v not in ("read", "edit"):
-            raise ValueError("permission must be 'read' or 'edit'")
+    def validate_phase(cls, v):
+        if v not in PHASE_LABEL_TO_NUM:
+            raise ValueError("assigned_phase must be one of: Phase 1, Phase 2, Phase 3, Phase 4")
+        return v
+
+    @field_validator("priority")
+    @classmethod
+    def validate_priority(cls, v):
+        if v not in ("routine", "urgent"):
+            raise ValueError("priority must be 'routine' or 'urgent'")
+        return v
+
+    @field_validator("reason", "notes")
+    @classmethod
+    def sanitize_text(cls, v):
+        return sanitize_input(v) if v else v
+
+
+class ReferralDecline(BaseModel):
+    reason: Optional[str] = Field(None, max_length=500)
+
+
+class ReferralInternalReject(BaseModel):
+    reason: Optional[str] = Field(None, max_length=500)
+
+
+class ReferralComplete(BaseModel):
+    outcome: str = Field(..., max_length=30)
+    transfer_to_department_id: Optional[str] = Field(None, max_length=64)
+    notes: Optional[str] = Field(None, max_length=1000)
+
+    @field_validator("outcome")
+    @classmethod
+    def validate_outcome(cls, v):
+        if v not in REFERRAL_OUTCOME_TO_STATUS:
+            raise ValueError(f"outcome must be one of: {sorted(REFERRAL_OUTCOME_TO_STATUS)}")
         return v
 
     @field_validator("notes")
     @classmethod
     def sanitize_notes(cls, v):
         return sanitize_input(v) if v else v
-
-
-class ReferralDecline(BaseModel):
-    reason: Optional[str] = Field(None, max_length=500)
 
 
 def _dept_authority_matches(current_user: dict, department_id: Optional[str]) -> bool:
@@ -2598,6 +2698,80 @@ def _dept_authority_matches(current_user: dict, department_id: Optional[str]) ->
     if current_user.get("is_super_admin") or current_user.get("is_admin"):
         return True
     return bool(department_id) and current_user.get("department_id") == department_id
+
+
+def _can_refer_case(current_user: dict, proc: dict) -> bool:
+    """Who may initiate a referral for this specific case — the case's own
+    student, the case's own supervisor, or anyone with department authority
+    (incharge of the case's department, or the org admin)."""
+    role = current_user.get("role")
+    if role == "student":
+        return proc.get("student_id") == current_user["_id"]
+    if role == "supervisor":
+        return proc.get("supervisor_id") == current_user["_id"]
+    if role in ("implant_incharge", "administrator"):
+        return _dept_authority_matches(current_user, proc.get("department_id"))
+    return False
+
+
+async def _find_department_incharges(org_id: str, department_id: Optional[str]) -> List[dict]:
+    """Implant Incharge users of `department_id`; falls back to the org
+    admin(s) when the department has no incharge assigned yet (or the
+    referrer has no department of their own to resolve one from)."""
+    if department_id:
+        incharges = await db.users.find({
+            "org_id": org_id, "role": "implant_incharge", "department_id": department_id,
+        }).to_list(10)
+        if incharges:
+            return incharges
+    return await db.users.find({"org_id": org_id, "is_admin": True}).to_list(10)
+
+
+async def _notify_referral_event(user_ids: List[str], case_id: str, patient_name: Optional[str], title: str, body: str, notif_type: str) -> None:
+    now = datetime.utcnow()
+    valid_ids = [u for u in user_ids if u]
+    for uid in valid_ids:
+        await db.notifications.insert_one({
+            "user_id": uid,
+            "procedure_id": case_id,
+            "message": body,
+            "type": notif_type,
+            "read": False,
+            "created_at": now,
+        })
+    if valid_ids:
+        await send_expo_push_notifications(valid_ids, title, body, redact=[patient_name] if patient_name else None)
+
+
+PHASE_LOCKED_TO_PRIMARY = {1}  # Phase 1 never transfers via referral.
+
+
+async def _assert_phase_edit_allowed(proc: dict, current_user: dict, phase_num: int) -> None:
+    """Blocks edits to a phase currently owned by a different department due
+    to an active referral — the enforcement half of phase ownership (spec:
+    the original department becomes read-only on the referred phase(s) until
+    the case is returned). A no-op whenever there's no active referral
+    affecting this phase, so normal case-editing is completely unaffected in
+    the common case.
+
+    Phase 1 is intentionally not enforced here — it's never touched by a
+    referral (only phases 2-4 can transfer), and the phase-1 edit endpoint
+    already restricts editing to the case's own student/supervisor/creator
+    independent of this helper, so there's nothing for it to add there."""
+    if current_user.get("is_super_admin") or current_user.get("is_admin"):
+        return
+    if phase_num in PHASE_LOCKED_TO_PRIMARY:
+        return
+    active_referral = await db.case_referrals.find_one({"case_id": str(proc["_id"]), "status": "active"})
+    if not active_referral or (active_referral.get("assigned_phase_num") or 0) > phase_num:
+        return  # no active referral affecting this phase — unrestricted, as before referrals existed.
+    owner_dept = active_referral.get("to_department_id")
+    if current_user.get("department_id") == owner_dept:
+        return
+    raise HTTPException(
+        status_code=403,
+        detail="This phase is currently owned by another department under an active referral — read-only until the case is returned.",
+    )
 
 
 def _serialize_referral(r: dict) -> dict:
@@ -2624,10 +2798,16 @@ def _assert_referral_org_and_authority(referral: dict, current_user: dict, side_
         raise HTTPException(status_code=403, detail="You don't have authority over that department")
 
 
+def _is_eligible_internal_approver(referral: dict, current_user: dict) -> bool:
+    if current_user.get("is_admin") or current_user.get("is_super_admin"):
+        return True
+    return current_user["_id"] in (referral.get("approver_ids") or [])
+
+
 @api_router.post("/procedures/{procedure_id}/refer")
 async def refer_procedure(procedure_id: str, payload: ReferralCreate, current_user: dict = Depends(get_current_user)):
-    if current_user.get("role") not in REFERRAL_ROLES:
-        raise HTTPException(status_code=403, detail="Only Implant In-Charge / Administrator can refer a case")
+    if current_user.get("role") not in REFERRAL_CREATE_ROLES:
+        raise HTTPException(status_code=403, detail="You don't have permission to refer a case")
     try:
         obj_pid = ObjectId(procedure_id)
     except Exception:
@@ -2638,8 +2818,8 @@ async def refer_procedure(procedure_id: str, payload: ReferralCreate, current_us
     await _assert_procedure_org_access(proc, current_user)
 
     case_dept_id = proc.get("department_id")
-    if not _dept_authority_matches(current_user, case_dept_id):
-        raise HTTPException(status_code=403, detail="Only this case's own department (or the org admin) can refer it")
+    if not _can_refer_case(current_user, proc):
+        raise HTTPException(status_code=403, detail="You don't have permission to refer this case")
 
     org_id = current_user.get("org_id")
     if not org_id:
@@ -2657,11 +2837,28 @@ async def refer_procedure(procedure_id: str, payload: ReferralCreate, current_us
 
     existing = await db.case_referrals.find_one({
         "case_id": procedure_id,
-        "to_department_id": payload.to_department_id,
-        "status": {"$in": ["pending", "active"]},
+        "status": {"$in": ["pending_supervisor_approval", "pending_incharge_approval", "pending", "active"]},
     })
     if existing:
-        raise HTTPException(status_code=400, detail="This case already has a pending or active referral to that department")
+        raise HTTPException(status_code=400, detail="This case already has a referral in progress")
+
+    role = current_user.get("role")
+    initial_status: str
+    approver_ids: List[str] = []
+    if role == "student":
+        sup_id = proc.get("supervisor_id")
+        if not sup_id:
+            raise HTTPException(status_code=400, detail="This case has no assigned supervisor to approve the referral")
+        initial_status = "pending_supervisor_approval"
+        approver_ids = [sup_id]
+    elif role == "supervisor":
+        incharges = await _find_department_incharges(org_id, current_user.get("department_id"))
+        approver_ids = [str(u["_id"]) for u in incharges]
+        if not approver_ids:
+            raise HTTPException(status_code=400, detail="No Implant Incharge is available to approve this referral")
+        initial_status = "pending_incharge_approval"
+    else:
+        initial_status = "pending"
 
     now = datetime.utcnow()
     referral_doc = {
@@ -2670,25 +2867,155 @@ async def refer_procedure(procedure_id: str, payload: ReferralCreate, current_us
         "from_department_id": case_dept_id,
         "to_department_id": payload.to_department_id,
         "to_department_name": to_dept["name"],
-        "permission": payload.permission,
+        "reason": payload.reason,
+        "assigned_phase": payload.assigned_phase,
+        "assigned_phase_num": PHASE_LABEL_TO_NUM[payload.assigned_phase],
+        "priority": payload.priority,
+        "expected_return_date": payload.expected_return_date,
         "notes": payload.notes,
-        "status": "pending",
+        "status": initial_status,
+        "approver_ids": approver_ids,
         "requested_by_id": current_user["_id"],
         "requested_by_name": current_user.get("name", ""),
+        "requested_by_role": role,
         "requested_at": now,
         # Denormalized so the receiving department can triage from the list
         # screen without needing case access before they've even accepted.
         "patient_name": proc.get("patient_name"),
         "implant_procedure_type": proc.get("implant_procedure_type"),
         "case_status": proc.get("status"),
+        "history": [{
+            "event": "created",
+            "by_id": current_user["_id"],
+            "by_name": current_user.get("name", ""),
+            "by_role": role,
+            "at": now,
+            "detail": f"Referral to {to_dept['name']} created" + (" — pending internal approval" if initial_status != "pending" else ""),
+        }],
     }
     result = await db.case_referrals.insert_one(referral_doc)
-    return {"id": str(result.inserted_id), "message": "Referral sent"}
+    referral_id = str(result.inserted_id)
+
+    if initial_status == "pending":
+        target_ids = [str(u["_id"]) for u in await _find_department_incharges(org_id, payload.to_department_id)]
+        await _notify_referral_event(
+            target_ids, procedure_id, proc.get("patient_name"),
+            "New Referral Received",
+            f"{proc.get('patient_name', 'A case')} referred to {to_dept['name']} — awaiting your response.",
+            "referral_incoming",
+        )
+        message = "Referral sent"
+    else:
+        await _notify_referral_event(
+            approver_ids, procedure_id, proc.get("patient_name"),
+            "Referral Awaiting Your Approval",
+            f"{current_user.get('name')} wants to refer {proc.get('patient_name', 'a case')} to {to_dept['name']}.",
+            "referral_approval",
+        )
+        message = "Referral submitted for approval"
+
+    return {"id": referral_id, "message": message}
+
+
+@api_router.post("/referrals/{referral_id}/approve-internal")
+async def approve_referral_internal(referral_id: str, current_user: dict = Depends(get_current_user)):
+    """Supervisor (student-initiated) or department Incharge
+    (supervisor-initiated) sign-off before a referral reaches the receiving
+    department at all."""
+    referral = await _get_referral_or_404(referral_id)
+    if not current_user.get("is_super_admin") and referral.get("org_id") != current_user.get("org_id"):
+        raise HTTPException(status_code=403, detail="Cannot access referrals outside your organization")
+    if referral.get("status") not in REFERRAL_INTERNAL_APPROVAL_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Referral is not awaiting internal approval (status: {referral.get('status')})")
+    if not _is_eligible_internal_approver(referral, current_user):
+        raise HTTPException(status_code=403, detail="You are not authorised to approve this referral")
+
+    now = datetime.utcnow()
+    history_entry = {
+        "event": "internal_approved", "by_id": current_user["_id"], "by_name": current_user.get("name", ""),
+        "by_role": current_user.get("role"), "at": now, "detail": "Referral approved internally",
+    }
+    await db.case_referrals.update_one({"_id": referral["_id"]}, {
+        "$set": {
+            "status": "pending",
+            "internal_approved_by_id": current_user["_id"],
+            "internal_approved_by_name": current_user.get("name", ""),
+            "internal_approved_at": now,
+        },
+        "$push": {"history": history_entry},
+    })
+
+    target_ids = [str(u["_id"]) for u in await _find_department_incharges(referral["org_id"], referral["to_department_id"])]
+    await _notify_referral_event(
+        target_ids, referral["case_id"], referral.get("patient_name"),
+        "New Referral Received",
+        f"{referral.get('patient_name', 'A case')} referred to {referral.get('to_department_name')} — awaiting your response.",
+        "referral_incoming",
+    )
+    await _notify_referral_event(
+        [referral["requested_by_id"]], referral["case_id"], referral.get("patient_name"),
+        "Referral Approved",
+        f"Your referral for {referral.get('patient_name', 'this case')} was approved and sent to {referral.get('to_department_name')}.",
+        "referral_status",
+    )
+    return {"message": "Referral approved and sent"}
+
+
+@api_router.post("/referrals/{referral_id}/reject-internal")
+async def reject_referral_internal(referral_id: str, payload: ReferralInternalReject, current_user: dict = Depends(get_current_user)):
+    referral = await _get_referral_or_404(referral_id)
+    if not current_user.get("is_super_admin") and referral.get("org_id") != current_user.get("org_id"):
+        raise HTTPException(status_code=403, detail="Cannot access referrals outside your organization")
+    if referral.get("status") not in REFERRAL_INTERNAL_APPROVAL_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Referral is not awaiting internal approval (status: {referral.get('status')})")
+    if not _is_eligible_internal_approver(referral, current_user):
+        raise HTTPException(status_code=403, detail="You are not authorised to reject this referral")
+
+    now = datetime.utcnow()
+    history_entry = {
+        "event": "internal_rejected", "by_id": current_user["_id"], "by_name": current_user.get("name", ""),
+        "by_role": current_user.get("role"), "at": now, "detail": payload.reason or "Referral rejected internally",
+    }
+    await db.case_referrals.update_one({"_id": referral["_id"]}, {
+        "$set": {
+            "status": "rejected_internal",
+            "internal_rejected_by_id": current_user["_id"],
+            "internal_rejected_by_name": current_user.get("name", ""),
+            "internal_rejected_at": now,
+            "internal_reject_reason": payload.reason,
+        },
+        "$push": {"history": history_entry},
+    })
+    await _notify_referral_event(
+        [referral["requested_by_id"]], referral["case_id"], referral.get("patient_name"),
+        "Referral Rejected",
+        f"Your referral for {referral.get('patient_name', 'this case')} was not approved." + (f" Reason: {payload.reason}" if payload.reason else ""),
+        "referral_status",
+    )
+    return {"message": "Referral rejected"}
+
+
+@api_router.get("/referrals/pending-my-approval")
+async def list_pending_my_approval(current_user: dict = Depends(get_current_user)):
+    """Referrals awaiting this user's internal sign-off — a case supervisor
+    (student-initiated referrals) or a department Incharge/org admin
+    (supervisor-initiated referrals)."""
+    role = current_user.get("role")
+    if role not in ("supervisor", "implant_incharge", "administrator"):
+        return {"referrals": []}
+    org_id = current_user.get("org_id")
+    if not org_id:
+        return {"referrals": []}
+    query: Dict[str, Any] = {"org_id": org_id, "status": {"$in": list(REFERRAL_INTERNAL_APPROVAL_STATUSES)}}
+    if not current_user.get("is_admin"):
+        query["approver_ids"] = current_user["_id"]
+    referrals = [_serialize_referral(r) async for r in db.case_referrals.find(query).sort("requested_at", -1)]
+    return {"referrals": referrals}
 
 
 @api_router.get("/referrals/incoming")
 async def list_incoming_referrals(current_user: dict = Depends(get_current_user)):
-    if current_user.get("role") not in REFERRAL_ROLES:
+    if current_user.get("role") not in REFERRAL_MANAGE_ROLES:
         raise HTTPException(status_code=403, detail="Only Implant In-Charge / Administrator can view referrals")
     org_id = current_user.get("org_id")
     if not org_id:
@@ -2705,13 +3032,19 @@ async def list_incoming_referrals(current_user: dict = Depends(get_current_user)
 
 @api_router.get("/referrals/outgoing")
 async def list_outgoing_referrals(current_user: dict = Depends(get_current_user)):
-    if current_user.get("role") not in REFERRAL_ROLES:
-        raise HTTPException(status_code=403, detail="Only Implant In-Charge / Administrator can view referrals")
+    role = current_user.get("role")
+    if role not in REFERRAL_CREATE_ROLES:
+        raise HTTPException(status_code=403, detail="You don't have permission to view referrals")
     org_id = current_user.get("org_id")
     if not org_id:
         raise HTTPException(status_code=400, detail="Your account is not linked to an organization")
     query: Dict[str, Any] = {"org_id": org_id}
-    if not current_user.get("is_admin"):
+    if role in ("student", "supervisor"):
+        # Students/supervisors only track referrals they personally
+        # requested — not the whole department's outgoing inbox (that stays
+        # an Incharge/Admin-level view).
+        query["requested_by_id"] = current_user["_id"]
+    elif not current_user.get("is_admin"):
         dept_id = current_user.get("department_id")
         if not dept_id:
             return {"referrals": []}
@@ -2736,65 +3069,182 @@ async def list_case_referrals(procedure_id: str, current_user: dict = Depends(ge
 
 @api_router.post("/referrals/{referral_id}/accept")
 async def accept_referral(referral_id: str, current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") not in REFERRAL_MANAGE_ROLES:
+        raise HTTPException(status_code=403, detail="Only Implant In-Charge / Administrator can accept referrals")
     referral = await _get_referral_or_404(referral_id)
     _assert_referral_org_and_authority(referral, current_user, "to_department_id")
     if referral.get("status") != "pending":
         raise HTTPException(status_code=400, detail=f"Referral is already {referral.get('status')}")
     now = datetime.utcnow()
-    await db.case_referrals.update_one({"_id": referral["_id"]}, {"$set": {
-        "status": "active",
-        "responded_by_id": current_user["_id"],
-        "responded_by_name": current_user.get("name", ""),
-        "responded_at": now,
-    }})
+    history_entry = {
+        "event": "accepted", "by_id": current_user["_id"], "by_name": current_user.get("name", ""),
+        "by_role": current_user.get("role"), "at": now, "detail": f"Accepted by {referral.get('to_department_name')}",
+    }
+    await db.case_referrals.update_one({"_id": referral["_id"]}, {
+        "$set": {
+            "status": "active",
+            "responded_by_id": current_user["_id"],
+            "responded_by_name": current_user.get("name", ""),
+            "responded_at": now,
+        },
+        "$push": {"history": history_entry},
+    })
+    await _notify_referral_event(
+        [referral["requested_by_id"]], referral["case_id"], referral.get("patient_name"),
+        "Referral Accepted",
+        f"{referral.get('to_department_name')} accepted the referral for {referral.get('patient_name', 'this case')}.",
+        "referral_status",
+    )
     return {"message": "Referral accepted"}
 
 
 @api_router.post("/referrals/{referral_id}/decline")
 async def decline_referral(referral_id: str, payload: ReferralDecline, current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") not in REFERRAL_MANAGE_ROLES:
+        raise HTTPException(status_code=403, detail="Only Implant In-Charge / Administrator can decline referrals")
     referral = await _get_referral_or_404(referral_id)
     _assert_referral_org_and_authority(referral, current_user, "to_department_id")
     if referral.get("status") != "pending":
         raise HTTPException(status_code=400, detail=f"Referral is already {referral.get('status')}")
     now = datetime.utcnow()
-    await db.case_referrals.update_one({"_id": referral["_id"]}, {"$set": {
-        "status": "declined",
-        "responded_by_id": current_user["_id"],
-        "responded_by_name": current_user.get("name", ""),
-        "responded_at": now,
-        "decline_reason": payload.reason,
-    }})
+    history_entry = {
+        "event": "declined", "by_id": current_user["_id"], "by_name": current_user.get("name", ""),
+        "by_role": current_user.get("role"), "at": now, "detail": payload.reason or "Declined",
+    }
+    await db.case_referrals.update_one({"_id": referral["_id"]}, {
+        "$set": {
+            "status": "declined",
+            "responded_by_id": current_user["_id"],
+            "responded_by_name": current_user.get("name", ""),
+            "responded_at": now,
+            "decline_reason": payload.reason,
+        },
+        "$push": {"history": history_entry},
+    })
+    await _notify_referral_event(
+        [referral["requested_by_id"]], referral["case_id"], referral.get("patient_name"),
+        "Referral Declined",
+        f"{referral.get('to_department_name')} declined the referral for {referral.get('patient_name', 'this case')}." + (f" Reason: {payload.reason}" if payload.reason else ""),
+        "referral_status",
+    )
     return {"message": "Referral declined"}
 
 
-@api_router.post("/referrals/{referral_id}/return")
-async def return_referral(referral_id: str, current_user: dict = Depends(get_current_user)):
-    """Receiving department marks treatment complete — case visibility falls
-    straight back to the originating department (status leaves "active", so
-    _referred_case_ids no longer includes it). Nothing on the procedure
-    document itself changes; department_id was never touched."""
+@api_router.post("/referrals/{referral_id}/complete")
+async def complete_referral(referral_id: str, payload: ReferralComplete, current_user: dict = Depends(get_current_user)):
+    """Receiving department ends an active referral with a structured
+    outcome: Return, Treatment Complete, Transfer Further, Cancelled, or
+    Patient Did Not Report. "Transfer Further" chains a brand-new referral
+    onward (from this department to the next) so the full history is
+    preserved across every hop."""
+    if current_user.get("role") not in REFERRAL_MANAGE_ROLES:
+        raise HTTPException(status_code=403, detail="Only Implant In-Charge / Administrator can complete a referral")
     referral = await _get_referral_or_404(referral_id)
     _assert_referral_org_and_authority(referral, current_user, "to_department_id")
     if referral.get("status") != "active":
         raise HTTPException(status_code=400, detail=f"Referral is not active (status: {referral.get('status')})")
+
     now = datetime.utcnow()
-    await db.case_referrals.update_one({"_id": referral["_id"]}, {"$set": {
-        "status": "returned",
-        "returned_by_id": current_user["_id"],
-        "returned_by_name": current_user.get("name", ""),
-        "returned_at": now,
-    }})
-    return {"message": "Case returned to originating department"}
+    outcome = payload.outcome
+    new_status = REFERRAL_OUTCOME_TO_STATUS[outcome]
+    update: Dict[str, Any] = {
+        "status": new_status,
+        "outcome": outcome,
+        "completed_by_id": current_user["_id"],
+        "completed_by_name": current_user.get("name", ""),
+        "completed_at": now,
+        "completion_notes": payload.notes,
+    }
+    history_entry = {
+        "event": outcome, "by_id": current_user["_id"], "by_name": current_user.get("name", ""),
+        "by_role": current_user.get("role"), "at": now, "detail": payload.notes or outcome.replace("_", " ").title(),
+    }
+
+    new_referral_id: Optional[str] = None
+    result_msg = {
+        "returned": "Case returned to originating department",
+        "treatment_complete": "Implant treatment marked complete",
+        "cancelled": "Referral cancelled",
+        "patient_did_not_report": "Case marked as patient did not report",
+        "transfer_further": "Case transferred further",
+    }[outcome]
+
+    if outcome == "transfer_further":
+        if not payload.transfer_to_department_id:
+            raise HTTPException(status_code=400, detail="transfer_to_department_id is required for Transfer Further")
+        if payload.transfer_to_department_id == referral["to_department_id"]:
+            raise HTTPException(status_code=400, detail="Cannot transfer to the same department")
+        try:
+            new_to_obj = ObjectId(payload.transfer_to_department_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid transfer_to_department_id")
+        new_to_dept = await db.departments.find_one({"_id": new_to_obj, "org_id": referral["org_id"]})
+        if not new_to_dept:
+            raise HTTPException(status_code=404, detail="Target department not found")
+
+        await db.case_referrals.update_one({"_id": referral["_id"]}, {"$set": update, "$push": {"history": history_entry}})
+
+        new_doc = {
+            "org_id": referral["org_id"], "case_id": referral["case_id"],
+            "from_department_id": referral["to_department_id"], "to_department_id": payload.transfer_to_department_id,
+            "to_department_name": new_to_dept["name"], "reason": referral.get("reason"),
+            "assigned_phase": referral.get("assigned_phase"), "assigned_phase_num": referral.get("assigned_phase_num"),
+            "priority": referral.get("priority", "routine"), "expected_return_date": None,
+            "notes": payload.notes, "status": "pending",
+            "approver_ids": [], "requested_by_id": current_user["_id"], "requested_by_name": current_user.get("name", ""),
+            "requested_by_role": current_user.get("role"), "requested_at": now,
+            "patient_name": referral.get("patient_name"), "implant_procedure_type": referral.get("implant_procedure_type"),
+            "case_status": referral.get("case_status"), "chain_from_referral_id": str(referral["_id"]),
+            "history": [{
+                "event": "created", "by_id": current_user["_id"], "by_name": current_user.get("name", ""),
+                "by_role": current_user.get("role"), "at": now,
+                "detail": f"Forwarded from {referral.get('to_department_name')} to {new_to_dept['name']}",
+            }],
+        }
+        new_result = await db.case_referrals.insert_one(new_doc)
+        new_referral_id = str(new_result.inserted_id)
+        target_ids = [str(u["_id"]) for u in await _find_department_incharges(referral["org_id"], payload.transfer_to_department_id)]
+        await _notify_referral_event(
+            target_ids, referral["case_id"], referral.get("patient_name"),
+            "New Referral Received",
+            f"{referral.get('patient_name', 'A case')} forwarded to {new_to_dept['name']}.",
+            "referral_incoming",
+        )
+    else:
+        await db.case_referrals.update_one({"_id": referral["_id"]}, {"$set": update, "$push": {"history": history_entry}})
+
+    notify_title = {
+        "returned": "Case Returned", "treatment_complete": "Treatment Complete",
+        "cancelled": "Referral Cancelled", "patient_did_not_report": "Patient Did Not Report",
+        "transfer_further": "Case Forwarded",
+    }[outcome]
+    await _notify_referral_event(
+        [referral["requested_by_id"]], referral["case_id"], referral.get("patient_name"),
+        notify_title, f"{referral.get('patient_name', 'This case')}: {result_msg}.", "referral_status",
+    )
+
+    resp: Dict[str, Any] = {"message": result_msg}
+    if new_referral_id:
+        resp["new_referral_id"] = new_referral_id
+    return resp
 
 
 @api_router.post("/referrals/{referral_id}/cancel")
 async def cancel_referral(referral_id: str, current_user: dict = Depends(get_current_user)):
-    """Originating department withdraws a still-pending referral before the
-    other side has responded."""
+    """Withdraw a referral that hasn't been accepted yet — by the person who
+    requested it (at any pre-acceptance stage) or by department authority
+    over the originating department (once it's out for the receiving side to
+    act on)."""
     referral = await _get_referral_or_404(referral_id)
-    _assert_referral_org_and_authority(referral, current_user, "from_department_id")
-    if referral.get("status") != "pending":
-        raise HTTPException(status_code=400, detail=f"Referral is already {referral.get('status')}")
+    if not current_user.get("is_super_admin") and referral.get("org_id") != current_user.get("org_id"):
+        raise HTTPException(status_code=403, detail="Cannot access referrals outside your organization")
+    status = referral.get("status")
+    if status not in REFERRAL_INTERNAL_APPROVAL_STATUSES and status != "pending":
+        raise HTTPException(status_code=400, detail=f"Referral is already {status}")
+    is_requester = referral.get("requested_by_id") == current_user["_id"]
+    has_from_dept_authority = _dept_authority_matches(current_user, referral.get("from_department_id"))
+    if not (is_requester or has_from_dept_authority):
+        raise HTTPException(status_code=403, detail="You don't have authority to cancel this referral")
     await db.case_referrals.delete_one({"_id": referral["_id"]})
     return {"message": "Referral cancelled"}
 
@@ -2816,6 +3266,8 @@ async def _ensure_org_indexes() -> None:
         await db.case_referrals.create_index("case_id")
         await db.case_referrals.create_index([("to_department_id", 1), ("status", 1)])
         await db.case_referrals.create_index([("from_department_id", 1), ("status", 1)])
+        await db.case_referrals.create_index([("approver_ids", 1), ("status", 1)])
+        await db.case_referrals.create_index([("requested_by_id", 1), ("status", 1)])
         await db.otp_verifications.create_index("email", unique=True)
         await db.otp_verifications.create_index("expires_at", expireAfterSeconds=3600)
     except Exception as e:
@@ -3336,7 +3788,7 @@ async def workspace_signup(payload: WorkspaceSignup):
             "name": {"$regex": f"^{re.escape(payload.college_data.college_name.strip())}$", "$options": "i"},
         })
         if existing_college:
-            raise HTTPException(400, "This college has already been onboarded. Contact your Implant In-Charge for access.")
+            raise HTTPException(400, "This college has already been onboarded. Contact your Implant Admin for access.")
     else:
         existing_clinic = await db.organizations.find_one({
             "org_type": "clinic",
@@ -12736,7 +13188,8 @@ async def submit_phase2(
     
     if not (is_student or is_supervisor or is_incharge or is_creator):
         raise HTTPException(status_code=403, detail="You don't have permission to submit Phase 2 for this procedure")
-    
+    await _assert_phase_edit_allowed(procedure, current_user, 2)
+
     # Check if Phase 1 is approved
     if procedure["status"] != "phase1_approved":
         raise HTTPException(status_code=400, detail="Phase 1 must be approved before submitting Phase 2")
@@ -12986,6 +13439,7 @@ async def submit_stage2_surgical(
     is_creator = procedure.get("created_by_id") == current_user["_id"]
     if not (is_student or is_supervisor or is_incharge or is_creator):
         raise HTTPException(status_code=403, detail="You don't have permission to submit Phase 3")
+    await _assert_phase_edit_allowed(procedure, current_user, 3)
     if procedure["status"] != "phase2_approved":
         raise HTTPException(status_code=400, detail="Phase 2 must be approved before starting Phase 3")
 
@@ -13078,6 +13532,7 @@ async def submit_stage2_prosthetic(
     is_creator = procedure.get("created_by_id") == current_user["_id"]
     if not (is_student or is_supervisor or is_incharge or is_creator):
         raise HTTPException(status_code=403, detail="You don't have permission")
+    await _assert_phase_edit_allowed(procedure, current_user, 4)
     # iter-194: save_only=true (Generate-Lab-Slip on the form) tolerates the
     # case being mid-flow — it's a soft draft. The full submit (save_only=false)
     # still requires the strict status precondition below.
@@ -13474,6 +13929,7 @@ async def submit_phase4_step2(
     is_creator = procedure.get("created_by_id") == current_user["_id"]
     if not (is_student or is_supervisor or is_incharge or is_creator):
         raise HTTPException(status_code=403, detail="You don't have permission")
+    await _assert_phase_edit_allowed(procedure, current_user, 4)
     if procedure["status"] != "stage2_prosthetic_step1_approved":
         raise HTTPException(status_code=400, detail="Phase 4 Step 1 must be approved before submitting Step 2")
 
@@ -22174,6 +22630,13 @@ async def start_pre_surgery_scheduler():
     asyncio.create_task(pre_surgery_reminder_loop(3600))
     asyncio.create_task(preop_checklist_reminder_loop(900))
     logging.info("Pre-surgery reminder scheduler started (interval=3600s, preop=900s).")
+
+@app.on_event("startup")
+async def start_upload_cache_sweep_scheduler():
+    """Evict stale local upload-cache files every 6h (files older than 30d
+    are re-fetched from S3 on next view — see local_upload_cache_sweep_loop)."""
+    asyncio.create_task(local_upload_cache_sweep_loop(21600, 30))
+    logging.info("Local upload-cache sweep scheduler started (interval=21600s, max_age=30d).")
 
 @app.on_event("startup")
 async def ensure_access_log_indexes_on_start():

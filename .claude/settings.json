@@ -235,7 +235,11 @@
       "Bash(grep -n \"prosthesis_photos: validPhotos,\\\\|isInchargeSelfCreated\\) {\" \"frontend/app/procedures/submit-phase4-step2/[id].tsx\")",
       "Bash(./venv/bin/python -c \"import motor, pymongo; print\\('ok'\\)\")",
       "Bash(timeout 20 ./venv/bin/python -c ' *)",
-      "Bash(./venv/bin/python -c ' *)"
+      "Bash(./venv/bin/python -c ' *)",
+      "Bash(curl -s -m 2 http://169.254.169.254/latest/meta-data/instance-id)",
+      "Bash(sed -i '' 's/CURRENT_PROJECT_VERSION = 13;/CURRENT_PROJECT_VERSION = 14;/g; s/MARKETING_VERSION = 1\\\\.1\\\\.6;/MARKETING_VERSION = 1.1.7;/g' ios/Implanr.xcodeproj/project.pbxproj)",
+      "Bash(sed -i '' 's/versionCode 13/versionCode 14/; s/versionName \"1\\\\.1\\\\.6\"/versionName \"1.1.7\"/' android/app/build.gradle)",
+      "Bash(./venv/bin/python -c \"import server; print\\('final import OK'\\)\")"
     ],
     "additionalDirectories": [
       "/dev",

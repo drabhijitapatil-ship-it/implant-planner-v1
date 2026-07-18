@@ -47,6 +47,21 @@ export default function ProfileScreen() {
   };
   useEffect(() => { fetchOrg(); }, []);
 
+  // Department name — any org member can list departments (needed for the
+  // assignment pickers elsewhere), so a student/supervisor tagged to a
+  // department can see which one here even though the admin-only Users tab
+  // (which already shows this per-user) is invisible to them.
+  const [departmentName, setDepartmentName] = useState<string | null>(null);
+  useEffect(() => {
+    if (!user?.department_id) { setDepartmentName(null); return; }
+    api.get('/departments')
+      .then(res => {
+        const match = (res.data?.departments || []).find((d: any) => d.id === user.department_id);
+        setDepartmentName(match?.name || null);
+      })
+      .catch(() => setDepartmentName(null));
+  }, [user?.department_id]);
+
   // Change password — same OTP-verify flow as forgot-password, just pinned
   // to the logged-in user's own email (no email-entry step needed).
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -319,7 +334,7 @@ export default function ProfileScreen() {
           </View>
 
           {org && (
-            <View style={(isIncharge || isOrgAdmin) ? styles.rowItem : [styles.rowItem, styles.rowItemLast]}>
+            <View style={(isIncharge || isOrgAdmin || departmentName) ? styles.rowItem : [styles.rowItem, styles.rowItemLast]}>
               <View style={[styles.iconBadge, { backgroundColor: '#E0F2F1' }]}>
                 <Ionicons name="business" size={20} color="#00695C" />
               </View>
@@ -330,6 +345,18 @@ export default function ProfileScreen() {
               {org.logo ? (
                 <Image source={{ uri: org.logo }} style={{ width: 36, height: 36, borderRadius: 8 }} />
               ) : null}
+            </View>
+          )}
+
+          {departmentName && (
+            <View style={(isIncharge || isOrgAdmin) ? styles.rowItem : [styles.rowItem, styles.rowItemLast]} data-testid="profile-department-row">
+              <View style={[styles.iconBadge, { backgroundColor: '#EDE7F6' }]}>
+                <Ionicons name="git-branch" size={20} color="#5E35B1" />
+              </View>
+              <View style={styles.rowContent}>
+                <Text style={styles.rowLabel}>Department</Text>
+                <Text style={styles.rowValue}>{departmentName}</Text>
+              </View>
             </View>
           )}
 

@@ -8,6 +8,9 @@ import {
   RefreshControl,
   ActivityIndicator,
   Alert,
+  Modal,
+  ScrollView,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,8 +20,16 @@ import { useAuth } from '../contexts/AuthContext';
 import CenteredHeader from '../components/CenteredHeader';
 
 /**
- * Cross-department case referral inbox/outbox. Implant In-Charge /
- * Administrator only — mirrors backend REFERRAL_ROLES.
+ * Cross-department case referral inbox/outbox/approvals.
+ *
+ * - Incoming / Outgoing: Implant In-Charge / Administrator manage the
+ *   department-level referral dashboard (accept/decline/complete).
+ * - Outgoing also surfaces a student's/supervisor's own referral requests
+ *   (scoped to just what they personally requested) so they can track
+ *   approval status.
+ * - Approvals: supervisor/incharge/admin — referrals awaiting their
+ *   internal sign-off before the referral even reaches the other
+ *   department (mirrors Phase 1-4 submission approval).
  */
 
 type Referral = {
@@ -27,54 +38,108 @@ type Referral = {
   from_department_id: string | null;
   to_department_id: string;
   to_department_name: string;
-  permission: 'read' | 'edit';
+  reason?: string;
+  assigned_phase?: string;
+  priority?: 'routine' | 'urgent';
+  expected_return_date?: string | null;
   notes?: string;
-  status: 'pending' | 'active' | 'declined' | 'returned';
+  status: string;
   requested_by_name: string;
+  requested_by_role?: string;
   requested_at: string;
   patient_name?: string;
   implant_procedure_type?: string;
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  pending_supervisor_approval: 'Awaiting Supervisor Approval',
+  pending_incharge_approval: 'Awaiting Incharge Approval',
+  pending: 'Pending',
+  active: 'Active',
+  declined: 'Declined',
+  rejected_internal: 'Rejected',
+  returned: 'Returned',
+  completed: 'Treatment Complete',
+  transferred: 'Transferred Further',
+  cancelled: 'Cancelled',
+  closed: 'Closed',
+};
+
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
+  pending_supervisor_approval: { bg: '#FFF3E0', text: '#E65100' },
+  pending_incharge_approval: { bg: '#FFF3E0', text: '#E65100' },
   pending: { bg: '#FFF3E0', text: '#E65100' },
   active: { bg: '#E8F5E9', text: '#2E7D32' },
   declined: { bg: '#FFEBEE', text: '#C62828' },
+  rejected_internal: { bg: '#FFEBEE', text: '#C62828' },
   returned: { bg: '#ECEFF1', text: '#546E7A' },
+  completed: { bg: '#E3F2FD', text: '#0D47A1' },
+  transferred: { bg: '#EDE7F6', text: '#4527A0' },
+  cancelled: { bg: '#ECEFF1', text: '#546E7A' },
+  closed: { bg: '#ECEFF1', text: '#546E7A' },
 };
+
+const OUTCOME_OPTIONS: { key: string; label: string; needsTarget?: boolean }[] = [
+  { key: 'returned', label: 'Return Patient' },
+  { key: 'treatment_complete', label: 'Treatment Complete' },
+  { key: 'transfer_further', label: 'Transfer Further', needsTarget: true },
+  { key: 'cancelled', label: 'Referral Cancelled' },
+  { key: 'patient_did_not_report', label: 'Patient Did Not Report' },
+];
+
+type Tab = 'incoming' | 'outgoing' | 'approvals';
 
 export default function ReferralsScreen() {
   const { user } = useAuth();
   const router = useRouter();
-  const [tab, setTab] = useState<'incoming' | 'outgoing'>('incoming');
+  const isManager = user?.role === 'implant_incharge' || user?.role === 'administrator';
+  const canCreate = user?.role === 'student' || user?.role === 'supervisor' || isManager;
+  const canApprove = user?.role === 'supervisor' || isManager;
+  const canView = canCreate;
+
+  const [tab, setTab] = useState<Tab>(isManager ? 'incoming' : canApprove ? 'approvals' : 'outgoing');
   const [incoming, setIncoming] = useState<Referral[]>([]);
   const [outgoing, setOutgoing] = useState<Referral[]>([]);
+  const [approvals, setApprovals] = useState<Referral[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [actingId, setActingId] = useState<string | null>(null);
 
-  const canView = user?.role === 'implant_incharge' || user?.role === 'administrator';
+  const [completeTarget, setCompleteTarget] = useState<Referral | null>(null);
+  const [outcome, setOutcome] = useState<string>('returned');
+  const [transferDeptId, setTransferDeptId] = useState<string | null>(null);
+  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+  const [completionNotes, setCompletionNotes] = useState('');
+  const [completing, setCompleting] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [inRes, outRes] = await Promise.all([
-        api.get('/referrals/incoming'),
-        api.get('/referrals/outgoing'),
-      ]);
+      const calls: Promise<any>[] = [];
+      calls.push(isManager ? api.get('/referrals/incoming') : Promise.resolve({ data: { referrals: [] } }));
+      calls.push(api.get('/referrals/outgoing'));
+      calls.push(canApprove ? api.get('/referrals/pending-my-approval') : Promise.resolve({ data: { referrals: [] } }));
+      const [inRes, outRes, apprRes] = await Promise.all(calls);
       setIncoming(inRes.data?.referrals || []);
       setOutgoing(outRes.data?.referrals || []);
+      setApprovals(apprRes.data?.referrals || []);
     } catch (error) {
       console.error('Failed to load referrals:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [isManager, canApprove]);
 
   useEffect(() => {
     if (canView) load();
     else setLoading(false);
   }, [canView, load]);
+
+  useEffect(() => {
+    if (isManager) {
+      api.get('/departments').then((res) => setDepartments(res.data?.departments || [])).catch(() => {});
+    }
+  }, [isManager]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -103,6 +168,36 @@ export default function ReferralsScreen() {
     }
   };
 
+  const openComplete = (referral: Referral) => {
+    setCompleteTarget(referral);
+    setOutcome('returned');
+    setTransferDeptId(null);
+    setCompletionNotes('');
+  };
+
+  const submitComplete = async () => {
+    if (!completeTarget) return;
+    const opt = OUTCOME_OPTIONS.find((o) => o.key === outcome);
+    if (opt?.needsTarget && !transferDeptId) {
+      Alert.alert('Error', 'Pick the department to transfer this case to');
+      return;
+    }
+    setCompleting(true);
+    try {
+      await api.post(`/referrals/${completeTarget.id}/complete`, {
+        outcome,
+        transfer_to_department_id: transferDeptId || undefined,
+        notes: completionNotes.trim() || undefined,
+      });
+      setCompleteTarget(null);
+      load();
+    } catch (error: any) {
+      Alert.alert('Error', error.response?.data?.detail || 'Failed to complete referral');
+    } finally {
+      setCompleting(false);
+    }
+  };
+
   if (!canView) {
     return (
       <SafeAreaView style={styles.container}>
@@ -110,18 +205,23 @@ export default function ReferralsScreen() {
         <View style={styles.accessDenied}>
           <Ionicons name="lock-closed" size={48} color="#CCC" />
           <Text style={styles.accessDeniedText}>Access Restricted</Text>
-          <Text style={styles.accessDeniedSubtext}>
-            Only Implant In-Charge / Administrator can view referrals
-          </Text>
+          <Text style={styles.accessDeniedSubtext}>Nurses cannot access referrals</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  const list = tab === 'incoming' ? incoming : outgoing;
+  const list = tab === 'incoming' ? incoming : tab === 'outgoing' ? outgoing : approvals;
+
+  const daysPending = (item: Referral) => {
+    const start = new Date(item.requested_at).getTime();
+    const days = Math.floor((Date.now() - start) / (1000 * 60 * 60 * 24));
+    return days;
+  };
 
   const renderCard = ({ item }: { item: Referral }) => {
     const colors = STATUS_COLORS[item.status] || STATUS_COLORS.pending;
+    const isUrgent = item.priority === 'urgent';
     return (
       <TouchableOpacity
         style={styles.card}
@@ -134,23 +234,37 @@ export default function ReferralsScreen() {
           </Text>
           <View style={[styles.statusBadge, { backgroundColor: colors.bg }]}>
             <Text style={[styles.statusBadgeText, { color: colors.text }]}>
-              {item.status.toUpperCase()}
+              {(STATUS_LABELS[item.status] || item.status).toUpperCase()}
             </Text>
           </View>
         </View>
         <Text style={styles.cardMeta}>{item.implant_procedure_type || ''}</Text>
+
         <View style={styles.cardRow}>
           <Ionicons name="business-outline" size={13} color="#64748B" />
           <Text style={styles.cardMetaSmall}>
-            {tab === 'incoming' ? `From: requested by ${item.requested_by_name}` : `To: ${item.to_department_name}`}
+            {tab === 'incoming' ? `From: ${item.requested_by_name} (${item.requested_by_role || ''})` : `To: ${item.to_department_name}`}
           </Text>
         </View>
+        {!!item.assigned_phase && (
+          <View style={styles.cardRow}>
+            <Ionicons name="layers-outline" size={13} color="#64748B" />
+            <Text style={styles.cardMetaSmall}>{item.assigned_phase}{item.reason ? ` · ${item.reason}` : ''}</Text>
+          </View>
+        )}
         <View style={styles.cardRow}>
-          <Ionicons name={item.permission === 'edit' ? 'create-outline' : 'eye-outline'} size={13} color="#64748B" />
-          <Text style={styles.cardMetaSmall}>
-            {item.permission === 'edit' ? 'Collaborate' : 'Read Only'}
+          <Ionicons name={isUrgent ? 'alert-circle-outline' : 'time-outline'} size={13} color={isUrgent ? '#C62828' : '#64748B'} />
+          <Text style={[styles.cardMetaSmall, isUrgent && { color: '#C62828', fontWeight: '700' }]}>
+            {isUrgent ? 'Urgent' : 'Routine'}
+            {(item.status === 'pending' || item.status === 'active') ? ` · ${daysPending(item)}d pending` : ''}
           </Text>
         </View>
+        {!!item.expected_return_date && (
+          <View style={styles.cardRow}>
+            <Ionicons name="calendar-outline" size={13} color="#64748B" />
+            <Text style={styles.cardMetaSmall}>Expected return: {item.expected_return_date}</Text>
+          </View>
+        )}
         {!!item.notes && <Text style={styles.cardNotes} numberOfLines={2}>"{item.notes}"</Text>}
 
         {tab === 'incoming' && item.status === 'pending' && (
@@ -177,15 +291,15 @@ export default function ReferralsScreen() {
           <View style={styles.actionsRow}>
             <TouchableOpacity
               style={[styles.actionBtn, styles.returnBtn]}
-              onPress={() => act('return', item.id, 'Mark treatment complete and return this case to its originating department?')}
+              onPress={() => openComplete(item)}
               disabled={actingId === item.id}
-              data-testid={`return-referral-${item.id}`}
+              data-testid={`complete-referral-${item.id}`}
             >
-              {actingId === item.id ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.actionBtnText}>Complete &amp; Return</Text>}
+              <Text style={styles.actionBtnText}>Complete Referral</Text>
             </TouchableOpacity>
           </View>
         )}
-        {tab === 'outgoing' && item.status === 'pending' && (
+        {tab === 'outgoing' && (item.status === 'pending' || item.status === 'pending_supervisor_approval' || item.status === 'pending_incharge_approval') && (
           <View style={styles.actionsRow}>
             <TouchableOpacity
               style={[styles.actionBtn, styles.declineBtn]}
@@ -194,6 +308,26 @@ export default function ReferralsScreen() {
               data-testid={`cancel-referral-${item.id}`}
             >
               <Text style={[styles.actionBtnText, { color: '#C62828' }]}>Cancel Request</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {tab === 'approvals' && (
+          <View style={styles.actionsRow}>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.acceptBtn]}
+              onPress={() => act('approve-internal', item.id)}
+              disabled={actingId === item.id}
+              data-testid={`approve-internal-${item.id}`}
+            >
+              {actingId === item.id ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.actionBtnText}>Approve</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.declineBtn]}
+              onPress={() => act('reject-internal', item.id)}
+              disabled={actingId === item.id}
+              data-testid={`reject-internal-${item.id}`}
+            >
+              <Text style={[styles.actionBtnText, { color: '#C62828' }]}>Reject</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -206,15 +340,17 @@ export default function ReferralsScreen() {
       <CenteredHeader title="Referrals" fallback="/(tabs)/dashboard" />
 
       <View style={styles.tabRow}>
-        <TouchableOpacity
-          style={[styles.tabBtn, tab === 'incoming' && styles.tabBtnActive]}
-          onPress={() => setTab('incoming')}
-          data-testid="referrals-tab-incoming"
-        >
-          <Text style={[styles.tabBtnText, tab === 'incoming' && styles.tabBtnTextActive]}>
-            Incoming ({incoming.length})
-          </Text>
-        </TouchableOpacity>
+        {isManager && (
+          <TouchableOpacity
+            style={[styles.tabBtn, tab === 'incoming' && styles.tabBtnActive]}
+            onPress={() => setTab('incoming')}
+            data-testid="referrals-tab-incoming"
+          >
+            <Text style={[styles.tabBtnText, tab === 'incoming' && styles.tabBtnTextActive]}>
+              Incoming ({incoming.length})
+            </Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={[styles.tabBtn, tab === 'outgoing' && styles.tabBtnActive]}
           onPress={() => setTab('outgoing')}
@@ -224,6 +360,17 @@ export default function ReferralsScreen() {
             Outgoing ({outgoing.length})
           </Text>
         </TouchableOpacity>
+        {canApprove && (
+          <TouchableOpacity
+            style={[styles.tabBtn, tab === 'approvals' && styles.tabBtnActive]}
+            onPress={() => setTab('approvals')}
+            data-testid="referrals-tab-approvals"
+          >
+            <Text style={[styles.tabBtnText, tab === 'approvals' && styles.tabBtnTextActive]}>
+              Approvals ({approvals.length})
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {loading ? (
@@ -247,6 +394,83 @@ export default function ReferralsScreen() {
           }
         />
       )}
+
+      {/* Complete Referral — structured outcome picker */}
+      <Modal visible={!!completeTarget} animationType="slide" transparent onRequestClose={() => setCompleteTarget(null)}>
+        <View style={styles.overlay}>
+          <View style={styles.sheet} data-testid="complete-referral-modal">
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <View style={styles.sheetHeaderRow}>
+                <Text style={styles.title}>Complete Referral</Text>
+                <TouchableOpacity onPress={() => setCompleteTarget(null)}>
+                  <Ionicons name="close" size={24} color="#666" />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.label}>Outcome</Text>
+              {OUTCOME_OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={opt.key}
+                  style={[styles.optRow, outcome === opt.key && styles.optRowActive]}
+                  onPress={() => setOutcome(opt.key)}
+                  data-testid={`outcome-${opt.key}`}
+                >
+                  <Ionicons
+                    name={outcome === opt.key ? 'radio-button-on' : 'radio-button-off'}
+                    size={18}
+                    color={outcome === opt.key ? '#1A73E8' : '#94A3B8'}
+                  />
+                  <Text style={styles.optRowText}>{opt.label}</Text>
+                </TouchableOpacity>
+              ))}
+
+              {outcome === 'transfer_further' && (
+                <>
+                  <Text style={styles.label}>Transfer To</Text>
+                  {departments
+                    .filter((d) => d.id !== completeTarget?.to_department_id)
+                    .map((d) => (
+                      <TouchableOpacity
+                        key={d.id}
+                        style={[styles.optRow, transferDeptId === d.id && styles.optRowActive]}
+                        onPress={() => setTransferDeptId(d.id)}
+                        data-testid={`transfer-dept-${d.id}`}
+                      >
+                        <Ionicons
+                          name={transferDeptId === d.id ? 'radio-button-on' : 'radio-button-off'}
+                          size={18}
+                          color={transferDeptId === d.id ? '#1A73E8' : '#94A3B8'}
+                        />
+                        <Text style={styles.optRowText}>{d.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                </>
+              )}
+
+              <Text style={styles.label}>Notes (optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Any closing notes"
+                placeholderTextColor="#999"
+                value={completionNotes}
+                onChangeText={setCompletionNotes}
+                multiline
+                numberOfLines={3}
+                data-testid="completion-notes-input"
+              />
+
+              <TouchableOpacity
+                style={[styles.submitBtn, completing && styles.btnDisabled]}
+                onPress={submitComplete}
+                disabled={completing}
+                data-testid="submit-complete-referral"
+              >
+                {completing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.submitBtnText}>Confirm</Text>}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -295,4 +519,42 @@ const styles = StyleSheet.create({
   actionBtnText: { fontSize: 13, fontWeight: '700', color: '#FFF' },
   emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 64, gap: 8 },
   emptyText: { fontSize: 14, color: '#94A3B8' },
+  // Complete Referral sheet (reuses ReferCaseButton's visual language)
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 32,
+    maxHeight: '88%',
+  },
+  sheetHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  title: { fontSize: 18, fontWeight: '700', color: '#1A202C' },
+  label: { fontSize: 13, fontWeight: '600', color: '#546E7A', marginBottom: 8, marginTop: 14 },
+  optRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 8,
+  },
+  optRowActive: { borderColor: '#1A73E8', backgroundColor: '#E3F2FD' },
+  optRowText: { fontSize: 14, fontWeight: '600', color: '#1A202C' },
+  input: {
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 14,
+    color: '#1A202C',
+    textAlignVertical: 'top',
+  },
+  submitBtn: { backgroundColor: '#1A73E8', borderRadius: 10, padding: 14, alignItems: 'center', marginTop: 20 },
+  submitBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
+  btnDisabled: { opacity: 0.6 },
 });

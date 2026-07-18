@@ -13,12 +13,19 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import api from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
+import CalendarPicker from './CalendarPicker';
 
 /**
  * Header-icon action for referring a case to another department for
  * collaborative treatment (e.g. Prosthodontics → Oral Surgery for implant
- * placement). Implant In-Charge / Administrator only — mirrors the backend's
- * REFERRAL_ROLES gate on POST /procedures/{id}/refer.
+ * placement).
+ *
+ * Referral creation follows the same role-based approval chain as Phase
+ * 1-4 submissions: a student's referral needs their case's own supervisor
+ * to approve; a supervisor's referral needs their own department's
+ * Implant Incharge; Incharge/Admin referrals go straight out. The backend
+ * is authoritative on all of this — the role/ownership checks here just
+ * decide whether to render the button at all.
  *
  * Self-contained: fetches its own department list, renders nothing if the
  * org has no other department to refer into (fewer than 2 departments, or
@@ -26,16 +33,25 @@ import { useAuth } from '../contexts/AuthContext';
  */
 
 type Department = { id: string; name: string };
+const PHASES = ['Phase 1', 'Phase 2', 'Phase 3', 'Phase 4'];
 
 export default function ReferCaseButton({
   procedureId,
   caseDepartmentId,
+  caseStudentId,
+  caseSupervisorId,
 }: {
   procedureId: string;
   caseDepartmentId?: string | null;
+  caseStudentId?: string | null;
+  caseSupervisorId?: string | null;
 }) {
   const { user } = useAuth();
-  const canRefer = user?.role === 'implant_incharge' || user?.role === 'administrator';
+  const canRefer =
+    (user?.role === 'student' && caseStudentId === user?.id) ||
+    (user?.role === 'supervisor' && caseSupervisorId === user?.id) ||
+    user?.role === 'implant_incharge' ||
+    user?.role === 'administrator';
 
   const [departments, setDepartments] = useState<Department[]>([]);
   useEffect(() => {
@@ -50,13 +66,19 @@ export default function ReferCaseButton({
 
   const [showModal, setShowModal] = useState(false);
   const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null);
-  const [permission, setPermission] = useState<'read' | 'edit'>('read');
+  const [reason, setReason] = useState('');
+  const [assignedPhase, setAssignedPhase] = useState('Phase 4');
+  const [priority, setPriority] = useState<'routine' | 'urgent'>('routine');
+  const [expectedReturnDate, setExpectedReturnDate] = useState('');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const openModal = () => {
     setSelectedDeptId(null);
-    setPermission('read');
+    setReason('');
+    setAssignedPhase('Phase 4');
+    setPriority('routine');
+    setExpectedReturnDate('');
     setNotes('');
     setShowModal(true);
   };
@@ -66,15 +88,30 @@ export default function ReferCaseButton({
       Alert.alert('Error', 'Pick a department to refer this case to');
       return;
     }
+    if (!reason.trim()) {
+      Alert.alert('Error', 'Enter a reason for the referral');
+      return;
+    }
     setSubmitting(true);
     try {
-      await api.post(`/procedures/${procedureId}/refer`, {
+      const res = await api.post(`/procedures/${procedureId}/refer`, {
         to_department_id: selectedDeptId,
-        permission,
+        reason: reason.trim(),
+        assigned_phase: assignedPhase,
+        priority,
+        expected_return_date: expectedReturnDate || undefined,
         notes: notes.trim() || undefined,
       });
       setShowModal(false);
-      Alert.alert('Referral Sent', 'The receiving department will see this in their Incoming Referrals.');
+      const needsApproval = user?.role === 'student' || user?.role === 'supervisor';
+      Alert.alert(
+        needsApproval ? 'Referral Submitted' : 'Referral Sent',
+        res.data?.message === 'Referral submitted for approval'
+          ? (user?.role === 'student'
+              ? "Your case supervisor needs to approve this before it's sent to the receiving department."
+              : "Your department's Implant Incharge needs to approve this before it's sent to the receiving department.")
+          : 'The receiving department will see this in their Incoming Referrals.',
+      );
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.detail || 'Failed to send referral');
     } finally {
@@ -103,7 +140,7 @@ export default function ReferCaseButton({
       <Modal visible={showModal} animationType="slide" transparent onRequestClose={() => setShowModal(false)}>
         <View style={styles.overlay}>
           <View style={styles.sheet} data-testid="refer-case-modal">
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <View style={styles.header}>
                 <Text style={styles.title}>Refer Case</Text>
                 <TouchableOpacity onPress={() => setShowModal(false)}>
@@ -115,7 +152,7 @@ export default function ReferCaseButton({
               {targetDepartments.map((d) => (
                 <TouchableOpacity
                   key={d.id}
-                  style={[styles.deptRow, selectedDeptId === d.id && styles.deptRowActive]}
+                  style={[styles.optRow, selectedDeptId === d.id && styles.optRowActive]}
                   onPress={() => setSelectedDeptId(d.id)}
                   data-testid={`refer-dept-${d.id}`}
                 >
@@ -124,30 +161,65 @@ export default function ReferCaseButton({
                     size={18}
                     color={selectedDeptId === d.id ? '#1A73E8' : '#94A3B8'}
                   />
-                  <Text style={styles.deptRowText}>{d.name}</Text>
+                  <Text style={styles.optRowText}>{d.name}</Text>
                 </TouchableOpacity>
               ))}
 
-              <Text style={styles.label}>Access Level</Text>
-              <View style={styles.permRow}>
-                {(['read', 'edit'] as const).map((p) => (
+              <Text style={styles.label}>Reason</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Implant Prosthesis"
+                placeholderTextColor="#999"
+                value={reason}
+                onChangeText={setReason}
+                data-testid="refer-reason-input"
+              />
+
+              <Text style={styles.label}>Expected Work</Text>
+              <View style={styles.chipRow}>
+                {PHASES.map((p) => (
                   <TouchableOpacity
                     key={p}
-                    style={[styles.permBtn, permission === p && styles.permBtnActive]}
-                    onPress={() => setPermission(p)}
-                    data-testid={`refer-permission-${p}`}
+                    style={[styles.chip, assignedPhase === p && styles.chipActive]}
+                    onPress={() => setAssignedPhase(p)}
+                    data-testid={`refer-phase-${p.replace(/\s+/g, '-')}`}
                   >
-                    <Text style={[styles.permBtnText, permission === p && styles.permBtnTextActive]}>
-                      {p === 'read' ? 'Read Only' : 'Collaborate'}
+                    <Text style={[styles.chipText, assignedPhase === p && styles.chipTextActive]}>{p}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.label}>Priority</Text>
+              <View style={styles.permRow}>
+                {(['routine', 'urgent'] as const).map((p) => (
+                  <TouchableOpacity
+                    key={p}
+                    style={[styles.permBtn, priority === p && styles.permBtnActive]}
+                    onPress={() => setPriority(p)}
+                    data-testid={`refer-priority-${p}`}
+                  >
+                    <Text style={[styles.permBtnText, priority === p && styles.permBtnTextActive]}>
+                      {p === 'routine' ? 'Routine' : 'Urgent'}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
 
-              <Text style={styles.label}>Note (optional)</Text>
+              <Text style={styles.label}>Expected Return Date (Optional)</Text>
+              <CalendarPicker
+                value={expectedReturnDate}
+                onChange={setExpectedReturnDate}
+                placeholder="Select date"
+                allowPast={false}
+                allowFuture
+                testID="refer-expected-return"
+                style={{ marginBottom: 0 }}
+              />
+
+              <Text style={styles.label}>Referral Notes</Text>
               <TextInput
                 style={styles.input}
-                placeholder="e.g. needs implant placement before prosthetic phase"
+                placeholder="What work needs to be done"
                 placeholderTextColor="#999"
                 value={notes}
                 onChangeText={setNotes}
@@ -190,12 +262,12 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     padding: 20,
     paddingBottom: 32,
-    maxHeight: '85%',
+    maxHeight: '88%',
   },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   title: { fontSize: 18, fontWeight: '700', color: '#1A202C' },
-  label: { fontSize: 13, fontWeight: '600', color: '#546E7A', marginBottom: 8, marginTop: 4 },
-  deptRow: {
+  label: { fontSize: 13, fontWeight: '600', color: '#546E7A', marginBottom: 8, marginTop: 14 },
+  optRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -206,9 +278,17 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
     marginBottom: 8,
   },
-  deptRowActive: { borderColor: '#1A73E8', backgroundColor: '#E3F2FD' },
-  deptRowText: { fontSize: 14, fontWeight: '600', color: '#1A202C' },
-  permRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  optRowActive: { borderColor: '#1A73E8', backgroundColor: '#E3F2FD' },
+  optRowText: { fontSize: 14, fontWeight: '600', color: '#1A202C' },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999,
+    borderWidth: 1, borderColor: '#E2E8F0', backgroundColor: '#FAFAFA',
+  },
+  chipActive: { borderColor: '#1A73E8', backgroundColor: '#E3F2FD' },
+  chipText: { fontSize: 13, fontWeight: '600', color: '#64748B' },
+  chipTextActive: { color: '#1A73E8' },
+  permRow: { flexDirection: 'row', gap: 8 },
   permBtn: {
     flex: 1,
     paddingVertical: 10,
@@ -227,10 +307,9 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 14,
     color: '#1A202C',
-    marginBottom: 20,
     textAlignVertical: 'top',
   },
-  submitBtn: { backgroundColor: '#1A73E8', borderRadius: 10, padding: 14, alignItems: 'center' },
+  submitBtn: { backgroundColor: '#1A73E8', borderRadius: 10, padding: 14, alignItems: 'center', marginTop: 20 },
   submitBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
   btnDisabled: { opacity: 0.6 },
 });

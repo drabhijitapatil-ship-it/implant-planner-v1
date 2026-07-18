@@ -46,6 +46,7 @@ function DrawerMenu({
   isNurse,
   isSuperAdmin,
   isOrgAdmin,
+  hasMultipleDepartments,
   userName,
   userRole,
   profilePhoto,
@@ -60,6 +61,7 @@ function DrawerMenu({
   isNurse: boolean;
   isSuperAdmin: boolean;
   isOrgAdmin: boolean;
+  hasMultipleDepartments: boolean;
   userName: string;
   userRole: string;
   profilePhoto: string | null;
@@ -126,7 +128,13 @@ function DrawerMenu({
           bg: '#E3F2FD', chip: '#BBDEFB', iconColor: '#1565C0',
         }]
       : []),
-    ...(isAdmin
+    // Referrals only make sense with 2+ departments to refer between —
+    // hidden entirely for single-department (or department-less) orgs,
+    // where the feature would just be a permanently-empty dead end.
+    // Supervisors get the tile too (they manage the Approvals + Outgoing
+    // tabs); students track their own outgoing referrals from inside the
+    // case itself via the Refer button, no separate menu entry needed.
+    ...((isAdmin || userRole === 'supervisor') && hasMultipleDepartments
       ? [{
           key: 'referrals', icon: 'git-branch' as const, label: 'Referrals', route: '/referrals',
           bg: '#F3E5F5', chip: '#E1BEE7', iconColor: '#6A1B9A',
@@ -448,6 +456,16 @@ export default function TabsLayout() {
   const isSuperAdmin = role === 'super_admin';
   const isOrgAdmin = !!user?.is_admin;
 
+  // Referrals only make sense once the org has 2+ departments to refer
+  // between — drives hiding the drawer tile entirely otherwise.
+  const [hasMultipleDepartments, setHasMultipleDepartments] = useState(false);
+  useEffect(() => {
+    if (isSuperAdmin || !user) return;
+    api.get('/departments')
+      .then((res) => setHasMultipleDepartments((res.data?.departments || []).length > 1))
+      .catch(() => {});
+  }, [isSuperAdmin, user]);
+
   const fetchUnreadCount = useCallback(async () => {
     try {
       const res = await api.get('/notifications/unread-count');
@@ -584,6 +602,7 @@ export default function TabsLayout() {
         isNurse={isNurse}
         isSuperAdmin={isSuperAdmin}
         isOrgAdmin={isOrgAdmin}
+        hasMultipleDepartments={hasMultipleDepartments}
         userName={user?.name || user?.username || ''}
         userRole={roleName}
         profilePhoto={user?.profile_photo || null}

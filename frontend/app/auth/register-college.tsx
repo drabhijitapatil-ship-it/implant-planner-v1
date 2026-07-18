@@ -9,15 +9,39 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import api from '../../utils/api';
+import api, { setToken } from '../../utils/api';
+import { useAuth } from '../../contexts/AuthContext';
 import { DENTAL_COLLEGES, type DentalCollege } from '../../constants/dentalColleges';
 import OtpEmailField from '../../components/OtpEmailField';
 import PasswordRequirements, { isPasswordValid } from '../../components/PasswordRequirements';
 
 const PREFIXES = ['Dr.', 'Mr.', 'Mrs.', 'Ms.', 'Prof.'];
 
+// Preset department options offered right after signup — Implant Admin can
+// still add/rename/remove departments later from Users > Departments, this
+// is just a fast-start so the common ones don't need typing.
+const PRESET_DEPARTMENTS = [
+  'Implant Centre',
+  'Centralized Implant Clinic',
+  'Department of Prosthodontics',
+  'Department of Periodontology',
+  'Department of Oral Surgery',
+];
+
 export default function CollegeRegisterScreen() {
   const router = useRouter();
+  const { refreshUser } = useAuth();
+
+  // 'form' = the signup form below. 'departments' = the post-signup,
+  // department-only setup step — the account already exists and is
+  // authenticated by the time this renders (signup returns tokens we stash
+  // immediately), so department Implant Incharge onboarding can happen
+  // later from the Implant Admin's own profile instead of blocking here.
+  const [step, setStep] = useState<'form' | 'departments'>('form');
+  const [selectedPresets, setSelectedPresets] = useState<Set<string>>(new Set());
+  const [otherEnabled, setOtherEnabled] = useState(false);
+  const [otherName, setOtherName] = useState('');
+  const [creatingDepts, setCreatingDepts] = useState(false);
 
   const [logo, setLogo] = useState<string | null>(null);
 
@@ -38,7 +62,6 @@ export default function CollegeRegisterScreen() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
   const [emailVerified, setEmailVerified] = useState(false);
 
   const [showPrefixPicker, setShowPrefixPicker] = useState(false);
@@ -139,7 +162,7 @@ export default function CollegeRegisterScreen() {
     if (!validate()) return;
     setLoading(true);
     try {
-      await api.post('/auth/signup', {
+      const res = await api.post('/auth/signup', {
         org_type: 'college',
         email: email.trim().toLowerCase(),
         password,
@@ -152,7 +175,16 @@ export default function CollegeRegisterScreen() {
           num_users: Number(numUsers),
         },
       });
-      setShowSuccess(true);
+      // Signup already returns a real session — stash it and hydrate
+      // AuthContext so the department-setup step below can call the
+      // authenticated /departments endpoint immediately, no separate
+      // "verify then log in again" round trip.
+      const { access_token, refresh_token } = res.data || {};
+      if (access_token) await setToken('access_token', access_token);
+      if (refresh_token) await setToken('refresh_token', refresh_token);
+      await setToken('last_activity_at', String(Date.now()));
+      await refreshUser();
+      setStep('departments');
     } catch (err: any) {
       const detail = err.response?.data?.detail;
       Alert.alert('Signup Failed', typeof detail === 'string' ? detail : 'Please try again.');
@@ -160,6 +192,119 @@ export default function CollegeRegisterScreen() {
       setLoading(false);
     }
   };
+
+  const togglePreset = (name: string) => {
+    setSelectedPresets(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
+
+  const handleCreateDepartments = async () => {
+    const names = [...selectedPresets];
+    if (otherEnabled && otherName.trim()) names.push(otherName.trim());
+    if (names.length === 0) {
+      Alert.alert('Nothing selected', 'Pick at least one department, or skip for now — you can always add departments later.');
+      return;
+    }
+    setCreatingDepts(true);
+    try {
+      for (const name of names) {
+        await api.post('/departments', { name });
+      }
+      router.replace('/(tabs)/dashboard');
+    } catch (err: any) {
+      const detail = err.response?.data?.detail;
+      Alert.alert('Could not create departments', typeof detail === 'string' ? detail : 'Please try again.');
+    } finally {
+      setCreatingDepts(false);
+    }
+  };
+
+  if (step === 'departments') {
+    return (
+      <LinearGradient colors={['#F4F9FD', '#EBF4FC', '#D6E9FA']} style={{ flex: 1 }}>
+        <SafeAreaView style={{ flex: 1 }}>
+          <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+            <View style={s.successIconWrap}>
+              <Ionicons name="checkmark-circle" size={64} color="#1565C0" />
+            </View>
+            <Text style={s.title}>Workspace Created!</Text>
+            <Text style={s.subtitle}>
+              Set up your departments — Implant Incharge assignment for each one can be done later from your profile.
+            </Text>
+
+            <View style={s.card}>
+              <Text style={s.label}>Departments</Text>
+              {PRESET_DEPARTMENTS.map(name => {
+                const selected = selectedPresets.has(name);
+                return (
+                  <TouchableOpacity
+                    key={name}
+                    style={s.deptRow}
+                    onPress={() => togglePreset(name)}
+                    data-testid={`signup-dept-${name}`}
+                  >
+                    <Ionicons
+                      name={selected ? 'checkbox' : 'square-outline'}
+                      size={22}
+                      color={selected ? '#1565C0' : '#90A4AE'}
+                    />
+                    <Text style={s.deptRowTxt}>{name}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+
+              <TouchableOpacity
+                style={s.deptRow}
+                onPress={() => setOtherEnabled(v => !v)}
+                data-testid="signup-dept-other"
+              >
+                <Ionicons
+                  name={otherEnabled ? 'checkbox' : 'square-outline'}
+                  size={22}
+                  color={otherEnabled ? '#1565C0' : '#90A4AE'}
+                />
+                <Text style={s.deptRowTxt}>Other</Text>
+              </TouchableOpacity>
+              {otherEnabled && (
+                <TextInput
+                  style={[s.input, { marginTop: 4, marginLeft: 32 }]}
+                  placeholder="Department name"
+                  value={otherName}
+                  onChangeText={setOtherName}
+                  autoCapitalize="words"
+                  data-testid="signup-dept-other-name"
+                />
+              )}
+
+              <TouchableOpacity
+                style={[s.submitBtn, creatingDepts && s.btnDisabled]}
+                onPress={handleCreateDepartments}
+                disabled={creatingDepts}
+                data-testid="signup-create-departments"
+              >
+                {creatingDepts
+                  ? <ActivityIndicator color="#FFF" />
+                  : <Text style={s.submitTxt}>Create & Continue</Text>
+                }
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={s.loginLink}
+                onPress={() => router.replace('/(tabs)/dashboard')}
+                disabled={creatingDepts}
+              >
+                <Text style={s.loginLinkTxt}>Skip for now</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </LinearGradient>
+    );
+  }
 
   return (
     <LinearGradient colors={['#F4F9FD', '#EBF4FC', '#D6E9FA']} style={{ flex: 1 }}>
@@ -273,7 +418,7 @@ export default function CollegeRegisterScreen() {
 
               {/* Incharge Name */}
               <View style={s.labelRow}>
-                <Text style={s.label}>Implant In-Charge Name *</Text>
+                <Text style={s.label}>Implant Admin Name *</Text>
                 <TouchableOpacity onPress={() => setInfoModal('incharge')}>
                   <Ionicons name="information-circle-outline" size={19} color="#1565C0" />
                 </TouchableOpacity>
@@ -478,23 +623,23 @@ export default function CollegeRegisterScreen() {
             <Ionicons name="information-circle" size={28} color="#1565C0" style={{ marginBottom: 8 }} />
             {infoModal === 'incharge' ? (
               <>
-                <Text style={s.infoTitle}>About Implant In-Charge</Text>
+                <Text style={s.infoTitle}>About Implant Admin</Text>
                 <Text style={s.infoBody}>
-                  The Implant In-Charge is the primary admin of your college workspace. They have full access to all cases, reports, and user management. They can add supervisors, students, and auxiliary staff. A maximum of 2 Implant In-Charges are allowed per college.
+                  The Implant Admin in the primary admin of your college workspace. They will have full access to all cases, reports, analytics, and user management. Implant Admin can add departments and allot department Implant Incharge. A maximum of 2 Implant Admins are allowed per college workspace.
                 </Text>
               </>
             ) : infoModal === 'email' ? (
               <>
                 <Text style={s.infoTitle}>Which Email to Use</Text>
                 <Text style={s.infoBody}>
-                  Official institutional email is preferred. Use the email of the person who will be the Implant In-Charge.
+                  Official institutional email is preferred. Use the email of the person who will be the Implant Admin.
                 </Text>
               </>
             ) : (
               <>
                 <Text style={s.infoTitle}>Number of Users</Text>
                 <Text style={s.infoBody}>
-                  Count everyone who will use the app — Implant In-Charges, Supervisors, Postgraduate Students, Undergraduate Students, Fellows, and Auxiliary Staff.
+                  Count everyone who will use the app — Implant Admins, department Implant Incharges, Supervisors, Postgraduate Students, Undergraduate Students, Fellows, and Auxiliary Staff.
                 </Text>
               </>
             )}
@@ -505,26 +650,6 @@ export default function CollegeRegisterScreen() {
         </Pressable>
       </Modal>
 
-      {/* Success Modal */}
-      <Modal visible={showSuccess} animationType="fade" transparent statusBarTranslucent>
-        <View style={s.successOverlay}>
-          <View style={s.successCard}>
-            <View style={s.successIconWrap}>
-              <Ionicons name="checkmark-circle" size={72} color="#1565C0" />
-            </View>
-            <Text style={s.successTitle}>Workspace Created!</Text>
-            <Text style={s.successBody}>
-              Your college workspace has been set up successfully. Sign in with your credentials to get started.
-            </Text>
-            <TouchableOpacity
-              style={s.successBtn}
-              onPress={() => { setShowSuccess(false); router.replace('/auth/login'); }}
-            >
-              <Text style={s.successBtnTxt}>Go to Sign In</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </LinearGradient>
   );
 }
@@ -596,11 +721,7 @@ const s = StyleSheet.create({
   infoBody: { fontSize: 14, color: '#546E7A', textAlign: 'center', lineHeight: 22 },
   infoCloseBtn: { marginTop: 18, backgroundColor: '#1565C0', borderRadius: 10, paddingHorizontal: 28, paddingVertical: 10 },
   infoCloseTxt: { color: '#FFF', fontWeight: '700', fontSize: 14 },
-  successOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 32 },
-  successCard: { backgroundColor: '#FFF', borderRadius: 24, padding: 32, alignItems: 'center', width: '100%', maxWidth: 360 },
-  successIconWrap: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#E3F2FD', justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
-  successTitle: { fontSize: 24, fontWeight: '800', color: '#1A1A2E', marginBottom: 12, textAlign: 'center' },
-  successBody: { fontSize: 15, color: '#546E7A', textAlign: 'center', lineHeight: 24, marginBottom: 28 },
-  successBtn: { backgroundColor: '#1565C0', borderRadius: 14, paddingVertical: 15, paddingHorizontal: 40, alignItems: 'center', width: '100%' },
-  successBtnTxt: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  successIconWrap: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#E3F2FD', justifyContent: 'center', alignItems: 'center', marginBottom: 20, alignSelf: 'center' },
+  deptRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
+  deptRowTxt: { fontSize: 15, color: '#1A1A2E' },
 });

@@ -11,6 +11,8 @@ import {
   TextInput,
   Modal,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -176,12 +178,22 @@ export default function DepartmentsScreen() {
     );
   };
 
+  // Stacking two native <Modal>s at once (the department modal + the
+  // assign-picker/new-incharge modal on top of it) is a known cause of the
+  // whole screen going unresponsive on iOS — only one is ever visible at a
+  // time, hiding the department modal while its sub-modal is open and
+  // restoring it after.
+  const openAssignPicker = () => { setShowModal(false); setShowAssignPicker(true); };
+  const closeAssignPicker = () => { setShowAssignPicker(false); setShowModal(true); };
+  const openNewInchargeForm = () => { setShowModal(false); setShowNewInchargeForm(true); };
+  const closeNewInchargeForm = () => { setShowNewInchargeForm(false); setShowModal(true); };
+
   const handleAssignExisting = async (u: InchargeUser) => {
     if (!editingDept) return;
     setAssigning(true);
     try {
       await api.put(`/users/${u.id}`, { department_id: editingDept.id });
-      setShowAssignPicker(false);
+      closeAssignPicker();
       loadIncharges(editingDept.id);
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.detail || 'Failed to assign incharge');
@@ -231,7 +243,7 @@ export default function DepartmentsScreen() {
         role: 'implant_incharge',
         department_id: editingDept.id,
       });
-      setShowNewInchargeForm(false);
+      closeNewInchargeForm();
       setNewIncharge({ name: '', email: '' });
       loadIncharges(editingDept.id);
       Alert.alert(
@@ -327,9 +339,13 @@ export default function DepartmentsScreen() {
       </TouchableOpacity>
 
       <Modal visible={showModal} animationType="slide" transparent onRequestClose={() => setShowModal(false)}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent} data-testid="department-modal">
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>
                   {editingDept ? editingDept.name : 'New Department'}
@@ -406,7 +422,7 @@ export default function DepartmentsScreen() {
                         <View style={styles.inchargeActionsRow}>
                           <TouchableOpacity
                             style={styles.inchargeActionBtn}
-                            onPress={() => setShowAssignPicker(true)}
+                            onPress={openAssignPicker}
                             data-testid="assign-existing-incharge-btn"
                           >
                             <Ionicons name="link-outline" size={16} color="#1A73E8" />
@@ -414,7 +430,7 @@ export default function DepartmentsScreen() {
                           </TouchableOpacity>
                           <TouchableOpacity
                             style={styles.inchargeActionBtn}
-                            onPress={() => setShowNewInchargeForm(true)}
+                            onPress={openNewInchargeForm}
                             data-testid="create-new-incharge-btn"
                           >
                             <Ionicons name="person-add-outline" size={16} color="#1A73E8" />
@@ -441,6 +457,7 @@ export default function DepartmentsScreen() {
             </ScrollView>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Assign an existing org-wide Implant In-Charge to editingDept */}
@@ -448,7 +465,7 @@ export default function DepartmentsScreen() {
         <TouchableOpacity
           style={styles.pickerOverlay}
           activeOpacity={1}
-          onPress={() => setShowAssignPicker(false)}
+          onPress={closeAssignPicker}
           data-testid="assign-picker-overlay"
         >
           <View style={styles.pickerSheet}>
@@ -483,11 +500,15 @@ export default function DepartmentsScreen() {
 
       {/* Create a brand-new Implant In-Charge directly into editingDept */}
       <Modal visible={showNewInchargeForm} animationType="slide" transparent>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent} data-testid="new-incharge-modal">
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>New Implant In-Charge</Text>
-              <TouchableOpacity onPress={() => setShowNewInchargeForm(false)}>
+              <TouchableOpacity onPress={closeNewInchargeForm}>
                 <Ionicons name="close" size={24} color="#666" />
               </TouchableOpacity>
             </View>
@@ -532,6 +553,7 @@ export default function DepartmentsScreen() {
             </TouchableOpacity>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

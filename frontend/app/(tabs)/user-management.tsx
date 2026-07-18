@@ -19,7 +19,7 @@ import * as Clipboard from "expo-clipboard";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import * as DocumentPicker from "expo-document-picker";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import api from "../../utils/api";
 import { useAuth } from "../../contexts/AuthContext";
 import BackButton from "../../components/BackButton";
@@ -167,6 +167,16 @@ export default function UserManagementScreen() {
     if (isSuperAdmin) return;
     fetchDepartments();
   }, [isSuperAdmin]);
+  // Re-fetch whenever this screen regains focus — e.g. after creating a
+  // department on the separate Departments screen and navigating back here.
+  // The mount-only effect above left a stale list, so a just-created
+  // department never showed up as an assignment target.
+  useFocusEffect(
+    useCallback(() => {
+      if (isSuperAdmin) return;
+      fetchDepartments();
+    }, [isSuperAdmin])
+  );
   const departmentName = (id?: string | null) =>
     departments.find((d) => d.id === id)?.name || null;
 
