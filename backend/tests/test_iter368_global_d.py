@@ -128,3 +128,79 @@ def test_catalog_docs_present():
         assert d.get("surface") == "SA²"
         assert d.get("material") == "Titanium"
         assert d.get("clinical_indications")
+
+
+# ── iter-369 — Drilling protocols ──
+def test_in_kone_universal_drilling_protocol_d2_shape():
+    r = requests.post(
+        f"{API_URL}/drilling-protocols/generate",
+        headers=_h(),
+        json={"brand": "Global D", "system": "In-Kone Universal",
+              "diameter": 4.0, "length": 10, "bone_density": "D2"},
+        timeout=15,
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    steps = body["steps"]
+    assert len(steps) == 6  # 5 drills (2.0, 2.4, 2.7, 2.9, 3.2) + placement
+    assert steps[0]["drill_type"] == "Marking Drill"
+    assert steps[0]["diameter"] == 2.0
+    assert steps[-1]["drill_type"] == "Implant Placement"
+
+
+def test_in_kone_universal_d1_adds_crestal_bone_profiler():
+    r = requests.post(
+        f"{API_URL}/drilling-protocols/generate",
+        headers=_h(),
+        json={"brand": "Global D", "system": "In-Kone Universal",
+              "diameter": 5.0, "length": 11.5, "bone_density": "D1"},
+        timeout=15,
+    ).json()
+    types = [s["drill_type"] for s in r["steps"]]
+    assert "Crestal Bone Profiler (Optional)" in types
+    # D1 for Ø5.0 uses the biggest drill (4.9)
+    diameters = [s["diameter"] for s in r["steps"] if s["drill_type"].endswith("Drill")]
+    assert 4.9 in diameters
+
+
+def test_3_0_implant_drilling_protocol():
+    r = requests.post(
+        f"{API_URL}/drilling-protocols/generate",
+        headers=_h(),
+        json={"brand": "Global D", "system": "3.0 Implant",
+              "diameter": 3.0, "length": 10, "bone_density": "D3"},
+        timeout=15,
+    ).json()
+    steps = r["steps"]
+    assert len(steps) == 2  # pilot 2.4 + placement (D3 uses only pilot)
+    assert steps[0]["diameter"] == 2.4
+    assert steps[0]["rpm"] == "1200"
+    assert steps[-1]["drill_type"] == "Implant Placement"
+
+
+def test_twinkone_4_ultra_short_drilling():
+    r = requests.post(
+        f"{API_URL}/drilling-protocols/generate",
+        headers=_h(),
+        json={"brand": "Global D", "system": "twinkone 4",
+              "diameter": 4.5, "length": 4, "bone_density": "D1"},
+        timeout=15,
+    ).json()
+    steps = r["steps"]
+    # D1 Ø4.5: pilot 2.0 + 2.5 + 3.0 + 3.5 + placement = 5 steps
+    assert len(steps) == 5
+    for s in steps[:-1]:
+        assert s.get("note") is None or "4.8" in (s["note"] or "")
+
+
+def test_all_three_global_d_in_available_list():
+    r = requests.get(f"{API_URL}/drilling-protocols/available", headers=_h(), timeout=15)
+    assert r.status_code == 200
+    payload = r.json()
+    if isinstance(payload, dict):
+        rows = payload.get("protocols") or payload.get("systems") or []
+    else:
+        rows = payload
+    text = str(rows)
+    for sys in ("In-Kone Universal", "3.0 Implant", "twinkone 4"):
+        assert sys in text, f"{sys} not present in available protocols"
