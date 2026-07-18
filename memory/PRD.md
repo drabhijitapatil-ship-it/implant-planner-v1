@@ -6585,8 +6585,23 @@ A comprehensive mobile application for managing dental implant procedures at the
 - P1 — Multi-tenant backend core + Platform Super Admin dashboard.
 - P1 — Microsoft OAuth login (needs Azure Client ID/Secret from user).
 - P1 — Swap EMERGENT_LLM_KEY for production OpenAI key (blocked — awaiting user key).
+- P1 — MUA workflow across Phase 2/3/4 + angulation picker [0°, 17°, 30°, 45°, Other] (user chose Option B).
 - P2 — Tablet responsive split-view refactor.
 - P2 — Existing-implants summary card gets Active/Inactive chip too.
 - P2 — Implanr AI Forum semantic search + IOPA vision context.
 - P2 — Proper phased Dark Mode.
+- P2 — PDF export for Drilling Protocols (printable nursing sequence).
 - P3 — Admin "Add Implant Size" UI, Group chat templates.
+
+### iter-370 — Global D UI-visibility fix (Feb 2026)
+- **Bug:** User reported "Global D: All three implant systems are not available anywhere in the app."
+- **Root cause:** `_seed_global_d.py` (iter-368) inserted the SKUs in `implant_library` but the previous agent forgot to add corresponding entries to the `IMPLANT_INDICATIONS` dict in `server.py`. Consequence: `/implant-library/systems` returned Global D rows with empty `indication`, so:
+  1. Let Me Choose dropdown showed an empty subtitle (looked broken/missed by user).
+  2. Suggest Me endpoint filtered them out entirely (`if not ind.get("indication"): continue`).
+- **Fix (`server.py`):** Added 3 Global D entries with `indication`, `indicated_procedures`, `indicated_bone_types`, and tooth restrictions:
+  - `Global D | In-Kone Universal` — universal Ø3.5–5.0 × 6–15 mm, D1–D4, all procedures incl. All-on-X.
+  - `Global D | 3.0 Implant` — restricted_teeth = [12, 22, 31, 32, 41, 42], single conventional only.
+  - `Global D | twinkone 4` — restricted_teeth = posterior molars, D3/D4 only, single + multi conventional.
+- **Regression:** 8 new tests in `tests/test_iter370_global_d_indications.py` (all 8 pass; combined with iter-368: 19/19).
+- **Testing:** Backend verified via curl + pytest. Frontend preview verified: searching "Global" in the Implant Selection dropdown now shows all three systems with populated indication subtitles.
+
