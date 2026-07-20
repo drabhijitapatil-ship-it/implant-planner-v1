@@ -14,9 +14,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-sys.path.insert(0, str(Path("/app/backend").resolve()))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from dotenv import load_dotenv
-load_dotenv(Path("/app/backend/.env"))
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 from motor.motor_asyncio import AsyncIOMotorClient  # noqa: E402
 from global_d_components import GLOBAL_D_COMPONENTS  # noqa: E402
