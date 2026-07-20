@@ -33,9 +33,27 @@ export function useScreenCaptureProtection(enabled: boolean): void {
         // (e.g. in Expo Go on very old OS versions).
       });
     };
+    // On Android, simply re-applying FLAG_SECURE on resume isn't always
+    // enough to clear the stuck-black-surface glitch — the OS can reuse the
+    // same stale secure window surface. Dropping the flag first and only
+    // re-applying a tick later forces Android to build a genuinely fresh
+    // secure surface instead of redrawing the stuck black one.
+    const reapplyOnResume = () => {
+      if (Platform.OS === 'android') {
+        ScreenCapture.allowScreenCaptureAsync('hipaa-phi-guard')
+          .catch(() => {})
+          .finally(() => {
+            setTimeout(() => {
+              if (!cancelled) apply();
+            }, 50);
+          });
+      } else {
+        apply();
+      }
+    };
     apply();
     const sub = AppState.addEventListener('change', (next) => {
-      if (next === 'active' && !cancelled) apply();
+      if (next === 'active' && !cancelled) reapplyOnResume();
     });
     return () => {
       cancelled = true;

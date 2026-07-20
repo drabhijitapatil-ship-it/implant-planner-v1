@@ -14731,6 +14731,36 @@ IMPLANT_INDICATIONS = {
         "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant"],
         "indicated_bone_types": ["D2", "D3", "D4"],
     },
+    # ── Global D (iter-370, Feb 2026) ─────────────────────────────────────
+    # Backend indication entries so Global D systems (In-Kone Universal, 3.0
+    # Implant, twinkone 4) appear in Suggest Me and show a proper subtitle in
+    # Let Me Choose. Long-form indications & features remain in the frontend
+    # constants/implantIndications.ts for the AI Explain card.
+    "Global D|In-Kone Universal": {
+        "indication": "Universal Ø3.5–5.0 mm × 6–15 mm bone-level implant. D1–D4 bone. Single tooth, multi-unit and full-arch rehabilitation. Immediate, delayed, guided and freehand placement. 8° Morse taper internal conical connection with universal prosthetic platform. SA² surface.",
+        "indicated_procedures": [
+            "Single Conventional Implant",
+            "Multiple Conventional Implants",
+            "Immediate Implant",
+            "Partial Extraction Therapy",
+            "All on 4",
+            "All on 6",
+            "All on X",
+        ],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Global D|3.0 Implant": {
+        "indication": "Ø3.0 small-diameter implant for narrow ridges and reduced mesio-distal spaces. Indicated for maxillary lateral incisors (12, 22) and mandibular incisors (31, 32, 41, 42). 5° Morse taper internal conical connection on a dedicated 3.0 prosthetic platform. SA² surface.",
+        "restricted_teeth": ["12", "22", "31", "32", "41", "42"],
+        "indicated_procedures": ["Single Conventional Implant"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Global D|twinkone 4": {
+        "indication": "Ultra-short (L = 4 mm) cylindrical implant (Ø4.0 / Ø4.5) for severely resorbed posterior maxilla and mandible (16, 17, 26, 27, 36, 37, 46, 47). Enables restoration where residual bone height is insufficient for standard implants — avoids sinus lift in the maxilla and stays clear of the inferior alveolar nerve in the mandible. External Conical Connection. SA² surface.",
+        "restricted_teeth": ["16", "17", "26", "27", "36", "37", "46", "47"],
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants"],
+        "indicated_bone_types": ["D3", "D4"],
+    },
 }
 
 # Map Suggest Me procedure types → New Case procedure types for indication matching
@@ -15824,6 +15854,29 @@ for _blt_sys in ("BLT Roxolid SLActive", "BLT Roxolid SLA", "BLT Ti SLA"):
         "surface": "SLActive" if "SLActive" in _blt_sys else "SLA",
     }
 del _blt_sys
+
+# ── Global D Drilling Protocols (iter-369, Feb 2026) ─────────────────────
+# Ultimate Surgical Kit (DKITULTI-INK) shared by In-Kone Universal + 3.0
+# Implant; twinkone 4 uses its own DKITTWK4 depth-stop kit. Sequences are
+# per-Ø × per-bone as published in the Global D catalog.
+for _gd_sys, _gd_kit in (
+    ("In-Kone Universal", "Ultimate Surgical Kit (DKITULTI-INK)"),
+    ("3.0 Implant", "3.0 Implant Surgical Kit (DKITTZ)"),
+    ("twinkone 4", "twinkone 4 Surgical Kit (DKITTWK4)"),
+):
+    DRILLING_PROTOCOLS[f"Global D|{_gd_sys}"] = {
+        "system_name": f"Global D {_gd_sys}",
+        "protocol_family": "global_d",
+        "connection": (
+            "External Conical" if _gd_sys == "twinkone 4"
+            else "Internal Conical (8° Morse)" if _gd_sys == "In-Kone Universal"
+            else "Internal Conical (5° Morse)"
+        ),
+        "material": "Titanium",
+        "surface": "SA²",
+        "kit": _gd_kit,
+    }
+del _gd_sys, _gd_kit
 
 def _generate_ankylos_protocol(proto, implant_diameter, implant_length, bone):
     """Generate drilling protocol for Dentsply Sirona Ankylos C/X system.

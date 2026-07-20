@@ -64,6 +64,20 @@ IMPLANT_SYSTEM_DETAILS: Dict[str, Dict[str, str]] = {
     "adin touareg-s": {"indications": "D1-D4 with immediate function. Single, multi-unit and full-arch All-on-X.", "features": "Tapered self-tapping 2-piece. Bone-condensing macrodesign. Standard Internal Hex connection. AB/AE (Alumina-Oxide Blasted + Acid-Etched) surface. Ø3.5/3.75/4.2/5.0/6.0."},
     "adin swell": {"indications": "D1-D4 bone types. Conventional and immediate placement.", "features": "Straight parallel-walled slightly tapered 2-piece with V-shaped thread. Standard Internal Hex connection. AB/AE surface. Ø3.3/3.75/4.2/5.0/6.0."},
     "adin one": {"indications": "Narrow ridges, flapless minimally-invasive surgery, lateral/mandibular incisors. Immediate function.", "features": "One-piece tapered spiral implant with integrated abutment. AB/AE surface. Ti-6Al-4V ELI alloy. Ø3.0/3.3/3.6/4.2/5.0."},
+    # ── iter-368 (Feb 2026) — Global D (France) ─────────────────────────────
+    # Keys match `key_of()` normalization: hyphens and dots collapse to spaces.
+    "global d in kone universal": {
+        "indications": "Universal indications — single tooth, multiple unit, and full-arch rehabilitation. Immediate and delayed placement. Healed ridges. Compatible with guided and freehand surgery. Diameters Ø3.5-5.0 mm and lengths 6-15 mm cover most clinical scenarios.",
+        "features": "8° Morse taper Internal Conical Connection with universal prosthetic platform. Bone-level implant. Cylindro-Conical body with double self-tapping threads. SA² (Sand-blasted, Acid-etched) surface. Titanium construction. Compatible with the Ultimate Surgical Kit (shared drilling protocol with the 3.0 Implant).",
+    },
+    "global d 3 0 implant": {
+        "indications": "Narrow ridges and reduced mesio-distal spaces. Specifically indicated for maxillary lateral incisors (12, 22) and mandibular incisors (31, 32, 41, 42). Use only where a standard-diameter implant cannot be placed without compromising bone width or inter-radicular space.",
+        "features": "Ø3.0 dedicated small-diameter implant. 5° Morse taper Internal Conical Connection on a dedicated 3.0 prosthetic platform. Cylindrical bone-level body with self-tapping thread. SA² surface. Titanium. Dedicated 3.0 Surgical Kit (also compatible with the Ultimate Surgical Kit).",
+    },
+    "global d twinkone 4": {
+        "indications": "Ultra-short (4 mm length) implant for severely resorbed posterior maxilla and posterior mandible (16, 17, 26, 27, 36, 37, 46, 47). Enables restoration where residual bone height is insufficient for standard implants — allows the clinician to avoid sinus lift procedures in the maxilla and to remain clear of the inferior alveolar nerve in the mandible.",
+        "features": "Ultra-Short cylindrical body (L=4 mm). External Conical Connection on a dedicated prosthetic platform. Self-tapping thread. SA² surface. Titanium. Diameters Ø4.0 and Ø4.5. Dedicated twinkone 4 Surgical Kit.",
+    },
 }
 
 
