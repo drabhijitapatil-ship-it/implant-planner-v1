@@ -133,29 +133,36 @@ class TestBredentSKYDrillingProtocols:
     # ==================== copaSKY TESTS ====================
     
     def test_04_copasky_simplified_protocol(self):
-        """Feature 4: copaSKY - Pilot → Final → Implant only (simplified ultra-short)."""
+        """iter-373: copaSKY now uses the full 4-step brochure protocol
+        (Crestal → Pilot → Twist → Final → Placement). Ultra-short (L=5)
+        surfaces a laser-mark safety guardrail in the drill notes."""
         response = requests.post(f"{BASE_URL}/api/drilling-protocols/generate", headers=self.headers, json={
             "brand": "Bredent",
             "system": "Copa Sky",
             "diameter": 4.0,
-            "length": 5.2,
+            "length": 5,
             "bone_density": "D3"
         })
         assert response.status_code == 200, f"Failed: {response.text}"
-        
+
         data = response.json()
         steps = data["steps"]
         drill_types = [s["drill_type"] for s in steps]
-        
-        # copaSKY should only have: Pilot → Final → Implant
-        assert drill_types == ["Pilot Drill", "Final Drill", "Implant Placement"], \
-            f"copaSKY should have simplified sequence, got {drill_types}"
-        
-        # Verify depth = 5.2 + 0.7 = 5.9mm
+
+        assert drill_types == [
+            "Crestal Drill", "Pilot Drill", "Twist Drill",
+            "Final Drill", "Implant Placement",
+        ], f"copaSKY should have full 4-step sequence, got {drill_types}"
+
+        # Ultra-short safety note is present on Crestal / Pilot steps.
+        crestal_note = next(s["note"] for s in steps if s["drill_type"] == "Crestal Drill").lower()
+        assert "laser mark" in crestal_note, crestal_note
+
+        # Depth = length + 0.7 → 5.7 for L=5
         pilot_step = next(s for s in steps if s["drill_type"] == "Pilot Drill")
-        assert pilot_step["depth"] == "5.9", f"copaSKY depth should be 5.9mm (5.2+0.7), got {pilot_step['depth']}"
-        
-        print(f"✓ copaSKY simplified protocol correct: {drill_types}, depth={pilot_step['depth']}")
+        assert pilot_step["depth"] == "5.7", pilot_step["depth"]
+
+        print(f"✓ copaSKY revised 4-step protocol correct: {drill_types}")
     
     def test_05_copasky_all_diameters(self):
         """Feature 5: copaSKY works for all diameters (4.0, 5.0, 6.0mm)."""

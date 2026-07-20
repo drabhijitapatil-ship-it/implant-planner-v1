@@ -6628,6 +6628,17 @@ A comprehensive mobile application for managing dental implant procedures at the
 - **Regression:** 12 new tests in `tests/test_iter372_copa_sky_revision.py` — 24-SKU library grid, universal procedures/bone, universal-platform components, healing abutment GH grid, cement + single-screw Ti-Base, uni.cone angulation grid, TiSi.snap naming enforcement (no "Locator" leakage), retention.sil 3-hardness mapping, Ø 3.0 narrow-incisor Suggest Me flow, SKU uniqueness, Compare-tool coverage.
 - **Total regression across brand seeds:** iter-368 + 370 + 371 + 372 = **44/44 pass**.
 
+### iter-373 — Bredent copaSKY drilling protocol (Feb 2026)
+- **Trigger:** User provided the revised 12-page copaSKY surgical catalogue.
+- **Delivered (`server.py`):**
+  - Registered `DRILLING_PROTOCOLS["Bredent|Copa Sky"]` with new length grid `[5, 8, 10, 12, 14]` (was `[5.2]`).
+  - Rewrote the `copa` branch of `_generate_bredent_protocol` to emit the full 4-step brochure sequence (Crestal → Pilot → Twist → Final → Placement) with per-Ø REF codes extracted from the catalogue (SKYCD35n / SKYXCD40 / SKYXCD45 / SKYXCD55 / COPACD60 crestal; SKY-DP06/08 pilots; SKYDT23K/L twists; SKYD12xx final for D1; SKYD34xx final for D2-D4; COPD12xx/34xx for Ø 6.0).
+  - Bone-density branching per user policy 1a: D1 uses D12xx REF; D2/D3/D4 share D34xx REF with D3 under-prep hint and D4 anticlockwise 50-rpm condensation.
+  - Ø 6.0 D1 gets an extra cortical/countersink step (policy 2a).
+  - Ultra-short L ≤ 5 mm surfaces "pilot only to laser mark, ≥0.5 mm apical clearance" safety note (policy 3a).
+  - Placement note carries the >45 N·cm recovery rule (unscrew 1-2 turns, wait 10 s).
+- **Regression:** 12 new tests in `tests/test_iter373_copa_sky_drilling.py` covering per-Ø REF codes, bone-density branching, ultra-short safety, wide Ø 6.0 cortical step, torque recovery note, and full 96-protocol matrix (24 SKUs × 4 bone types). Updated `test_04_copasky_simplified_protocol` in iter-53 to reflect the new 4-step protocol (was legacy 3-step ultra-short-only). Combined suite pass: **77/77**.
+
 ### Backlog / Next
 
 ### Backlog / Next
