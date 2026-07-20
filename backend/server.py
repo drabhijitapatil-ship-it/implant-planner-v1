@@ -16818,7 +16818,8 @@ DRILLING_PROTOCOLS["Bredent|Copa Sky"] = {
     "system_name": "Bredent copaSKY",
     "protocol_family": "bredent_sky",
     "bredent_system": "copa",
-    "lengths": [5.2],
+    # iter-373 (Feb 2026): revised copaSKY line-up — 6 diameters, 5 length steps.
+    "lengths": [5, 8, 10, 12, 14],
 }
 
 DRILLING_PROTOCOLS["Bredent|Narrow Sky"] = {
@@ -16862,18 +16863,132 @@ def _generate_bredent_protocol(proto, implant_diameter, implant_length, bone):
     sys_label = SYSTEM_LABELS.get(sys_type, sys_type)
 
     if sys_type == "copa":
-        # copaSKY: Ultra-short (5.2mm) — simplified: Pilot → Final → Implant
-        steps.append({"step": step_num, "drill_type": "Pilot Drill", "code": "—",
-                       "diameter": 2.0, "depth": depth_str, "rpm": "800-1000", "irrigation": True,
-                       "note": "copaSKY ultra-short. Precise axial alignment critical."})
+        # iter-373 (Feb 2026): full copaSKY drilling protocol per revised
+        # Bredent surgical catalogue. 4-step universal sequence
+        # (Crestal → Pilot → Twist → Final) scaled by implant Ø, with
+        # D1-specific final drill REF (SKYD12xx) vs. D2-D4 REF (SKYD34xx).
+        # Ø 6.0 D1 gets an added cortical/countersink step per user policy.
+
+        # Per-diameter drill map extracted from the brochure REF numbers.
+        _COPA_DRILLS = {
+            # ø → (crestal_ref, pilot_ø, pilot_ref, twist_ø, twist_ref,
+            #      final_ref_d1, final_ref_soft)
+            3.0: ("SKYCD35n",   2.0, "SKY-DP06", 2.5, "SKYDT23K",
+                  "SKYD1230",  "SKYD3430"),
+            3.5: ("SKYCD35n",   2.0, "SKY-DP06", 2.5, "SKYDT23K",
+                  "SKYD1235",  "SKYD3435"),
+            4.0: ("SKYXCD40",   2.5, "SKY-DP08", 3.0, "SKYDT23L",
+                  "SKYD1240",  "SKYD3440"),
+            4.5: ("SKYXCD45",   2.8, "SKY-DP08", 3.5, "SKYDT23L",
+                  "SKYD1245",  "SKYD3445"),
+            5.0: ("SKYXCD55",   3.2, "SKY-DP08", 4.0, "SKYDT23L",
+                  "SKYD1255",  "SKYD3455"),
+            6.0: ("COPACD60",   4.0, "COPD1260", 4.8, "COPD3460",
+                  "COPD1260",  "COPD3460"),
+        }
+
+        # Snap the numeric Ø to the closest key we have.
+        _ø_key = min(_COPA_DRILLS.keys(), key=lambda x: abs(x - d))
+        crestal_ref, pilot_d, pilot_ref, twist_d, twist_ref, \
+            final_d1_ref, final_soft_ref = _COPA_DRILLS[_ø_key]
+
+        is_ultra_short = implant_length <= 5
+
+        # Ultra-short safety guardrail (user policy 3a).
+        ultra_short_note = (
+            " Ultra-short — pilot only to laser mark; do NOT over-prepare;"
+            " maintain ≥0.5 mm apical clearance."
+            if is_ultra_short else ""
+        )
+
+        # Step 1 — Crestal drill (matches implant Ø). D1 uses this for a
+        # controlled cortical entry; D2-D4 for the crestal preparation too.
+        steps.append({
+            "step": step_num, "drill_type": "Crestal Drill",
+            "code": crestal_ref, "diameter": _ø_key,
+            "depth": depth_str, "rpm": "300", "irrigation": True,
+            "note": (
+                f"copaSKY crestal drill Ø{_ø_key} mm — controlled entry."
+                + ultra_short_note
+            ),
+        })
         step_num += 1
-        steps.append({"step": step_num, "drill_type": "Final Drill", "code": "—",
-                       "diameter": d, "depth": depth_str, "rpm": "300", "irrigation": True,
-                       "note": f"Final drill to implant diameter {d}mm."})
+
+        # Step 2 — Pilot drill.
+        steps.append({
+            "step": step_num, "drill_type": "Pilot Drill",
+            "code": pilot_ref, "diameter": pilot_d,
+            "depth": depth_str, "rpm": "800-1000", "irrigation": True,
+            "note": (
+                "Establish osteotomy direction. Copious external irrigation."
+                + (" Drill only to laser mark for ultra-short." if is_ultra_short else "")
+            ),
+        })
         step_num += 1
-        steps.append({"step": step_num, "drill_type": "Implant Placement", "code": "—",
-                       "diameter": d, "depth": str(implant_length), "rpm": "15-25", "irrigation": False,
-                       "note": f"Bredent copaSKY {d}mm x {implant_length}mm — Ultra-short. Maintain strict axial alignment."})
+
+        # Step 3 — Twist drill (progressive widening).
+        steps.append({
+            "step": step_num, "drill_type": "Twist Drill",
+            "code": twist_ref, "diameter": twist_d,
+            "depth": depth_str, "rpm": "800-1000", "irrigation": True,
+            "note": "Verify axis with paralleling pin.",
+        })
+        step_num += 1
+
+        # Step 4 — Final drill (bone-density dependent REF + speed).
+        if is_very_soft:
+            final_rpm = "50 (anticlockwise)"
+            final_note = (
+                "D4 very soft bone: anticlockwise slow drilling as bone "
+                "condensation instrument. Preserves particles for primary stability."
+            )
+        elif is_soft:
+            final_rpm = "300"
+            final_note = (
+                "D3 soft bone: consider under-preparation — skip if primary "
+                "stability appears adequate."
+            )
+        elif is_d1:
+            final_rpm = "300"
+            final_note = "D1 dense bone — full osteotomy to implant diameter."
+        else:  # D2
+            final_rpm = "300"
+            final_note = f"Final drill to implant diameter {_ø_key} mm."
+
+        steps.append({
+            "step": step_num, "drill_type": "Final Drill",
+            "code": final_d1_ref if is_d1 else final_soft_ref,
+            "diameter": _ø_key, "depth": depth_str, "rpm": final_rpm,
+            "irrigation": True, "note": final_note,
+        })
+        step_num += 1
+
+        # Optional cortical/countersink step for Ø 6.0 wide implants in D1 dense
+        # bone (user policy 2a — safer for wide cortical entry).
+        if _ø_key >= 6.0 and is_d1:
+            steps.append({
+                "step": step_num, "drill_type": "Cortical / Countersink Drill",
+                "code": "COPACD60-cs", "diameter": _ø_key,
+                "depth": "1.5 mm cortical widening",
+                "rpm": "300", "irrigation": True,
+                "note": (
+                    "Ø 6.0 in D1: crestal cortical widening only (~1.5 mm) to "
+                    "reduce risk of excessive insertion torque."
+                ),
+            })
+            step_num += 1
+
+        # Implant placement — >45 Ncm safety recovery rule from brochure.
+        steps.append({
+            "step": step_num, "drill_type": "Implant Placement",
+            "code": "—", "diameter": d, "depth": str(implant_length),
+            "rpm": "15-25", "irrigation": False,
+            "note": (
+                f"Bredent copaSKY Ø{d} × {implant_length} mm — iso-crestal or "
+                "slightly subcrestal. Target 25-45 N·cm. If torque > 45 N·cm: "
+                "unscrew 1-2 turns, wait ~10 s, then continue seating."
+            ),
+        })
         return steps
 
     if sys_type == "mini":
