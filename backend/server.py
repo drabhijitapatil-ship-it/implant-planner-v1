@@ -14730,10 +14730,17 @@ IMPLANT_INDICATIONS = {
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
     "Bredent|Copa Sky": {
-        "indication": "Indicated for 34, 35, 36, 37, 44, 45, 46, 47 regions with Bone Height 6mm, 7mm, or 8mm.",
-        "indicated_teeth": ["34", "35", "36", "37", "44", "45", "46", "47"],
-        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants"],
-        "indicated_bone_types": ["D3", "D4"],
+        "indication": "Bredent copaSKY — universal Ø3.0-6.0 × 5-14 mm implant with Torx / conical connection and universal prosthetic platform. D1-D4 bone. Single tooth, multi-unit, All-on-X and TiSi.snap overdenture rehabilitation. Immediate and delayed placement. Note: Ø 3.0 best suits narrow lateral / mandibular incisor sites; Ø 6.0 reserved for wide posterior molar ridges.",
+        "indicated_procedures": [
+            "Single Conventional Implant",
+            "Multiple Conventional Implants",
+            "Immediate Implant",
+            "Partial Extraction Therapy",
+            "All on 4",
+            "All on 6",
+            "All on X",
+        ],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
     "Bredent|Narrow Sky": {
         "indication": "Indicated for bone width 4mm, 4.5mm, 5mm - Narrow Ridges.",
