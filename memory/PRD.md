@@ -6617,5 +6617,18 @@ A comprehensive mobile application for managing dental implant procedures at the
 - **Regression:** 13 new tests in `tests/test_iter371_global_d_components.py` — cement grid, single-screw ti-base grid, MUA angulation grid, twinkone-4 screw-only enforcement, 3.0-implant incisor-only enforcement, Locator 6-colour insert coverage, Compare-tool cross-brand visibility, SKU uniqueness. Combined Global-D suite (iter-368 + 370 + 371) = **32/32 pass**.
 - **Verified in UI:** Implant Database → Global D → In-Kone Universal now renders `Components (192)` with every SKU showing GH, retention, material, and indication.
 
+### iter-372 — Bredent copaSKY revision (Feb 2026)
+- **Trigger:** User provided revised copaSKY brochure with expanded Ø 3.0-6.0 mm line-up and universal prosthetic platform.
+- **Delivered:**
+  - `implant_library_data.py` + DB: replaced legacy 3-SKU ultra-short-only entry with 24 SKUs (Ø 3.0/3.5/4.0/4.5/5.0/6.0 × variable lengths 5-14 mm).
+  - `IMPLANT_INDICATIONS`: removed 34-37/44-47 tooth restriction, expanded to D1-D4 bone and full All-on-X procedure set. Ø 3.0 vs Ø 6.0 clinical guidance surfaced in the indication text.
+  - `/app/backend/copa_sky_revision.py` + `_seed_copa_sky_revision.py`: idempotent seed for 45 universal prosthetic components covering cement + single screw-retained (Ti-Base), multi-unit screw-retained (uni.cone straight + 17°/30° angled with full aux workflow), and removable overdenture pathway.
+  - **TiSi.snap** (user-specified naming — NOT "Locator"): 4 GH abutments + retention.sil silicone inserts in 3 hardnesses (200 light-pink for immediate restoration, 400 medium-pink for 4-implant OD, 600 dark-pink for 2-implant OD) + housing + impression + analog.
+- **User confirmation captured:** 1a (remove tooth restriction, D1-D4, Ø 3.0 best for incisors, Ø 6.0 for molars), 2a (unified 24-SKU system), 3a (full ~50-component clinical grid), 4 (TiSi.snap naming + 3 retention.sil hardnesses).
+- **Regression:** 12 new tests in `tests/test_iter372_copa_sky_revision.py` — 24-SKU library grid, universal procedures/bone, universal-platform components, healing abutment GH grid, cement + single-screw Ti-Base, uni.cone angulation grid, TiSi.snap naming enforcement (no "Locator" leakage), retention.sil 3-hardness mapping, Ø 3.0 narrow-incisor Suggest Me flow, SKU uniqueness, Compare-tool coverage.
+- **Total regression across brand seeds:** iter-368 + 370 + 371 + 372 = **44/44 pass**.
+
+### Backlog / Next
+
 ### Backlog / Next
 
