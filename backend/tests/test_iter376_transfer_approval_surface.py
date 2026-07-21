@@ -177,6 +177,21 @@ def test_recipient_receives_transfer_recipient_notification():
 
 # ── Decline with optional reason from supervisor ──────────────────────
 
+def test_transfer_notifications_include_message_field_for_alerts_ui():
+    """iter-378 regression — the Alerts UI reads `item.message` to render
+    the notification body. Transfer notifications must populate this field
+    (earlier iterations wrote only `title` + `body`, which rendered blank
+    cards on the phone)."""
+    r = requests.get(f"{API_URL}/notifications", headers=_h(TOK["supervisor"]), timeout=10)
+    r.raise_for_status()
+    items = r.json() if isinstance(r.json(), list) else r.json().get("notifications", [])
+    transfer_notifs = [n for n in items if str(n.get("type", "")).startswith("transfer_")]
+    assert transfer_notifs, "supervisor should have at least one transfer notification"
+    latest = transfer_notifs[0]
+    assert latest.get("message"), f"transfer notification missing `message`: {latest}"
+    assert len(str(latest["message"])) > 5
+
+
 def test_supervisor_reject_transfer_with_reason(monkeypatch=None):
     """Seed a *fresh* transfer request and confirm supervisor decline with a
     reason clears the transfer_request and records the reason on

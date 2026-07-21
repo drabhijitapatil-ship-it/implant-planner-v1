@@ -6683,6 +6683,19 @@ A comprehensive mobile application for managing dental implant procedures at the
 - **UI verified:** Logging in as `Paresh.gandhi` (Supervisor) with a live pending transfer shows the new **Transfers Awaiting Your Approval (1)** section on the dashboard with the initiator → recipient breadcrumb (screenshot captured).
 - **Combined recent suite** (iter-53 + 368 + 370 + 371 + 372 + 373 + 374 + 375 + 376 + 377) = **104/104 pass** (27 pass across the full transfer/timeline/dashboard chain).
 
+### iter-378 — Transfer notifications blank-card fix (Feb 2026)
+- **User bug report:** Alerts screen showed blank transfer notifications — only the patient name + date visible, no body text. Also asked to confirm the full end-to-end transfer flow works across every role.
+- **Root cause:** The Alerts UI (`app/(tabs)/notifications.tsx`) reads `item.message` (the field used by every other notification in the app). `_notify_transfer` was writing `title` + `body` only, so the rendered card had no primary text → looked blank.
+- **Fix (`server.py::_notify_transfer`):** Every transfer notification now writes a concatenated `message` field (`"<title>. <body>"`) plus keeps `title` + `body` for backward compat. One-time DB migration back-filled 94 legacy transfer notifications with the derived `message` so the user sees them immediately on next reload.
+- **Frontend hardening (`TransferApprovalCard.tsx`):** Coerced all ID comparisons via `String(…)` so the Approve/Reject Transfer buttons render correctly regardless of whether `supervisor_id` / `implant_incharge_id` / `from_student_id` / `to_student_id` arrive as ObjectId hex or plain string (mirrors the safer pattern used by other approval cards in the app).
+- **Regression:** New `test_transfer_notifications_include_message_field_for_alerts_ui` in `tests/test_iter376_transfer_approval_surface.py` locks the `message` field so this can't recur. Combined recent transfer/timeline/dashboard suite (iter-374 → 378) = **28/28 pass**.
+- **End-to-end coverage summary across roles** (all shipping in iter-374 → 378):
+  - **Initiator student**: Menu entry "Transfer Case" in My Cases → modal with recipient dropdown + reason (≥ 10 chars); Cancel Transfer button on case detail while pending; retains read-only visibility of transferred cases via `previous_students`.
+  - **Case Supervisor**: `transfer_approval` alert card in Alerts; "Transfers Awaiting Your Approval" section on dashboard; green **Approve Transfer** + red **Reject Transfer** buttons at bottom of case detail (mirrors phase-approval UX); optional rejection reason modal.
+  - **Implant In-Charge**: Same as supervisor but only after Supervisor approval (`pending_incharge` stage).
+  - **Recipient student**: `transfer_recipient` alert; case appears in their My Cases before ownership swap; green **Accept Transfer** + red **Decline Transfer** buttons at bottom of case detail with 48 h deadline enforcement; AI-generated de-identified handoff brief on acceptance (age + sex only — no name/DOB/address).
+  - **All roles**: HIPAA `access_logs` entries at every state transition; Student Contribution Timeline card renders once the case has been transferred at least once.
+
 ### Backlog / Next
 
 ### Backlog / Next
