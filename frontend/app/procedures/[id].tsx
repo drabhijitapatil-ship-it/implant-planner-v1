@@ -45,6 +45,7 @@ import CaseImplantPlanning from '../../components/CaseImplantPlanning';// iter-2
 import ExportPrintMenu from '../../components/ExportPrintMenu';
 import Phase2EditModal from '../../components/Phase2EditModal';
 import ContributionTimelineCard from '../../components/ContributionTimelineCard';
+import TransferApprovalCard from '../../components/TransferApprovalCard';
 import RescheduleModal from '../../components/RescheduleModal';
 import ImplantLifecycleTimeline from '../../components/ImplantLifecycleTimeline';
 import AugmentationChecklist from '../../components/AugmentationChecklist';
@@ -4373,6 +4374,13 @@ export default function ProcedureDetailScreen() {
 
         {/* Extra bottom spacing for the fixed buttons */}
         <View style={{ height: (canExportPDF() || canViewAiSummary()) ? 70 : 10 }} />
+
+        {/* iter-376: Transfer Case approval — mirrors phase-approval UX.
+            Renders green Approve / red Reject buttons for supervisor / in-charge
+            at the correct stage; recipient sees Accept / Decline; initiator
+            sees a Cancel button while the transfer is still pending. Card
+            auto-hides when no transfer is in progress. */}
+        <TransferApprovalCard procedure={procedure} onChanged={() => loadProcedure()} />
       </ScrollView>
 
       {/* Implant In-Charge "Edit Patient Consent Form" bottom-sheet.

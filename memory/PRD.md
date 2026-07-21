@@ -6655,6 +6655,24 @@ A comprehensive mobile application for managing dental implant procedures at the
 - **Frontend:** New `components/ContributionTimelineCard.tsx` — vertical timeline with color-coded dots per student, phase-range chips, duration in days, "Current" pill on the open segment. Collapsible header ("N transfer(s) · Md" summary). Auto-hides when the case has never been transferred so cards without a story stay clean. Wired into `procedures/[id].tsx` right after the End Treatment banner.
 - **Regression:** 4 new tests in `tests/test_iter375_contribution_timeline.py` (single-owner returns one segment, transferred case returns two ordered segments with correct N+1 phase inheritance, prior-owner read-only visibility, non-stakeholder 403). Combined suite (iter-53 + 368 + 370 + 371 + 372 + 373 + 374 + 375) = **94/94 pass**.
 
+### iter-376 — Transfer approval surface + notifications fix (Feb 2026)
+- **Trigger:** User reported that after initiating a transfer, the Supervisor and Implant In-Charge received no notification and had no visible Approve / Reject UX. Requested the same UX as Phase 1-4 approval — green **Approve Transfer** + red **Reject Transfer** buttons at the bottom of the case detail.
+- **Root cause of missing notifications:** `_notify_transfer` was storing `created_at` as an ISO string; the `/notifications` GET endpoint calls `.isoformat()` on the field, which raised on strings — result: 500 for anyone whose newest notification was a transfer event, and transfer notifications never surfaced in the app.
+- **Backend fixes:**
+  - `_notify_transfer` now stores `created_at` as a `datetime` (matches the rest of the app).
+  - One-time DB migration coerced 38 legacy string-typed notification timestamps → datetime.
+  - `GET /procedures/{id}` now grants access to the pending transfer recipient too (in addition to owner + previous owners) so they can load the case before the ownership swap.
+  - `/procedures` list query for students expanded to include cases where the caller is the `transfer_request.to_student_id` with `status == pending_recipient` → recipient sees the case in their My Cases before accepting.
+- **Frontend (`components/TransferApprovalCard.tsx`):** New card rendered at the very bottom of the Implant Planning / case scroll (mirrors phase-approval UX). Shows initiator + recipient + at-phase + reason; renders context-specific buttons per role/stage:
+  - Supervisor during `pending_supervisor` → green **Approve Transfer** + red **Reject Transfer**.
+  - Implant In-Charge during `pending_incharge` → same buttons.
+  - Recipient during `pending_recipient` → green **Accept Transfer** + red **Decline Transfer**.
+  - Initiator while pending → red **Cancel Transfer**.
+  - Modal with optional rejection reason (mirrors phase reject UX).
+  - Soft-limit warning banner when `transfer_count ≥ 3`.
+- **Regression:** 7 new tests in `tests/test_iter376_transfer_approval_surface.py` covering `transfer_request` exposed on case detail to supervisor & in-charge, supervisor + in-charge + recipient notification records exist with the right types, recipient sees the case in `/procedures` before ownership swap, supervisor decline with reason writes `last_transfer_attempt.declined_reason`.
+- **Combined suite** (iter-53 + 368 + 370 + 371 + 372 + 373 + 374 + 375 + 376) = **101/101 pass**.
+
 ### Backlog / Next
 
 ### Backlog / Next
