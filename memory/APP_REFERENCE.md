@@ -559,7 +559,7 @@ CORS_ORIGINS="*"
 
 ### Frontend (`/app/frontend/.env`)
 ```
-EXPO_PUBLIC_BACKEND_URL=https://implant-workflow-hub.preview.emergentagent.com
+EXPO_PUBLIC_BACKEND_URL=https://case-approval.preview.emergentagent.com
 ```
 
 ---

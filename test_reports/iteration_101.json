@@ -7,7 +7,7 @@
     "design_issues": []
   },
   "repro_steps_executed": [
-    "1. Login https://implant-workflow-hub.preview.emergentagent.com with nurse.1@dental.edu / Nurse@123 (viewport 480x900). Redirects to /dashboard.",
+    "1. Login https://case-approval.preview.emergentagent.com with nurse.1@dental.edu / Nurse@123 (viewport 480x900). Redirects to /dashboard.",
     "2. Scroll to 'Scheduled Cases' section on nurse home, click scheduled-card-69cf9bdfdafb502718057bcd.",
     "3. URL navigates to /procedures/69cf9bdfdafb502718057bcd. Case detail loads: GET /api/procedures/69cf9bdfdafb502718057bcd → 200; GET /api/procedures/.../implant-plan → 200 with 1 implant plan (MIS Lance+ 3.75x11.5, bone D2, position 36).",
     "4. Implant Planning card renders for the nurse (non-canEdit branch at CaseImplantPlanning.tsx L665-676) with the 'Drilling Protocol' button visible.",

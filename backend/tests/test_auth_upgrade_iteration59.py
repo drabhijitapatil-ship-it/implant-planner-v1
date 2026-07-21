@@ -16,7 +16,7 @@ import time
 
 BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', '').rstrip('/')
 if not BASE_URL:
-    BASE_URL = "https://implant-workflow-hub.preview.emergentagent.com"
+    BASE_URL = "https://case-approval.preview.emergentagent.com"
 
 # Test credentials from test_credentials.md
 STUDENT_EMAIL = "Gaurav.pandey@student.dental.edu"

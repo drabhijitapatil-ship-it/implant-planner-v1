@@ -18,7 +18,7 @@ import pytest
 import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL") or \
-    "https://implant-workflow-hub.preview.emergentagent.com"
+    "https://case-approval.preview.emergentagent.com"
 BASE_URL = BASE_URL.rstrip("/")
 
 # Procedure IDs supplied by main agent / discovered during setup

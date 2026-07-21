@@ -15,7 +15,7 @@ from PIL import Image
 from bson import ObjectId
 from pymongo import MongoClient
 
-BASE_URL = "https://dental-workflow-18.preview.emergentagent.com"
+BASE_URL = "https://case-approval.preview.emergentagent.com"
 API = f"{BASE_URL}/api"
 
 MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017")

@@ -15,7 +15,7 @@ import requests
 import os
 import time
 
-BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://implant-workflow-hub.preview.emergentagent.com')
+BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://case-approval.preview.emergentagent.com')
 
 # Test procedure with implant plans
 TEST_PROCEDURE_ID = "69cfde8b356c7405230a9dcc"

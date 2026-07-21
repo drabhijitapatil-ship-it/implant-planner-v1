@@ -6737,3 +6737,48 @@ A comprehensive mobile application for managing dental implant procedures at the
 
 ### Backlog / Next
 
+
+---
+
+## 2026-07-21 — Transfer visibility fix + plan pruning (iter-382)
+
+### User directive
+- **REMOVED from backlog permanently (user order 2026-07-21): Tasks a, b, c, d** —
+  (a) administrator role rollback verification, (b) MUA-angulation workflow (Phase 2/3/4),
+  (c) Microsoft OAuth login, (d) EMERGENT_LLM_KEY → production OpenAI key swap.
+  Do NOT re-propose these.
+
+### Bug report: "Supervisor & In-Charge don't see Accept/Reject Transfer tabs on Home"
+Root cause analysis (verified via API curl + preview screenshots — backend & code were
+actually working for the ASSIGNED supervisor at the correct stage):
+1. In-Charge dashboard only showed transfers at `pending_incharge`; while a transfer sat at
+   `pending_supervisor`, the In-Charge home showed NOTHING → looked like a missing feature.
+2. `TransferApprovalCard` returned `null` for faculty when it wasn't their turn/assignment →
+   case detail showed no transfer section at all for them.
+3. User's physical device runs stale Expo Go JS bundles (known recurrence).
+
+### Fixes shipped
+- `dashboard.tsx` SupervisorDashboard + InChargeDashboard: "Case Transfers (n)" section now
+  lists ALL active transfers; actionable ones sort first with blue "Review Now" chip; other
+  stages show grey badges ("With Supervisor" / "With In-Charge" / "With Recipient").
+- `TransferApprovalCard.tsx`: new `observer` view — supervisors / in-charges / administrators
+  always see a read-only Case Transfer card with stage pill + info note when it's not their
+  turn (data-testid="transfer-observer-note"). Approve/Reject buttons unchanged for the
+  assigned approver at their stage.
+- `auth/login.tsx`: visible build stamp `Build 2026.07.21-a` (data-testid="build-stamp") on
+  the login screen so stale Expo Go bundles can be detected instantly.
+- Metro cache cleared + expo restarted for a fresh bundle hash.
+
+### Verified (preview screenshots)
+- Supervisor (Paresh.gandhi) home: "Case Transfers (1)" pinned at top; case detail shows
+  Approve Transfer / Reject Transfer buttons.
+- In-Charge (Abhijit.patil) home: transfer visible with "With Supervisor" badge; case detail
+  shows read-only observer card ("Awaiting Supervisor approval (Dr. Paresh Gandhi)").
+- Live pending transfer on case 69f640160ae04a75cf8d0cd8 (TEST_MUA_88c4430c,
+  Gaurav → Atharva, pending_supervisor) left INTACT for user verification.
+
+### Remaining backlog (post-pruning)
+- P1: Multi-tenant backend core + Platform Super Admin dashboard.
+- P2: PDF export for Drilling Protocols.
+- P2: Forum / Group Chat semantic search (Implant AI).
+- P2: Phased Dark Mode; tablet split-view responsiveness.

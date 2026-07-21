@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 
 BASE_URL = os.environ.get(
     "EXPO_PUBLIC_BACKEND_URL",
-    "https://dental-workflow-18.preview.emergentagent.com",
+    "https://case-approval.preview.emergentagent.com",
 ).rstrip("/")
 ADMIN = {"identifier": "Abhijit.patil", "password": "Admin@123"}
 

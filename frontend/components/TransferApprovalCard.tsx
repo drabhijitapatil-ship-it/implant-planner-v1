@@ -28,7 +28,7 @@ export default function TransferApprovalCard({ procedure, onChanged }: Props) {
   const role = user?.role;
   const uid = String(user?.id || user?._id || '');
 
-  const view: 'supervisor' | 'incharge' | 'recipient' | 'initiator' | null = useMemo(() => {
+  const view: 'supervisor' | 'incharge' | 'recipient' | 'initiator' | 'observer' | null = useMemo(() => {
     if (!tr || !uid) return null;
     const supId = String(procedure.supervisor_id || '');
     const incId = String(procedure.implant_incharge_id || '');
@@ -38,6 +38,9 @@ export default function TransferApprovalCard({ procedure, onChanged }: Props) {
     if (role === 'implant_incharge' && incId === uid && tr.status === 'pending_incharge') return 'incharge';
     if (role === 'student' && uid === toId && tr.status === 'pending_recipient') return 'recipient';
     if (role === 'student' && uid === fromId && NEEDS_INCHARGE.has(tr.status)) return 'initiator';
+    // iter-382: faculty / admin always see the transfer as read-only when it
+    // is not their turn — the card never silently disappears for them.
+    if (role === 'supervisor' || role === 'implant_incharge' || role === 'administrator') return 'observer';
     return null;
   }, [tr, role, uid, procedure]);
 
@@ -84,11 +87,18 @@ export default function TransferApprovalCard({ procedure, onChanged }: Props) {
     }
   };
 
+  const observerStage = tr.status === 'pending_supervisor'
+    ? `Awaiting Supervisor approval (${procedure.supervisor_name || 'assigned supervisor'})`
+    : tr.status === 'pending_incharge'
+      ? `Awaiting Implant In-Charge approval (${procedure.implant_incharge_name || 'assigned In-Charge'})`
+      : 'Awaiting recipient acceptance';
+
   const stageLabel = {
     supervisor: 'Awaiting your Supervisor approval',
     incharge: 'Awaiting your Implant In-Charge approval',
     recipient: 'Awaiting your acceptance',
     initiator: `Transfer in progress → ${tr.status.replace('pending_', '').replace('_', ' ')}`,
+    observer: observerStage,
   }[view];
 
   const primaryTxt = view === 'recipient' ? 'Accept Transfer' : 'Approve Transfer';
@@ -135,7 +145,20 @@ export default function TransferApprovalCard({ procedure, onChanged }: Props) {
         ) : null}
       </View>
 
-      {view !== 'initiator' && (
+      {view === 'observer' && (
+        <View style={s.observerNote} data-testid="transfer-observer-note">
+          <Ionicons name="information-circle-outline" size={15} color="#546E7A" />
+          <Text style={s.observerNoteTxt}>
+            {tr.status === 'pending_supervisor' && role === 'supervisor'
+              ? 'This transfer is assigned to a different supervisor for approval.'
+              : tr.status === 'pending_incharge' && role === 'implant_incharge'
+                ? 'This transfer is assigned to a different Implant In-Charge for approval.'
+                : 'No action needed from you at this stage — it is not your turn in the approval chain.'}
+          </Text>
+        </View>
+      )}
+
+      {view !== 'initiator' && view !== 'observer' && (
         <View style={s.btnRow}>
           <Pressable
             style={[s.btn, s.btnPrimary, submitting && s.btnDisabled]}
@@ -237,6 +260,11 @@ const s = StyleSheet.create({
     borderRadius: 8, padding: 8, marginTop: 4,
   },
   warnTxt: { fontSize: 12, color: '#E65100', flex: 1 },
+  observerNote: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 12,
+    backgroundColor: '#F5F7F9', borderRadius: 8, padding: 10,
+  },
+  observerNoteTxt: { fontSize: 12, color: '#546E7A', flex: 1, lineHeight: 17 },
   btnRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
   btn: {
     flex: 1, height: 44, borderRadius: 10, alignItems: 'center',
