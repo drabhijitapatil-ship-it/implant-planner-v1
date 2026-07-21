@@ -7,9 +7,9 @@
  * navigating back before hitting the final Submit button.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useContext, useEffect, useRef } from 'react';
 import { AppState, Alert, AppStateStatus } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { NavigationContext } from '@react-navigation/native';
 
 export function draftStorageKey(screen: string, procedureId: string, userId?: string): string {
   return `phase_draft_${screen}_${procedureId}_${userId || 'anon'}`;
@@ -93,10 +93,15 @@ export function useUnsavedChangesGuard(opts: {
   onSave: () => void | Promise<void>;
 }) {
   const { enabled, hasUnsavedChanges, onSave } = opts;
-  const navigation = useNavigation();
+  // useContext (not useNavigation()) so a screen rendered before its
+  // NavigationContainer/Stack context is fully attached — a real timing
+  // case with Expo Router + the RN new architecture — gets `undefined`
+  // instead of useNavigation()'s hard throw ("Couldn't find a navigation
+  // object"), which was crashing the Phase 2/3/4 submission screens on mount.
+  const navigation = useContext(NavigationContext);
 
   useEffect(() => {
-    if (!enabled) return undefined;
+    if (!enabled || !navigation) return undefined;
     // @ts-ignore — expo-router screens sit on a React Navigation stack, so
     // beforeRemove is always available even though the expo-router type
     // doesn't declare it.

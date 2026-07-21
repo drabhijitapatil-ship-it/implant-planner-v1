@@ -33,7 +33,7 @@ import CenteredHeader from '../../components/CenteredHeader';
  */
 
 type Department = { id: string; name: string };
-type InchargeUser = { id: string; name: string; email: string; department_id?: string | null };
+type InchargeUser = { id: string; name: string; email: string; department_id?: string | null; role?: string; is_admin?: boolean };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_INCHARGES_PER_DEPT = 2;
@@ -91,8 +91,18 @@ export default function DepartmentsScreen() {
   const loadIncharges = useCallback(async (deptId: string) => {
     setLoadingIncharges(true);
     try {
-      const res = await api.get('/users', { params: { role: 'implant_incharge' } });
-      const all: InchargeUser[] = res.data || [];
+      // A department incharge can be either an Implant In-Charge or an
+      // Administrator (org co-admin) — the org owner (is_admin=true) is
+      // excluded since department_id has no effect on them (they always
+      // stay org-wide, see backend _dept_scope_query).
+      const [inchargeRes, adminRes] = await Promise.all([
+        api.get('/users', { params: { role: 'implant_incharge' } }),
+        api.get('/users', { params: { role: 'administrator' } }),
+      ]);
+      const all: InchargeUser[] = [
+        ...(inchargeRes.data || []),
+        ...(adminRes.data || []).filter((u: InchargeUser) => !u.is_admin),
+      ];
       setAssignedIncharges(all.filter((u) => u.department_id === deptId));
       setUnassignedIncharges(all.filter((u) => !u.department_id));
     } catch (error) {
@@ -401,7 +411,14 @@ export default function DepartmentsScreen() {
                             <Ionicons name="person" size={16} color="#1565C0" />
                           </View>
                           <View style={{ flex: 1 }}>
-                            <Text style={styles.inchargeName}>{u.name}</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                              <Text style={styles.inchargeName}>{u.name}</Text>
+                              <View style={styles.roleBadge}>
+                                <Text style={styles.roleBadgeText}>
+                                  {u.role === 'administrator' ? 'Admin' : 'Implant In-Charge'}
+                                </Text>
+                              </View>
+                            </View>
                             <Text style={styles.inchargeEmail}>{u.email}</Text>
                           </View>
                           <TouchableOpacity
@@ -473,8 +490,8 @@ export default function DepartmentsScreen() {
             <ScrollView style={{ maxHeight: 360 }}>
               {unassignedIncharges.length === 0 ? (
                 <Text style={styles.hintSmall}>
-                  No unassigned Implant In-Charge available — create a new one instead,
-                  or free one up from another department first.
+                  No unassigned Implant In-Charge or Admin available — create a new one
+                  instead, or free one up from another department first.
                 </Text>
               ) : (
                 unassignedIncharges.map((u) => (
@@ -487,7 +504,14 @@ export default function DepartmentsScreen() {
                   >
                     <Ionicons name="person-circle-outline" size={20} color="#666" />
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.pickerItemText}>{u.name}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={styles.pickerItemText}>{u.name}</Text>
+                        <View style={styles.roleBadge}>
+                          <Text style={styles.roleBadgeText}>
+                            {u.role === 'administrator' ? 'Admin' : 'Implant In-Charge'}
+                          </Text>
+                        </View>
+                      </View>
                       <Text style={styles.inchargeEmail}>{u.email}</Text>
                     </View>
                   </TouchableOpacity>
@@ -703,6 +727,8 @@ const styles = StyleSheet.create({
   },
   inchargeName: { fontSize: 14, fontWeight: '600', color: '#1A202C' },
   inchargeEmail: { fontSize: 12, color: '#64748B' },
+  roleBadge: { backgroundColor: '#EDF2F7', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
+  roleBadgeText: { fontSize: 10, fontWeight: '700', color: '#475569' },
   inchargeActionsRow: {
     flexDirection: 'row',
     gap: 8,

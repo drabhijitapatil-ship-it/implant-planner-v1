@@ -88,6 +88,11 @@ function DefaultProceduresScreen() {
     "all" | "in_progress" | "completed" | "rejected"
   >("all");
   const [searchQuery, setSearchQuery] = useState("");
+  // iter-350: org owner (is_admin) isn't auto-scoped to any department, so
+  // give them a filter to narrow "My Cases" down to one instead of always
+  // seeing everything org-wide. 'all' = no department_id param sent.
+  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+  const [deptFilter, setDeptFilter] = useState<string>("all");
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [shareCase, setShareCase] = useState<{
     id: string;
@@ -123,8 +128,16 @@ function DefaultProceduresScreen() {
   }, [params.filter, params.phase]);
 
   useEffect(() => {
+    if (!user?.is_admin) return;
+    api
+      .get("/departments")
+      .then((res) => setDepartments(res.data?.departments || []))
+      .catch(() => {});
+  }, [user?.is_admin]);
+
+  useEffect(() => {
     loadProcedures();
-  }, [filter]);
+  }, [filter, deptFilter]);
 
   // Re-fetch on every screen focus so a case cancelled/deleted/rescheduled
   // elsewhere (by this user or another) is reflected without needing to
@@ -132,7 +145,7 @@ function DefaultProceduresScreen() {
   useFocusEffect(
     useCallback(() => {
       loadProcedures();
-    }, [filter])
+    }, [filter, deptFilter])
   );
 
   const loadProcedures = async () => {
@@ -141,6 +154,9 @@ function DefaultProceduresScreen() {
       const f = String(filter);
       if (f.startsWith("phase_")) {
         reqParams.phase = f.replace("phase_", "");
+      }
+      if (user?.is_admin && deptFilter !== "all") {
+        reqParams.department_id = deptFilter;
       }
       // For All / In Progress / Completed / Rejected we fetch the full
       // case list and filter client-side so categories stay consistent
@@ -677,6 +693,46 @@ function DefaultProceduresScreen() {
         </View>
       </View>
 
+      {user?.is_admin && departments.length > 0 && (
+        <View style={isTablet && { maxWidth: 960, alignSelf: "center", width: "100%" }}>
+          <FlatList
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            data={[{ id: "all", name: "All Departments" }, ...departments]}
+            keyExtractor={(d) => d.id}
+            contentContainerStyle={styles.deptFilterRow}
+            data-testid="department-filter-row"
+            renderItem={({ item }) => {
+              const isActive = deptFilter === item.id;
+              const isMine = item.id !== "all" && item.id === user?.department_id;
+              return (
+                <TouchableOpacity
+                  style={[
+                    styles.deptChip,
+                    isActive && styles.deptChipActive,
+                    isMine && styles.deptChipMine,
+                  ]}
+                  onPress={() => setDeptFilter(item.id)}
+                  testID={`department-filter-${item.id}`}
+                >
+                  {isMine && (
+                    <Ionicons
+                      name="star"
+                      size={11}
+                      color={isActive ? "#FFF" : "#B7791F"}
+                      style={{ marginRight: 4 }}
+                    />
+                  )}
+                  <Text style={[styles.deptChipText, isActive && styles.deptChipTextActive]}>
+                    {item.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            }}
+          />
+        </View>
+      )}
+
       <View style={isTablet && { maxWidth: 960, alignSelf: "center", width: "100%" }}>
         <View style={styles.searchContainer} data-testid="search-bar-container">
           <Ionicons
@@ -839,6 +895,39 @@ const styles = StyleSheet.create({
   },
   filterCountActive: {
     color: "#E3F2FD",
+  },
+  deptFilterRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 2,
+    backgroundColor: "#FFF",
+  },
+  deptChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: "#F5F5F5",
+    borderWidth: 1,
+    borderColor: "#E5E5EA",
+  },
+  deptChipActive: {
+    backgroundColor: "#1565C0",
+    borderColor: "#1565C0",
+  },
+  deptChipMine: {
+    borderColor: "#FFD54F",
+  },
+  deptChipText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#546E7A",
+  },
+  deptChipTextActive: {
+    color: "#FFF",
   },
   searchContainer: {
     flexDirection: "row",

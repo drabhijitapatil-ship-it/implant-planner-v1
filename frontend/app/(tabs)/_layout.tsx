@@ -122,6 +122,22 @@ function DrawerMenu({
     badge?: boolean;
   };
   const allItems: TileItem[] = [
+    {
+      key: 'profile', icon: 'person-circle' as const, label: 'My Profile', route: '/profile',
+      bg: '#E0F7FA', chip: '#B2EBF2', iconColor: '#00838F',
+    },
+    ...(isOrgAdmin
+      ? [{
+          key: 'departments', icon: 'business-outline' as const, label: 'Departments', route: '/admin/departments',
+          bg: '#E3F2FD', chip: '#BBDEFB', iconColor: '#1565C0',
+        }]
+      : []),
+    ...(isSuperAdmin
+      ? [{
+          key: 'organizations', icon: 'business' as const, label: 'Organizations', route: '/admin/organizations',
+          bg: '#EDE7F6', chip: '#D1C4E9', iconColor: '#4527A0',
+        }]
+      : []),
     ...(isAdmin
       ? [{
           key: 'users', icon: 'people' as const, label: 'Users', route: '/user-management',
@@ -140,28 +156,14 @@ function DrawerMenu({
           bg: '#F3E5F5', chip: '#E1BEE7', iconColor: '#6A1B9A',
         }]
       : []),
-    ...(isSuperAdmin
-      ? [{
-          key: 'organizations', icon: 'business' as const, label: 'Organizations', route: '/admin/organizations',
-          bg: '#EDE7F6', chip: '#D1C4E9', iconColor: '#4527A0',
-        }]
-      : []),
-    ...(isOrgAdmin
-      ? [{
-          key: 'departments', icon: 'business-outline' as const, label: 'Departments', route: '/admin/departments',
-          bg: '#E3F2FD', chip: '#BBDEFB', iconColor: '#1565C0',
-        }]
-      : []),
+    // iter-149: Implant Database tile — visible to ALL roles (read-only for
+    // students / supervisors / nurses; edit-enabled for implant_incharge +
+    // administrator at the catalog screen level via canEdit gate). Amber
+    // palette per user choice — distinct from the peach What's-New tile.
     {
-      key: 'profile', icon: 'person-circle' as const, label: 'My Profile', route: '/profile',
-      bg: '#E0F7FA', chip: '#B2EBF2', iconColor: '#00838F',
+      key: 'implant-database', icon: 'library' as const, label: 'Implant Database', route: '/admin/implant-catalog',
+      bg: '#FFF8E1', chip: '#FFE082', iconColor: '#E65100',
     },
-    ...(isNurse
-      ? []
-      : [{
-          key: 'archived', icon: 'archive' as const, label: 'Archived', route: '/archived',
-          bg: '#E8EAF6', chip: '#C5CAE9', iconColor: '#3949AB',
-        }]),
     ...(forumAllowed
       ? [{
           key: 'forum', icon: 'chatbubbles' as const, label: 'Forum', route: '/forum',
@@ -178,14 +180,6 @@ function DrawerMenu({
           bg: '#FFF3E0', chip: '#FFE0B2', iconColor: '#EF6C00', badge: hasUnseenWhatsNew,
         }]
       : []),
-    // iter-149: Implant Database tile — visible to ALL roles (read-only for
-    // students / supervisors / nurses; edit-enabled for implant_incharge +
-    // administrator at the catalog screen level via canEdit gate). Amber
-    // palette per user choice — distinct from the peach What's-New tile.
-    {
-      key: 'implant-database', icon: 'library' as const, label: 'Implant Database', route: '/admin/implant-catalog',
-      bg: '#FFF8E1', chip: '#FFE082', iconColor: '#E65100',
-    },
     // iter-363: Procedure Analytics tile — visible to all clinical roles
     // (student / supervisor / implant_incharge / administrator). Nurses
     // are excluded via the isNurse guard below on the tile filter.
@@ -195,6 +189,12 @@ function DrawerMenu({
           bg: '#E8F5E9', chip: '#C8E6C9', iconColor: '#2E7D32',
         }]
       : []),
+    ...(isNurse
+      ? []
+      : [{
+          key: 'archived', icon: 'archive' as const, label: 'Archived', route: '/archived',
+          bg: '#E8EAF6', chip: '#C5CAE9', iconColor: '#3949AB',
+        }]),
   ];
 
   return (

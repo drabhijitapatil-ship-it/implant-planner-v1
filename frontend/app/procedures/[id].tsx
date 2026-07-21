@@ -2718,8 +2718,11 @@ export default function ProcedureDetailScreen() {
               );
             })()}
 
-            {/* Consent form action row — only shown during Phase 1 lifecycle (pending_phase1 or phase1_approved).
-            After Phase 2 submission onwards, the consent form is locked and this row disappears.
+            {/* Consent form action row. Upload/Replace/Edit is restricted to the
+            Phase 1 lifecycle (pending_phase1 or phase1_approved) — after Phase 2
+            submission the consent form is locked and can no longer be changed.
+            Viewing the already-uploaded form, however, stays available for the
+            rest of the case lifecycle (audit/reference) instead of disappearing.
             Upload is restricted to the case scheduler (owner) + Nurse. Non-owner Supervisor /
             In-Charge / Admin can only VIEW the uploaded file once it exists — they don't get
             the Upload button or the blank template print/export, which aren't useful for them. */}
@@ -2740,8 +2743,51 @@ export default function ProcedureDetailScreen() {
               const phase1Window =
                 procedure.status === "pending_phase1" ||
                 procedure.status === "phase1_approved";
-              if (!phase1Window) return null;
               const consentUploaded = !!procedure.patient_consent_form;
+              if (!phase1Window) {
+                // Locked window (Phase 2+): no upload/edit, but keep the
+                // already-uploaded form viewable for anyone who could
+                // otherwise see this action row.
+                if (!consentUploaded || !(canUpload || canViewOnly)) return null;
+                const filename = procedure.patient_consent_form?.filename;
+                const openLockedConsent = async () => {
+                  try {
+                    if (!filename) {
+                      Alert.alert("Error", "Consent form filename missing");
+                      return;
+                    }
+                    const fileUrl = await mintFileToken(filename);
+                    await openDocument(fileUrl, filename);
+                  } catch {
+                    Alert.alert("Error", "Could not open consent form");
+                  }
+                };
+                return (
+                  <View
+                    style={styles.consentActionRow}
+                    testID="consent-action-row"
+                  >
+                    <TouchableOpacity
+                      style={[
+                        styles.consentActionBtn,
+                        styles.consentActionBtnSecondary,
+                      ]}
+                      onPress={openLockedConsent}
+                      activeOpacity={0.85}
+                      testID="consent-view-uploaded-btn"
+                    >
+                      <Ionicons
+                        name="document-text-outline"
+                        size={16}
+                        color="#FFF"
+                      />
+                      <Text style={styles.consentActionBtnTextSecondary}>
+                        View Patient Consent Form
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              }
               // Non-owner sup/in-charge/admin: render an "Awaiting Student/Nurse..." pill when
               // no consent has been uploaded yet, so reviewers can see the status at a glance.
               if (!canUpload && !canViewOnly) return null;

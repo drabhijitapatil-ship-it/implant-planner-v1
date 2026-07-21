@@ -132,7 +132,7 @@ export default function ReferCaseButton({
             data-testid="refer-case-btn"
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Ionicons name="git-branch-outline" size={20} color="#1565C0" />
+            <Ionicons name="share-social-outline" size={20} color="#1565C0" />
           </TouchableOpacity>
         )}
       </View>

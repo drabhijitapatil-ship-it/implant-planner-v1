@@ -4944,6 +4944,7 @@ async def get_procedures(
     date: Optional[str] = None,
     student_id: Optional[str] = None,
     supervisor_id: Optional[str] = None,
+    department_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
     query = {}
@@ -4969,6 +4970,24 @@ async def get_procedures(
     elif current_user["role"] in ("administrator", "implant_incharge"):
         # Sees all cases within their own organization
         query.update(await _org_scope_match(current_user))
+
+    # iter-350: org owner (is_admin) is never auto-scoped to a department —
+    # let them explicitly narrow "My Cases" down to one department instead
+    # of always seeing everything org-wide. Ignored for non-admin callers
+    # (department incharges/supervisors are already scoped to their own
+    # department via _org_scope_match above).
+    if department_id and current_user.get("is_admin"):
+        dept = await db.departments.find_one({"_id": ObjectId(department_id), "org_id": current_user.get("org_id")})
+        if not dept:
+            raise HTTPException(status_code=400, detail="Department not found")
+        dept_member_ids = [str(i) for i in await db.users.distinct(
+            "_id", {"org_id": current_user.get("org_id"), "department_id": department_id}
+        )]
+        query["$or"] = [
+            {"student_id": {"$in": dept_member_ids}},
+            {"supervisor_id": {"$in": dept_member_ids}},
+            {"created_by_id": {"$in": dept_member_ids}},
+        ]
 
     # Optional student_id filter — honoured for In-Charge / Administrator.
     # Supervisors can also use it but the supervisor $and scope applies on top
@@ -7757,6 +7776,7 @@ async def serve_upload(
         {"cbct_file": filename},
         {"cbct_files.filename": filename},
         {"ios_file": filename},
+        {"patient_consent_form.filename": filename},
         {"phase2_data.iopa_files.filename": filename},
         {"phase2_data.opg_file.filename": filename},
         {"phase3_data.iopa_files.filename": filename},
@@ -7774,7 +7794,46 @@ async def serve_upload(
             allowed = True
         if not allowed:
             raise HTTPException(status_code=403, detail="Access denied")
-    
+
+    # Find the actual original filename based on which field matched
+    orig_filename = filename
+    if procedure:
+        if procedure.get("cbct_file") == filename:
+            orig_filename = procedure.get("cbct_original_name") or filename
+        elif procedure.get("ios_file") == filename:
+            orig_filename = procedure.get("ios_original_name") or filename
+        elif (
+            procedure.get("patient_consent_form")
+            and isinstance(procedure["patient_consent_form"], dict)
+            and procedure["patient_consent_form"].get("filename") == filename
+        ):
+            orig_filename = procedure["patient_consent_form"].get("original_name") or filename
+        elif procedure.get("cbct_files"):
+            for f in procedure["cbct_files"]:
+                if isinstance(f, dict) and f.get("filename") == filename:
+                    orig_filename = f.get("original_name") or filename
+                    break
+        elif procedure.get("phase2_data"):
+            p2 = procedure["phase2_data"]
+            if p2.get("iopa_files"):
+                for f in p2["iopa_files"]:
+                    if isinstance(f, dict) and f.get("filename") == filename:
+                        orig_filename = f.get("original_name") or filename
+                        break
+            if (
+                p2.get("opg_file")
+                and isinstance(p2["opg_file"], dict)
+                and p2["opg_file"].get("filename") == filename
+            ):
+                orig_filename = p2["opg_file"].get("original_name") or filename
+        elif procedure.get("phase3_data"):
+            p3 = procedure["phase3_data"]
+            if p3.get("iopa_files"):
+                for f in p3["iopa_files"]:
+                    if isinstance(f, dict) and f.get("filename") == filename:
+                        orig_filename = f.get("original_name") or filename
+                        break
+
     # Default to inline so Chrome/the OS renders PDFs and images in place
     # instead of triggering Android's generic "open with / download" chooser
     # (Starlette's FileResponse defaults to Content-Disposition: attachment
@@ -7782,7 +7841,7 @@ async def serve_upload(
     # Pass ?download=1 to force a real download instead.
     return FileResponse(
         file_path,
-        filename=procedure.get("cbct_original_name", filename) if procedure else filename,
+        filename=orig_filename,
         content_disposition_type="attachment" if download else "inline",
     )
 

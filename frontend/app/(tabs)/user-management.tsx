@@ -792,7 +792,7 @@ export default function UserManagementScreen() {
             <Text style={styles.userName}>{item.name}</Text>
 
             {/* Role Badge pill */}
-            <View style={{ flexDirection: "row", marginTop: 4 }}>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 4, alignItems: "center" }}>
               <View
                 style={[
                   styles.roleBadge,
@@ -814,7 +814,7 @@ export default function UserManagementScreen() {
               {departmentName(item.department_id) && (
                 <View style={styles.deptBadge} data-testid={`user-dept-${item.id}`}>
                   <Ionicons name="business-outline" size={11} color="#546E7A" />
-                  <Text style={styles.deptBadgeText}>
+                  <Text style={styles.deptBadgeText} numberOfLines={1}>
                     {departmentName(item.department_id)}
                   </Text>
                 </View>
@@ -1486,7 +1486,7 @@ export default function UserManagementScreen() {
                   <Text style={styles.inputLabel}>Organization</Text>
                   <TouchableOpacity
                     style={styles.orgPickerBtn}
-                    onPress={() => setShowOrgPicker(true)}
+                    onPress={() => { setShowCreateModal(false); setShowOrgPicker(true); }}
                     data-testid="org-picker-btn"
                   >
                     {selectedOrg ? (
@@ -1515,7 +1515,7 @@ export default function UserManagementScreen() {
                   <Text style={styles.inputLabel}>Department (optional)</Text>
                   <TouchableOpacity
                     style={styles.orgPickerBtn}
-                    onPress={() => setShowDeptPicker(true)}
+                    onPress={() => { setShowCreateModal(false); setShowDeptPicker(true); }}
                     data-testid="dept-picker-btn"
                   >
                     <Text
@@ -2002,7 +2002,7 @@ export default function UserManagementScreen() {
         <TouchableOpacity
           style={styles.pickerOverlay}
           activeOpacity={1}
-          onPress={() => setShowOrgPicker(false)}
+          onPress={() => { setShowOrgPicker(false); setShowCreateModal(true); }}
           data-testid="org-picker-overlay"
         >
           <View style={styles.pickerSheet}>
@@ -2019,6 +2019,7 @@ export default function UserManagementScreen() {
                     onPress={() => {
                       setSelectedOrgId(org.id);
                       setShowOrgPicker(false);
+                      setShowCreateModal(true);
                       setNewUser((u) => ({ ...u, role: "" }));
                       setBulkRows([{ id: "1", name: "", email: "", role: "" }]);
                     }}
@@ -2052,7 +2053,7 @@ export default function UserManagementScreen() {
         <TouchableOpacity
           style={styles.pickerOverlay}
           activeOpacity={1}
-          onPress={() => setShowDeptPicker(false)}
+          onPress={() => { setShowDeptPicker(false); setShowCreateModal(true); }}
           data-testid="dept-picker-overlay"
         >
           <View style={styles.pickerSheet}>
@@ -2062,6 +2063,7 @@ export default function UserManagementScreen() {
                 onPress={() => {
                   setSelectedDepartmentId(null);
                   setShowDeptPicker(false);
+                  setShowCreateModal(true);
                 }}
                 data-testid="dept-picker-option-none"
               >
@@ -2075,6 +2077,7 @@ export default function UserManagementScreen() {
                   onPress={() => {
                     setSelectedDepartmentId(d.id);
                     setShowDeptPicker(false);
+                    setShowCreateModal(true);
                   }}
                   data-testid={`dept-picker-option-${d.id}`}
                 >
@@ -2092,7 +2095,7 @@ export default function UserManagementScreen() {
         <TouchableOpacity
           style={styles.pickerOverlay}
           activeOpacity={1}
-          onPress={() => setShowEditDeptPicker(false)}
+          onPress={() => { setShowEditDeptPicker(false); setShowEditModal(true); }}
           data-testid="edit-dept-picker-overlay"
         >
           <View style={styles.pickerSheet}>
@@ -2102,6 +2105,7 @@ export default function UserManagementScreen() {
                 onPress={() => {
                   setEditForm({ ...editForm, departmentId: null });
                   setShowEditDeptPicker(false);
+                  setShowEditModal(true);
                 }}
                 data-testid="edit-dept-picker-option-none"
               >
@@ -2115,6 +2119,7 @@ export default function UserManagementScreen() {
                   onPress={() => {
                     setEditForm({ ...editForm, departmentId: d.id });
                     setShowEditDeptPicker(false);
+                    setShowEditModal(true);
                   }}
                   data-testid={`edit-dept-picker-option-${d.id}`}
                 >
@@ -2307,7 +2312,7 @@ export default function UserManagementScreen() {
                   <Text style={styles.inputLabel}>Department</Text>
                   <TouchableOpacity
                     style={styles.orgPickerBtn}
-                    onPress={() => setShowEditDeptPicker(true)}
+                    onPress={() => { setShowEditModal(false); setShowEditDeptPicker(true); }}
                     data-testid="edit-dept-picker-btn"
                   >
                     <Text
@@ -2733,9 +2738,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    marginLeft: 6,
     marginTop: 0,
     gap: 4,
+    flexShrink: 1,
   },
   deptBadgeText: {
     fontSize: 10,
@@ -2751,7 +2756,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    marginLeft: 6,
     gap: 4,
   },
   adminBadgeText: {
