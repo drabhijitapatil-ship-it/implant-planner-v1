@@ -6639,6 +6639,16 @@ A comprehensive mobile application for managing dental implant procedures at the
   - Placement note carries the >45 N·cm recovery rule (unscrew 1-2 turns, wait 10 s).
 - **Regression:** 12 new tests in `tests/test_iter373_copa_sky_drilling.py` covering per-Ø REF codes, bone-density branching, ultra-short safety, wide Ø 6.0 cortical step, torque recovery note, and full 96-protocol matrix (24 SKUs × 4 bone types). Updated `test_04_copasky_simplified_protocol` in iter-53 to reflect the new 4-step protocol (was legacy 3-step ultra-short-only). Combined suite pass: **77/77**.
 
+### iter-374 — Transfer Case student workflow (Feb 2026)
+- **Trigger:** User asked for a "Transfer Case" option in the student My Cases 3-dot menu (existing options: Archive, Add to Discussion Forum).
+- **Delivered — backend:** Endpoints under `/api/procedures/{id}/transfer/`: `request`, `supervisor-approve`, `incharge-approve`, `accept`, `decline`, `handoff`. Guard rails (policies A-H) enforced: non-owner blocked (403), self-transfer blocked (400), recipient must be a student, ping-pong to prior owner blocked (400), phase submission in-flight blocks initiation, existing pending transfer prevents new (409), soft warning when `transfer_count ≥ 3`. On successful acceptance the ownership swaps atomically; original student appended to `previous_students`; new student inherits at Phase N+1.
+- **Delivered — data model:** `procedures` gains `transfer_request`, `transfer_history[]`, `previous_students[]`, `transfer_count`, `last_transfer_attempt`. `/procedures` GET now also returns cases where the caller is in `previous_students` → read-only visibility for prior owners (policy 3).
+- **Delivered — AI Handoff Brief:** Emergent LLM (`openai / gpt-5.2`) generates a 4-6 sentence brief with a de-identified payload — age + sex only. Patient name, DOB, address, and demographics never leave the backend (policy F).
+- **Delivered — HIPAA + notifications:** Every state transition writes to `access_logs`. Four new notification types (`transfer_approval`, `transfer_recipient`, `transfer_declined`, `transfer_completed`) surface to supervisor, in-charge, recipient, and initiator at the correct stages (policies G, H).
+- **Delivered — frontend:** `components/TransferCaseModal.tsx` (searchable student picker + mandatory reason field ≥ 10 chars + Transfer submit); menu entry wired into `procedures.tsx` (student role only, current owner, non-archived / non-completed, no in-flight phase submission, no active transfer); hardened `format(new Date(procedure_date))` in the case card to render "Date not set" for legacy rows missing that field.
+- **Regression:** 13 new tests in `tests/test_iter374_transfer_case.py` (guards + full 4-stage happy path + previous-owner read-only visibility + handoff endpoint + reverse-transfer block + pending-phase block). Combined recent-brand + drilling + transfer suite (iter-368 / 370 / 371 / 372 / 373 / 374 + iter-53) = **90/90 pass**.
+- **UI verified:** Student → My Cases → 3-dot menu now shows Archive · Transfer Case · Add to Discussion Forum (screenshot captured).
+
 ### Backlog / Next
 
 ### Backlog / Next
