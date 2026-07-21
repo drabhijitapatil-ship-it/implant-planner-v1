@@ -715,14 +715,7 @@ function DefaultProceduresScreen() {
                   onPress={() => setDeptFilter(item.id)}
                   testID={`department-filter-${item.id}`}
                 >
-                  {isMine && (
-                    <Ionicons
-                      name="star"
-                      size={11}
-                      color={isActive ? "#FFF" : "#B7791F"}
-                      style={{ marginRight: 4 }}
-                    />
-                  )}
+                  {isMine && <View style={styles.deptChipDot} testID={`department-filter-${item.id}-mine-dot`} />}
                   <Text style={[styles.deptChipText, isActive && styles.deptChipTextActive]}>
                     {item.name}
                   </Text>
