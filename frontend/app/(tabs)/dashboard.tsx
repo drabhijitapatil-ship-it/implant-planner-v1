@@ -279,6 +279,16 @@ function SupervisorDashboard({ stats, procedures, selectedDate, setSelectedDate,
     [procedures]
   );
 
+  // iter-377: Transfer requests awaiting this supervisor's approval —
+  // surfaced alongside Phase 1-4 approvals so faculty don't have to open
+  // each case individually.
+  const pendingTransfers = useMemo(() =>
+    procedures.filter((p: any) =>
+      p.transfer_request && p.transfer_request.status === 'pending_supervisor'
+    ),
+    [procedures]
+  );
+
   const draftCases = useMemo(() => procedures.filter((p: any) => p.status === 'draft'), [procedures]);
 
   const pipeline = stats.pipeline || {};
@@ -361,6 +371,38 @@ function SupervisorDashboard({ stats, procedures, selectedDate, setSelectedDate,
         </View>
       )}
 
+      {/* iter-377: Pending Transfer Approvals */}
+      {pendingTransfers.length > 0 && (
+        <View style={s.section}>
+          <View style={s.sectionHeader}>
+            <Ionicons name="swap-horizontal-outline" size={18} color="#0D47A1" />
+            <Text style={[s.sectionTitle, { color: '#0D47A1' }]}>Transfers Awaiting Your Approval ({pendingTransfers.length})</Text>
+          </View>
+          {pendingTransfers.slice(0, 5).map((proc: any) => (
+            <TouchableOpacity
+              key={proc.id}
+              style={s.approvalCard}
+              onPress={() => router.push(`/procedures/${proc.id}`)}
+              data-testid={`pending-transfer-card-${proc.id}`}
+            >
+              <View style={[s.approvalPhaseWrap, { backgroundColor: '#E3F2FD' }]}>
+                <Ionicons name="swap-horizontal" size={16} color="#0D47A1" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.approvalPatient}>{proc.patient_name}</Text>
+                <Text style={s.approvalSub}>
+                  {proc.transfer_request.from_student_name} → {proc.transfer_request.to_student_name}
+                </Text>
+              </View>
+              <PulsingDoubleArrow color="#0D47A1" size={14} delayMs={120} />
+              <View style={[s.reviewChip, { backgroundColor: '#0D47A1' }]}>
+                <Text style={s.reviewChipText}>Transfer</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
       {/* My Students */}
       {myStudents.length > 0 && (
         <View style={s.section}>
@@ -429,6 +471,15 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
 
   const pendingApproval = useMemo(() =>
     procedures.filter((p: any) => PENDING_STATUSES.includes(p.status)),
+    [procedures]
+  );
+
+  // iter-377: Transfer requests awaiting In-Charge approval (supervisor
+  // has already approved). Surfaced alongside phase approvals.
+  const pendingTransfers = useMemo(() =>
+    procedures.filter((p: any) =>
+      p.transfer_request && p.transfer_request.status === 'pending_incharge'
+    ),
     [procedures]
   );
 
@@ -516,6 +567,38 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
               </TouchableOpacity>
             );
           })}
+        </View>
+      )}
+
+      {/* iter-377: Pending Transfer Approvals (In-Charge stage) */}
+      {pendingTransfers.length > 0 && (
+        <View style={s.section}>
+          <View style={s.sectionHeader}>
+            <Ionicons name="swap-horizontal-outline" size={18} color="#0D47A1" />
+            <Text style={[s.sectionTitle, { color: '#0D47A1' }]}>Transfers Awaiting Your Approval ({pendingTransfers.length})</Text>
+          </View>
+          {pendingTransfers.slice(0, 5).map((proc: any) => (
+            <TouchableOpacity
+              key={proc.id}
+              style={s.approvalCard}
+              onPress={() => router.push(`/procedures/${proc.id}`)}
+              data-testid={`ic-pending-transfer-${proc.id}`}
+            >
+              <View style={[s.approvalPhaseWrap, { backgroundColor: '#E3F2FD' }]}>
+                <Ionicons name="swap-horizontal" size={16} color="#0D47A1" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.approvalPatient}>{proc.patient_name}</Text>
+                <Text style={s.approvalSub}>
+                  {proc.transfer_request.from_student_name} → {proc.transfer_request.to_student_name}
+                </Text>
+              </View>
+              <PulsingDoubleArrow color="#0D47A1" size={14} delayMs={120} />
+              <View style={[s.reviewChip, { backgroundColor: '#0D47A1' }]}>
+                <Text style={s.reviewChipText}>Transfer</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
         </View>
       )}
 

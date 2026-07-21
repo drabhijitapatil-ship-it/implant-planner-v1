@@ -6673,6 +6673,16 @@ A comprehensive mobile application for managing dental implant procedures at the
 - **Regression:** 7 new tests in `tests/test_iter376_transfer_approval_surface.py` covering `transfer_request` exposed on case detail to supervisor & in-charge, supervisor + in-charge + recipient notification records exist with the right types, recipient sees the case in `/procedures` before ownership swap, supervisor decline with reason writes `last_transfer_attempt.declined_reason`.
 - **Combined suite** (iter-53 + 368 + 370 + 371 + 372 + 373 + 374 + 375 + 376) = **101/101 pass**.
 
+### iter-377 — Faculty dashboard transfer-approval summary (Feb 2026)
+- **Trigger:** Follow-up to iter-376 — surface pending transfer approvals in the same "Pending Actions" summary the Supervisor + In-Charge already see for Phase 1-4 approvals, so faculty don't have to open each case individually.
+- **Frontend (`dashboard.tsx`):**
+  - Supervisor dashboard: new `pendingTransfers` memo (`p.transfer_request?.status === 'pending_supervisor'`) + a new **"Transfers Awaiting Your Approval (N)"** section right below the phase-approval queue with a swap-horizontal icon, initiator → recipient names, and a "Transfer" chip. Tapping a card jumps straight to the case detail where the Approve/Reject Transfer buttons live.
+  - Implant In-Charge dashboard: same section but filters on `status === 'pending_incharge'` — the case only appears once the Supervisor has approved.
+  - Both sections auto-hide when there are zero pending transfers.
+- **Regression:** 3 new tests in `tests/test_iter377_faculty_dashboard_transfer_surface.py` verifying the `/procedures` payload includes `transfer_request.status` at the right stage for each role — supervisor sees `pending_supervisor` (in-charge does not surface it), then after supervisor approves the case flips to `pending_incharge` for the In-Charge dashboard and disappears from the Supervisor section.
+- **UI verified:** Logging in as `Paresh.gandhi` (Supervisor) with a live pending transfer shows the new **Transfers Awaiting Your Approval (1)** section on the dashboard with the initiator → recipient breadcrumb (screenshot captured).
+- **Combined recent suite** (iter-53 + 368 + 370 + 371 + 372 + 373 + 374 + 375 + 376 + 377) = **104/104 pass** (27 pass across the full transfer/timeline/dashboard chain).
+
 ### Backlog / Next
 
 ### Backlog / Next
