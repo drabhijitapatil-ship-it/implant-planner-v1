@@ -2169,11 +2169,15 @@ async def get_procedures(
     
     # Filter based on role
     if current_user["role"] == "student":
-        # iter-374: students see cases they currently own OR previously owned
-        # (read-only visibility after Transfer Case ownership swap).
+        # iter-374 / iter-376: students see (a) cases they currently own,
+        # (b) cases they previously owned (read-only after transfer), and
+        # (c) cases where they are the pending recipient of an active
+        # transfer request (so they can accept / decline it).
         query["$or"] = [
             {"student_id": current_user["_id"]},
             {"previous_students": current_user["_id"]},
+            {"transfer_request.to_student_id": current_user["_id"],
+             "transfer_request.status": "pending_recipient"},
         ]
     elif current_user["role"] == "supervisor":
         query["$and"] = [
@@ -2802,9 +2806,18 @@ async def get_procedure(procedure_id: str, request: Request, current_user: dict 
         raise HTTPException(status_code=404, detail="Procedure not found")
     
     # Check access
-    if current_user["role"] == "student" and procedure["student_id"] != current_user["_id"]:
-        await log_access(action="procedure_view", resource_type="procedure", resource_id=procedure_id, user=current_user, request=request, outcome="denied")
-        raise HTTPException(status_code=403, detail="Access denied")
+    if current_user["role"] == "student":
+        # iter-374: current owner OR any previous owner may view (read-only after transfer).
+        owner = procedure.get("student_id") == current_user["_id"]
+        prev  = current_user["_id"] in (procedure.get("previous_students") or [])
+        # iter-376: transfer recipient must be able to load the case to accept.
+        pending_recipient = (
+            (procedure.get("transfer_request") or {}).get("to_student_id") == current_user["_id"]
+            and (procedure.get("transfer_request") or {}).get("status") == "pending_recipient"
+        )
+        if not (owner or prev or pending_recipient):
+            await log_access(action="procedure_view", resource_type="procedure", resource_id=procedure_id, user=current_user, request=request, outcome="denied")
+            raise HTTPException(status_code=403, detail="Access denied")
     elif current_user["role"] == "supervisor" and procedure["supervisor_id"] != current_user["_id"]:
         await log_access(action="procedure_view", resource_type="procedure", resource_id=procedure_id, user=current_user, request=request, outcome="denied")
         raise HTTPException(status_code=403, detail="Access denied")
@@ -3765,7 +3778,10 @@ async def _generate_transfer_handoff_summary(proc: dict) -> str:
 
 async def _notify_transfer(recipient_ids: list, title: str, body: str,
                            procedure_id: str, kind: str = "transfer_approval"):
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)  # datetime, not iso-string — matches
+                                       # the rest of the app so the
+                                       # `/notifications` endpoint can
+                                       # `.isoformat()` on read.
     for rid in recipient_ids:
         if not rid:
             continue
