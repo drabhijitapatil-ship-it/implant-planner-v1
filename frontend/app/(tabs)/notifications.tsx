@@ -64,7 +64,19 @@ export default function NotificationsScreen() {
     if (!notification.read) {
       await markAsRead(notification.id);
     }
-    router.push(`/procedures/${notification.procedure_id}`);
+    // iter-379 — deep-link chips: transfer notifications auto-scroll or
+    // auto-open the relevant section on the case detail via ?anchor=….
+    const t = String(notification.type || '');
+    let anchor: string | null = null;
+    if (t === 'transfer_approval') anchor = 'transfer';        // Sup / In-Charge approval card
+    else if (t === 'transfer_recipient') anchor = 'transfer';  // Recipient accept card
+    else if (t === 'transfer_completed') anchor = 'handoff';   // Auto-open Handoff Brief
+    else if (t === 'transfer_declined') anchor = 'transfer';   // Show last_transfer_attempt banner
+
+    const path = anchor
+      ? `/procedures/${notification.procedure_id}?anchor=${anchor}`
+      : `/procedures/${notification.procedure_id}`;
+    router.push(path);
   };
 
   const getNotificationIcon = (type: string) => {
@@ -74,6 +86,13 @@ export default function NotificationsScreen() {
       case 'approved':
         return 'checkmark-circle';
       case 'rejected':
+        return 'close-circle';
+      case 'transfer_approval':
+      case 'transfer_recipient':
+        return 'swap-horizontal';
+      case 'transfer_completed':
+        return 'checkmark-done';
+      case 'transfer_declined':
         return 'close-circle';
       default:
         return 'information-circle';
@@ -88,6 +107,13 @@ export default function NotificationsScreen() {
         return '#4CAF50';
       case 'rejected':
         return '#F44336';
+      case 'transfer_approval':
+      case 'transfer_recipient':
+        return '#0D47A1';
+      case 'transfer_completed':
+        return '#2E7D32';
+      case 'transfer_declined':
+        return '#C62828';
       default:
         return '#007AFF';
     }

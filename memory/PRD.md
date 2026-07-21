@@ -6696,6 +6696,19 @@ A comprehensive mobile application for managing dental implant procedures at the
   - **Recipient student**: `transfer_recipient` alert; case appears in their My Cases before ownership swap; green **Accept Transfer** + red **Decline Transfer** buttons at bottom of case detail with 48 h deadline enforcement; AI-generated de-identified handoff brief on acceptance (age + sex only — no name/DOB/address).
   - **All roles**: HIPAA `access_logs` entries at every state transition; Student Contribution Timeline card renders once the case has been transferred at least once.
 
+### iter-379 — Deep-link chips on transfer alerts (Feb 2026)
+- **Trigger:** Follow-up on iter-378. The Alerts screen now shows full transfer messages, but tapping just landed you at the top of the case detail. Requested that tapping a transfer alert takes the user directly to the action they need.
+- **Frontend (`notifications.tsx`):**
+  - `handleNotificationPress` inspects `notification.type` and appends an anchor query-string when opening the case:
+    - `transfer_approval` (supervisor / in-charge) → `?anchor=transfer` — auto-scrolls to the Approve/Reject Transfer card.
+    - `transfer_recipient` (recipient) → `?anchor=transfer` — auto-scrolls to the Accept/Decline Transfer card.
+    - `transfer_completed` → `?anchor=handoff` — auto-scrolls to the ContributionTimelineCard where the AI Handoff Brief now renders.
+    - `transfer_declined` → `?anchor=transfer` — lands on the transfer status area.
+  - Distinct icons + colours per transfer notification type (swap-horizontal blue for approval/recipient, checkmark-done green for completed, close-circle red for declined).
+- **Frontend (`procedures/[id].tsx`):** Reads the `anchor` search param; new `transferAnchorY` ref captured via `onLayout` on the TransferApprovalCard wrapper; effect scrolls `mainScrollRef` to that Y with a small offset ~450 ms after the case loads.
+- **Frontend (`ContributionTimelineCard.tsx`):** Now also fetches `/transfer/handoff` in parallel and renders a dedicated **Handoff Brief** panel at the top of the card with the AI-generated de-identified summary, from → to names, and a "age & sex only — no PHI" fine-print disclaimer.
+- **Regression:** Existing iter-374 handoff test locks the de-identified-summary contract; iter-375 timeline tests cover the derived segments. Combined recent transfer/timeline/dashboard suite = **28/28 pass**.
+
 ### Backlog / Next
 
 ### Backlog / Next
