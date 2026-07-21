@@ -9,7 +9,7 @@ import pytest
 import requests
 import os
 
-BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://implant-workflow-hub.preview.emergentagent.com")
+BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://case-approval.preview.emergentagent.com")
 
 # Test credentials from test_credentials.md
 CREDENTIALS = {

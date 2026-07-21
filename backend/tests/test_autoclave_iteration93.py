@@ -19,7 +19,7 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 # Ensure backend package is importable for helper unit test
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://implant-workflow-hub.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://case-approval.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
 MONGO_URL = os.environ.get("MONGO_URL")
 DB_NAME = os.environ.get("DB_NAME")

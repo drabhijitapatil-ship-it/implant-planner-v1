@@ -12,7 +12,7 @@ import random
 import string
 from datetime import datetime, timedelta
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://implant-workflow-hub.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://case-approval.preview.emergentagent.com')
 
 # Test credentials from test_credentials.md
 INCHARGE_EMAIL = "Abhijit.patil@dental.edu"

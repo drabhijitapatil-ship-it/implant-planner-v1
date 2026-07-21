@@ -201,7 +201,7 @@ export default function LoginScreen() {
               </TouchableOpacity>
             </BlurView>
 
-
+            <Text style={styles.buildStamp} data-testid="build-stamp">Build 2026.07.21-a</Text>
 
           </ScrollView>
         </KeyboardAvoidingView>
@@ -213,6 +213,12 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  buildStamp: {
+    marginTop: 14,
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.55)',
+    textAlign: 'center',
   },
   scrollContent: {
     flexGrow: 1,

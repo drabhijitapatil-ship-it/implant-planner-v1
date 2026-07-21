@@ -19,7 +19,7 @@ import pytest
 import requests
 
 BASE_URL = (os.environ.get("REACT_APP_BACKEND_URL")
-            or "https://implant-workflow-hub.preview.emergentagent.com").rstrip("/")
+            or "https://case-approval.preview.emergentagent.com").rstrip("/")
 
 STUDENT_IDENT = "Gaurav.pandey"
 STUDENT_PASS = "Student@123"

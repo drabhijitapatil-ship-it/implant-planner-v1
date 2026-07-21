@@ -18,7 +18,7 @@ from datetime import datetime, timedelta
 
 BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
-    BASE_URL = "https://implant-workflow-hub.preview.emergentagent.com"
+    BASE_URL = "https://case-approval.preview.emergentagent.com"
 
 # Test credentials
 STUDENT_CREDS = {"identifier": "Gaurav.pandey@student.dental.edu", "password": "Student@123"}

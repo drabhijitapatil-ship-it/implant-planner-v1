@@ -279,15 +279,16 @@ function SupervisorDashboard({ stats, procedures, selectedDate, setSelectedDate,
     [procedures]
   );
 
-  // iter-377: Transfer requests awaiting this supervisor's approval —
-  // surfaced alongside Phase 1-4 approvals so faculty don't have to open
-  // each case individually.
-  const pendingTransfers = useMemo(() =>
-    procedures.filter((p: any) =>
-      p.transfer_request && p.transfer_request.status === 'pending_supervisor'
-    ),
-    [procedures]
-  );
+  // iter-382: ALL active transfers on this supervisor's cases are visible —
+  // actionable ones (pending_supervisor) first, later stages shown with a
+  // stage badge so the request never "disappears" from Home.
+  const pendingTransfers = useMemo(() => {
+    const active = procedures.filter((p: any) => p.transfer_request);
+    return active.sort((a: any, b: any) =>
+      (a.transfer_request.status === 'pending_supervisor' ? 0 : 1) -
+      (b.transfer_request.status === 'pending_supervisor' ? 0 : 1)
+    );
+  }, [procedures]);
 
   const draftCases = useMemo(() => procedures.filter((p: any) => p.status === 'draft'), [procedures]);
 
@@ -318,9 +319,13 @@ function SupervisorDashboard({ stats, procedures, selectedDate, setSelectedDate,
         <View style={[s.section, { backgroundColor: '#E3F2FD', borderColor: '#90CAF9', borderWidth: 1 }]} data-testid="sup-pending-transfers-section">
           <View style={s.sectionHeader}>
             <Ionicons name="swap-horizontal" size={20} color="#0D47A1" />
-            <Text style={[s.sectionTitle, { color: '#0D47A1', fontSize: 15 }]}>Transfers Awaiting Your Approval ({pendingTransfers.length})</Text>
+            <Text style={[s.sectionTitle, { color: '#0D47A1', fontSize: 15 }]}>Case Transfers ({pendingTransfers.length})</Text>
           </View>
-          {pendingTransfers.slice(0, 5).map((proc: any) => (
+          {pendingTransfers.slice(0, 5).map((proc: any) => {
+            const trStatus = proc.transfer_request.status;
+            const actionable = trStatus === 'pending_supervisor';
+            const stageTxt = actionable ? 'Review Now' : trStatus === 'pending_incharge' ? 'With In-Charge' : 'With Recipient';
+            return (
             <TouchableOpacity
               key={proc.id}
               style={s.approvalCard}
@@ -336,12 +341,13 @@ function SupervisorDashboard({ stats, procedures, selectedDate, setSelectedDate,
                   {proc.transfer_request.from_student_name} → {proc.transfer_request.to_student_name}
                 </Text>
               </View>
-              <PulsingDoubleArrow color="#0D47A1" size={14} delayMs={120} />
-              <View style={[s.reviewChip, { backgroundColor: '#0D47A1' }]}>
-                <Text style={s.reviewChipText}>Transfer</Text>
+              {actionable && <PulsingDoubleArrow color="#0D47A1" size={14} delayMs={120} />}
+              <View style={[s.reviewChip, { backgroundColor: actionable ? '#0D47A1' : '#90A4AE' }]}>
+                <Text style={s.reviewChipText}>{stageTxt}</Text>
               </View>
             </TouchableOpacity>
-          ))}
+            );
+          })}
         </View>
       )}
 
@@ -478,14 +484,16 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
     [procedures]
   );
 
-  // iter-377: Transfer requests awaiting In-Charge approval (supervisor
-  // has already approved). Surfaced alongside phase approvals.
-  const pendingTransfers = useMemo(() =>
-    procedures.filter((p: any) =>
-      p.transfer_request && p.transfer_request.status === 'pending_incharge'
-    ),
-    [procedures]
-  );
+  // iter-382: In-Charge has global oversight — ALL active transfers are
+  // visible from the moment they are requested. Actionable ones
+  // (pending_incharge) sort first; earlier/later stages show a stage badge.
+  const pendingTransfers = useMemo(() => {
+    const active = procedures.filter((p: any) => p.transfer_request);
+    return active.sort((a: any, b: any) =>
+      (a.transfer_request.status === 'pending_incharge' ? 0 : 1) -
+      (b.transfer_request.status === 'pending_incharge' ? 0 : 1)
+    );
+  }, [procedures]);
 
   return (
     <>
@@ -495,9 +503,13 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
         <View style={[s.section, { backgroundColor: '#E3F2FD', borderColor: '#90CAF9', borderWidth: 1 }]} data-testid="ic-pending-transfers-section">
           <View style={s.sectionHeader}>
             <Ionicons name="swap-horizontal" size={20} color="#0D47A1" />
-            <Text style={[s.sectionTitle, { color: '#0D47A1', fontSize: 15 }]}>Transfers Awaiting Your Approval ({pendingTransfers.length})</Text>
+            <Text style={[s.sectionTitle, { color: '#0D47A1', fontSize: 15 }]}>Case Transfers ({pendingTransfers.length})</Text>
           </View>
-          {pendingTransfers.slice(0, 5).map((proc: any) => (
+          {pendingTransfers.slice(0, 5).map((proc: any) => {
+            const trStatus = proc.transfer_request.status;
+            const actionable = trStatus === 'pending_incharge';
+            const stageTxt = actionable ? 'Review Now' : trStatus === 'pending_supervisor' ? 'With Supervisor' : 'With Recipient';
+            return (
             <TouchableOpacity
               key={proc.id}
               style={s.approvalCard}
@@ -513,12 +525,13 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
                   {proc.transfer_request.from_student_name} → {proc.transfer_request.to_student_name}
                 </Text>
               </View>
-              <PulsingDoubleArrow color="#0D47A1" size={14} delayMs={120} />
-              <View style={[s.reviewChip, { backgroundColor: '#0D47A1' }]}>
-                <Text style={s.reviewChipText}>Transfer</Text>
+              {actionable && <PulsingDoubleArrow color="#0D47A1" size={14} delayMs={120} />}
+              <View style={[s.reviewChip, { backgroundColor: actionable ? '#0D47A1' : '#90A4AE' }]}>
+                <Text style={s.reviewChipText}>{stageTxt}</Text>
               </View>
             </TouchableOpacity>
-          ))}
+            );
+          })}
         </View>
       )}
 

@@ -14,7 +14,7 @@ import requests
 import os
 import uuid
 
-BASE_URL = "https://implant-workflow-hub.preview.emergentagent.com"
+BASE_URL = "https://case-approval.preview.emergentagent.com"
 
 # Test credentials
 CREDENTIALS = {
