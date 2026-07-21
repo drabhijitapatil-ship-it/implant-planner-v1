@@ -25,6 +25,11 @@ type Payload = {
   segments: Segment[];
 };
 
+type HandoffPayload = {
+  latest?: { handoff_summary?: string; from_student_name?: string; to_student_name?: string; completed_at?: string };
+  history?: any[];
+};
+
 const PHASE_COLORS = ['#78909C', '#0D47A1', '#00838F', '#F57C00', '#2E7D32'];
 
 function _fmtDate(iso: string | null): string {
@@ -43,6 +48,7 @@ function _phaseChipLabel(phases: number[]): string {
 
 export default function ContributionTimelineCard({ procedureId }: { procedureId: string }) {
   const [data, setData] = useState<Payload | null>(null);
+  const [handoff, setHandoff] = useState<HandoffPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
 
@@ -54,9 +60,15 @@ export default function ContributionTimelineCard({ procedureId }: { procedureId:
         if (alive) setData(r.data);
       } catch {
         // 403 or 404 → hide the card entirely
-      } finally {
-        if (alive) setLoading(false);
       }
+      // Best-effort — the handoff endpoint may 404 for cases without a
+      // completed transfer yet; that's fine, we simply won't render the
+      // brief.
+      try {
+        const h = await api.get(`/procedures/${procedureId}/transfer/handoff`);
+        if (alive) setHandoff(h.data);
+      } catch { /* no brief available */ }
+      if (alive) setLoading(false);
     })();
     return () => { alive = false; };
   }, [procedureId]);
@@ -89,6 +101,19 @@ export default function ContributionTimelineCard({ procedureId }: { procedureId:
 
       {!collapsed && (
         <View style={s.timeline}>
+          {handoff?.latest?.handoff_summary ? (
+            <View style={s.handoffBox} data-testid="handoff-brief">
+              <View style={s.handoffHeader}>
+                <Ionicons name="sparkles-outline" size={14} color="#0D47A1" />
+                <Text style={s.handoffTitle}>Handoff Brief</Text>
+                <Text style={s.handoffMeta}>
+                  {handoff.latest.from_student_name} → {handoff.latest.to_student_name}
+                </Text>
+              </View>
+              <Text style={s.handoffBody}>{handoff.latest.handoff_summary}</Text>
+              <Text style={s.handoffFine}>De-identified — age & sex only. No patient name / DOB / address shared with the AI.</Text>
+            </View>
+          ) : null}
           {data.segments.map((seg, idx) => {
             const isLast = idx === data.segments.length - 1;
             const dotColor = PHASE_COLORS[Math.min(idx, PHASE_COLORS.length - 1)];
@@ -149,4 +174,13 @@ const s = StyleSheet.create({
     borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3,
   },
   chipTxt: { fontSize: 11, fontWeight: '700' },
+  handoffBox: {
+    backgroundColor: '#F5F9FF', borderRadius: 10, padding: 10, marginBottom: 10,
+    borderWidth: 1, borderColor: '#BBDEFB',
+  },
+  handoffHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' },
+  handoffTitle: { fontSize: 13, fontWeight: '800', color: '#0D47A1', flexGrow: 1 },
+  handoffMeta: { fontSize: 11, color: '#546E7A' },
+  handoffBody: { fontSize: 13, color: '#263238', lineHeight: 19 },
+  handoffFine: { fontSize: 10, color: '#78909C', fontStyle: 'italic', marginTop: 6 },
 });

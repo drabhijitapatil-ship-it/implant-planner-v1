@@ -230,7 +230,7 @@ function resolveFieldOptions(fieldKey: string, procedure: any): FieldOptionsConf
 }
 
 export default function ProcedureDetailScreen() {
-  const { id, edit } = useLocalSearchParams();
+  const { id, edit, anchor } = useLocalSearchParams();
   const { user } = useAuth();
   const router = useRouter();
   
@@ -274,6 +274,9 @@ export default function ProcedureDetailScreen() {
   // Main page scroller — used by the case-detail progress pill to jump
   // straight to the current phase's section when tapped.
   const mainScrollRef = useRef<ScrollView | null>(null);
+  // iter-379: Y-position of the TransferApprovalCard, captured via onLayout,
+  // so we can auto-scroll when a transfer notification deep-links here.
+  const transferAnchorY = useRef<number>(0);
   // y-positions of each phase section (recorded via onLayout). Indexed by
   // the same keys returned by getProgressPair().current.
   const phaseAnchors = useRef<Record<string, number>>({});
@@ -376,6 +379,24 @@ export default function ProcedureDetailScreen() {
   useEffect(() => {
     loadProcedure();
   }, [id]);
+
+  // iter-379: When the case is opened via a transfer notification deep-link
+  // (?anchor=transfer|handoff), auto-scroll to the TransferApprovalCard once
+  // both the procedure has loaded and the anchor's layout has been measured.
+  useEffect(() => {
+    if (!anchor || !procedure) return;
+    const wants = String(anchor).toLowerCase();
+    if (wants !== 'transfer' && wants !== 'handoff') return;
+    const timer = setTimeout(() => {
+      const y = transferAnchorY.current;
+      if (y > 0 && mainScrollRef.current) {
+        try {
+          mainScrollRef.current.scrollTo({ y: Math.max(0, y - 80), animated: true });
+        } catch { /* no-op */ }
+      }
+    }, 450); // wait for the ScrollView layout pass to settle
+    return () => clearTimeout(timer);
+  }, [anchor, procedure]);
 
   // ── One-time pulse hint on the case-detail progress pill ──
   // The first time a user lands on a case where a phase is in flight (pill is
@@ -4375,12 +4396,15 @@ export default function ProcedureDetailScreen() {
         {/* Extra bottom spacing for the fixed buttons */}
         <View style={{ height: (canExportPDF() || canViewAiSummary()) ? 70 : 10 }} />
 
-        {/* iter-376: Transfer Case approval — mirrors phase-approval UX.
-            Renders green Approve / red Reject buttons for supervisor / in-charge
-            at the correct stage; recipient sees Accept / Decline; initiator
-            sees a Cancel button while the transfer is still pending. Card
-            auto-hides when no transfer is in progress. */}
-        <TransferApprovalCard procedure={procedure} onChanged={() => loadProcedure()} />
+        {/* iter-376/379: Transfer Case approval card. On deep-link
+            (`?anchor=transfer`) we measure this View and scroll to it so the
+            supervisor / in-charge / recipient lands directly on the buttons. */}
+        <View
+          onLayout={(e) => { transferAnchorY.current = e.nativeEvent.layout.y; }}
+          data-testid="transfer-anchor"
+        >
+          <TransferApprovalCard procedure={procedure} onChanged={() => loadProcedure()} />
+        </View>
       </ScrollView>
 
       {/* Implant In-Charge "Edit Patient Consent Form" bottom-sheet.
