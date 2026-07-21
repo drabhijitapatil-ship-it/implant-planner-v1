@@ -823,6 +823,19 @@ export default function ProcedureDetailScreen() {
         ref={mainScrollRef}
         contentContainerStyle={styles.scrollContent}
       >
+        {/* iter-380: Transfer Case approval card — surfaced at the TOP of the
+            case detail so supervisors / in-charges / recipients see the
+            Approve / Reject buttons the moment they open the case (same UX
+            weight as Phase approval buttons). The internal component decides
+            whether to render based on the viewer's role and transfer state. */}
+        <View
+          onLayout={(e) => { transferAnchorY.current = e.nativeEvent.layout.y; }}
+          data-testid="transfer-anchor"
+          testID="transfer-anchor"
+        >
+          <TransferApprovalCard procedure={procedure} onChanged={() => loadProcedure()} />
+        </View>
+
         {/* Pre-Op Augmentation Checklist (iter-136) — auto-derived rule-based
             augmentation/grafting plan items. Hidden on completed cases (already
             signed off; reviewable inside the phase data sections). */}
@@ -4395,16 +4408,6 @@ export default function ProcedureDetailScreen() {
 
         {/* Extra bottom spacing for the fixed buttons */}
         <View style={{ height: (canExportPDF() || canViewAiSummary()) ? 70 : 10 }} />
-
-        {/* iter-376/379: Transfer Case approval card. On deep-link
-            (`?anchor=transfer`) we measure this View and scroll to it so the
-            supervisor / in-charge / recipient lands directly on the buttons. */}
-        <View
-          onLayout={(e) => { transferAnchorY.current = e.nativeEvent.layout.y; }}
-          data-testid="transfer-anchor"
-        >
-          <TransferApprovalCard procedure={procedure} onChanged={() => loadProcedure()} />
-        </View>
       </ScrollView>
 
       {/* Implant In-Charge "Edit Patient Consent Form" bottom-sheet.

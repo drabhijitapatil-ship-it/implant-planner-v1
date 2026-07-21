@@ -6709,6 +6709,18 @@ A comprehensive mobile application for managing dental implant procedures at the
 - **Frontend (`ContributionTimelineCard.tsx`):** Now also fetches `/transfer/handoff` in parallel and renders a dedicated **Handoff Brief** panel at the top of the card with the AI-generated de-identified summary, from → to names, and a "age & sex only — no PHI" fine-print disclaimer.
 - **Regression:** Existing iter-374 handoff test locks the de-identified-summary contract; iter-375 timeline tests cover the derived segments. Combined recent transfer/timeline/dashboard suite = **28/28 pass**.
 
+### iter-380 — Transfer approval card surfaced at top of case detail (Feb 2026)
+- **User bug report:** Supervisor & Implant In-Charge opened a transferred case but saw no Accept/Reject Transfer tabs. Backend, notifications, and dashboard "Transfers Awaiting Your Approval" section were all wired correctly — the card was simply placed at the very bottom of a very long ScrollView (below Phase 1-4 approval panels, timeline, edit history, AI summary, and 70px spacer), so users never scrolled far enough to see it.
+- **Root cause:** Placement, not logic. The `<TransferApprovalCard>` (+ its `transfer-anchor` onLayout wrapper) was rendered at line ~4400 of `procedures/[id].tsx`, well below the fold on all realistic viewports.
+- **Fix (`app/procedures/[id].tsx`):** Moved the `<View data-testid="transfer-anchor"><TransferApprovalCard /></View>` block to the **very top** of the main ScrollView — above the Pre-Op Augmentation Checklist — so any viewer with a pending transfer action (supervisor / in-charge / recipient / initiator-cancel) sees the Approve/Reject/Accept/Decline buttons the moment the case opens. Semantic weight now matches the Phase-approval workflow.
+- **UI verified end-to-end via screenshot tool:**
+  - ✅ Supervisor (`Paresh.gandhi`) opens transferred case → sees **Case Transfer · Awaiting your Supervisor approval** at top with green **Approve Transfer** + red **Reject Transfer** buttons.
+  - ✅ Implant In-Charge (`Abhijit.patil`) after supervisor approval → sees same card + buttons with **Awaiting your Implant In-Charge approval** pill.
+  - ✅ Recipient student (`Atharva.Mahadik`) after both faculty approve → sees **Awaiting your acceptance** with green **Accept Transfer** + red **Decline Transfer**.
+  - ✅ Home dashboard "Transfers Awaiting Your Approval (N)" section already listed pending items correctly (confirmed for supervisor + in-charge).
+- **Regression:** No functional logic changed — this is a JSX placement move; all existing iter-374 → 379 tests remain green.
+
+
 ### Backlog / Next
 
 ### Backlog / Next
