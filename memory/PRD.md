@@ -6721,6 +6721,18 @@ A comprehensive mobile application for managing dental implant procedures at the
 - **Regression:** No functional logic changed — this is a JSX placement move; all existing iter-374 → 379 tests remain green.
 
 
+### iter-381 — Pin transfer approval queue to the very top of the Home dashboard (Feb 2026)
+- **User bug follow-up:** Even after iter-380, user (testing on Expo Go phone build) reported still not seeing the Approve/Reject Transfer buttons or a Transfer Case Review section on Home. Root cause is almost certainly a stale Expo Go JS bundle cache — but as a UX belt-and-suspenders fix we made the section impossible to miss.
+- **Frontend (`app/(tabs)/dashboard.tsx`):**
+  - **Supervisor dashboard**: moved the "Transfers Awaiting Your Approval (N)" section from below "Pending Your Approval" to the **very top** — the first section rendered on the Home tab, above stats / pipeline / phase-approval queue. Applied a light-blue banner background (`#E3F2FD` with `#90CAF9` border) so it stands out visually.
+  - **In-Charge dashboard**: identical treatment — pinned to the very top of the dashboard, above stats and pipeline.
+  - Both cards now deep-link with `?anchor=transfer` so tapping them lands directly on the Approve/Reject Transfer card in case detail.
+- **Ops:** Restarted the Expo Metro service to bust the bundle cache so any freshly connecting Expo Go client picks up the latest JS.
+- **UI verified end-to-end (web preview screenshots):**
+  - ✅ Supervisor (`Paresh.gandhi`) Home now opens on "Transfers Awaiting Your Approval (1)" with the initiator → recipient breadcrumb — the first visible section.
+  - ✅ Tapping the transfer card opens the case detail with the "Case Transfer · Awaiting your Supervisor approval" card + big green **Approve Transfer** and red **Reject Transfer** buttons as the very first widget on the page.
+
+
 ### Backlog / Next
 
 ### Backlog / Next
