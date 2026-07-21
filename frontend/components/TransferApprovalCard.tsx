@@ -26,14 +26,18 @@ export default function TransferApprovalCard({ procedure, onChanged }: Props) {
   const [rejectReason, setRejectReason] = useState('');
 
   const role = user?.role;
-  const uid = user?.id || user?._id;
+  const uid = String(user?.id || user?._id || '');
 
   const view: 'supervisor' | 'incharge' | 'recipient' | 'initiator' | null = useMemo(() => {
     if (!tr || !uid) return null;
-    if (role === 'supervisor' && procedure.supervisor_id === uid && tr.status === 'pending_supervisor') return 'supervisor';
-    if (role === 'implant_incharge' && procedure.implant_incharge_id === uid && tr.status === 'pending_incharge') return 'incharge';
-    if (role === 'student' && uid === tr.to_student_id && tr.status === 'pending_recipient') return 'recipient';
-    if (role === 'student' && uid === tr.from_student_id && NEEDS_INCHARGE.has(tr.status)) return 'initiator';
+    const supId = String(procedure.supervisor_id || '');
+    const incId = String(procedure.implant_incharge_id || '');
+    const fromId = String(tr.from_student_id || '');
+    const toId = String(tr.to_student_id || '');
+    if (role === 'supervisor' && supId === uid && tr.status === 'pending_supervisor') return 'supervisor';
+    if (role === 'implant_incharge' && incId === uid && tr.status === 'pending_incharge') return 'incharge';
+    if (role === 'student' && uid === toId && tr.status === 'pending_recipient') return 'recipient';
+    if (role === 'student' && uid === fromId && NEEDS_INCHARGE.has(tr.status)) return 'initiator';
     return null;
   }, [tr, role, uid, procedure]);
 

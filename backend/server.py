@@ -3778,10 +3778,17 @@ async def _generate_transfer_handoff_summary(proc: dict) -> str:
 
 async def _notify_transfer(recipient_ids: list, title: str, body: str,
                            procedure_id: str, kind: str = "transfer_approval"):
-    now = datetime.now(timezone.utc)  # datetime, not iso-string — matches
-                                       # the rest of the app so the
-                                       # `/notifications` endpoint can
-                                       # `.isoformat()` on read.
+    """Insert notification records shaped like the rest of the app.
+
+    The Alerts screen (`app/(tabs)/notifications.tsx`) reads `item.message`
+    for the body text (title is derived from `item.type`). Writing `title` +
+    `body` (my earlier shape) rendered as blank cards — this variant writes
+    `message` (primary text) *and* keeps `title` / `body` for any consumer
+    that already reads them.
+    """
+    now = datetime.now(timezone.utc)
+    # A concise single-line summary readable in the alerts list.
+    message = f"{title}. {body}".strip()
     for rid in recipient_ids:
         if not rid:
             continue
@@ -3791,6 +3798,7 @@ async def _notify_transfer(recipient_ids: list, title: str, body: str,
                 "type": kind,
                 "title": title,
                 "body": body,
+                "message": message,           # ← surfaced by the Alerts UI
                 "procedure_id": procedure_id,
                 "read": False,
                 "created_at": now,
