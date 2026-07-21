@@ -4111,10 +4111,6 @@ async def transfer_recipient_accept(procedure_id: str, request: Request,
 @api_router.get("/procedures/{procedure_id}/transfer/handoff")
 async def transfer_handoff_summary(procedure_id: str, request: Request,
                                     current_user: dict = Depends(get_current_user)):
-    """Return the AI-generated handoff brief plus phase-by-phase snapshot.
-    Available to: current student, previous students (read-only), supervisor,
-    implant_incharge, administrator.
-    """
     proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
@@ -4137,6 +4133,112 @@ async def transfer_handoff_summary(procedure_id: str, request: Request,
 
     await _log_transfer_event(procedure_id, "transfer_handoff_viewed", "read", uid, request)
     return {"latest": latest, "history": history}
+
+
+@api_router.get("/procedures/{procedure_id}/contribution-timeline")
+async def contribution_timeline(procedure_id: str, request: Request,
+                                 current_user: dict = Depends(get_current_user)):
+    """iter-375 — Student Contribution Timeline.
+
+    Derives a chronological ordered list of "who owned the case for which
+    phases" segments from `created_at` + `transfer_history` + the current
+    student. Used by the case detail Contribution Timeline card so students
+    can screenshot their portfolio breadcrumb.
+    """
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    uid = current_user["_id"]
+    role = current_user.get("role")
+    is_stakeholder = (
+        uid == proc.get("student_id")
+        or uid in (proc.get("previous_students") or [])
+        or uid == proc.get("supervisor_id")
+        or uid == proc.get("implant_incharge_id")
+        or role in ("administrator", "implant_incharge")
+    )
+    if not is_stakeholder:
+        raise HTTPException(status_code=403, detail="Not authorised to view this timeline.")
+
+    created_at = proc.get("created_at") or datetime.now(timezone.utc).isoformat()
+
+    # Chronological transfer history (defensive sort — history is normally
+    # already appended in order).
+    history = sorted(proc.get("transfer_history") or [],
+                      key=lambda h: h.get("completed_at") or "")
+
+    # Determine current at-phase for the trailing (open) segment.
+    current_phase = _current_phase_index(proc)
+
+    def _iso_to_days(iso_a: str, iso_b: str | None) -> int:
+        try:
+            a = datetime.fromisoformat(iso_a.replace("Z", "+00:00"))
+            b = (datetime.fromisoformat(iso_b.replace("Z", "+00:00"))
+                 if iso_b else datetime.now(timezone.utc))
+            return max(0, (b - a).days)
+        except Exception:
+            return 0
+
+    segments = []
+    seg_start = created_at
+
+    if not history:
+        # Single owner for the whole case.
+        segments.append({
+            "student_id": proc.get("student_id"),
+            "student_name": proc.get("student_name") or "Unknown",
+            "from": created_at,
+            "to": None,   # still owned
+            "duration_days": _iso_to_days(created_at, None),
+            "phases": list(range(0, current_phase + 1)),
+            "is_current": True,
+        })
+    else:
+        # Walk transfer history — each entry closes the previous student's
+        # segment and opens the next student's.
+        for i, h in enumerate(history):
+            seg_end = h.get("completed_at")
+            segments.append({
+                "student_id": h.get("from_student_id"),
+                "student_name": h.get("from_student_name") or "Unknown",
+                "from": seg_start,
+                "to": seg_end,
+                "duration_days": _iso_to_days(seg_start, seg_end),
+                "phases": list(range(
+                    segments[-1]["phases"][-1] + 1 if segments else 0,
+                    (h.get("at_phase") or 0) + 1,
+                )) if segments else list(range(0, (h.get("at_phase") or 0) + 1)),
+                "is_current": False,
+            })
+            seg_start = seg_end
+
+        # Trailing open segment — the current owner (last recipient).
+        last = history[-1]
+        last_at_phase = last.get("at_phase") or 0
+        trailing_phases = list(range(
+            last_at_phase + 1, current_phase + 1
+        )) if current_phase >= last_at_phase + 1 else []
+        segments.append({
+            "student_id": last.get("to_student_id"),
+            "student_name": last.get("to_student_name") or proc.get("student_name") or "Unknown",
+            "from": seg_start,
+            "to": None,
+            "duration_days": _iso_to_days(seg_start, None),
+            "phases": trailing_phases,
+            "is_current": True,
+        })
+
+    total_days = _iso_to_days(created_at, None)
+
+    return {
+        "case_created_at": created_at,
+        "current_phase": current_phase,
+        "transfer_count": int(proc.get("transfer_count") or 0),
+        "total_days": total_days,
+        "segments": segments,
+    }
+
 
 
 

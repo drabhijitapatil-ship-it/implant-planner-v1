@@ -6649,6 +6649,12 @@ A comprehensive mobile application for managing dental implant procedures at the
 - **Regression:** 13 new tests in `tests/test_iter374_transfer_case.py` (guards + full 4-stage happy path + previous-owner read-only visibility + handoff endpoint + reverse-transfer block + pending-phase block). Combined recent-brand + drilling + transfer suite (iter-368 / 370 / 371 / 372 / 373 / 374 + iter-53) = **90/90 pass**.
 - **UI verified:** Student → My Cases → 3-dot menu now shows Archive · Transfer Case · Add to Discussion Forum (screenshot captured).
 
+### iter-375 — Student Contribution Timeline (Feb 2026)
+- **Trigger:** Follow-up on iter-374 to give students a screenshottable portfolio breadcrumb showing which student owned the case for which phases with duration.
+- **Backend:** New endpoint `GET /api/procedures/{id}/contribution-timeline`. Derives ordered segments from `created_at` + `transfer_history` + current owner. Payload: `case_created_at`, `current_phase`, `transfer_count`, `total_days`, `segments[]` where each segment carries `student_id`, `student_name`, `from`, `to` (null = still open), `duration_days`, `phases` (list of integers), `is_current` flag. Access restricted to stakeholders (current student, previous students, supervisor, in-charge, administrator).
+- **Frontend:** New `components/ContributionTimelineCard.tsx` — vertical timeline with color-coded dots per student, phase-range chips, duration in days, "Current" pill on the open segment. Collapsible header ("N transfer(s) · Md" summary). Auto-hides when the case has never been transferred so cards without a story stay clean. Wired into `procedures/[id].tsx` right after the End Treatment banner.
+- **Regression:** 4 new tests in `tests/test_iter375_contribution_timeline.py` (single-owner returns one segment, transferred case returns two ordered segments with correct N+1 phase inheritance, prior-owner read-only visibility, non-stakeholder 403). Combined suite (iter-53 + 368 + 370 + 371 + 372 + 373 + 374 + 375) = **94/94 pass**.
+
 ### Backlog / Next
 
 ### Backlog / Next
