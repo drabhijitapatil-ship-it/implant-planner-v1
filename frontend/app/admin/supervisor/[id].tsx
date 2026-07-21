@@ -320,25 +320,27 @@ export default function SupervisorDrillDown() {
             filtered.map((p) => (
               <TouchableOpacity
                 key={p.id}
-                style={s.caseCard}
+                style={[s.caseCard, { flexDirection: 'column', alignItems: 'stretch' }]}
                 onPress={() => router.push(`/procedures/${p.id}`)}
                 activeOpacity={0.7}
                 data-testid={`supervisor-case-${p.id}`}
               >
-                <View style={[s.caseStatusPill, { backgroundColor: (STATUS_COLORS[p.status] || '#90A4AE') + '22', borderColor: STATUS_COLORS[p.status] || '#90A4AE' }]}>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.caseTitle} numberOfLines={1}>{p.patient_name || 'Unnamed'}</Text>
+                    <Text style={s.caseMeta} numberOfLines={1}>{p.implant_procedure_type || 'Procedure'}{p.registration_number ? ` · ${p.registration_number}` : ''}</Text>
+                    {p.procedure_date && (
+                      <Text style={s.caseMetaSub} numberOfLines={1}>
+                        {(() => { try { return format(new Date(p.procedure_date), 'MMM dd, yyyy'); } catch { return p.procedure_date; } })()}
+                        {p.procedure_time ? ` · ${p.procedure_time}` : ''}
+                      </Text>
+                    )}
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color="#B0BEC5" style={{ marginLeft: 8 }} />
+                </View>
+                <View style={[s.caseStatusPill, { backgroundColor: (STATUS_COLORS[p.status] || '#90A4AE') + '22', borderColor: STATUS_COLORS[p.status] || '#90A4AE', marginTop: 8 }]}>
                   <Text style={[s.caseStatusText, { color: STATUS_COLORS[p.status] || '#37474F' }]}>{STATUS_LABELS[p.status] || p.status}</Text>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.caseTitle} numberOfLines={1}>{p.patient_name || 'Unnamed'}</Text>
-                  <Text style={s.caseMeta} numberOfLines={1}>{p.implant_procedure_type || 'Procedure'}{p.registration_number ? ` · ${p.registration_number}` : ''}</Text>
-                  {p.procedure_date && (
-                    <Text style={s.caseMetaSub} numberOfLines={1}>
-                      {(() => { try { return format(new Date(p.procedure_date), 'MMM dd, yyyy'); } catch { return p.procedure_date; } })()}
-                      {p.procedure_time ? ` · ${p.procedure_time}` : ''}
-                    </Text>
-                  )}
-                </View>
-                <Ionicons name="chevron-forward" size={18} color="#B0BEC5" />
               </TouchableOpacity>
             ))
           )}

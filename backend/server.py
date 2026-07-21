@@ -1858,6 +1858,21 @@ async def register_push_token(
     return {"message": "Push token registered"}
 
 # User Routes
+@api_router.get("/users/check-email")
+async def check_user_email(email: str, current_user: dict = Depends(get_current_user)):
+    """Live duplicate-email check for admin/incharge user-creation forms
+    (e.g. the inline 'Create New Incharge' form on the Departments screen) —
+    lets the UI flag an already-registered email before submit instead of
+    only surfacing it as a generic error after the create attempt fails."""
+    email = email.strip()
+    if not email:
+        return {"exists": False}
+    existing = await db.users.find_one({
+        "email": {"$regex": f"^{re.escape(email)}$", "$options": "i"},
+    })
+    return {"exists": bool(existing)}
+
+
 @api_router.get("/users")
 async def get_users(role: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     query = {} if current_user.get("is_super_admin") else _dept_scope_query(current_user)

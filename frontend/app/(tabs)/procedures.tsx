@@ -898,6 +898,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF",
   },
   deptChip: {
+    position: "relative",
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 6,
@@ -913,6 +914,17 @@ const styles = StyleSheet.create({
   },
   deptChipMine: {
     borderColor: "#FFD54F",
+  },
+  deptChipDot: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: "#43A047",
+    borderWidth: 1.5,
+    borderColor: "#FFF",
   },
   deptChipText: {
     fontSize: 12,

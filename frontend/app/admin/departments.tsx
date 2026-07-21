@@ -66,6 +66,26 @@ export default function DepartmentsScreen() {
   const [showAssignPicker, setShowAssignPicker] = useState(false);
   const [showNewInchargeForm, setShowNewInchargeForm] = useState(false);
   const [newIncharge, setNewIncharge] = useState({ name: '', email: '' });
+  // Live duplicate-email check while onboarding a new incharge — flags an
+  // already-registered email before submit instead of only surfacing it as
+  // a generic error after Create & Assign fails.
+  const [emailStatus, setEmailStatus] = useState<'idle' | 'checking' | 'exists' | 'available'>('idle');
+
+  useEffect(() => {
+    const email = newIncharge.email.trim();
+    if (!EMAIL_RE.test(email)) {
+      setEmailStatus('idle');
+      return;
+    }
+    setEmailStatus('checking');
+    const timer = setTimeout(() => {
+      api
+        .get('/users/check-email', { params: { email } })
+        .then((res) => setEmailStatus(res.data?.exists ? 'exists' : 'available'))
+        .catch(() => setEmailStatus('idle'));
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [newIncharge.email]);
 
   const loadDepartments = useCallback(async () => {
     try {
@@ -195,8 +215,8 @@ export default function DepartmentsScreen() {
   // restoring it after.
   const openAssignPicker = () => { setShowModal(false); setShowAssignPicker(true); };
   const closeAssignPicker = () => { setShowAssignPicker(false); setShowModal(true); };
-  const openNewInchargeForm = () => { setShowModal(false); setShowNewInchargeForm(true); };
-  const closeNewInchargeForm = () => { setShowNewInchargeForm(false); setShowModal(true); };
+  const openNewInchargeForm = () => { setEmailStatus('idle'); setShowModal(false); setShowNewInchargeForm(true); };
+  const closeNewInchargeForm = () => { setEmailStatus('idle'); setShowNewInchargeForm(false); setShowModal(true); };
 
   const handleAssignExisting = async (u: InchargeUser) => {
     if (!editingDept) return;
@@ -241,6 +261,10 @@ export default function DepartmentsScreen() {
     const email = newIncharge.email.trim();
     if (!name || !EMAIL_RE.test(email)) {
       Alert.alert('Error', 'A valid name and email are required');
+      return;
+    }
+    if (emailStatus === 'exists') {
+      Alert.alert('Error', 'A user with this email is already registered');
       return;
     }
     setAssigning(true);
@@ -549,7 +573,7 @@ export default function DepartmentsScreen() {
 
             <Text style={styles.inputLabel}>Email</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, emailStatus === 'exists' && { borderColor: '#EF5350' }]}
               placeholder="jane.doe@dental.edu"
               placeholderTextColor="#999"
               value={newIncharge.email}
@@ -558,15 +582,32 @@ export default function DepartmentsScreen() {
               autoCapitalize="none"
               data-testid="new-incharge-email-input"
             />
+            {emailStatus === 'checking' && (
+              <Text style={styles.hintSmall} data-testid="new-incharge-email-checking">Checking email…</Text>
+            )}
+            {emailStatus === 'exists' && (
+              <Text style={[styles.hintSmall, { color: '#EF5350' }]} data-testid="new-incharge-email-exists">
+                A user with this email is already registered
+              </Text>
+            )}
+            {emailStatus === 'available' && (
+              <Text style={[styles.hintSmall, { color: '#2E7D32' }]} data-testid="new-incharge-email-available">
+                Email is available
+              </Text>
+            )}
 
             <Text style={styles.hintSmall}>
               A password is generated automatically and emailed to them.
             </Text>
 
             <TouchableOpacity
-              style={[styles.saveBtn, { marginTop: 12 }, assigning && styles.btnDisabled]}
+              style={[
+                styles.saveBtn,
+                { marginTop: 12 },
+                (assigning || emailStatus === 'exists' || emailStatus === 'checking') && styles.btnDisabled,
+              ]}
               onPress={handleCreateIncharge}
-              disabled={assigning}
+              disabled={assigning || emailStatus === 'exists' || emailStatus === 'checking'}
               data-testid="submit-new-incharge"
             >
               {assigning ? (
