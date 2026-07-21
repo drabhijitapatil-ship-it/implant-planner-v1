@@ -44,6 +44,7 @@ import CaseImplantPlanning from '../../components/CaseImplantPlanning';// iter-2
 // Treatment Complete banner above the timeline.
 import ExportPrintMenu from '../../components/ExportPrintMenu';
 import Phase2EditModal from '../../components/Phase2EditModal';
+import ContributionTimelineCard from '../../components/ContributionTimelineCard';
 import RescheduleModal from '../../components/RescheduleModal';
 import ImplantLifecycleTimeline from '../../components/ImplantLifecycleTimeline';
 import AugmentationChecklist from '../../components/AugmentationChecklist';
@@ -1023,6 +1024,11 @@ export default function ProcedureDetailScreen() {
             onResolved={() => loadProcedure()}
           />
         )}
+
+        {/* iter-375: Student Contribution Timeline — shows the ownership
+            history of the case with per-student phase segments + durations.
+            Auto-hides if the case never changed hands. */}
+        <ContributionTimelineCard procedureId={String(id)} />
 
         {/* iter-352: End Treatment REJECTED banner. Shown when the last
             end-treatment request was rejected; auto-hides once a new
