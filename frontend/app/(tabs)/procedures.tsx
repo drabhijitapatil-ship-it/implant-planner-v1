@@ -23,6 +23,7 @@ import CaseSubmissionStatus from '../../components/CaseSubmissionStatus';
 import NurseCasesScreen from '../../components/NurseCasesScreen';
 import ShareToForumModal from '../../components/ShareToForumModal';
 import RescheduleModal from '../../components/RescheduleModal';
+import TransferCaseModal from '../../components/TransferCaseModal';
 
 export default function ProceduresScreen() {
   const { user } = useAuth();
@@ -49,6 +50,8 @@ function DefaultProceduresScreen() {
   const [shareCase, setShareCase] = useState<{ id: string; patientName?: string } | null>(null);
   // iter-269: case selected for reschedule via the three-dot menu.
   const [rescheduleCase, setRescheduleCase] = useState<{ id: string; patientName?: string; currentDate?: string; currentTime?: string } | null>(null);
+  // iter-374: case selected for transfer via the three-dot menu.
+  const [transferCase, setTransferCase] = useState<{ id: string } | null>(null);
   const router = useRouter();
   const params = useLocalSearchParams<{ filter?: string; phase?: string }>();
 
@@ -146,6 +149,24 @@ function DefaultProceduresScreen() {
       actions.push({ key: 'archive', label: 'Archive', icon: 'archive-outline', color: '#1565C0', onPress: () => handleArchive(pid) });
     } else if (role === 'student') {
       actions.push({ key: 'archive', label: 'Archive', icon: 'archive-outline', color: '#1565C0', onPress: () => handleArchive(pid) });
+      // iter-374: Transfer Case — student can only initiate transfer of a case
+      // they currently own, that is not archived/completed and does not have
+      // a phase submission pending approval. Backend re-enforces every guard.
+      const isCurrentOwner = item.student_id === user?.id;
+      const isBlockedStatus = new Set([
+        'pending_phase1', 'pending_phase2', 'pending_phase3', 'pending_phase4',
+        'pending_stage2_surgical',
+      ]).has(item.status);
+      const hasPendingTransfer = !!item.transfer_request;
+      if (isCurrentOwner && !isCompleted && !isBlockedStatus && !hasPendingTransfer) {
+        actions.push({
+          key: 'transfer',
+          label: 'Transfer Case',
+          icon: 'swap-horizontal-outline',
+          color: '#1565C0',
+          onPress: () => setTransferCase({ id: pid }),
+        });
+      }
     }
     // Add to Discussion Forum — Students (own case), Supervisors (supervised), In-Charges (any)
     const canShare = role === 'implant_incharge'
@@ -227,7 +248,12 @@ function DefaultProceduresScreen() {
         <View style={styles.detailRow}>
           <Ionicons name="calendar" size={16} color="#666" />
           <Text style={styles.detailText}>
-            {format(new Date(item.procedure_date), 'MMM dd, yyyy')} at {item.procedure_time}
+            {(() => {
+              const d = item.procedure_date ? new Date(item.procedure_date) : null;
+              return d && !isNaN(d.getTime())
+                ? `${format(d, 'MMM dd, yyyy')} at ${item.procedure_time || '—'}`
+                : 'Date not set';
+            })()}
           </Text>
         </View>
 
@@ -414,6 +440,13 @@ function DefaultProceduresScreen() {
           currentTime={rescheduleCase.currentTime}
           onClose={() => setRescheduleCase(null)}
           onRescheduled={() => { setRescheduleCase(null); loadProcedures(); }}
+        />
+      )}
+      {transferCase && (
+        <TransferCaseModal
+          procedureId={transferCase.id}
+          onClose={() => setTransferCase(null)}
+          onSubmitted={() => { setTransferCase(null); loadProcedures(); }}
         />
       )}
     </SafeAreaView>

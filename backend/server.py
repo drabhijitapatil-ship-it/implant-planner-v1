@@ -2169,7 +2169,12 @@ async def get_procedures(
     
     # Filter based on role
     if current_user["role"] == "student":
-        query["student_id"] = current_user["_id"]
+        # iter-374: students see cases they currently own OR previously owned
+        # (read-only visibility after Transfer Case ownership swap).
+        query["$or"] = [
+            {"student_id": current_user["_id"]},
+            {"previous_students": current_user["_id"]},
+        ]
     elif current_user["role"] == "supervisor":
         query["$and"] = [
             {"$or": [
@@ -3611,6 +3616,528 @@ async def reschedule_procedure(
     )
 
     return {"message": "Procedure rescheduled successfully", "entry": history_entry}
+
+
+# ── Transfer Case (iter-374, Feb 2026) ────────────────────────────────────
+# Student-initiated ownership handoff to another student.
+# 4-step approval: initiator → supervisor → implant_incharge → recipient
+#
+# Guards (user policies A-H):
+#   • initiator must be the current student owner
+#   • recipient must be a student, not self, not a prior owner of this case
+#   • block if a phase submission is currently pending approval
+#   • warning surfaced (soft) when transfer_count ≥ 3
+#   • recipient has 48h to accept; expiry → auto-cancel
+#   • AI Handoff summary strips PHI (name / DOB / address / demographics) —
+#     only age + sex are permitted
+#   • every transition writes to access_logs (HIPAA)
+#
+# On successful ownership swap the receiving student takes over from the
+# next un-started phase (N+1). The original student retains READ-ONLY
+# visibility via `previous_students` — filtered on the /procedures list.
+
+TRANSFER_PENDING_PHASE_STATUSES = {
+    "pending_phase1", "pending_phase2", "pending_phase3", "pending_phase4",
+    "pending_stage2_surgical",
+}
+
+TRANSFER_ACCEPT_WINDOW_HOURS = 48
+TRANSFER_SOFT_LIMIT = 3
+
+
+class TransferCaseRequest(BaseModel):
+    to_student_id: str = Field(..., min_length=1, max_length=100)
+    reason: str = Field(..., min_length=10, max_length=500)
+
+
+class TransferDeclineRequest(BaseModel):
+    reason: str = Field("", max_length=500)
+
+
+def _current_phase_index(proc: dict) -> int:
+    """Return the highest fully-approved phase (0 if none completed)."""
+    if proc.get("phase4_completed") or proc.get("status") == "completed":
+        return 4
+    if proc.get("phase3_approved") or proc.get("status") in ("phase3_approved", "phase4_approved"):
+        return 3
+    if proc.get("supervisor_phase2_approved") and proc.get("implant_incharge_phase2_approved"):
+        return 2
+    if proc.get("supervisor_phase1_approved") and proc.get("implant_incharge_phase1_approved"):
+        return 1
+    return 0
+
+
+async def _log_transfer_event(procedure_id: str, action: str, outcome: str,
+                              user_id: str, request: Request | None = None,
+                              extra: dict | None = None):
+    """HIPAA-audited transfer event."""
+    entry = {
+        "action": action,
+        "outcome": outcome,
+        "user_id": user_id,
+        "resource_type": "procedure",
+        "resource_id": procedure_id,
+        "ip": request.client.host if request and request.client else None,
+        "at": datetime.now(timezone.utc).isoformat(),
+    }
+    if extra:
+        entry.update(extra)
+    try:
+        await db.access_logs.insert_one(entry)
+    except Exception:
+        pass
+
+
+async def _generate_transfer_handoff_summary(proc: dict) -> str:
+    """LLM-generated de-identified case brief for the receiving student.
+    Strict PHI policy: age + sex only. No name, DOB, address, phone.
+    """
+    # Build a de-identified payload
+    payload = {
+        "age": proc.get("patient_age"),
+        "sex": proc.get("patient_sex") or proc.get("patient_gender"),
+        "current_phase": _current_phase_index(proc),
+        "implants": [
+            {
+                "brand": i.get("brand"),
+                "system": i.get("system"),
+                "diameter": i.get("diameter"),
+                "length": i.get("length"),
+                "tooth": i.get("tooth"),
+            }
+            for i in (proc.get("implants") or [])[:6]
+        ],
+        "phase1": {
+            "bone_type": proc.get("bone_type"),
+            "bone_width": proc.get("bone_width"),
+            "bone_height": proc.get("bone_height"),
+            "procedures": proc.get("procedures"),
+        },
+        "phase2": {
+            "insertion_torque": (proc.get("phase2") or {}).get("insertion_torque_ncm"),
+            "isq": (proc.get("phase2") or {}).get("isq_value"),
+            "flap": (proc.get("phase2") or {}).get("flap_design"),
+            "date": (proc.get("phase2") or {}).get("surgery_date") or proc.get("procedure_date"),
+        },
+        "phase3": {
+            "abutment_type": (proc.get("phase3") or {}).get("abutment_type"),
+            "gh_mm": (proc.get("phase3") or {}).get("gingival_height_mm"),
+            "date": (proc.get("phase3") or {}).get("uncovering_date"),
+        },
+        "phase4": {
+            "prosthesis_type": (proc.get("phase4") or {}).get("prosthesis_type"),
+            "delivery_date": (proc.get("phase4") or {}).get("delivery_date"),
+        },
+    }
+
+    prompt = (
+        "You are writing a 4-6 sentence clinical handoff brief for a student "
+        "who is taking over an implant case mid-workflow. STRICT PHI RULES: "
+        "do NOT include patient name, date of birth, address, phone, or any "
+        "demographic beyond age and sex. Focus on: what was planned in Phase "
+        "1, what was executed in Phase 2 (torque, ISQ, healing plan), the "
+        "prosthetic status from Phase 3, and any Phase 4 decisions already "
+        "made. Highlight the single most important thing the new student "
+        "must not forget. Use present tense. De-identified data only:\n\n"
+        + json.dumps(payload, default=str)
+    )
+
+    try:
+        chat = LlmChat(
+            api_key=_get_llm_key(),
+            session_id=f"transfer-handoff-{proc.get('_id')}-{uuid.uuid4().hex[:8]}",
+            system_message=(
+                "You are an implant dentistry clinical writer. Produce "
+                "compact, de-identified handoff briefs. NEVER include patient "
+                "name, DOB, or address. Include only age + sex if provided."
+            ),
+        ).with_model("openai", "gpt-5.2")
+        response = await chat.send_message(UserMessage(text=prompt))
+        return str(response).strip()
+    except Exception as exc:  # pragma: no cover - fallback
+        return (
+            f"Handoff brief unavailable (AI service error: {exc}). "
+            f"Case currently at Phase {payload['current_phase']}. "
+            f"Age {payload['age']} / {payload['sex']}. "
+            f"Implants: {len(payload['implants'])}. Review case detail for full history."
+        )
+
+
+async def _notify_transfer(recipient_ids: list, title: str, body: str,
+                           procedure_id: str, kind: str = "transfer_approval"):
+    now = datetime.now(timezone.utc).isoformat()
+    for rid in recipient_ids:
+        if not rid:
+            continue
+        try:
+            await db.notifications.insert_one({
+                "user_id": rid,
+                "type": kind,
+                "title": title,
+                "body": body,
+                "procedure_id": procedure_id,
+                "read": False,
+                "created_at": now,
+            })
+        except Exception:
+            pass
+
+
+@api_router.post("/procedures/{procedure_id}/transfer/request")
+async def transfer_case_request(
+    procedure_id: str,
+    body: TransferCaseRequest,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    role = current_user.get("role")
+    uid = current_user["_id"]
+
+    # Guard: initiator must be current student owner.
+    if role != "student" or proc.get("student_id") != uid:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the current student owner can initiate a transfer.",
+        )
+
+    # Guard: block if archived / completed
+    if proc.get("archived") or proc.get("status") == "completed":
+        raise HTTPException(status_code=400, detail="This case is archived or completed and cannot be transferred.")
+
+    # Guard: no in-flight phase submission awaiting approval.
+    if proc.get("status") in TRANSFER_PENDING_PHASE_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail="This case has a phase submission pending approval. "
+                   "Please wait for it to be decided before initiating a transfer.",
+        )
+
+    # Guard: existing pending transfer.
+    existing = proc.get("transfer_request")
+    if existing and existing.get("status", "").startswith("pending_"):
+        raise HTTPException(status_code=409, detail="A transfer is already in progress on this case.")
+
+    # Self-transfer check BEFORE any DB lookup for a clean error message.
+    if body.to_student_id == uid:
+        raise HTTPException(status_code=400, detail="You cannot transfer the case to yourself.")
+
+    # Recipient validation. `_id` stored as ObjectId in the users collection —
+    # coerce the incoming string id, treating malformed values as 404.
+    try:
+        recipient_query = {"_id": ObjectId(body.to_student_id)}
+    except Exception:
+        raise HTTPException(status_code=404, detail="Selected student not found.")
+    recipient = await db.users.find_one(recipient_query)
+    if not recipient:
+        raise HTTPException(status_code=404, detail="Selected student not found.")
+    if recipient.get("role") != "student":
+        raise HTTPException(status_code=400, detail="Selected user is not a student.")
+
+    # Guard: prevent ping-pong — no prior owner.
+    if body.to_student_id in (proc.get("previous_students") or []):
+        raise HTTPException(
+            status_code=400,
+            detail="This student previously owned this case. Transferring back is not allowed.",
+        )
+
+    transfer_count = int(proc.get("transfer_count") or 0)
+
+    now = datetime.now(timezone.utc)
+    deadline = (now + timedelta(hours=TRANSFER_ACCEPT_WINDOW_HOURS)).isoformat()
+
+    tr = {
+        "id": str(uuid.uuid4()),
+        "from_student_id": uid,
+        "from_student_name": current_user.get("name") or current_user.get("username"),
+        "to_student_id": body.to_student_id,
+        "to_student_name": recipient.get("name") or recipient.get("username"),
+        "reason": body.reason.strip(),
+        "status": "pending_supervisor",
+        "requested_at": now.isoformat(),
+        "supervisor_approved_at": None,
+        "incharge_approved_at": None,
+        "recipient_deadline": deadline,
+        "recipient_accepted_at": None,
+        "completed_at": None,
+        "at_phase": _current_phase_index(proc),
+        "soft_limit_exceeded": transfer_count >= TRANSFER_SOFT_LIMIT,
+    }
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"transfer_request": tr}},
+    )
+
+    await _log_transfer_event(procedure_id, "transfer_requested", "pending",
+                              uid, request, {"to": body.to_student_id, "at_phase": tr["at_phase"]})
+
+    # Notify supervisor + implant_incharge assigned to this case.
+    await _notify_transfer(
+        [proc.get("supervisor_id"), proc.get("implant_incharge_id")],
+        title="Transfer Approval Pending",
+        body=f"Student {tr['from_student_name']} wants to transfer this case to {tr['to_student_name']}.",
+        procedure_id=procedure_id,
+    )
+
+    return {"message": "Transfer requested", "transfer_request": tr}
+
+
+async def _advance_transfer(procedure_id: str, proc: dict, current_user: dict,
+                             expected_role: str, request: Request):
+    tr = proc.get("transfer_request") or {}
+    uid = current_user["_id"]
+    role = current_user.get("role")
+
+    if role != expected_role:
+        raise HTTPException(status_code=403, detail=f"Only the assigned {expected_role} can approve this step.")
+
+    if expected_role == "supervisor" and proc.get("supervisor_id") != uid:
+        raise HTTPException(status_code=403, detail="You are not the supervisor for this case.")
+    if expected_role == "implant_incharge" and proc.get("implant_incharge_id") != uid:
+        raise HTTPException(status_code=403, detail="You are not the Implant In-Charge for this case.")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    if expected_role == "supervisor":
+        if tr.get("status") != "pending_supervisor":
+            raise HTTPException(status_code=400, detail=f"Transfer is not awaiting supervisor approval (current: {tr.get('status')}).")
+        tr["supervisor_approved_at"] = now_iso
+        tr["status"] = "pending_incharge"
+    else:
+        if tr.get("status") != "pending_incharge":
+            raise HTTPException(status_code=400, detail=f"Transfer is not awaiting Implant In-Charge approval (current: {tr.get('status')}).")
+        tr["incharge_approved_at"] = now_iso
+        tr["status"] = "pending_recipient"
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"transfer_request": tr}},
+    )
+    await _log_transfer_event(procedure_id, f"transfer_{expected_role}_approved",
+                              "approved", uid, request)
+
+    # Notify next actor.
+    if tr["status"] == "pending_incharge":
+        await _notify_transfer(
+            [proc.get("implant_incharge_id")],
+            title="Transfer Approval Pending",
+            body="Supervisor approved a case transfer — your approval is required.",
+            procedure_id=procedure_id,
+        )
+    elif tr["status"] == "pending_recipient":
+        await _notify_transfer(
+            [tr["to_student_id"], tr["from_student_id"]],
+            title="Case Transfer — Awaiting Your Acceptance",
+            body=f"Both faculty approved the transfer. Recipient has {TRANSFER_ACCEPT_WINDOW_HOURS}h to accept.",
+            procedure_id=procedure_id,
+            kind="transfer_recipient",
+        )
+    return {"message": f"{expected_role} approved", "transfer_request": tr}
+
+
+@api_router.post("/procedures/{procedure_id}/transfer/supervisor-approve")
+async def transfer_supervisor_approve(procedure_id: str, request: Request,
+                                       current_user: dict = Depends(get_current_user)):
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    return await _advance_transfer(procedure_id, proc, current_user, "supervisor", request)
+
+
+@api_router.post("/procedures/{procedure_id}/transfer/incharge-approve")
+async def transfer_incharge_approve(procedure_id: str, request: Request,
+                                     current_user: dict = Depends(get_current_user)):
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    return await _advance_transfer(procedure_id, proc, current_user, "implant_incharge", request)
+
+
+@api_router.post("/procedures/{procedure_id}/transfer/decline")
+async def transfer_decline(procedure_id: str, body: TransferDeclineRequest,
+                            request: Request,
+                            current_user: dict = Depends(get_current_user)):
+    """Reject the pending transfer. Any of: supervisor, incharge, recipient,
+    or the original initiator can decline before ownership swap."""
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    tr = proc.get("transfer_request") or {}
+    if not tr or tr.get("status", "").startswith(("accepted", "rejected", "declined", "timed_out", "cancelled")):
+        raise HTTPException(status_code=400, detail="No active transfer to decline.")
+
+    uid = current_user["_id"]
+    role = current_user.get("role")
+
+    # Who can decline at each stage?
+    stage = tr.get("status")
+    allowed = False
+    if role == "supervisor" and proc.get("supervisor_id") == uid and stage == "pending_supervisor":
+        allowed, new_status = True, "rejected_supervisor"
+    elif role == "implant_incharge" and proc.get("implant_incharge_id") == uid and stage in ("pending_supervisor", "pending_incharge"):
+        allowed, new_status = True, "rejected_incharge"
+    elif role == "student" and uid == tr.get("to_student_id") and stage == "pending_recipient":
+        allowed, new_status = True, "declined_recipient"
+    elif role == "student" and uid == tr.get("from_student_id") and stage in ("pending_supervisor", "pending_incharge"):
+        allowed, new_status = True, "cancelled"
+
+    if not allowed:
+        raise HTTPException(status_code=403, detail="You are not permitted to decline the transfer at this stage.")
+
+    tr["status"] = new_status
+    tr["declined_at"] = datetime.now(timezone.utc).isoformat()
+    tr["declined_by_id"] = uid
+    tr["declined_reason"] = body.reason.strip()
+
+    # Clear pending transfer (keep the record inside transfer_history? No — only
+    # successful transfers append to history per spec. Failed attempts stay on
+    # the case as `last_transfer_attempt` for the initiator's audit view.)
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"last_transfer_attempt": tr},
+         "$unset": {"transfer_request": ""}},
+    )
+
+    await _log_transfer_event(procedure_id, f"transfer_{new_status}", "rejected", uid, request,
+                              {"reason": body.reason.strip()})
+
+    # Notify initiator & other parties.
+    await _notify_transfer(
+        [tr.get("from_student_id"), tr.get("to_student_id"),
+         proc.get("supervisor_id"), proc.get("implant_incharge_id")],
+        title="Case Transfer Declined",
+        body=f"Transfer to {tr.get('to_student_name')} was declined ({new_status.replace('_', ' ')}).",
+        procedure_id=procedure_id,
+        kind="transfer_declined",
+    )
+    return {"message": "Transfer declined", "transfer_request": tr}
+
+
+@api_router.post("/procedures/{procedure_id}/transfer/accept")
+async def transfer_recipient_accept(procedure_id: str, request: Request,
+                                     current_user: dict = Depends(get_current_user)):
+    """Recipient student accepts the transfer — ownership swap happens now."""
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    tr = proc.get("transfer_request") or {}
+    if tr.get("status") != "pending_recipient":
+        raise HTTPException(status_code=400, detail="Transfer is not awaiting recipient acceptance.")
+    uid = current_user["_id"]
+    if uid != tr.get("to_student_id"):
+        raise HTTPException(status_code=403, detail="Only the selected recipient can accept this transfer.")
+
+    # 48h window enforcement.
+    try:
+        deadline = datetime.fromisoformat(tr["recipient_deadline"])
+        if datetime.now(timezone.utc) > deadline:
+            # Auto-cancel
+            tr["status"] = "timed_out"
+            tr["timed_out_at"] = datetime.now(timezone.utc).isoformat()
+            await db.procedures.update_one(
+                {"_id": ObjectId(procedure_id)},
+                {"$set": {"last_transfer_attempt": tr},
+                 "$unset": {"transfer_request": ""}},
+            )
+            await _log_transfer_event(procedure_id, "transfer_timed_out", "expired", uid, request)
+            raise HTTPException(status_code=410, detail="Transfer acceptance window has expired.")
+    except (ValueError, TypeError):
+        pass  # ignore malformed dates and proceed
+
+    # Perform the ownership swap.
+    now = datetime.now(timezone.utc)
+    at_phase = tr.get("at_phase", _current_phase_index(proc))
+
+    # AI handoff summary (de-identified).
+    handoff_summary = await _generate_transfer_handoff_summary(proc)
+
+    history_entry = {
+        "id": tr["id"],
+        "from_student_id": tr["from_student_id"],
+        "from_student_name": tr["from_student_name"],
+        "to_student_id": tr["to_student_id"],
+        "to_student_name": tr["to_student_name"],
+        "reason": tr["reason"],
+        "completed_at": now.isoformat(),
+        "at_phase": at_phase,
+        "next_phase": min(at_phase + 1, 4),  # user policy 4: N+1
+        "handoff_summary": handoff_summary,
+    }
+
+    prev_students = list(proc.get("previous_students") or [])
+    if tr["from_student_id"] not in prev_students:
+        prev_students.append(tr["from_student_id"])
+
+    tr["status"] = "accepted"
+    tr["recipient_accepted_at"] = now.isoformat()
+    tr["completed_at"] = now.isoformat()
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {
+            "$set": {
+                "student_id": tr["to_student_id"],
+                "student_name": tr["to_student_name"],
+                "previous_students": prev_students,
+                "transfer_count": int(proc.get("transfer_count") or 0) + 1,
+                "last_transfer_attempt": tr,
+            },
+            "$push": {"transfer_history": history_entry},
+            "$unset": {"transfer_request": ""},
+        },
+    )
+
+    await _log_transfer_event(procedure_id, "transfer_ownership_swapped",
+                              "completed", uid, request,
+                              {"from": tr["from_student_id"], "to": tr["to_student_id"],
+                               "at_phase": at_phase, "next_phase": history_entry["next_phase"]})
+
+    await _notify_transfer(
+        [tr["from_student_id"], tr["to_student_id"], proc.get("supervisor_id"),
+         proc.get("implant_incharge_id")],
+        title="Case Transfer Complete",
+        body=f"Case ownership transferred to {tr['to_student_name']}. Handoff brief available.",
+        procedure_id=procedure_id,
+        kind="transfer_completed",
+    )
+    return {"message": "Transfer accepted — ownership updated", "handoff_summary": handoff_summary,
+            "entry": history_entry}
+
+
+@api_router.get("/procedures/{procedure_id}/transfer/handoff")
+async def transfer_handoff_summary(procedure_id: str, request: Request,
+                                    current_user: dict = Depends(get_current_user)):
+    """Return the AI-generated handoff brief plus phase-by-phase snapshot.
+    Available to: current student, previous students (read-only), supervisor,
+    implant_incharge, administrator.
+    """
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    uid = current_user["_id"]
+    role = current_user.get("role")
+    is_stakeholder = (
+        uid == proc.get("student_id")
+        or uid in (proc.get("previous_students") or [])
+        or uid == proc.get("supervisor_id")
+        or uid == proc.get("implant_incharge_id")
+        or role in ("administrator", "implant_incharge")
+    )
+    if not is_stakeholder:
+        raise HTTPException(status_code=403, detail="Not authorised to view this handoff.")
+
+    history = list(proc.get("transfer_history") or [])
+    latest = history[-1] if history else None
+    if not latest:
+        raise HTTPException(status_code=404, detail="This case has no completed transfers yet.")
+
+    await _log_transfer_event(procedure_id, "transfer_handoff_viewed", "read", uid, request)
+    return {"latest": latest, "history": history}
+
 
 
 
