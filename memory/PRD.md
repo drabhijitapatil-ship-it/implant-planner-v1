@@ -6782,3 +6782,22 @@ actually working for the ASSIGNED supervisor at the correct stage):
 - P2: PDF export for Drilling Protocols.
 - P2: Forum / Group Chat semantic search (Implant AI).
 - P2: Phased Dark Mode; tablet split-view responsiveness.
+
+---
+
+## 2026-07-22 — Transfer entries merged into "Action Needed" + card repositioned (iter-383)
+
+### User choices (1a, 2a, 3a, 4a)
+1a. Separate blue "Case Transfers" Home section REMOVED — transfers live only inside "Action Needed".
+2a. Supervisor "Pending Your Approval" and In-Charge "Pending Review" sections RENAMED to "Action Needed"; transfer entries render inside them, listed first.
+3a. Students: recipient sees actionable "accept or decline" entry; initiator sees "Transfer in progress — with Supervisor/In-Charge/awaiting recipient" tracker entry.
+4a. Case detail order: phase chevron pills → Case Transfer Approve/Reject card → Contributions/Handoff card → … → Treatment Progress (card no longer at top of screen).
+
+### Implementation
+- dashboard.tsx: StudentDashboard now receives userId; transferItems memo merges transfers into Action Needed (data-testid/testID `action-transfer-card-{id}`). Supervisor section `sup-action-needed-section`, In-Charge `ic-action-needed-section`; transfer cards `pending-transfer-card-{id}` / `ic-pending-transfer-{id}` with "Review Now" (actionable) or grey stage chips. Tap → `/procedures/{id}?anchor=transfer`.
+- procedures/[id].tsx: transfer-anchor View moved from top of ScrollView to just before ContributionTimelineCard (below statusCard/chevron, above Treatment Progress).
+- Added testID alongside data-testid on all new transfer UI elements (RN-Web DOM propagation, per testing-agent action item).
+
+### Testing
+- testing_agent iteration_304.json: ALL 7 scenarios PASS across Supervisor / In-Charge / Student (DOM order verified via bounding-rect Y). Live pending transfer preserved (case 69f640160ae04a75cf8d0cd8, Gaurav → Atharva, pending_supervisor).
+- Known pre-existing dev-only console warning documented in /app/memory/known_issues.md (empty text node in case-detail, exists on non-transfer cases, harmless).

@@ -109,7 +109,7 @@ export default function TransferApprovalCard({ procedure, onChanged }: Props) {
       : 'Reject Transfer';
 
   return (
-    <View style={s.card} data-testid="transfer-approval-card">
+    <View style={s.card} data-testid="transfer-approval-card" testID="transfer-approval-card">
       <View style={s.headerRow}>
         <Ionicons name="swap-horizontal" size={18} color="#0D47A1" />
         <Text style={s.title}>Case Transfer</Text>
@@ -146,7 +146,7 @@ export default function TransferApprovalCard({ procedure, onChanged }: Props) {
       </View>
 
       {view === 'observer' && (
-        <View style={s.observerNote} data-testid="transfer-observer-note">
+        <View style={s.observerNote} data-testid="transfer-observer-note" testID="transfer-observer-note">
           <Ionicons name="information-circle-outline" size={15} color="#546E7A" />
           <Text style={s.observerNoteTxt}>
             {tr.status === 'pending_supervisor' && role === 'supervisor'
@@ -165,6 +165,7 @@ export default function TransferApprovalCard({ procedure, onChanged }: Props) {
             onPress={doApprove}
             disabled={submitting}
             data-testid={view === 'recipient' ? 'transfer-accept-btn' : 'transfer-approve-btn'}
+            testID={view === 'recipient' ? 'transfer-accept-btn' : 'transfer-approve-btn'}
           >
             {submitting
               ? <ActivityIndicator color="#fff" />
@@ -175,6 +176,7 @@ export default function TransferApprovalCard({ procedure, onChanged }: Props) {
             onPress={() => setShowRejectModal(true)}
             disabled={submitting}
             data-testid={view === 'recipient' ? 'transfer-decline-btn' : 'transfer-reject-btn'}
+            testID={view === 'recipient' ? 'transfer-decline-btn' : 'transfer-reject-btn'}
           >
             <Ionicons name="close-circle" size={18} color="#fff" />
             <Text style={s.btnDangerTxt}>{secondaryTxt}</Text>
@@ -188,6 +190,7 @@ export default function TransferApprovalCard({ procedure, onChanged }: Props) {
           onPress={() => setShowRejectModal(true)}
           disabled={submitting}
           data-testid="transfer-cancel-btn"
+          testID="transfer-cancel-btn"
         >
           <Ionicons name="close-circle" size={18} color="#fff" />
           <Text style={s.btnDangerTxt}>Cancel Transfer</Text>
@@ -207,6 +210,7 @@ export default function TransferApprovalCard({ procedure, onChanged }: Props) {
               value={rejectReason}
               onChangeText={setRejectReason}
               data-testid="transfer-reject-reason-input"
+              testID="transfer-reject-reason-input"
             />
             <View style={s.btnRow}>
               <Pressable
@@ -221,6 +225,7 @@ export default function TransferApprovalCard({ procedure, onChanged }: Props) {
                 onPress={doDecline}
                 disabled={submitting}
                 data-testid="transfer-reject-confirm-btn"
+                testID="transfer-reject-confirm-btn"
               >
                 {submitting
                   ? <ActivityIndicator color="#fff" />

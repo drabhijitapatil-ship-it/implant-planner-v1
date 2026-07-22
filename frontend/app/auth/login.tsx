@@ -201,7 +201,7 @@ export default function LoginScreen() {
               </TouchableOpacity>
             </BlurView>
 
-            <Text style={styles.buildStamp} data-testid="build-stamp">Build 2026.07.21-a</Text>
+            <Text style={styles.buildStamp} data-testid="build-stamp" testID="build-stamp">Build 2026.07.21-a</Text>
 
           </ScrollView>
         </KeyboardAvoidingView>

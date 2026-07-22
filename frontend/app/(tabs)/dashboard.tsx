@@ -230,6 +230,7 @@ function StudentDashboard({ stats, procedures, selectedDate, setSelectedDate, ro
               style={s.actionCard}
               onPress={() => router.push(`/procedures/${proc.id}?anchor=transfer`)}
               data-testid={`action-transfer-card-${proc.id}`}
+              testID={`action-transfer-card-${proc.id}`}
             >
               <View style={[s.actionIconWrap, { backgroundColor: (actionable ? '#0D47A1' : '#90A4AE') + '18' }]}>
                 <Ionicons name="swap-horizontal" size={20} color={actionable ? '#0D47A1' : '#90A4AE'} />
@@ -383,7 +384,7 @@ function SupervisorDashboard({ stats, procedures, selectedDate, setSelectedDate,
 
       {/* Action Needed — phase approvals + case transfers (iter-383) */}
       {(pendingApproval.length + pendingTransfers.length) > 0 && (
-        <View style={s.section} data-testid="sup-action-needed-section">
+        <View style={s.section} data-testid="sup-action-needed-section" testID="sup-action-needed-section">
           <View style={s.sectionHeader}>
             <Ionicons name="flash" size={18} color="#E65100" />
             <Text style={[s.sectionTitle, { color: '#E65100' }]}>Action Needed ({pendingApproval.length + pendingTransfers.length})</Text>
@@ -398,6 +399,7 @@ function SupervisorDashboard({ stats, procedures, selectedDate, setSelectedDate,
               style={s.approvalCard}
               onPress={() => router.push(`/procedures/${proc.id}?anchor=transfer`)}
               data-testid={`pending-transfer-card-${proc.id}`}
+              testID={`pending-transfer-card-${proc.id}`}
             >
               <View style={[s.approvalPhaseWrap, { backgroundColor: '#BBDEFB' }]}>
                 <Ionicons name="swap-horizontal" size={16} color="#0D47A1" />
@@ -582,7 +584,7 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
 
       {/* Pending Review */}
       {(pendingApproval.length + pendingTransfers.length) > 0 && (
-        <View style={s.section} data-testid="ic-action-needed-section">
+        <View style={s.section} data-testid="ic-action-needed-section" testID="ic-action-needed-section">
           <View style={s.sectionHeader}>
             <Ionicons name="flash" size={18} color="#E65100" />
             <Text style={[s.sectionTitle, { color: '#E65100' }]}>Action Needed ({pendingApproval.length + pendingTransfers.length})</Text>
@@ -597,6 +599,7 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
               style={s.approvalCard}
               onPress={() => router.push(`/procedures/${proc.id}?anchor=transfer`)}
               data-testid={`ic-pending-transfer-${proc.id}`}
+              testID={`ic-pending-transfer-${proc.id}`}
             >
               <View style={[s.approvalPhaseWrap, { backgroundColor: '#BBDEFB' }]}>
                 <Ionicons name="swap-horizontal" size={16} color="#0D47A1" />
