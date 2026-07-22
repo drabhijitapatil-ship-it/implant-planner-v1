@@ -20,6 +20,7 @@ type StudentRow = {
   total: number;
   completed: number;
   active: number;
+  department_name?: string | null;
 };
 
 export default function StudentsPerformanceScreen() {
@@ -118,6 +119,11 @@ export default function StudentsPerformanceScreen() {
               <View style={s.rank}><Text style={s.rankT}>#{idx + 1}</Text></View>
               <View style={{ flex: 1 }}>
                 <Text style={s.name}>{st.student_name}</Text>
+                {st.department_name && (
+                  <Text style={s.dept} numberOfLines={1}>
+                    <Ionicons name="business-outline" size={10} color="#78909C" /> {st.department_name}
+                  </Text>
+                )}
                 <View style={s.stats}>
                   <View style={s.chip}><Text style={[s.chipT, { color: '#1A73E8' }]}>{st.total} total</Text></View>
                   <View style={s.chip}><Text style={[s.chipT, { color: '#4CAF50' }]}>{st.completed} done</Text></View>
@@ -153,6 +159,7 @@ const s = StyleSheet.create({
   rank: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#E3F2FD', justifyContent: 'center', alignItems: 'center' },
   rankT: { fontSize: 12, fontWeight: '800', color: '#1565C0' },
   name: { fontSize: 15, fontWeight: '600', color: '#1A1A1A' },
+  dept: { fontSize: 11, color: '#78909C', marginTop: 2 },
   stats: { flexDirection: 'row', gap: 8, marginTop: 4 },
   chip: { backgroundColor: '#F5F7FA', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
   chipT: { fontSize: 10, fontWeight: '600' },

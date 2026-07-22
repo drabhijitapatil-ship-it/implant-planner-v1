@@ -242,7 +242,19 @@
       "Bash(./venv/bin/python -c \"import server; print\\('final import OK'\\)\")",
       "Bash(./venv/bin/python3 -c ' *)",
       "Bash(./venv/bin/python3 _seed_global_d.py)",
-      "Bash(./venv/bin/python3 _seed_global_d_components.py)"
+      "Bash(./venv/bin/python3 _seed_global_d_components.py)",
+      "Bash(./venv/bin/python3 _seed_copa_sky_revision.py)",
+      "Bash(git fetch *)",
+      "Bash(git ls-tree *)",
+      "Bash(grep -i \"\\\\.tsx$\\\\|\\\\.ts$\")",
+      "Bash(xargs -I{} sh -c 'git show origin/conflict_1:{} 2>/dev/null | grep -ql -i \"transfer\" && echo {}')",
+      "Bash(git show *)",
+      "Bash(grep -n \"^@api_router.get\\(\\\\\"/procedures\\\\\"\\)$\\\\|^@api_router.get\\(\\\\\"/procedures/{procedure_id}\\\\\"\\)$\" server.py)",
+      "Bash(grep -n \"^@api_router.get\\(\\\\\"/procedures/{procedure_id}\\\\\"\\)$\" server.py)",
+      "Bash(grep -n \"^app.include_router\\(api_router\\)$\" server.py)",
+      "Bash(cp /tmp/TransferApprovalCard.tsx /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/frontend/components/TransferApprovalCard.tsx *)",
+      "Bash(grep -n 'return {\"segments\": segments, \"transfer_count\": len\\(history\\), \"current_phase\": current_phase}' server.py)",
+      "Bash(cp /tmp/ContributionTimelineCard.tsx /Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/frontend/components/ContributionTimelineCard.tsx *)"
     ],
     "additionalDirectories": [
       "/dev",

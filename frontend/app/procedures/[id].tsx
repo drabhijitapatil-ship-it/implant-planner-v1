@@ -80,6 +80,8 @@ import {
 } from "../../utils/pdfGenerator";
 import { downloadPreopBriefing } from "../../utils/preopBriefingPdf";
 import CaseImplantPlanning from "../../components/CaseImplantPlanning"; // iter-209: removed CaseCompletionBadge — its facts merged into the green
+import TransferApprovalCard from "../../components/TransferApprovalCard";
+import ContributionTimelineCard from "../../components/ContributionTimelineCard";
 // Treatment Complete banner above the timeline.
 import ImplantLifecycleTimeline from "../../components/ImplantLifecycleTimeline";
 import ExportPrintMenu from "../../components/ExportPrintMenu";
@@ -8801,6 +8803,15 @@ export default function ProcedureDetailScreen() {
                 )}
               </View>
             )}
+
+            {/* iter-385: Transfer Case approval card + Student Contribution
+            Timeline — shown for every stakeholder (initiator, recipient,
+            supervisor, in-charge) when a transfer is active or has ever
+            happened on this case. Placed right after the phase
+            approve/reject section so it reads as the next thing needing
+            attention, matching the Phase 1-4 approval UX. */}
+            <TransferApprovalCard procedure={procedure} onChanged={() => loadProcedure()} />
+            <ContributionTimelineCard procedureId={id as string} />
 
             {/* Implant Planning - Standalone Section.
             iter-223: hidden for existing-implant cases — those have the

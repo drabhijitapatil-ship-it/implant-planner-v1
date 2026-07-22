@@ -1609,6 +1609,11 @@ function StudentPerformanceSection({
                   </View>
                 )}
               </View>
+              {st.department_name && (
+                <Text style={s.perfDept} numberOfLines={1}>
+                  <Ionicons name="business-outline" size={10} color="#78909C" /> {st.department_name}
+                </Text>
+              )}
               <View style={s.perfStats}>
                 <View style={s.perfChip}>
                   <Text style={[s.perfChipText, { color: "#1A73E8" }]}>
@@ -1784,6 +1789,11 @@ function SupervisorPerformanceSection({
                   </View>
                 )}
               </View>
+              {sp.department_name && (
+                <Text style={s.perfDept} numberOfLines={1}>
+                  <Ionicons name="business-outline" size={10} color="#78909C" /> {sp.department_name}
+                </Text>
+              )}
               <View style={s.perfStats}>
                 <View style={s.perfChip}>
                   <Text style={[s.perfChipText, { color: "#1A73E8" }]}>
@@ -2524,6 +2534,7 @@ const s = StyleSheet.create({
   },
   perfRankText: { fontSize: 12, fontWeight: "800", color: "#F57F17" },
   perfName: { fontSize: 15, fontWeight: "600", color: "#1A1A1A" },
+  perfDept: { fontSize: 11, color: "#78909C", marginTop: 2 },
   perfStats: { flexDirection: "row", gap: 8, marginTop: 4 },
   perfChip: {
     backgroundColor: "#F5F7FA",

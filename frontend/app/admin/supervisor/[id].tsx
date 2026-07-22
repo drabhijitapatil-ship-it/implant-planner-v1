@@ -14,7 +14,7 @@ import { STATUS_COLORS, STATUS_LABELS } from '../../../constants/checklist';
 import { NudgeBottomSheet } from '../../../components/NudgeBottomSheet';
 
 type Summary = {
-  profile: { id?: string; name?: string; email?: string; role?: string; username?: string; profile_photo?: string } | null;
+  profile: { id?: string; name?: string; email?: string; role?: string; username?: string; profile_photo?: string; department_id?: string | null; department_name?: string | null } | null;
   kpis: {
     total: number; approved: number; rejected: number; pending: number; completed: number;
     stale_count: number; avg_review_hours: number | null;
@@ -48,6 +48,34 @@ type Filter = 'all' | 'pending' | 'approved' | 'rejected' | 'completed';
 
 const PENDING_STATUSES = ['pending_phase1', 'pending_phase2', 'pending_stage2_surgical', 'pending_stage2_prosthetic'];
 const REJECTED_STATUSES = ['rejected', 'permanently_rejected', 'stage2_surgical_rejected', 'stage2_prosthetic_rejected'];
+
+const parseStatus = (statusStr: string) => {
+  const parts = statusStr.split(/\s*-\s*/);
+  if (parts.length > 1) {
+    return { main: parts[0], sub: parts.slice(1).join(' - ') };
+  }
+  return { main: statusStr, sub: null };
+};
+
+const getStatusIconInfo = (status: string, themeColor: string) => {
+  const lowercaseStatus = status.toLowerCase();
+  let name: 'checkmark' | 'close' | 'alert' = 'alert';
+  if (
+    lowercaseStatus.includes('approved') ||
+    lowercaseStatus.includes('complete') ||
+    lowercaseStatus === 'approved' ||
+    lowercaseStatus === 'completed'
+  ) {
+    name = 'checkmark';
+  } else if (lowercaseStatus.includes('reject') || lowercaseStatus.includes('fail')) {
+    name = 'close';
+  }
+  return {
+    name,
+    color: themeColor,
+    bg: themeColor + '12',
+  };
+};
 
 export default function SupervisorDrillDown() {
   const router = useRouter();
@@ -144,6 +172,12 @@ export default function SupervisorDrillDown() {
           <View style={{ flex: 1 }}>
             <Text style={s.headerTitle} numberOfLines={1}>{supervisorName}</Text>
             <Text style={s.headerSubtitle} numberOfLines={1}>{profile?.email || profile?.username || 'Supervisor performance'}</Text>
+            {profile?.department_name && (
+              <View style={s.headerDeptRow}>
+                <Ionicons name="business-outline" size={11} color="#6A1B9A" />
+                <Text style={s.headerDeptText} numberOfLines={1}>{profile.department_name}</Text>
+              </View>
+            )}
           </View>
         </View>
         <TouchableOpacity onPress={() => setNudgeOpen(true)} style={s.nudgeBtn} data-testid="open-supervisor-nudge-btn" activeOpacity={0.85}>
@@ -317,32 +351,103 @@ export default function SupervisorDrillDown() {
               <Text style={s.emptyText}>No cases match this filter.</Text>
             </View>
           ) : (
-            filtered.map((p) => (
-              <TouchableOpacity
-                key={p.id}
-                style={[s.caseCard, { flexDirection: 'column', alignItems: 'stretch' }]}
-                onPress={() => router.push(`/procedures/${p.id}`)}
-                activeOpacity={0.7}
-                data-testid={`supervisor-case-${p.id}`}
-              >
-                <View style={{ flexDirection: "row", alignItems: "center" }}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.caseTitle} numberOfLines={1}>{p.patient_name || 'Unnamed'}</Text>
-                    <Text style={s.caseMeta} numberOfLines={1}>{p.implant_procedure_type || 'Procedure'}{p.registration_number ? ` · ${p.registration_number}` : ''}</Text>
-                    {p.procedure_date && (
-                      <Text style={s.caseMetaSub} numberOfLines={1}>
-                        {(() => { try { return format(new Date(p.procedure_date), 'MMM dd, yyyy'); } catch { return p.procedure_date; } })()}
-                        {p.procedure_time ? ` · ${p.procedure_time}` : ''}
+            filtered.map((p) => {
+              const themeColor = STATUS_COLORS[p.status] || '#90A4AE';
+              return (
+                <TouchableOpacity
+                  key={p.id}
+                  style={[s.caseCard, { borderLeftColor: themeColor }]}
+                  onPress={() => router.push(`/procedures/${p.id}`)}
+                  activeOpacity={0.7}
+                  data-testid={`supervisor-case-${p.id}`}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    {/* Circular Avatar Fallback */}
+                    <View style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 22,
+                      backgroundColor: '#E3F2FD',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginRight: 12,
+                    }}>
+                      <Text style={{ fontSize: 15, fontWeight: '800', color: '#0D47A1' }}>
+                        {p.patient_name
+                          ?.split(" ")
+                          .map((n: string) => n[0])
+                          .join("")
+                          .toUpperCase()
+                          .slice(0, 2) || "??"}
                       </Text>
-                    )}
+                    </View>
+
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.caseTitle} numberOfLines={1}>{p.patient_name || 'Unnamed'}</Text>
+                      <Text style={s.caseMeta} numberOfLines={1}>{p.implant_procedure_type || 'Procedure'}{p.registration_number ? ` · ${p.registration_number}` : ''}</Text>
+                      
+                      <View style={{ flexDirection: "row", alignItems: "center", marginTop: 6 }}>
+                        <Ionicons name="calendar-outline" size={12} color="#1565C0" />
+                        <Text style={{ fontSize: 11, color: "#546E7A", marginLeft: 4 }}>
+                          {p.procedure_date
+                            ? (() => { try { return format(new Date(p.procedure_date), 'MMM dd, yyyy'); } catch { return p.procedure_date; } })()
+                            : 'N/A'
+                          }
+                        </Text>
+                        <Text style={{ marginHorizontal: 6, color: "#CFD8DC" }}>|</Text>
+                        <Ionicons name="time-outline" size={12} color="#1565C0" />
+                        <Text style={{ fontSize: 11, color: "#546E7A", marginLeft: 4 }}>
+                          {p.procedure_time || "N/A"}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Subtle chevron circle */}
+                    <View style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 16,
+                      backgroundColor: '#F0F4F8',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginLeft: 8,
+                    }}>
+                      <Ionicons name="chevron-forward" size={16} color="#1565C0" />
+                    </View>
                   </View>
-                  <Ionicons name="chevron-forward" size={18} color="#B0BEC5" style={{ marginLeft: 8 }} />
-                </View>
-                <View style={[s.caseStatusPill, { backgroundColor: (STATUS_COLORS[p.status] || '#90A4AE') + '22', borderColor: STATUS_COLORS[p.status] || '#90A4AE', marginTop: 8 }]}>
-                  <Text style={[s.caseStatusText, { color: STATUS_COLORS[p.status] || '#37474F' }]}>{STATUS_LABELS[p.status] || p.status}</Text>
-                </View>
-              </TouchableOpacity>
-            ))
+
+                  <View style={{ height: 1, backgroundColor: '#E2E8F0', marginVertical: 12 }} />
+
+                  {(() => {
+                    const statusLabel = STATUS_LABELS[p.status] || p.status;
+                    const parsed = parseStatus(statusLabel);
+                    const iconInfo = getStatusIconInfo(p.status, themeColor);
+                    return (
+                      <View style={[s.caseStatusPill, { backgroundColor: iconInfo.bg, borderColor: themeColor + '33' }]}>
+                        <View style={{
+                          width: 16,
+                          height: 16,
+                          borderRadius: 8,
+                          backgroundColor: themeColor,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}>
+                          <Ionicons name={iconInfo.name} size={10} color="#FFF" />
+                        </View>
+                        <Text style={[s.caseStatusText, { color: themeColor }]}>
+                          {parsed.main}
+                          {parsed.sub && (
+                            <Text style={{ fontWeight: '400', color: themeColor + 'BB' }}>
+                              {'  |  '}{parsed.sub}
+                            </Text>
+                          )}
+                        </Text>
+                      </View>
+                    );
+                  })()}
+                </TouchableOpacity>
+              );
+            })
           )}
         </View>
 
@@ -445,6 +550,8 @@ const s = StyleSheet.create({
   identityAvatarTxt: { fontSize: 15, fontWeight: '800', color: '#FFF' },
   headerTitle: { fontSize: 16, fontWeight: '800', color: '#4A148C' },
   headerSubtitle: { fontSize: 12, color: '#6A1B9A', marginTop: 2 },
+  headerDeptRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
+  headerDeptText: { fontSize: 11, color: '#6A1B9A', fontWeight: '600' },
   nudgeBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999,
@@ -535,13 +642,32 @@ const s = StyleSheet.create({
   emptyText: { fontSize: 12, color: '#90A4AE', fontWeight: '600' },
 
   caseCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: '#FFF', borderRadius: 12, padding: 12, marginBottom: 8,
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderLeftWidth: 4,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  caseStatusPill: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, alignSelf: 'flex-start' },
-  caseStatusText: { fontSize: 10, fontWeight: '700' },
-  caseTitle: { fontSize: 14, fontWeight: '700', color: '#4A148C' },
-  caseMeta: { fontSize: 11, color: '#546E7A', marginTop: 2 },
+  caseStatusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignSelf: 'flex-start',
+    gap: 6,
+  },
+  caseStatusText: { fontSize: 12, fontWeight: '700' },
+  caseTitle: { fontSize: 16, fontWeight: '700', color: '#4A148C' },
+  caseMeta: { fontSize: 13, color: '#546E7A', marginTop: 2 },
   caseMetaSub: { fontSize: 10, color: '#90A4AE', marginTop: 1 },
 
   actionRow: {

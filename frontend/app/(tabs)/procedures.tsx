@@ -25,6 +25,7 @@ import NurseCasesScreen from "../../components/NurseCasesScreen";
 import ShareToForumModal from "../../components/ShareToForumModal";
 import RescheduleModal from "../../components/RescheduleModal";
 import CancelCaseModal from "../../components/CancelCaseModal";
+import TransferCaseModal from "../../components/TransferCaseModal";
 
 export default function ProceduresScreen() {
   const { user } = useAuth();
@@ -110,6 +111,8 @@ function DefaultProceduresScreen() {
     id: string;
     patientName?: string;
   } | null>(null);
+  // iter-385: case selected for Transfer Case via the three-dot menu.
+  const [transferCase, setTransferCase] = useState<{ id: string } | null>(null);
   const router = useRouter();
   const params = useLocalSearchParams<{ filter?: string; phase?: string }>();
 
@@ -309,6 +312,25 @@ function DefaultProceduresScreen() {
         color: "#1565C0",
         onPress: () => handleArchive(pid),
       });
+      // iter-385: Transfer Case — student can only initiate transfer of a
+      // case they currently own, that isn't archived/completed, isn't
+      // mid-phase-submission-pending-approval, and has no transfer already
+      // in progress. Mirrors backend TRANSFER_PENDING_STATUSES.
+      const transferPendingStatuses = new Set([
+        "pending_phase1", "pending_phase2", "pending_stage2_surgical",
+        "pending_stage2_prosthetic", "pending_final_delivery",
+      ]);
+      const isCurrentOwner = item.student_id === user?.id;
+      const hasPendingTransfer = !!item.transfer_request;
+      if (isCurrentOwner && !isCompleted && !transferPendingStatuses.has(item.status) && !hasPendingTransfer) {
+        actions.push({
+          key: "transfer",
+          label: "Transfer Case",
+          icon: "swap-horizontal-outline",
+          color: "#0D47A1",
+          onPress: () => setTransferCase({ id: pid }),
+        });
+      }
     }
     // Add to Discussion Forum — Students (own case), Supervisors (supervised), In-Charges (any)
     const canShare =
@@ -824,6 +846,13 @@ function DefaultProceduresScreen() {
             setCancelCase(null);
             loadProcedures();
           }}
+        />
+      )}
+      {transferCase && (
+        <TransferCaseModal
+          procedureId={transferCase.id}
+          onClose={() => setTransferCase(null)}
+          onSubmitted={() => { setTransferCase(null); loadProcedures(); }}
         />
       )}
     </View>
