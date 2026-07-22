@@ -145,13 +145,33 @@ function ProcedureCalendar({ procedures, selectedDate, setSelectedDate, router }
 }
 
 // ── Student Dashboard ─────────────────────────────────────
-function StudentDashboard({ stats, procedures, selectedDate, setSelectedDate, router }: any) {
+function StudentDashboard({ stats, procedures, selectedDate, setSelectedDate, router, userId }: any) {
   const [approvingDraftId, setApprovingDraftId] = useState<string | null>(null);
 
   const actionNeeded = useMemo(() =>
     procedures.filter((p: any) => ACTION_NEEDED_MAP[p.status] && p.status !== 'draft'),
     [procedures]
   );
+
+  // iter-383: active case transfers surfaced inside Action Needed —
+  // recipient gets an actionable "Accept" entry, initiator gets a tracker.
+  const transferItems = useMemo(() => {
+    const uid = String(userId || '');
+    return procedures
+      .filter((p: any) => p.transfer_request)
+      .map((p: any) => {
+        const tr = p.transfer_request;
+        if (String(tr.to_student_id) === uid && tr.status === 'pending_recipient')
+          return { proc: p, label: 'Case transfer — accept or decline', actionable: true };
+        if (String(tr.from_student_id) === uid) {
+          const stage = tr.status === 'pending_supervisor' ? 'with Supervisor'
+            : tr.status === 'pending_incharge' ? 'with In-Charge' : 'awaiting recipient';
+          return { proc: p, label: `Transfer in progress — ${stage}`, actionable: false };
+        }
+        return null;
+      })
+      .filter(Boolean) as { proc: any; label: string; actionable: boolean }[];
+  }, [procedures, userId]);
   const draftCases = useMemo(() => procedures.filter((p: any) => p.status === 'draft'), [procedures]);
 
   const handleSendForApproval = async (procId: string) => {
@@ -198,12 +218,29 @@ function StudentDashboard({ stats, procedures, selectedDate, setSelectedDate, ro
       </View>
 
       {/* Action Needed */}
-      {actionNeeded.length > 0 && (
+      {(actionNeeded.length + transferItems.length) > 0 && (
         <View style={s.section}>
           <View style={s.sectionHeader}>
             <Ionicons name="flash" size={18} color="#E65100" />
-            <Text style={[s.sectionTitle, { color: '#E65100' }]}>Action Needed ({actionNeeded.length})</Text>
+            <Text style={[s.sectionTitle, { color: '#E65100' }]}>Action Needed ({actionNeeded.length + transferItems.length})</Text>
           </View>
+          {transferItems.map(({ proc, label, actionable }) => (
+            <TouchableOpacity
+              key={`tr-${proc.id}`}
+              style={s.actionCard}
+              onPress={() => router.push(`/procedures/${proc.id}?anchor=transfer`)}
+              data-testid={`action-transfer-card-${proc.id}`}
+            >
+              <View style={[s.actionIconWrap, { backgroundColor: (actionable ? '#0D47A1' : '#90A4AE') + '18' }]}>
+                <Ionicons name="swap-horizontal" size={20} color={actionable ? '#0D47A1' : '#90A4AE'} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.actionPatient}>{proc.patient_name}</Text>
+                <Text style={s.actionLabel}>{label}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#B0BEC5" />
+            </TouchableOpacity>
+          ))}
           {actionNeeded.slice(0, 4).map((proc: any) => {
             const info = ACTION_NEEDED_MAP[proc.status];
             return (
@@ -313,44 +350,6 @@ function SupervisorDashboard({ stats, procedures, selectedDate, setSelectedDate,
 
   return (
     <>
-      {/* iter-381: Pending Transfer Approvals pinned to very top of Supervisor
-          dashboard so it's the first section they see on Home. */}
-      {pendingTransfers.length > 0 && (
-        <View style={[s.section, { backgroundColor: '#E3F2FD', borderColor: '#90CAF9', borderWidth: 1 }]} data-testid="sup-pending-transfers-section">
-          <View style={s.sectionHeader}>
-            <Ionicons name="swap-horizontal" size={20} color="#0D47A1" />
-            <Text style={[s.sectionTitle, { color: '#0D47A1', fontSize: 15 }]}>Case Transfers ({pendingTransfers.length})</Text>
-          </View>
-          {pendingTransfers.slice(0, 5).map((proc: any) => {
-            const trStatus = proc.transfer_request.status;
-            const actionable = trStatus === 'pending_supervisor';
-            const stageTxt = actionable ? 'Review Now' : trStatus === 'pending_incharge' ? 'With In-Charge' : 'With Recipient';
-            return (
-            <TouchableOpacity
-              key={proc.id}
-              style={s.approvalCard}
-              onPress={() => router.push(`/procedures/${proc.id}?anchor=transfer`)}
-              data-testid={`pending-transfer-card-${proc.id}`}
-            >
-              <View style={[s.approvalPhaseWrap, { backgroundColor: '#BBDEFB' }]}>
-                <Ionicons name="swap-horizontal" size={16} color="#0D47A1" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.approvalPatient}>{proc.patient_name}</Text>
-                <Text style={s.approvalSub}>
-                  {proc.transfer_request.from_student_name} → {proc.transfer_request.to_student_name}
-                </Text>
-              </View>
-              {actionable && <PulsingDoubleArrow color="#0D47A1" size={14} delayMs={120} />}
-              <View style={[s.reviewChip, { backgroundColor: actionable ? '#0D47A1' : '#90A4AE' }]}>
-                <Text style={s.reviewChipText}>{stageTxt}</Text>
-              </View>
-            </TouchableOpacity>
-            );
-          })}
-        </View>
-      )}
-
       {/* Stats */}
       <View style={s.statsRow}>
         <StatCard label="To Review" value={stats.pending_my_approval || pendingApproval.length} color="#E65100" icon="document-attach" onPress={() => router.push('/procedures')} />
@@ -382,13 +381,40 @@ function SupervisorDashboard({ stats, procedures, selectedDate, setSelectedDate,
         </View>
       </View>
 
-      {/* Pending Approval Queue */}
-      {pendingApproval.length > 0 && (
-        <View style={s.section}>
+      {/* Action Needed — phase approvals + case transfers (iter-383) */}
+      {(pendingApproval.length + pendingTransfers.length) > 0 && (
+        <View style={s.section} data-testid="sup-action-needed-section">
           <View style={s.sectionHeader}>
-            <Ionicons name="clipboard-outline" size={18} color="#E65100" />
-            <Text style={[s.sectionTitle, { color: '#E65100' }]}>Pending Your Approval ({pendingApproval.length})</Text>
+            <Ionicons name="flash" size={18} color="#E65100" />
+            <Text style={[s.sectionTitle, { color: '#E65100' }]}>Action Needed ({pendingApproval.length + pendingTransfers.length})</Text>
           </View>
+          {pendingTransfers.slice(0, 5).map((proc: any) => {
+            const trStatus = proc.transfer_request.status;
+            const actionable = trStatus === 'pending_supervisor';
+            const stageTxt = actionable ? 'Review Now' : trStatus === 'pending_incharge' ? 'With In-Charge' : 'With Recipient';
+            return (
+            <TouchableOpacity
+              key={`tr-${proc.id}`}
+              style={s.approvalCard}
+              onPress={() => router.push(`/procedures/${proc.id}?anchor=transfer`)}
+              data-testid={`pending-transfer-card-${proc.id}`}
+            >
+              <View style={[s.approvalPhaseWrap, { backgroundColor: '#BBDEFB' }]}>
+                <Ionicons name="swap-horizontal" size={16} color="#0D47A1" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.approvalPatient}>{proc.patient_name}</Text>
+                <Text style={s.approvalSub}>
+                  Transfer: {proc.transfer_request.from_student_name} → {proc.transfer_request.to_student_name}
+                </Text>
+              </View>
+              {actionable && <PulsingDoubleArrow color="#0D47A1" size={14} delayMs={120} />}
+              <View style={[s.reviewChip, { backgroundColor: actionable ? '#0D47A1' : '#90A4AE' }]}>
+                <Text style={s.reviewChipText}>{stageTxt}</Text>
+              </View>
+            </TouchableOpacity>
+            );
+          })}
           {pendingApproval.slice(0, 5).map((proc: any) => {
             const phase = getPhaseFromStatus(proc.status);
             return (
@@ -497,44 +523,6 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
 
   return (
     <>
-      {/* iter-381: Pending Transfer Approvals pinned to very top of In-Charge
-          dashboard so it's the first thing they see on Home. */}
-      {pendingTransfers.length > 0 && (
-        <View style={[s.section, { backgroundColor: '#E3F2FD', borderColor: '#90CAF9', borderWidth: 1 }]} data-testid="ic-pending-transfers-section">
-          <View style={s.sectionHeader}>
-            <Ionicons name="swap-horizontal" size={20} color="#0D47A1" />
-            <Text style={[s.sectionTitle, { color: '#0D47A1', fontSize: 15 }]}>Case Transfers ({pendingTransfers.length})</Text>
-          </View>
-          {pendingTransfers.slice(0, 5).map((proc: any) => {
-            const trStatus = proc.transfer_request.status;
-            const actionable = trStatus === 'pending_incharge';
-            const stageTxt = actionable ? 'Review Now' : trStatus === 'pending_supervisor' ? 'With Supervisor' : 'With Recipient';
-            return (
-            <TouchableOpacity
-              key={proc.id}
-              style={s.approvalCard}
-              onPress={() => router.push(`/procedures/${proc.id}?anchor=transfer`)}
-              data-testid={`ic-pending-transfer-${proc.id}`}
-            >
-              <View style={[s.approvalPhaseWrap, { backgroundColor: '#BBDEFB' }]}>
-                <Ionicons name="swap-horizontal" size={16} color="#0D47A1" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.approvalPatient}>{proc.patient_name}</Text>
-                <Text style={s.approvalSub}>
-                  {proc.transfer_request.from_student_name} → {proc.transfer_request.to_student_name}
-                </Text>
-              </View>
-              {actionable && <PulsingDoubleArrow color="#0D47A1" size={14} delayMs={120} />}
-              <View style={[s.reviewChip, { backgroundColor: actionable ? '#0D47A1' : '#90A4AE' }]}>
-                <Text style={s.reviewChipText}>{stageTxt}</Text>
-              </View>
-            </TouchableOpacity>
-            );
-          })}
-        </View>
-      )}
-
       {/* Stats */}
       <View style={s.statsRow}>
         <StatCard label="Total" value={stats.total} color="#283593" icon="layers" onPress={() => router.push('/procedures')} />
@@ -593,12 +581,39 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
       )}
 
       {/* Pending Review */}
-      {pendingApproval.length > 0 && (
-        <View style={s.section}>
+      {(pendingApproval.length + pendingTransfers.length) > 0 && (
+        <View style={s.section} data-testid="ic-action-needed-section">
           <View style={s.sectionHeader}>
-            <Ionicons name="clipboard-outline" size={18} color="#E65100" />
-            <Text style={[s.sectionTitle, { color: '#E65100' }]}>Pending Review ({pendingApproval.length})</Text>
+            <Ionicons name="flash" size={18} color="#E65100" />
+            <Text style={[s.sectionTitle, { color: '#E65100' }]}>Action Needed ({pendingApproval.length + pendingTransfers.length})</Text>
           </View>
+          {pendingTransfers.slice(0, 5).map((proc: any) => {
+            const trStatus = proc.transfer_request.status;
+            const actionable = trStatus === 'pending_incharge';
+            const stageTxt = actionable ? 'Review Now' : trStatus === 'pending_supervisor' ? 'With Supervisor' : 'With Recipient';
+            return (
+            <TouchableOpacity
+              key={`tr-${proc.id}`}
+              style={s.approvalCard}
+              onPress={() => router.push(`/procedures/${proc.id}?anchor=transfer`)}
+              data-testid={`ic-pending-transfer-${proc.id}`}
+            >
+              <View style={[s.approvalPhaseWrap, { backgroundColor: '#BBDEFB' }]}>
+                <Ionicons name="swap-horizontal" size={16} color="#0D47A1" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.approvalPatient}>{proc.patient_name}</Text>
+                <Text style={s.approvalSub}>
+                  Transfer: {proc.transfer_request.from_student_name} → {proc.transfer_request.to_student_name}
+                </Text>
+              </View>
+              {actionable && <PulsingDoubleArrow color="#0D47A1" size={14} delayMs={120} />}
+              <View style={[s.reviewChip, { backgroundColor: actionable ? '#0D47A1' : '#90A4AE' }]}>
+                <Text style={s.reviewChipText}>{stageTxt}</Text>
+              </View>
+            </TouchableOpacity>
+            );
+          })}
           {pendingApproval.slice(0, 5).map((proc: any) => {
             const phase = getPhaseFromStatus(proc.status);
             return (
@@ -1000,7 +1015,7 @@ export default function DashboardScreen() {
         {isNurse && <ScheduledCasesSection router={router} />}
 
         {isStudent && (
-          <StudentDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
+          <StudentDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} userId={user?.id || (user as any)?._id} />
         )}
         {isSupervisor && (
           <SupervisorDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} userId={user?.id} />
@@ -1009,7 +1024,7 @@ export default function DashboardScreen() {
           <InChargeDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
         )}
         {!isStudent && !isSupervisor && !isInCharge && !isNurse && (
-          <StudentDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} />
+          <StudentDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} userId={user?.id || (user as any)?._id} />
         )}
 
         {/* iter-348: Implant Survival Analytics quick-link — visible to
