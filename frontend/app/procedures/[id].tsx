@@ -823,19 +823,6 @@ export default function ProcedureDetailScreen() {
         ref={mainScrollRef}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* iter-380: Transfer Case approval card — surfaced at the TOP of the
-            case detail so supervisors / in-charges / recipients see the
-            Approve / Reject buttons the moment they open the case (same UX
-            weight as Phase approval buttons). The internal component decides
-            whether to render based on the viewer's role and transfer state. */}
-        <View
-          onLayout={(e) => { transferAnchorY.current = e.nativeEvent.layout.y; }}
-          data-testid="transfer-anchor"
-          testID="transfer-anchor"
-        >
-          <TransferApprovalCard procedure={procedure} onChanged={() => loadProcedure()} />
-        </View>
-
         {/* Pre-Op Augmentation Checklist (iter-136) — auto-derived rule-based
             augmentation/grafting plan items. Hidden on completed cases (already
             signed off; reviewable inside the phase data sections). */}
@@ -1060,8 +1047,19 @@ export default function ProcedureDetailScreen() {
           />
         )}
 
-        {/* iter-375: Student Contribution Timeline — shows the ownership
-            history of the case with per-student phase segments + durations.
+        {/* iter-383: Transfer Case approval card — placed between the phase
+            chevron pills and the Treatment Progress section (per user request).
+            The component decides what to render based on viewer role/stage. */}
+        <View
+          onLayout={(e) => { transferAnchorY.current = e.nativeEvent.layout.y; }}
+          data-testid="transfer-anchor"
+          testID="transfer-anchor"
+        >
+          <TransferApprovalCard procedure={procedure} onChanged={() => loadProcedure()} />
+        </View>
+
+        {/* iter-375: Student Contribution Timeline / Transfer Handoff — shows
+            the ownership history of the case with per-student phase segments.
             Auto-hides if the case never changed hands. */}
         <ContributionTimelineCard procedureId={String(id)} />
 

@@ -1,0 +1,85 @@
+{
+  "summary": "iter-355 frontend-only verification of Case-Transfer visibility/placement across 3 roles on live pending transfer (case 69f640160ae04a75cf8d0cd8 — Gaurav→Atharva, status=pending_supervisor). All 7 required scenarios PASS. No Approve/Reject/Cancel confirm actions were taken; transfer state preserved.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "All case-detail + dashboard screens (Supervisor/IC/Student)", "issues": ["Console spam: 12+ warnings 'Unexpected text node: . A text node cannot be a child of a <View>' on every render of the Case Transfer card / case-detail screen. Likely a stray '{condition && ' text-node in TransferApprovalCard.tsx or procedures/[id].tsx. Non-blocking but pollutes console and indicates a JSX bug (a whitespace/string being rendered as child of View)."]}
+    ]
+  },
+  "verification_matrix": {
+    "supervisor_home": {
+      "action_needed_section_visible": true,
+      "transfer_entry_first_before_regular_phase_entries": true,
+      "transfer_shows_Review_Now_chip": true,
+      "patient_TEST_MUA_88c4430c_visible": true,
+      "transfer_direction_text_correct": "Dr. Gaurav Pandey → Dr. Atharva Mahadik",
+      "old_blue_Case_Transfers_section_absent": true,
+      "regular_phase_entries_below": ["P1 Approval Test (Dr. Gaurav)", "P2 Phase2 Test (Gaurav Pandey)"]
+    },
+    "supervisor_case_detail": {
+      "url_has_anchor_transfer": true,
+      "dom_order_correct": "case-progress-indicator(Y=276) -> transfer-anchor(with Approve/Reject buttons) -> treatment-timeline(Y=604)",
+      "Approve_Transfer_button_visible": true,
+      "Reject_Transfer_button_visible": true,
+      "stage_pill_text": "Awaiting your Supervisor approval",
+      "did_not_click_approve_or_reject": true
+    },
+    "incharge_home": {
+      "action_needed_section_visible": true,
+      "transfer_entry_visible_with_With_Supervisor_badge": true,
+      "no_Review_Now_chip_for_IC": true,
+      "old_Case_Transfers_section_absent": true
+    },
+    "incharge_case_detail": {
+      "observer_view_rendered": true,
+      "stage_pill_text": "Awaiting Supervisor approval (Dr. Paresh Gandhi)",
+      "info_note_visible": "No action needed from you at this stage — it is not your turn in the approval chain.",
+      "approve_reject_buttons_absent_for_IC": true,
+      "dom_order_correct": "case-progress-indicator(Y=276) -> transfer-anchor(Y=318) -> treatment-timeline(Y=638)"
+    },
+    "student_initiator_home": {
+      "action_needed_section_visible": true,
+      "transfer_tracker_entry_visible": "TEST_MUA_88c4430c — 'Transfer in progress — with Supervisor'",
+      "listed_at_top_of_action_needed": true,
+      "drafts_section_still_present": "Drafts (7)",
+      "regular_action_needed_entries_below": ["Submit Phase 3 data (TEST_iter354 FE Patient)", "Submit Phase 2 surgical data (multiple)"]
+    },
+    "student_case_detail": {
+      "url_has_anchor_transfer": true,
+      "Cancel_Transfer_button_visible": true,
+      "stage_pill_text": "Transfer in progress → supervisor",
+      "dom_order_correct": "case-progress-indicator(Y=292) -> transfer-anchor(Y=334) -> treatment-timeline(Y=596)",
+      "did_not_click_cancel": true
+    },
+    "regression": {
+      "build_stamp_text_on_login": "Build 2026.07.21-a (visible)",
+      "no_blank_screens": true,
+      "student_home_still_shows_regular_Action_Needed_and_Drafts": true
+    }
+  },
+  "test_report_links": [],
+  "action_items": [
+    "P3 testability: data-testid attributes declared in JSX for RN-Web <View>/<TouchableOpacity>/<Text> nodes DO NOT propagate to the DOM for many of the review-request test-ids (sup-action-needed-section, ic-action-needed-section, pending-transfer-card-*, action-transfer-card-*, transfer-approval-card, transfer-approve-btn, transfer-reject-btn, transfer-cancel-btn, transfer-observer-note, build-stamp). Only test-ids landed on ScrollView anchor Views and a few others (case-progress-indicator, transfer-anchor, treatment-timeline, case-progress-chip-*) actually render as data-testid HTML attrs. Recommend switching to nativeID or wrapping in a div-like element / using accessibilityLabel + a stable helper so Playwright can target these components reliably. This is the SAME known RN-Web propagation gap flagged in iteration_303.",
+    "P2 console noise: 'Unexpected text node: . A text node cannot be a child of a <View>' printed ~12 times when the Case Transfer card renders (all 3 roles). Investigate TransferApprovalCard.tsx and procedures/[id].tsx around the transfer block for a stray string/whitespace child inside a <View> (common causes: conditional expressions like `{cond && ' '}`, un-wrapped whitespace between JSX siblings, or a raw ternary yielding a string outside <Text>)."
+  ],
+  "critical_code_review_comments": [
+    "dashboard.tsx L232, L400 — TouchableOpacity uses data-testid attr directly; on RN-Web, TouchableOpacity accepts testID (prop) which is auto-mapped to data-testid, but a plain data-testid HTML attr will NOT propagate through the accessibility layer. Convert `data-testid={...}` to `testID={...}` for consistent DOM propagation.",
+    "dashboard.tsx L386, L585 — Same issue on the section-wrapping <View>: use `testID` instead of `data-testid`.",
+    "TransferApprovalCard.tsx observer branch: `transfer-observer-note`, `transfer-approve-btn`, `transfer-reject-btn`, `transfer-cancel-btn`, `transfer-approval-card` all need to switch from `data-testid` to `testID`.",
+    "auth/login.tsx L204 — the Build stamp <Text> uses data-testid instead of testID; the text is visible but the attr does not reach the DOM.",
+    "Content ordering fix (main deliverable) is correct: the Case Transfer card renders between the phase chevron pills (case-progress-indicator) and Treatment Progress (treatment-timeline) for all 3 roles, verified via bounding-rect Y offsets.",
+    "Old blue 'Case Transfers' section is fully removed — confirmed via body text absence on all 3 role dashboards.",
+    "Observer view for IC correctly hides Approve/Reject buttons and shows 'No action needed from you at this stage' info note — role gating works.",
+    "console spam of 'text node inside <View>' warnings should be tracked as a P2 — indicates a subtle JSX child bug in the transfer card path."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100% for visibility & DOM-order requirements; testids partially propagated (known RN-Web gap)"},
+  "test_credentials": "Supervisor Paresh.gandhi / Supervisor@123; IC Abhijit.patil / Admin@123; Student Gaurav.pandey / Student@123 — all working",
+  "seed_data_creation": "No seed data created. Pending transfer on case 69f640160ae04a75cf8d0cd8 (Gaurav → Atharva, status=pending_supervisor) preserved intact — NO approve/reject/cancel confirm actions taken during this run.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Case 69f640160ae04a75cf8d0cd8 has an active pending_supervisor transfer (Gaurav → Atharva) that MUST be preserved for user verification. Patient is TEST_MUA_88c4430c. All 3 role dashboards + case detail placements verified visually + via bounding-rect Y ordering. For any future Playwright targeting of transfer UI, do NOT rely on data-testid HTML attrs for TouchableOpacity/View — use text selectors (page.get_by_text('Review Now') / 'Approve Transfer' / 'Cancel Transfer' etc.) or convert JSX attrs from data-testid to testID first. testIDs that DO propagate on this screen: case-progress-indicator, case-progress-chip-0/1, transfer-anchor, treatment-timeline, implant-plan-status-*.",
+  "rca of the issue": "Not applicable — this run is a placement verification, no bugs to RCA. Only testability + console-noise gaps identified."
+}
