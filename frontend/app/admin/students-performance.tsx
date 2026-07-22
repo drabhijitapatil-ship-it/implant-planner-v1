@@ -33,6 +33,8 @@ export default function StudentsPerformanceScreen() {
   const [rows, setRows] = useState<StudentRow[]>([]);
   const [query, setQuery] = useState('');
 
+  const [selectedDept, setSelectedDept] = useState<string>('all');
+
   const load = useCallback(async () => {
     try {
       const res = await api.get('/dashboard/stats');
@@ -47,12 +49,29 @@ export default function StudentsPerformanceScreen() {
 
   useEffect(() => { if (canAccess) load(); else if (!authLoading) setLoading(false); }, [canAccess, authLoading, load]);
 
+  const departments = useMemo(() => {
+    const set = new Set<string>();
+    rows.forEach((r) => {
+      if (r.department_name) set.add(r.department_name);
+    });
+    return Array.from(set).sort();
+  }, [rows]);
+
+  const hasUnassigned = useMemo(() => rows.some((r) => !r.department_name), [rows]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const sorted = [...rows].sort((a, b) => (b.completed || 0) - (a.completed || 0));
-    if (!q) return sorted;
-    return sorted.filter((r) => (r.student_name || '').toLowerCase().includes(q));
-  }, [rows, query]);
+    let list = [...rows].sort((a, b) => (b.completed || 0) - (a.completed || 0));
+    if (selectedDept !== 'all') {
+      if (selectedDept === 'unassigned') {
+        list = list.filter((r) => !r.department_name);
+      } else {
+        list = list.filter((r) => r.department_name === selectedDept);
+      }
+    }
+    if (!q) return list;
+    return list.filter((r) => (r.student_name || '').toLowerCase().includes(q));
+  }, [rows, query, selectedDept]);
 
   if (authLoading || loading) {
     return <SafeAreaView style={s.c}><ActivityIndicator size="large" color="#1565C0" style={{ marginTop: 80 }} /></SafeAreaView>;
@@ -101,12 +120,59 @@ export default function StudentsPerformanceScreen() {
         )}
       </View>
 
+      {(departments.length > 0 || hasUnassigned) && (
+        <View style={{ height: 48 }}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={s.deptFilterBar}
+          >
+            <TouchableOpacity
+              style={[s.deptChip, selectedDept === 'all' && s.deptChipActive]}
+              onPress={() => setSelectedDept('all')}
+              data-testid="dept-filter-all"
+            >
+              <Text style={[s.deptChipText, selectedDept === 'all' && s.deptChipTextActive]}>
+                All ({rows.length})
+              </Text>
+            </TouchableOpacity>
+            {departments.map((dept) => {
+              const count = rows.filter((r) => r.department_name === dept).length;
+              const active = selectedDept === dept;
+              return (
+                <TouchableOpacity
+                  key={dept}
+                  style={[s.deptChip, active && s.deptChipActive]}
+                  onPress={() => setSelectedDept(dept)}
+                  data-testid={`dept-filter-${dept}`}
+                >
+                  <Text style={[s.deptChipText, active && s.deptChipTextActive]}>
+                    {dept} ({count})
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+            {hasUnassigned && (
+              <TouchableOpacity
+                style={[s.deptChip, selectedDept === 'unassigned' && s.deptChipActive]}
+                onPress={() => setSelectedDept('unassigned')}
+                data-testid="dept-filter-unassigned"
+              >
+                <Text style={[s.deptChipText, selectedDept === 'unassigned' && s.deptChipTextActive]}>
+                  Unassigned ({rows.filter((r) => !r.department_name).length})
+                </Text>
+              </TouchableOpacity>
+            )}
+          </ScrollView>
+        </View>
+      )}
+
       <ScrollView
         contentContainerStyle={{ padding: 16, paddingTop: 8, paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
       >
         {filtered.length === 0 ? (
-          <Text style={s.empty}>{query ? 'No students match your search.' : 'No student data yet.'}</Text>
+          <Text style={s.empty}>{query || selectedDept !== 'all' ? 'No students match your filter.' : 'No student data yet.'}</Text>
         ) : (
           filtered.map((st, idx) => (
             <TouchableOpacity
@@ -119,11 +185,12 @@ export default function StudentsPerformanceScreen() {
               <View style={s.rank}><Text style={s.rankT}>#{idx + 1}</Text></View>
               <View style={{ flex: 1 }}>
                 <Text style={s.name}>{st.student_name}</Text>
-                {st.department_name && (
-                  <Text style={s.dept} numberOfLines={1}>
-                    <Ionicons name="business-outline" size={10} color="#78909C" /> {st.department_name}
-                  </Text>
-                )}
+                {st.department_name ? (
+                  <View style={s.deptTag}>
+                    <Ionicons name="business-outline" size={11} color="#37474F" />
+                    <Text style={s.deptText} numberOfLines={1}>{st.department_name}</Text>
+                  </View>
+                ) : null}
                 <View style={s.stats}>
                   <View style={s.chip}><Text style={[s.chipT, { color: '#1A73E8' }]}>{st.total} total</Text></View>
                   <View style={s.chip}><Text style={[s.chipT, { color: '#4CAF50' }]}>{st.completed} done</Text></View>
@@ -146,23 +213,53 @@ const s = StyleSheet.create({
   sub: { fontSize: 12, color: '#546E7A', marginTop: 2 },
   searchBox: {
     flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FFF',
-    marginHorizontal: 16, marginTop: 12, paddingHorizontal: 12, paddingVertical: 10,
+    marginHorizontal: 16, marginTop: 12, marginBottom: 8, paddingHorizontal: 12, paddingVertical: 10,
     borderRadius: 10, borderWidth: 1, borderColor: '#CFD8DC',
+  },
+  deptFilterBar: {
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    gap: 8,
+    alignItems: 'center',
+  },
+  deptChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#CFD8DC',
+  },
+  deptChipActive: {
+    backgroundColor: '#1565C0',
+    borderColor: '#1565C0',
+  },
+  deptChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#455A64',
+  },
+  deptChipTextActive: {
+    color: '#FFFFFF',
   },
   searchInput: { flex: 1, fontSize: 14, color: '#1e2a44' },
   empty: { fontSize: 13, color: '#78909C', textAlign: 'center', marginTop: 40 },
   card: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderRadius: 12,
-    padding: 12, marginBottom: 8, gap: 12,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3, elevation: 1,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderRadius: 14,
+    padding: 12, marginBottom: 8, gap: 12, borderWidth: 1, borderColor: '#E2E8F0',
+    shadowColor: '#0F172A', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3, elevation: 1,
   },
-  rank: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#E3F2FD', justifyContent: 'center', alignItems: 'center' },
+  rank: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#E3F2FD', justifyContent: 'center', alignItems: 'center' },
   rankT: { fontSize: 12, fontWeight: '800', color: '#1565C0' },
-  name: { fontSize: 15, fontWeight: '600', color: '#1A1A1A' },
-  dept: { fontSize: 11, color: '#78909C', marginTop: 2 },
-  stats: { flexDirection: 'row', gap: 8, marginTop: 4 },
-  chip: { backgroundColor: '#F5F7FA', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
-  chipT: { fontSize: 10, fontWeight: '600' },
+  name: { fontSize: 15, fontWeight: '700', color: '#0F172A' },
+  deptTag: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#ECEFF1',
+    paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, alignSelf: 'flex-start', marginTop: 3, marginBottom: 2,
+  },
+  deptText: { fontSize: 11, fontWeight: '700', color: '#37474F' },
+  stats: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
+  chip: { backgroundColor: '#F5F7FA', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  chipT: { fontSize: 10.5, fontWeight: '700' },
   blockedCard: { margin: 24, backgroundColor: '#FFF', borderRadius: 14, padding: 24, alignItems: 'center', gap: 10 },
   blockedTitle: { fontSize: 16, fontWeight: '800', color: '#C62828' },
   blockedBody: { fontSize: 13, color: '#546E7A', textAlign: 'center' },

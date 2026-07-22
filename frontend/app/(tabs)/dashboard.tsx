@@ -1609,11 +1609,14 @@ function StudentPerformanceSection({
                   </View>
                 )}
               </View>
-              {st.department_name && (
-                <Text style={s.perfDept} numberOfLines={1}>
-                  <Ionicons name="business-outline" size={10} color="#78909C" /> {st.department_name}
-                </Text>
-              )}
+              {st.department_name ? (
+                <View style={s.perfDeptTag}>
+                  <Ionicons name="business-outline" size={11} color="#37474F" />
+                  <Text style={s.perfDeptText} numberOfLines={1}>
+                    {st.department_name}
+                  </Text>
+                </View>
+              ) : null}
               <View style={s.perfStats}>
                 <View style={s.perfChip}>
                   <Text style={[s.perfChipText, { color: "#1A73E8" }]}>
@@ -1789,11 +1792,14 @@ function SupervisorPerformanceSection({
                   </View>
                 )}
               </View>
-              {sp.department_name && (
-                <Text style={s.perfDept} numberOfLines={1}>
-                  <Ionicons name="business-outline" size={10} color="#78909C" /> {sp.department_name}
-                </Text>
-              )}
+              {sp.department_name ? (
+                <View style={s.perfDeptTag}>
+                  <Ionicons name="business-outline" size={11} color="#37474F" />
+                  <Text style={s.perfDeptText} numberOfLines={1}>
+                    {sp.department_name}
+                  </Text>
+                </View>
+              ) : null}
               <View style={s.perfStats}>
                 <View style={s.perfChip}>
                   <Text style={[s.perfChipText, { color: "#1A73E8" }]}>
@@ -2514,35 +2520,49 @@ const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#FFF",
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 12,
     marginBottom: 8,
     gap: 12,
-    shadowColor: "#000",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    shadowColor: "#0F172A",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 3,
     elevation: 1,
   },
   perfRank: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: "#FFF8E1",
     justifyContent: "center",
     alignItems: "center",
   },
   perfRankText: { fontSize: 12, fontWeight: "800", color: "#F57F17" },
-  perfName: { fontSize: 15, fontWeight: "600", color: "#1A1A1A" },
-  perfDept: { fontSize: 11, color: "#78909C", marginTop: 2 },
-  perfStats: { flexDirection: "row", gap: 8, marginTop: 4 },
+  perfName: { fontSize: 15, fontWeight: "700", color: "#0F172A" },
+  perfDeptTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#ECEFF1",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    alignSelf: "flex-start",
+    marginTop: 3,
+    marginBottom: 2,
+  },
+  perfDeptText: { fontSize: 11, fontWeight: "700", color: "#37474F" },
+  perfStats: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 4 },
   perfChip: {
     backgroundColor: "#F5F7FA",
     borderRadius: 6,
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
   },
-  perfChipText: { fontSize: 10, fontWeight: "600" },
+  perfChipText: { fontSize: 10.5, fontWeight: "700" },
 
   // Show more / less button used by Student Performance + Recent Activity
   showMoreBtn: {

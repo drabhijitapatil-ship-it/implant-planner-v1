@@ -14449,9 +14449,14 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
             _all_person_ids += [r["supervisor_id"] for r in supervisor_stats if r.get("supervisor_id")]
             _valid_person_oids = [ObjectId(i) for i in set(_all_person_ids) if ObjectId.is_valid(i)]
             _dept_id_by_person: Dict[str, Optional[str]] = {}
+            _direct_dept_name_by_person: Dict[str, str] = {}
             if _valid_person_oids:
-                async for u in db.users.find({"_id": {"$in": _valid_person_oids}}, {"department_id": 1}):
-                    _dept_id_by_person[str(u["_id"])] = u.get("department_id") or None
+                async for u in db.users.find({"_id": {"$in": _valid_person_oids}}, {"department_id": 1, "department_name": 1, "department": 1}):
+                    uid_str = str(u["_id"])
+                    _dept_id_by_person[uid_str] = u.get("department_id") or None
+                    d_name = u.get("department_name") or u.get("department")
+                    if d_name:
+                        _direct_dept_name_by_person[uid_str] = d_name
             _dept_ids = {d for d in _dept_id_by_person.values() if d}
             _dept_name_by_id: Dict[str, str] = {}
             if _dept_ids:
@@ -14459,13 +14464,15 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
                 async for d in db.departments.find({"_id": {"$in": _valid_dept_oids}}, {"name": 1}):
                     _dept_name_by_id[str(d["_id"])] = d.get("name")
             for r in student_stats:
-                _did = _dept_id_by_person.get(r.get("student_id"))
+                _sid = r.get("student_id")
+                _did = _dept_id_by_person.get(_sid)
                 r["department_id"] = _did
-                r["department_name"] = _dept_name_by_id.get(_did) if _did else None
+                r["department_name"] = (_dept_name_by_id.get(_did) if _did else None) or _direct_dept_name_by_person.get(_sid) or None
             for r in supervisor_stats:
-                _did = _dept_id_by_person.get(r.get("supervisor_id"))
+                _sid = r.get("supervisor_id")
+                _did = _dept_id_by_person.get(_sid)
                 r["department_id"] = _did
-                r["department_name"] = _dept_name_by_id.get(_did) if _did else None
+                r["department_name"] = (_dept_name_by_id.get(_did) if _did else None) or _direct_dept_name_by_person.get(_sid) or None
 
     return result
 
