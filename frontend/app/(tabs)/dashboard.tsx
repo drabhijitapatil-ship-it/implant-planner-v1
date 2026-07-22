@@ -591,7 +591,8 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
           </View>
           {pendingTransfers.slice(0, 5).map((proc: any) => {
             const trStatus = proc.transfer_request.status;
-            const actionable = trStatus === 'pending_incharge';
+            const samePerson = proc.supervisor_id && proc.supervisor_id === proc.implant_incharge_id;
+            const actionable = trStatus === 'pending_incharge' || (trStatus === 'pending_supervisor' && samePerson);
             const stageTxt = actionable ? 'Review Now' : trStatus === 'pending_supervisor' ? 'With Supervisor' : 'With Recipient';
             return (
             <TouchableOpacity

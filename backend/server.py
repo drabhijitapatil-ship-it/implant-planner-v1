@@ -3916,6 +3916,36 @@ async def _advance_transfer(procedure_id: str, proc: dict, current_user: dict,
     uid = current_user["_id"]
     role = current_user.get("role")
 
+    # Same person holds BOTH Supervisor and Implant In-Charge on this case →
+    # single combined approval (mirrors the End-Treatment same_person_both
+    # pattern). Works from either endpoint regardless of the account role.
+    same_person_both = proc.get("supervisor_id") and proc.get("supervisor_id") == proc.get("implant_incharge_id")
+    if same_person_both:
+        if uid != proc.get("supervisor_id") or role not in ("supervisor", "implant_incharge"):
+            raise HTTPException(status_code=403, detail="Only the assigned Supervisor / Implant In-Charge can approve this transfer.")
+        if tr.get("status") not in ("pending_supervisor", "pending_incharge"):
+            raise HTTPException(status_code=400, detail=f"Transfer is not awaiting faculty approval (current: {tr.get('status')}).")
+        now_iso = datetime.now(timezone.utc).isoformat()
+        tr["supervisor_approved_at"] = tr.get("supervisor_approved_at") or now_iso
+        tr["incharge_approved_at"] = now_iso
+        tr["combined_approval"] = True
+        tr["status"] = "pending_recipient"
+        await db.procedures.update_one(
+            {"_id": ObjectId(procedure_id)},
+            {"$set": {"transfer_request": tr}},
+        )
+        await _log_transfer_event(procedure_id, "transfer_supervisor_incharge_approved",
+                                  "approved", uid, request,
+                                  {"combined": True, "roles": ["supervisor", "implant_incharge"]})
+        await _notify_transfer(
+            [tr["to_student_id"], tr["from_student_id"]],
+            title="Case Transfer — Awaiting Your Acceptance",
+            body=f"Faculty approved the transfer. Recipient has {TRANSFER_ACCEPT_WINDOW_HOURS}h to accept.",
+            procedure_id=procedure_id,
+            kind="transfer_recipient",
+        )
+        return {"message": "supervisor & implant_incharge approved", "transfer_request": tr}
+
     if role != expected_role:
         raise HTTPException(status_code=403, detail=f"Only the assigned {expected_role} can approve this step.")
 
@@ -4000,7 +4030,12 @@ async def transfer_decline(procedure_id: str, body: TransferDeclineRequest,
     # Who can decline at each stage?
     stage = tr.get("status")
     allowed = False
-    if role == "supervisor" and proc.get("supervisor_id") == uid and stage == "pending_supervisor":
+    same_person_both = proc.get("supervisor_id") and proc.get("supervisor_id") == proc.get("implant_incharge_id")
+    if same_person_both and uid == proc.get("supervisor_id") and role in ("supervisor", "implant_incharge") \
+            and stage in ("pending_supervisor", "pending_incharge"):
+        # Combined Supervisor + In-Charge rejection (single approver holds both roles).
+        allowed, new_status = True, "rejected_supervisor_incharge"
+    elif role == "supervisor" and proc.get("supervisor_id") == uid and stage == "pending_supervisor":
         allowed, new_status = True, "rejected_supervisor"
     elif role == "implant_incharge" and proc.get("implant_incharge_id") == uid and stage in ("pending_supervisor", "pending_incharge"):
         allowed, new_status = True, "rejected_incharge"

@@ -28,12 +28,15 @@ export default function TransferApprovalCard({ procedure, onChanged }: Props) {
   const role = user?.role;
   const uid = String(user?.id || user?._id || '');
 
-  const view: 'supervisor' | 'incharge' | 'recipient' | 'initiator' | 'observer' | null = useMemo(() => {
+  const view: 'supervisor' | 'incharge' | 'combined' | 'recipient' | 'initiator' | 'observer' | null = useMemo(() => {
     if (!tr || !uid) return null;
     const supId = String(procedure.supervisor_id || '');
     const incId = String(procedure.implant_incharge_id || '');
     const fromId = String(tr.from_student_id || '');
     const toId = String(tr.to_student_id || '');
+    // Same person holds both faculty roles on this case → single combined approval.
+    const samePersonBoth = !!supId && supId === incId;
+    if (samePersonBoth && uid === supId && (role === 'supervisor' || role === 'implant_incharge') && NEEDS_INCHARGE.has(tr.status)) return 'combined';
     if (role === 'supervisor' && supId === uid && tr.status === 'pending_supervisor') return 'supervisor';
     if (role === 'implant_incharge' && incId === uid && tr.status === 'pending_incharge') return 'incharge';
     if (role === 'student' && uid === toId && tr.status === 'pending_recipient') return 'recipient';
@@ -53,7 +56,9 @@ export default function TransferApprovalCard({ procedure, onChanged }: Props) {
         ? 'transfer/supervisor-approve'
         : view === 'incharge'
           ? 'transfer/incharge-approve'
-          : 'transfer/accept';
+          : view === 'combined'
+            ? (tr.status === 'pending_incharge' ? 'transfer/incharge-approve' : 'transfer/supervisor-approve')
+            : 'transfer/accept';
       await api.post(`/procedures/${procedure.id || procedure._id}/${path}`);
       Alert.alert(
         view === 'recipient' ? 'Transfer Accepted' : 'Transfer Approved',
@@ -96,6 +101,7 @@ export default function TransferApprovalCard({ procedure, onChanged }: Props) {
   const stageLabel = {
     supervisor: 'Awaiting your Supervisor approval',
     incharge: 'Awaiting your Implant In-Charge approval',
+    combined: 'Awaiting your approval (Supervisor & In-Charge)',
     recipient: 'Awaiting your acceptance',
     initiator: `Transfer in progress → ${tr.status.replace('pending_', '').replace('_', ' ')}`,
     observer: observerStage,

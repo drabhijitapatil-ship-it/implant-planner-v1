@@ -6801,3 +6801,34 @@ actually working for the ASSIGNED supervisor at the correct stage):
 ### Testing
 - testing_agent iteration_304.json: ALL 7 scenarios PASS across Supervisor / In-Charge / Student (DOM order verified via bounding-rect Y). Live pending transfer preserved (case 69f640160ae04a75cf8d0cd8, Gaurav → Atharva, pending_supervisor).
 - Known pre-existing dev-only console warning documented in /app/memory/known_issues.md (empty text node in case-detail, exists on non-transfer cases, harmless).
+
+---
+
+## 2026-07-22 — Combined approval when Supervisor == Implant In-Charge (iter-384)
+
+### User choices: 1a (single approval → straight to recipient), 2a (rejection logged as combined)
+Root cause: transfers always started at pending_supervisor, and supervisor-approve required
+account role == 'supervisor'. When one person (e.g., Dr. Abhijit Patil, role implant_incharge)
+was assigned BOTH roles on a case (9 such cases in DB), they could never approve → transfer
+stuck; the card showed them the read-only observer view.
+
+### Fix (mirrors End-Treatment same_person_both pattern)
+- server.py `_advance_transfer`: same_person_both branch — the assigned person (role
+  supervisor OR implant_incharge) approves ONCE from either endpoint at either pending stage;
+  both timestamps stamped, `combined_approval: true`, status → pending_recipient; HIPAA log
+  action `transfer_supervisor_incharge_approved` with roles=[supervisor, implant_incharge].
+- server.py `transfer_decline`: combined branch → new_status `rejected_supervisor_incharge`.
+- TransferApprovalCard.tsx: new 'combined' view (takes precedence over observer) — stage pill
+  "Awaiting your approval (Supervisor & In-Charge)", single Approve/Reject; approve endpoint
+  picked from tr.status.
+- dashboard.tsx InChargeDashboard: pending_supervisor transfers on same-person cases now show
+  actionable "Review Now" instead of grey "With Supervisor".
+
+### Testing (2026-07-22)
+- Backend E2E curl: request → combined approve (one click → pending_recipient, both stamps) ✓;
+  request → combined decline (rejected_supervisor_incharge) ✓; normal two-step flow untouched ✓.
+- Frontend screenshots as Abhijit: Home "Review Now" on same-person case; detail shows combined
+  pill + Approve/Reject. 
+- Data: case 699fc5c1248100e8a0d87261 ('Phase2 Test', sup=inc=Abhijit) reassigned to student
+  Gaurav (real account) and left with a LIVE pending_supervisor transfer (Gaurav → Atharva)
+  for user verification. TEST_MUA_88c4430c transfer (normal flow) also still pending.
