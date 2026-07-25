@@ -1,7 +1,6 @@
 import React, { createContext, useState, useContext, useEffect, useRef, useCallback } from 'react';
 import { Alert, AppState } from 'react-native';
 import api, { getToken, setToken, removeToken, setOnAuthFailure, setOnActivity } from '../utils/api';
-import { BACKEND_URL } from '../utils/config';
 import { router } from 'expo-router';
 
 interface User {
@@ -20,6 +19,12 @@ interface User {
   /** Department this user is scoped to. Null/undefined = org-wide (the
    *  behavior every account had before departments existed). */
   department_id?: string | null;
+  department_name?: string | null;
+  department_color?: string | null;
+  /** Full list — an Implant In-Charge (or department-tagged org admin) can be
+   *  tagged to up to 2 departments at once. department_id/_name/_color above
+   *  are just the first one, kept for back-compat. */
+  departments?: { department_id: string; department_name: string | null; department_color: string | null }[];
   /** ISO timestamp set when the user first dismisses the onboarding + workflow
    *  help. Null/undefined means they haven't seen it → frontend routes them
    *  through /onboarding → /help-workflow once before the dashboard. */
@@ -56,6 +61,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const lastActivityRef = useRef<number>(Date.now());
   const sessionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sessionExpiryPromptRef = useRef(false);
   // Mirror of `user` readable from long-lived closures (auth-failure callback).
   const userRef = useRef<User | null>(null);
   useEffect(() => { userRef.current = user; }, [user]);
@@ -64,24 +70,95 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     lastActivityRef.current = Date.now();
   }, []);
 
+  const clearSession = useCallback(async () => {
+    await removeToken('access_token');
+    await removeToken('refresh_token');
+    await removeToken('user');
+    await removeToken('last_activity_at');
+    setUser(null);
+  }, []);
+
+  const logout = useCallback(async () => {
+    try {
+      const accessToken = await getToken('access_token');
+      if (accessToken) {
+        await api.post('/auth/logout');
+      }
+    } catch {
+      // Ignore logout API errors
+    }
+    await clearSession();
+  }, [clearSession]);
+
+  const finishSessionExpiry = useCallback(async () => {
+    try {
+      await logout();
+    } finally {
+      sessionExpiryPromptRef.current = false;
+      setLoading(false);
+      router.replace('/auth/login');
+    }
+  }, [logout]);
+
+  const promptSessionExpired = useCallback((message: string, holdLoading = false) => {
+    if (sessionExpiryPromptRef.current) return;
+    sessionExpiryPromptRef.current = true;
+    if (!holdLoading) {
+      setLoading(false);
+    }
+    Alert.alert(
+      'Session Expired',
+      message,
+      [{ text: 'OK', onPress: () => { void finishSessionExpiry(); } }],
+      { cancelable: false }
+    );
+  }, [finishSessionExpiry]);
+
+  const loadStoredAuth = useCallback(async () => {
+    try {
+      const storedAccessToken = await getToken('access_token');
+      if (storedAccessToken) {
+        // Enforce the 15-minute inactivity rule across app restarts too:
+        // without this, killing and reopening the app silently re-logs the
+        // user in via the 7-day refresh token — a hole on shared clinic
+        // devices. `last_activity_at` is persisted on app background.
+        const lastActivity = Number(await getToken('last_activity_at')) || 0;
+        if (lastActivity && Date.now() - lastActivity > SESSION_TIMEOUT_MS) {
+          promptSessionExpired(
+            'You have been logged out after 15 minutes of inactivity. Please log in again.',
+            true
+          );
+          return;
+        }
+        try {
+          const resp = await api.get('/auth/me');
+          setUser(resp.data);
+        } catch {
+          // Token invalid — try refresh silently (interceptor handles it)
+          // If refresh also fails, interceptor clears tokens
+          await removeToken('access_token');
+          await removeToken('refresh_token');
+          await removeToken('user');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load stored auth:', error);
+    } finally {
+      if (!sessionExpiryPromptRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [promptSessionExpired]);
+
   useEffect(() => {
     loadStoredAuth();
     // Register auth failure callback so interceptor can trigger logout safely.
     // Fires when the access token is rejected AND the refresh attempt fails —
-    // i.e. the session is genuinely over. Redirect to login with an explicit
-    // message instead of leaving the user stranded on a broken screen.
+    // i.e. the session is genuinely over. Prompt the user first, then clear
+    // auth state only after OK so iOS doesn't strand them on a black screen.
     setOnAuthFailure(() => {
-      const wasLoggedIn = !!userRef.current;
-      setUser(null);
-      if (wasLoggedIn) {
-        // Navigate only on OK tap — cancelable:false so a back-button/outside
-        // dismiss can't skip navigation and strand the user on a blank screen.
-        Alert.alert(
-          'Session Expired',
-          'Your session has expired. Please log in again.',
-          [{ text: 'OK', onPress: () => router.replace('/auth/login') }],
-          { cancelable: false }
-        );
+      if (userRef.current) {
+        promptSessionExpired('Your session has expired. Please log in again.');
       }
     });
     // iter-169: Every authenticated API call records activity. Closes the HIPAA
@@ -90,20 +167,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setOnActivity(() => {
       lastActivityRef.current = Date.now();
     });
-  }, []);
+  }, [clearSession, loadStoredAuth, promptSessionExpired]);
 
   // "Kicked out after 15 min of inactivity" flow — used by the in-app
-  // interval only. Navigates on OK tap, not automatically.
+  // interval only. Clears auth immediately so the route guard can send the
+  // user back to sign-in without waiting on any confirmation UI.
   const expireSession = useCallback(() => {
-    logout().then(() => {
-      Alert.alert(
-        'Session Expired',
-        'You have been logged out after 15 minutes of inactivity. Please log in again.',
-        [{ text: 'OK', onPress: () => router.replace('/auth/login') }],
-        { cancelable: false }
-      );
-    });
-  }, []);
+    promptSessionExpired('You have been logged out after 15 minutes of inactivity. Please log in again.');
+  }, [promptSessionExpired]);
 
   // Session inactivity timer — auto-logout when no activity for SESSION_TIMEOUT_MS.
   useEffect(() => {
@@ -150,50 +221,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => sub.remove();
   }, [user]);
 
-  const loadStoredAuth = async () => {
-    try {
-      const storedAccessToken = await getToken('access_token');
-      if (storedAccessToken) {
-        // Enforce the 15-minute inactivity rule across app restarts too:
-        // without this, killing and reopening the app silently re-logs the
-        // user in via the 7-day refresh token — a hole on shared clinic
-        // devices. `last_activity_at` is persisted on app background.
-        const lastActivity = Number(await getToken('last_activity_at')) || 0;
-        if (lastActivity && Date.now() - lastActivity > SESSION_TIMEOUT_MS) {
-          await removeToken('access_token');
-          await removeToken('refresh_token');
-          await removeToken('user');
-          await removeToken('last_activity_at');
-          // Same "Session Expired" confirmation as the live in-app timeout
-          // (expireSession below) — don't silently dump the user on the
-          // login screen with no explanation just because they reopened
-          // the app after being away.
-          Alert.alert(
-            'Session Expired',
-            'You have been logged out after 15 minutes of inactivity. Please log in again.',
-            [{ text: 'OK', onPress: () => router.replace('/auth/login') }],
-            { cancelable: false }
-          );
-          return;
-        }
-        try {
-          const resp = await api.get('/auth/me');
-          setUser(resp.data);
-        } catch {
-          // Token invalid — try refresh silently (interceptor handles it)
-          // If refresh also fails, interceptor clears tokens
-          await removeToken('access_token');
-          await removeToken('refresh_token');
-          await removeToken('user');
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load stored auth:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const login = async (identifier: string, password: string) => {
     const response = await api.post('/auth/login', { identifier, password });
 
@@ -211,22 +238,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await api.post('/auth/register', { name, email, password, role });
     // Auto login after register
     await login(email, password);
-  };
-
-  const logout = async () => {
-    try {
-      const accessToken = await getToken('access_token');
-      if (accessToken) {
-        await api.post('/auth/logout');
-      }
-    } catch {
-      // Ignore logout API errors
-    }
-    await removeToken('access_token');
-    await removeToken('refresh_token');
-    await removeToken('user');
-    await removeToken('last_activity_at');
-    setUser(null);
   };
 
   const updateProfilePhoto = async (photoBase64: string) => {

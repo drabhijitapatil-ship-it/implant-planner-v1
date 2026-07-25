@@ -209,9 +209,15 @@ interface Props {
   /** Fired when the student confirms a 3-unit bridge on a candidate. Parent persists
    *  these on the procedure document (default prosthesis + bridge material). */
   onBridgeConfirmed?: (info: { design: string; material: BridgeMaterial; pontics: string[]; implants: string[] }) => void;
+  /** Callback fired whenever implant plans are updated, passing current plans and completion status. */
+  onPlanUpdated?: (plans: ImplantPlanItem[], isComplete: boolean) => void;
 }
 
 // ── Drilling Protocol Generator ────────────────────────────
+function isPhase1Status(status?: string | null): boolean {
+  if (!status) return true;
+  return ['draft', 'pending_phase1', 'phase1', 'phase1_step1', 'phase1_step2', 'phase1_step3', 'phase1_step4'].includes(status.toLowerCase());
+}
 // Generates a system-specific drilling sequence based on brand, implant diameter, bone type, and length
 function generateDrillingProtocol(brand: string, system: string, diameter: number, boneType: string, length?: number): { step: number; drill: string; speed: string; depth: string; note: string }[] {
   const d = diameter;
@@ -566,7 +572,7 @@ function generateDrillingProtocol(brand: string, system: string, diameter: numbe
   return protocol;
 }
 
-export default function CaseImplantPlanning({ procedureId, isOwner, userRole, torqueValues, procedureStatus, procedureType, medicalAssessment, patientName, patientId, procedureDate, teethPresent, missingTeeth, edentulousSiteMeasurements, defaultOcclusocervical, defaultMesiodistal, onBridgeConfirmed }: Props) {
+export default function CaseImplantPlanning({ procedureId, isOwner, userRole, torqueValues, procedureStatus, procedureType, medicalAssessment, patientName, patientId, procedureDate, teethPresent, missingTeeth, edentulousSiteMeasurements, defaultOcclusocervical, defaultMesiodistal, onBridgeConfirmed, onPlanUpdated }: Props) {
   const [plans, setPlans] = useState<ImplantPlanItem[]>([]);
   const [systems, setSystems] = useState<ImplantSystem[]>([]);
   const [toothRecs, setToothRecs] = useState<Record<string,any>>({});
@@ -607,6 +613,20 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
   const phase2Done = !!procedureStatus && !editableStatuses.includes(procedureStatus);
   const canAddImplant = canEdit && !phase2Done;
   const canDeleteImplant = canEdit && !phase2Done;
+  // Drilling protocol is hidden during Phase 1 (Step 2/4, 3/4) and unlocked in Phase 2+
+  const showDrillingProtocol = !isPhase1Status(procedureStatus);
+
+  const checkImplantPlansComplete = useCallback((plansList: ImplantPlanItem[]) => {
+    if (!plansList || plansList.length === 0) return false;
+    const allValid = plansList.every(p => !!p.system && !!p.diameter && !!p.length);
+    if (!allValid) return false;
+    if (missingTeeth && missingTeeth.length > 0) {
+      const positionsWithPlan = new Set(plansList.map(p => String(p.position)));
+      const allMissingCovered = missingTeeth.every(t => positionsWithPlan.has(String(t)));
+      if (!allMissingCovered) return false;
+    }
+    return true;
+  }, [missingTeeth]);
 
   const [survivalReview, setSurvivalReview] = useState<any | null>(null);
 
@@ -618,7 +638,11 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
         api.get('/implant-library/tooth-recommendations'),
         api.get(`/procedures/${procedureId}`),
       ]);
-      if (planRes.status === 'fulfilled') setPlans(planRes.value.data.implant_plans || []);
+      if (planRes.status === 'fulfilled') {
+        const loadedPlans = planRes.value.data.implant_plans || [];
+        setPlans(loadedPlans);
+        onPlanUpdated?.(loadedPlans, checkImplantPlansComplete(loadedPlans));
+      }
       if (sysRes.status === 'fulfilled') setSystems(sysRes.value.data || []);
       if (toothRes.status === 'fulfilled') setToothRecs(toothRes.value.data || {});
       // iter-345: load survival review so Implant Planning cards can show
@@ -629,7 +653,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
     } finally {
       setLoading(false);
     }
-  }, [procedureId]);
+  }, [procedureId, missingTeeth, checkImplantPlansComplete, onPlanUpdated]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -638,6 +662,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
     try {
       await api.post(`/procedures/${procedureId}/implant-plan`, { implants: newPlans });
       setPlans(newPlans);
+      onPlanUpdated?.(newPlans, checkImplantPlansComplete(newPlans));
       Alert.alert('Saved', `Implant plan saved (${newPlans.length} implant${newPlans.length > 1 ? 's' : ''}).`);
     } catch (err: any) {
       Alert.alert('Error', err.response?.data?.detail || 'Failed to save implant plan.');
@@ -914,26 +939,30 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
                     <Text style={st.deleteBtnText}>Remove</Text>
                   </TouchableOpacity>
                 )}
-                <TouchableOpacity
-                  style={st.protocolBtn}
-                  onPress={() => setExpandedProtocol(expandedProtocol === idx ? null : idx)}
-                  data-testid={`protocol-btn-${idx}`}
-                >
-                  <Ionicons name="construct" size={16} color="#5C6BC0" />
-                  <Text style={st.protocolBtnText}>Drilling Protocol</Text>
-                </TouchableOpacity>
+                {showDrillingProtocol && (
+                  <TouchableOpacity
+                    style={st.protocolBtn}
+                    onPress={() => setExpandedProtocol(expandedProtocol === idx ? null : idx)}
+                    data-testid={`protocol-btn-${idx}`}
+                  >
+                    <Ionicons name="construct" size={16} color="#5C6BC0" />
+                    <Text style={st.protocolBtnText}>Drilling Protocol</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
             {!tileEditable && !isInactive && (
               <View style={st.implantActions}>
-                <TouchableOpacity
-                  style={st.protocolBtn}
-                  onPress={() => setExpandedProtocol(expandedProtocol === idx ? null : idx)}
-                  data-testid={`protocol-btn-${idx}`}
-                >
-                  <Ionicons name="construct" size={16} color="#5C6BC0" />
-                  <Text style={st.protocolBtnText}>Drilling Protocol</Text>
-                </TouchableOpacity>
+                {showDrillingProtocol && (
+                  <TouchableOpacity
+                    style={st.protocolBtn}
+                    onPress={() => setExpandedProtocol(expandedProtocol === idx ? null : idx)}
+                    data-testid={`protocol-btn-${idx}`}
+                  >
+                    <Ionicons name="construct" size={16} color="#5C6BC0" />
+                    <Text style={st.protocolBtnText}>Drilling Protocol</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
             {isInactive && (
@@ -981,30 +1010,32 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
                   )
                 ))}
                 {/* Print / Export Drilling Protocol PDF — single entry, same popover as elsewhere */}
-                <View style={{ marginTop: 8 }}>
-                  <ExportPrintMenu
-                    label="Print / Export Drilling Protocol PDF"
-                    buttonStyle={{ backgroundColor: '#37474F', paddingVertical: 10, borderRadius: 8 }}
-                    textStyle={{ color: '#FFF', fontSize: 12, fontWeight: '700', letterSpacing: 0.3 }}
-                    triggerIcon="share-outline"
-                    triggerIconSize={14}
-                    testID={`drilling-export-print-${idx}`}
-                    popoverTitle="Drilling Protocol"
-                    printLabel="Print drilling protocol"
-                    exportLabel="Export drilling protocol PDF"
-                    onPrint={() => {
-                      const steps = generateDrillingProtocol(plan.brand, plan.system, plan.diameter, plan.bone_type, plan.length);
-                      return printDrillingProtocolPdf({ implant: plan, bone: plan.bone_type, tooth: plan.tooth || '', patientName, patientId, procedureDate, procedureId, steps });
-                    }}
-                    onExport={() => {
-                      const steps = generateDrillingProtocol(plan.brand, plan.system, plan.diameter, plan.bone_type, plan.length);
-                      return exportDrillingProtocolPdf({ implant: plan, bone: plan.bone_type, tooth: plan.tooth || '', patientName, patientId, procedureDate, procedureId, steps });
-                    }}
-                  />
-                </View>
+                {showDrillingProtocol && (
+                  <View style={{ marginTop: 8 }}>
+                    <ExportPrintMenu
+                      label="Print / Export Drilling Protocol PDF"
+                      buttonStyle={{ backgroundColor: '#37474F', paddingVertical: 10, borderRadius: 8 }}
+                      textStyle={{ color: '#FFF', fontSize: 12, fontWeight: '700', letterSpacing: 0.3 }}
+                      triggerIcon="share-outline"
+                      triggerIconSize={14}
+                      testID={`drilling-export-print-${idx}`}
+                      popoverTitle="Drilling Protocol"
+                      printLabel="Print drilling protocol"
+                      exportLabel="Export drilling protocol PDF"
+                      onPrint={() => {
+                        const steps = generateDrillingProtocol(plan.brand, plan.system, plan.diameter, plan.bone_type, plan.length);
+                        return printDrillingProtocolPdf({ implant: plan, bone: plan.bone_type, tooth: plan.tooth || '', patientName, patientId, procedureDate, procedureId, steps });
+                      }}
+                      onExport={() => {
+                        const steps = generateDrillingProtocol(plan.brand, plan.system, plan.diameter, plan.bone_type, plan.length);
+                        return exportDrillingProtocolPdf({ implant: plan, bone: plan.bone_type, tooth: plan.tooth || '', patientName, patientId, procedureDate, procedureId, steps });
+                      }}
+                    />
+                  </View>
+                )}
               </View>
             )}
-            {expandedProtocol === idx && !isInactive && !plan.bone_type && (
+            {expandedProtocol === idx && !isInactive && !plan.bone_type && showDrillingProtocol && (
               <View style={st.inlineProtocol}>
                 <Text style={{ fontSize: 12, color: '#C62828', textAlign: 'center', padding: 8, fontWeight: '600' }}>
                   Bone type is not set for this implant.
@@ -1224,6 +1255,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
         defaultOcclusocervical={defaultOcclusocervical}
         defaultMesiodistal={defaultMesiodistal}
         procedureStatus={procedureStatus}
+        showDrillingProtocol={showDrillingProtocol}
       />
 
       {/* iter-351: Revision Comparison Modal — opened by "Compare with current"
@@ -1324,38 +1356,31 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
 }
 
 // ── Add/Edit Implant Modal Component ───────────────────────
-function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPositions, editItem, medicalAssessment, procedureType, procedureId, allowedTeeth, presetPosition, edentulousSiteMeasurements, defaultOcclusocervical, defaultMesiodistal, missingTeeth, procedureStatus }: {
+function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPositions, editItem, medicalAssessment, procedureType, procedureId, allowedTeeth, presetPosition, edentulousSiteMeasurements, defaultOcclusocervical, defaultMesiodistal, missingTeeth, procedureStatus, showDrillingProtocol: showDrillingProtocolProp }: {
   visible: boolean; onClose: () => void; onSave: (item: ImplantPlanItem) => void;
   systems: ImplantSystem[]; toothRecs: Record<string,any>; usedPositions: string[];
   editItem?: ImplantPlanItem; medicalAssessment?: Record<string, string>;
   procedureType?: string; procedureId: string;
-  /** When provided, only teeth in this list can be selected in the tooth picker. */
   allowedTeeth?: string[];
-  /** Optional tooth to pre-select when opening the modal (from Phase 1 Step 1 missing-teeth quick-click). */
   presetPosition?: string;
-  /** Per-tooth Phase 1 edentulous-site measurements (oc + md). */
   edentulousSiteMeasurements?: Record<string, { oc?: string; md?: string }>;
-  /** Single-tooth fallback — used when only one tooth is marked in Phase 1. */
   defaultOcclusocervical?: string;
   defaultMesiodistal?: string;
-  /** Phase 1 missing teeth list — used to detect cluster status (Scenario 2). */
   missingTeeth?: string[];
-  /** iter-277: current procedure status — used to skip Risk Assessment
-      step when editing an existing implant after Phase 1 approval. */
   procedureStatus?: string;
+  showDrillingProtocol?: boolean;
 }) {
   const [step, setStep] = useState(1);
   const [position, setPosition] = useState('');
 
-  // iter-277: streamlined edit flow when an EXISTING implant is being
-  // edited AFTER Phase 1 has been approved. Skips Step 4 (Risk
-  // Assessment) — the original risk score/level is preserved as-is.
   const POST_PHASE1_APPROVED = new Set([
     'phase1_approved', 'pending_phase2', 'phase2_approved',
     'pending_stage2_surgical', 'stage2_surgical_approved',
     'pending_stage2_prosthetic', 'completed',
   ]);
   const streamlinedEdit = !!editItem && POST_PHASE1_APPROVED.has(procedureStatus || '');
+
+  const showDrillingProtocol = showDrillingProtocolProp !== undefined ? showDrillingProtocolProp : !isPhase1Status(procedureStatus);
 
   // When the modal opens freshly (no editItem) with a presetPosition provided,
   // auto-fill the tooth position so the student skips the picker step.
@@ -1517,6 +1542,8 @@ function ImplantPlanModal({ visible, onClose, onSave, systems, toothRecs, usedPo
         procedureId={procedureId}
         allowedTeeth={allowedTeeth}
         streamlinedEdit={streamlinedEdit}
+        procedureStatus={procedureStatus}
+        showDrillingProtocol={showDrillingProtocol}
       />
     </Modal>
   );
@@ -1533,8 +1560,9 @@ function ModalContent(props: any) {
     showAllResults, setShowAllResults,
     sProcedures, setSProcedures, handleSearch, handleCalcRisk, handleConfirm, toothInfo,
     systems, usedPositions, onSave, procedureType, procedureId, allowedTeeth,
-    streamlinedEdit,
+    streamlinedEdit, procedureStatus,
   } = props;
+  const showDrillingProtocol = props.showDrillingProtocol !== undefined ? props.showDrillingProtocol : !isPhase1Status(procedureStatus);
 
   const BONE_TYPES = ['D1','D2','D3','D4'];
   const PROCEDURES = ['Conventional Implant Placement','Conventional Implant Placement with Bone Graft','Immediate Implant Placement','Immediate Implant Placement with Bone Graft','Sinus Lift','Restricted Bone Height','Narrow Ridge'];
@@ -1707,10 +1735,8 @@ function ModalContent(props: any) {
                     </View>
                   )}
 
-                  {/* Drilling Protocol - shown after system is selected.
-                      iter-278: hidden in streamlined edit mode (post-Phase-1)
-                      to keep the implant size adjustment focused. */}
-                  {selectedSystem && !streamlinedEdit && (
+                  {/* Drilling Protocol - shown after system is selected in Phase 2+ */}
+                  {selectedSystem && !streamlinedEdit && showDrillingProtocol && (
                     <View style={ms.protocolBox} data-testid="drilling-protocol">
                       <View style={ms.protocolHeader}>
                         <Ionicons name="construct" size={18} color="#1565C0" />
@@ -1940,7 +1966,7 @@ function ModalContent(props: any) {
                   )}
 
                   {/* Bone Density Drilling Protocol */}
-                  {result.narrow_ridge_evaluation.recommendation?.drilling_protocol_label && (
+                  {showDrillingProtocol && result.narrow_ridge_evaluation.recommendation?.drilling_protocol_label && (
                     <View style={ms.treatmentRow}>
                       <Ionicons name="construct" size={16} color="#37474F" />
                       <Text style={ms.treatmentRowLabel}>Drilling: </Text>
@@ -2171,10 +2197,8 @@ function ModalContent(props: any) {
                 );
               })()}
 
-              {/* Drilling Protocol Preview (when implant selected).
-                  iter-279: hidden in streamlined edit mode (post-Phase-1)
-                  to keep the implant resize flow focused. */}
-              {selectedImplant && !streamlinedEdit && (
+              {/* Drilling Protocol Preview (when implant selected). */}
+              {selectedImplant && !streamlinedEdit && showDrillingProtocol && (
                 <View style={ms.protocolPreviewCard} data-testid="drilling-protocol-preview">
                   <TouchableOpacity
                     style={ms.protocolPreviewHeader}

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Stack } from 'expo-router';
+import { Stack, router, usePathname } from 'expo-router';
 import { View } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
@@ -28,11 +28,19 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
  */
 function ActivityTracker({ children }: { children: React.ReactNode }) {
   const { recordActivity, user, loading } = useAuth();
+  const pathname = usePathname();
   useScreenCaptureProtection(!!user);
 
   useEffect(() => {
     SplashScreen.hideAsync().catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (loading) return;
+    if (user) return;
+    if (pathname === '/auth/login' || pathname.startsWith('/auth/')) return;
+    router.replace('/auth/login');
+  }, [loading, pathname, user]);
 
   return (
     <View

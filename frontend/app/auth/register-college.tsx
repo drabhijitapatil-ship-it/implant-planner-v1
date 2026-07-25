@@ -23,9 +23,9 @@ const PREFIXES = ['Dr.', 'Mr.', 'Mrs.', 'Ms.', 'Prof.'];
 const PRESET_DEPARTMENTS = [
   'Implant Centre',
   'Centralized Implant Clinic',
-  'Department of Prosthodontics',
-  'Department of Periodontology',
-  'Department of Oral Surgery',
+  'Prosthodontics',
+  'Periodontology',
+  'Oral Surgery',
 ];
 
 export default function CollegeRegisterScreen() {

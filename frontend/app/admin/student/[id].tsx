@@ -13,9 +13,10 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { STATUS_COLORS, STATUS_LABELS } from '../../../constants/checklist';
 import { RecentActivityWidget } from '../../../components/RecentActivityWidget';
 import { NudgeBottomSheet } from '../../../components/NudgeBottomSheet';
+import { getDepartmentBadgeColors, resolveUserDepartments, DepartmentItem } from '../../../utils/departmentBadge';
 
 type Summary = {
-  profile: { id?: string; name?: string; email?: string; role?: string; username?: string; profile_photo?: string; department_id?: string | null; department_name?: string | null } | null;
+  profile: { id?: string; name?: string; email?: string; role?: string; username?: string; profile_photo?: string; department_id?: string | null; department_name?: string | null; department_color?: string | null; departments?: DepartmentItem[] } | null;
   kpis: {
     total: number; completed: number; rejected: number; active: number;
     pending_approval: number; approval_rate: number | null;
@@ -165,12 +166,19 @@ export default function StudentDrillDown() {
             <Text style={s.headerSubtitle} numberOfLines={1}>
               {profile?.email || profile?.username || 'Student performance'}
             </Text>
-            {profile?.department_name && (
-              <View style={s.headerDeptRow}>
-                <Ionicons name="business-outline" size={11} color="#1565C0" />
-                <Text style={s.headerDeptText} numberOfLines={1}>{profile.department_name}</Text>
+            {resolveUserDepartments(profile).length > 0 ? (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                {resolveUserDepartments(profile).map((d: DepartmentItem, i: number) => {
+                  const colors = getDepartmentBadgeColors(d.department_color);
+                  return (
+                    <View key={d.department_id || i} style={[s.headerDeptRow, { backgroundColor: colors.bg, borderColor: colors.border, borderWidth: 1 }]}>
+                      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.dot }} />
+                      <Text style={[s.headerDeptText, { color: colors.text }]} numberOfLines={1}>{d.department_name}</Text>
+                    </View>
+                  );
+                })}
               </View>
-            )}
+            ) : null}
           </View>
         </View>
         {user && ['implant_incharge', 'administrator', 'supervisor'].includes(user.role) && (
@@ -451,8 +459,11 @@ const s = StyleSheet.create({
   identityAvatarTxt: { fontSize: 15, fontWeight: '800', color: '#FFF' },
   headerTitle: { fontSize: 16, fontWeight: '800', color: '#0D47A1' },
   headerSubtitle: { fontSize: 12, color: '#546E7A', marginTop: 2 },
-  headerDeptRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
-  headerDeptText: { fontSize: 11, color: '#1565C0', fontWeight: '600' },
+  headerDeptRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, alignSelf: 'flex-start',
+    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999,
+  },
+  headerDeptText: { fontSize: 11, color: '#37474F', fontWeight: '600' },
   nudgeBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999,

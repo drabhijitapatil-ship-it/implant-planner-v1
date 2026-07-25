@@ -446,6 +446,7 @@ export default function NewProcedureScreen() {
   const [activeTooltip, setActiveTooltip] = useState<{ label: string; tooltip: string } | null>(null);
   const [showSupervisorPicker, setShowSupervisorPicker] = useState(false);
   const [showInchargePicker, setShowInchargePicker] = useState(false);
+  const [isPlanComplete, setIsPlanComplete] = useState(false);
 
   // Dynamic responsive styles to prevent stretching on iPad
   const styles = useMemo(() => ({
@@ -771,7 +772,7 @@ export default function NewProcedureScreen() {
   // but 2 fixed labelled slots ("Occlusal View", "Lateral view/Frontal
   // view") and extras get a free-text label input. Skipped for Existing
   // Implant cases (consistent with CBCT).
-  const INTRAORAL_LABELS = ['Occlusal View', 'Lateral view/Frontal view'];
+  const INTRAORAL_LABELS = ['Occlusal View Photo', 'Lateral/Frontal View'];
   const [intraoralPhotos, setIntraoralPhotos] = useState<(null | { filename: string; original_name: string; content_type: string; label: string })[]>([null, null]);
   const [intraoralUploadingIdx, setIntraoralUploadingIdx] = useState<number | null>(null);
   const [extraIntraoralCount, setExtraIntraoralCount] = useState(0);
@@ -1348,6 +1349,7 @@ export default function NewProcedureScreen() {
             medicalAssessment={formData.medical_assessment}
             teethPresent={formData.teeth_present}
             missingTeeth={formData.missing_teeth}
+            onPlanUpdated={(plans, isComplete) => setIsPlanComplete(isComplete)}
             onBridgeConfirmed={async (info) => {
               // Persist the default prosthesis on the procedure so Phase 2 can pre-fill it.
               // Student edits draft procedures via PUT (edit-fields is reviewer-only).
@@ -1377,71 +1379,84 @@ export default function NewProcedureScreen() {
               </TouchableOpacity>
             </View>
           ) : (
-          <TouchableOpacity style={styles.submitBtn} data-testid="submit-for-approval"
-            onPress={async () => {
-              // Final clinical-correlation summary before submission (Q2=c — also done live).
-              let fetchedPlan: any[] = [];
-              try {
-                const planRes = await api.get(`/procedures/${createdProcedureId}/implant-plan`);
-                fetchedPlan = planRes.data?.implant_plans || [];
-                const positions: string[] = fetchedPlan.map((p: any) => p.position);
-                const finalCheck = validateImplantSelection(formData.implant_procedure_type, formData.teeth_present, positions);
-                if (finalCheck.block) {
-                  Alert.alert('Cannot submit', finalCheck.block);
-                  return;
-                }
-                if (finalCheck.bridgeCandidates.length > 0) {
-                  const lines = finalCheck.bridgeCandidates.map(c =>
-                    `• ${c.implants.join(', ')} → ${c.pontics.join(', ')} as pontic`,
-                  ).join('\n');
-                  // Non-blocking — already prompted live, just remind on submit.
-                  Alert.alert(
-                    'Bridge prosthesis indicated',
-                    `Implant-supported bridge configurations detected:\n\n${lines}\n\nThe student / supervisor will confirm the final prosthesis in Phase 2.`,
-                  );
-                }
-                if (finalCheck.cantileverCandidates.length > 0) {
-                  const lines = finalCheck.cantileverCandidates.map(c =>
-                    `• Tooth ${c.pontic} (anchored on implant ${c.implant})`,
-                  ).join('\n');
-                  Alert.alert(
-                    'Cantilever pontic warning',
-                    `Cantilever pontics detected — review crown-to-implant ratio and occlusal load before proceeding:\n\n${lines}`,
-                  );
-                }
-              } catch {
-                // Plan endpoint failed — don't block submission, but log.
-              }
-
-              // iter-348: Supervisor / Implant In-Charge self-created cases
-              // get auto-approved on submit with no independent second
-              // reviewer — route them through a Review screen first instead
-              // of a bare confirm dialog. Students always get real dual
-              // approval later, so they keep the plain confirm.
-              if (user?.role === 'supervisor' || user?.role === 'implant_incharge') {
-                setReviewPlan(fetchedPlan);
-                setStep('review');
-                return;
-              }
-
-              Alert.alert('Submit for Approval', 'Are you sure you want to submit this case?', [
-                { text: 'Cancel' },
-                {
-                  text: 'Submit', onPress: async () => {
-                    try {
-                      await api.put(`/procedures/${createdProcedureId}`, { status: 'pending_phase1' });
-                      Alert.alert('Success', 'Case submitted for approval.');
-                      router.replace('/(tabs)/dashboard');
-                    } catch (e: any) {
-                      Alert.alert('Error', e.response?.data?.detail || 'Failed to submit');
+            <View style={{ width: '100%' }}>
+              <TouchableOpacity
+                style={[
+                  styles.submitBtn,
+                  !isPlanComplete && { backgroundColor: '#B0BEC5', opacity: 0.5 },
+                ]}
+                disabled={!isPlanComplete}
+                data-testid="submit-for-approval"
+                onPress={async () => {
+                  // Final clinical-correlation summary before submission (Q2=c — also done live).
+                  let fetchedPlan: any[] = [];
+                  try {
+                    const planRes = await api.get(`/procedures/${createdProcedureId}/implant-plan`);
+                    fetchedPlan = planRes.data?.implant_plans || [];
+                    const positions: string[] = fetchedPlan.map((p: any) => p.position);
+                    const finalCheck = validateImplantSelection(formData.implant_procedure_type, formData.teeth_present, positions);
+                    if (finalCheck.block) {
+                      Alert.alert('Cannot submit', finalCheck.block);
+                      return;
                     }
+                    if (finalCheck.bridgeCandidates.length > 0) {
+                      const lines = finalCheck.bridgeCandidates.map(c =>
+                        `• ${c.implants.join(', ')} → ${c.pontics.join(', ')} as pontic`,
+                      ).join('\n');
+                      // Non-blocking — already prompted live, just remind on submit.
+                      Alert.alert(
+                        'Bridge prosthesis indicated',
+                        `Implant-supported bridge configurations detected:\n\n${lines}\n\nThe student / supervisor will confirm the final prosthesis in Phase 2.`,
+                      );
+                    }
+                    if (finalCheck.cantileverCandidates.length > 0) {
+                      const lines = finalCheck.cantileverCandidates.map(c =>
+                        `• Tooth ${c.pontic} (anchored on implant ${c.implant})`,
+                      ).join('\n');
+                      Alert.alert(
+                        'Cantilever pontic warning',
+                        `Cantilever pontics detected — review crown-to-implant ratio and occlusal load before proceeding:\n\n${lines}`,
+                      );
+                    }
+                  } catch {
+                    // Plan endpoint failed — don't block submission, but log.
                   }
-                },
-              ]);
-            }}>
-            <Ionicons name="checkmark-circle" size={20} color="#FFF" />
-            <Text style={styles.submitBtnText}>{user?.role === 'implant_incharge' ? 'Done' : 'Submit for Approval'}</Text>
-          </TouchableOpacity>
+
+                  // iter-348: Supervisor / Implant In-Charge self-created cases
+                  // get auto-approved on submit with no independent second
+                  // reviewer — route them through a Review screen first instead
+                  // of a bare confirm dialog. Students always get real dual
+                  // approval later, so they keep the plain confirm.
+                  if (user?.role === 'supervisor' || user?.role === 'implant_incharge') {
+                    setReviewPlan(fetchedPlan);
+                    setStep('review');
+                    return;
+                  }
+
+                  Alert.alert('Submit for Approval', 'Are you sure you want to submit this case?', [
+                    { text: 'Cancel' },
+                    {
+                      text: 'Submit', onPress: async () => {
+                        try {
+                          await api.put(`/procedures/${createdProcedureId}`, { status: 'pending_phase1' });
+                          Alert.alert('Success', 'Case submitted for approval.');
+                          router.replace('/(tabs)/dashboard');
+                        } catch (e: any) {
+                          Alert.alert('Error', e.response?.data?.detail || 'Failed to submit');
+                        }
+                      }
+                    },
+                  ]);
+                }}>
+                <Ionicons name={isPlanComplete ? "checkmark-circle" : "lock-closed"} size={20} color="#FFF" />
+                <Text style={styles.submitBtnText}>{user?.role === 'implant_incharge' ? 'Done' : 'Submit for Approval'}</Text>
+              </TouchableOpacity>
+              {!isPlanComplete && (
+                <Text style={{ fontSize: 12, color: '#D32F2F', textAlign: 'center', marginTop: 8, fontWeight: '600' }} data-testid="incomplete-implant-warning">
+                  Please select implants for all missing teeth to activate submission.
+                </Text>
+              )}
+            </View>
           )}
         </View>
       </SafeAreaView>
@@ -1911,7 +1926,8 @@ export default function NewProcedureScreen() {
         <View style={styles.fieldContainer}>
           <Text style={styles.label}>Registration Number <Text style={{ color: '#DC3545' }}>*</Text></Text>
           <TextInput style={styles.input} value={formData.registration_number}
-            onChangeText={v => updateForm('registration_number', v)} placeholder="Enter registration number" data-testid="registration-number-input" />
+            keyboardType="phone-pad"
+            onChangeText={v => updateForm('registration_number',  v.replace(/[^0-9+\-\s]/g, ''))} placeholder="Enter registration number" data-testid="registration-number-input" />
         </View>
         {user?.role === 'student' && (
           <View style={styles.fieldContainer}>
@@ -3219,12 +3235,15 @@ export default function NewProcedureScreen() {
                   editable={!!file}
                   data-testid={`intraoral-label-${idx}`}
                 />
-              ) : (
+              ) : file ? (
                 <Text style={{ fontSize: 13, fontWeight: '800', color: '#1565C0', marginBottom: 6, letterSpacing: 0.3 }}>
-                  Tab {idx + 1} — {fixedLabel}
+                  {file.label || fixedLabel}
                 </Text>
-              )}
+              ) : null}
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={{ width: 30, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#555' }}>{idx + 1}</Text>
+                </View>
                 <View style={{ flex: 1 }}>
                   {file ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -3259,7 +3278,9 @@ export default function NewProcedureScreen() {
                       ) : (
                         <>
                           <Ionicons name="cloud-upload" size={18} color="#FFF" />
-                          <Text style={styles.cbctUploadBtnText}>Upload Photograph</Text>
+                          <Text style={styles.cbctUploadBtnText}>
+                            {idx === 0 ? 'Upload Occlusal View Photo' : idx === 1 ? 'Upload Lateral/Frontal View' : 'Upload Photograph'}
+                          </Text>
                         </>
                       )}
                     </TouchableOpacity>

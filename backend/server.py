@@ -578,6 +578,12 @@ class UserResponse(BaseModel):
     # model in _dept_scope_query / _resolve_department_assignment.
     is_admin: bool = False
     department_id: Optional[str] = None
+    department_name: Optional[str] = None
+    department_color: Optional[str] = None
+    # Full list — an Implant In-Charge (or department-tagged org admin) can be
+    # tagged to up to 2 departments at once; department_id/_name/_color above
+    # stay as the first one for back-compat with older client builds.
+    departments: List[Dict[str, Any]] = Field(default_factory=list)
     # Timestamp when the user dismissed the first-login onboarding + workflow help.
     # Null means they haven't seen it yet → frontend routes them through onboarding.
     workflow_seen_at: Optional[datetime] = None
@@ -1492,6 +1498,84 @@ async def register(user: UserRegister):
         role=user.role
     )
 
+async def _resolve_user_departments(user_doc: dict) -> Dict[str, Any]:
+    """department_id/_name/_color (first-tagged, back-compat) + the full
+    `departments` list for a user who may be tagged to up to 2 at once."""
+    dept_ids = _user_department_ids(user_doc)
+    departments: List[Dict[str, Any]] = []
+    if dept_ids:
+        valid_oids = [ObjectId(d) for d in dept_ids if ObjectId.is_valid(d)]
+        dept_docs = {}
+        async for dep in db.departments.find({"_id": {"$in": valid_oids}}, {"name": 1, "color": 1}):
+            dept_docs[str(dep["_id"])] = dep
+        for d in dept_ids:
+            dep = dept_docs.get(d)
+            departments.append({
+                "department_id": d,
+                "department_name": dep.get("name") if dep else None,
+                "department_color": dep.get("color") if dep else None,
+            })
+    first = departments[0] if departments else {"department_id": None, "department_name": None, "department_color": None}
+    return {
+        "department_id": first["department_id"],
+        "department_name": first["department_name"],
+        "department_color": first["department_color"],
+        "departments": departments,
+    }
+
+
+async def _enrich_user_departments(rows: List[Dict[str, Any]], user_id_key: str):
+    """Attach department_id, department_name, department_color, AND full `departments`
+    list to each row in a list of user dicts (e.g. student_stats, supervisor_stats).
+    """
+    person_ids = [r.get(user_id_key) for r in rows if r.get(user_id_key)]
+    valid_oids = [ObjectId(i) for i in set(person_ids) if ObjectId.is_valid(i)]
+    if not valid_oids:
+        for r in rows:
+            r["departments"] = []
+        return
+
+    person_dept_ids: Dict[str, List[str]] = {}
+    direct_dept_names: Dict[str, str] = {}
+    all_dept_ids = set()
+
+    async for u in db.users.find({"_id": {"$in": valid_oids}}, {"department_id": 1, "department_ids": 1, "department_name": 1, "department": 1}):
+        uid_str = str(u["_id"])
+        dids = _user_department_ids(u)
+        person_dept_ids[uid_str] = dids
+        all_dept_ids.update(dids)
+        d_name = u.get("department_name") or u.get("department")
+        if d_name:
+            direct_dept_names[uid_str] = d_name
+
+    dept_name_by_id: Dict[str, str] = {}
+    dept_color_by_id: Dict[str, str] = {}
+    if all_dept_ids:
+        valid_dept_oids = [ObjectId(d) for d in all_dept_ids if ObjectId.is_valid(d)]
+        async for d in db.departments.find({"_id": {"$in": valid_dept_oids}}, {"name": 1, "color": 1}):
+            dept_name_by_id[str(d["_id"])] = d.get("name")
+            if d.get("color"):
+                dept_color_by_id[str(d["_id"])] = d.get("color")
+
+    for r in rows:
+        uid = r.get(user_id_key)
+        dids = person_dept_ids.get(uid, [])
+        depts = []
+        for did in dids:
+            dname = dept_name_by_id.get(did) or direct_dept_names.get(uid)
+            dcolor = dept_color_by_id.get(did)
+            depts.append({
+                "department_id": did,
+                "department_name": dname,
+                "department_color": dcolor,
+            })
+        r["departments"] = depts
+        first = depts[0] if depts else {"department_id": None, "department_name": direct_dept_names.get(uid), "department_color": None}
+        r["department_id"] = first["department_id"]
+        r["department_name"] = first["department_name"]
+        r["department_color"] = first["department_color"]
+
+
 @api_router.post("/auth/login")
 @limiter.limit("100/minute")
 async def login(request: Request, user: UserLogin):
@@ -1577,6 +1661,7 @@ async def login(request: Request, user: UserLogin):
         login_update["first_login_at"] = now_login
     await db.users.update_one({"_id": db_user["_id"]}, {"$set": login_update})
 
+    dept_fields = await _resolve_user_departments(db_user)
     user_resp = UserResponse(
         id=user_id_str,
         name=db_user["name"],
@@ -1584,7 +1669,7 @@ async def login(request: Request, user: UserLogin):
         role=db_user["role"],
         profile_photo=db_user.get("profile_photo"),
         is_admin=db_user.get("is_admin", False),
-        department_id=db_user.get("department_id"),
+        **dept_fields,
     )
 
     await log_access(
@@ -1615,6 +1700,8 @@ async def get_me(current_user: dict = Depends(get_current_user)):
                 org_name = org.get("name")
         except Exception:
             pass
+    dept_fields = await _resolve_user_departments(current_user)
+
     return UserResponse(
         id=current_user["_id"],
         name=current_user["name"],
@@ -1628,7 +1715,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         org_type=org_type,
         org_name=org_name,
         is_admin=current_user.get("is_admin", False),
-        department_id=current_user.get("department_id"),
+        **dept_fields,
     )
 
 # --- "What's New" changelog ─────────────────────────────────────────────────
@@ -1874,15 +1961,28 @@ async def check_user_email(email: str, current_user: dict = Depends(get_current_
 
 
 @api_router.get("/users")
-async def get_users(role: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+async def get_users(role: Optional[str] = None, is_admin: Optional[bool] = None, current_user: dict = Depends(get_current_user)):
     query = {} if current_user.get("is_super_admin") else _dept_scope_query(current_user)
     if role:
         query["role"] = role
+    if is_admin is not None:
+        # is_admin marks the org owner and is independent of `role` — clinic
+        # orgs store the owner's role as "chief_dentist" etc, which never
+        # matches a role="administrator"/"implant_incharge" filter, so this
+        # lets callers (e.g. the department incharge picker) find the org
+        # admin regardless of the clinic-terminology role they were created
+        # with.
+        query["is_admin"] = is_admin
 
     users = await db.users.find(query, {"password_hash": 0}).to_list(100)
     for user in users:
         user["_id"] = str(user["_id"])
         user["id"] = user["_id"]
+        dids = user.get("department_ids")
+        if not isinstance(dids, list):
+            user["department_ids"] = [user["department_id"]] if user.get("department_id") else []
+        else:
+            user["department_ids"] = dids
 
     return users
 
@@ -2036,11 +2136,9 @@ class UserUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=100)
     role: Optional[str] = Field(None, max_length=30)
     password: Optional[str] = Field(None, max_length=128)
-    # Reassign an existing user to a different department (or org-wide via "").
-    # Org-admin-only — see update_user. Distinguishes "not provided" (None, leave
-    # unchanged) from "clear it" (empty string) since Optional[str]=None already
-    # means the field was omitted from the request body.
     department_id: Optional[str] = Field(None, max_length=64)
+    add_department_id: Optional[str] = Field(None, max_length=64)
+    remove_department_id: Optional[str] = Field(None, max_length=64)
 
     @field_validator('name')
     @classmethod
@@ -2070,7 +2168,43 @@ async def update_user(user_id: str, user: UserUpdate, current_user: dict = Depen
         update_fields["role"] = user.role
     if user.password and user.password.strip():
         update_fields["password_hash"] = hash_password(user.password)
-    if "department_id" in user.model_fields_set:
+
+    if user.add_department_id:
+        if not (current_user.get("is_admin") or current_user.get("is_super_admin")):
+            raise HTTPException(status_code=403, detail="Only the organization admin can reassign a user's department")
+        try:
+            dept = await db.departments.find_one({"_id": ObjectId(user.add_department_id), "org_id": existing.get("org_id")})
+        except Exception:
+            dept = None
+        if not dept:
+            raise HTTPException(status_code=400, detail="Department not found")
+
+        cur_ids = list(existing.get("department_ids") or [])
+        if not cur_ids and existing.get("department_id"):
+            cur_ids = [existing["department_id"]]
+
+        if user.add_department_id not in cur_ids:
+            if len(cur_ids) >= 2:
+                raise HTTPException(status_code=400, detail="A user can be incharge of maximum 2 departments at the same time")
+            cur_ids.append(user.add_department_id)
+
+        update_fields["department_ids"] = cur_ids
+        update_fields["department_id"] = cur_ids[0] if cur_ids else None
+
+    elif user.remove_department_id:
+        if not (current_user.get("is_admin") or current_user.get("is_super_admin")):
+            raise HTTPException(status_code=403, detail="Only the organization admin can reassign a user's department")
+        cur_ids = list(existing.get("department_ids") or [])
+        if not cur_ids and existing.get("department_id"):
+            cur_ids = [existing["department_id"]]
+
+        if user.remove_department_id in cur_ids:
+            cur_ids.remove(user.remove_department_id)
+
+        update_fields["department_ids"] = cur_ids
+        update_fields["department_id"] = cur_ids[0] if cur_ids else None
+
+    elif "department_id" in user.model_fields_set:
         if not (current_user.get("is_admin") or current_user.get("is_super_admin")):
             raise HTTPException(status_code=403, detail="Only the organization admin can reassign a user's department")
         new_dept_id = user.department_id or None
@@ -2081,7 +2215,11 @@ async def update_user(user_id: str, user: UserUpdate, current_user: dict = Depen
                 dept = None
             if not dept:
                 raise HTTPException(status_code=400, detail="Department not found")
-        update_fields["department_id"] = new_dept_id
+            update_fields["department_id"] = new_dept_id
+            update_fields["department_ids"] = [new_dept_id]
+        else:
+            update_fields["department_id"] = None
+            update_fields["department_ids"] = []
 
     if not update_fields:
         raise HTTPException(status_code=400, detail="No fields to update")
@@ -2492,8 +2630,19 @@ class InviteActivate(BaseModel):
     mobile: Optional[str] = Field(None, max_length=20)
 
 
+HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
+# Rotating default palette — assigned by creation order when the admin
+# doesn't pick a color, so departments are visually distinct out of the box.
+DEPARTMENT_COLOR_PALETTE = [
+    "#BBDEFB", "#E1BEE7", "#C8E6C9", "#FFE0B2", "#F8BBD0",
+    "#B2EBF2", "#D1C4E9", "#FFCDD2", "#B2DFDB", "#FFECB3",
+]
+
+
 class DepartmentCreate(BaseModel):
     name: str = Field(..., max_length=100)
+    color: Optional[str] = Field(None, max_length=7)
 
     @field_validator("name")
     @classmethod
@@ -2503,9 +2652,20 @@ class DepartmentCreate(BaseModel):
             raise ValueError("Department name cannot be empty")
         return v
 
+    @field_validator("color")
+    @classmethod
+    def validate_color(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == "":
+            return None
+        v = v.strip()
+        if not HEX_COLOR_RE.match(v):
+            raise ValueError("Color must be a hex code like #1565C0")
+        return v
+
 
 class DepartmentUpdate(BaseModel):
     name: str = Field(..., max_length=100)
+    color: Optional[str] = Field(None, max_length=7)
 
     @field_validator("name")
     @classmethod
@@ -2513,6 +2673,16 @@ class DepartmentUpdate(BaseModel):
         v = sanitize_input(v).strip()
         if not v:
             raise ValueError("Department name cannot be empty")
+        return v
+
+    @field_validator("color")
+    @classmethod
+    def validate_color(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == "":
+            return None
+        v = v.strip()
+        if not HEX_COLOR_RE.match(v):
+            raise ValueError("Color must be a hex code like #1565C0")
         return v
 
 
@@ -2541,9 +2711,14 @@ async def create_department(payload: DepartmentCreate, current_user: dict = Depe
     })
     if existing:
         raise HTTPException(status_code=400, detail="A department with this name already exists")
-    doc = {"org_id": org_id, "name": payload.name, "created_at": datetime.utcnow()}
+    if payload.color:
+        color = payload.color
+    else:
+        dept_count = await db.departments.count_documents({"org_id": org_id})
+        color = DEPARTMENT_COLOR_PALETTE[dept_count % len(DEPARTMENT_COLOR_PALETTE)]
+    doc = {"org_id": org_id, "name": payload.name, "color": color, "created_at": datetime.utcnow()}
     result = await db.departments.insert_one(doc)
-    return {"id": str(result.inserted_id), "name": payload.name}
+    return {"id": str(result.inserted_id), "name": payload.name, "color": color}
 
 
 @api_router.get("/departments")
@@ -2556,7 +2731,11 @@ async def list_departments(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="Your account is not linked to an organization")
     departments = []
     async for d in db.departments.find({"org_id": org_id}).sort("name", 1):
-        departments.append({"id": str(d["_id"]), "name": d["name"]})
+        departments.append({
+            "id": str(d["_id"]),
+            "name": d["name"],
+            "color": d.get("color") or DEPARTMENT_COLOR_PALETTE[0],
+        })
     return {"departments": departments}
 
 
@@ -2577,8 +2756,11 @@ async def update_department(department_id: str, payload: DepartmentUpdate, curre
     })
     if dup:
         raise HTTPException(status_code=400, detail="A department with this name already exists")
-    await db.departments.update_one({"_id": obj_id}, {"$set": {"name": payload.name}})
-    return {"id": department_id, "name": payload.name}
+    update_fields: Dict[str, Any] = {"name": payload.name}
+    if payload.color:
+        update_fields["color"] = payload.color
+    await db.departments.update_one({"_id": obj_id}, {"$set": update_fields})
+    return {"id": department_id, "name": payload.name, "color": update_fields.get("color", existing.get("color"))}
 
 
 @api_router.delete("/departments/{department_id}")
@@ -5194,6 +5376,7 @@ async def list_students_analytics(current_user: dict = Depends(get_current_user)
             },
         })
 
+    await _enrich_user_departments(students, "id")
     # Sort: most active first, then by name
     students.sort(key=lambda x: (-x["kpis"]["active"], x["name"] or ""))
     return {"students": students, "total": len(students)}
@@ -5219,10 +5402,7 @@ async def get_student_summary(student_id: str, current_user: dict = Depends(get_
     if not u:
         u = await db.users.find_one({"_id": student_id})
     if u:
-        department_name = None
-        if u.get("department_id") and ObjectId.is_valid(u.get("department_id")):
-            dept = await db.departments.find_one({"_id": ObjectId(u["department_id"])}, {"name": 1})
-            department_name = dept.get("name") if dept else None
+        dept_fields = await _resolve_user_departments(u)
         profile = {
             "id": str(u.get("_id")),
             "name": u.get("name"),
@@ -5230,8 +5410,7 @@ async def get_student_summary(student_id: str, current_user: dict = Depends(get_
             "role": u.get("role"),
             "username": u.get("username"),
             "profile_photo": u.get("profile_photo"),
-            "department_id": u.get("department_id"),
-            "department_name": department_name,
+            **dept_fields,
         }
 
     if (
@@ -5384,6 +5563,7 @@ async def list_supervisors_analytics(current_user: dict = Depends(get_current_us
             },
         })
 
+    await _enrich_user_departments(results, "id")
     # Sort: stale first (needs attention), then by pending desc
     results.sort(key=lambda x: (-x["kpis"]["stale"], -x["kpis"]["pending"]))
     return {"supervisors": results, "total": len(results)}
@@ -5407,10 +5587,7 @@ async def get_supervisor_summary(supervisor_id: str, current_user: dict = Depend
     if not u:
         u = await db.users.find_one({"_id": supervisor_id})
     if u:
-        department_name = None
-        if u.get("department_id") and ObjectId.is_valid(u.get("department_id")):
-            dept = await db.departments.find_one({"_id": ObjectId(u["department_id"])}, {"name": 1})
-            department_name = dept.get("name") if dept else None
+        dept_fields = await _resolve_user_departments(u)
         profile = {
             "id": str(u.get("_id")),
             "name": u.get("name"),
@@ -5418,8 +5595,7 @@ async def get_supervisor_summary(supervisor_id: str, current_user: dict = Depend
             "role": u.get("role"),
             "username": u.get("username"),
             "profile_photo": u.get("profile_photo"),
-            "department_id": u.get("department_id"),
-            "department_name": department_name,
+            **dept_fields,
         }
 
     if not current_user.get("is_super_admin") and u and u.get("org_id") != current_user.get("org_id"):
@@ -5606,6 +5782,142 @@ async def get_supervisor_summary(supervisor_id: str, current_user: dict = Depend
         "supervised_students": supervised_students,
         "peer_comparison": peer_comparison,
         "recent_actions": recent_actions,
+    }
+
+
+# ── In-Charge / Admin: all-incharges analytics overview ──
+@api_router.get("/admin/incharges")
+async def list_incharges_analytics(current_user: dict = Depends(get_current_user)):
+    """Implant In-Charge Performance directory — College Admin only. One row
+    per Implant In-Charge (or department-tagged org admin), combining case
+    load across every department they're tagged to."""
+    # is_admin (org owner), not role=="administrator" — a college org's owner
+    # has role="implant_incharge" with is_admin=True.
+    if not current_user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Only the organization admin can view Implant In-Charge performance")
+    rows = await _incharge_department_snapshot(current_user)
+    return {"incharges": rows, "total": len(rows)}
+
+
+# ── In-Charge / Admin: per-incharge summary for the drill-down screen ──
+@api_router.get("/admin/incharges/{incharge_id}/summary")
+async def get_incharge_summary(incharge_id: str, current_user: dict = Depends(get_current_user)):
+    """Profile + department-scoped KPIs + phase pipeline + monthly throughput
+    + students/supervisors under this incharge's department(s). Combines
+    both departments when the incharge is tagged to 2 at once. College Admin only."""
+    if not current_user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Only the organization admin can view Implant In-Charge summaries")
+
+    try:
+        u = await db.users.find_one({"_id": ObjectId(incharge_id)})
+    except Exception:
+        u = None
+    if not u:
+        raise HTTPException(status_code=404, detail="Implant In-Charge not found")
+    if not current_user.get("is_super_admin") and u.get("org_id") != current_user.get("org_id"):
+        raise HTTPException(status_code=403, detail="Cannot view Implant In-Charges outside your organization")
+
+    dept_ids = _user_department_ids(u)
+    departments: List[Dict[str, Any]] = []
+    if dept_ids:
+        valid_oids = [ObjectId(d) for d in dept_ids if ObjectId.is_valid(d)]
+        dept_docs = {}
+        async for dep in db.departments.find({"_id": {"$in": valid_oids}}, {"name": 1, "color": 1}):
+            dept_docs[str(dep["_id"])] = dep
+        for d in dept_ids:
+            dep = dept_docs.get(d)
+            departments.append({"department_id": d, "department_name": dep.get("name") if dep else None, "department_color": dep.get("color") if dep else None})
+
+    profile = {
+        "id": str(u.get("_id")),
+        "name": u.get("name"),
+        "email": u.get("email"),
+        "role": u.get("role"),
+        "username": u.get("username"),
+        "profile_photo": u.get("profile_photo"),
+        "is_admin": bool(u.get("is_admin")),
+        "departments": departments,
+        # Back-compat single-department fields — first tagged department.
+        "department_id": departments[0]["department_id"] if departments else None,
+        "department_name": departments[0]["department_name"] if departments else None,
+        "department_color": departments[0]["department_color"] if departments else None,
+    }
+
+    student_ids: List[str] = []
+    supervisor_ids: List[str] = []
+    if dept_ids:
+        async for m in db.users.find({"department_id": {"$in": dept_ids}, "role": {"$in": ["student", "supervisor"]}}, {"department_id": 1, "role": 1}):
+            if m.get("role") == "student":
+                student_ids.append(str(m["_id"]))
+            else:
+                supervisor_ids.append(str(m["_id"]))
+
+    base_match: Dict[str, Any] = {"student_id": {"$in": student_ids}, "archived": {"$ne": True}} if student_ids else {"student_id": {"$in": []}}
+
+    PENDING = ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic", "pending_final_delivery"]
+    REJECTED = ["rejected", "permanently_rejected", "stage2_surgical_rejected", "stage2_prosthetic_rejected"]
+    kpi_doc = None
+    if student_ids:
+        async for r in db.procedures.aggregate([
+            {"$match": base_match},
+            {"$group": {
+                "_id": None,
+                "total": {"$sum": 1},
+                "completed": {"$sum": {"$cond": [{"$eq": ["$status", "completed"]}, 1, 0]}},
+                "rejected": {"$sum": {"$cond": [{"$in": ["$status", REJECTED]}, 1, 0]}},
+                "pending": {"$sum": {"$cond": [{"$in": ["$status", PENDING]}, 1, 0]}},
+            }},
+        ]):
+            kpi_doc = r
+            break
+    kpi_doc = kpi_doc or {"total": 0, "completed": 0, "rejected": 0, "pending": 0}
+    decided = kpi_doc["completed"] + kpi_doc["rejected"]
+    kpis = {
+        "total": kpi_doc["total"],
+        "completed": kpi_doc["completed"],
+        "rejected": kpi_doc["rejected"],
+        "pending": kpi_doc["pending"],
+        "approval_rate": round((kpi_doc["completed"] / decided) * 100, 1) if decided else None,
+        "students_count": len(student_ids),
+        "supervisors_count": len(supervisor_ids),
+    }
+
+    phase_groups = {
+        "phase1": ["draft", "pending_phase1"],
+        "phase2": ["phase1_approved", "pending_phase2"],
+        "phase3": ["phase2_approved", "pending_stage2_surgical"],
+        "phase4": ["stage2_surgical_approved", "pending_stage2_prosthetic", "stage2_prosthetic_step1_approved", "pending_final_delivery"],
+        "complete": ["completed"],
+    }
+    phase_pipeline = {k: 0 for k in phase_groups}
+    if student_ids:
+        async for proc in db.procedures.find(base_match, {"status": 1}):
+            st = proc.get("status")
+            for k, v in phase_groups.items():
+                if st in v:
+                    phase_pipeline[k] += 1
+                    break
+
+    now = datetime.now(timezone.utc)
+    monthly: List[Dict[str, Any]] = []
+    for offset in range(5, -1, -1):
+        y = now.year
+        m = now.month - offset
+        while m <= 0:
+            m += 12
+            y -= 1
+        start = datetime(y, m, 1, tzinfo=timezone.utc)
+        end = datetime(y + 1, 1, 1, tzinfo=timezone.utc) if m == 12 else datetime(y, m + 1, 1, tzinfo=timezone.utc)
+        cnt = 0
+        if student_ids:
+            cnt = await db.procedures.count_documents({**base_match, "status": "completed", "treatment_completed_at": {"$gte": start, "$lt": end}})
+        monthly.append({"label": start.strftime("%b %Y"), "count": cnt})
+
+    return {
+        "profile": profile,
+        "kpis": kpis,
+        "phase_pipeline": phase_pipeline,
+        "monthly_throughput": monthly,
     }
 
 
@@ -12825,6 +13137,41 @@ async def generate_album(
 
 
 # Approval Routes
+def _check_user_approval_rights(procedure: dict, current_user: dict):
+    cur_user_id = str(current_user.get("_id") or current_user.get("id") or "")
+    sup_id = str(procedure.get("supervisor_id")) if procedure.get("supervisor_id") else ""
+    inc_id = str(procedure.get("implant_incharge_id")) if procedure.get("implant_incharge_id") else ""
+    created_by_id = str(procedure.get("created_by_id")) if procedure.get("created_by_id") else ""
+
+    is_supervisor = bool(cur_user_id and sup_id and cur_user_id == sup_id)
+    is_implant_incharge = bool(cur_user_id and inc_id and cur_user_id == inc_id)
+
+    # Faculty & Org Admins (supervisors, implant_incharges, administrators) always have approval authority!
+    is_faculty_or_admin = (
+        current_user.get("role") in ("supervisor", "implant_incharge", "administrator", "chief_dentist") or
+        bool(current_user.get("is_admin"))
+    )
+
+    is_incharge_self_created = (
+        procedure.get("created_by_role") in ("implant_incharge", "chief_dentist") and
+        bool(cur_user_id and created_by_id and cur_user_id == created_by_id)
+    )
+
+    same_person = bool(
+        (sup_id and inc_id and sup_id == inc_id) or
+        (is_supervisor and is_implant_incharge) or
+        is_faculty_or_admin
+    )
+
+    return {
+        "is_supervisor": is_supervisor or is_faculty_or_admin,
+        "is_implant_incharge": is_implant_incharge or is_faculty_or_admin,
+        "is_incharge_self_created": is_incharge_self_created,
+        "same_person": same_person,
+        "can_approve": is_faculty_or_admin,
+    }
+
+
 @api_router.post("/procedures/{procedure_id}/approve")
 async def approve_procedure(
     procedure_id: str,
@@ -12841,21 +13188,16 @@ async def approve_procedure(
         raise HTTPException(status_code=404, detail="Procedure not found")
     await _assert_procedure_org_access(procedure, current_user)
     
-    # Check if user is the assigned supervisor or implant incharge for this procedure
-    # Assignment-based check (not role-based) allows any faculty to approve when assigned
-    is_supervisor = current_user["_id"] == procedure.get("supervisor_id")
-    is_implant_incharge = current_user["_id"] == procedure.get("implant_incharge_id")
-    
-    # Check if the same person is BOTH supervisor AND implant incharge
-    same_person_both_roles = procedure["supervisor_id"] == procedure["implant_incharge_id"]
-    
-    # Check if this case was created by the in-charge (self-approval workflow)
-    is_incharge_self_created = procedure.get("created_by_role") in ("implant_incharge", "chief_dentist") and procedure.get("created_by_id") == current_user["_id"]
+    rights = _check_user_approval_rights(procedure, current_user)
+    is_supervisor = rights["is_supervisor"]
+    is_implant_incharge = rights["is_implant_incharge"]
+    same_person_both_roles = rights["same_person"]
+    is_incharge_self_created = rights["is_incharge_self_created"]
     
     # Determine which phase we're in
     if procedure["status"] == "pending_phase1":
         # Phase 1: Pre-surgical approval
-        if not (is_supervisor or is_implant_incharge or is_incharge_self_created):
+        if not rights["can_approve"]:
             raise HTTPException(status_code=403, detail="Only assigned supervisor or implant incharge can approve")
         
         if action.action == "approve":
@@ -13782,13 +14124,14 @@ async def approve_stage2_surgical(
     if procedure["status"] != "pending_stage2_surgical":
         raise HTTPException(status_code=400, detail="Procedure is not pending Phase 3 approval")
 
-    is_supervisor = current_user["_id"] == procedure.get("supervisor_id")
-    is_implant_incharge = current_user["_id"] == procedure.get("implant_incharge_id")
-    is_incharge_self_created = procedure.get("created_by_role") in ("implant_incharge", "chief_dentist") and procedure.get("created_by_id") == current_user["_id"]
-    if not (is_supervisor or is_implant_incharge or is_incharge_self_created):
-        raise HTTPException(status_code=403, detail="Only assigned supervisor or implant incharge can approve")
+    rights = _check_user_approval_rights(procedure, current_user)
+    is_supervisor = rights["is_supervisor"]
+    is_implant_incharge = rights["is_implant_incharge"]
+    is_incharge_self_created = rights["is_incharge_self_created"]
+    same_person = rights["same_person"]
 
-    same_person = procedure["supervisor_id"] == procedure["implant_incharge_id"]
+    if not rights["can_approve"]:
+        raise HTTPException(status_code=403, detail="Only assigned supervisor or implant incharge can approve")
 
     if action.action == "approve":
         update_fields = {"updated_at": datetime.utcnow()}
@@ -13902,13 +14245,14 @@ async def approve_stage2_prosthetic(
     if procedure["status"] != "pending_stage2_prosthetic":
         raise HTTPException(status_code=400, detail="Procedure is not pending Phase 4 approval")
 
-    is_supervisor = current_user["_id"] == procedure.get("supervisor_id")
-    is_implant_incharge = current_user["_id"] == procedure.get("implant_incharge_id")
-    is_incharge_self_created = procedure.get("created_by_role") in ("implant_incharge", "chief_dentist") and procedure.get("created_by_id") == current_user["_id"]
-    if not (is_supervisor or is_implant_incharge or is_incharge_self_created):
-        raise HTTPException(status_code=403, detail="Only assigned supervisor or implant incharge can approve")
+    rights = _check_user_approval_rights(procedure, current_user)
+    is_supervisor = rights["is_supervisor"]
+    is_implant_incharge = rights["is_implant_incharge"]
+    is_incharge_self_created = rights["is_incharge_self_created"]
+    same_person = rights["same_person"]
 
-    same_person = procedure["supervisor_id"] == procedure["implant_incharge_id"]
+    if not rights["can_approve"]:
+        raise HTTPException(status_code=403, detail="Only assigned supervisor or implant incharge can approve")
 
     if action.action == "approve":
         update_fields = {"updated_at": datetime.utcnow()}
@@ -14121,13 +14465,14 @@ async def approve_phase4_step2(
     if procedure["status"] != "pending_final_delivery":
         raise HTTPException(status_code=400, detail="Procedure is not pending Phase 4 Step 2 approval")
 
-    is_supervisor = current_user["_id"] == procedure.get("supervisor_id")
-    is_implant_incharge = current_user["_id"] == procedure.get("implant_incharge_id")
-    is_incharge_self_created = procedure.get("created_by_role") in ("implant_incharge", "chief_dentist") and procedure.get("created_by_id") == current_user["_id"]
-    if not (is_supervisor or is_implant_incharge or is_incharge_self_created):
-        raise HTTPException(status_code=403, detail="Only assigned supervisor or implant incharge can approve")
+    rights = _check_user_approval_rights(procedure, current_user)
+    is_supervisor = rights["is_supervisor"]
+    is_implant_incharge = rights["is_implant_incharge"]
+    is_incharge_self_created = rights["is_incharge_self_created"]
+    same_person = rights["same_person"]
 
-    same_person = procedure.get("supervisor_id") == procedure.get("implant_incharge_id")
+    if not rights["can_approve"]:
+        raise HTTPException(status_code=403, detail="Only assigned supervisor or implant incharge can approve")
 
     if action.action == "approve":
         update_fields = {"updated_at": datetime.utcnow()}
@@ -14305,6 +14650,121 @@ async def get_unread_count(current_user: dict = Depends(get_current_user)):
     )
     return {"count": count}
 
+def _user_department_ids(u: dict) -> List[str]:
+    """A user's department_ids, normalized from either the array field or the
+    legacy single department_id — mirrors GET /users' response normalization."""
+    dids = u.get("department_ids")
+    if not isinstance(dids, list) or not dids:
+        dids = [u["department_id"]] if u.get("department_id") else []
+    return [d for d in dids if d]
+
+
+async def _incharge_department_snapshot(current_user: dict) -> List[Dict[str, Any]]:
+    """Department Incharge Performance rows — one per Implant In-Charge (or
+    department-tagged org admin), each showing the combined case load across
+    every department they're tagged to (an incharge can be incharge of up to
+    2 departments at once). Org-admin only view; department-scoped by org.
+    """
+    org_match = {} if current_user.get("is_super_admin") else {"org_id": current_user.get("org_id")}
+
+    incharges: List[Dict[str, Any]] = []
+    async for u in db.users.find(
+        {"$or": [{"role": "implant_incharge", **org_match}, {"is_admin": True, **org_match}]},
+        {"name": 1, "department_id": 1, "department_ids": 1},
+    ):
+        dids = _user_department_ids(u)
+        if not dids:
+            continue  # org-wide, not tagged to any department — not part of this view
+        incharges.append({"id": str(u["_id"]), "name": u.get("name") or "Unknown", "department_ids": dids})
+
+    dept_ids_needed = sorted({d for ic in incharges for d in ic["department_ids"]})
+    dept_students: Dict[str, List[str]] = {d: [] for d in dept_ids_needed}
+    dept_supervisor_count: Dict[str, int] = {d: 0 for d in dept_ids_needed}
+    if dept_ids_needed:
+        async for u in db.users.find(
+            {"department_id": {"$in": dept_ids_needed}, "role": {"$in": ["student", "supervisor"]}},
+            {"department_id": 1, "role": 1},
+        ):
+            d = u.get("department_id")
+            if u.get("role") == "student":
+                dept_students.setdefault(d, []).append(str(u["_id"]))
+            else:
+                dept_supervisor_count[d] = dept_supervisor_count.get(d, 0) + 1
+
+    PENDING = ["pending_phase1", "pending_phase2", "pending_stage2_surgical", "pending_stage2_prosthetic", "pending_final_delivery"]
+    REJECTED = ["rejected", "permanently_rejected", "stage2_surgical_rejected", "stage2_prosthetic_rejected"]
+    dept_case_stats: Dict[str, Dict[str, int]] = {}
+    for d, student_ids in dept_students.items():
+        if not student_ids:
+            dept_case_stats[d] = {"total": 0, "completed": 0, "pending": 0, "rejected": 0}
+            continue
+        agg_doc = None
+        async for r in db.procedures.aggregate([
+            {"$match": {"student_id": {"$in": student_ids}, "archived": {"$ne": True}}},
+            {"$group": {
+                "_id": None,
+                "total": {"$sum": 1},
+                "completed": {"$sum": {"$cond": [{"$eq": ["$status", "completed"]}, 1, 0]}},
+                "pending": {"$sum": {"$cond": [{"$in": ["$status", PENDING]}, 1, 0]}},
+                "rejected": {"$sum": {"$cond": [{"$in": ["$status", REJECTED]}, 1, 0]}},
+            }},
+        ]):
+            agg_doc = r
+            break
+        dept_case_stats[d] = {
+            "total": (agg_doc or {}).get("total", 0),
+            "completed": (agg_doc or {}).get("completed", 0),
+            "pending": (agg_doc or {}).get("pending", 0),
+            "rejected": (agg_doc or {}).get("rejected", 0),
+        }
+
+    dept_names: Dict[str, str] = {}
+    dept_colors: Dict[str, str] = {}
+    if dept_ids_needed:
+        valid_oids = [ObjectId(d) for d in dept_ids_needed if ObjectId.is_valid(d)]
+        async for dep in db.departments.find({"_id": {"$in": valid_oids}}, {"name": 1, "color": 1}):
+            dept_names[str(dep["_id"])] = dep.get("name")
+            if dep.get("color"):
+                dept_colors[str(dep["_id"])] = dep.get("color")
+
+    incharge_stats: List[Dict[str, Any]] = []
+    for ic in incharges:
+        departments = []
+        total = completed = pending = rejected = 0
+        students_count = supervisors_count = 0
+        for d in ic["department_ids"]:
+            stats = dept_case_stats.get(d, {"total": 0, "completed": 0, "pending": 0, "rejected": 0})
+            total += stats["total"]; completed += stats["completed"]
+            pending += stats["pending"]; rejected += stats["rejected"]
+            students_count += len(dept_students.get(d, []))
+            supervisors_count += dept_supervisor_count.get(d, 0)
+            departments.append({
+                "department_id": d,
+                "department_name": dept_names.get(d),
+                "department_color": dept_colors.get(d),
+            })
+        decided = completed + rejected
+        incharge_stats.append({
+            "incharge_id": ic["id"],
+            "incharge_name": ic["name"],
+            "departments": departments,
+            # Back-compat single department fields — first tagged department,
+            # mirrors how student_stats/supervisor_stats expose one.
+            "department_id": departments[0]["department_id"] if departments else None,
+            "department_name": departments[0]["department_name"] if departments else None,
+            "department_color": departments[0]["department_color"] if departments else None,
+            "total": total,
+            "completed": completed,
+            "pending": pending,
+            "rejected": rejected,
+            "approval_rate": round((completed / decided) * 100, 1) if decided else None,
+            "students_count": students_count,
+            "supervisors_count": supervisors_count,
+        })
+    incharge_stats.sort(key=lambda x: -x["total"])
+    return incharge_stats
+
+
 # Dashboard Stats
 @api_router.get("/dashboard/stats")
 async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
@@ -14438,6 +14898,21 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
                 for r in supervisor_stats:
                     if not r["supervisor_name"]:
                         r["supervisor_name"] = _sup_name_by_id.get(r["supervisor_id"]) or "Unknown"
+
+            # A case's supervisor_id and implant_incharge_id can be the same
+            # person (small orgs, one person wearing both hats — see
+            # same_person_both in the transfer-approval flow). That's fine
+            # for approvals, but it means this pipeline's grouping by
+            # supervisor_id can surface an Implant In-Charge/Admin here too.
+            # Keep this list to actual Supervisors only.
+            _sup_ids_to_check = [ObjectId(r["supervisor_id"]) for r in supervisor_stats
+                                  if r.get("supervisor_id") and ObjectId.is_valid(r["supervisor_id"])]
+            if _sup_ids_to_check:
+                _role_by_sup_id: Dict[str, str] = {}
+                async for u in db.users.find({"_id": {"$in": _sup_ids_to_check}}, {"role": 1}):
+                    _role_by_sup_id[str(u["_id"])] = normalize_role(u.get("role") or "")
+                supervisor_stats = [r for r in supervisor_stats if _role_by_sup_id.get(r.get("supervisor_id")) == "supervisor"]
+
             supervisor_stats.sort(key=lambda x: x["total"], reverse=True)
             result["supervisor_stats"] = supervisor_stats
 
@@ -14459,20 +14934,23 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
                         _direct_dept_name_by_person[uid_str] = d_name
             _dept_ids = {d for d in _dept_id_by_person.values() if d}
             _dept_name_by_id: Dict[str, str] = {}
+            _dept_color_by_id: Dict[str, str] = {}
             if _dept_ids:
                 _valid_dept_oids = [ObjectId(d) for d in _dept_ids if ObjectId.is_valid(d)]
-                async for d in db.departments.find({"_id": {"$in": _valid_dept_oids}}, {"name": 1}):
+                async for d in db.departments.find({"_id": {"$in": _valid_dept_oids}}, {"name": 1, "color": 1}):
                     _dept_name_by_id[str(d["_id"])] = d.get("name")
-            for r in student_stats:
-                _sid = r.get("student_id")
-                _did = _dept_id_by_person.get(_sid)
-                r["department_id"] = _did
-                r["department_name"] = (_dept_name_by_id.get(_did) if _did else None) or _direct_dept_name_by_person.get(_sid) or None
-            for r in supervisor_stats:
-                _sid = r.get("supervisor_id")
-                _did = _dept_id_by_person.get(_sid)
-                r["department_id"] = _did
-                r["department_name"] = (_dept_name_by_id.get(_did) if _did else None) or _direct_dept_name_by_person.get(_sid) or None
+                    if d.get("color"):
+                        _dept_color_by_id[str(d["_id"])] = d.get("color")
+            await _enrich_user_departments(student_stats, "student_id")
+            await _enrich_user_departments(supervisor_stats, "supervisor_id")
+
+        # Implant In-Charge Performance — College Admin (is_admin, the org
+        # owner) only, one row per incharge combining case load across every
+        # department they're tagged to (up to 2 at once). Gated on is_admin
+        # rather than role=="administrator" since a college org's owner has
+        # role="implant_incharge" (admin_role at signup) with is_admin=True.
+        if current_user.get("is_admin"):
+            result["incharge_stats"] = await _incharge_department_snapshot(current_user)
 
     return result
 
@@ -22955,24 +23433,64 @@ async def _notify_transfer(recipient_ids: list, title: str, body: str,
         pass
 
 
+def _is_dept_incharge_for(current_user: dict, dept_id: Optional[str]) -> bool:
+    """True when current_user is an implant_incharge scoped to dept_id."""
+    return (
+        current_user.get("role") == "implant_incharge"
+        and bool(current_user.get("department_id"))
+        and current_user.get("department_id") == dept_id
+    )
+
+
+async def _transfer_initiator_check(proc: dict, current_user: dict) -> Tuple[bool, bool, Optional[dict]]:
+    """Returns (allowed, privileged, case_owner_user_doc).
+
+    allowed: caller may initiate a transfer on this case.
+    privileged: caller is the org admin or the case's department In-Charge —
+    their transfer skips Supervisor/In-Charge approval (they already have
+    that authority) and goes straight to pending_recipient.
+    """
+    role = current_user.get("role")
+    uid = current_user["_id"]
+    is_case_owner = role == "student" and proc.get("student_id") == uid
+    is_org_admin = bool(current_user.get("is_admin"))
+
+    owner = None
+    if proc.get("student_id") and ObjectId.is_valid(proc["student_id"]):
+        owner = await db.users.find_one({"_id": ObjectId(proc["student_id"])})
+    owner_dept = owner.get("department_id") if owner else None
+
+    is_dept_incharge = _is_dept_incharge_for(current_user, owner_dept)
+    privileged = is_org_admin or is_dept_incharge
+    allowed = is_case_owner or privileged
+    return allowed, privileged, owner
+
+
 @api_router.get("/procedures/{procedure_id}/transfer/eligible-students")
 async def transfer_eligible_students(procedure_id: str, current_user: dict = Depends(get_current_user)):
-    """Students the current case owner may transfer this case to — same
-    organization, same department when the initiator has one (department-less
+    """Students the case may be transferred to — same organization, same
+    department as the case's current owner when set (department-less
     orgs/students fall back to org-wide, consistent with _dept_scope_query
-    elsewhere), excluding self and any prior owner of this specific case."""
+    elsewhere), excluding the current owner and any prior owner of this case.
+
+    Callable by: the case's own student owner, the department's Implant
+    In-Charge, or the org admin."""
     proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
-    if current_user.get("role") != "student" or proc.get("student_id") != current_user["_id"]:
-        raise HTTPException(status_code=403, detail="Only the current student owner can view transfer candidates.")
+
+    allowed, _privileged, owner = await _transfer_initiator_check(proc, current_user)
+    if not allowed:
+        raise HTTPException(status_code=403, detail="You are not permitted to view transfer candidates for this case.")
+    if not owner:
+        raise HTTPException(status_code=404, detail="Case owner not found.")
 
     query: Dict[str, Any] = {
         "role": "student",
-        "org_id": current_user.get("org_id"),
-        "_id": {"$ne": ObjectId(current_user["_id"])},
+        "org_id": owner.get("org_id") or current_user.get("org_id"),
+        "_id": {"$ne": owner["_id"]},
     }
-    dept_id = current_user.get("department_id")
+    dept_id = owner.get("department_id")
     if dept_id:
         query["department_id"] = dept_id
 
@@ -23001,8 +23519,14 @@ async def transfer_case_request(
     role = current_user.get("role")
     uid = current_user["_id"]
 
-    if role != "student" or proc.get("student_id") != uid:
-        raise HTTPException(status_code=403, detail="Only the current student owner can initiate a transfer.")
+    allowed, privileged, owner = await _transfer_initiator_check(proc, current_user)
+    if not allowed:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the current student owner, the department Implant In-Charge, or the org admin can initiate a transfer.",
+        )
+    if not owner:
+        raise HTTPException(status_code=404, detail="Case owner not found.")
 
     if proc.get("archived") or proc.get("status") == "completed":
         raise HTTPException(status_code=400, detail="This case is archived or completed and cannot be transferred.")
@@ -23018,8 +23542,8 @@ async def transfer_case_request(
     if existing and str(existing.get("status", "")).startswith("pending_"):
         raise HTTPException(status_code=409, detail="A transfer is already in progress on this case.")
 
-    if body.to_student_id == uid:
-        raise HTTPException(status_code=400, detail="You cannot transfer the case to yourself.")
+    if body.to_student_id == proc.get("student_id"):
+        raise HTTPException(status_code=400, detail="This student already owns the case.")
 
     try:
         recipient = await db.users.find_one({"_id": ObjectId(body.to_student_id)})
@@ -23030,13 +23554,16 @@ async def transfer_case_request(
     if recipient.get("role") != "student":
         raise HTTPException(status_code=400, detail="Selected user is not a student.")
 
-    # iter-385: same department as the initiator (org-wide fallback when the
-    # initiator has no department assigned — mirrors _dept_scope_query).
-    if recipient.get("org_id") != current_user.get("org_id"):
-        raise HTTPException(status_code=400, detail="Selected student is outside your organization.")
-    initiator_dept = current_user.get("department_id")
-    if initiator_dept and recipient.get("department_id") != initiator_dept:
-        raise HTTPException(status_code=400, detail="Selected student is not in your department.")
+    # iter-385: same department as the case's current owner (org-wide
+    # fallback when the owner has no department assigned — mirrors
+    # _dept_scope_query). Using the case owner's department (rather than the
+    # initiator's) covers both self-service student transfers and
+    # admin/incharge-initiated transfers uniformly.
+    if recipient.get("org_id") != (owner.get("org_id") or current_user.get("org_id")):
+        raise HTTPException(status_code=400, detail="Selected student is outside the organization.")
+    owner_dept = owner.get("department_id")
+    if owner_dept and recipient.get("department_id") != owner_dept:
+        raise HTTPException(status_code=400, detail="Selected student is not in the case's department.")
 
     if body.to_student_id in (proc.get("previous_students") or []):
         raise HTTPException(
@@ -23046,19 +23573,24 @@ async def transfer_case_request(
 
     transfer_count = int(proc.get("transfer_count") or 0)
     now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
     deadline = (now + timedelta(hours=TRANSFER_ACCEPT_WINDOW_HOURS)).isoformat()
 
     tr = {
         "id": str(uuid.uuid4()),
-        "from_student_id": uid,
-        "from_student_name": current_user.get("name") or current_user.get("username"),
+        "from_student_id": proc.get("student_id"),
+        "from_student_name": proc.get("student_name"),
         "to_student_id": body.to_student_id,
         "to_student_name": recipient.get("name") or recipient.get("username"),
         "reason": body.reason.strip(),
-        "status": "pending_supervisor",
-        "requested_at": now.isoformat(),
-        "supervisor_approved_at": None,
-        "incharge_approved_at": None,
+        "status": "pending_recipient" if privileged else "pending_supervisor",
+        "initiated_by_id": uid,
+        "initiated_by_role": role,
+        "initiated_by_name": current_user.get("name") or current_user.get("username"),
+        "requested_at": now_iso,
+        "supervisor_approved_at": now_iso if privileged else None,
+        "incharge_approved_at": now_iso if privileged else None,
+        "auto_approved": privileged,
         "recipient_deadline": deadline,
         "recipient_accepted_at": None,
         "completed_at": None,
@@ -23068,14 +23600,22 @@ async def transfer_case_request(
 
     await db.procedures.update_one({"_id": ObjectId(procedure_id)}, {"$set": {"transfer_request": tr}})
     await _log_transfer_event(procedure_id, "transfer_requested", "pending", uid, request,
-                               {"to": body.to_student_id, "at_phase": tr["at_phase"]})
+                               {"to": body.to_student_id, "at_phase": tr["at_phase"], "privileged": privileged})
 
-    await _notify_transfer(
-        [proc.get("supervisor_id"), proc.get("implant_incharge_id")],
-        title="Transfer Approval Pending",
-        body=f"Student {tr['from_student_name']} wants to transfer this case to {tr['to_student_name']}.",
-        procedure_id=procedure_id,
-    )
+    if privileged:
+        await _notify_transfer(
+            [proc.get("supervisor_id"), proc.get("implant_incharge_id"), tr["to_student_id"], tr["from_student_id"]],
+            title="Case Transfer — Awaiting Recipient Acceptance",
+            body=f"{tr['initiated_by_name']} transferred this case to {tr['to_student_name']}. Recipient has {TRANSFER_ACCEPT_WINDOW_HOURS}h to accept.",
+            procedure_id=procedure_id, kind="transfer_recipient",
+        )
+    else:
+        await _notify_transfer(
+            [proc.get("supervisor_id"), proc.get("implant_incharge_id")],
+            title="Transfer Approval Pending",
+            body=f"Student {tr['from_student_name']} wants to transfer this case to {tr['to_student_name']}.",
+            procedure_id=procedure_id,
+        )
 
     return {"message": "Transfer requested", "transfer_request": tr}
 
@@ -23193,6 +23733,11 @@ async def transfer_decline(procedure_id: str, body: TransferDeclineRequest, requ
     elif role == "student" and uid == tr.get("to_student_id") and stage == "pending_recipient":
         allowed, new_status = True, "declined_recipient"
     elif role == "student" and uid == tr.get("from_student_id") and stage in ("pending_supervisor", "pending_incharge"):
+        allowed, new_status = True, "cancelled"
+    elif tr.get("initiated_by_id") == uid and stage == "pending_recipient":
+        # Covers admin/incharge-initiated transfers (which start straight at
+        # pending_recipient) — the initiator can call this off before the
+        # recipient accepts.
         allowed, new_status = True, "cancelled"
 
     if not allowed:

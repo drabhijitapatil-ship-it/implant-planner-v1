@@ -16,11 +16,14 @@ type Props = {
   procedureId: string;
   onClose: () => void;
   onSubmitted?: () => void;
+  // Admin / Department In-Charge initiated — skips Supervisor + In-Charge
+  // approval and goes straight to recipient acceptance.
+  privileged?: boolean;
 };
 
 type Student = { id: string; name: string; username?: string };
 
-export default function TransferCaseModal({ procedureId, onClose, onSubmitted }: Props) {
+export default function TransferCaseModal({ procedureId, onClose, onSubmitted, privileged }: Props) {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -66,7 +69,9 @@ export default function TransferCaseModal({ procedureId, onClose, onSubmitted }:
       });
       Alert.alert(
         'Transfer Requested',
-        `Awaiting Supervisor + Implant In-Charge approval. ${selected.name} will have 48h to accept once both faculty approve.`,
+        privileged
+          ? `${selected.name} has been notified and has 48h to accept the case.`
+          : `Awaiting Supervisor + Implant In-Charge approval. ${selected.name} will have 48h to accept once both faculty approve.`,
         [{ text: 'OK', onPress: () => { onSubmitted?.(); onClose(); } }],
       );
     } catch (e: any) {
@@ -87,9 +92,9 @@ export default function TransferCaseModal({ procedureId, onClose, onSubmitted }:
             </Pressable>
           </View>
           <Text style={s.help}>
-            Choose a junior student in your department. They'll need Supervisor + Implant In-Charge
-            approval, then must accept within 48h. Only age &amp; sex are shared in the AI handoff
-            brief — patient name and other demographics are never disclosed.
+            {privileged
+              ? "Choose a student in this case's department. Since you're initiating this, it skips Supervisor + Implant In-Charge approval and goes straight to the recipient, who has 48h to accept. Only age & sex are shared in the AI handoff brief — patient name and other demographics are never disclosed."
+              : "Choose a junior student in your department. They'll need Supervisor + Implant In-Charge approval, then must accept within 48h. Only age & sex are shared in the AI handoff brief — patient name and other demographics are never disclosed."}
           </Text>
 
           <Text style={s.label}>Select student</Text>

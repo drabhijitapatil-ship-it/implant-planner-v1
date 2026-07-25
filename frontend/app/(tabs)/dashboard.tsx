@@ -27,6 +27,7 @@ import WhatsNewBadge from "../../components/WhatsNewBadge";
 import PulsingDoubleArrow from "../../components/onboarding/primitives/PulsingDoubleArrow";
 import AskImplanrAIFab from "../../components/AskImplanrAIFab";
 import SmartTipBanner from "../../components/SmartTipBanner";
+import { getDepartmentBadgeColors, resolveUserDepartments, DepartmentItem } from "../../utils/departmentBadge";
 
 // ── Status helpers ────────────────────────────────────────
 const ACTION_NEEDED_MAP: Record<
@@ -188,42 +189,130 @@ function Header({ user, router }: any) {
 
   return (
     <View style={s.headerCard} data-testid="dashboard-header">
-      <View style={{ flex: 1, paddingRight: 12 }}>
-        {/* Welcome Row */}
-        <View style={s.welcomeRow}>
-          <View style={s.welcomeIconContainer}>
-            <Ionicons name="person-outline" size={12} color="#1A73E8" />
+      {/* Top Section: User Info on left, Avatar on right */}
+      <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", width: "100%" }}>
+        <View style={{ flex: 1, paddingRight: 12 }}>
+          {/* Welcome Row */}
+          <View style={s.welcomeRow}>
+            <View style={s.welcomeIconContainer}>
+              <Ionicons name="person-outline" size={12} color="#1A73E8" />
+            </View>
+            <Text style={s.greeting}>Welcome back,</Text>
           </View>
-          <Text style={s.greeting}>Welcome back,</Text>
+
+          {/* User Name */}
+          <Text style={s.userName} data-testid="dashboard-user-name">
+            {user?.name}
+          </Text>
+
+          {/* Decorative Line */}
+          <View style={[s.decorLine, { backgroundColor: roleColor }]} />
+
+          {/* Org Row */}
+          {user?.org_name ? (
+            <View style={s.orgContainer}>
+              <View style={s.orgIconContainer}>
+                <Ionicons name="business" size={18} color="#0D47A1" />
+              </View>
+              <Text style={s.orgName} data-testid="dashboard-org-name">
+                {user.org_name}
+              </Text>
+            </View>
+          ) : null}
         </View>
 
-        {/* User Name */}
-        <Text style={s.userName} data-testid="dashboard-user-name">
-          {user?.name}
-        </Text>
+        {/* Avatar with Ring Border & Overlay Badge */}
+        <TouchableOpacity
+          onPress={() => router.push("/profile")}
+          data-testid="dashboard-profile-avatar"
+          style={s.avatarWrapper}
+        >
+          <View style={[s.avatarRing, { borderColor: roleColor }]}>
+            {user?.profile_photo ? (
+              <Image source={{ uri: user.profile_photo }} style={s.avatarImage} />
+            ) : (
+              <View
+                style={[
+                  s.avatarFallbackContainer,
+                  { backgroundColor: roleColor },
+                ]}
+              >
+                <Text style={s.avatarInitialsText}>
+                  {getInitials(user?.name || "U")}
+                </Text>
+              </View>
+            )}
+          </View>
+          <View style={[s.avatarOverlayBadge, { backgroundColor: roleColor }]}>
+            <Ionicons name={overlayIcon} size={10} color="#FFF" />
+          </View>
+        </TouchableOpacity>
+      </View>
 
-        {/* Decorative Line */}
-        <View style={[s.decorLine, { backgroundColor: roleColor }]} />
-
-        {/* Org Row */}
-        {user?.org_name ? (
-          <View style={s.orgContainer}>
-            <View style={s.orgIconContainer}>
-              <Ionicons name="business" size={18} color="#0D47A1" />
-            </View>
-            <Text style={s.orgName} data-testid="dashboard-org-name">
-              {user.org_name}
-            </Text>
+      {/* Full-width Badges Section Below Top Row */}
+      <View style={{ width: "100%", marginTop: 6 }}>
+        {/* Department Badge Pill(s) */}
+        {(user?.department_name || (user?.departments && user.departments.length > 0) || user?.role === "implant_incharge") ? (
+          <View
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: 6,
+              marginBottom: 6,
+            }}
+            data-testid="dashboard-department-badge"
+          >
+            {resolveUserDepartments(user).map((d: DepartmentItem, idx: number) => {
+              const badgeColors = getDepartmentBadgeColors(d.department_color);
+              return (
+                <View
+                  key={d.department_id || idx}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                    alignSelf: "flex-start",
+                    backgroundColor: badgeColors.bg,
+                    borderWidth: 1,
+                    borderColor: badgeColors.border,
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                    borderRadius: 20,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: 4,
+                      backgroundColor: badgeColors.dot,
+                    }}
+                  />
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontWeight: "700",
+                      color: badgeColors.text,
+                      letterSpacing: 0.3,
+                    }}
+                  >
+                    {d.department_name || "All Departments"}
+                  </Text>
+                </View>
+              );
+            })}
           </View>
         ) : null}
 
-        {/* Role Badge Pill */}
+        {/* Role Badge Pill(s) */}
         <View
           style={{
             flexDirection: "row",
             alignItems: "center",
             flexWrap: "wrap",
             gap: 6,
+            marginBottom: 6,
           }}
         >
           <View
@@ -266,33 +355,6 @@ function Header({ user, router }: any) {
 
         <WhatsNewBadge />
       </View>
-
-      {/* Avatar with Ring Border & Overlay Badge */}
-      <TouchableOpacity
-        onPress={() => router.push("/profile")}
-        data-testid="dashboard-profile-avatar"
-        style={s.avatarWrapper}
-      >
-        <View style={[s.avatarRing, { borderColor: roleColor }]}>
-          {user?.profile_photo ? (
-            <Image source={{ uri: user.profile_photo }} style={s.avatarImage} />
-          ) : (
-            <View
-              style={[
-                s.avatarFallbackContainer,
-                { backgroundColor: roleColor },
-              ]}
-            >
-              <Text style={s.avatarInitialsText}>
-                {getInitials(user?.name || "U")}
-              </Text>
-            </View>
-          )}
-        </View>
-        <View style={[s.avatarOverlayBadge, { backgroundColor: roleColor }]}>
-          <Ionicons name={overlayIcon} size={10} color="#FFF" />
-        </View>
-      </TouchableOpacity>
     </View>
   );
 }
@@ -1271,6 +1333,17 @@ function InChargeDashboard({
               router={router}
             />
           )}
+
+          {/* Implant In-Charge Performance — College Admin only; backend
+              only populates incharge_stats for role === "administrator". */}
+          {(stats.incharge_stats || []).length > 0 && (
+            <InchargePerformanceSection
+              rows={(stats.incharge_stats || []).filter(
+                (ic: any) => ic.incharge_name,
+              )}
+              router={router}
+            />
+          )}
         </>
       )}
 
@@ -1416,7 +1489,7 @@ function pickLeaderboardBadges<T extends Record<string, any>>(
   riskKey: string,
 ): { topId: string | null; hotId: string | null; riskId: string | null } {
   if (rows.length === 0) return { topId: null, hotId: null, riskId: null };
-  const idOf = (r: T) => r.student_id || r.supervisor_id || r._id || r.id;
+  const idOf = (r: T) => r.student_id || r.supervisor_id || r.incharge_id || r._id || r.id;
   const top = [...rows].sort(
     (a, b) => (b[primaryKey] || 0) - (a[primaryKey] || 0),
   )[0];
@@ -1586,35 +1659,23 @@ function StudentPerformanceSection({
             accessibilityRole="button"
           >
             <RankCircle idx={idx} badge={badge} />
-            <View style={{ flex: 1 }}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 6,
-                  flexWrap: "wrap",
-                }}
-              >
-                <Text style={s.perfName}>{st.student_name}</Text>
-                {badge && (
-                  <View
-                    style={[
-                      s.lbBadgePill,
-                      { backgroundColor: badge.bg, borderColor: badge.border },
-                    ]}
-                  >
-                    <Text style={[s.lbBadgeText, { color: badge.color }]}>
-                      {badge.label}
-                    </Text>
-                  </View>
-                )}
-              </View>
-              {st.department_name ? (
-                <View style={s.perfDeptTag}>
-                  <Ionicons name="business-outline" size={11} color="#37474F" />
-                  <Text style={s.perfDeptText} numberOfLines={1}>
-                    {st.department_name}
-                  </Text>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={s.perfName} numberOfLines={1} ellipsizeMode="tail">
+                {st.student_name}
+              </Text>
+              {resolveUserDepartments(st).length > 0 ? (
+                <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 2, marginBottom: 2 }}>
+                  {resolveUserDepartments(st).map((d: DepartmentItem, i: number) => {
+                    const colors = getDepartmentBadgeColors(d.department_color);
+                    return (
+                      <View key={d.department_id || i} style={[s.perfDeptTag, { backgroundColor: colors.bg, borderColor: colors.border, borderWidth: 1 }]}>
+                        <View style={[s.perfDeptDot, { backgroundColor: colors.dot }]} />
+                        <Text style={[s.perfDeptText, { color: colors.text }]} numberOfLines={1}>
+                          {d.department_name}
+                        </Text>
+                      </View>
+                    );
+                  })}
                 </View>
               ) : null}
               <View style={s.perfStats}>
@@ -1769,35 +1830,23 @@ function SupervisorPerformanceSection({
                 </Text>
               </View>
             )}
-            <View style={{ flex: 1 }}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 6,
-                  flexWrap: "wrap",
-                }}
-              >
-                <Text style={s.perfName}>{sp.supervisor_name}</Text>
-                {badge && (
-                  <View
-                    style={[
-                      s.lbBadgePill,
-                      { backgroundColor: badge.bg, borderColor: badge.border },
-                    ]}
-                  >
-                    <Text style={[s.lbBadgeText, { color: badge.color }]}>
-                      {badge.label}
-                    </Text>
-                  </View>
-                )}
-              </View>
-              {sp.department_name ? (
-                <View style={s.perfDeptTag}>
-                  <Ionicons name="business-outline" size={11} color="#37474F" />
-                  <Text style={s.perfDeptText} numberOfLines={1}>
-                    {sp.department_name}
-                  </Text>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={s.perfName} numberOfLines={1} ellipsizeMode="tail">
+                {sp.supervisor_name}
+              </Text>
+              {resolveUserDepartments(sp).length > 0 ? (
+                <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 2, marginBottom: 2 }}>
+                  {resolveUserDepartments(sp).map((d: DepartmentItem, i: number) => {
+                    const colors = getDepartmentBadgeColors(d.department_color);
+                    return (
+                      <View key={d.department_id || i} style={[s.perfDeptTag, { backgroundColor: colors.bg, borderColor: colors.border, borderWidth: 1 }]}>
+                        <View style={[s.perfDeptDot, { backgroundColor: colors.dot }]} />
+                        <Text style={[s.perfDeptText, { color: colors.text }]} numberOfLines={1}>
+                          {d.department_name}
+                        </Text>
+                      </View>
+                    );
+                  })}
                 </View>
               ) : null}
               <View style={s.perfStats}>
@@ -1842,6 +1891,177 @@ function SupervisorPerformanceSection({
         >
           <Ionicons name="chevron-down" size={14} color="#6A1B9A" />
           <Text style={[s.showMoreText, { color: "#6A1B9A" }]}>
+            Show more ({remaining} more)
+          </Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
+// ── Implant In-Charge Performance Section (interactive + Show More + Leaderboard) ───
+function InchargePerformanceSection({
+  rows,
+  router,
+}: {
+  rows: any[];
+  router: any;
+}) {
+  const [leaderboard, setLeaderboard] = useState(false);
+  // In-Charge leaderboard: top by completed; hot by completed/total ratio; risk by pending backlog.
+  const lb = useMemo(
+    () => pickLeaderboardBadges(rows, "completed", "completed", "pending"),
+    [rows],
+  );
+  const sortedRows = useMemo(() => {
+    if (!leaderboard) return rows;
+    const ordered: any[] = [];
+    const used = new Set<string>();
+    const pickById = (id: string | null) => {
+      if (!id) return null;
+      const r = rows.find((x: any) => x.incharge_id === id);
+      if (r && !used.has(id)) {
+        used.add(id);
+        ordered.push(r);
+      }
+      return r;
+    };
+    pickById(lb.topId);
+    pickById(lb.hotId);
+    pickById(lb.riskId);
+    rows.forEach((r: any) => {
+      if (!used.has(r.incharge_id)) {
+        used.add(r.incharge_id);
+        ordered.push(r);
+      }
+    });
+    return ordered;
+  }, [rows, leaderboard, lb]);
+  const shown = sortedRows.slice(0, PERF_PREVIEW_COUNT);
+  const remaining = Math.max(0, sortedRows.length - PERF_PREVIEW_COUNT);
+  const hasMore = remaining > 0;
+  return (
+    <View style={s.section}>
+      <View style={s.sectionHeader}>
+        <Ionicons name="shield-checkmark-outline" size={18} color="#00695C" />
+        <Text style={[s.sectionTitle, { color: "#00695C" }]}>
+          Implant In-Charge Performance
+        </Text>
+        <View style={{ flex: 1 }} />
+        <LeaderboardToggle
+          value={leaderboard}
+          onChange={setLeaderboard}
+          accent="#00695C"
+          testID="incharge-leaderboard-toggle"
+        />
+      </View>
+      {leaderboard && <LeaderboardLegend />}
+      {shown.map((ic: any, idx: number) => {
+        const iid = ic.incharge_id;
+        const onPress = iid
+          ? () => router.push(`/admin/incharge/${iid}`)
+          : undefined;
+        const departments =
+          ic.departments && ic.departments.length > 0
+            ? ic.departments
+            : ic.department_name
+              ? [{ department_id: ic.department_id, department_name: ic.department_name, department_color: ic.department_color }]
+              : [];
+        const badge = leaderboard
+          ? iid === lb.topId
+            ? TOP_BADGE
+            : iid === lb.hotId
+              ? HOT_BADGE
+              : iid === lb.riskId
+                ? RISK_BADGE
+                : null
+          : null;
+        return (
+          <TouchableOpacity
+            key={`incharge-perf-${idx}`}
+            style={[
+              s.perfCard,
+              badge && { borderColor: badge.border, borderWidth: 1.5 },
+            ]}
+            activeOpacity={onPress ? 0.7 : 1}
+            onPress={onPress}
+            data-testid={`incharge-perf-${idx}`}
+            accessibilityRole="button"
+          >
+            {badge ? (
+              <RankCircle idx={idx} badge={badge} />
+            ) : (
+              <View style={[s.perfRank, { backgroundColor: "#E0F2F1" }]}>
+                <Text style={[s.perfRankText, { color: "#00695C" }]}>
+                  #{idx + 1}
+                </Text>
+              </View>
+            )}
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={s.perfName} numberOfLines={1} ellipsizeMode="tail">
+                {ic.incharge_name}
+              </Text>
+              {departments.length > 0 && (
+                <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 3, marginBottom: 2 }}>
+                  {departments.map((d: any, dIdx: number) => {
+                    const colors = getDepartmentBadgeColors(d.department_color);
+                    return (
+                      <View
+                        key={d.department_id || dIdx}
+                        style={[
+                          s.perfDeptTag,
+                          { backgroundColor: colors.bg, borderColor: colors.border, borderWidth: 1 }
+                        ]}
+                      >
+                        <View style={[s.perfDeptDot, { backgroundColor: colors.dot }]} />
+                        <Text style={[s.perfDeptText, { color: colors.text }]} numberOfLines={1}>
+                          {d.department_name}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+              <View style={s.perfStats}>
+                <View style={s.perfChip}>
+                  <Text style={[s.perfChipText, { color: "#1A73E8" }]}>
+                    {ic.total} cases
+                  </Text>
+                </View>
+                <View style={s.perfChip}>
+                  <Text style={[s.perfChipText, { color: "#4CAF50" }]}>
+                    {ic.completed} completed
+                  </Text>
+                </View>
+                <View style={s.perfChip}>
+                  <Text style={[s.perfChipText, { color: "#FF9800" }]}>
+                    {ic.pending} pending
+                  </Text>
+                </View>
+                <View style={s.perfChip}>
+                  <Text style={[s.perfChipText, { color: "#00695C" }]}>
+                    {ic.students_count} student{ic.students_count === 1 ? "" : "s"}
+                  </Text>
+                </View>
+              </View>
+            </View>
+            {onPress && (
+              <Ionicons name="chevron-forward" size={18} color="#B0BEC5" />
+            )}
+          </TouchableOpacity>
+        );
+      })}
+      {hasMore && (
+        <TouchableOpacity
+          style={[
+            s.showMoreBtn,
+            { backgroundColor: "#E0F2F1", borderColor: "#80CBC4" },
+          ]}
+          onPress={() => router.push("/admin/incharges-performance")}
+          data-testid="incharge-perf-show-more"
+        >
+          <Ionicons name="chevron-down" size={14} color="#00695C" />
+          <Text style={[s.showMoreText, { color: "#00695C" }]}>
             Show more ({remaining} more)
           </Text>
         </TouchableOpacity>
@@ -2156,8 +2376,8 @@ const s = StyleSheet.create({
 
   // Header
   headerCard: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: "column",
+    alignItems: "stretch",
     backgroundColor: "#FFF",
     borderRadius: 20,
     marginHorizontal: 16,
@@ -2223,11 +2443,14 @@ const s = StyleSheet.create({
   roleBadgeCard: {
     flexDirection: "row",
     alignItems: "center",
+    alignSelf: "flex-start",
     borderWidth: 1,
     borderRadius: 20,
     paddingVertical: 3,
     paddingHorizontal: 10,
     paddingLeft: 3,
+    marginRight: 6,
+    marginBottom: 6,
     gap: 6,
   },
   roleBadgeIconCircle: {
@@ -2521,9 +2744,11 @@ const s = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#FFF",
     borderRadius: 14,
-    padding: 12,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+    paddingRight: 8,
     marginBottom: 8,
-    gap: 12,
+    gap: 10,
     borderWidth: 1,
     borderColor: "#E2E8F0",
     shadowColor: "#0F172A",
@@ -2533,36 +2758,39 @@ const s = StyleSheet.create({
     elevation: 1,
   },
   perfRank: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: "#FFF8E1",
     justifyContent: "center",
     alignItems: "center",
   },
-  perfRankText: { fontSize: 12, fontWeight: "800", color: "#F57F17" },
-  perfName: { fontSize: 15, fontWeight: "700", color: "#0F172A" },
+  perfRankText: { fontSize: 11.5, fontWeight: "800", color: "#F57F17" },
+  perfName: { fontSize: 14, fontWeight: "700", color: "#0F172A", marginBottom: 1 },
   perfDeptTag: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#ECEFF1",
     paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
+    paddingVertical: 1.5,
+    borderRadius: 12,
     alignSelf: "flex-start",
-    marginTop: 3,
+    marginRight: 4,
+    marginBottom: 2,
+    maxWidth: "100%",
+  },
+  perfDeptText: { fontSize: 10.5, fontWeight: "700" },
+  perfDeptDot: { width: 6.5, height: 6.5, borderRadius: 3.5 },
+  perfStats: { flexDirection: "row", flexWrap: "wrap", marginTop: 2 },
+  perfChip: {
+    backgroundColor: "#F1F5F9",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginRight: 4,
     marginBottom: 2,
   },
-  perfDeptText: { fontSize: 11, fontWeight: "700", color: "#37474F" },
-  perfStats: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 4 },
-  perfChip: {
-    backgroundColor: "#F5F7FA",
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  perfChipText: { fontSize: 10.5, fontWeight: "700" },
+  perfChipText: { fontSize: 10, fontWeight: "700" },
 
   // Show more / less button used by Student Performance + Recent Activity
   showMoreBtn: {

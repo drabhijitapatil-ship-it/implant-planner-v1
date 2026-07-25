@@ -813,63 +813,29 @@ export default function ProcedureDetailScreen() {
 
   const canApprove = () => {
     if (!procedure) return false;
+    // Students and nurses cannot approve
     if (user?.role === "nurse" || user?.role === "student") return false;
 
-    // Assignment-based check: anyone assigned as supervisor or incharge can approve
-    const isSupervisor = user?.id === procedure.supervisor_id;
-    const isImplantIncharge = user?.id === procedure.implant_incharge_id;
-    const isInchargeSelfCreated =
-      procedure.created_by_role === "implant_incharge" &&
-      user?.id === procedure.created_by_id;
+    // Faculty & Org Admins always have approval authority on pending cases
+    const isFacultyOrAdmin =
+      user?.is_admin ||
+      user?.role === "administrator" ||
+      user?.role === "implant_incharge" ||
+      user?.role === "supervisor" ||
+      user?.role === "chief_dentist";
 
-    if (procedure.status === "pending_phase1") {
-      if (isInchargeSelfCreated) return true;
-      if (isSupervisor && !procedure.supervisor_phase1_approved) return true;
-      if (isImplantIncharge && !procedure.implant_incharge_phase1_approved)
-        return true;
-    }
+    if (!isFacultyOrAdmin) return false;
 
-    if (procedure.status === "pending_phase2") {
-      if (isInchargeSelfCreated) return true;
-      if (isSupervisor && !procedure.supervisor_phase2_approved) return true;
-      if (isImplantIncharge && !procedure.implant_incharge_phase2_approved)
-        return true;
-    }
+    const PENDING = new Set([
+      "pending_phase1",
+      "pending_phase2",
+      "pending_stage2_surgical",
+      "pending_stage2_prosthetic",
+      "pending_final_delivery",
+      "pending_end_treatment",
+    ]);
 
-    if (procedure.status === "pending_stage2_surgical") {
-      if (isInchargeSelfCreated) return true;
-      if (isSupervisor && !procedure.supervisor_stage2_surgical_approved)
-        return true;
-      if (
-        isImplantIncharge &&
-        !procedure.implant_incharge_stage2_surgical_approved
-      )
-        return true;
-    }
-
-    if (procedure.status === "pending_stage2_prosthetic") {
-      if (isInchargeSelfCreated) return true;
-      if (isSupervisor && !procedure.supervisor_stage2_prosthetic_approved)
-        return true;
-      if (
-        isImplantIncharge &&
-        !procedure.implant_incharge_stage2_prosthetic_approved
-      )
-        return true;
-    }
-
-    if (procedure.status === "pending_final_delivery") {
-      if (isInchargeSelfCreated) return true;
-      if (isSupervisor && !procedure.supervisor_final_delivery_approved)
-        return true;
-      if (
-        isImplantIncharge &&
-        !procedure.implant_incharge_final_delivery_approved
-      )
-        return true;
-    }
-
-    return false;
+    return PENDING.has(procedure.status);
   };
 
   const canSubmitPhase2 = () => {
@@ -943,6 +909,187 @@ export default function ProcedureDetailScreen() {
     // Implant In-Charge: see AI Summary for ALL cases
     if (user?.role === "implant_incharge") return true;
     return false;
+  };
+
+  const currentUserId = String(user?.id || (user as any)?._id || "");
+  const extractId = (val: any) => {
+    if (!val) return "";
+    if (typeof val === "object") return String(val._id || val.id || "");
+    return String(val);
+  };
+  const supervisorId = extractId(procedure?.supervisor_id);
+  const inchargeId = extractId(procedure?.implant_incharge_id);
+  const isSupervisorOnCase = Boolean(currentUserId && supervisorId && currentUserId === supervisorId);
+  const isInchargeOnCase = Boolean(currentUserId && inchargeId && currentUserId === inchargeId);
+  const samePersonBothRoles = Boolean(
+    (supervisorId && inchargeId && supervisorId === inchargeId) ||
+    (isSupervisorOnCase && isInchargeOnCase)
+  );
+
+  const renderApprovalActions = () => {
+    if (!canApprove() || showRejectDialog) return null;
+    if (
+      user?.role === "implant_incharge" &&
+      procedure.created_by_role === "implant_incharge" &&
+      user?.id === procedure.created_by_id
+    ) {
+      return null;
+    }
+
+    let heading = "Your Remarks (optional)";
+    if (samePersonBothRoles && (isSupervisorOnCase || isInchargeOnCase || user?.role === "implant_incharge")) {
+      heading = "Comment (optional)";
+    } else if (isSupervisorOnCase && !isInchargeOnCase) {
+      heading = "Supervisor Comment (optional)";
+    } else if (isInchargeOnCase && !isSupervisorOnCase) {
+      heading = "Implant In-Charge Comment (optional)";
+    }
+
+    return (
+      <View
+        style={{
+          marginTop: 12,
+          marginBottom: 16,
+          marginHorizontal: 12,
+          backgroundColor: "#FFF",
+          borderRadius: 16,
+          padding: 16,
+          borderWidth: 1,
+          borderColor: "#E8EDF5",
+          shadowColor: "#1565C0",
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.08,
+          shadowRadius: 8,
+          elevation: 3,
+        }}
+        data-testid="approval-action-card"
+      >
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10,marginBottom:16  }}>
+          <View
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: 17,
+              backgroundColor: "#E3F2FD",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Ionicons name="checkbox-outline" size={18} color="#1565C0" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 16, fontWeight: "800", color: "#1565C0" }}>
+              Review this phase
+            </Text>
+            <Text style={{ fontSize: 12, color: "#607D8B", marginTop: 2 }}>
+              Add remarks if needed, then approve or reject.
+            </Text>
+          </View>
+          {samePersonBothRoles && (
+            <View
+              style={{
+                backgroundColor: "#E8F1FF",
+                borderWidth: 1,
+                borderColor: "#B7C9FF",
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+                borderRadius: 999,
+              }}
+            >
+              <Text style={{ fontSize: 11, fontWeight: "700", color: "#1A237E" }}>
+                Supervisor + In-Charge
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <View
+          style={{
+            marginTop: 14,
+            backgroundColor: "#F8FBFF",
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: "#D7E3F5",
+            padding: 12,
+          }}
+        >
+          <Text style={{ fontSize: 12, fontWeight: "700", color: "#283593", marginBottom: 6 }}>
+            {heading}
+          </Text>
+          <TextInput
+            style={{
+              borderWidth: 1,
+              borderColor: "#C5CAE9",
+              borderRadius: 10,
+              padding: 10,
+              fontSize: 14,
+              backgroundColor: "#FFF",
+              minHeight: 64,
+              textAlignVertical: "top",
+            }}
+            value={approvalComment}
+            onChangeText={setApprovalComment}
+            placeholder="Write your remarks for the postgraduate student..."
+            multiline
+            testID="approval-comment-input"
+          />
+          {user?.role !== "implant_incharge" && (
+            <Text
+              style={{
+                fontSize: 11,
+                color: "#7986CB",
+                marginTop: 6,
+                fontStyle: "italic",
+              }}
+            >
+              This comment will be visible to the student and included in the PDF.
+            </Text>
+          )}
+        </View>
+
+        <View
+          style={{
+            marginTop: 14,
+            flexDirection: "row",
+            gap: 12,
+          }}
+        >
+          <TouchableOpacity
+            style={[
+              styles.approveButton,
+              styles.approvalActionPrimaryButton,
+              actionLoading && styles.buttonDisabled,
+            ]}
+            onPress={handleApprove}
+            disabled={actionLoading}
+            data-testid="approve-btn"
+          >
+            {actionLoading ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <>
+                <Ionicons name="checkmark-circle" size={20} color="#FFF" />
+                <Text style={styles.buttonText}>Approve</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.rejectButton,
+              styles.approvalActionSecondaryButton,
+              actionLoading && styles.buttonDisabled,
+            ]}
+            onPress={() => setShowRejectDialog(true)}
+            disabled={actionLoading}
+            data-testid="reject-btn"
+          >
+            <Ionicons name="close-circle" size={20} color="#FFF" />
+            <Text style={styles.buttonText}>Reject</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
   };
 
   const handleExportPDF = async () => {
@@ -3048,6 +3195,7 @@ export default function ProcedureDetailScreen() {
                 </View>
               </View>
             )}
+            {procedure.status === "pending_phase1" && renderApprovalActions()}
 
             {/* Permanently Rejected Banner */}
             {procedure.status === "permanently_rejected" && (
@@ -8524,142 +8672,8 @@ export default function ProcedureDetailScreen() {
                 </View>
               )}
 
-            {/* ── APPROVAL COMMENT BOX (Phase 1-4) ──
-            iter-248: now shown on Phase 1 too with a role-aware heading.
-            Hidden for Implant In-Charge on self-created cases (auto-approval flow). */}
-            {canApprove() &&
-              !showRejectDialog &&
-              !(
-                user?.role === "implant_incharge" &&
-                procedure.created_by_role === "implant_incharge" &&
-                user?.id === procedure.created_by_id
-              ) &&
-              (() => {
-                // Compute the right heading based on the current user's role(s)
-                // on this specific case.
-                const isSupervisorOnCase = user?.id === procedure.supervisor_id;
-                const isInchargeOnCase =
-                  user?.id === procedure.implant_incharge_id;
-                const samePersonBothRoles =
-                  procedure.supervisor_id &&
-                  procedure.implant_incharge_id &&
-                  procedure.supervisor_id === procedure.implant_incharge_id;
-                let heading = "Your Remarks (optional)";
-                if (
-                  samePersonBothRoles &&
-                  (isSupervisorOnCase || isInchargeOnCase)
-                ) {
-                  heading = "Comment (optional)";
-                } else if (isSupervisorOnCase && !isInchargeOnCase) {
-                  heading = "Supervisor Comment (optional)";
-                } else if (isInchargeOnCase && !isSupervisorOnCase) {
-                  heading = "Implant In-Charge Comment (optional)";
-                }
-                return (
-                  <View
-                    style={{
-                      marginTop: 16,
-                      marginHorizontal: 16,
-                      backgroundColor: "#F0F4FF",
-                      borderRadius: 12,
-                      padding: 14,
-                      borderWidth: 1,
-                      borderColor: "#C5CAE9",
-                    }}
-                    data-testid="approval-comment-box"
-                  >
-                    <Text
-                      style={{
-                        fontSize: 13,
-                        fontWeight: "600",
-                        color: "#283593",
-                        marginBottom: 6,
-                      }}
-                    >
-                      {heading}
-                    </Text>
-                    <TextInput
-                      style={{
-                        borderWidth: 1,
-                        borderColor: "#C5CAE9",
-                        borderRadius: 8,
-                        padding: 10,
-                        fontSize: 14,
-                        backgroundColor: "#FFF",
-                        minHeight: 60,
-                        textAlignVertical: "top",
-                      }}
-                      value={approvalComment}
-                      onChangeText={setApprovalComment}
-                      placeholder="Write your remarks for the postgraduate student..."
-                      multiline
-                      testID="approval-comment-input"
-                    />
-                    {user?.role !== "implant_incharge" && (
-                      <Text
-                        style={{
-                          fontSize: 11,
-                          color: "#7986CB",
-                          marginTop: 4,
-                          fontStyle: "italic",
-                        }}
-                      >
-                        This comment will be visible to the student and included
-                        in the PDF.
-                      </Text>
-                    )}
-                  </View>
-                );
-              })()}
-
-            {/* ── APPROVAL SECTION ── */}
-            {canApprove() && !showRejectDialog && (
-              <View
-                style={{
-                  marginTop: 20,
-                  marginHorizontal: 16,
-                  flexDirection: "row",
-                  justifyContent: "center",
-                  gap: 16,
-                }}
-              >
-                <TouchableOpacity
-                  style={[
-                    styles.approveButton,
-                    actionLoading && styles.buttonDisabled,
-                  ]}
-                  onPress={handleApprove}
-                  disabled={actionLoading}
-                  data-testid="approve-btn"
-                >
-                  {actionLoading ? (
-                    <ActivityIndicator color="#FFF" />
-                  ) : (
-                    <>
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={20}
-                        color="#FFF"
-                      />
-                      <Text style={styles.buttonText}>Approve</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.rejectButton,
-                    actionLoading && styles.buttonDisabled,
-                  ]}
-                  onPress={() => setShowRejectDialog(true)}
-                  disabled={actionLoading}
-                  data-testid="reject-btn"
-                >
-                  <Ionicons name="close-circle" size={20} color="#FFF" />
-                  <Text style={styles.buttonText}>Reject</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+            {/* ── APPROVAL SECTION (Phase 2-4) ── */}
+            {procedure.status !== "pending_phase1" && renderApprovalActions()}
 
             {showRejectDialog && (
               <View style={styles.rejectDialog}>
@@ -10751,21 +10765,39 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     backgroundColor: "#4CAF50",
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 14,
+    paddingVertical: 15,
+    paddingHorizontal: 14,
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
+    shadowColor: "#4CAF50",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 2,
   },
   rejectButton: {
     flex: 1,
     flexDirection: "row",
     backgroundColor: "#F44336",
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 14,
+    paddingVertical: 15,
+    paddingHorizontal: 14,
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
+    shadowColor: "#F44336",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  approvalActionPrimaryButton: {
+    minHeight: 54,
+  },
+  approvalActionSecondaryButton: {
+    minHeight: 54,
   },
   buttonDisabled: {
     opacity: 0.6,

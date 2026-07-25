@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -10,15 +10,17 @@ import {
   TextInput,
   Alert,
   Modal,
-  Pressable,
+  LayoutAnimation,
   useWindowDimensions,
+  ScrollView,
+  UIManager,
+  Platform,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import api from "../../utils/api";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { format } from "date-fns";
-import { STATUS_COLORS, STATUS_LABELS } from "../../constants/checklist";
+import { STATUS_LABELS } from "../../constants/checklist";
 import { useAuth } from "../../contexts/AuthContext";
 import CaseSubmissionStatus from "../../components/CaseSubmissionStatus";
 import NurseCasesScreen from "../../components/NurseCasesScreen";
@@ -73,6 +75,28 @@ const getStatusBadgeStyle = (status: string) => {
   };
 };
 
+const PENDING_STATUSES = new Set([
+  "pending_phase1",
+  "pending_phase2",
+  "pending_stage2_surgical",
+  "pending_phase4_step1",
+  "pending_phase4_step2",
+]);
+const IN_PROGRESS_STATUSES = new Set([
+  ...PENDING_STATUSES,
+  "phase1_approved",
+  "phase2_approved",
+  "stage2_surgical_approved",
+  "phase4_step1_approved",
+]);
+const REJECTED_STATUSES = new Set([
+  "rejected_phase1",
+  "rejected_phase2",
+  "rejected_stage2_surgical",
+  "rejected_phase4_step1",
+  "rejected_phase4_step2",
+]);
+
 function DefaultProceduresScreen() {
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
@@ -92,9 +116,11 @@ function DefaultProceduresScreen() {
   // iter-350: org owner (is_admin) isn't auto-scoped to any department, so
   // give them a filter to narrow "My Cases" down to one instead of always
   // seeing everything org-wide. 'all' = no department_id param sent.
-  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+  const [departments, setDepartments] = useState<{ id: string; name: string; color?: string }[]>([]);
   const [deptFilter, setDeptFilter] = useState<string>("all");
-  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [tempFilter, setTempFilter] = useState<string>("all");
+  const [tempDeptFilter, setTempDeptFilter] = useState<string>("all");
   const [shareCase, setShareCase] = useState<{
     id: string;
     patientName?: string;
@@ -112,7 +138,9 @@ function DefaultProceduresScreen() {
     patientName?: string;
   } | null>(null);
   // iter-385: case selected for Transfer Case via the three-dot menu.
-  const [transferCase, setTransferCase] = useState<{ id: string } | null>(null);
+  const [transferCase, setTransferCase] = useState<{ id: string; privileged?: boolean } | null>(null);
+  const [selectedProcedureForActions, setSelectedProcedureForActions] = useState<any | null>(null);
+
   const router = useRouter();
   const params = useLocalSearchParams<{ filter?: string; phase?: string }>();
 
@@ -138,20 +166,7 @@ function DefaultProceduresScreen() {
       .catch(() => {});
   }, [user?.is_admin]);
 
-  useEffect(() => {
-    loadProcedures();
-  }, [filter, deptFilter]);
-
-  // Re-fetch on every screen focus so a case cancelled/deleted/rescheduled
-  // elsewhere (by this user or another) is reflected without needing to
-  // restart the app.
-  useFocusEffect(
-    useCallback(() => {
-      loadProcedures();
-    }, [filter, deptFilter])
-  );
-
-  const loadProcedures = async () => {
+  const loadProcedures = useCallback(async () => {
     try {
       const reqParams: any = {};
       const f = String(filter);
@@ -175,7 +190,20 @@ function DefaultProceduresScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [deptFilter, filter, user?.is_admin]);
+
+  useEffect(() => {
+    loadProcedures();
+  }, [loadProcedures]);
+
+  // Re-fetch on every screen focus so a case cancelled/deleted/rescheduled
+  // elsewhere (by this user or another) is reflected without needing to
+  // restart the app.
+  useFocusEffect(
+    useCallback(() => {
+      loadProcedures();
+    }, [loadProcedures])
+  );
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -183,7 +211,6 @@ function DefaultProceduresScreen() {
   };
 
   const handleArchive = async (id: string) => {
-    setMenuOpenId(null);
     if (!id) {
       Alert.alert("Error", "Missing case ID");
       return;
@@ -215,7 +242,6 @@ function DefaultProceduresScreen() {
   };
 
   const handleDelete = async (id: string) => {
-    setMenuOpenId(null);
     if (!id) {
       Alert.alert("Error", "Missing case ID");
       return;
@@ -248,7 +274,6 @@ function DefaultProceduresScreen() {
   };
 
   const handleEdit = (id: string) => {
-    setMenuOpenId(null);
     router.push(`/procedures/${id}?edit=true`);
   };
 
@@ -264,6 +289,16 @@ function DefaultProceduresScreen() {
     }[] = [];
     const isCompleted = item.status === "completed";
     const pid = item.id || item._id;
+    // iter-385: Transfer Case eligibility — shared across student,
+    // department incharge, and org admin initiators. Mirrors backend
+    // TRANSFER_PENDING_STATUSES.
+    const transferPendingStatuses = new Set([
+      "pending_phase1", "pending_phase2", "pending_stage2_surgical",
+      "pending_stage2_prosthetic", "pending_final_delivery",
+    ]);
+    const hasPendingTransfer = !!item.transfer_request;
+    const transferEligible =
+      !isCompleted && !transferPendingStatuses.has(item.status) && !hasPendingTransfer;
 
     if (role === "implant_incharge") {
       if (!isCompleted)
@@ -288,6 +323,29 @@ function DefaultProceduresScreen() {
         color: "#1565C0",
         onPress: () => handleArchive(pid),
       });
+      // Department In-Charge — transfer within own department, skips
+      // Supervisor/In-Charge approval (they already have that authority).
+      if (user?.department_id && transferEligible) {
+        actions.push({
+          key: "transfer",
+          label: "Transfer Case",
+          icon: "swap-horizontal-outline",
+          color: "#0D47A1",
+          onPress: () => setTransferCase({ id: pid, privileged: true }),
+        });
+      }
+    } else if (role === "administrator") {
+      // Organization Admin — transfer within the case's own department,
+      // skips Supervisor/In-Charge approval.
+      if (user?.is_admin && transferEligible) {
+        actions.push({
+          key: "transfer",
+          label: "Transfer Case",
+          icon: "swap-horizontal-outline",
+          color: "#0D47A1",
+          onPress: () => setTransferCase({ id: pid, privileged: true }),
+        });
+      }
     } else if (role === "supervisor") {
       if (!isCompleted)
         actions.push({
@@ -313,16 +371,9 @@ function DefaultProceduresScreen() {
         onPress: () => handleArchive(pid),
       });
       // iter-385: Transfer Case — student can only initiate transfer of a
-      // case they currently own, that isn't archived/completed, isn't
-      // mid-phase-submission-pending-approval, and has no transfer already
-      // in progress. Mirrors backend TRANSFER_PENDING_STATUSES.
-      const transferPendingStatuses = new Set([
-        "pending_phase1", "pending_phase2", "pending_stage2_surgical",
-        "pending_stage2_prosthetic", "pending_final_delivery",
-      ]);
+      // case they currently own.
       const isCurrentOwner = item.student_id === user?.id;
-      const hasPendingTransfer = !!item.transfer_request;
-      if (isCurrentOwner && !isCompleted && !transferPendingStatuses.has(item.status) && !hasPendingTransfer) {
+      if (isCurrentOwner && transferEligible) {
         actions.push({
           key: "transfer",
           label: "Transfer Case",
@@ -406,7 +457,6 @@ function DefaultProceduresScreen() {
 
   const renderProcedure = ({ item }: any) => {
     const actions = getMenuActions(item);
-    const isMenuOpen = menuOpenId === item.id;
     const statusStyle = getStatusBadgeStyle(item.status);
 
     return (
@@ -420,7 +470,6 @@ function DefaultProceduresScreen() {
           },
         ]}
         onPress={() => {
-          setMenuOpenId(null);
           router.push(`/procedures/${item.id}`);
         }}
       >
@@ -434,47 +483,16 @@ function DefaultProceduresScreen() {
               <Text style={styles.registrationNumber}>#{item.registration_number}</Text>
             </View>
             {actions.length > 0 && (
-              <View style={styles.menuContainer}>
-                <TouchableOpacity
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    setMenuOpenId(isMenuOpen ? null : item.id);
-                  }}
-                  style={styles.threeDotButton}
-                  data-testid={`three-dot-menu-${item.id}`}
-                >
-                  <Ionicons name="ellipsis-vertical" size={20} color="#666" />
-                </TouchableOpacity>
-                {isMenuOpen && (
-                  <View
-                    style={styles.popupMenu}
-                    data-testid={`popup-menu-${item.id}`}
-                  >
-                    {actions.map((action) => (
-                      <TouchableOpacity
-                        key={action.key}
-                        style={styles.popupItem}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          action.onPress();
-                        }}
-                        data-testid={`menu-${action.key}-${item.id}`}
-                      >
-                        <Ionicons
-                          name={action.icon as any}
-                          size={18}
-                          color={action.color}
-                        />
-                        <Text
-                          style={[styles.popupItemText, { color: action.color }]}
-                        >
-                          {action.label}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-              </View>
+              <TouchableOpacity
+                onPress={(e) => {
+                  e.stopPropagation();
+                  setSelectedProcedureForActions(item);
+                }}
+                style={styles.threeDotButton}
+                data-testid={`three-dot-menu-${item.id}`}
+              >
+                <Ionicons name="ellipsis-vertical" size={20} color="#666" />
+              </TouchableOpacity>
             )}
           </View>
         </View>
@@ -482,7 +500,7 @@ function DefaultProceduresScreen() {
         {/* Status Banner */}
         <View style={[styles.statusBanner, { backgroundColor: statusStyle.bg }]}>
           <Ionicons name={statusStyle.icon} size={16} color={statusStyle.text} />
-          <Text style={[styles.statusText, { color: statusStyle.text }]}>
+          <Text style={[styles.statusText, { color: statusStyle.text }]} numberOfLines={1}>
             {STATUS_LABELS[item.status as keyof typeof STATUS_LABELS] || item.status}
           </Text>
         </View>
@@ -598,24 +616,23 @@ function DefaultProceduresScreen() {
     );
   };
 
-  const filterButtons = [
+  const filterButtons = useMemo(() => [
     { key: "all", label: "All" },
     { key: "in_progress", label: "In Progress" },
     { key: "completed", label: "Completed" },
     { key: "rejected", label: "Rejected" },
-  ];
+  ], []);
 
-  const searchFiltered = searchQuery.trim()
-    ? procedures.filter((p: any) => {
-        const q = searchQuery.toLowerCase();
-        return (
-          p.patient_name?.toLowerCase().includes(q) ||
-          p.registration_number?.toLowerCase().includes(q) ||
-          p.student_name?.toLowerCase().includes(q) ||
-          p.supervisor_name?.toLowerCase().includes(q)
-        );
-      })
-    : procedures;
+  const searchFiltered = useMemo(() => {
+    if (!searchQuery.trim()) return procedures;
+    const q = searchQuery.toLowerCase();
+    return procedures.filter((p: any) => (
+      p.patient_name?.toLowerCase().includes(q) ||
+      p.registration_number?.toLowerCase().includes(q) ||
+      p.student_name?.toLowerCase().includes(q) ||
+      p.supervisor_name?.toLowerCase().includes(q)
+    ));
+  }, [procedures, searchQuery]);
 
   // iter-267: unified client-side status categorisation. Drafts are
   // already excluded upstream (Dashboard owns them).
@@ -624,31 +641,9 @@ function DefaultProceduresScreen() {
   //     cleared a phase but are not yet completed.
   //   • Completed = final state.
   //   • Rejected = any rejected_* phase status.
-  const PENDING_STATUSES = new Set([
-    "pending_phase1",
-    "pending_phase2",
-    "pending_stage2_surgical",
-    "pending_phase4_step1",
-    "pending_phase4_step2",
-  ]);
-  const IN_PROGRESS_STATUSES = new Set([
-    ...PENDING_STATUSES,
-    "phase1_approved",
-    "phase2_approved",
-    "stage2_surgical_approved",
-    "phase4_step1_approved",
-  ]);
-  const REJECTED_STATUSES = new Set([
-    "rejected_phase1",
-    "rejected_phase2",
-    "rejected_stage2_surgical",
-    "rejected_phase4_step1",
-    "rejected_phase4_step2",
-  ]);
-
   // iter-268: per-tab counts so users see workload at a glance.
   // Counts reflect the active search query (mirrors the visible list).
-  const tabCounts: Record<string, number> = {
+  const tabCounts = useMemo<Record<string, number>>(() => ({
     all: searchFiltered.length,
     in_progress: searchFiltered.filter((p: any) =>
       IN_PROGRESS_STATUSES.has(p.status),
@@ -657,11 +652,11 @@ function DefaultProceduresScreen() {
       .length,
     rejected: searchFiltered.filter((p: any) => REJECTED_STATUSES.has(p.status))
       .length,
-  };
+  }), [searchFiltered]);
 
-  const filteredProcedures = (() => {
+  const filteredProcedures = useMemo(() => {
     const f = String(filter);
-    if (f.startsWith("phase_")) return searchFiltered; // phase deep-link
+    if (f.startsWith("phase_")) return searchFiltered;
     if (f === "all") return searchFiltered;
     return searchFiltered.filter((p: any) => {
       const s = p.status;
@@ -670,7 +665,7 @@ function DefaultProceduresScreen() {
       if (f === "rejected") return REJECTED_STATUSES.has(s);
       return true;
     });
-  })();
+  }, [filter, searchFiltered]);
 
   if (loading) {
     return (
@@ -682,100 +677,98 @@ function DefaultProceduresScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={isTablet ? { backgroundColor: "#FFF", borderBottomWidth: 1, borderBottomColor: "#E5E5EA" } : null}>
-        <View style={[styles.filterContainer, isTablet && { maxWidth: 960, alignSelf: "center", width: "100%", borderBottomWidth: 0 }]}>
-          {filterButtons.map((btn) => {
-            const isActive = filter === btn.key;
-            const count = tabCounts[btn.key] ?? 0;
-            return (
+      {/* Plain Search Header */}
+      <View style={isTablet && { maxWidth: 960, alignSelf: "center", width: "100%" }}>
+        <View style={styles.searchRow}>
+          <View style={styles.searchContainer} data-testid="search-bar-container">
+            <Ionicons
+              name="search"
+              size={18}
+              color="#999"
+              style={{ marginLeft: 12 }}
+            />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search by patient, registration, student..."
+              placeholderTextColor="#999"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCorrect={false}
+              data-testid="search-input"
+            />
+            {searchQuery.length > 0 && (
               <TouchableOpacity
-                key={btn.key}
-                style={[
-                  styles.filterButton,
-                  isActive && styles.filterButtonActive,
-                ]}
-                onPress={() => setFilter(btn.key as any)}
-                testID={`filter-tab-${btn.key}`}
+                onPress={() => setSearchQuery("")}
+                style={{ padding: 8 }}
+                data-testid="search-clear"
               >
-                <Text
-                  style={[styles.filterText, isActive && styles.filterTextActive]}
-                  numberOfLines={1}
-                >
-                  {btn.label}
-                  <Text
-                    style={[
-                      styles.filterCount,
-                      isActive && styles.filterCountActive,
-                    ]}
-                  >{` (${count})`}</Text>
-                </Text>
+                <Ionicons name="close-circle" size={20} color="#999" />
               </TouchableOpacity>
-            );
-          })}
+            )}
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.filterIconButton,
+              (filter !== "all" || deptFilter !== "all") && styles.filterIconButtonActive,
+            ]}
+            onPress={() => {
+              setTempFilter(filter);
+              setTempDeptFilter(deptFilter);
+              setShowFilterModal(true);
+            }}
+            data-testid="open-filter-modal-btn"
+          >
+            <Ionicons
+              name="options-outline"
+              size={20}
+              color={(filter !== "all" || deptFilter !== "all") ? "#FFF" : "#1565C0"}
+            />
+            {(filter !== "all" || deptFilter !== "all") && (
+              <View style={styles.filterBadgeDot} />
+            )}
+          </TouchableOpacity>
         </View>
       </View>
 
-      {user?.is_admin && departments.length > 0 && (
-        <View style={isTablet && { maxWidth: 960, alignSelf: "center", width: "100%" }}>
-          <FlatList
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            data={[{ id: "all", name: "All Departments" }, ...departments]}
-            keyExtractor={(d) => d.id}
-            contentContainerStyle={styles.deptFilterRow}
-            data-testid="department-filter-row"
-            renderItem={({ item }) => {
-              const isActive = deptFilter === item.id;
-              const isMine = item.id !== "all" && item.id === user?.department_id;
-              return (
-                <TouchableOpacity
-                  style={[
-                    styles.deptChip,
-                    isActive && styles.deptChipActive,
-                    isMine && styles.deptChipMine,
-                  ]}
-                  onPress={() => setDeptFilter(item.id)}
-                  testID={`department-filter-${item.id}`}
-                >
-                  {isMine && <View style={styles.deptChipDot} testID={`department-filter-${item.id}-mine-dot`} />}
-                  <Text style={[styles.deptChipText, isActive && styles.deptChipTextActive]}>
-                    {item.name}
-                  </Text>
+      {/* Applied Filters Chips Bar */}
+      {(filter !== "all" || deptFilter !== "all") && (
+        <View style={[styles.appliedFiltersRow, isTablet && { maxWidth: 960, alignSelf: "center", width: "100%" }]}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: "center", gap: 8 }}>
+            {filter !== "all" && (
+              <View style={styles.appliedChip}>
+                <Text style={styles.appliedChipText}>
+                  Status: {filterButtons.find((b) => b.key === filter)?.label || filter}
+                </Text>
+                <TouchableOpacity onPress={() => setFilter("all" as any)}>
+                  <Ionicons name="close-circle" size={16} color="#1565C0" />
                 </TouchableOpacity>
-              );
-            }}
-          />
+              </View>
+            )}
+
+            {deptFilter !== "all" && (
+              <View style={styles.appliedChip}>
+                <Text style={styles.appliedChipText}>
+                  Dept: {departments.find((d) => d.id === deptFilter)?.name || deptFilter}
+                </Text>
+                <TouchableOpacity onPress={() => setDeptFilter("all")}>
+                  <Ionicons name="close-circle" size={16} color="#1565C0" />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <TouchableOpacity
+              onPress={() => {
+                setFilter("all" as any);
+                setDeptFilter("all");
+              }}
+              style={{ paddingVertical: 4, paddingHorizontal: 6 }}
+            >
+              <Text style={styles.clearAllText}>Clear All</Text>
+            </TouchableOpacity>
+          </ScrollView>
         </View>
       )}
-
-      <View style={isTablet && { maxWidth: 960, alignSelf: "center", width: "100%" }}>
-        <View style={styles.searchContainer} data-testid="search-bar-container">
-          <Ionicons
-            name="search"
-            size={18}
-            color="#999"
-            style={{ marginLeft: 12 }}
-          />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search by patient, registration, student..."
-            placeholderTextColor="#999"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            autoCorrect={false}
-            data-testid="search-input"
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity
-              onPress={() => setSearchQuery("")}
-              style={{ padding: 8 }}
-              data-testid="search-clear"
-            >
-              <Ionicons name="close-circle" size={20} color="#999" />
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
 
       {filteredProcedures.length === 0 ? (
         <View style={styles.emptyState}>
@@ -796,6 +789,12 @@ function DefaultProceduresScreen() {
           data={filteredProcedures}
           renderItem={renderProcedure}
           keyExtractor={(item: any) => item.id}
+          initialNumToRender={6}
+          maxToRenderPerBatch={6}
+          updateCellsBatchingPeriod={40}
+          windowSize={5}
+          removeClippedSubviews
+          decelerationRate="fast"
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
@@ -851,10 +850,275 @@ function DefaultProceduresScreen() {
       {transferCase && (
         <TransferCaseModal
           procedureId={transferCase.id}
+          privileged={transferCase.privileged}
           onClose={() => setTransferCase(null)}
           onSubmitted={() => { setTransferCase(null); loadProcedures(); }}
         />
       )}
+      {selectedProcedureForActions && (
+        <Modal
+          visible={!!selectedProcedureForActions}
+          animationType="slide"
+          transparent
+          onRequestClose={() => {
+            setSelectedProcedureForActions(null);
+          }}
+        >
+          <TouchableOpacity
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0,0,0,0.45)",
+              justifyContent: "flex-end",
+            }}
+            activeOpacity={1}
+            onPress={() => {
+              setSelectedProcedureForActions(null);
+            }}
+            data-testid={`popup-menu-${selectedProcedureForActions.id}`}
+          >
+            <TouchableOpacity
+              activeOpacity={1}
+              style={{
+                backgroundColor: "#FFF",
+                borderTopLeftRadius: 20,
+                borderTopRightRadius: 20,
+                paddingHorizontal: 20,
+                paddingTop: 12,
+                paddingBottom: 24,
+                maxHeight: "80%",
+              }}
+              onPress={(e) => e.stopPropagation()}
+            >
+              {/* Drag Handle indicator */}
+              <View
+                style={{
+                  width: 36,
+                  height: 4,
+                  borderRadius: 2,
+                  backgroundColor: "#CBD5E1",
+                  alignSelf: "center",
+                  marginBottom: 16,
+                }}
+              />
+
+              {/* Header: Patient Name & Reg Number */}
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 16,
+                  paddingBottom: 12,
+                  borderBottomWidth: 1,
+                  borderBottomColor: "#F1F5F9",
+                }}
+              >
+                <View style={{ flex: 1, marginRight: 8 }}>
+                  <Text
+                    style={{ fontSize: 18, fontWeight: "700", color: "#0F172A" }}
+                    numberOfLines={1}
+                  >
+                    {selectedProcedureForActions.patient_name}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>
+                    #{selectedProcedureForActions.registration_number}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => {
+                    setSelectedProcedureForActions(null);
+                  }}
+                  style={{ padding: 4 }}
+                >
+                  <Ionicons name="close-circle" size={24} color="#94A3B8" />
+                </TouchableOpacity>
+              </View>
+
+              {/* Action items list */}
+              <ScrollView style={{ maxHeight: 340 }}>
+                {getMenuActions(selectedProcedureForActions).map((action: any) => (
+                  <TouchableOpacity
+                    key={action.key}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 14,
+                      paddingVertical: 14,
+                      paddingHorizontal: 12,
+                      borderRadius: 10,
+                      marginBottom: 6,
+                      backgroundColor: "#F8FAFC",
+                    }}
+                    onPress={() => {
+                      setSelectedProcedureForActions(null);
+                      action.onPress();
+                    }}
+                    data-testid={`menu-${action.key}-${selectedProcedureForActions.id}`}
+                  >
+                    <View
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 18,
+                        backgroundColor: (action.color || "#1565C0") + "15",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Ionicons name={action.icon as any} size={18} color={action.color || "#1565C0"} />
+                    </View>
+                    <Text
+                      style={{
+                        fontSize: 15,
+                        fontWeight: "600",
+                        color: action.color === "#C62828" ? "#DC2626" : "#1E293B",
+                        flex: 1,
+                      }}
+                    >
+                      {action.label}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
+      )}
+
+      {/* Bottom Sheet Filter Modal */}
+      <Modal
+        visible={showFilterModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowFilterModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowFilterModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.bottomSheetContainer}
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>Filter Procedures</Text>
+              <TouchableOpacity
+                onPress={() => setShowFilterModal(false)}
+                style={styles.sheetCloseBtn}
+              >
+                <Ionicons name="close" size={22} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>
+              {/* Status Section */}
+              <Text style={styles.filterSectionTitle}>Status</Text>
+              <View style={styles.chipGroup}>
+                {filterButtons.map((btn) => {
+                  const isActive = tempFilter === btn.key;
+                  const count = tabCounts[btn.key] ?? 0;
+                  return (
+                    <TouchableOpacity
+                      key={btn.key}
+                      style={[
+                        styles.modalChip,
+                        isActive && styles.modalChipActive,
+                      ]}
+                      onPress={() => setTempFilter(btn.key as any)}
+                    >
+                      <Text
+                        style={[
+                          styles.modalChipText,
+                          isActive && styles.modalChipTextActive,
+                        ]}
+                      >
+                        {btn.label} ({count})
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Department Section */}
+              {user?.is_admin && departments.length > 0 && (
+                <>
+                  <Text style={[styles.filterSectionTitle, { marginTop: 20 }]}>
+                    Department
+                  </Text>
+                  <View style={styles.chipGroup}>
+                    {[{ id: "all", name: "All Departments" }, ...departments].map(
+                      (dept) => {
+                        const isActive = tempDeptFilter === dept.id;
+                        const color = dept.id !== "all" ? dept.color : undefined;
+                        return (
+                          <TouchableOpacity
+                            key={dept.id}
+                            style={[
+                              styles.modalChip,
+                              isActive &&
+                                (color
+                                  ? { backgroundColor: color, borderColor: color }
+                                  : styles.modalChipActive),
+                            ]}
+                            onPress={() => setTempDeptFilter(dept.id)}
+                          >
+                            {color && !isActive && (
+                              <View
+                                style={[
+                                  styles.deptChipColorDot,
+                                  { backgroundColor: color },
+                                ]}
+                              />
+                            )}
+                            <Text
+                              style={[
+                                styles.modalChipText,
+                                isActive &&
+                                  (color
+                                    ? styles.deptChipTextActiveDark
+                                    : styles.modalChipTextActive),
+                              ]}
+                            >
+                              {dept.name}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      }
+                    )}
+                  </View>
+                </>
+              )}
+            </ScrollView>
+
+            <View style={styles.sheetFooter}>
+              <TouchableOpacity
+                style={styles.resetFilterBtn}
+                onPress={() => {
+                  setTempFilter("all");
+                  setTempDeptFilter("all");
+                }}
+              >
+                <Text style={styles.resetFilterText}>Reset All</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.applyFilterBtn}
+                onPress={() => {
+                  setFilter(tempFilter as any);
+                  setDeptFilter(tempDeptFilter);
+                  setShowFilterModal(false);
+                }}
+              >
+                <Text style={styles.applyFilterText}>Apply Filters</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -930,6 +1194,7 @@ const styles = StyleSheet.create({
     position: "relative",
     flexDirection: "row",
     alignItems: "center",
+    gap: 6,
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 999,
@@ -937,6 +1202,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E5E5EA",
   },
+  deptChipColorDot: { width: 7, height: 7, borderRadius: 3.5 },
   deptChipActive: {
     backgroundColor: "#1565C0",
     borderColor: "#1565C0",
@@ -963,16 +1229,186 @@ const styles = StyleSheet.create({
   deptChipTextActive: {
     color: "#FFF",
   },
+  // Department chips fill with a pastel color — dark text stays readable
+  // on top, unlike the white text used for the generic "All" chip fill.
+  deptChipTextActiveDark: {
+    color: "#37474F",
+  },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 6,
+  },
   searchContainer: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#FFF",
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 4,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#E5E5EA",
+  },
+  filterIconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "#FFF",
+    borderWidth: 1,
+    borderColor: "#E5E5EA",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 8,
+    position: "relative",
+  },
+  filterIconButtonActive: {
+    backgroundColor: "#1565C0",
+    borderColor: "#1565C0",
+  },
+  filterBadgeDot: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#FF5252",
+    borderWidth: 1,
+    borderColor: "#FFF",
+  },
+  appliedFiltersRow: {
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  appliedChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#E3F2FD",
+    borderWidth: 1,
+    borderColor: "#90CAF9",
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    gap: 6,
+  },
+  appliedChipText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#1565C0",
+  },
+  clearAllText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#DC3545",
+    marginLeft: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  bottomSheetContainer: {
+    backgroundColor: "#FFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    maxHeight: "80%",
+  },
+  sheetHandle: {
+    width: 38,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "#E0E0E0",
+    alignSelf: "center",
+    marginBottom: 14,
+  },
+  sheetHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  sheetTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#1A237E",
+  },
+  sheetCloseBtn: {
+    padding: 4,
+  },
+  sheetBody: {
+    marginBottom: 16,
+  },
+  filterSectionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#333",
+    marginBottom: 10,
+  },
+  chipGroup: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  modalChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "#F5F7FA",
+    borderWidth: 1,
+    borderColor: "#E0E5EC",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  modalChipActive: {
+    backgroundColor: "#1565C0",
+    borderColor: "#1565C0",
+  },
+  modalChipText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#555",
+  },
+  modalChipTextActive: {
+    color: "#FFF",
+  },
+  sheetFooter: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#F0F0F0",
+  },
+  resetFilterBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#CFD8DC",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F8F9FA",
+  },
+  resetFilterText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#546E7A",
+  },
+  applyFilterBtn: {
+    flex: 2,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: "#1565C0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  applyFilterText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#FFF",
   },
   searchInput: {
     flex: 1,
@@ -1049,6 +1485,7 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 13,
     fontWeight: "600",
+    flex: 1,
   },
   rescheduledChip: {
     flexDirection: "row",

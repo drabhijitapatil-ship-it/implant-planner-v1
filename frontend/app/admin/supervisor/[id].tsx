@@ -12,9 +12,10 @@ import api from '../../../utils/api';
 import { useAuth } from '../../../contexts/AuthContext';
 import { STATUS_COLORS, STATUS_LABELS } from '../../../constants/checklist';
 import { NudgeBottomSheet } from '../../../components/NudgeBottomSheet';
+import { getDepartmentBadgeColors, resolveUserDepartments, DepartmentItem } from '../../../utils/departmentBadge';
 
 type Summary = {
-  profile: { id?: string; name?: string; email?: string; role?: string; username?: string; profile_photo?: string; department_id?: string | null; department_name?: string | null } | null;
+  profile: { id?: string; name?: string; email?: string; role?: string; username?: string; profile_photo?: string; department_id?: string | null; department_name?: string | null; department_color?: string | null; departments?: DepartmentItem[] } | null;
   kpis: {
     total: number; approved: number; rejected: number; pending: number; completed: number;
     stale_count: number; avg_review_hours: number | null;
@@ -172,12 +173,19 @@ export default function SupervisorDrillDown() {
           <View style={{ flex: 1 }}>
             <Text style={s.headerTitle} numberOfLines={1}>{supervisorName}</Text>
             <Text style={s.headerSubtitle} numberOfLines={1}>{profile?.email || profile?.username || 'Supervisor performance'}</Text>
-            {profile?.department_name && (
-              <View style={s.headerDeptRow}>
-                <Ionicons name="business-outline" size={11} color="#6A1B9A" />
-                <Text style={s.headerDeptText} numberOfLines={1}>{profile.department_name}</Text>
+            {resolveUserDepartments(profile).length > 0 ? (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                {resolveUserDepartments(profile).map((d: DepartmentItem, i: number) => {
+                  const colors = getDepartmentBadgeColors(d.department_color);
+                  return (
+                    <View key={d.department_id || i} style={[s.headerDeptRow, { backgroundColor: colors.bg, borderColor: colors.border, borderWidth: 1 }]}>
+                      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.dot }} />
+                      <Text style={[s.headerDeptText, { color: colors.text }]} numberOfLines={1}>{d.department_name}</Text>
+                    </View>
+                  );
+                })}
               </View>
-            )}
+            ) : null}
           </View>
         </View>
         <TouchableOpacity onPress={() => setNudgeOpen(true)} style={s.nudgeBtn} data-testid="open-supervisor-nudge-btn" activeOpacity={0.85}>
@@ -550,8 +558,11 @@ const s = StyleSheet.create({
   identityAvatarTxt: { fontSize: 15, fontWeight: '800', color: '#FFF' },
   headerTitle: { fontSize: 16, fontWeight: '800', color: '#4A148C' },
   headerSubtitle: { fontSize: 12, color: '#6A1B9A', marginTop: 2 },
-  headerDeptRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
-  headerDeptText: { fontSize: 11, color: '#6A1B9A', fontWeight: '600' },
+  headerDeptRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, alignSelf: 'flex-start',
+    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999,
+  },
+  headerDeptText: { fontSize: 11, color: '#37474F', fontWeight: '600' },
   nudgeBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999,

@@ -13,6 +13,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { getDepartmentBadgeColors, resolveUserDepartments, DepartmentItem } from '../../utils/departmentBadge';
 
 type StudentRow = {
   student_id: string;
@@ -21,6 +22,8 @@ type StudentRow = {
   completed: number;
   active: number;
   department_name?: string | null;
+  department_color?: string | null;
+  departments?: DepartmentItem[];
 };
 
 export default function StudentsPerformanceScreen() {
@@ -52,21 +55,37 @@ export default function StudentsPerformanceScreen() {
   const departments = useMemo(() => {
     const set = new Set<string>();
     rows.forEach((r) => {
-      if (r.department_name) set.add(r.department_name);
+      resolveUserDepartments(r).forEach((d) => {
+        if (d.department_name) set.add(d.department_name);
+      });
     });
     return Array.from(set).sort();
   }, [rows]);
 
-  const hasUnassigned = useMemo(() => rows.some((r) => !r.department_name), [rows]);
+  const hasUnassigned = useMemo(() => rows.some((r) => resolveUserDepartments(r).length === 0), [rows]);
+
+  const deptColorByName = useMemo(() => {
+    const map: Record<string, string> = {};
+    rows.forEach((r) => {
+      resolveUserDepartments(r).forEach((d) => {
+        if (d.department_name && d.department_color && !map[d.department_name]) {
+          map[d.department_name] = d.department_color;
+        }
+      });
+    });
+    return map;
+  }, [rows]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     let list = [...rows].sort((a, b) => (b.completed || 0) - (a.completed || 0));
     if (selectedDept !== 'all') {
       if (selectedDept === 'unassigned') {
-        list = list.filter((r) => !r.department_name);
+        list = list.filter((r) => resolveUserDepartments(r).length === 0);
       } else {
-        list = list.filter((r) => r.department_name === selectedDept);
+        list = list.filter((r) =>
+          resolveUserDepartments(r).some((d) => d.department_name === selectedDept)
+        );
       }
     }
     if (!q) return list;
@@ -139,14 +158,16 @@ export default function StudentsPerformanceScreen() {
             {departments.map((dept) => {
               const count = rows.filter((r) => r.department_name === dept).length;
               const active = selectedDept === dept;
+              const color = deptColorByName[dept] || '#BBDEFB';
               return (
                 <TouchableOpacity
                   key={dept}
-                  style={[s.deptChip, active && s.deptChipActive]}
+                  style={[s.deptChip, active && { backgroundColor: color, borderColor: color }]}
                   onPress={() => setSelectedDept(dept)}
                   data-testid={`dept-filter-${dept}`}
                 >
-                  <Text style={[s.deptChipText, active && s.deptChipTextActive]}>
+                  {!active && <View style={[s.deptChipDot, { backgroundColor: color }]} />}
+                  <Text style={[s.deptChipText, active && s.deptChipTextActiveDark]}>
                     {dept} ({count})
                   </Text>
                 </TouchableOpacity>
@@ -183,12 +204,19 @@ export default function StudentsPerformanceScreen() {
               data-testid={`students-perf-row-${idx}`}
             >
               <View style={s.rank}><Text style={s.rankT}>#{idx + 1}</Text></View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.name}>{st.student_name}</Text>
-                {st.department_name ? (
-                  <View style={s.deptTag}>
-                    <Ionicons name="business-outline" size={11} color="#37474F" />
-                    <Text style={s.deptText} numberOfLines={1}>{st.department_name}</Text>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={s.name} numberOfLines={1} ellipsizeMode="tail">{st.student_name}</Text>
+                {resolveUserDepartments(st).length > 0 ? (
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 2, marginBottom: 2 }}>
+                    {resolveUserDepartments(st).map((d: DepartmentItem, i: number) => {
+                      const colors = getDepartmentBadgeColors(d.department_color);
+                      return (
+                        <View key={d.department_id || i} style={[s.deptTag, { backgroundColor: colors.bg, borderColor: colors.border, borderWidth: 1 }]}>
+                          <View style={[s.deptChipDot, { backgroundColor: colors.dot }]} />
+                          <Text style={[s.deptText, { color: colors.text }]} numberOfLines={1}>{d.department_name}</Text>
+                        </View>
+                      );
+                    })}
                   </View>
                 ) : null}
                 <View style={s.stats}>
@@ -223,6 +251,9 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   deptChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
@@ -230,6 +261,7 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#CFD8DC',
   },
+  deptChipDot: { width: 7, height: 7, borderRadius: 3.5 },
   deptChipActive: {
     backgroundColor: '#1565C0',
     borderColor: '#1565C0',
@@ -242,24 +274,30 @@ const s = StyleSheet.create({
   deptChipTextActive: {
     color: '#FFFFFF',
   },
+  // Department chips fill with a pastel color — dark text stays readable
+  // on top, unlike the white text used for the generic "All" chip fill.
+  deptChipTextActiveDark: {
+    color: '#37474F',
+  },
   searchInput: { flex: 1, fontSize: 14, color: '#1e2a44' },
   empty: { fontSize: 13, color: '#78909C', textAlign: 'center', marginTop: 40 },
   card: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderRadius: 14,
-    padding: 12, marginBottom: 8, gap: 12, borderWidth: 1, borderColor: '#E2E8F0',
+    padding: 10, paddingRight: 8, marginBottom: 8, gap: 8, borderWidth: 1, borderColor: '#E2E8F0',
     shadowColor: '#0F172A', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3, elevation: 1,
   },
-  rank: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#E3F2FD', justifyContent: 'center', alignItems: 'center' },
+  rank: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#E3F2FD', justifyContent: 'center', alignItems: 'center' },
   rankT: { fontSize: 12, fontWeight: '800', color: '#1565C0' },
-  name: { fontSize: 15, fontWeight: '700', color: '#0F172A' },
+  name: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
   deptTag: {
-    flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#ECEFF1',
-    paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, alignSelf: 'flex-start', marginTop: 3, marginBottom: 2,
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 7, paddingVertical: 2, borderRadius: 12, alignSelf: 'flex-start',
+    marginRight: 4, marginBottom: 4, maxWidth: '100%',
   },
-  deptText: { fontSize: 11, fontWeight: '700', color: '#37474F' },
-  stats: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
-  chip: { backgroundColor: '#F5F7FA', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  chipT: { fontSize: 10.5, fontWeight: '700' },
+  deptText: { fontSize: 10.5, fontWeight: '700' },
+  stats: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 2 },
+  chip: { backgroundColor: '#F1F5F9', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2.5, marginRight: 4, marginBottom: 4 },
+  chipT: { fontSize: 10, fontWeight: '700' },
   blockedCard: { margin: 24, backgroundColor: '#FFF', borderRadius: 14, padding: 24, alignItems: 'center', gap: 10 },
   blockedTitle: { fontSize: 16, fontWeight: '800', color: '#C62828' },
   blockedBody: { fontSize: 13, color: '#546E7A', textAlign: 'center' },
