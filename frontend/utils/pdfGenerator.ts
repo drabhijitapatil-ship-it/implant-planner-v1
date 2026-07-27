@@ -81,6 +81,11 @@ export const buildProcedurePdfHtml = (procedure: any): string => {
             <div class="section-title">Procedure Details</div>
             <table>
               <tr><td class="info-label">Procedure Type:</td><td class="info-value">${procedure.implant_procedure_type}</td></tr>
+              ${procedure.procedure_surgery_type ? `<tr><td class="info-label">Surgical Approach:</td><td class="info-value">${procedure.procedure_surgery_type}</td></tr>` : ''}
+              ${procedure.guided_surgery_type ? `<tr><td class="info-label">Type of Guided Surgery:</td><td class="info-value">${procedure.guided_surgery_type}</td></tr>` : ''}
+              ${procedure.static_guide_type ? `<tr><td class="info-label">Type of Static Guide:</td><td class="info-value">${procedure.static_guide_type}</td></tr>` : ''}
+              ${procedure.sleeve_type ? `<tr><td class="info-label">Type of Sleeve:</td><td class="info-value">${procedure.sleeve_type}</td></tr>` : ''}
+              ${procedure.dynamic_nav_system ? `<tr><td class="info-label">Dynamic Navigation System:</td><td class="info-value">${procedure.dynamic_nav_system}</td></tr>` : ''}
               ${procedure.loading_type?.length ? `<tr><td class="info-label">Loading Type:</td><td class="info-value">${procedure.loading_type.join(', ')}</td></tr>` : ''}
               ${procedure.prosthetic_plan ? `<tr><td class="info-label">Prosthetic Plan:</td><td class="info-value">${procedure.prosthetic_plan}</td></tr>` : ''}
               ${procedure.prosthetic_plan_other ? `<tr><td class="info-label">Prosthetic Plan (Other):</td><td class="info-value">${procedure.prosthetic_plan_other}</td></tr>` : ''}

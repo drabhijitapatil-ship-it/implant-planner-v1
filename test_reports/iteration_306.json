@@ -1,0 +1,47 @@
+{
+  "summary": "iter-387 frontend-only verification of the new Procedure Information cascade (Procedure Type → Type of Guided Surgery → Static Guide + Sleeve | Dynamic Navigation System). All 8 required scenarios PASS: 'Guided Surgery' is removed from the top procedure dropdown; the surgical-approach cascade renders correctly with proper reset behaviour; 'Tooth Supported Guide' is hidden for All-on-4/6/X; Existing Implant hides the whole cascade; Sinus Lift regression is clean. Validation code path (T7) verified via source review — Alert.alert on RN-Web does not surface as a browser dialog so the popup could not be visually captured, but the missing-fields wiring at new-procedure.tsx:1474 is confirmed correct.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "New Case → all steps (Home dashboard also)", "issues": ["Console error spam: 'Unexpected text node: . A text node cannot be a child of a <View>.' printed 14+ times on load and on every dropdown toggle. Same warning flagged in iteration_304 — still not fixed. Non-blocking but indicates a stray whitespace/string child of a <View> in the JSX tree."]}
+    ]
+  },
+  "verified_scenarios": [
+    {"id":"T1", "case":"Type of Implant Procedure dropdown options", "result":"PASS", "detail":"10 options rendered exactly: Single Conventional, Multiple Conventional, Immediate Implant, Sinus Lift, Partial Extraction Therapy, Implant Placement with GBR, All on 4, All on 6, All on X, Existing Implant. 'Guided Surgery' correctly ABSENT."},
+    {"id":"T2", "case":"Single Conventional → full cascade Guided Surgery → Static Guide → Tooth Supported Guide → Sleeve", "result":"PASS", "detail":"Procedure Type has 3 options (Free Hand / Combination / Guided Surgery). Type of Guided Surgery has 2 (Static Guide, Dynamic Navigation). Type of Static Guide has all 4 incl. Tooth Supported Guide. Type of Sleeve has all 6 sleeve options."},
+    {"id":"T3", "case":"Switch Guided Surgery Type → Dynamic Navigation resets Static+Sleeve and shows Dynamic Navigation System", "result":"PASS", "detail":"Static Guide + Sleeve dropdowns disappear; Dynamic Navigation Surgery System appears with ImplaNav, Navident, Denacam, X-Guide, DCARER."},
+    {"id":"T4", "case":"Change Procedure Type → Free Hand Surgery hides all guided sub-dropdowns", "result":"PASS", "detail":"After picking Free Hand, guided-surgery-type, static-guide-type, sleeve-type and dynamic-nav-system all removed from DOM."},
+    {"id":"T5", "case":"All on 4 → Guided Surgery → Static Guide: Tooth Supported Guide hidden", "result":"PASS", "detail":"Static Guide dropdown lists only Mucosa Supported Guide, Bone supported guide, Stackable guide. Tooth Supported Guide correctly filtered out."},
+    {"id":"T6", "case":"Existing Implant → NO Procedure Type dropdown", "result":"PASS", "detail":"After selecting Existing Implant, procedure-surgery-type-dropdown is not in DOM."},
+    {"id":"T7", "case":"Validation surfaces 'Procedure Type' in incomplete-sections popup", "result":"PASS (code-verified)", "detail":"Missing-fields panel wiring confirmed at new-procedure.tsx:1474 — `if (!formData.procedure_surgery_type) missImplantDetails.push('Procedure Type');` and the alert body composed at lines 993-999 emits per-field detail. RN-Web Alert.alert renders as a no-op / console message in the browser context (not a window.alert dialog nor a modal in the DOM), so the popup could not be visually captured by Playwright — but the '4 sections still incomplete — tap to see what's missing' helper text renders under the Continue button as expected. Main agent can self-verify on a real device / expo-go build."},
+    {"id":"T8", "case":"Regression — Sinus Lift shows Type of Sinus Lift + bone graft input + new Procedure Type", "result":"PASS", "detail":"Type of Sinus Lift dropdown, Details of Bone Graft Material text input, AND new Procedure Type cascade all render together. No crash / blank screen."}
+  ],
+  "test_report_links": [
+    "/app/test_reports/proc_info.png",
+    "/app/test_reports/t7_after_continue.png",
+    "/app/test_reports/t7_final.png"
+  ],
+  "action_items": [
+    "P3 — Fix the recurring console spam 'Unexpected text node: . A text node cannot be a child of a <View>.' (14+ warnings per screen). Same issue flagged in iteration_304; still unresolved. Likely a stray whitespace/string child in TransferApprovalCard.tsx or a JSX block in dashboard/new-procedure.tsx.",
+    "P3 (nice-to-have) — RN-Web Alert.alert() used by handleContinueToImplants (line 1000) does not render a browser dialog or in-DOM modal on web builds; consider replacing with a custom in-app modal so the missing-fields popup is actually visible to web users."
+  ],
+  "critical_code_review_comments": [
+    "constants/checklist.ts:150-171 — PROCEDURE_TYPES correctly omits 'Guided Surgery'; comment at :159-161 explains legacy behaviour. Good.",
+    "new-procedure.tsx:1883-1951 — cascade rendering is correct. Guarded by `implant_procedure_type !== 'Existing Implant'`, and children only render when parent has a truthy value. `Tooth Supported Guide` correctly filtered when top type ∈ {All on 4/6/X} via ternary at :1920-1922.",
+    "new-procedure.tsx:1851-1877 — top-level onChange resets num_implants, prosthetic_plan, sinus_lift_type, and (for full-arch) clears static_guide_type + sleeve_type if the previous static guide was Tooth Supported. Good defensive reset. HOWEVER: switching from e.g. Single Conventional (with Tooth Supported Guide picked) → Sinus Lift keeps procedure_surgery_type/guided_surgery_type/static_guide_type in state — only Tooth Supported → All-on-X path clears it. Consider whether the same reset should fire whenever the top type changes for symmetry. Currently NOT a bug because the ternary at :1920 re-filters render options based on the new top type, but the stored (invisible) values may persist across type changes.",
+    "new-procedure.tsx:1888-1893 — child onChange of Procedure Type correctly resets guided_surgery_type, static_guide_type, sleeve_type, dynamic_nav_system when parent changes. Good.",
+    "new-procedure.tsx:1899-1901, 1915-1916, 1941-1942 — every child dropdown gates its own visibility on both parent values (procedure_surgery_type ∈ {Combination, Guided Surgery} AND guided_surgery_type is set). Correct.",
+    "new-procedure.tsx:1032-1058 — handleContinueToImplants surfaces field-level Alert.alert for each missing cascade field. Correct.",
+    "new-procedure.tsx:1466-1483 — missImplantDetails.push('Procedure Type', 'Type of Guided Surgery', ...) wired to Treatment Plan section. Feeds into the sectionDetail body used by the Incomplete-sections alert.",
+    "P2 — The '4 sections still incomplete — tap to see what's missing' helper Text at :3172-3175 is NOT wrapped in a TouchableOpacity; the hint says 'tap' but the tap target is actually the Continue button above it. This is misleading UI copy. Consider rewording to 'tap the Continue button to see what's missing' or making the hint itself a tappable link."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100% — 8/8 scenarios verified (T7 code-verified due to RN-Web Alert.alert web limitation)"},
+  "test_credentials": "Student Gaurav.pandey / Student@123 (used, verified)",
+  "seed_data_creation": "None. No cases created or submitted. Pending transfer TEST_MUA_88c4430c and other cases untouched.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "iter-387 Procedure Information cascade is fully functional per spec. Dropdown component in new-procedure.tsx:85-131 sets both testID and data-testid HTML attr, so option-level testids DO propagate to DOM: format is `<parent-testid>-option-<slugged-option>` (e.g. `procedure-surgery-type-dropdown-option-free-hand-surgery`). For any RN-Web dropdown option interaction, use js click via `element.click()` in evaluate() rather than Playwright's native click — it bypasses TouchableOpacity's react-native-web accessibility wrapper reliably. Alert.alert() on web is a no-op — cannot be captured via page.on('dialog') nor via window.alert override. Recommend main-agent replace with custom modal for web-verifiable popups."
+}
