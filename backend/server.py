@@ -15479,6 +15479,16 @@ IMPLANT_INDICATIONS = {
         "indicated_procedures": ["Single Conventional Implant"],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
+    "Cowellmedi|INNO X": {
+        "indication": "Universal for D1, D2, D3, D4 bone. Indicated for Immediate and Delayed implant placement. HydroX7 surface treatment. Morse-tapered internal hex (11°/Hex 2.5) with dual contact.",
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
+    "Cowellmedi|INNO Submerged Short": {
+        "indication": "Ultra-short 4mm implant indicated for Restricted Bone Height in posterior regions. Platform identical to INNO Submerged (Hex 2.5). SLA-SH surface treatment. Use 4mm drill stopper.",
+        "indicated_procedures": ["Restricted Bone Height", "Single Conventional Implant", "Multiple Conventional Implants"],
+        "indicated_bone_types": ["D1", "D2", "D3", "D4"],
+    },
     "Alpha Bio|SPI": {
         "indication": "Indicated primarily for D3 and D4 bone, for Immediate Implant. Sand-blasted + double acid etched.",
         "indicated_procedures": ["Immediate Implant"],
@@ -16176,6 +16186,7 @@ async def suggest_auto(
             "BioHorizons|Tapered Short Conical RBT",
             "Bredent|Copa Sky",
             "Dentsply Sirona|Ankylos C/X",
+            "Cowellmedi|INNO Submerged Short",
         }
         # Priority 1: Query P1 systems filtered by diameter only (no length/bone_type filter)
         p1_conditions = [{"brand": k.split("|")[0], "system": k.split("|")[1]} for k in PRIORITY1_KEYS]
@@ -17357,7 +17368,9 @@ COWELLMEDI_SUBMERGED_FINAL = {
     4.0: 3.6,
     4.5: 4.2,
     5.0: 4.8,
+    5.5: 4.8,
     6.0: 4.8,
+    7.0: 4.8,
 }
 
 COWELLMEDI_SUBMERGED_UNDERPREP = {
@@ -17365,7 +17378,9 @@ COWELLMEDI_SUBMERGED_UNDERPREP = {
     4.0: 3.2,
     4.5: 3.6,
     5.0: 4.2,
+    5.5: 4.2,
     6.0: 4.2,
+    7.0: 4.2,
 }
 
 DRILLING_PROTOCOLS["Cowellmedi|INNO Submerged"] = {
@@ -17395,6 +17410,68 @@ DRILLING_PROTOCOLS["Cowellmedi|INNO Submerged Narrow"] = {
     "cowellmedi_system": "narrow",
     "lengths": [8, 10, 12, 14],
 }
+
+# iter-386: INNO X — drilling protocol mirrors INNO Submerged per user spec.
+DRILLING_PROTOCOLS["Cowellmedi|INNO X"] = {
+    "system_name": "Cowellmedi INNO X",
+    "protocol_family": "cowellmedi",
+    "cowellmedi_system": "submerged",
+    "lengths": [7, 8, 10, 12, 14, 16, 18],
+}
+
+# iter-386: INNO Submerged Short (4mm ultra-short) — per Cowell Short Implant
+# catalogue: point drill → Ø2.0 step drill → sequential step drills to the
+# EXACT implant diameter (all bone types); D1 adds a countersink at implant
+# diameter before placement. 4mm drill stopper throughout.
+DRILLING_PROTOCOLS["Cowellmedi|INNO Submerged Short"] = {
+    "system_name": "Cowellmedi INNO Submerged Short",
+    "protocol_family": "cowellmedi_short",
+    "lengths": [4],
+}
+
+COWELLMEDI_SHORT_STEP_DRILLS = [4.0, 4.5, 5.0, 5.5, 6.0]
+
+
+def _generate_cowellmedi_short_protocol(proto, implant_diameter, implant_length, bone):
+    """Cowellmedi INNO Submerged Short (4mm) — INNO Short KIT Ver.2."""
+    steps = []
+    step_num = 1
+    d = implant_diameter
+    depth = f"{implant_length} mm (4 mm drill stopper)"
+    is_d1 = bone == "D1"
+
+    steps.append({"step": step_num, "drill_type": "Point Drill", "code": "KPD01S",
+                  "diameter": 2.0, "depth": "Mark site", "rpm": "1200-1500", "irrigation": True})
+    step_num += 1
+
+    steps.append({"step": step_num, "drill_type": "Step Drill", "code": "KSSD2004",
+                  "diameter": 2.0, "depth": depth, "rpm": "800-1200", "irrigation": True})
+    step_num += 1
+
+    # Sequential step drills up to the EXACT implant diameter (all bone types).
+    seq = [x for x in COWELLMEDI_SHORT_STEP_DRILLS if x <= d]
+    for drill_d in seq:
+        is_final = drill_d == seq[-1]
+        steps.append({
+            "step": step_num,
+            "drill_type": "Final Step Drill" if is_final else "Step Drill",
+            "code": f"KSSD{int(drill_d * 10)}04",
+            "diameter": drill_d, "depth": depth,
+            "rpm": "≤300" if is_final else "800-1200", "irrigation": True,
+            **({"note": "Drill to the exact implant diameter."} if is_final else {}),
+        })
+        step_num += 1
+
+    if is_d1:
+        steps.append({"step": step_num, "drill_type": "Countersink", "code": f"4KCS{int(d * 10)}S",
+                      "diameter": d, "depth": "Cortical", "rpm": "≤300", "irrigation": True,
+                      "note": "D1 dense bone only — countersink to the implant diameter before placement."})
+        step_num += 1
+
+    steps.append({"step": step_num, "drill_type": "Implant Placement", "code": "—",
+                  "diameter": d, "depth": depth, "rpm": "20-30", "irrigation": False,
+                  "note": f"Cowellmedi INNO Submerged Short {d}mm x {implant_length}mm — SLA-SH surface, Internal Hex (Taper 11°/Hex 2.5), platform interchangeable with INNO Submerged."})
+    return steps
 
 
 def _generate_cowellmedi_protocol(proto, implant_diameter, implant_length, bone):
@@ -17477,10 +17554,11 @@ def _generate_cowellmedi_protocol(proto, implant_diameter, implant_length, bone)
             step_num += 1
 
     # Implant Placement
-    sys_label = "INNO Submerged" if sys_type == "submerged" else "INNO Submerged Narrow"
+    sys_label = (proto.get("system_name") or "").replace("Cowellmedi ", "") or (
+        "INNO Submerged" if sys_type == "submerged" else "INNO Submerged Narrow")
     steps.append({"step": step_num, "drill_type": "Implant Placement", "code": "—",
                    "diameter": d, "depth": depth, "rpm": "20-30", "irrigation": False,
-                   "note": f"Cowellmedi {sys_label} {d}mm x {implant_length}mm — Grade 4 Ti, SLA Surface, Internal Hex"})
+                   "note": f"Cowellmedi {sys_label} {d}mm x {implant_length}mm — Grade 4 Ti, {'HydroX7' if 'INNO X' in sys_label else 'SLA'} Surface, Internal Hex"})
 
     return steps
 
@@ -18385,6 +18463,8 @@ async def generate_drilling_protocol(
         steps = _generate_alpha_bio_spi_protocol(proto, diameter, length, bone)
     elif proto.get("protocol_family") == "alpha_bio_brochure":
         steps = _generate_alpha_bio_brochure_protocol(proto, diameter, length, bone)
+    elif proto.get("protocol_family") == "cowellmedi_short":
+        steps = _generate_cowellmedi_short_protocol(proto, diameter, length, bone)
     elif "Short" in system and "Conelog" not in system and brand != "Neodent":
         steps = _generate_short_protocol(proto, diameter, length, bone)
     elif "Progressive" in system or brand == "Conelog":
@@ -18451,8 +18531,10 @@ async def generate_drilling_protocol(
         protocol_type = f"Dense Bone Protocol (MIS LANCE+)" if bone in ("D1", "D2") else (f"Under-Preparation Protocol (MIS LANCE+)" if bone in ("D3", "D4") else "Standard Protocol (MIS LANCE+)")
     elif family == "cowellmedi":
         cw_sys = proto.get("cowellmedi_system", "submerged")
-        cw_label = "INNO Submerged" if cw_sys == "submerged" else "INNO Narrow"
+        cw_label = (proto.get("system_name") or "").replace("Cowellmedi ", "") or ("INNO Submerged" if cw_sys == "submerged" else "INNO Narrow")
         protocol_type = f"Dense Bone Protocol ({cw_label})" if bone in ("D1", "D2") else (f"Under-Preparation Protocol ({cw_label})" if bone in ("D3", "D4") else f"Standard Protocol ({cw_label})")
+    elif family == "cowellmedi_short":
+        protocol_type = "Dense Bone + Countersink Protocol (INNO Submerged Short)" if bone == "D1" else "Standard Short Protocol (INNO Submerged Short)"
     elif family == "bredent_sky":
         br_sys = proto.get("bredent_system", "blue")
         br_labels = {"mini": "miniSKY", "copa": "copaSKY", "narrow": "narrowSKY", "blue": "blueSKY", "classic": "classicSKY"}
@@ -18500,7 +18582,7 @@ async def generate_drilling_protocol(
     else:
         protocol_type = "Reduced Protocol" if bone == "D4" else "Conventional Protocol"
 
-    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else ("35-50 Ncm" if family == "mis_lance" else ("25-45 Ncm" if family in ("cowellmedi", "bredent_sky") else ("~40 Ncm" if family == "osstem" else ("≤90 Ncm" if family == "tsx" else ("30-80 Ncm (target 35 Ncm)" if family == "straumann_blx" else ("≤35 Ncm (target — check bed if >35 Ncm reached early)" if family == "straumann_blt" else ("Not specified by Adin catalog — refer to Adin surgical guide" if family == "adin" else ("35-45 Ncm" if family in ("conical_rbt", "alpha_bio_spi", "refirm") else "35-45 Ncm")))))))))
+    insertion_torque = "60 Ncm" if family in ("helix", "drive", "titamax") else ("25-35 Ncm" if family == "ankylos" else ("35-50 Ncm" if family == "mis_lance" else ('25-45 Ncm' if family in ("cowellmedi", "cowellmedi_short", "bredent_sky") else ("~40 Ncm" if family == "osstem" else ("≤90 Ncm" if family == "tsx" else ("30-80 Ncm (target 35 Ncm)" if family == "straumann_blx" else ("≤35 Ncm (target — check bed if >35 Ncm reached early)" if family == "straumann_blt" else ("Not specified by Adin catalog — refer to Adin surgical guide" if family == "adin" else ("35-45 Ncm" if family in ("conical_rbt", "alpha_bio_spi", "refirm") else "35-45 Ncm")))))))))
 
     # Add Ankylos series info to response
     ankylos_info = {}
@@ -18671,6 +18753,8 @@ async def export_drilling_pdf(
         steps = _generate_conical_rbt_protocol(proto, diameter, length, bone)
     elif proto.get("protocol_family") == "alpha_bio_spi":
         steps = _generate_alpha_bio_spi_protocol(proto, diameter, length, bone)
+    elif proto.get("protocol_family") == "cowellmedi_short":
+        steps = _generate_cowellmedi_short_protocol(proto, diameter, length, bone)
     elif "Short" in system and "Conelog" not in system and brand != "Neodent":
         steps = _generate_short_protocol(proto, diameter, length, bone)
     elif "Progressive" in system or brand == "Conelog":
@@ -18737,8 +18821,10 @@ async def export_drilling_pdf(
         protocol_type = f"Dense Bone Protocol (MIS LANCE+)" if bone in ("D1", "D2") else (f"Under-Preparation Protocol (MIS LANCE+)" if bone in ("D3", "D4") else "Standard Protocol (MIS LANCE+)")
     elif family == "cowellmedi":
         cw_sys = proto.get("cowellmedi_system", "submerged")
-        cw_label = "INNO Submerged" if cw_sys == "submerged" else "INNO Narrow"
+        cw_label = (proto.get("system_name") or "").replace("Cowellmedi ", "") or ("INNO Submerged" if cw_sys == "submerged" else "INNO Narrow")
         protocol_type = f"Dense Bone Protocol ({cw_label})" if bone in ("D1", "D2") else (f"Under-Preparation Protocol ({cw_label})" if bone in ("D3", "D4") else f"Standard Protocol ({cw_label})")
+    elif family == "cowellmedi_short":
+        protocol_type = "Dense Bone + Countersink Protocol (INNO Submerged Short)" if bone == "D1" else "Standard Short Protocol (INNO Submerged Short)"
     elif family == "bredent_sky":
         br_sys = proto.get("bredent_system", "blue")
         br_labels = {"mini": "miniSKY", "copa": "copaSKY", "narrow": "narrowSKY", "blue": "blueSKY", "classic": "classicSKY"}
