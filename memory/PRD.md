@@ -6896,3 +6896,34 @@ implant diameter before placement.
 - Drilling INNO X 4.5×10 D2: INNO Submerged-family sequence, HydroX7 note ✓
 - Suggest-auto Restricted Height h=6: INNO Submerged Short = Priority 1 ✓
 - implant_catalog endpoint lists both new keys ✓; frontend dropdown shows (76) ✓
+
+---
+
+## 2026-07-27 — Phase 1 Surgical-Approach cascade (iter-387)
+
+### User choices: 1a legacy unchanged, 2a all required, 3a hidden for Existing Implant,
+### 4a "Sleeveless guide" spelling, 5a shown in case detail + PDFs.
+
+### Feature
+- 'Guided Surgery' REMOVED from Type of Implant Procedure options (constants/checklist.ts);
+  legacy cases keep their stored value (backend valid_procedure_types untouched).
+- New cascade below Type of Implant Procedure (hidden for Existing Implant), all required:
+  Procedure Type [Free Hand | Combination of Free hand and Guided | Guided Surgery]
+  → Type of Guided Surgery [Static Guide | Dynamic Navigation]
+  → Static path: Type of Static Guide [Tooth Supported (hidden for All on 4/6/X) | Mucosa |
+    Bone supported | Stackable] → Type of Sleeve [Sleeveless guide | Key Sleeve | Metal full |
+    Metal lateral open | PEEK full | PEEK lateral open]
+  → Dynamic path: Dynamic Navigation Surgery System [ImplaNav | Navident | Denacam | X-Guide | DCARER]
+- Children reset on parent change; full-arch switch clears a previously-picked Tooth Supported Guide.
+- Fields: procedure_surgery_type, guided_surgery_type, static_guide_type, sleeve_type,
+  dynamic_nav_system — added to formData, edit-load, validation alerts + missing-fields panel
+  (new-procedure.tsx), ProcedureCreate + update models (server.py), case detail InfoRows
+  ([id].tsx, implant row relabelled 'Type of Implant Procedure'), frontend pdfGenerator.ts
+  Procedure Details table, backend comprehensive PDF proc_rows.
+
+### Testing
+- testing_agent iteration_306.json: ALL 8 scenarios PASS (option removal, full cascade,
+  resets, All-on-4 filtering, Existing Implant hidden, Sinus Lift regression). Backend
+  persistence verified via PUT+GET curl. Copy fix: "press Continue to see the full list".
+- Known: Alert.alert is no-op on web (fine on native); text-node dev warning still open (P3,
+  pre-existing — see known_issues.md).
