@@ -20,7 +20,7 @@ import api from '../../utils/api';
 import DrillingProtocolScreen from '../../components/DrillingProtocol';
 import { getImplantDetails } from '../../constants/implantIndications';
 import ColorStripe from '../../components/ColorStripe';
-import { evaluateImplantSafety, annotateImplantSafety, shortSafetyChip, type SafetyVerdict } from '../../utils/implantSafety';
+import { evaluateImplantSafety, annotateImplantSafety, shortSafetyChip, rankImplantsByCloseness, type SafetyVerdict } from '../../utils/implantSafety';
 
 // ── Types ──────────────────────────────────────────────────
 type ImplantSystem = {
@@ -639,19 +639,22 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
   const hasNarrowRidge = result.narrow_ridge_evaluation && result.narrow_ridge_evaluation.classification !== 'adequate';
   const isBlocked = result.narrow_ridge_evaluation?.blocked;
 
-  // Use narrow options when narrow ridge is detected and narrow_options available
-  const baseImplantsRaw = (hasNarrowRidge && narrowOptions.length > 0) ? narrowOptions : (recommended.length > 0 ? recommended : allOptions);
-  const isUsingAllOptions = !hasNarrowRidge && recommended.length === 0 && allOptions.length > 0;
-  // Annotate every option with a per-implant safety verdict, then sort safest-first:
-  // hard-blocked (length) sink to the end; among the rest, largest bone-width margin wins.
-  const _annotated = annotateImplantSafety(baseImplantsRaw, {
+  // iter-385: show the FULL system catalogue ranked by closeness to the
+  // entered bone dimensions (ideal Ø = width − 3 mm, ideal L = height − 2 mm).
+  // Safety chips still annotate each row; tap keeps confirmation gating.
+  const baseImplantsRaw = allOptions.length > 0
+    ? allOptions
+    : (recommended.length > 0 ? recommended : narrowOptions);
+  const ranked = rankImplantsByCloseness(
+    baseImplantsRaw,
+    parseFloat(boneWidth) || null,
+    parseFloat(boneHeight) || null,
+  );
+  const safetyAnnotated = annotateImplantSafety(ranked, {
     toothPosition: tooth,
     boneWidthMm: parseFloat(boneWidth) || null,
     boneHeightMm: parseFloat(boneHeight) || null,
   });
-  const _safetyRank = (v: SafetyVerdict) =>
-    v.kind === 'length_warning' ? -Infinity : v.kind === 'width_warning' ? v.marginMm : Infinity;
-  const safetyAnnotated = [..._annotated].sort((a, b) => _safetyRank(b._safety) - _safetyRank(a._safety));
   const baseImplants: Implant[] = safetyAnnotated;
 
   // Safety-aware tap — soft warning for width AND for length (iter-340). Both
@@ -687,8 +690,7 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
       },
     ]);
   };
-  const isUsingNarrowOptions = hasNarrowRidge && narrowOptions.length > 0;
-  const visibleImplants = showAll ? baseImplants : baseImplants.slice(0, 5);
+  const isUsingNarrowOptions = hasNarrowRidge && narrowOptions.length > 0;  const visibleImplants = showAll ? baseImplants : baseImplants.slice(0, 5);
   const hasMore = baseImplants.length > 5;
   const selectedImplant = selectedIdx !== null ? baseImplants[selectedIdx] : null;
   const riskImplant = selectedImplant || baseImplants[0];
@@ -771,26 +773,16 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
         {isUsingNarrowOptions && (
           <View style={s.indResultBox}>
             <Ionicons name="information-circle" size={16} color="#1565C0" />
-            <Text style={s.indResultText}>Showing narrow diameter ({'\u2264'}3.5mm) implants from {system.brand} {system.system} for narrow ridge compatibility.</Text>
+            <Text style={s.indResultText}>Narrow ridge detected — narrow diameter ({'\u2264'}3.5mm) implants rank first for compatibility.</Text>
           </View>
         )}
 
         {baseImplants.length > 0 ? (
           <View style={{ marginBottom: 12 }}>
-            {isUsingAllOptions && (
-              <View style={s.allOptionsNote}>
-                <Ionicons name="information-circle" size={16} color="#E65100" />
-                <Text style={s.allOptionsNoteText}>No exact matches for given measurements. Showing all available sizes in this system.</Text>
-              </View>
-            )}
             <Text style={s.recTitle}>
-              {isUsingNarrowOptions
-                ? (showAll ? `All Narrow Options (${baseImplants.length})` : `Narrow Diameter Options (${Math.min(5, baseImplants.length)})`)
-                : isUsingAllOptions
-                ? (showAll ? `All Available Sizes (${baseImplants.length})` : `Available Sizes (${Math.min(5, baseImplants.length)})`)
-                : (showAll ? `All Implants (${baseImplants.length})` : `Top ${Math.min(5, baseImplants.length)} Implants`)}
+              {showAll ? `All Sizes (${baseImplants.length})` : `Closest Matches (${Math.min(5, baseImplants.length)} of ${baseImplants.length})`}
             </Text>
-            <Text style={s.selectHint}>Tap an implant to select it for drilling protocol</Text>
+            <Text style={s.selectHint} data-testid="closeness-ranking-hint">Ranked by closeness to your bone width &amp; height · tap an implant to select it for drilling protocol</Text>
             {visibleImplants.map((imp: Implant, i: number) => {
               const isSelected = selectedIdx === i;
               const verdict = safetyAnnotated[i]?._safety;
@@ -820,7 +812,7 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
                       </View>
                     )}
                   </View>
-                  {i === 0 && !hasWarning && <View style={s.bestBadge}><Text style={s.bestBadgeText}>Best</Text></View>}
+                  {i === 0 && <View style={s.bestBadge}><Text style={s.bestBadgeText}>Best match</Text></View>}
                 </TouchableOpacity>
               );
             })}
