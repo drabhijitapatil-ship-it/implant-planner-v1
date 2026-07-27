@@ -3109,7 +3109,7 @@ export default function NewProcedureScreen() {
             </TouchableOpacity>
             {!canSubmit && !existingSubmitApi.submitting && (
               <Text style={{ marginTop: 2, textAlign: 'center', color: '#90A4AE', fontSize: 12, fontWeight: '600' }}>
-                {incompleteCount} section{incompleteCount > 1 ? 's' : ''} still incomplete — tap to see what's missing
+                {incompleteCount} section{incompleteCount > 1 ? 's' : ''} still incomplete — press Continue to see the full list
               </Text>
             )}
             {!existingSubmitApi.isDraftResume && (
@@ -3170,7 +3170,7 @@ export default function NewProcedureScreen() {
             </TouchableOpacity>
             {!canContinue && !loading && (
               <Text style={{ marginTop: 8, textAlign: 'center', color: '#90A4AE', fontSize: 12, fontWeight: '600' }}>
-                {incompleteCount} section{incompleteCount > 1 ? 's' : ''} still incomplete — tap to see what's missing
+                {incompleteCount} section{incompleteCount > 1 ? 's' : ''} still incomplete — press Continue to see the full list
               </Text>
             )}
           </View>
