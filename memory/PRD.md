@@ -6832,3 +6832,28 @@ stuck; the card showed them the read-only observer view.
 - Data: case 699fc5c1248100e8a0d87261 ('Phase2 Test', sup=inc=Abhijit) reassigned to student
   Gaurav (real account) and left with a LIVE pending_supervisor transfer (Gaurav → Atharva)
   for user verification. TEST_MUA_88c4430c transfer (normal flow) also still pending.
+
+---
+
+## 2026-07-27 — "Let Me Choose" closeness ranking (iter-385)
+
+### User request + choices (1a rank-by-closeness w/ safety chips, 2a both screens, 3a Best-match badge)
+Show ALL implants of the selected system, ordered by closeness to entered bone width/height.
+Acceptance example: Cowellmedi INNO Submerged, width 6 / height 7-9 → 3.5×8 first, then 4×7, 4×8.
+
+### Implementation
+- `utils/implantSafety.ts`: new `rankImplantsByCloseness()` — ideal Ø = width−3mm, ideal L =
+  height−2mm; weighted score = 2×|Ø dev| + |L dev|; tie-break Ø closeness, then size asc.
+  (Weighted metric chosen because it reproduces the user's example exactly; strict
+  diameter-first ordering would wrongly put 3.5×10 before 4×7.)
+- `implant-selection.tsx` ChooseResult: full catalogue (all_options) ranked; header
+  "Closest Matches (5 of N)" / "All Sizes (N)"; hint "Ranked by closeness to your bone width
+  & height"; "Best match" badge on row 0; safety chips + confirm-on-tap unchanged; narrow-ridge
+  note reworded (narrow diameters naturally rank first).
+- `CaseImplantPlanning.tsx` choose mode: same ranking via shared util; suggest mode keeps
+  safety-first sort. Backend /implant-library/suggest unchanged.
+
+### Testing — testing_agent iteration_305.json: ALL PASS
+- w6/h8 → 3.5×8(Best match), 4×7, 4×8, 4.5×7, 3.5×10 ✓; w6/h9 ✓; w6/h12 ✓; Suggest Me regression ✓.
+- Safety chips verified per-row (height conflict / tight bone margins).
+- In-case planning flow skipped by tester (deep nav) — logic is the shared verified util; bundle clean.
