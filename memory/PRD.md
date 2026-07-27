@@ -6857,3 +6857,42 @@ Acceptance example: Cowellmedi INNO Submerged, width 6 / height 7-9 → 3.5×8 f
 - w6/h8 → 3.5×8(Best match), 4×7, 4×8, 4.5×7, 3.5×10 ✓; w6/h9 ✓; w6/h12 ✓; Suggest Me regression ✓.
 - Safety chips verified per-row (height conflict / tight bone margins).
 - In-case planning flow skipped by tester (deep nav) — logic is the shared verified util; bundle clean.
+
+---
+
+## 2026-07-27 — Two new Cowell Medi systems: INNO X + INNO Submerged Short (iter-386)
+
+### Source: user-uploaded PDFs (INNO X/V catalogue + COWELL Short Implant catalogue)
+User choices: name "INNO Submerged Short" (1a); standard INNO-family RPMs (2a); nominal
+lengths (3a); added to Restricted-Height Priority-1 list (4a); INNO X indications =
+Universal D1-D4, Immediate + Delayed placement, HydroX7 surface (5b). Short drilling per
+user correction: drill to EXACT implant diameter for D2/D3/D4; D1 adds countersink at
+implant diameter before placement.
+
+### Data added
+- implant_library (brand 'Cowellmedi', source 'catalog_iter386'):
+  • INNO X — 39 sizes: 3.5×(7-14), 4.0/4.5×(7-18), 5.0/5.5/6.0/7.0×(7-14).
+  • INNO Submerged Short — 5 sizes: 4.0/4.5/5.0/5.5/6.0 × 4mm.
+- implant_catalog (brand 'Cowell Medi'): both systems, prosthetic components copied from
+  INNO Submerged (31 components — same Hex 2.5 platform per PDFs).
+- Seed script: /app/backend/seed_inno_x_short.py (idempotent upserts).
+
+### server.py changes
+- IMPLANT_INDICATIONS: entries for both systems.
+- DRILLING_PROTOCOLS: "Cowellmedi|INNO X" (family cowellmedi, mirrors INNO Submerged) and
+  "Cowellmedi|INNO Submerged Short" (new family cowellmedi_short).
+- New _generate_cowellmedi_short_protocol(): Point Drill KPD01S → Step Drill Ø2.0 KSSD2004 →
+  sequential step drills (KSSD4004..) to EXACT implant Ø (final ≤300 RPM) → D1-only
+  countersink 4KCS{d}S → placement 20-30 RPM; 4mm drill stopper noted.
+- Dispatch: cowellmedi_short branch added BEFORE the generic '"Short" in system' branch in
+  BOTH generate endpoints (lines ~18466 & ~18752 — CRITICAL ordering trap).
+- _generate_cowellmedi_protocol: sys_label + surface now derive from proto system_name
+  (INNO X → HydroX7 surface in placement note).
+- PRIORITY1_KEYS (restricted bone height): + "Cowellmedi|INNO Submerged Short".
+
+### Verified (curl E2E, 2026-07-27)
+- Systems list: 76 total; INNO X 39 sizes, INNO Submerged Short 5 sizes ✓
+- Drilling Short 5.0×4 D1: steps → exact Ø5.0 final drill + Ø5.0 countersink ✓; 4.5×4 D3: no countersink ✓
+- Drilling INNO X 4.5×10 D2: INNO Submerged-family sequence, HydroX7 note ✓
+- Suggest-auto Restricted Height h=6: INNO Submerged Short = Priority 1 ✓
+- implant_catalog endpoint lists both new keys ✓; frontend dropdown shows (76) ✓
