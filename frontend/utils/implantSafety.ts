@@ -128,3 +128,36 @@ export function shortSafetyChip(v: SafetyVerdict): string | null {
   if (v.kind === 'width_warning') return `Tight bone — ${v.marginMm.toFixed(1)} mm margin`;
   return null;
 }
+
+/**
+ * iter-385: rank a full implant catalogue by closeness to the clinically
+ * ideal size derived from the entered bone dimensions:
+ *   ideal diameter = bone width − 3 mm (1.5 mm bone buffer each side)
+ *   ideal length   = bone height − 2 mm (nerve / sinus clearance)
+ * Combined weighted score (diameter deviation weighs 2×) so e.g. for
+ * width 6 / height 8: 3.5×8 → 4×7 → 4×8 → 3.5×10 (per user spec example).
+ */
+export function rankImplantsByCloseness<T extends { diameter?: number; length?: number }>(
+  implants: T[],
+  boneWidthMm: number | null,
+  boneHeightMm: number | null,
+): T[] {
+  const idealD = boneWidthMm != null && !isNaN(boneWidthMm) ? boneWidthMm - 3.0 : null;
+  const idealL = boneHeightMm != null && !isNaN(boneHeightMm) ? boneHeightMm - 2.0 : null;
+  const score = (imp: T) => {
+    const dDev = idealD != null ? Math.abs((imp.diameter ?? 0) - idealD) : 0;
+    const lDev = idealL != null ? Math.abs((imp.length ?? 0) - idealL) : 0;
+    return 2 * dDev + lDev;
+  };
+  return [...implants].sort((a, b) => {
+    const sA = score(a), sB = score(b);
+    if (sA !== sB) return sA - sB;
+    if (idealD != null) {
+      const dA = Math.abs((a.diameter ?? 0) - idealD);
+      const dB = Math.abs((b.diameter ?? 0) - idealD);
+      if (dA !== dB) return dA - dB;
+    }
+    if ((a.diameter ?? 0) !== (b.diameter ?? 0)) return (a.diameter ?? 0) - (b.diameter ?? 0);
+    return (a.length ?? 0) - (b.length ?? 0);
+  });
+}
