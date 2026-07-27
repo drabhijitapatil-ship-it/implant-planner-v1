@@ -404,6 +404,12 @@ class ProcedureCreate(BaseModel):
     # implant_procedure_type == "Sinus Lift".
     sinus_lift_type: Optional[str] = Field("", max_length=50)
     bone_graft_material_details: Optional[str] = Field("", max_length=200)
+    # iter-387: surgical-approach cascade (Procedure Type → guided details)
+    procedure_surgery_type: Optional[str] = Field("", max_length=60)
+    guided_surgery_type: Optional[str] = Field("", max_length=40)
+    static_guide_type: Optional[str] = Field("", max_length=40)
+    sleeve_type: Optional[str] = Field("", max_length=40)
+    dynamic_nav_system: Optional[str] = Field("", max_length=40)
     loading_type: List[str] = []
     prosthetic_plan: str = Field("", max_length=500)
     prosthetic_plan_other: Optional[str] = Field("", max_length=500)
@@ -505,6 +511,12 @@ class ProcedureUpdate(BaseModel):
     # iter-328: Sinus Lift sub-fields on the draft model.
     sinus_lift_type: Optional[str] = Field(None, max_length=50)
     bone_graft_material_details: Optional[str] = Field(None, max_length=200)
+    # iter-387: surgical-approach cascade on the draft/update model too.
+    procedure_surgery_type: Optional[str] = Field(None, max_length=60)
+    guided_surgery_type: Optional[str] = Field(None, max_length=40)
+    static_guide_type: Optional[str] = Field(None, max_length=40)
+    sleeve_type: Optional[str] = Field(None, max_length=40)
+    dynamic_nav_system: Optional[str] = Field(None, max_length=40)
     loading_type: Optional[List[str]] = None
     prosthetic_plan: Optional[str] = Field(None, max_length=500)
     bone_graft_specifications: Optional[str] = Field(None, max_length=500)
@@ -4398,6 +4410,20 @@ async def generate_consent_template(
     if (procedure.get("implant_procedure_type") or "") == "Sinus Lift":
         proc_rows.insert(1, ["Type of Sinus Lift:", procedure.get("sinus_lift_type") or "____________________"])
         proc_rows.insert(2, ["Bone Graft Material:", procedure.get("bone_graft_material_details") or "____________________"])
+    # iter-387: surgical-approach cascade rows (Procedure Type → guided detail)
+    _gs_rows = []
+    if procedure.get("procedure_surgery_type"):
+        _gs_rows.append(["Procedure Type:", procedure.get("procedure_surgery_type")])
+    if procedure.get("guided_surgery_type"):
+        _gs_rows.append(["Type of Guided Surgery:", procedure.get("guided_surgery_type")])
+    if procedure.get("static_guide_type"):
+        _gs_rows.append(["Type of Static Guide:", procedure.get("static_guide_type")])
+    if procedure.get("sleeve_type"):
+        _gs_rows.append(["Type of Sleeve:", procedure.get("sleeve_type")])
+    if procedure.get("dynamic_nav_system"):
+        _gs_rows.append(["Dynamic Navigation System:", procedure.get("dynamic_nav_system")])
+    for _i, _r in enumerate(_gs_rows):
+        proc_rows.insert(1 + _i, _r)
     prt = Table(proc_rows, colWidths=[40*mm, 142*mm])
     prt.setStyle(TableStyle([
         ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),

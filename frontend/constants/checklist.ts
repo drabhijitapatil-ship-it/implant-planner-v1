@@ -156,7 +156,9 @@ export const PROCEDURE_TYPES = [
   'Sinus Lift',
   'Partial Extraction Therapy',
   'Implant Placement with Guided Bone Regeneration',
-  'Guided Surgery',
+  // iter-387: 'Guided Surgery' removed as a procedure TYPE — the surgical
+  // approach is now captured by the separate "Procedure Type" cascade
+  // (Free Hand / Combination / Guided). Legacy cases keep their value.
   'All on 4',
   'All on 6',
   'All on X',
@@ -167,6 +169,29 @@ export const PROCEDURE_TYPES = [
   // component, prosthetic history, radiographs, phase-routing).
   'Existing Implant',
 ];
+
+// iter-387: Surgical-approach cascade (Phase 1 — Procedure Information)
+export const SURGERY_APPROACH_TYPES = [
+  'Free Hand Surgery',
+  'Combination of Free hand and Guided Surgery',
+  'Guided Surgery',
+];
+export const GUIDED_SURGERY_TYPES = ['Static Guide', 'Dynamic Navigation'];
+export const STATIC_GUIDE_TYPES = [
+  'Tooth Supported Guide',
+  'Mucosa Supported Guide',
+  'Bone supported guide',
+  'Stackable guide',
+];
+export const SLEEVE_TYPES = [
+  'Sleeveless guide',
+  'Key Sleeve',
+  'Metal full sleeve',
+  'Metal lateral open sleeve',
+  'PEEK full sleeve',
+  'PEEK lateral open sleeve',
+];
+export const DYNAMIC_NAV_SYSTEMS = ['ImplaNav', 'Navident', 'Denacam', 'X-Guide', 'DCARER'];
 
 // iter-328: FDI codes where Sinus Lift is clinically appropriate
 // (maxillary posterior only). The procedure adds bone via the
