@@ -168,6 +168,29 @@ export const PROCEDURE_TYPES = [
   'Existing Implant',
 ];
 
+// iter-387: Surgical-approach cascade (Phase 1 — Procedure Information)
+export const SURGERY_APPROACH_TYPES = [
+  'Free Hand Surgery',
+  'Combination of Free hand and Guided Surgery',
+  'Guided Surgery',
+];
+export const GUIDED_SURGERY_TYPES = ['Static Guide', 'Dynamic Navigation'];
+export const STATIC_GUIDE_TYPES = [
+  'Tooth Supported Guide',
+  'Mucosa Supported Guide',
+  'Bone supported guide',
+  'Stackable guide',
+];
+export const SLEEVE_TYPES = [
+  'Sleeveless guide',
+  'Key Sleeve',
+  'Metal full sleeve',
+  'Metal lateral open sleeve',
+  'PEEK full sleeve',
+  'PEEK lateral open sleeve',
+];
+export const DYNAMIC_NAV_SYSTEMS = ['ImplaNav', 'Navident', 'Denacam', 'X-Guide', 'DCARER'];
+
 // iter-328: FDI codes where Sinus Lift is clinically appropriate
 // (maxillary posterior only). The procedure adds bone via the
 // maxillary sinus floor — irrelevant for the mandible or maxillary

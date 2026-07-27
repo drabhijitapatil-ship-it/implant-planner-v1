@@ -22,6 +22,7 @@ import { validateImplantSelection, findMissingRuns, clusterLeader } from '../../
 import {
   PROCEDURE_TYPES,  LOADING_TYPES,
   PROCEDURES_WITH_NUM_IMPLANTS_QUESTION,
+  SURGERY_APPROACH_TYPES, GUIDED_SURGERY_TYPES, STATIC_GUIDE_TYPES, SLEEVE_TYPES, DYNAMIC_NAV_SYSTEMS,
   getInvalidSinusLiftTeeth,
   CHECKLIST_DATA,
   PROCEDURE_TIME_SLOTS,
@@ -386,6 +387,11 @@ export default function NewProcedureScreen() {
     // dropdowns; the third is a multiline note (≤150 char soft limit).
     sinus_lift_type: '',
     bone_graft_material_details: '',
+    procedure_surgery_type: '',
+    guided_surgery_type: '',
+    static_guide_type: '',
+    sleeve_type: '',
+    dynamic_nav_system: '',
     teeth_present: [] as string[],
     missing_teeth: [] as string[],
     edentulous_site_measurements: {} as Record<string, { oc?: string; md?: string }>,
@@ -535,6 +541,11 @@ export default function NewProcedureScreen() {
                 num_implants: proc.num_implants || '',
                 sinus_lift_type: proc.sinus_lift_type || '',
                 bone_graft_material_details: proc.bone_graft_material_details || '',
+                procedure_surgery_type: proc.procedure_surgery_type || '',
+                guided_surgery_type: proc.guided_surgery_type || '',
+                static_guide_type: proc.static_guide_type || '',
+                sleeve_type: proc.sleeve_type || '',
+                dynamic_nav_system: proc.dynamic_nav_system || '',
                 teeth_present: Array.isArray(proc.teeth_present) ? proc.teeth_present : [],
                 missing_teeth: Array.isArray(proc.missing_teeth) ? proc.missing_teeth : [],
                 edentulous_site_measurements: (proc.edentulous_site_measurements && typeof proc.edentulous_site_measurements === 'object') ? proc.edentulous_site_measurements : {},
@@ -1099,6 +1110,33 @@ export default function NewProcedureScreen() {
       Alert.alert('Missing Field', 'Please select at least one loading type.');
       return;
     }
+     // iter-387: surgical-approach cascade validation (not for Existing Implant)
+    if (!isExistingImplantCase) {
+      if (!sanitized.procedure_surgery_type) {
+        Alert.alert('Missing Field', 'Please select the Procedure Type (Free Hand / Combination / Guided Surgery).');
+        return;
+      }
+      if (['Combination of Free hand and Guided Surgery', 'Guided Surgery'].includes(sanitized.procedure_surgery_type)) {
+        if (!sanitized.guided_surgery_type) {
+          Alert.alert('Missing Field', 'Please select the Type of Guided Surgery.');
+          return;
+        }
+        if (sanitized.guided_surgery_type === 'Static Guide') {
+          if (!sanitized.static_guide_type) {
+            Alert.alert('Missing Field', 'Please select the Type of Static Guide.');
+            return;
+          }
+          if (!sanitized.sleeve_type) {
+            Alert.alert('Missing Field', 'Please select the Type of Sleeve.');
+            return;
+          }
+        }
+        if (sanitized.guided_surgery_type === 'Dynamic Navigation' && !sanitized.dynamic_nav_system) {
+          Alert.alert('Missing Field', 'Please select the Dynamic Navigation Surgery System.');
+          return;
+        }
+      }
+    }
     if (!sanitized.periodontal_status && (
       sanitized.implant_procedure_type === 'Single Conventional Implant' ||
       sanitized.implant_procedure_type === 'Multiple Conventional Implants' ||
@@ -1653,6 +1691,17 @@ export default function NewProcedureScreen() {
         missImplantDetails.push('Number of Implants');
       }
       if (!formData.prosthetic_plan) missImplantDetails.push('Prosthetic Plan');
+            // iter-387: surgical-approach cascade requirements
+      if (!formData.procedure_surgery_type) missImplantDetails.push('Procedure Type');
+      else if (['Combination of Free hand and Guided Surgery', 'Guided Surgery'].includes(formData.procedure_surgery_type)) {
+        if (!formData.guided_surgery_type) missImplantDetails.push('Type of Guided Surgery');
+        else if (formData.guided_surgery_type === 'Static Guide') {
+          if (!formData.static_guide_type) missImplantDetails.push('Type of Static Guide');
+          else if (!formData.sleeve_type) missImplantDetails.push('Type of Sleeve');
+        } else if (formData.guided_surgery_type === 'Dynamic Navigation' && !formData.dynamic_nav_system) {
+          missImplantDetails.push('Dynamic Navigation Surgery System');
+        }
+      }
       if (isFullArch && !formData.arch) missImplantDetails.push('Arch');
       if (!isFullArch && (formData.missing_teeth || []).length === 0) missImplantDetails.push('At least one missing tooth on FDI chart');
       // iter-328: Sinus Lift extras surfaced in the missing-fields panel
@@ -2035,8 +2084,92 @@ export default function NewProcedureScreen() {
             // persist into a non-sinus-lift case.
             updateForm('sinus_lift_type', '');
             updateForm('bone_graft_material_details', '');
+            // iter-387: Tooth Supported Guide is not offered for full-arch
+            // procedures; Existing Implant hides the whole approach cascade.
+            if (['All on 4', 'All on 6', 'All on X'].includes(v) && formData.static_guide_type === 'Tooth Supported Guide') {
+              updateForm('static_guide_type', '');
+              updateForm('sleeve_type', '');
+            }
+            if (v === 'Existing Implant') {
+              updateForm('procedure_surgery_type', '');
+              updateForm('guided_surgery_type', '');
+              updateForm('static_guide_type', '');
+              updateForm('sleeve_type', '');
+              updateForm('dynamic_nav_system', '');
+            }
           }} required />
-
+{/* iter-387: Surgical-approach cascade — Procedure Type → Type of
+            Guided Surgery → (Static Guide path | Dynamic Navigation path).
+            Hidden for Existing Implant (no new surgery planned). */}
+        {!!formData.implant_procedure_type && formData.implant_procedure_type !== 'Existing Implant' && (
+          <Dropdown
+            label="Procedure Type"
+            value={formData.procedure_surgery_type}
+            options={SURGERY_APPROACH_TYPES}
+            onChange={v => {
+              updateForm('procedure_surgery_type', v);
+              updateForm('guided_surgery_type', '');
+              updateForm('static_guide_type', '');
+              updateForm('sleeve_type', '');
+              updateForm('dynamic_nav_system', '');
+            }}
+            required
+            data-testid="procedure-surgery-type-dropdown"
+          />
+        )}
+        {['Combination of Free hand and Guided Surgery', 'Guided Surgery'].includes(formData.procedure_surgery_type) &&
+          formData.implant_procedure_type !== 'Existing Implant' && (
+          <Dropdown
+            label="Type of Guided Surgery"
+            value={formData.guided_surgery_type}
+            options={GUIDED_SURGERY_TYPES}
+            onChange={v => {
+              updateForm('guided_surgery_type', v);
+              updateForm('static_guide_type', '');
+              updateForm('sleeve_type', '');
+              updateForm('dynamic_nav_system', '');
+            }}
+            required
+            data-testid="guided-surgery-type-dropdown"
+          />
+        )}
+        {formData.guided_surgery_type === 'Static Guide' &&
+          ['Combination of Free hand and Guided Surgery', 'Guided Surgery'].includes(formData.procedure_surgery_type) && (
+          <Dropdown
+            label="Type of Static Guide"
+            value={formData.static_guide_type}
+            options={['All on 4', 'All on 6', 'All on X'].includes(formData.implant_procedure_type)
+              ? STATIC_GUIDE_TYPES.filter(o => o !== 'Tooth Supported Guide')
+              : STATIC_GUIDE_TYPES}
+            onChange={v => {
+              updateForm('static_guide_type', v);
+              updateForm('sleeve_type', '');
+            }}
+            required
+            data-testid="static-guide-type-dropdown"
+          />
+        )}
+        {formData.guided_surgery_type === 'Static Guide' && !!formData.static_guide_type && (
+          <Dropdown
+            label="Type of Sleeve"
+            value={formData.sleeve_type}
+            options={SLEEVE_TYPES}
+            onChange={v => updateForm('sleeve_type', v)}
+            required
+            data-testid="sleeve-type-dropdown"
+          />
+        )}
+        {formData.guided_surgery_type === 'Dynamic Navigation' &&
+          ['Combination of Free hand and Guided Surgery', 'Guided Surgery'].includes(formData.procedure_surgery_type) && (
+          <Dropdown
+            label="Dynamic Navigation Surgery System"
+            value={formData.dynamic_nav_system}
+            options={DYNAMIC_NAV_SYSTEMS}
+            onChange={v => updateForm('dynamic_nav_system', v)}
+            required
+            data-testid="dynamic-nav-system-dropdown"
+          />
+        )}
         {/* iter-328: Sinus Lift cascade — Type of Sinus Lift dropdown
             renders directly under the procedure-type picker and only
             when Sinus Lift is the chosen type. Required. */}
@@ -3518,7 +3651,7 @@ export default function NewProcedureScreen() {
             </TouchableOpacity>
             {!canSubmit && !existingSubmitApi.submitting && (
               <Text style={{ marginTop: 2, textAlign: 'center', color: '#90A4AE', fontSize: 12, fontWeight: '600' }}>
-                {incompleteCount} section{incompleteCount > 1 ? 's' : ''} still incomplete — tap to see what's missing
+                {incompleteCount} section{incompleteCount > 1 ? 's' : ''} still incomplete — press Continue to see the full list
               </Text>
             )}
             {!existingSubmitApi.isDraftResume && (
@@ -3579,7 +3712,7 @@ export default function NewProcedureScreen() {
             </TouchableOpacity>
             {!canContinue && !loading && (
               <Text style={{ marginTop: 8, textAlign: 'center', color: '#90A4AE', fontSize: 12, fontWeight: '600' }}>
-                {incompleteCount} section{incompleteCount > 1 ? 's' : ''} still incomplete — tap to see what's missing
+                {incompleteCount} section{incompleteCount > 1 ? 's' : ''} still incomplete — press Continue to see the full list
               </Text>
             )}
           </View>

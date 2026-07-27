@@ -3897,12 +3897,23 @@ export default function ProcedureDetailScreen() {
                       </TouchableOpacity>
                     )}
                 </View>
-                <InfoRow
-                  icon="construct"
-                  label="Procedure Type"
-                  value={procedure.implant_procedure_type}
-                  fieldKey="implant_procedure_type"
-                />
+               <InfoRow icon="construct" label="Type of Implant Procedure" value={procedure.implant_procedure_type} fieldKey="implant_procedure_type" />
+            {/* iter-387: surgical-approach cascade echoed on the case detail */}
+            {procedure.procedure_surgery_type && (
+              <InfoRow icon="hand-left" label="Procedure Type" value={procedure.procedure_surgery_type} />
+            )}
+            {procedure.guided_surgery_type && (
+              <InfoRow icon="navigate" label="Type of Guided Surgery" value={procedure.guided_surgery_type} />
+            )}
+            {procedure.static_guide_type && (
+              <InfoRow icon="grid" label="Type of Static Guide" value={procedure.static_guide_type} />
+            )}
+            {procedure.sleeve_type && (
+              <InfoRow icon="ellipse" label="Type of Sleeve" value={procedure.sleeve_type} />
+            )}
+            {procedure.dynamic_nav_system && (
+              <InfoRow icon="compass" label="Dynamic Navigation System" value={procedure.dynamic_nav_system} />
+            )}
                 {/* iter-307: Echo the Number-of-Implants sub-choice (only set
                 for Immediate / PET / GBR / Guided Surgery) so faculty
                 can scan it from the case detail without opening Phase 1. */}

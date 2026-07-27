@@ -351,7 +351,7 @@ export default function ProfileScreen() {
           {departmentName && (
             <View style={(isIncharge || isOrgAdmin) ? styles.rowItem : [styles.rowItem, styles.rowItemLast]} data-testid="profile-department-row">
               <View style={[styles.iconBadge, { backgroundColor: '#EDE7F6' }]}>
-                <Ionicons name="git-branch" size={20} color="#5E35B1" />
+                <Ionicons name="home-outline" size={20} color="#5E35B1" />
               </View>
               <View style={styles.rowContent}>
                 <Text style={styles.rowLabel}>Department</Text>

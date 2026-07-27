@@ -20,7 +20,7 @@ import api from '../../utils/api';
 import DrillingProtocolScreen from '../../components/DrillingProtocol';
 import { getImplantDetails } from '../../constants/implantIndications';
 import ColorStripe from '../../components/ColorStripe';
-import { evaluateImplantSafety, annotateImplantSafety, shortSafetyChip, type SafetyVerdict } from '../../utils/implantSafety';
+import { evaluateImplantSafety, annotateImplantSafety, shortSafetyChip, rankImplantsByCloseness, type SafetyVerdict } from '../../utils/implantSafety';
 
 // ── Types ──────────────────────────────────────────────────
 type ImplantSystem = {
@@ -642,9 +642,16 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
   // Use narrow options when narrow ridge is detected and narrow_options available
   const baseImplantsRaw = (hasNarrowRidge && narrowOptions.length > 0) ? narrowOptions : (recommended.length > 0 ? recommended : allOptions);
   const isUsingAllOptions = !hasNarrowRidge && recommended.length === 0 && allOptions.length > 0;
+  // iter-385: rank candidates by closeness to entered bone dimensions
+  // (ideal Ø = width − 3 mm, ideal L = height − 2 mm) before annotating safety.
+  const ranked = rankImplantsByCloseness(
+    baseImplantsRaw,
+    parseFloat(boneWidth) || null,
+    parseFloat(boneHeight) || null,
+  );
   // Annotate every option with a per-implant safety verdict, then sort safest-first:
   // hard-blocked (length) sink to the end; among the rest, largest bone-width margin wins.
-  const _annotated = annotateImplantSafety(baseImplantsRaw, {
+  const _annotated = annotateImplantSafety(ranked, {
     toothPosition: tooth,
     boneWidthMm: parseFloat(boneWidth) || null,
     boneHeightMm: parseFloat(boneHeight) || null,
@@ -790,7 +797,7 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
                 ? (showAll ? `All Available Sizes (${baseImplants.length})` : `Available Sizes (${Math.min(5, baseImplants.length)})`)
                 : (showAll ? `All Implants (${baseImplants.length})` : `Top ${Math.min(5, baseImplants.length)} Implants`)}
             </Text>
-            <Text style={s.selectHint}>Tap an implant to select it for drilling protocol</Text>
+            <Text style={s.selectHint} data-testid="closeness-ranking-hint">Ranked by closeness to your bone width &amp; height · tap an implant to select it for drilling protocol</Text>
             {visibleImplants.map((imp: Implant, i: number) => {
               const isSelected = selectedIdx === i;
               const verdict = safetyAnnotated[i]?._safety;

@@ -19,7 +19,7 @@ import ExportPrintMenu from './ExportPrintMenu';
 import BackButton from './BackButton';
 import { getImplantDetails } from '../constants/implantIndications';
 import ColorStripe from './ColorStripe';
-import { evaluateImplantSafety, shortSafetyChip, type SafetyVerdict } from '../utils/implantSafety';
+import { evaluateImplantSafety, shortSafetyChip, rankImplantsByCloseness, type SafetyVerdict } from '../utils/implantSafety';
 import {
   validateImplantSelection,
   detectBridgeCandidates,
@@ -2032,12 +2032,16 @@ function ModalContent(props: any) {
                 let implants: any[];
                 const hasNarrowRidge = result.narrow_ridge_evaluation && result.narrow_ridge_evaluation.classification !== 'adequate';
                 if (mode === 'choose') {
-                  // In narrow ridge: prefer narrow_options, fall back to recommended
-                  if (hasNarrowRidge && result.narrow_options?.length > 0) {
-                    implants = result.narrow_options;
-                  } else {
-                    implants = result.recommended?.length ? result.recommended : result.all_options || [];
-                  }
+                  // iter-385: full system catalogue ranked by closeness to the
+                  // entered bone dimensions (ideal Ø = width−3mm, L = height−2mm).
+                  const catalogue = result.all_options?.length
+                    ? result.all_options
+                    : (result.recommended?.length ? result.recommended : result.narrow_options || []);
+                  implants = rankImplantsByCloseness(
+                    catalogue,
+                    parseFloat(boneWidth) || null,
+                    parseFloat(boneHeight) || null,
+                  );
                 } else {
                   implants = (result.recommended_systems || []).flatMap((s: any) => (s.implants || []).map((imp: any) => ({
                     ...imp, brand: s.brand, system: s.system,
@@ -2047,7 +2051,7 @@ function ModalContent(props: any) {
                 }
                 if (implants.length === 0) return <Text style={ms.noResults}>No implants found for these measurements.</Text>;
                 const isRestrictedResult = result.restricted_bone_height === true;
-                const isNarrowResult = hasNarrowRidge && mode === 'choose' && result.narrow_options?.length > 0;
+                  const isNarrowResult = hasNarrowRidge && mode === 'choose';
                 // Safety-aware sort: rank length-blocks last, then by largest width margin first.
                 // Mirrors the Home tab "Let Me Choose" surface so Top 5 always surfaces the safest sizes.
                 const _safetyRank = (imp: any): number => {
@@ -2063,15 +2067,11 @@ function ModalContent(props: any) {
                   if (v.kind === 'width_warning') return v.marginMm;
                   return Infinity;
                 };
-                const sortedImplants = [...implants].sort((a, b) => _safetyRank(b) - _safetyRank(a));
+                const sortedImplants = mode === 'choose' ? implants : [...implants].sort((a, b) => _safetyRank(b) - _safetyRank(a));
                 const topMatches = sortedImplants.slice(0, 5);
-                // In "choose" mode, "Show More" reveals all system options beyond top 5
-                const allSystemOptions = mode === 'choose' ? (result.all_options || []) : sortedImplants;
-                const remainingAll = allSystemOptions.filter((opt: any) =>
-                  !topMatches.some((t: any) => t.diameter === opt.diameter && t.length === opt.length)
-                );
-                const remaining = mode === 'choose' ? remainingAll : sortedImplants.slice(5);
-                const displayed = showAllResults ? [...topMatches, ...remaining] : topMatches;
+                const remaining = sortedImplants.slice(5);
+                const displayed = showAllResults ? sortedImplants : topMatches;
+               
                 return (
                   <>
                     {isRestrictedResult && (
@@ -2086,9 +2086,18 @@ function ModalContent(props: any) {
                         <Text style={ms.cautionBannerText}>{result.restricted_height_warning}</Text>
                       </View>
                     )}
-                    <Text style={ms.matchHeader}>
-                      {isRestrictedResult ? `Priority-Based Recommendations (${implants.length})` : isNarrowResult ? `Narrow Diameter Options (${implants.length})` : `Top ${Math.min(5, sortedImplants.length)} Best Matches`}
+                                       <Text style={ms.matchHeader}>
+                      {isRestrictedResult
+                        ? `Priority-Based Recommendations (${implants.length})`
+                        : mode === 'choose'
+                        ? (showAllResults ? `All Sizes (${sortedImplants.length})` : `Closest Matches (${Math.min(5, sortedImplants.length)} of ${sortedImplants.length})`)
+                        : `Top ${Math.min(5, sortedImplants.length)} Best Matches`}
                     </Text>
+                    {mode === 'choose' && !isRestrictedResult && (
+                      <Text style={{ fontSize: 11, color: '#78909C', marginBottom: 8 }} data-testid="case-closeness-ranking-hint">
+                        Ranked by closeness to your bone width &amp; height{isNarrowResult ? ' · narrow ridge detected — narrow diameters rank first' : ''}
+                      </Text>
+                    )}
                     {displayed.map((imp: any, i: number) => {
                       const isSelected = selectedImplant?.diameter === imp.diameter && selectedImplant?.length === imp.length && selectedImplant?.brand === imp.brand;
                       const verdict = evaluateImplantSafety({
@@ -2175,7 +2184,7 @@ function ModalContent(props: any) {
                           </View>
                           {imp.priority === 1 && <View style={[ms.bestBadge, { backgroundColor: '#E8F5E9' }]}><Text style={[ms.bestBadgeText, { color: '#2E7D32' }]}>P1</Text></View>}
                           {imp.priority === 2 && <View style={[ms.bestBadge, { backgroundColor: '#FFF3E0' }]}><Text style={[ms.bestBadgeText, { color: '#E65100' }]}>P2</Text></View>}
-                          {!imp.priority && i === 0 && !blocked && !warning && <View style={ms.bestBadge}><Text style={ms.bestBadgeText}>Best</Text></View>}
+                          {!imp.priority && i === 0 && <View style={ms.bestBadge}><Text style={ms.bestBadgeText}>Best match</Text></View>}
                           {!imp.priority && i === 1 && !blocked && !warning && <View style={[ms.bestBadge, { backgroundColor: '#E3F2FD' }]}><Text style={[ms.bestBadgeText, { color: '#1565C0' }]}>2nd</Text></View>}
                           {!imp.priority && i === 2 && !blocked && !warning && <View style={[ms.bestBadge, { backgroundColor: '#FFF3E0' }]}><Text style={[ms.bestBadgeText, { color: '#E65100' }]}>3rd</Text></View>}
                         </TouchableOpacity>

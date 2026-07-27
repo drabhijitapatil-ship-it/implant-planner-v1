@@ -279,7 +279,14 @@
       "Bash(curl -s http://localhost:8001/api/admin/incharges -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNmE0NDM3ODU5OGYwNzUwNDgyM2JmMTE4IiwiZXhwIjoxNzg0OTkzMzA4LCJ0eXBlIjoiYWNjZXNzIiwianRpIjoiOGE2NGU0MjMtMmViZC00MjFhLWI5NGUtZmZiMDE0MDQ4ODc5In0._Ihuj3ph5A1RnTO-EFeoy1RpBFS-aTPENTD1LYQEVYA')",
       "Bash(curl -s http://localhost:8001/api/admin/incharges/6a44378598f07504823bf118/summary -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNmE0NDM3ODU5OGYwNzUwNDgyM2JmMTE4IiwiZXhwIjoxNzg0OTkzMzA4LCJ0eXBlIjoiYWNjZXNzIiwianRpIjoiOGE2NGU0MjMtMmViZC00MjFhLWI5NGUtZmZiMDE0MDQ4ODc5In0._Ihuj3ph5A1RnTO-EFeoy1RpBFS-aTPENTD1LYQEVYA')",
       "Bash(curl -s http://localhost:8001/api/admin/incharges -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNmE0NDM3ODU5OGYwNzUwNDgyM2JmMTE4IiwiZXhwIjoxNzg0OTk0NTYxLCJ0eXBlIjoiYWNjZXNzIiwianRpIjoiMjc2MzA1NmQtNDU0My00NTFlLTliYzQtOGFlNDkwYWI0YWQzIn0.3bK7aQkw1ZVMl2vkz01UDlkIUmqX0woG6k2wrFhkcyU')",
-      "Bash(curl -s http://localhost:8001/api/dashboard/stats -H 'Authorization: Bearer __TRACKED_VAR__')"
+      "Bash(curl -s http://localhost:8001/api/dashboard/stats -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(curl -s http://localhost:8001/api/procedures/6a65e1ab76e8695b0798e007/transfer/eligible-students -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNmE0NDM3ODU5OGYwNzUwNDgyM2JmMTE4IiwiZXhwIjoxNzg1MTgxNjk5LCJ0eXBlIjoiYWNjZXNzIiwianRpIjoiNzkxYmQ1YTgtNzdiMC00MTE5LThmMTItNmMyNTBhYWU2ZWE2In0.pTHLuD-FvLjSQCQos1IVxFRj0U3GXQRXNw4rkvZZuw4')",
+      "Bash(ls -la \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/frontend/app/\\(tabs\\)/implant-selection.tsx\" \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/frontend/app/\\(tabs\\)/implant-selection.tsx\" 2>&1)",
+      "Bash(diff \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/frontend/app/\\(tabs\\)/implant-selection.tsx\" \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/frontend/app/\\(tabs\\)/implant-selection.tsx\")",
+      "Bash(grep -n \"rankImplantsByCloseness\" -A 30 \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/frontend/utils/implantSafety.ts\" 2>&1 *)",
+      "Bash(diff \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/main/backend/server.py\" \"/Users/prathmeshjadhav/Desktop/work/implant-planner-v1/implant-planner-v1/backend/server.py\")",
+      "Bash(python3 seed_inno_x_short.py)",
+      "Bash(./venv/bin/python3 seed_inno_x_short.py)"
     ],
     "additionalDirectories": [
       "/dev",
