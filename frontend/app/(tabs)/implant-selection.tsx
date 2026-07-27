@@ -690,7 +690,8 @@ function ChooseResult({ result, system, tooth, toothInfo, boneWidth, boneHeight,
       },
     ]);
   };
-  const isUsingNarrowOptions = hasNarrowRidge && narrowOptions.length > 0;  const visibleImplants = showAll ? baseImplants : baseImplants.slice(0, 5);
+  const isUsingNarrowOptions = hasNarrowRidge && narrowOptions.length > 0;
+  const visibleImplants = showAll ? baseImplants : baseImplants.slice(0, 5);
   const hasMore = baseImplants.length > 5;
   const selectedImplant = selectedIdx !== null ? baseImplants[selectedIdx] : null;
   const riskImplant = selectedImplant || baseImplants[0];
