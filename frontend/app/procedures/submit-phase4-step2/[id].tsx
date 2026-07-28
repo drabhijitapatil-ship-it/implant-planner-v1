@@ -50,6 +50,8 @@ export default function Phase4Step2Screen() {
   const [prosthesisPhotos, setProsthesisPhotos] = useState<(LabeledUpload | null)[]>([
     null, null,
   ]);
+  // iter-388: Baseline Probing Depth of Peri-implant Soft Tissue — per site
+  const [baselineProbing, setBaselineProbing] = useState<Record<string, Record<string, string>>>({});
   const [photoLabels, setPhotoLabels] = useState<string[]>(['Frontal view', 'Occlusal view']);
   const [photoUploadingIdx, setPhotoUploadingIdx] = useState<number | null>(null);
 
@@ -244,6 +246,7 @@ export default function Phase4Step2Screen() {
         iopa_uploads: isFullArch ? null : iopaUploads,
         opg_upload: isFullArch ? opgUpload : null,
         prosthesis_photos: validPhotos,
+        baseline_probing_depths: Object.keys(baselineProbing).length > 0 ? baselineProbing : null,
         // iter-332: actual delivery date (defaults to today)
         done_date: doneDate || null,
       });
@@ -512,6 +515,56 @@ export default function Phase4Step2Screen() {
                 ))}
               </View>
             </View>
+          </View>
+
+          {/* ── iter-388: Baseline Probing Depth of Peri-implant Soft Tissue ── */}
+          <View style={s.section} testID="baseline-probing-section">
+            <View style={s.sectionHeader}>
+              <Ionicons name="analytics-outline" size={20} color="#0D47A1" />
+              <Text style={s.sectionTitle}>Baseline Probing Depth of Peri-implant Soft Tissue</Text>
+              <TouchableOpacity
+                onPress={() => Alert.alert(
+                  'Baseline Probing Depth',
+                  'Baseline probing depth is one of the most important criteria to evaluate the success of the treatment during follow up appointments. The baseline probing depth is measured after successful placement of the prosthesis and compared over follow up recall and maintenance appointments.'
+                )}
+                testID="baseline-probing-info-btn"
+              >
+                <Ionicons name="information-circle-outline" size={20} color="#1565C0" />
+              </TouchableOpacity>
+            </View>
+            {(implantPositions.length > 0 ? implantPositions : ['']).map(pos => (
+              <View key={pos || 'case'} style={{ marginBottom: 14 }}>
+                {pos ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <View style={s.toothBadge}><Text style={s.toothBadgeText}>{pos}</Text></View>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#37474F' }}>Implant site {pos}</Text>
+                  </View>
+                ) : null}
+                {[
+                  ['kgw', 'Keratinized gingiva width'],
+                  ['vestibular', 'Vestibular probing depth'],
+                  ['distal', 'Distal probing depth'],
+                  ['mesial', 'Mesial probing depth'],
+                  ['lingual', 'Lingual/Palatal probing depth'],
+                ].map(([key, label]) => (
+                  <View key={key} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <Text style={{ flex: 1, fontSize: 13, color: '#555' }}>{label}</Text>
+                    <TextInput
+                      style={[s.input, { width: 84, textAlign: 'center' }]}
+                      value={baselineProbing[pos || 'case']?.[key] || ''}
+                      onChangeText={v => setBaselineProbing(prev => ({
+                        ...prev,
+                        [pos || 'case']: { ...(prev[pos || 'case'] || {}), [key]: v.replace(/[^0-9.]/g, '') },
+                      }))}
+                      keyboardType="decimal-pad"
+                      placeholder="mm"
+                      testID={`baseline-probing-${pos || 'case'}-${key}`}
+                    />
+                    <Text style={{ fontSize: 12, color: '#90A4AE' }}>mm</Text>
+                  </View>
+                ))}
+              </View>
+            ))}
           </View>
 
           {/* ── Submit ── */}
