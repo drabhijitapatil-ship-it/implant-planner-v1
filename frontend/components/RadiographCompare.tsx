@@ -29,6 +29,9 @@ type Props = {
   procedure: any;
   iopaUploads: Record<string, Upload>;
   opgUpload: Upload | null;
+  // iter-389: Phase 5 mode — adds a middle Phase-4 pane per row and relabels
+  // the current pane; AI notes compare against the Phase-4 baseline.
+  followupMode?: { phase4ByTooth: Record<string, string>; phase4Opg: string | null; currentLabel: string };
 };
 
 /**
@@ -43,7 +46,7 @@ type Props = {
  *
  * Full-arch cases compare OPGs instead of per-tooth IOPAs.
  */
-export default function RadiographCompare({ procedure, iopaUploads, opgUpload }: Props) {
+export default function RadiographCompare({ procedure, iopaUploads, opgUpload, followupMode }: Props) {
   const [expanded, setExpanded] = useState(true);
   const [viewer, setViewer] = useState<{ baseline: string | null; current: string | null; toothKey: string; toothLabel: string } | null>(null);
 
@@ -120,7 +123,8 @@ export default function RadiographCompare({ procedure, iopaUploads, opgUpload }:
   }, [procedure, isExisting, isFullArch]);
 
   const baselineLabel = isExisting ? 'Baseline — Phase 1 (intake)' : 'Baseline — Phase 2 (post-surgical)';
-  const currentLabel = 'Current — Phase 4 (post-delivery)';
+  const currentLabel = followupMode?.currentLabel || 'Current — Phase 4 (post-delivery)';
+  const phase4Label = 'Phase 4 (post-delivery)';
 
   // iter-306: Don't silently hide when no baseline exists — a missing
   // baseline is itself important feedback for the clinician.  Render
@@ -230,7 +234,7 @@ export default function RadiographCompare({ procedure, iopaUploads, opgUpload }:
           toothLabel={viewer.toothLabel}
           baselineLabel={baselineLabel}
           currentLabel={currentLabel}
-          existingNote={notesMap[viewer.toothKey]}
+          existingNote={notesMap[followupMode ? `fu_${viewer.toothKey}` : viewer.toothKey]}
           canEdit={canEditNotes}
           onClose={() => setViewer(null)}
         />
@@ -243,21 +247,29 @@ export default function RadiographCompare({ procedure, iopaUploads, opgUpload }:
 // Single per-tooth row: tooth pill + side-by-side baseline/current thumbs.
 // ─────────────────────────────────────────────────────────────────────────
 function ComparisonRow({
-  toothLabel, baseline, current, baselineLabel, currentLabel, onOpen,
+  toothLabel, baseline, mid, midLabel, current, baselineLabel, currentLabel, onOpen,
 }: {
   toothLabel: string;
   baseline: string | null;
+  mid?: string | null;
+  midLabel?: string;
   current: string | null;
   baselineLabel: string;
   currentLabel: string;
   onOpen: (b: string | null, c: string | null) => void;
 }) {
-  const canOpen = !!(baseline || current);
+  const canOpen = !!(baseline || mid || current);
   return (
     <View style={s.row} testID={`compare-row-${toothLabel}`}>
       <View style={s.toothBadge}><Text style={s.toothBadgeText} numberOfLines={1}>{toothLabel}</Text></View>
       <CompareThumb filename={baseline} caption={baselineLabel} placeholder="No baseline" onPress={canOpen ? () => onOpen(baseline, current) : undefined} testID={`compare-baseline-${toothLabel}`} />
-      <Ionicons name="arrow-forward" size={18} color="#90A4AE" style={{ marginHorizontal: 2 }} />
+      {mid !== undefined && (
+        <>
+          <Ionicons name="arrow-forward" size={14} color="#90A4AE" />
+          <CompareThumb filename={mid} caption={midLabel || 'Phase 4'} placeholder="No Phase 4" onPress={canOpen ? () => onOpen(baseline, current) : undefined} testID={`compare-mid-${toothLabel}`} />
+        </>
+      )}
+      <Ionicons name="arrow-forward" size={mid !== undefined ? 14 : 18} color="#90A4AE" style={{ marginHorizontal: 2 }} />
       <CompareThumb filename={current} caption={currentLabel} placeholder="Not uploaded yet" onPress={canOpen ? () => onOpen(baseline, current) : undefined} testID={`compare-current-${toothLabel}`} />
     </View>
   );
