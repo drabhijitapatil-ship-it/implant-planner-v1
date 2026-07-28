@@ -6927,3 +6927,45 @@ implant diameter before placement.
   persistence verified via PUT+GET curl. Copy fix: "press Continue to see the full list".
 - Known: Alert.alert is no-op on web (fine on native); text-node dev warning still open (P3,
   pre-existing — see known_issues.md).
+
+---
+
+## 2026-07-28 — PHASE 5: Follow-up & Maintenance, Iteration 1 (iter-388)
+
+### User choices: per-implant probing (1a), unlimited follow-ups (2a), free date (3a),
+### comparison chips + always-show New systemic condition (4a), 2-iteration delivery (5a).
+
+### Delivered (Iteration 1)
+- Phase 4 Step 2: new "Baseline Probing Depth of Peri-implant Soft Tissue" section — info ⓘ
+  + per implant site 5 mm-inputs (kgw/vestibular/distal/mesial/lingual); stored on proc as
+  `baseline_probing_depths` (submit-phase4-step2/[id].tsx + Phase4Step2Submit model).
+- Backend (server.py ~15105): FollowUpSubmit model; POST /api/procedures/{id}/followups
+  (completed-only, owner-only, sequential unlock, rejected→resubmit replaces entry,
+  incharge-self-created auto-approve); POST /followups/{n}/approve (approve/reject,
+  supervisor→incharge chain, combined single approval when sup==inc, faculty comments,
+  notifications to student/faculty). Followups stored as proc.followups[] with ISO dates.
+- Follow-up form /app/frontend/app/procedures/followup/[id].tsx?n=N — 10 sections in order:
+  Implant Survival Review (per implant Surviving/Failed, always first), Date (calendar),
+  Systemic Condition Review (pre-existing Controlled/Not controlled only when Phase-1 risk
+  factors present; New systemic condition always w/ info ⓘ), General, Oral Hygiene (Lindquist),
+  Probing Depths per site with live "+x mm vs baseline" chips, Radiograph (per-implant IOPA or
+  OPG for full-arch via /uploads/media-temp), Peri-implant Soft Tissue (4×Present/Absent),
+  Prosthesis & Occlusion (mobility modal dropdown, 5 options) + Overdenture subsection when
+  prosthetic_plan includes 'Overdenture with Attachment', Patient Feedback. Full validation.
+- Case detail: FollowUpSection.tsx below Contributions card — expandable appointment tabs w/
+  status pills, Approve/Reject for assigned faculty (combined label when same person),
+  reject-reason modal, Start/Revise buttons for owner.
+- Dashboards: Supervisor + In-Charge "Action Needed" now list pending Phase-5 follow-ups
+  (green Review Now chip; combined rule for In-Charge).
+
+### Testing
+- Backend curl E2E: submit → duplicate-block → wrong-role 403 → sup approve → inc approve →
+  #2 submit → reject → resubmit-replaces ✓ (all verified 2026-07-28).
+- testing_agent iteration_307.json: 9/9 PASS (dashboards, section order, expandable data,
+  reject modal, role gating, mobility modal, incomplete-submit guard, regressions).
+- Live verification data: 'Test Approval Patient' (69cfb036a19e1d1819e0f6fd) has First=approved,
+  Second=pending_supervisor (reserved for user). 'Phase2 E2E Test' has Start button.
+
+### Iteration 2 (NEXT): Phase 5 Analytics
+- Survival-over-time from followups[].survival_review; probing-depth trend vs baseline;
+  crestal bone loss radiograph comparison view; follow-up compliance metrics; role-scoped.
