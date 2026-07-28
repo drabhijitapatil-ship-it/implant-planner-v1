@@ -7053,3 +7053,18 @@ implant diameter before placement.
   orange tag with exact diff, Phase 1 constants regression, legacy-label case renders fine.
 - Test case 699fc5c1248100e8a0d87261 'Phase2 Test' now pending_phase2 with persisted deviation
   (Sleeve: Key Sleeve → PEEK full sleeve) — good demo of the orange tag for the user.
+
+## 2026-07-28 — Guided-Plan Adherence Analytics (iter-392)
+
+- Backend GET /api/analytics/protocol-adherence (after followup-metrics in server.py):
+  reuses drilling deviation logic (_normalize_surgery_approach/_is_guided_approach/
+  _drilling_protocol_diffs mirroring the [id].tsx readback comparison). Returns summary
+  {comparable_cases, as_planned, deviated, adherence_rate}, by_student (sorted lowest
+  adherence first), deviation_fields Pareto, recent_deviations (max 20, with diffs list).
+  Role-scoped (student own / supervisor theirs / faculty all / nurse 403); from/to filter
+  on phase2_actual_done_date|phase2_submitted_at; HIPAA log_access.
+- Frontend advanced.tsx: new "Plan Adherence" tab (adv-tab-adherence, AdherencePane,
+  testID adherence-analytics-pane) — summary cards + overall rate card, per-student
+  adherence bars (green ≥90 / amber ≥70 / red), deviation-field counts, recent deviation list.
+- Self-tested: admin curl returns correct data (picks up Phase2 Test sleeve deviation),
+  nurse 403, screenshot shows all 4 cards populated live.

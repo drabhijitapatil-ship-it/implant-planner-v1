@@ -29,7 +29,7 @@ import { downloadAuthenticated } from '../../utils/csvDownload';
 import CalendarPicker from '../../components/CalendarPicker';
 import { useAuth } from '../../contexts/AuthContext';
 
-type Section = 'km' | 'scatter' | 'heatmap' | 'crosstab' | 'learning' | 'cmi' | 'complications' | 'failures' | 'followup' | 'benchmarks' | 'export';
+type Section = 'km' | 'scatter' | 'heatmap' | 'crosstab' | 'learning' | 'cmi' | 'complications' | 'failures' | 'followup' | 'adherence' | 'benchmarks' | 'export';
 
 const SECTIONS: { key: Section; label: string; icon: keyof typeof Ionicons.glyphMap; facultyOnly?: boolean }[] = [
   { key: 'km', label: 'Kaplan-Meier', icon: 'pulse-outline' },
@@ -41,6 +41,7 @@ const SECTIONS: { key: Section; label: string; icon: keyof typeof Ionicons.glyph
   { key: 'complications', label: 'Complications', icon: 'warning-outline' },
   { key: 'failures', label: 'Failure Analysis', icon: 'sad-outline' },
   { key: 'followup', label: 'Follow-up', icon: 'repeat-outline' },
+  { key: 'adherence', label: 'Plan Adherence', icon: 'git-compare-outline' },
   { key: 'benchmarks', label: 'Benchmarks', icon: 'ribbon-outline' },
   { key: 'export', label: 'Research Export', icon: 'download-outline' },
 ];
@@ -129,6 +130,7 @@ export default function AdvancedAnalyticsHub() {
         {section === 'complications' && <ComplicationsPane fromDate={fromDate} toDate={toDate} />}
         {section === 'failures' && <FailurePane fromDate={fromDate} toDate={toDate} />}
         {section === 'followup' && <FollowUpPane fromDate={fromDate} toDate={toDate} />}
+        {section === 'adherence' && <AdherencePane fromDate={fromDate} toDate={toDate} />}
         {section === 'benchmarks' && <BenchmarksPane fromDate={fromDate} toDate={toDate} />}
         {section === 'export' && <ResearchExportPane fromDate={fromDate} toDate={toDate} />}
       </ScrollView>
@@ -1021,6 +1023,88 @@ function FollowUpPane({ fromDate, toDate }: { fromDate: string; toDate: string }
             <Text style={s.failRate}>{row.days_since_last}d</Text>
           </View>
         ))}
+      </SectionCard>
+    </View>
+  );
+}
+
+// ─────────────────────── Guided-plan adherence (iter-392) ───────────────────────
+function AdherencePane({ fromDate, toDate }: { fromDate: string; toDate: string }) {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params: any = {};
+      if (fromDate) params.from_date = fromDate;
+      if (toDate) params.to_date = toDate;
+      const r = await api.get('/analytics/protocol-adherence', { params });
+      setData(r.data);
+    } finally { setLoading(false); }
+  }, [fromDate, toDate]);
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) return <View style={s.pane}><ActivityIndicator style={{ marginVertical: 24 }} /></View>;
+  if (!data) return <View style={s.pane}><EmptyMsg /></View>;
+  const sum = data.summary || {};
+  const rateColor = (r: number | null) => (r ?? 100) >= 90 ? '#2E7D32' : (r ?? 100) >= 70 ? '#F9A825' : '#C62828';
+  return (
+    <View style={s.pane} testID="adherence-analytics-pane">
+      <SectionCard title="Guided-plan adherence" hint="How often the Phase 2 drilling protocol matched the Phase 1 surgical plan.">
+        <View style={s.bucketsRow}>
+          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#1565C0' }]}>{sum.comparable_cases ?? 0}</Text><Text style={s.bucketLbl}>Comparable cases</Text></View>
+          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#1B5E20' }]}>{sum.as_planned ?? 0}</Text><Text style={s.bucketLbl}>As planned</Text></View>
+          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: sum.deviated ? '#C62828' : '#37474F' }]}>{sum.deviated ?? 0}</Text><Text style={s.bucketLbl}>Deviated</Text></View>
+        </View>
+        {sum.adherence_rate != null && (
+          <View style={s.sweetCard} testID="adherence-rate-card">
+            <Text style={[s.sweetHead, { color: rateColor(sum.adherence_rate) }]}>Overall adherence: {sum.adherence_rate}%</Text>
+            <Text style={s.sweetLine}>Cases where the surgery followed the planned drilling protocol exactly.</Text>
+          </View>
+        )}
+      </SectionCard>
+
+      <SectionCard title="Adherence by student" hint="Sorted lowest first — a teaching KPI for who most often abandons the plan intra-operatively.">
+        {!(data.by_student || []).length ? <EmptyMsg /> :
+          (data.by_student || []).map((row: any) => (
+            <View key={row.student_name} style={{ marginBottom: 8 }} testID={`adherence-student-${row.student_name}`}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={s.paretoLbl}>{row.student_name}</Text>
+                <Text style={s.paretoRight}>{row.adherence_rate}% · {row.deviated}/{row.total} deviated</Text>
+              </View>
+              <View style={s.paretoBar}>
+                <View style={[s.paretoBarFill, { width: `${row.adherence_rate}%`, backgroundColor: rateColor(row.adherence_rate) }]} />
+              </View>
+            </View>
+          ))}
+      </SectionCard>
+
+      <SectionCard title="What changes most" hint="Which part of the protocol deviates most often during surgery.">
+        {!(data.deviation_fields || []).length ? (
+          <Text style={{ color: '#2E7D32', fontStyle: 'italic', marginTop: 4 }}>No deviations recorded — every surgery followed its plan.</Text>
+        ) : (data.deviation_fields || []).map((row: any) => (
+          <View key={row.field} style={s.failRow} testID={`adherence-field-${row.field}`}>
+            <Text style={[s.failName, { flex: 1 }]}>{row.field}</Text>
+            <Text style={s.failRate}>{row.count}</Text>
+          </View>
+        ))}
+      </SectionCard>
+
+      <SectionCard title="Recent deviations" hint="Latest cases where the intra-op protocol differed from the plan.">
+        {!(data.recent_deviations || []).length ? <EmptyMsg /> :
+          (data.recent_deviations || []).map((row: any, i: number) => (
+            <View key={i} style={[s.failRow, { alignItems: 'flex-start' }]} testID={`adherence-recent-${i}`}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.failName}>{row.patient_name}</Text>
+                <Text style={s.failN}>{row.student_name}{row.date ? ` · ${row.date}` : ''}</Text>
+                {(row.diffs || []).map((d: any, j: number) => (
+                  <Text key={j} style={{ fontSize: 11, color: '#5D4037', marginTop: 1 }}>
+                    {d.field}: {d.planned} → <Text style={{ color: '#C62828', fontWeight: '700' }}>{d.actual}</Text>
+                  </Text>
+                ))}
+              </View>
+            </View>
+          ))}
       </SectionCard>
     </View>
   );
