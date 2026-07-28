@@ -6969,3 +6969,43 @@ implant diameter before placement.
 ### Iteration 2 (NEXT): Phase 5 Analytics
 - Survival-over-time from followups[].survival_review; probing-depth trend vs baseline;
   crestal bone loss radiograph comparison view; follow-up compliance metrics; role-scoped.
+
+## 2026-07-28 — PHASE 5 Iteration 2 (iter-389): per-implant shapes + 3-way compare + Follow-up Analytics
+
+### Delivered
+- **Survival Review — Phase-2 style** (followup/[id].tsx): "All Implants Survived?" Yes/No gate
+  (Yes auto-marks all Surviving); No → per-implant Survived/Failed pills + failure-reason
+  dropdown (9 reasons, Other → free text ≤100 words) + optional clinical notes.
+  Entry shape: survival_review[tooth] = {status, reason, reason_other_text, details}.
+- **Per-implant Soft Tissue Assessment**: soft_tissue[tooth][param] = {status, details} for
+  bleeding_on_probing / soft_tissue_inflammation / ulceration / swelling (Present → details required).
+- **Per-implant Implant Mobility**: prosthesis_occlusion.implant_mobility = {tooth: option} —
+  one modal dropdown per implant (5 options).
+- **3-way Radiograph Comparison** (RadiographCompare.tsx `followupMode` prop
+  {phase4ByTooth, phase4Opg, currentLabel}): rows show baseline → Phase 4 (mid pane,
+  testID compare-mid-*) → follow-up; FullScreenCompare renders 3 panes; AI notes compare
+  vs Phase 4 baseline and store under `fu_{tooth}` keys (won't clash with Phase 4 notes).
+  Embedded in the follow-up form (below Radiograph uploads) and in FollowUpSection readback.
+- **FollowUpSection readback** handles BOTH old (case-level) and new (per-implant) shapes.
+- **Backend GET /api/analytics/followup-metrics** (server.py after approve_followup):
+  compliance {completed_cases, cases_with_followup, compliance_rate, total_followups,
+  avg_days_to_first, avg_interval_days, overdue[>180d]}, survival_over_time (5 buckets
+  0–3mo…2+yr from delivery date), current_survival (latest review per implant),
+  probing_trend (mean/max Δmm of 4 depth sites vs Phase-4 baseline per FU ordinal).
+  Role-scoped (student own / supervisor theirs / faculty all / nurse 403) + HIPAA log_access.
+- **Advanced Analytics "Follow-up" tab** (advanced.tsx FollowUpPane, adv-tab-followup):
+  compliance stat boxes, survival-over-time bars, current-survival card, probing trend, overdue recalls.
+
+### Testing (iteration_308.json — all PASS, 0 issues)
+- Backend pytest 4/4 (shape, nurse 403, student scope, supervisor 200) + curl E2E of the
+  per-implant POST payload (persisted correctly, pending_supervisor).
+- Frontend: form gate/per-implant cards/3-way compare/analytics tab (admin + student) verified
+  live via playwright; old-shape regression on 'Test Approval Patient' First follow-up OK.
+- Seeded test case: 'FollowUp Iter2 Test' (id 6a6891eb702df4d66d11a897, owner Gaurav, 1 implant
+  tooth 14, baseline probing + Phase 2/Phase 4 IOPAs) — has First follow-up pending_supervisor
+  (Paresh to review). 'Test Approval Patient' Second follow-up remains reserved for user verification.
+
+### Next (unchanged backlog)
+- P1: administrator role rollback verification; MUA angulation workflow (Option B); Microsoft Login (via integration_expert).
+- P1: Multi-tenant backend core + Platform Super Admin dashboard.
+- P2: Drilling protocol PDF export; Forum semantic search; Dark mode; production OpenAI key swap (blocked on user).
