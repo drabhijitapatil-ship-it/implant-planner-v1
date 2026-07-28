@@ -20,6 +20,7 @@ import {
   PROCEDURE_TYPES,  LOADING_TYPES,
   PROCEDURES_WITH_NUM_IMPLANTS_QUESTION,
   SURGERY_APPROACH_TYPES, GUIDED_SURGERY_TYPES, STATIC_GUIDE_TYPES, SLEEVE_TYPES, DYNAMIC_NAV_SYSTEMS,
+  normalizeSurgeryApproach, isGuidedApproach,
   getInvalidSinusLiftTeeth,
   CHECKLIST_DATA,
   PROCEDURE_TIME_SLOTS,
@@ -509,7 +510,7 @@ export default function NewProcedureScreen() {
                 num_implants: proc.num_implants || '',
                 sinus_lift_type: proc.sinus_lift_type || '',
                 bone_graft_material_details: proc.bone_graft_material_details || '',
-                procedure_surgery_type: proc.procedure_surgery_type || '',
+                procedure_surgery_type: normalizeSurgeryApproach(proc.procedure_surgery_type) || '',
                 guided_surgery_type: proc.guided_surgery_type || '',
                 static_guide_type: proc.static_guide_type || '',
                 sleeve_type: proc.sleeve_type || '',
@@ -1035,7 +1036,7 @@ export default function NewProcedureScreen() {
         Alert.alert('Missing Field', 'Please select the Procedure Type (Free Hand / Combination / Guided Surgery).');
         return;
       }
-      if (['Combination of Free hand and Guided Surgery', 'Guided Surgery'].includes(sanitized.procedure_surgery_type)) {
+      if (isGuidedApproach(sanitized.procedure_surgery_type)) {
         if (!sanitized.guided_surgery_type) {
           Alert.alert('Missing Field', 'Please select the Type of Guided Surgery.');
           return;
@@ -1472,7 +1473,7 @@ export default function NewProcedureScreen() {
       if (!formData.prosthetic_plan) missImplantDetails.push('Prosthetic Plan');
       // iter-387: surgical-approach cascade requirements
       if (!formData.procedure_surgery_type) missImplantDetails.push('Procedure Type');
-      else if (['Combination of Free hand and Guided Surgery', 'Guided Surgery'].includes(formData.procedure_surgery_type)) {
+      else if (isGuidedApproach(formData.procedure_surgery_type)) {
         if (!formData.guided_surgery_type) missImplantDetails.push('Type of Guided Surgery');
         else if (formData.guided_surgery_type === 'Static Guide') {
           if (!formData.static_guide_type) missImplantDetails.push('Type of Static Guide');
@@ -1896,7 +1897,7 @@ export default function NewProcedureScreen() {
             data-testid="procedure-surgery-type-dropdown"
           />
         )}
-        {['Combination of Free hand and Guided Surgery', 'Guided Surgery'].includes(formData.procedure_surgery_type) &&
+        {isGuidedApproach(formData.procedure_surgery_type) &&
           formData.implant_procedure_type !== 'Existing Implant' && (
           <Dropdown
             label="Type of Guided Surgery"
@@ -1913,7 +1914,7 @@ export default function NewProcedureScreen() {
           />
         )}
         {formData.guided_surgery_type === 'Static Guide' &&
-          ['Combination of Free hand and Guided Surgery', 'Guided Surgery'].includes(formData.procedure_surgery_type) && (
+          isGuidedApproach(formData.procedure_surgery_type) && (
           <Dropdown
             label="Type of Static Guide"
             value={formData.static_guide_type}
@@ -1939,7 +1940,7 @@ export default function NewProcedureScreen() {
           />
         )}
         {formData.guided_surgery_type === 'Dynamic Navigation' &&
-          ['Combination of Free hand and Guided Surgery', 'Guided Surgery'].includes(formData.procedure_surgery_type) && (
+          isGuidedApproach(formData.procedure_surgery_type) && (
           <Dropdown
             label="Dynamic Navigation Surgery System"
             value={formData.dynamic_nav_system}

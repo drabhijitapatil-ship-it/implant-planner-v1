@@ -171,11 +171,23 @@ export const PROCEDURE_TYPES = [
 ];
 
 // iter-387: Surgical-approach cascade (Phase 1 — Procedure Information)
+// iter-391: labels unified with Phase 2 Drilling Type terminology so the
+// planned approach (Phase 1) and actual protocol (Phase 2) are comparable.
 export const SURGERY_APPROACH_TYPES = [
-  'Free Hand Surgery',
-  'Combination of Free hand and Guided Surgery',
+  'Free Hand Sequential Drilling',
+  'Combination of Guided and Free Hand Sequential Drilling',
   'Guided Surgery',
 ];
+
+// iter-391: legacy Phase-1 labels → unified drilling terminology.
+export const normalizeSurgeryApproach = (v?: string | null): string => {
+  if (!v) return '';
+  if (v === 'Free Hand Surgery') return 'Free Hand Sequential Drilling';
+  if (v === 'Combination of Free hand and Guided Surgery') return 'Combination of Guided and Free Hand Sequential Drilling';
+  return v;
+};
+export const isGuidedApproach = (v?: string | null): boolean =>
+  ['Guided Surgery', 'Combination of Guided and Free Hand Sequential Drilling', 'Combination of Free hand and Guided Surgery'].includes(String(v || ''));
 export const GUIDED_SURGERY_TYPES = ['Static Guide', 'Dynamic Navigation'];
 export const STATIC_GUIDE_TYPES = [
   'Tooth Supported Guide',
