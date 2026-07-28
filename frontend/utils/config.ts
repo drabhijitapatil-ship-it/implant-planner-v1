@@ -38,11 +38,11 @@ function resolveLocalDevUrl(): string {
   return `http://localhost:${LOCAL_BACKEND_PORT}`;
 }
 
-const _rawUrl: string = resolveLocalDevUrl();
-// const _rawUrl: string =
-//   process.env.EXPO_PUBLIC_BACKEND_URL ||
-//   Constants.expoConfig?.extra?.backendUrl ||
-//   "https://api.implanr.com";
+// const _rawUrl: string = resolveLocalDevUrl();
+const _rawUrl: string =
+  process.env.EXPO_PUBLIC_BACKEND_URL ||
+  Constants.expoConfig?.extra?.backendUrl ||
+  "https://api.implanr.com";
 
 const BACKEND_URL: string = resolveUrl(_rawUrl);
 
