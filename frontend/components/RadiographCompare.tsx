@@ -197,7 +197,9 @@ export default function RadiographCompare({ procedure, iopaUploads, opgUpload, f
             <View style={s.uploadHintBox} testID="compare-upload-hint">
               <Ionicons name="arrow-down-circle" size={18} color="#0277BD" />
               <Text style={s.uploadHintText}>
-                {missingCurrentCount} post-delivery IOPA{missingCurrentCount === 1 ? '' : 's'} still to upload — use the "Post-Delivery IOPA (per implant)" section below.
+                {followupMode
+                  ? `${missingCurrentCount} follow-up IOPA${missingCurrentCount === 1 ? '' : 's'} still to upload — use the Radiograph section above.`
+                  : `${missingCurrentCount} post-delivery IOPA${missingCurrentCount === 1 ? '' : 's'} still to upload — use the "Post-Delivery IOPA (per implant)" section below.`}
               </Text>
             </View>
           )}
