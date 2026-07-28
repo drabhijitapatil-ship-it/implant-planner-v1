@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import api from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
+import RadiographCompare from './RadiographCompare';
 
 const ORDINALS = ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth', 'Tenth'];
 const nextLabel = (n: number) => `${ORDINALS[n - 1] || `${n}th`} Follow up Appointment`;
@@ -31,18 +32,36 @@ const Row = ({ label, value }: { label: string; value?: any }) => {
   );
 };
 
-function FollowUpDetails({ fu }: { fu: any }) {
+const SOFT_TISSUE_KEYS: [string, string][] = [
+  ['bleeding_on_probing', 'Bleeding on probing'],
+  ['soft_tissue_inflammation', 'Inflammation'],
+  ['ulceration', 'Ulceration'],
+  ['swelling', 'Swelling'],
+];
+
+function FollowUpDetails({ fu, procedure }: { fu: any; procedure: any }) {
   const g = fu.general || {}; const h = fu.oral_hygiene || {}; const po = fu.prosthesis_occlusion || {};
   const stt = fu.soft_tissue || {}; const od = fu.overdenture;
   const fmt = (o: any) => o?.status ? `${o.status}${o.details ? ` — ${o.details}` : ''}` : undefined;
+  // iter-389: old (case-level) vs new (per-implant) soft-tissue / mobility shapes
+  const sttIsPerImplant = !stt.bleeding_on_probing;
+  const mobIsPerImplant = po.implant_mobility && typeof po.implant_mobility === 'object';
+  // Phase 4 radiographs for the 3-way comparison readback
+  const phase4ByTooth: Record<string, string> = {};
+  Object.entries((procedure?.phase4_step2_iopa_uploads || {}) as Record<string, any>).forEach(([t, u]) => {
+    if (u?.filename) phase4ByTooth[t] = String(u.filename);
+  });
+  const phase4Opg: string | null = procedure?.phase4_step2_opg_upload?.filename || null;
+  const hasRadiographs = !!fu.opg_upload || Object.keys(fu.iopa_uploads || {}).length > 0;
   return (
     <View style={{ marginTop: 8 }}>
       <Row label="Date" value={fu.date} />
       {fu.preexisting_condition_review?.status ? <Row label="Pre-existing condition" value={fmt(fu.preexisting_condition_review)} /> : null}
       <Row label="New systemic condition" value={fu.new_systemic_condition?.answer ? `${fu.new_systemic_condition.answer}${fu.new_systemic_condition.details ? ` — ${fu.new_systemic_condition.details}` : ''}` : undefined} />
-      {Object.entries(fu.survival_review || {}).map(([tooth, v]: any) => (
-        <Row key={tooth} label={`Implant ${tooth} survival`} value={`${v.status}${v.details ? ` — ${v.details}` : ''}`} />
-      ))}
+      {Object.entries(fu.survival_review || {}).map(([tooth, v]: any) => {
+        const reason = v.reason ? ` — ${v.reason === 'Other' ? (v.reason_other_text || 'Other') : v.reason}` : '';
+        return <Row key={tooth} label={`Implant ${tooth} survival`} value={`${v.status}${reason}${v.details ? ` — ${v.details}` : ''}`} />;
+      })}
       <Row label="Comfort" value={g.comfort === 'No' ? `No — ${g.comfort_details}` : g.comfort} />
       <Row label="Pain" value={g.pain === 'Yes' ? `Yes — ${g.pain_details}` : g.pain} />
       <Row label="Chewing ability" value={g.chewing_ability} />
@@ -56,11 +75,29 @@ function FollowUpDetails({ fu }: { fu: any }) {
         <Row key={`pd-${tooth}`} label={`Probing ${tooth} (KGW/V/D/M/L mm)`}
           value={`${v.kgw || '—'} / ${v.vestibular || '—'} / ${v.distal || '—'} / ${v.mesial || '—'} / ${v.lingual || '—'}`} />
       ))}
-      <Row label="Bleeding on probing" value={fmt(stt.bleeding_on_probing)} />
-      <Row label="Soft tissue inflammation" value={fmt(stt.soft_tissue_inflammation)} />
-      <Row label="Ulceration" value={fmt(stt.ulceration)} />
-      <Row label="Swelling" value={fmt(stt.swelling)} />
-      <Row label="Implant mobility" value={po.implant_mobility} />
+      {sttIsPerImplant ? (
+        Object.entries(stt).map(([tooth, params]: any) => (
+          <Row key={`stt-${tooth}`} label={`Soft tissue — ${tooth}`}
+            value={SOFT_TISSUE_KEYS.map(([k, lbl]) => {
+              const e = params?.[k];
+              return `${lbl}: ${e?.status || '—'}${e?.status === 'Present' && e?.details ? ` (${e.details})` : ''}`;
+            }).join(' · ')} />
+        ))
+      ) : (
+        <>
+          <Row label="Bleeding on probing" value={fmt(stt.bleeding_on_probing)} />
+          <Row label="Soft tissue inflammation" value={fmt(stt.soft_tissue_inflammation)} />
+          <Row label="Ulceration" value={fmt(stt.ulceration)} />
+          <Row label="Swelling" value={fmt(stt.swelling)} />
+        </>
+      )}
+      {mobIsPerImplant ? (
+        Object.entries(po.implant_mobility || {}).map(([tooth, v]: any) => (
+          <Row key={`mob-${tooth}`} label={`Implant ${tooth} mobility`} value={v} />
+        ))
+      ) : (
+        <Row label="Implant mobility" value={po.implant_mobility} />
+      )}
       <Row label="Prosthesis stability" value={po.prosthesis_stability === 'Mobile' ? `Mobile — ${po.prosthesis_stability_details}` : po.prosthesis_stability} />
       <Row label="Prosthesis integrity" value={po.prosthesis_integrity} />
       <Row label="Component integrity" value={po.component_integrity} />
@@ -72,11 +109,21 @@ function FollowUpDetails({ fu }: { fu: any }) {
         <Row label="Denture hygiene" value={od.denture_hygiene} />
       </>) : null}
       <Row label="Patient feedback" value={fu.patient_feedback} />
-      <Row label="Radiographs" value={fu.opg_upload ? 'OPG uploaded' : Object.keys(fu.iopa_uploads || {}).length ? `IOPA × ${Object.keys(fu.iopa_uploads || {}).length}` : undefined} />
       {(fu.faculty_comments || []).map((c: any, i: number) => (
         <Row key={i} label={`${c.role === 'supervisor' ? 'Supervisor' : 'In-Charge'} remark`} value={c.comment} />
       ))}
       {fu.rejection_reason ? <Row label="Rejection reason" value={`${fu.rejection_reason} (${fu.rejected_by})`} /> : null}
+      {/* iter-389: 3-way radiograph comparison — Phase 2 → Phase 4 → this follow-up */}
+      {hasRadiographs && (
+        <View style={{ marginHorizontal: -16 }}>
+          <RadiographCompare
+            procedure={procedure}
+            iopaUploads={fu.iopa_uploads || {}}
+            opgUpload={fu.opg_upload || null}
+            followupMode={{ phase4ByTooth, phase4Opg, currentLabel: `Current — ${fu.label}` }}
+          />
+        </View>
+      )}
     </View>
   );
 }
@@ -154,7 +201,7 @@ export default function FollowUpSection({ procedure, onChanged }: { procedure: a
               </View>
               <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color="#90A4AE" />
             </TouchableOpacity>
-            {open && <FollowUpDetails fu={fu} />}
+            {open && <FollowUpDetails fu={fu} procedure={procedure} />}
             {canApprove(fu) && (
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
                 <TouchableOpacity style={[st.btn, { backgroundColor: '#1B5E20' }]} disabled={acting} onPress={() => doApprove(fu)} testID={`followup-approve-${fu.number}`}>

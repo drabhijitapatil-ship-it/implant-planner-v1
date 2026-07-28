@@ -15281,6 +15281,164 @@ async def approve_followup(
     return {"message": msg, "followup": fu}
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# iter-389: PHASE 5 Analytics — survival-over-time, probing-depth trend vs
+# baseline, and follow-up compliance. Role-scoped: student = own cases,
+# supervisor = supervised cases, in-charge/admin = all, nurse = 403.
+# ─────────────────────────────────────────────────────────────────────────
+
+FOLLOWUP_TIME_BUCKETS = [
+    (0, 90, "0–3 mo"), (90, 180, "3–6 mo"), (180, 365, "6–12 mo"),
+    (365, 730, "1–2 yr"), (730, 10**9, "2+ yr"),
+]
+
+
+def _iso_days_between(a, b) -> Optional[int]:
+    try:
+        da = datetime.strptime(str(a)[:10], "%Y-%m-%d").date()
+        db_date = datetime.strptime(str(b)[:10], "%Y-%m-%d").date()
+        return (db_date - da).days
+    except (TypeError, ValueError):
+        return None
+
+
+@api_router.get("/analytics/followup-metrics")
+async def get_followup_metrics(
+    request: Request,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user.get("role") not in ("administrator", "implant_incharge", "supervisor", "student"):
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    match: Dict[str, Any] = {"archived": {"$ne": True}, "status": "completed"}
+    role = current_user.get("role")
+    uid = str(current_user.get("_id") or "")
+    uname = current_user.get("name") or current_user.get("username")
+    if role == "student":
+        match["$or"] = [{"student_id": uid}, {"student_name": uname}]
+    elif role == "supervisor":
+        match["$or"] = [{"supervisor_id": uid}, {"supervisor_name": uname}]
+    procs = await db.procedures.find(match, {
+        "followups": 1, "baseline_probing_depths": 1, "phase4_step2_done_date": 1,
+        "completed_at": 1, "patient_name": 1, "student_name": 1,
+    }).to_list(20000)
+
+    total_followups = 0
+    with_fu = 0
+    first_days: List[int] = []
+    interval_days: List[int] = []
+    overdue: List[Dict[str, Any]] = []
+    buckets = {lbl: {"reviewed": 0, "failed": 0} for _, _, lbl in FOLLOWUP_TIME_BUCKETS}
+    latest_status: Dict[str, str] = {}
+    probing_agg: Dict[int, Dict[str, Any]] = {}
+    today_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    for proc in procs:
+        delivery = proc.get("phase4_step2_done_date") or str(proc.get("completed_at") or "")[:10]
+        fus = [f for f in (proc.get("followups") or []) if f.get("status") != "rejected"]
+        if from_date:
+            fus = [f for f in fus if str(f.get("date") or "") >= from_date]
+        if to_date:
+            fus = [f for f in fus if str(f.get("date") or "") <= to_date]
+        if fus:
+            with_fu += 1
+            total_followups += len(fus)
+            d0 = _iso_days_between(delivery, fus[0].get("date"))
+            if d0 is not None and d0 >= 0:
+                first_days.append(d0)
+            for prev_fu, next_fu in zip(fus, fus[1:]):
+                di = _iso_days_between(prev_fu.get("date"), next_fu.get("date"))
+                if di is not None and di >= 0:
+                    interval_days.append(di)
+        last_seen = fus[-1].get("date") if fus else delivery
+        overdue_days = _iso_days_between(last_seen, today_iso)
+        if overdue_days is not None and overdue_days > 180:
+            overdue.append({
+                "patient_name": proc.get("patient_name"),
+                "student_name": proc.get("student_name"),
+                "followup_count": len(fus),
+                "days_since_last": overdue_days,
+            })
+        base = proc.get("baseline_probing_depths") or {}
+        for fu in fus:
+            dd = _iso_days_between(delivery, fu.get("date"))
+            bucket_lbl = None
+            if dd is not None and dd >= 0:
+                for lo, hi, lbl in FOLLOWUP_TIME_BUCKETS:
+                    if lo <= dd < hi:
+                        bucket_lbl = lbl
+                        break
+            for tooth, v in (fu.get("survival_review") or {}).items():
+                status = (v or {}).get("status") if isinstance(v, dict) else str(v or "")
+                if bucket_lbl:
+                    buckets[bucket_lbl]["reviewed"] += 1
+                    if status == "Failed":
+                        buckets[bucket_lbl]["failed"] += 1
+                latest_status[f"{proc['_id']}::{tooth}"] = status or ""
+            n = int(fu.get("number") or 0)
+            agg = probing_agg.setdefault(n, {"sum": 0.0, "count": 0, "max": None, "label": fu.get("label")})
+            for tooth, sites in (fu.get("probing_depths") or {}).items():
+                b = base.get(tooth) or base.get("case") or {}
+                for k in ("vestibular", "distal", "mesial", "lingual"):
+                    try:
+                        delta = float((sites or {}).get(k)) - float(b.get(k))
+                    except (TypeError, ValueError):
+                        continue
+                    agg["sum"] += delta
+                    agg["count"] += 1
+                    if agg["max"] is None or delta > agg["max"]:
+                        agg["max"] = delta
+
+    tracked = len(latest_status)
+    surviving = sum(1 for v in latest_status.values() if v != "Failed")
+    completed_cases = len(procs)
+    result = {
+        "compliance": {
+            "completed_cases": completed_cases,
+            "cases_with_followup": with_fu,
+            "compliance_rate": round(100.0 * with_fu / completed_cases, 1) if completed_cases else 0.0,
+            "total_followups": total_followups,
+            "avg_days_to_first": round(sum(first_days) / len(first_days), 1) if first_days else None,
+            "avg_interval_days": round(sum(interval_days) / len(interval_days), 1) if interval_days else None,
+            "overdue": sorted(overdue, key=lambda r: -r["days_since_last"])[:50],
+        },
+        "survival_over_time": [
+            {
+                "bucket": lbl,
+                "reviewed": buckets[lbl]["reviewed"],
+                "failed": buckets[lbl]["failed"],
+                "survival_rate": (
+                    round(100.0 * (buckets[lbl]["reviewed"] - buckets[lbl]["failed"]) / buckets[lbl]["reviewed"], 1)
+                    if buckets[lbl]["reviewed"] else None
+                ),
+            }
+            for _, _, lbl in FOLLOWUP_TIME_BUCKETS
+        ],
+        "current_survival": {
+            "implants_tracked": tracked,
+            "surviving": surviving,
+            "rate": round(100.0 * surviving / tracked, 1) if tracked else None,
+        },
+        "probing_trend": [
+            {
+                "followup": n,
+                "label": a.get("label") or _followup_label(n),
+                "n_sites": a["count"],
+                "mean_delta_mm": round(a["sum"] / a["count"], 2) if a["count"] else None,
+                "max_delta_mm": round(a["max"], 1) if a["max"] is not None else None,
+            }
+            for n, a in sorted(probing_agg.items())
+        ],
+        "scope": {"role": role, "read_only": role in ("student", "supervisor")},
+    }
+    await log_access(
+        action="analytics_view", outcome="success", resource_type="followup_metrics",
+        resource_id="global", user=current_user, request=request,
+    )
+    return result
+
+
 # Notification Routes
 @api_router.get("/notifications")
 async def get_notifications(current_user: dict = Depends(get_current_user)):
