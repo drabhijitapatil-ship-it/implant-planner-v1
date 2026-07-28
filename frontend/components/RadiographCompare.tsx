@@ -48,7 +48,7 @@ type Props = {
  */
 export default function RadiographCompare({ procedure, iopaUploads, opgUpload, followupMode }: Props) {
   const [expanded, setExpanded] = useState(true);
-  const [viewer, setViewer] = useState<{ baseline: string | null; current: string | null; toothKey: string; toothLabel: string } | null>(null);
+  const [viewer, setViewer] = useState<{ baseline: string | null; mid?: string | null; current: string | null; toothKey: string; toothLabel: string } | null>(null);
 
   const { user } = useAuth();
   const procedureId: string = procedure?._id || procedure?.id || '';
@@ -170,9 +170,11 @@ export default function RadiographCompare({ procedure, iopaUploads, opgUpload, f
       {expanded && (
         <>
           <Text style={s.helper}>
-            {isExisting
-              ? 'Compare the original intake IOPA with the new post-delivery IOPA per implant.'
-              : 'Compare the post-surgical IOPA (Phase 2) with the new post-delivery IOPA per implant.'}
+            {followupMode
+              ? 'Three-way comparison: baseline → Phase 4 (post-delivery) → this follow-up. Tap a row for the full-screen view; AI crestal-bone-loss notes compare against the Phase 4 baseline.'
+              : isExisting
+                ? 'Compare the original intake IOPA with the new post-delivery IOPA per implant.'
+                : 'Compare the post-surgical IOPA (Phase 2) with the new post-delivery IOPA per implant.'}
           </Text>
 
           {/* iter-306: callout when no baseline IOPA was captured at Phase 2.
@@ -204,10 +206,12 @@ export default function RadiographCompare({ procedure, iopaUploads, opgUpload, f
             <ComparisonRow
               toothLabel="Full Arch — OPG"
               baseline={baselineOpg}
+              mid={followupMode ? (followupMode.phase4Opg || null) : undefined}
+              midLabel={phase4Label}
               current={opgUpload?.filename || null}
               baselineLabel={baselineLabel}
               currentLabel={currentLabel}
-              onOpen={(b, c) => setViewer({ baseline: b, current: c, toothKey: 'opg', toothLabel: 'Full Arch — OPG' })}
+              onOpen={(b, c) => setViewer({ baseline: b, mid: followupMode ? (followupMode.phase4Opg || null) : undefined, current: c, toothKey: followupMode ? 'fu_opg' : 'opg', toothLabel: 'Full Arch — OPG' })}
             />
           ) : (
             teeth.map(tooth => (
@@ -215,10 +219,12 @@ export default function RadiographCompare({ procedure, iopaUploads, opgUpload, f
                 key={tooth}
                 toothLabel={`Tooth ${tooth}`}
                 baseline={baselineByTooth[tooth] || null}
+                mid={followupMode ? (followupMode.phase4ByTooth[tooth] || null) : undefined}
+                midLabel={phase4Label}
                 current={iopaUploads[tooth]?.filename || null}
                 baselineLabel={baselineLabel}
                 currentLabel={currentLabel}
-                onOpen={(b, c) => setViewer({ baseline: b, current: c, toothKey: tooth, toothLabel: `Tooth ${tooth}` })}
+                onOpen={(b, c) => setViewer({ baseline: b, mid: followupMode ? (followupMode.phase4ByTooth[tooth] || null) : undefined, current: c, toothKey: followupMode ? `fu_${tooth}` : tooth, toothLabel: `Tooth ${tooth}` })}
               />
             ))
           )}
@@ -230,11 +236,13 @@ export default function RadiographCompare({ procedure, iopaUploads, opgUpload, f
           procedureId={procedureId}
           toothKey={viewer.toothKey}
           baseline={viewer.baseline}
+          mid={viewer.mid}
+          midLabel={phase4Label}
           current={viewer.current}
           toothLabel={viewer.toothLabel}
           baselineLabel={baselineLabel}
           currentLabel={currentLabel}
-          existingNote={notesMap[followupMode ? `fu_${viewer.toothKey}` : viewer.toothKey]}
+          existingNote={notesMap[viewer.toothKey]}
           canEdit={canEditNotes}
           onClose={() => setViewer(null)}
         />
@@ -329,12 +337,14 @@ function CompareThumb({
 // Full-screen side-by-side modal with both baseline + current + AI notes.
 // ─────────────────────────────────────────────────────────────────────────
 function FullScreenCompare({
-  procedureId, toothKey, baseline, current, toothLabel,
+  procedureId, toothKey, baseline, mid, midLabel, current, toothLabel,
   baselineLabel, currentLabel, existingNote, canEdit, onClose,
 }: {
   procedureId: string;
   toothKey: string;
   baseline: string | null;
+  mid?: string | null;
+  midLabel?: string;
   current: string | null;
   toothLabel: string;
   baselineLabel: string;
@@ -355,6 +365,7 @@ function FullScreenCompare({
         <ScrollView contentContainerStyle={s.modalScroll}>
           <View style={s.modalPanesWrap}>
             <FullPane filename={baseline} caption={baselineLabel} testID="fullscreen-baseline" />
+            {mid !== undefined && <FullPane filename={mid} caption={midLabel || 'Phase 4'} testID="fullscreen-mid" />}
             <FullPane filename={current} caption={currentLabel} testID="fullscreen-current" />
           </View>
 
@@ -362,9 +373,9 @@ function FullScreenCompare({
             procedureId={procedureId}
             toothKey={toothKey}
             toothLabel={toothLabel}
-            baselineFilename={baseline}
+            baselineFilename={mid !== undefined ? (mid || null) : baseline}
             currentFilename={current}
-            baselineLabel={baselineLabel}
+            baselineLabel={mid !== undefined ? (midLabel || 'Phase 4') : baselineLabel}
             currentLabel={currentLabel}
             existingNote={existingNote}
             canEdit={canEdit}

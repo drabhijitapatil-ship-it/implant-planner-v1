@@ -29,7 +29,7 @@ import { downloadAuthenticated } from '../../utils/csvDownload';
 import CalendarPicker from '../../components/CalendarPicker';
 import { useAuth } from '../../contexts/AuthContext';
 
-type Section = 'km' | 'scatter' | 'heatmap' | 'crosstab' | 'learning' | 'cmi' | 'complications' | 'failures' | 'benchmarks' | 'export';
+type Section = 'km' | 'scatter' | 'heatmap' | 'crosstab' | 'learning' | 'cmi' | 'complications' | 'failures' | 'followup' | 'benchmarks' | 'export';
 
 const SECTIONS: { key: Section; label: string; icon: keyof typeof Ionicons.glyphMap; facultyOnly?: boolean }[] = [
   { key: 'km', label: 'Kaplan-Meier', icon: 'pulse-outline' },
@@ -40,6 +40,7 @@ const SECTIONS: { key: Section; label: string; icon: keyof typeof Ionicons.glyph
   { key: 'cmi', label: 'Case-Mix Index', icon: 'medal-outline', facultyOnly: true },
   { key: 'complications', label: 'Complications', icon: 'warning-outline' },
   { key: 'failures', label: 'Failure Analysis', icon: 'sad-outline' },
+  { key: 'followup', label: 'Follow-up', icon: 'repeat-outline' },
   { key: 'benchmarks', label: 'Benchmarks', icon: 'ribbon-outline' },
   { key: 'export', label: 'Research Export', icon: 'download-outline' },
 ];
@@ -127,6 +128,7 @@ export default function AdvancedAnalyticsHub() {
         {section === 'cmi' && isFaculty && <CaseMixPane fromDate={fromDate} toDate={toDate} />}
         {section === 'complications' && <ComplicationsPane fromDate={fromDate} toDate={toDate} />}
         {section === 'failures' && <FailurePane fromDate={fromDate} toDate={toDate} />}
+        {section === 'followup' && <FollowUpPane fromDate={fromDate} toDate={toDate} />}
         {section === 'benchmarks' && <BenchmarksPane fromDate={fromDate} toDate={toDate} />}
         {section === 'export' && <ResearchExportPane fromDate={fromDate} toDate={toDate} />}
       </ScrollView>
@@ -931,6 +933,99 @@ function ResearchExportPane({ fromDate, toDate }: { fromDate: string; toDate: st
 }
 
 // ─────────────────────── Shared bits ───────────────────────
+// ─────────────────────── Phase 5 Follow-up metrics (iter-389) ───────────────────────
+function FollowUpPane({ fromDate, toDate }: { fromDate: string; toDate: string }) {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params: any = {};
+      if (fromDate) params.from_date = fromDate;
+      if (toDate) params.to_date = toDate;
+      const r = await api.get('/analytics/followup-metrics', { params });
+      setData(r.data);
+    } finally { setLoading(false); }
+  }, [fromDate, toDate]);
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) return <View style={s.pane}><ActivityIndicator style={{ marginVertical: 24 }} /></View>;
+  if (!data) return <View style={s.pane}><EmptyMsg /></View>;
+  const c = data.compliance || {};
+  return (
+    <View style={s.pane} testID="followup-analytics-pane">
+      <SectionCard title="Follow-up compliance" hint="Phase 5 recall discipline across completed cases in your scope.">
+        <View style={s.bucketsRow}>
+          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#1565C0' }]}>{c.completed_cases ?? 0}</Text><Text style={s.bucketLbl}>Completed cases</Text></View>
+          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#1B5E20' }]}>{c.cases_with_followup ?? 0}</Text><Text style={s.bucketLbl}>With ≥1 follow-up</Text></View>
+          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#00695C' }]}>{c.compliance_rate ?? 0}%</Text><Text style={s.bucketLbl}>Compliance</Text></View>
+        </View>
+        <View style={[s.bucketsRow, { marginTop: 8 }]}>
+          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#37474F' }]}>{c.total_followups ?? 0}</Text><Text style={s.bucketLbl}>Total follow-ups</Text></View>
+          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#37474F' }]}>{c.avg_days_to_first ?? '—'}</Text><Text style={s.bucketLbl}>Avg days to first</Text></View>
+          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: (c.overdue || []).length ? '#C62828' : '#37474F' }]}>{(c.overdue || []).length}</Text><Text style={s.bucketLbl}>Overdue ({'>'}6 mo)</Text></View>
+        </View>
+      </SectionCard>
+
+      <SectionCard title="Implant survival over time" hint="From Phase 5 survival reviews — % of reviewed implants surviving in each period after prosthesis delivery.">
+        {(data.survival_over_time || []).every((b: any) => !b.reviewed) ? <EmptyMsg /> :
+          (data.survival_over_time || []).map((b: any) => (
+            <View key={b.bucket} style={{ marginBottom: 8 }} testID={`fu-survival-bucket-${b.bucket}`}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={s.paretoLbl}>{b.bucket}</Text>
+                <Text style={s.paretoRight}>{b.reviewed ? `${b.survival_rate}% · n=${b.reviewed}` : 'no reviews'}</Text>
+              </View>
+              <View style={s.paretoBar}>
+                <View style={[s.paretoBarFill, {
+                  width: `${b.survival_rate || 0}%`,
+                  backgroundColor: (b.survival_rate ?? 100) >= 95 ? '#2E7D32' : (b.survival_rate ?? 100) >= 85 ? '#F9A825' : '#C62828',
+                }]} />
+              </View>
+            </View>
+          ))}
+        {data.current_survival?.implants_tracked ? (
+          <View style={s.sweetCard} testID="fu-current-survival">
+            <Text style={s.sweetHead}>
+              Current: {data.current_survival.surviving}/{data.current_survival.implants_tracked} implants surviving ({data.current_survival.rate}%)
+            </Text>
+            <Text style={s.sweetLine}>Based on each implant's most recent follow-up survival review.</Text>
+          </View>
+        ) : null}
+      </SectionCard>
+
+      <SectionCard title="Probing depth trend vs baseline" hint="Mean change (mm) across the 4 probing sites vs the Phase 4 Step 2 baseline, per follow-up appointment.">
+        {!(data.probing_trend || []).length ? <EmptyMsg /> :
+          (data.probing_trend || []).map((row: any) => (
+            <View key={row.followup} style={s.failRow} testID={`fu-probing-row-${row.followup}`}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.failName}>{row.label}</Text>
+                <Text style={s.failN}>n={row.n_sites} sites</Text>
+              </View>
+              <Text style={[s.failRate, { color: (row.mean_delta_mm ?? 0) > 1 ? '#C62828' : (row.mean_delta_mm ?? 0) > 0 ? '#F9A825' : '#2E7D32' }]}>
+                {row.mean_delta_mm != null ? `${row.mean_delta_mm > 0 ? '+' : ''}${row.mean_delta_mm} mm` : '—'}
+              </Text>
+              <Text style={[s.failN, { marginLeft: 8 }]}>max {row.max_delta_mm != null ? `${row.max_delta_mm > 0 ? '+' : ''}${row.max_delta_mm}` : '—'}</Text>
+            </View>
+          ))}
+      </SectionCard>
+
+      <SectionCard title="Overdue recalls" hint="Completed cases with no follow-up in the last 6 months.">
+        {!(c.overdue || []).length ? (
+          <Text style={{ color: '#2E7D32', fontStyle: 'italic', marginTop: 4 }}>No overdue recalls — every completed case has been seen within 6 months.</Text>
+        ) : (c.overdue || []).map((row: any, i: number) => (
+          <View key={i} style={s.failRow} testID={`fu-overdue-row-${i}`}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.failName}>{row.patient_name}</Text>
+              <Text style={s.failN}>{row.student_name} · {row.followup_count} follow-up{row.followup_count === 1 ? '' : 's'}</Text>
+            </View>
+            <Text style={s.failRate}>{row.days_since_last}d</Text>
+          </View>
+        ))}
+      </SectionCard>
+    </View>
+  );
+}
+
 function SectionCard({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
     <View style={s.card}>

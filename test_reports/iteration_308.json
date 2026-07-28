@@ -1,0 +1,47 @@
+{
+  "summary": "iter-389 Phase 5 Iteration 2 (per-implant follow-up shapes + 3-way RadiographCompare + Follow-up analytics endpoint/tab). Backend pytest 4/4 executed tests PASS: analytics shape (compliance/survival_over_time 5 buckets/current_survival/probing_trend/scope), role gates (nurse 403, student 200 scoped, supervisor 200). Per-implant POST /followups shape test SKIPPED — the two student-owned completed cases have no implant positions in data (Phase2 E2E Test has implant_plans=[]; Test Approval Patient has 1 plan but a pending 2nd follow-up correctly blocks new submissions per spec). Frontend: follow-up form on Phase2 E2E Test loads with all iter-2 section testIDs (followup-survival-section, all-yes/all-no gate pills, followup-soft-tissue-section, followup-prosthesis-section, followup-radiograph-section). Per-implant sub-cards (survival-card-*, soft-tissue-card-*, implant-mobility-dropdown-*) correctly render 0 when implantPositions=[]; code inspection confirms testIDs are wired at lines 354/553/586 in /procedures/followup/[id].tsx. phase4-step2-radiograph-compare panel is conditionally rendered only when implant positions exist (correct behaviour). Advanced Analytics Follow-up tab (adv-tab-followup) confirmed rendering for BOTH admin and student — followup-analytics-pane shows all 4 cards: Follow-up compliance (6 stat boxes: 4/1/25%/2/107/0), Implant survival over time (5 bucket bars with 3-6mo=100% n=2), fu-current-survival green card (1/1 100%), Probing depth trend (2 appointments), Overdue recalls (empty state). Regression: expanding First follow-up on Test Approval Patient renders OLD case-level Bleeding on probing & Implant mobility single rows without crash. Second (pending) followup was NOT approved/rejected as instructed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_scenarios": [
+    {"id": "B1", "case": "GET /api/analytics/followup-metrics admin shape", "result": "PASS", "detail": "All required keys present incl. compliance.{completed_cases,cases_with_followup,compliance_rate,total_followups,avg_days_to_first,avg_interval_days,overdue[]}; survival_over_time has 5 buckets each with reviewed/failed/survival_rate; current_survival has implants_tracked/surviving/rate; probing_trend list; scope key present."},
+    {"id": "B2", "case": "Role gates: nurse 403, student 200 scoped, supervisor 200", "result": "PASS"},
+    {"id": "B3", "case": "POST /followups per-implant payload persistence", "result": "SKIPPED", "detail": "No student-owned completed case has implant positions available AND is not blocked by a pending prior follow-up. Backend already curl-verified per review request agent context."},
+    {"id": "F1", "case": "Follow-up form loads with all iter-2 section testIDs (Phase2 E2E Test)", "result": "PASS", "detail": "followup-survival-section, followup-survival-all-yes, followup-survival-all-no, followup-soft-tissue-section, followup-prosthesis-section, followup-radiograph-section all present. Yes/No pill toggle correctly swaps view (no per-implant cards on this case since implant_plans=[])."},
+    {"id": "F2", "case": "Per-implant testIDs code-verified", "result": "PASS (code)", "detail": "survival-card-{pos} at [id].tsx:354, soft-tissue-card-{pos} at 553, implant-mobility-dropdown-{pos} at 586. Cannot render visually on Phase2 E2E (0 implants) — Test Approval Patient blocked by pending followup."},
+    {"id": "F3", "case": "3-way RadiographCompare panel (phase4-step2-radiograph-compare)", "result": "PASS (code)", "detail": "Present in RadiographCompare.tsx:151 with compare-baseline-{tooth}, compare-mid-{tooth}, compare-current-{tooth} at 273/277/281. Panel is conditionally omitted from Phase2 E2E form because no implant positions exist — matches component logic."},
+    {"id": "F4", "case": "Advanced Analytics Follow-up tab renders (admin)", "result": "PASS", "detail": "adv-tab-followup clickable; followup-analytics-pane renders: 6 compliance stats (4 completed cases / 1 with fu / 25% compliance / 2 total / 107 avg days / 0 overdue), 5 survival buckets (3-6mo shows 100% n=2), fu-current-survival card '1/1 implants surviving (100%)', Probing depth trend rows for both appointments, Overdue empty state."},
+    {"id": "F5", "case": "Advanced Analytics Follow-up tab renders (student)", "result": "PASS", "detail": "Same tab visible, followup-analytics-pane rendered with student-scoped data."},
+    {"id": "F6", "case": "OLD-shape follow-up expansion regression (Test Approval Patient)", "result": "PASS", "detail": "followup-toggle-1 & -2 both expand and render 'Bleeding on probing', 'Implant mobility' single rows (Absent/Absence of mobility) without crash. No error boundaries triggered. Second remains pending_supervisor as reserved for user verification."}
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iter389_followup_metrics.py",
+    "/app/test_reports/pytest/iter389.xml",
+    "/app/test_reports/iter389_admin_fu_analytics.png",
+    "/app/test_reports/iter389_student_fu_analytics.png",
+    "/app/test_reports/iter389_form.png",
+    "/app/test_reports/iter389_tap_fu.png"
+  ],
+  "action_items": [
+    "P4 (test-data) — Neither student-owned completed case currently supports a live E2E of the new per-implant follow-up submission: 'Phase2 E2E Test' has implant_plans=[] so per-implant cards render 0; 'Test Approval Patient' has 1 implant plan but is blocked by pending 2nd follow-up (reserved for user). Consider seeding a 3rd completed student case with ≥1 implant_plans[position=<tooth>] and no pending follow-up so future testing can visually verify survival-card-*, soft-tissue-card-*, implant-mobility-dropdown-* and compare-baseline/mid/current thumbnails. Backend endpoint is already correct.",
+    "P4 (carry-over from iter-307) — dashboard.tsx:400/626 pending-followup cards still have only data-testid (missing testID). Not re-verified this session."
+  ],
+  "critical_code_review_comments": [
+    "app/procedures/followup/[id].tsx — implantPositions derived from implant_plans first, then existing_implants fallback (line 134-139). Correct. All per-implant sections iterate implantPositions and emit testIDs {survival-card-*, soft-tissue-card-*, implant-mobility-dropdown-*}. When list is empty, sections silently render header only without an empty state — consider adding a subtle 'No implants recorded for this case' hint under the Peri-implant Soft Tissue / Prosthesis headers to differentiate from 'section didn't load'.",
+    "components/RadiographCompare.tsx — followupMode adds mid pane (Phase 4) correctly at line 277; caption defaults to 'Phase 4' when midLabel missing. Full-screen 3-pane path present.",
+    "app/analytics/advanced.tsx — FollowUpPane wiring is clean, both testID and data-testid on tab (line 94/95), followup-analytics-pane, and fu-current-survival present. Handles empty buckets ('no reviews') gracefully.",
+    "backend/server.py /api/analytics/followup-metrics — response shape stable, role scoping working (student receives 200 with own-case data). No _id leakage detected in serialized response."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter389_followup_metrics.py (new)"
+  ],
+  "success_rate": {"backend": "100% (4/4 executed; 1 skipped due to test-data limitation)", "frontend": "100% of verifiable scenarios; per-implant visual verification limited by test-data availability"},
+  "test_credentials": "Admin Abhijit.patil/Admin@123, Student Gaurav.pandey/Student@123, Supervisor Paresh.gandhi/Supervisor@123, Nurse nurse.1@dental.edu/Nurse@123 — all working.",
+  "seed_data_creation": "None. Second follow-up on Test Approval Patient (69cfb036a19e1d1819e0f6fd) preserved as pending_supervisor for user verification per instructions.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter-2 backend endpoints and Advanced Analytics Follow-up tab both PASS. To fully E2E the new per-implant follow-up submission and readback UI, we need a student-owned completed case with (a) implant_plans[].position populated and (b) no pending prior follow-up. Test Approval Patient has (a) but not (b); Phase2 E2E Test has (b) but not (a). Recommend seeding an additional completed case with ≥2 implant_plans[position=e.g. 14,15] under student Gaurav.pandey. Follow-up form testID pattern: {survival-card-<pos>, soft-tissue-card-<pos>, implant-mobility-dropdown-<pos>, compare-baseline-Tooth <pos>, compare-mid-Tooth <pos>, compare-current-Tooth <pos>}. Analytics endpoint: GET /api/analytics/followup-metrics."
+}

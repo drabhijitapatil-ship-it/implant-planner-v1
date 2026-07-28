@@ -1,6 +1,9 @@
 /**
- * iter-388 — Phase 5: Follow-up & Maintenance appointment form.
- * 10 sections per user spec; starts with the Implant Survival Review.
+ * iter-388/389 — Phase 5: Follow-up & Maintenance appointment form.
+ * 10 sections per user spec; starts with the Implant Survival Review
+ * (Phase-2 style: All Survived? gate → per-implant Survived/Failed with
+ * reason dropdown). Soft tissue + implant mobility captured PER IMPLANT.
+ * Radiograph section embeds the 3-way comparison (Phase 2 → Phase 4 → now).
  */
 import React, { useState, useEffect } from 'react';
 import {
@@ -15,10 +18,15 @@ import { PhaseHeader } from '../../../components/PhaseHeader';
 import { Ionicons } from '@expo/vector-icons';
 import { showUploadPicker } from '../../../utils/uploadPicker';
 import DoneDatePicker, { todayIso } from '../../../components/DoneDatePicker';
+import RadiographCompare from '../../../components/RadiographCompare';
 
 const FULL_ARCH_TYPES = new Set(['All on 4', 'All on 6', 'All on X']);
 type Upload = { filename: string; original_name: string; content_type: string };
 
+const FAILURE_REASONS = [
+  'Early failure', 'Lack of Osseointegration', 'Infection', 'Peri-implantitis',
+  'Mobility', 'Implant fracture', 'Unknown', 'Removed elsewhere', 'Other',
+];
 const MOBILITY_OPTIONS = [
   'Absence of mobility',
   'Minimum clinically visible mobility',
@@ -33,6 +41,14 @@ const PROBING_FIELDS: [string, string][] = [
   ['mesial', 'Mesial probing depth'],
   ['lingual', 'Lingual/Palatal probing depth'],
 ];
+const SOFT_TISSUE_PARAMS: [string, string][] = [
+  ['bleeding_on_probing', 'Bleeding on probing'],
+  ['soft_tissue_inflammation', 'Soft tissue inflammation'],
+  ['ulceration', 'Ulceration'],
+  ['swelling', 'Swelling'],
+];
+
+const wordCount = (t: string) => (t.trim() ? t.trim().split(/\s+/).length : 0);
 
 const Chips = ({ options, value, onChange, testID }: any) => (
   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -62,6 +78,9 @@ const Field = ({ label, required, children, info }: any) => (
   </View>
 );
 
+type SurvivalEntry = { status: string; reason: string; reason_other_text: string; details: string };
+const emptySurvival = (): SurvivalEntry => ({ status: '', reason: '', reason_other_text: '', details: '' });
+
 export default function FollowUpForm() {
   const { id, n } = useLocalSearchParams();
   const router = useRouter();
@@ -74,7 +93,9 @@ export default function FollowUpForm() {
   const [completed, setCompleted] = useState(false);
 
   const [date, setDate] = useState<string>(todayIso());
-  const [survival, setSurvival] = useState<Record<string, { status: string; details: string }>>({});
+  const [allSurvived, setAllSurvived] = useState<'yes' | 'no' | null>(null);
+  const [survival, setSurvival] = useState<Record<string, SurvivalEntry>>({});
+  const [reasonModalFor, setReasonModalFor] = useState<string | null>(null);
   const [preexisting, setPreexisting] = useState({ status: '', details: '' });
   const [newCondition, setNewCondition] = useState({ answer: '', details: '' });
   const [general, setGeneral] = useState<any>({ comfort: '', comfort_details: '', pain: '', pain_details: '', chewing_ability: '', speech: '', esthetics: '' });
@@ -83,16 +104,14 @@ export default function FollowUpForm() {
   const [iopaUploads, setIopaUploads] = useState<Record<string, Upload>>({});
   const [opgUpload, setOpgUpload] = useState<Upload | null>(null);
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
-  const [softTissue, setSoftTissue] = useState<any>({
-    bleeding_on_probing: { status: '', details: '' },
-    soft_tissue_inflammation: { status: '', details: '' },
-    ulceration: { status: '', details: '' },
-    swelling: { status: '', details: '' },
-  });
-  const [prosthesis, setProsthesis] = useState<any>({ implant_mobility: '', prosthesis_stability: '', prosthesis_stability_details: '', prosthesis_integrity: '', component_integrity: '', occlusion: '' });
+  // iter-389: per-implant soft tissue — { tooth: { param: { status, details } } }
+  const [softTissue, setSoftTissue] = useState<Record<string, Record<string, { status: string; details: string }>>>({});
+  // iter-389: per-implant mobility — { tooth: option }
+  const [implantMobility, setImplantMobility] = useState<Record<string, string>>({});
+  const [mobilityModalFor, setMobilityModalFor] = useState<string | null>(null);
+  const [prosthesis, setProsthesis] = useState<any>({ prosthesis_stability: '', prosthesis_stability_details: '', prosthesis_integrity: '', component_integrity: '', occlusion: '' });
   const [overdenture, setOverdenture] = useState<any>({ pressure_areas: '', occlusion_balanced: '', attachment_integrity: '', denture_hygiene: '' });
   const [feedback, setFeedback] = useState('');
-  const [mobilityModal, setMobilityModal] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -126,6 +145,33 @@ export default function FollowUpForm() {
 
   const isOverdenture = String(procedure?.prosthetic_plan || '').includes('Overdenture with Attachment');
   const baseline = procedure?.baseline_probing_depths || {};
+
+  // iter-389: Phase 4 radiographs for the 3-way comparison.
+  const phase4ByTooth: Record<string, string> = {};
+  Object.entries((procedure?.phase4_step2_iopa_uploads || {}) as Record<string, any>).forEach(([t, u]) => {
+    if (u?.filename) phase4ByTooth[t] = String(u.filename);
+  });
+  const phase4Opg: string | null = procedure?.phase4_step2_opg_upload?.filename || null;
+
+  const setSurvivalField = (pos: string, patch: Partial<SurvivalEntry>) =>
+    setSurvival(prev => ({ ...prev, [pos]: { ...(prev[pos] || emptySurvival()), ...patch } }));
+
+  const pickAllSurvived = (v: 'yes' | 'no') => {
+    setAllSurvived(v);
+    if (v === 'yes') {
+      const all: Record<string, SurvivalEntry> = {};
+      implantPositions.forEach(p => { all[p] = { ...emptySurvival(), status: 'Surviving' }; });
+      setSurvival(all);
+    } else {
+      setSurvival({});
+    }
+  };
+
+  const setSoftTissueField = (pos: string, param: string, patch: Partial<{ status: string; details: string }>) =>
+    setSoftTissue(prev => {
+      const existing = prev[pos]?.[param] || { status: '', details: '' };
+      return { ...prev, [pos]: { ...(prev[pos] || {}), [param]: { ...existing, ...patch } } };
+    });
 
   const uploadFile = async (): Promise<Upload | null> => {
     const picked = await showUploadPicker(['image/png', 'image/jpeg', 'image/heic', 'image/heif', 'application/pdf']);
@@ -167,8 +213,21 @@ export default function FollowUpForm() {
 
   const handleSubmit = async () => {
     const missing: string[] = [];
-    const survMissing = implantPositions.filter(p => !survival[p]?.status);
-    if (survMissing.length) missing.push(`Survival Review for tooth ${survMissing.join(', ')}`);
+    if (!allSurvived) missing.push(`Implant Survival Review — answer "${implantPositions.length === 1 ? 'Implant Survived' : 'All Implants Survived'}?"`);
+    if (allSurvived === 'no') {
+      const survMissing = implantPositions.filter(p => !survival[p]?.status);
+      if (survMissing.length) missing.push(`Survived / Failed status for tooth ${survMissing.join(', ')}`);
+      for (const pos of implantPositions) {
+        const e = survival[pos];
+        if (e?.status === 'Failed') {
+          if (!e.reason) missing.push(`Reason for failure — tooth ${pos}`);
+          else if (e.reason === 'Other') {
+            if (!e.reason_other_text.trim()) missing.push(`Failure description — tooth ${pos}`);
+            else if (wordCount(e.reason_other_text) > 100) missing.push(`Failure description over 100 words — tooth ${pos}`);
+          }
+        }
+      }
+    }
     if (anyRisk && !preexisting.status) missing.push('Review of Pre-existing systemic condition');
     if (anyRisk && preexisting.status === 'Not controlled' && !preexisting.details.trim()) missing.push('Pre-existing condition details');
     if (!newCondition.answer) missing.push('New systemic condition');
@@ -192,11 +251,15 @@ export default function FollowUpForm() {
       const radMissing = implantPositions.filter(p => !iopaUploads[p]);
       if (radMissing.length) missing.push(`IOPA for tooth ${radMissing.join(', ')}`);
     }
-    for (const [k, lbl] of [['bleeding_on_probing', 'Bleeding on probing'], ['soft_tissue_inflammation', 'Soft tissue inflammation'], ['ulceration', 'Ulceration'], ['swelling', 'Swelling']] as [string, string][]) {
-      if (!softTissue[k].status) missing.push(lbl);
-      else if (softTissue[k].status === 'Present' && !softTissue[k].details.trim()) missing.push(`${lbl} details`);
+    for (const pos of implantPositions) {
+      for (const [k, lbl] of SOFT_TISSUE_PARAMS) {
+        const e = softTissue[pos]?.[k];
+        if (!e?.status) missing.push(`${lbl} — tooth ${pos}`);
+        else if (e.status === 'Present' && !e.details.trim()) missing.push(`${lbl} details — tooth ${pos}`);
+      }
     }
-    if (!prosthesis.implant_mobility) missing.push('Implant mobility');
+    const mobMissing = implantPositions.filter(p => !implantMobility[p]);
+    if (mobMissing.length) missing.push(`Implant mobility for tooth ${mobMissing.join(', ')}`);
     if (!prosthesis.prosthesis_stability) missing.push('Prosthesis stability');
     if (prosthesis.prosthesis_stability === 'Mobile' && !prosthesis.prosthesis_stability_details.trim()) missing.push('Prosthesis stability details');
     if (!prosthesis.prosthesis_integrity) missing.push('Prosthesis integrity');
@@ -225,7 +288,7 @@ export default function FollowUpForm() {
         iopa_uploads: isFullArch ? null : iopaUploads,
         opg_upload: isFullArch ? opgUpload : null,
         soft_tissue: softTissue,
-        prosthesis_occlusion: prosthesis,
+        prosthesis_occlusion: { ...prosthesis, implant_mobility: implantMobility },
         overdenture: isOverdenture ? overdenture : null,
         patient_feedback: feedback,
       });
@@ -258,35 +321,72 @@ export default function FollowUpForm() {
     );
   }
 
+  const survivalGateLabel = implantPositions.length === 1 ? 'Implant Survived' : 'All Implants Survived';
+
   return (
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       <PhaseHeader title="Phase 5 - Follow-up & Maintenance" subtitle={label} testID="followup-header" />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} nestedScrollEnabled>
 
-          {/* ── Implant Survival Review (always first) ── */}
+          {/* ── Implant Survival Review (always first — Phase 2 style) ── */}
           <View style={s.section} testID="followup-survival-section">
             <View style={s.sectionHeader}>
               <Ionicons name="pulse" size={20} color="#B71C1C" />
               <Text style={s.sectionTitle}>Implant Survival Review</Text>
             </View>
             <Text style={s.helperText}>Record the current status of every implant before the maintenance review.</Text>
-            {implantPositions.map(pos => (
-              <View key={pos} style={{ marginBottom: 12 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <View style={s.toothBadge}><Text style={s.toothBadgeText}>{pos}</Text></View>
-                  <Chips options={['Surviving', 'Failed']} value={survival[pos]?.status}
-                    onChange={(v: string) => setSurvival(prev => ({ ...prev, [pos]: { status: v, details: prev[pos]?.details || '' } }))}
-                    testID={`survival-${pos}`} />
+
+            <Text style={s.gateQ}>{survivalGateLabel}?</Text>
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 10, marginBottom: 4 }}>
+              <TouchableOpacity style={[s.gatePill, allSurvived === 'yes' && s.gatePillOn]} onPress={() => pickAllSurvived('yes')} testID="followup-survival-all-yes">
+                <Text style={[s.gatePillT, allSurvived === 'yes' && s.gatePillTOn]}>Yes</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.gatePill, allSurvived === 'no' && s.gatePillOn]} onPress={() => pickAllSurvived('no')} testID="followup-survival-all-no">
+                <Text style={[s.gatePillT, allSurvived === 'no' && s.gatePillTOn]}>No</Text>
+              </TouchableOpacity>
+            </View>
+
+            {allSurvived === 'no' && implantPositions.map(pos => {
+              const e = survival[pos];
+              const failed = e?.status === 'Failed';
+              return (
+                <View key={pos} style={s.survCard} testID={`survival-card-${pos}`}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <View style={s.toothBadge}><Text style={s.toothBadgeText}>{pos}</Text></View>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#37474F', flex: 1 }}>Tooth {pos}</Text>
+                    <TouchableOpacity style={[s.pillSm, e?.status === 'Surviving' && s.pillSmOn]} onPress={() => setSurvivalField(pos, { status: 'Surviving', reason: '', reason_other_text: '' })} testID={`survival-${pos}-surviving`}>
+                      <Text style={[s.pillSmT, e?.status === 'Surviving' && s.pillSmTOn]}>Survived</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[s.pillSm, failed && s.pillSmOnR]} onPress={() => setSurvivalField(pos, { status: 'Failed' })} testID={`survival-${pos}-failed`}>
+                      <Text style={[s.pillSmT, failed && s.pillSmTOn]}>Failed</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {failed && (
+                    <View style={{ marginTop: 10, gap: 8 }}>
+                      <Text style={s.label}>Reason for failure <Text style={{ color: '#DC3545' }}>*</Text></Text>
+                      <TouchableOpacity style={s.dropdown} onPress={() => setReasonModalFor(pos)} testID={`survival-${pos}-reason`}>
+                        <Text style={[s.dropdownText, !e?.reason && { color: '#999' }]}>{e?.reason || 'Select a reason'}</Text>
+                        <Ionicons name="chevron-down" size={18} color="#666" />
+                      </TouchableOpacity>
+                      {e?.reason === 'Other' && (
+                        <View>
+                          <TextInput style={[s.input, { minHeight: 60 }]} multiline placeholder="Describe the reason (max 100 words)"
+                            value={e.reason_other_text} onChangeText={v => setSurvivalField(pos, { reason_other_text: v })}
+                            testID={`survival-${pos}-reason-other`} />
+                          <Text style={[s.helperText, { marginTop: 4 }, wordCount(e.reason_other_text) > 100 && { color: '#C62828' }]}>
+                            {wordCount(e.reason_other_text)} / 100 words
+                          </Text>
+                        </View>
+                      )}
+                      <TextInput style={[s.input, { minHeight: 52 }]} multiline placeholder="Clinical notes (mobility, pain, peri-implantitis…) — optional"
+                        value={e?.details || ''} onChangeText={v => setSurvivalField(pos, { details: v })}
+                        testID={`survival-details-${pos}`} />
+                    </View>
+                  )}
                 </View>
-                {survival[pos]?.status === 'Failed' && (
-                  <TextInput style={[s.input, { minHeight: 60 }]} multiline placeholder="Failure details (mobility, pain, peri-implantitis...)"
-                    value={survival[pos]?.details || ''}
-                    onChangeText={v => setSurvival(prev => ({ ...prev, [pos]: { ...prev[pos], details: v } }))}
-                    testID={`survival-details-${pos}`} />
-                )}
-              </View>
-            ))}
+              );
+            })}
           </View>
 
           {/* ── Date ── */}
@@ -405,7 +505,7 @@ export default function FollowUpForm() {
             ))}
           </View>
 
-          {/* ── Radiograph ── */}
+          {/* ── Radiograph + 3-way comparison ── */}
           <View style={s.section} testID="followup-radiograph-section">
             <View style={s.sectionHeader}>
               <Ionicons name="scan-outline" size={20} color="#4527A0" />
@@ -430,21 +530,46 @@ export default function FollowUpForm() {
             ))}
           </View>
 
-          {/* ── Peri-implant Soft Tissue Assessment ── */}
+          {/* iter-389: 3-way radiograph comparison — Phase 2 baseline → Phase 4 → this follow-up */}
+          {procedure && (
+            <View style={{ marginBottom: 16, marginTop: -16 }}>
+              <RadiographCompare
+                procedure={procedure}
+                iopaUploads={iopaUploads}
+                opgUpload={opgUpload}
+                followupMode={{ phase4ByTooth, phase4Opg, currentLabel: `Current — ${label}` }}
+              />
+            </View>
+          )}
+
+          {/* ── Peri-implant Soft Tissue Assessment — per implant (iter-389) ── */}
           <View style={s.section} testID="followup-soft-tissue-section">
             <View style={s.sectionHeader}>
               <Ionicons name="leaf-outline" size={20} color="#C62828" />
               <Text style={s.sectionTitle}>Peri-implant Soft Tissue Assessment</Text>
             </View>
-            {([['bleeding_on_probing', 'Bleeding on probing'], ['soft_tissue_inflammation', 'Soft tissue inflammation'], ['ulceration', 'Ulceration'], ['swelling', 'Swelling']] as [string, string][]).map(([k, lbl]) => (
-              <Field key={k} label={lbl} required>
-                <Chips options={['Present', 'Absent']} value={softTissue[k].status}
-                  onChange={(v: string) => setSoftTissue((p: any) => ({ ...p, [k]: { ...p[k], status: v } }))} testID={k.replace(/_/g, '-')} />
-                {softTissue[k].status === 'Present' && (
-                  <TextInput style={[s.input, { marginTop: 8 }]} placeholder="Details (site, severity)..."
-                    value={softTissue[k].details} onChangeText={v => setSoftTissue((p: any) => ({ ...p, [k]: { ...p[k], details: v } }))} />
-                )}
-              </Field>
+            <Text style={s.helperText}>Assess each parameter around every implant individually.</Text>
+            {implantPositions.map(pos => (
+              <View key={pos} style={s.survCard} testID={`soft-tissue-card-${pos}`}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <View style={s.toothBadge}><Text style={s.toothBadgeText}>{pos}</Text></View>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#37474F' }}>Implant site {pos}</Text>
+                </View>
+                {SOFT_TISSUE_PARAMS.map(([k, lbl]) => {
+                  const e = softTissue[pos]?.[k];
+                  return (
+                    <Field key={k} label={lbl} required>
+                      <Chips options={['Present', 'Absent']} value={e?.status}
+                        onChange={(v: string) => setSoftTissueField(pos, k, { status: v })} testID={`${k.replace(/_/g, '-')}-${pos}`} />
+                      {e?.status === 'Present' && (
+                        <TextInput style={[s.input, { marginTop: 8 }]} placeholder="Details (site, severity)..."
+                          value={e?.details || ''} onChangeText={v => setSoftTissueField(pos, k, { details: v })}
+                          testID={`${k.replace(/_/g, '-')}-details-${pos}`} />
+                      )}
+                    </Field>
+                  );
+                })}
+              </View>
             ))}
           </View>
 
@@ -454,13 +579,18 @@ export default function FollowUpForm() {
               <Ionicons name="construct-outline" size={20} color="#37474F" />
               <Text style={s.sectionTitle}>Prosthesis and Occlusion</Text>
             </View>
-            <Field label="Implant mobility" required>
-              <TouchableOpacity style={s.dropdown} onPress={() => setMobilityModal(true)} testID="implant-mobility-dropdown">
-                <Text style={[s.dropdownText, !prosthesis.implant_mobility && { color: '#999' }]}>
-                  {prosthesis.implant_mobility || 'Select implant mobility'}
-                </Text>
-                <Ionicons name="chevron-down" size={18} color="#666" />
-              </TouchableOpacity>
+            <Field label="Implant mobility (per implant)" required>
+              {implantPositions.map(pos => (
+                <View key={pos} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <View style={s.toothBadge}><Text style={s.toothBadgeText}>{pos}</Text></View>
+                  <TouchableOpacity style={[s.dropdown, { flex: 1 }]} onPress={() => setMobilityModalFor(pos)} testID={`implant-mobility-dropdown-${pos}`}>
+                    <Text style={[s.dropdownText, !implantMobility[pos] && { color: '#999' }]} numberOfLines={1}>
+                      {implantMobility[pos] || 'Select implant mobility'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={18} color="#666" />
+                  </TouchableOpacity>
+                </View>
+              ))}
             </Field>
             <Field label="Prosthesis stability" required>
               <Chips options={['Stable', 'Mobile']} value={prosthesis.prosthesis_stability} onChange={(v: string) => setProsthesis((p: any) => ({ ...p, prosthesis_stability: v }))} testID="prosthesis-stability" />
@@ -522,16 +652,35 @@ export default function FollowUpForm() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Implant mobility dropdown modal */}
-      <Modal visible={mobilityModal} transparent animationType="fade" onRequestClose={() => setMobilityModal(false)}>
-        <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={() => setMobilityModal(false)}>
+      {/* Failure reason dropdown modal */}
+      <Modal visible={reasonModalFor !== null} transparent animationType="fade" onRequestClose={() => setReasonModalFor(null)}>
+        <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={() => setReasonModalFor(null)}>
           <View style={s.modalCard}>
-            <Text style={{ fontSize: 15, fontWeight: '800', color: '#1A1A2E', marginBottom: 10 }}>Implant Mobility</Text>
+            <Text style={{ fontSize: 15, fontWeight: '800', color: '#1A1A2E', marginBottom: 10 }}>Reason for failure — Tooth {reasonModalFor}</Text>
+            <ScrollView style={{ maxHeight: 380 }}>
+              {FAILURE_REASONS.map(opt => (
+                <TouchableOpacity key={opt} style={s.modalOption}
+                  onPress={() => { if (reasonModalFor) setSurvivalField(reasonModalFor, { reason: opt }); setReasonModalFor(null); }}
+                  testID={`failure-reason-option-${opt.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}>
+                  <Ionicons name={reasonModalFor && survival[reasonModalFor]?.reason === opt ? 'radio-button-on' : 'radio-button-off'} size={18} color="#1565C0" />
+                  <Text style={{ flex: 1, fontSize: 13, color: '#333' }}>{opt}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Implant mobility dropdown modal (per implant) */}
+      <Modal visible={mobilityModalFor !== null} transparent animationType="fade" onRequestClose={() => setMobilityModalFor(null)}>
+        <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={() => setMobilityModalFor(null)}>
+          <View style={s.modalCard}>
+            <Text style={{ fontSize: 15, fontWeight: '800', color: '#1A1A2E', marginBottom: 10 }}>Implant Mobility — Tooth {mobilityModalFor}</Text>
             {MOBILITY_OPTIONS.map(opt => (
               <TouchableOpacity key={opt} style={s.modalOption}
-                onPress={() => { setProsthesis((p: any) => ({ ...p, implant_mobility: opt })); setMobilityModal(false); }}
+                onPress={() => { if (mobilityModalFor) setImplantMobility(prev => ({ ...prev, [mobilityModalFor]: opt })); setMobilityModalFor(null); }}
                 testID={`mobility-option-${MOBILITY_OPTIONS.indexOf(opt)}`}>
-                <Ionicons name={prosthesis.implant_mobility === opt ? 'radio-button-on' : 'radio-button-off'} size={18} color="#1565C0" />
+                <Ionicons name={mobilityModalFor && implantMobility[mobilityModalFor] === opt ? 'radio-button-on' : 'radio-button-off'} size={18} color="#1565C0" />
                 <Text style={{ flex: 1, fontSize: 13, color: '#333' }}>{opt}</Text>
               </TouchableOpacity>
             ))}
@@ -569,4 +718,16 @@ const s = StyleSheet.create({
   submitBtn: { flexDirection: 'row', backgroundColor: '#1B5E20', borderRadius: 12, padding: 16, alignItems: 'center', justifyContent: 'center', gap: 8 },
   submitText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
   successWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
+  // iter-389 — Phase-2-style survival review pills + per-implant cards
+  gateQ: { fontSize: 15, fontWeight: '800', color: '#1A1A2E' },
+  gatePill: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1.5, borderColor: '#CFD8DC', backgroundColor: '#F8FAFC', alignItems: 'center' },
+  gatePillOn: { borderColor: '#1565C0', backgroundColor: '#1565C0' },
+  gatePillT: { fontSize: 14, fontWeight: '800', color: '#546E7A' },
+  gatePillTOn: { color: '#FFF' },
+  survCard: { borderWidth: 1, borderColor: '#E0E7EE', borderRadius: 10, padding: 12, marginTop: 10, backgroundColor: '#FAFCFD' },
+  pillSm: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1.5, borderColor: '#CFD8DC', backgroundColor: '#F8FAFC' },
+  pillSmOn: { borderColor: '#2E7D32', backgroundColor: '#2E7D32' },
+  pillSmOnR: { borderColor: '#C62828', backgroundColor: '#C62828' },
+  pillSmT: { fontSize: 12, fontWeight: '800', color: '#546E7A' },
+  pillSmTOn: { color: '#FFF' },
 });
