@@ -112,6 +112,8 @@ export default function FollowUpForm() {
   const [prosthesis, setProsthesis] = useState<any>({ prosthesis_stability: '', prosthesis_stability_details: '', prosthesis_integrity: '', component_integrity: '', occlusion: '' });
   const [overdenture, setOverdenture] = useState<any>({ pressure_areas: '', occlusion_balanced: '', attachment_integrity: '', denture_hygiene: '' });
   const [feedback, setFeedback] = useState('');
+  // iter-390: full probing history modal — { pos, key, label } of the tapped site.
+  const [historyFor, setHistoryFor] = useState<{ pos: string; key: string; label: string } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -145,6 +147,12 @@ export default function FollowUpForm() {
 
   const isOverdenture = String(procedure?.prosthetic_plan || '').includes('Overdenture with Attachment');
   const baseline = procedure?.baseline_probing_depths || {};
+
+  // iter-390: longitudinal probing comparison — all prior non-rejected follow-ups.
+  const priorFollowups: any[] = (procedure?.followups || [])
+    .filter((f: any) => f.number < num && f.status !== 'rejected');
+  const prevFU = priorFollowups.length ? priorFollowups[priorFollowups.length - 1] : null;
+  const ordShort = (n: number) => `${['1st', '2nd', '3rd'][n - 1] || `${n}th`} FU`;
 
   // iter-389: Phase 4 radiographs for the 3-way comparison.
   const phase4ByTooth: Record<string, string> = {};
@@ -209,6 +217,17 @@ export default function FollowUpForm() {
     const d = +(cur - base).toFixed(1);
     if (d === 0) return { txt: '= baseline', up: false };
     return { txt: `${d > 0 ? '+' : ''}${d} mm vs baseline`, up: d > 0 };
+  };
+
+  // iter-390: delta vs the immediately previous follow-up.
+  const probingDeltaPrev = (pos: string, key: string): { txt: string; up: boolean } | null => {
+    if (!prevFU) return null;
+    const cur = parseFloat(probing[pos]?.[key] || '');
+    const prev = parseFloat(String(prevFU.probing_depths?.[pos]?.[key] ?? ''));
+    if (isNaN(cur) || isNaN(prev)) return null;
+    const d = +(cur - prev).toFixed(1);
+    if (d === 0) return { txt: `= ${ordShort(prevFU.number)}`, up: false };
+    return { txt: `${d > 0 ? '+' : ''}${d} mm vs ${ordShort(prevFU.number)}`, up: d > 0 };
   };
 
   const handleSubmit = async () => {
@@ -476,7 +495,11 @@ export default function FollowUpForm() {
               <Ionicons name="analytics-outline" size={20} color="#0D47A1" />
               <Text style={s.sectionTitle}>Probing Depth of Peri-implant Soft Tissue</Text>
             </View>
-            <Text style={s.helperText}>Values are compared with the Baseline Probing Depth recorded during Phase 4 Step 2.</Text>
+            <Text style={s.helperText}>
+              {prevFU
+                ? `Values are compared with the Phase 4 Step 2 baseline AND the ${ordShort(prevFU.number).replace(' FU', ' Follow up')} values. Tap the clock icon for the full history of a site.`
+                : 'Values are compared with the Baseline Probing Depth recorded during Phase 4 Step 2.'}
+            </Text>
             {implantPositions.map(pos => (
               <View key={pos} style={{ marginBottom: 14 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -485,13 +508,28 @@ export default function FollowUpForm() {
                 </View>
                 {PROBING_FIELDS.map(([key, lbl]) => {
                   const delta = probingDelta(pos, key);
+                  const deltaPrev = probingDeltaPrev(pos, key);
                   return (
                     <View key={key} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                       <Text style={{ flex: 1, fontSize: 13, color: '#555' }}>{lbl}</Text>
-                      {delta && (
-                        <View style={[s.deltaChip, { backgroundColor: delta.up ? '#FFF3E0' : '#E8F5E9' }]}>
-                          <Text style={{ fontSize: 10, fontWeight: '700', color: delta.up ? '#E65100' : '#1B5E20' }}>{delta.txt}</Text>
+                      {(delta || deltaPrev) && (
+                        <View style={{ alignItems: 'flex-end', gap: 3 }}>
+                          {delta && (
+                            <View style={[s.deltaChip, { backgroundColor: delta.up ? '#FFF3E0' : '#E8F5E9' }]}>
+                              <Text style={{ fontSize: 10, fontWeight: '700', color: delta.up ? '#E65100' : '#1B5E20' }}>{delta.txt}</Text>
+                            </View>
+                          )}
+                          {deltaPrev && (
+                            <View style={[s.deltaChip, { backgroundColor: deltaPrev.up ? '#FFF3E0' : '#E3F2FD' }]}>
+                              <Text style={{ fontSize: 10, fontWeight: '700', color: deltaPrev.up ? '#E65100' : '#0D47A1' }}>{deltaPrev.txt}</Text>
+                            </View>
+                          )}
                         </View>
+                      )}
+                      {priorFollowups.length > 0 && (
+                        <TouchableOpacity onPress={() => setHistoryFor({ pos, key, label: lbl })} style={{ padding: 2 }} testID={`probing-history-${pos}-${key}`}>
+                          <Ionicons name="time-outline" size={19} color="#1565C0" />
+                        </TouchableOpacity>
                       )}
                       <TextInput style={[s.input, { width: 74, textAlign: 'center' }]}
                         value={probing[pos]?.[key] || ''}
@@ -671,6 +709,54 @@ export default function FollowUpForm() {
         </TouchableOpacity>
       </Modal>
 
+      {/* iter-390: probing site history modal — full chain Baseline → FUs → current */}
+      <Modal visible={historyFor !== null} transparent animationType="fade" onRequestClose={() => setHistoryFor(null)}>
+        <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={() => setHistoryFor(null)}>
+          <View style={s.modalCard}>
+            {historyFor && (() => {
+              const { pos, key, label: siteLbl } = historyFor;
+              const baseVal = parseFloat(String((baseline[pos] || baseline['case'] || {})[key] ?? ''));
+              const rows: { label: string; date?: string; value: number | null }[] = [
+                { label: 'Baseline — Phase 4 Step 2', value: isNaN(baseVal) ? null : baseVal },
+                ...priorFollowups.map((f: any) => {
+                  const v = parseFloat(String(f.probing_depths?.[pos]?.[key] ?? ''));
+                  return { label: f.label, date: f.date, value: isNaN(v) ? null : v };
+                }),
+              ];
+              const cur = parseFloat(probing[pos]?.[key] || '');
+              rows.push({ label: 'Current — this appointment', value: isNaN(cur) ? null : cur });
+              const base = rows[0].value;
+              return (
+                <>
+                  <Text style={{ fontSize: 15, fontWeight: '800', color: '#1A1A2E' }}>{siteLbl}</Text>
+                  <Text style={{ fontSize: 12, color: '#78909C', marginBottom: 12 }}>Tooth {pos} — history across appointments</Text>
+                  {rows.map((r, i) => {
+                    const d = r.value != null && base != null && i > 0 ? +(r.value - base).toFixed(1) : null;
+                    return (
+                      <View key={i} style={s.histRow} testID={`probing-history-row-${i}`}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 12.5, fontWeight: '700', color: '#37474F' }}>{r.label}</Text>
+                          {r.date ? <Text style={{ fontSize: 10.5, color: '#90A4AE' }}>{r.date}</Text> : null}
+                        </View>
+                        <Text style={{ fontSize: 14, fontWeight: '800', color: '#0D47A1', minWidth: 56, textAlign: 'right' }}>
+                          {r.value != null ? `${r.value} mm` : '—'}
+                        </Text>
+                        <Text style={{ fontSize: 11, fontWeight: '700', minWidth: 92, textAlign: 'right', color: d == null ? '#B0BEC5' : d > 0 ? '#E65100' : '#1B5E20' }}>
+                          {d == null ? (i === 0 ? 'baseline' : '—') : d === 0 ? '= baseline' : `${d > 0 ? '+' : ''}${d} vs baseline`}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                  <TouchableOpacity style={[s.submitBtn, { marginTop: 14, padding: 12 }]} onPress={() => setHistoryFor(null)} testID="probing-history-close">
+                    <Text style={s.submitText}>Close</Text>
+                  </TouchableOpacity>
+                </>
+              );
+            })()}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Implant mobility dropdown modal (per implant) */}
       <Modal visible={mobilityModalFor !== null} transparent animationType="fade" onRequestClose={() => setMobilityModalFor(null)}>
         <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={() => setMobilityModalFor(null)}>
@@ -718,6 +804,7 @@ const s = StyleSheet.create({
   submitBtn: { flexDirection: 'row', backgroundColor: '#1B5E20', borderRadius: 12, padding: 16, alignItems: 'center', justifyContent: 'center', gap: 8 },
   submitText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
   successWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
+  histRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#F0F4F7' },
   // iter-389 — Phase-2-style survival review pills + per-implant cards
   gateQ: { fontSize: 15, fontWeight: '800', color: '#1A1A2E' },
   gatePill: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1.5, borderColor: '#CFD8DC', backgroundColor: '#F8FAFC', alignItems: 'center' },

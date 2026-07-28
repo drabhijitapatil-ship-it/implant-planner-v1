@@ -32,6 +32,10 @@ const Row = ({ label, value }: { label: string; value?: any }) => {
   );
 };
 
+const PROBING_SITES: [string, string][] = [
+  ['kgw', 'KGW'], ['vestibular', 'V'], ['distal', 'D'], ['mesial', 'M'], ['lingual', 'L'],
+];
+
 const SOFT_TISSUE_KEYS: [string, string][] = [
   ['bleeding_on_probing', 'Bleeding on probing'],
   ['soft_tissue_inflammation', 'Inflammation'],
@@ -71,10 +75,29 @@ function FollowUpDetails({ fu, procedure }: { fu: any; procedure: any }) {
       <Row label="Hygiene — prosthesis" value={h.hygiene_prosthesis} />
       <Row label="Hygiene — implant components" value={h.hygiene_components} />
       <Row label="Access for cleaning" value={h.access_cleaning} />
-      {Object.entries(fu.probing_depths || {}).map(([tooth, v]: any) => (
-        <Row key={`pd-${tooth}`} label={`Probing ${tooth} (KGW/V/D/M/L mm)`}
-          value={`${v.kgw || '—'} / ${v.vestibular || '—'} / ${v.distal || '—'} / ${v.mesial || '—'} / ${v.lingual || '—'}`} />
-      ))}
+      {Object.entries(fu.probing_depths || {}).map(([tooth, v]: any) => {
+        // iter-390: longitudinal deltas — vs Phase 4 Step 2 baseline + vs previous follow-up.
+        const bp = procedure?.baseline_probing_depths || {};
+        const base = bp[tooth] || bp['case'] || null;
+        const priors = (procedure?.followups || []).filter((f: any) => f.number < fu.number && f.status !== 'rejected');
+        const prevFU = priors.length ? priors[priors.length - 1] : null;
+        const prevVals = prevFU?.probing_depths?.[tooth] || null;
+        const deltaLine = (ref: any) => PROBING_SITES.map(([k, sh]) => {
+          const c = parseFloat(String(v?.[k] ?? '')); const r = parseFloat(String(ref?.[k] ?? ''));
+          if (isNaN(c) || isNaN(r)) return `${sh} —`;
+          const d = +(c - r).toFixed(1);
+          return `${sh} ${d > 0 ? '+' : ''}${d}`;
+        }).join(' · ');
+        const prevOrd = prevFU ? `${['1st', '2nd', '3rd'][prevFU.number - 1] || `${prevFU.number}th`} FU` : '';
+        return (
+          <React.Fragment key={`pd-${tooth}`}>
+            <Row label={`Probing ${tooth} (KGW/V/D/M/L mm)`}
+              value={`${v.kgw || '—'} / ${v.vestibular || '—'} / ${v.distal || '—'} / ${v.mesial || '—'} / ${v.lingual || '—'}`} />
+            {base ? <Row label={`Δ vs baseline (${tooth})`} value={deltaLine(base)} /> : null}
+            {prevVals ? <Row label={`Δ vs ${prevOrd} (${tooth})`} value={deltaLine(prevVals)} /> : null}
+          </React.Fragment>
+        );
+      })}
       {sttIsPerImplant ? (
         Object.entries(stt).map(([tooth, params]: any) => (
           <Row key={`stt-${tooth}`} label={`Soft tissue — ${tooth}`}

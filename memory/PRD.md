@@ -7009,3 +7009,19 @@ implant diameter before placement.
 - P1: administrator role rollback verification; MUA angulation workflow (Option B); Microsoft Login (via integration_expert).
 - P1: Multi-tenant backend core + Platform Super Admin dashboard.
 - P2: Drilling protocol PDF export; Forum semantic search; Dark mode; production OpenAI key swap (blocked on user).
+
+## 2026-07-28 — Longitudinal Probing Comparison (iter-390)
+
+### User spec: FU1 compares vs Phase-4-Step-2 baseline; FU2 vs baseline + FU1; FU-N vs baseline + prior FUs.
+### User choices: chips (baseline + previous FU) + tappable full-history modal (1c); all non-rejected priors count (2a); deltas in readback too (3a).
+
+- Form (followup/[id].tsx): `priorFollowups` = followups with number < current & status != rejected;
+  `probingDeltaPrev()` adds a second blue/orange chip "±x mm vs {n} FU"; clock icon per site
+  (testID probing-history-{pos}-{key}) opens a history modal: Baseline → each prior FU (with date)
+  → current input, each row showing Δ vs baseline. Helper text updates when a prior FU exists.
+- Readback (FollowUpSection.tsx): each probing row now followed by "Δ vs baseline ({tooth})" and
+  "Δ vs {n} FU ({tooth})" lines (KGW/V/D/M/L per-site deltas) computed from
+  procedure.baseline_probing_depths and the previous non-rejected follow-up.
+- No backend change needed (prior followups already on the procedure doc).
+- Self-tested live via playwright on seeded case 'FollowUp Iter2 Test' (FU2 form): both chips
+  correct (+1.5 vs baseline / +1 vs 1st FU), 3-row history modal correct, readback Δ row renders.
