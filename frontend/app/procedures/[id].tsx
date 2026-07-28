@@ -32,6 +32,7 @@ import {
   OCCLUSAL_SCHEME_OPTIONS, PARAFUNCTION_HABIT_OPTIONS, VERTICAL_DIMENSION_OPTIONS, TMJ_OPTIONS,
   SMILE_LINE_OPTIONS, GINGIVAL_BIOTYPE_OPTIONS,
   FLAP_DESIGN_OPTIONS, DRILLING_TYPE_OPTIONS, PROSTHETIC_COMPONENT_OPTIONS,
+  normalizeSurgeryApproach, isGuidedApproach,
   FP_MATERIAL_OPTIONS, OVERDENTURE_ATTACHMENT_OPTIONS, CUSTOM_ABUTMENT_OPTIONS,
   MEDICAL_RISK_FACTORS, calculateMedicalRisk,
   getProstheticOptions,
@@ -2899,6 +2900,49 @@ export default function ProcedureDetailScreen() {
               {procedure.phase2_data.drilling_type && (
                 <InfoRow icon="hardware-chip" label="Drilling Type" value={procedure.phase2_data.drilling_type} fieldKey="phase2_data.drilling_type" />
               )}
+              {/* iter-391: actual drilling cascade + plan-vs-actual comparison */}
+              {isGuidedApproach(procedure.phase2_data.drilling_type) && procedure.phase2_data.drilling_guided_surgery_type && (
+                <InfoRow icon="navigate" label="Type of Guided Surgery (actual)" value={procedure.phase2_data.drilling_guided_surgery_type} />
+              )}
+              {isGuidedApproach(procedure.phase2_data.drilling_type) && procedure.phase2_data.drilling_static_guide_type && (
+                <InfoRow icon="layers" label="Type of Static Guide (actual)" value={procedure.phase2_data.drilling_static_guide_type} />
+              )}
+              {isGuidedApproach(procedure.phase2_data.drilling_type) && procedure.phase2_data.drilling_sleeve_type && (
+                <InfoRow icon="ellipse-outline" label="Type of Sleeve (actual)" value={procedure.phase2_data.drilling_sleeve_type} />
+              )}
+              {isGuidedApproach(procedure.phase2_data.drilling_type) && procedure.phase2_data.drilling_dynamic_nav_system && (
+                <InfoRow icon="compass" label="Dynamic Navigation System (actual)" value={procedure.phase2_data.drilling_dynamic_nav_system} />
+              )}
+              {(() => {
+                const p2: any = procedure.phase2_data;
+                const plannedApproach = normalizeSurgeryApproach(procedure.procedure_surgery_type);
+                if (!plannedApproach || !p2.drilling_type) return null;
+                const diffs: string[] = [];
+                if (p2.drilling_type !== plannedApproach) diffs.push(`Drilling Type: ${plannedApproach} → ${p2.drilling_type}`);
+                if (isGuidedApproach(p2.drilling_type)) {
+                  if (p2.drilling_guided_surgery_type && p2.drilling_guided_surgery_type !== (procedure.guided_surgery_type || '')) diffs.push(`Guided Surgery: ${procedure.guided_surgery_type || '—'} → ${p2.drilling_guided_surgery_type}`);
+                  if (p2.drilling_static_guide_type && p2.drilling_static_guide_type !== (procedure.static_guide_type || '')) diffs.push(`Static Guide: ${procedure.static_guide_type || '—'} → ${p2.drilling_static_guide_type}`);
+                  if (p2.drilling_sleeve_type && p2.drilling_sleeve_type !== (procedure.sleeve_type || '')) diffs.push(`Sleeve: ${procedure.sleeve_type || '—'} → ${p2.drilling_sleeve_type}`);
+                  if (p2.drilling_dynamic_nav_system && p2.drilling_dynamic_nav_system !== (procedure.dynamic_nav_system || '')) diffs.push(`Dynamic Nav System: ${procedure.dynamic_nav_system || '—'} → ${p2.drilling_dynamic_nav_system}`);
+                }
+                if (diffs.length === 0) {
+                  return (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#E8F5E9', borderRadius: 8, borderWidth: 1, borderColor: '#A5D6A7', padding: 8, marginVertical: 6 }} testID="drilling-as-planned-tag">
+                      <Ionicons name="checkmark-circle" size={16} color="#1B5E20" />
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: '#1B5E20', flex: 1 }}>Drilling performed as planned in Phase 1</Text>
+                    </View>
+                  );
+                }
+                return (
+                  <View style={{ backgroundColor: '#FFF3E0', borderRadius: 8, borderWidth: 1, borderColor: '#FFB74D', padding: 8, marginVertical: 6 }} testID="drilling-protocol-changed-tag">
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                      <Ionicons name="warning" size={15} color="#E65100" />
+                      <Text style={{ fontSize: 12, fontWeight: '800', color: '#E65100' }}>Protocol changed vs Phase 1 plan</Text>
+                    </View>
+                    {diffs.map((d, i) => <Text key={i} style={{ fontSize: 11.5, color: '#5D4037', marginTop: 1 }}>{d}</Text>)}
+                  </View>
+                );
+              })()}
               {procedure.phase2_data.implant_seated_correctly !== undefined && (
                 <InfoRow icon="checkmark-done" label="Implant Seated Correctly" value={procedure.phase2_data.implant_seated_correctly ? 'Yes' : 'No'} fieldKey="phase2_data.implant_seated_correctly" />
               )}

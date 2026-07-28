@@ -1,0 +1,36 @@
+{
+  "summary": "iter-391 Phase 2 Drilling Type cascade (mirrors Phase 1 Procedure Type) end-to-end verified. Backend pytest 5/5 PASS: (1) seeded case precheck (status=phase1_approved, Pre-Op complete, Phase1 plan Guided Surgery / Static Guide / Tooth Supported Guide / Key Sleeve, 1 implant), (2) uploaded consent PNG via /api/procedures/{id}/upload-consent (was missing on seed case), (3) POST /api/procedures/{id}/submit-phase2 with all 4 new drilling_* fields (drilling_guided_surgery_type='Static Guide', drilling_static_guide_type='Tooth Supported Guide', drilling_sleeve_type='PEEK full sleeve' as intentional deviation, drilling_dynamic_nav_system=null) → 200, (4) GET /api/procedures/{id} readback confirms all 4 fields persisted inside phase2_data, (5) old-style payload WITHOUT the new drilling_* fields returns 400 (business rule, case now pending_phase2) NOT 422 — proving Phase2Submit treats them as Optional. Frontend readback E2E on /procedures/699fc5c1248100e8a0d87261 confirms: Phase 2 section renders InfoRows 'Type of Guided Surgery (actual)=Static Guide', 'Type of Static Guide (actual)=Tooth Supported Guide', 'Type of Sleeve (actual)=PEEK full sleeve' AND the orange banner data-testid='drilling-protocol-changed-tag' with the exact expected text 'Protocol changed vs Phase 1 plan · Sleeve: Key Sleeve → PEEK full sleeve'. drilling-as-planned-tag absent (correct — plan differs). Constants/checklist.ts confirms SURGERY_APPROACH_TYPES = ['Free Hand Sequential Drilling', 'Combination of Guided and Free Hand Sequential Drilling', 'Guided Surgery'] and normalizeSurgeryApproach + isGuidedApproach helpers wired.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "verified_scenarios": [
+    {"id": "B1", "case": "GET /procedures/{id} pre-check (phase1_approved, preop done, Phase1 plan Guided/Static/Tooth/Key)", "result": "PASS"},
+    {"id": "B2", "case": "POST /procedures/{id}/upload-consent (Gaurav student, tiny PNG)", "result": "PASS"},
+    {"id": "B3", "case": "POST /procedures/{id}/submit-phase2 with 4 new drilling_* fields", "result": "PASS", "detail": "200 OK"},
+    {"id": "B4", "case": "GET readback — phase2_data.drilling_guided_surgery_type/static_guide_type/sleeve_type persisted", "result": "PASS"},
+    {"id": "B5", "case": "Old-style payload (no drilling_* fields) — no 422 validation error", "result": "PASS", "detail": "Returns 400 (business rule, already pending_phase2). NOT 422, confirming fields are truly Optional in Phase2Submit."},
+    {"id": "F1", "case": "Case-detail /procedures/{id} Phase 2 readback: (actual) InfoRows + drilling-protocol-changed-tag", "result": "PASS", "detail": "All three (actual) rows rendered. Orange tag text = 'Protocol changed vs Phase 1 plan · Sleeve: Key Sleeve → PEEK full sleeve'. drilling-as-planned-tag absent (deviation present)."},
+    {"id": "F2", "case": "Phase 1 regression — SURGERY_APPROACH_TYPES constants unified", "result": "PASS (code)", "detail": "Exactly 3 options in /app/frontend/constants/checklist.ts:176. normalizeSurgeryApproach() maps legacy 'Free Hand Surgery'→'Free Hand Sequential Drilling' and 'Combination of Free hand and Guided Surgery'→'Combination of Guided and Free Hand Sequential Drilling'. isGuidedApproach() covers both new and legacy Combination labels."},
+    {"id": "F3", "case": "Legacy case regression — existing case with procedure_surgery_type='Guided Surgery' renders without errors", "result": "PASS", "detail": "Case 699fc5c1248100e8a0d87261 (Phase1 stored as 'Guided Surgery') loaded and rendered Phase 2 readback + Implant Planning without console errors related to normalization."}
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iter391_phase2_drilling.py",
+    "/app/test_reports/pytest/iter391.xml",
+    "/app/test_reports/iter391_readback.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:14140-14143 correctly persists all 4 new drilling_* fields inside phase2_data; Phase2Submit model (line 589-592) has proper max_length=40 caps and Optional[str]=None defaults — no 422 risk. Nothing to change.",
+    "procedures/[id].tsx:2905-2947 correctly branches between 'drilling-as-planned-tag' (green) and 'drilling-protocol-changed-tag' (orange) with a diff list. Verified live: only shows changed items (single-line diff for Sleeve on this test case).",
+    "constants/checklist.ts normalizeSurgeryApproach + isGuidedApproach are pure and defensive; isGuidedApproach still accepts the legacy 'Combination of Free hand and Guided Surgery' label so existing cases keep the guided cascade visible on readback — correct backwards-compatibility posture.",
+    "Consent form was NOT pre-seeded on 699fc5c1248100e8a0d87261 despite phase2_preop_completed_at being set — Phase 2 submit would have 400'd immediately for a real student without a nurse present. Consider seeding patient_consent_form on any 'phase1_approved+preop_done' fixture in future so E2E tests don't need a synthetic upload step. Non-blocking (test now handles it)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter391_phase2_drilling.py (new)"
+  ],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100% of verifiable scenarios"},
+  "test_credentials": "Student Gaurav.pandey / Student@123 — working. Admin Abhijit.patil / Admin@123 not needed this session.",
+  "seed_data_creation": "Uploaded patient_consent_form (tiny 1x1 PNG 'consent.png') to case 699fc5c1248100e8a0d87261 as prerequisite to Phase 2 submission. Case is now status=pending_phase2 with phase2_data.drilling_sleeve_type='PEEK full sleeve' (intentional deviation from planned 'Key Sleeve'). Do NOT re-run the E2E test on the same case — it will get a 400. If needed, re-seed via /app/backend/tests/seed_mua_ui_test_cases.py pattern or an admin phase2-edit-request.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "iter-391 (Phase 2 drilling cascade + plan-vs-actual banner + legacy label normalization) is fully verified. Test case 699fc5c1248100e8a0d87261 has now been transitioned to pending_phase2 status with a persisted deviation (Sleeve: Key Sleeve → PEEK full sleeve) — the case-detail Phase 2 readback shows the orange 'drilling-protocol-changed-tag' with that exact diff. If a second E2E is ever required, seed a fresh phase1_approved+preop_done+consent case (see seed_mua_ui_test_cases.py for the pattern)."
+}

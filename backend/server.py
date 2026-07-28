@@ -584,6 +584,12 @@ class Phase2Submit(BaseModel):
     anesthesia_details: Optional[str] = Field(None, max_length=500)  # If No
     flap_design: Optional[str] = Field(None, max_length=100)
     drilling_type: Optional[str] = Field(None, max_length=100)
+    # iter-391: Drilling Type cascade — actual intra-op protocol (mirrors the
+    # Phase 1 plan cascade so plan-vs-actual deviations are auditable).
+    drilling_guided_surgery_type: Optional[str] = Field(None, max_length=40)
+    drilling_static_guide_type: Optional[str] = Field(None, max_length=40)
+    drilling_sleeve_type: Optional[str] = Field(None, max_length=40)
+    drilling_dynamic_nav_system: Optional[str] = Field(None, max_length=40)
     implant_seated_correctly: Optional[bool] = True
     implant_seated_comment: Optional[str] = Field(None, max_length=500)
     torque_values: Optional[List[float]] = None
@@ -14131,6 +14137,10 @@ async def submit_phase2(
         "anesthesia_details": phase2_data.anesthesia_details,
         "flap_design": phase2_data.flap_design,
         "drilling_type": phase2_data.drilling_type,
+        "drilling_guided_surgery_type": phase2_data.drilling_guided_surgery_type,
+        "drilling_static_guide_type": phase2_data.drilling_static_guide_type,
+        "drilling_sleeve_type": phase2_data.drilling_sleeve_type,
+        "drilling_dynamic_nav_system": phase2_data.drilling_dynamic_nav_system,
         "implant_seated_correctly": phase2_data.implant_seated_correctly,
         "implant_seated_comment": phase2_data.implant_seated_comment,
         "torque_values": phase2_data.torque_values or [],
