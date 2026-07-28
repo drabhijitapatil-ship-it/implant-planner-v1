@@ -7025,3 +7025,31 @@ implant diameter before placement.
 - No backend change needed (prior followups already on the procedure doc).
 - Self-tested live via playwright on seeded case 'FollowUp Iter2 Test' (FU2 form): both chips
   correct (+1.5 vs baseline / +1 vs 1st FU), 3-row history modal correct, readback Δ row renders.
+
+## 2026-07-28 — Phase 2 Drilling Type cascade + plan-vs-actual deviation (iter-391)
+
+### User spec: replicate Phase 1 "Procedure Type" cascade under Phase 2 "Drilling Type" to confirm
+### whether the Phase-1 plan was performed or the protocol changed intra-op.
+### Choices: pre-fill from Phase 1 plan (1a); live warning banner, no mandatory reason (2b);
+### unified labels "Free Hand Sequential Drilling" wording in BOTH phases (3); readback comparison only (4a).
+
+- constants/checklist.ts: SURGERY_APPROACH_TYPES renamed to ['Free Hand Sequential Drilling',
+  'Combination of Guided and Free Hand Sequential Drilling', 'Guided Surgery'];
+  new helpers normalizeSurgeryApproach() (legacy label mapping) + isGuidedApproach().
+- new-procedure.tsx: guided-path checks use isGuidedApproach; legacy values normalized on edit-load.
+- submit-phase2/[id].tsx: cascade states + pre-fill from Phase-1 plan in loadImplantPlan;
+  cascade dropdowns (Guided Surgery type → Static Guide type [Tooth Supported hidden for full-arch]
+  → Sleeve; Dynamic Navigation → system); selecting plan approach restores planned subs, other
+  approach clears them; protocolChanges useMemo → live orange banner (testID protocol-change-banner)
+  listing "field: planned → actual"; validation + stepMissing require cascade fields; payload adds
+  drilling_guided_surgery_type / drilling_static_guide_type / drilling_sleeve_type / drilling_dynamic_nav_system.
+- server.py: Phase2Submit model + phase2_surgical_data persist the 4 new optional fields.
+- procedures/[id].tsx readback: "(actual)" InfoRows for the cascade + green
+  drilling-as-planned-tag OR orange drilling-protocol-changed-tag with diff list vs Phase-1 plan fields.
+
+### Testing (iteration_309.json — all PASS, 0 issues)
+- Backend pytest 5/5 (submit with new fields 200, persistence, optional-field back-compat no 422).
+- Frontend live: pre-fill cascade, deviation banner (sleeve change + drilling change), readback
+  orange tag with exact diff, Phase 1 constants regression, legacy-label case renders fine.
+- Test case 699fc5c1248100e8a0d87261 'Phase2 Test' now pending_phase2 with persisted deviation
+  (Sleeve: Key Sleeve → PEEK full sleeve) — good demo of the orange tag for the user.
