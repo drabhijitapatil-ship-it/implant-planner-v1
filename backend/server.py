@@ -15449,6 +15449,136 @@ async def get_followup_metrics(
     return result
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# iter-392: Guided-plan adherence analytics — how often the Phase 2 actual
+# drilling protocol matches the Phase 1 plan (per student + deviation types).
+# ─────────────────────────────────────────────────────────────────────────
+
+def _normalize_surgery_approach(v) -> str:
+    s = str(v or "")
+    if s == "Free Hand Surgery":
+        return "Free Hand Sequential Drilling"
+    if s == "Combination of Free hand and Guided Surgery":
+        return "Combination of Guided and Free Hand Sequential Drilling"
+    return s
+
+
+def _is_guided_approach(v) -> bool:
+    return str(v or "") in (
+        "Guided Surgery",
+        "Combination of Guided and Free Hand Sequential Drilling",
+        "Combination of Free hand and Guided Surgery",
+    )
+
+
+def _drilling_protocol_diffs(proc: Dict[str, Any]) -> Optional[List[Dict[str, str]]]:
+    """None = not comparable (missing plan or actual); [] = performed as planned."""
+    p2 = proc.get("phase2_data") or {}
+    planned = _normalize_surgery_approach(proc.get("procedure_surgery_type"))
+    actual = str(p2.get("drilling_type") or "")
+    if not planned or not actual:
+        return None
+    diffs: List[Dict[str, str]] = []
+    if actual != planned:
+        diffs.append({"field": "Drilling Type", "planned": planned, "actual": actual})
+    if _is_guided_approach(actual):
+        pairs = [
+            ("Type of Guided Surgery", proc.get("guided_surgery_type"), p2.get("drilling_guided_surgery_type")),
+            ("Type of Static Guide", proc.get("static_guide_type"), p2.get("drilling_static_guide_type")),
+            ("Type of Sleeve", proc.get("sleeve_type"), p2.get("drilling_sleeve_type")),
+            ("Dynamic Navigation System", proc.get("dynamic_nav_system"), p2.get("drilling_dynamic_nav_system")),
+        ]
+        for field, plan_v, act_v in pairs:
+            if act_v and str(act_v) != str(plan_v or ""):
+                diffs.append({"field": field, "planned": str(plan_v or "—"), "actual": str(act_v)})
+    return diffs
+
+
+@api_router.get("/analytics/protocol-adherence")
+async def get_protocol_adherence(
+    request: Request,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user.get("role") not in ("administrator", "implant_incharge", "supervisor", "student"):
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    match: Dict[str, Any] = {"archived": {"$ne": True}, "phase2_data.drilling_type": {"$exists": True, "$nin": [None, ""]}}
+    role = current_user.get("role")
+    uid = str(current_user.get("_id") or "")
+    uname = current_user.get("name") or current_user.get("username")
+    if role == "student":
+        match["$or"] = [{"student_id": uid}, {"student_name": uname}]
+    elif role == "supervisor":
+        match["$or"] = [{"supervisor_id": uid}, {"supervisor_name": uname}]
+    procs = await db.procedures.find(match, {
+        "patient_name": 1, "student_name": 1, "procedure_surgery_type": 1,
+        "guided_surgery_type": 1, "static_guide_type": 1, "sleeve_type": 1,
+        "dynamic_nav_system": 1, "phase2_data": 1, "phase2_submitted_at": 1,
+        "phase2_actual_done_date": 1,
+    }).to_list(20000)
+
+    comparable = 0
+    deviated = 0
+    by_student: Dict[str, Dict[str, int]] = {}
+    field_counts: Dict[str, int] = {}
+    recent: List[Dict[str, Any]] = []
+    for proc in procs:
+        p2_date = str(proc.get("phase2_actual_done_date") or proc.get("phase2_submitted_at") or "")[:10]
+        if from_date and p2_date and p2_date < from_date:
+            continue
+        if to_date and p2_date and p2_date > to_date:
+            continue
+        diffs = _drilling_protocol_diffs(proc)
+        if diffs is None:
+            continue
+        comparable += 1
+        student = proc.get("student_name") or "Unknown"
+        stats = by_student.setdefault(student, {"total": 0, "deviated": 0})
+        stats["total"] += 1
+        if diffs:
+            deviated += 1
+            stats["deviated"] += 1
+            for d in diffs:
+                field_counts[d["field"]] = field_counts.get(d["field"], 0) + 1
+            recent.append({
+                "patient_name": proc.get("patient_name"),
+                "student_name": student,
+                "date": p2_date or None,
+                "diffs": diffs,
+            })
+
+    recent.sort(key=lambda r: r.get("date") or "", reverse=True)
+    result = {
+        "summary": {
+            "comparable_cases": comparable,
+            "as_planned": comparable - deviated,
+            "deviated": deviated,
+            "adherence_rate": round(100.0 * (comparable - deviated) / comparable, 1) if comparable else None,
+        },
+        "by_student": sorted([
+            {
+                "student_name": name,
+                "total": s["total"],
+                "deviated": s["deviated"],
+                "adherence_rate": round(100.0 * (s["total"] - s["deviated"]) / s["total"], 1),
+            }
+            for name, s in by_student.items()
+        ], key=lambda r: (r["adherence_rate"], -r["total"])),
+        "deviation_fields": sorted(
+            [{"field": f, "count": c} for f, c in field_counts.items()],
+            key=lambda r: -r["count"],
+        ),
+        "recent_deviations": recent[:20],
+        "scope": {"role": role},
+    }
+    await log_access(
+        action="analytics_view", outcome="success", resource_type="protocol_adherence",
+        resource_id="global", user=current_user, request=request,
+    )
+    return result
+
+
 # Notification Routes
 @api_router.get("/notifications")
 async def get_notifications(current_user: dict = Depends(get_current_user)):
