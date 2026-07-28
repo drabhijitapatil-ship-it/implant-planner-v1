@@ -397,7 +397,7 @@ function SupervisorDashboard({ stats, procedures, selectedDate, setSelectedDate,
           </View>
           {pendingFollowups.slice(0, 5).map((proc: any) => (
             <TouchableOpacity key={`fu-${proc.id}`} style={s.approvalCard}
-              onPress={() => router.push(`/procedures/${proc.id}`)} data-testid={`sup-pending-followup-${proc.id}`}>
+              onPress={() => router.push(`/procedures/${proc.id}`)} data-testid={`sup-pending-followup-${proc.id}`} testID={`sup-pending-followup-${proc.id}`}>
               <View style={[s.approvalPhaseWrap, { backgroundColor: '#B2DFDB' }]}>
                 <Ionicons name="repeat" size={16} color="#00695C" />
               </View>
@@ -622,7 +622,7 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
           </View>
           {pendingFollowups.slice(0, 5).map((proc: any) => (
             <TouchableOpacity key={`fu-${proc.id}`} style={s.approvalCard}
-              onPress={() => router.push(`/procedures/${proc.id}`)} data-testid={`ic-pending-followup-${proc.id}`}>
+              onPress={() => router.push(`/procedures/${proc.id}`)} data-testid={`ic-pending-followup-${proc.id}`} testID={`ic-pending-followup-${proc.id}`}>
               <View style={[s.approvalPhaseWrap, { backgroundColor: '#B2DFDB' }]}>
                 <Ionicons name="repeat" size={16} color="#00695C" />
               </View>
