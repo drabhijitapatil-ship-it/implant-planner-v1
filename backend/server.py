@@ -705,6 +705,9 @@ class Phase4Step2Submit(BaseModel):
     prosthesis_photos: Optional[List[Dict[str, str]]] = None
     # iter-332: actual date this step was performed (YYYY-MM-DD).
     done_date: Optional[str] = Field(None, max_length=10)
+    # iter-388: Baseline Probing Depth of Peri-implant Soft Tissue — per
+    # implant site {tooth: {kgw, vestibular, distal, mesial, lingual}} in mm.
+    baseline_probing_depths: Optional[Dict[str, Dict[str, str]]] = None
 
 
 # ── Treatment Timeline (iter-332) ────────────────────────────────────
@@ -15100,6 +15103,182 @@ async def approve_phase4_step2(
     updated["_id"] = str(updated["_id"])
     updated["id"] = updated["_id"]
     return updated
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# iter-388: PHASE 5 — Follow-up & Maintenance
+# Unlimited sequential follow-up appointments after case completion. Each
+# starts with an Implant Survival Review, then the 10-section clinical form.
+# Approval chain mirrors Phases 1-4 (supervisor → in-charge, with combined
+# single approval when the same person holds both roles).
+# ─────────────────────────────────────────────────────────────────────────
+
+FOLLOWUP_ORDINALS = ["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth", "Ninth", "Tenth"]
+
+
+def _followup_label(n: int) -> str:
+    word = FOLLOWUP_ORDINALS[n - 1] if 1 <= n <= 10 else f"{n}th"
+    return f"{word} Follow up Appointment"
+
+
+class FollowUpSubmit(BaseModel):
+    date: str = Field(..., max_length=10)
+    survival_review: Dict[str, Any] = {}
+    preexisting_condition_review: Optional[Dict[str, Any]] = None
+    new_systemic_condition: Optional[Dict[str, Any]] = None
+    general: Dict[str, Any] = {}
+    oral_hygiene: Dict[str, Any] = {}
+    probing_depths: Dict[str, Any] = {}
+    iopa_uploads: Optional[Dict[str, Dict[str, str]]] = None
+    opg_upload: Optional[Dict[str, str]] = None
+    soft_tissue: Dict[str, Any] = {}
+    prosthesis_occlusion: Dict[str, Any] = {}
+    overdenture: Optional[Dict[str, Any]] = None
+    patient_feedback: Optional[str] = Field("", max_length=2000)
+
+
+@api_router.post("/procedures/{procedure_id}/followups")
+async def submit_followup(
+    procedure_id: str,
+    data: FollowUpSubmit,
+    current_user: dict = Depends(get_current_user),
+):
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if proc.get("status") != "completed":
+        raise HTTPException(status_code=400, detail="Follow-up appointments activate only after Phase 4 is approved (case completed).")
+    is_owner_student = current_user["role"] == "student" and proc.get("student_id") == current_user["_id"]
+    is_creator = proc.get("created_by_id") == current_user["_id"]
+    if not (is_owner_student or is_creator):
+        raise HTTPException(status_code=403, detail="Only the case owner can submit a follow-up appointment.")
+    if not data.survival_review:
+        raise HTTPException(status_code=400, detail="Complete the Implant Survival Review first — it starts every follow-up appointment.")
+
+    followups = proc.get("followups") or []
+    if followups and followups[-1].get("status") == "rejected":
+        number = followups[-1]["number"]
+        followups = followups[:-1]
+    elif followups and followups[-1].get("status") != "approved":
+        raise HTTPException(status_code=400, detail=f"{followups[-1].get('label')} is still awaiting approval.")
+    else:
+        number = len(followups) + 1
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    is_incharge_self_created = proc.get("created_by_role") == "implant_incharge" and proc.get("created_by_id") == current_user["_id"]
+    entry = {
+        "number": number,
+        "label": _followup_label(number),
+        "status": "approved" if is_incharge_self_created else "pending_supervisor",
+        "date": data.date,
+        "survival_review": data.survival_review,
+        "preexisting_condition_review": data.preexisting_condition_review,
+        "new_systemic_condition": data.new_systemic_condition,
+        "general": data.general,
+        "oral_hygiene": data.oral_hygiene,
+        "probing_depths": data.probing_depths,
+        "iopa_uploads": data.iopa_uploads,
+        "opg_upload": data.opg_upload,
+        "soft_tissue": data.soft_tissue,
+        "prosthesis_occlusion": data.prosthesis_occlusion,
+        "overdenture": data.overdenture,
+        "patient_feedback": data.patient_feedback or "",
+        "submitted_at": now_iso,
+        "submitted_by_id": current_user["_id"],
+        "submitted_by_name": current_user.get("name", ""),
+    }
+    if is_incharge_self_created:
+        entry["supervisor_approved_at"] = now_iso
+        entry["incharge_approved_at"] = now_iso
+        entry["combined_approval"] = True
+    followups.append(entry)
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"followups": followups, "updated_at": datetime.utcnow()}},
+    )
+    if not is_incharge_self_created:
+        for uid in filter(None, {proc.get("supervisor_id"), proc.get("implant_incharge_id")}):
+            await db.notifications.insert_one({
+                "user_id": uid,
+                "procedure_id": procedure_id,
+                "message": f"Phase 5: {entry['label']} submitted for {proc['patient_name']}. Review required.",
+                "type": "approval_request",
+                "read": False,
+                "created_at": datetime.utcnow(),
+            })
+    return {"message": "Follow-up submitted", "followup": entry}
+
+
+@api_router.post("/procedures/{procedure_id}/followups/{number}/approve")
+async def approve_followup(
+    procedure_id: str,
+    number: int,
+    action: ApprovalAction,
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user["role"] in ("student", "nurse"):
+        raise HTTPException(status_code=403, detail="Only supervisors and implant in-charge can review follow-ups")
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    followups = proc.get("followups") or []
+    fu = next((f for f in followups if f.get("number") == number), None)
+    if not fu:
+        raise HTTPException(status_code=404, detail="Follow-up appointment not found")
+    if fu.get("status") not in ("pending_supervisor", "pending_incharge"):
+        raise HTTPException(status_code=400, detail=f"This follow-up is not awaiting review (current: {fu.get('status')}).")
+
+    uid = current_user["_id"]
+    role = current_user.get("role")
+    is_sup = uid == proc.get("supervisor_id")
+    is_inc = uid == proc.get("implant_incharge_id")
+    same_person = proc.get("supervisor_id") and proc.get("supervisor_id") == proc.get("implant_incharge_id")
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    if action.action == "approve":
+        if same_person and uid == proc.get("supervisor_id") and role in ("supervisor", "implant_incharge"):
+            fu["supervisor_approved_at"] = fu.get("supervisor_approved_at") or now_iso
+            fu["incharge_approved_at"] = now_iso
+            fu["combined_approval"] = True
+            fu["status"] = "approved"
+        elif fu["status"] == "pending_supervisor":
+            if not (role == "supervisor" and is_sup):
+                raise HTTPException(status_code=403, detail="Awaiting the assigned Supervisor's approval.")
+            fu["supervisor_approved_at"] = now_iso
+            fu["status"] = "pending_incharge"
+        else:  # pending_incharge
+            if not (role == "implant_incharge" and is_inc):
+                raise HTTPException(status_code=403, detail="Awaiting the assigned Implant In-Charge's approval.")
+            fu["incharge_approved_at"] = now_iso
+            fu["status"] = "approved"
+        if action.comment and action.comment.strip():
+            fu.setdefault("faculty_comments", []).append({"by": current_user.get("name", ""), "role": role, "comment": action.comment.strip(), "at": now_iso})
+        msg = (f"{fu['label']} approved for {proc['patient_name']}."
+               if fu["status"] == "approved"
+               else f"{fu['label']} for {proc['patient_name']} approved by Supervisor — awaiting Implant In-Charge.")
+    else:
+        if not ((role == "supervisor" and is_sup) or (role == "implant_incharge" and is_inc)):
+            raise HTTPException(status_code=403, detail="Only the assigned faculty can reject this follow-up.")
+        fu["status"] = "rejected"
+        fu["rejection_reason"] = action.rejection_reason or action.comment or "No reason provided"
+        fu["rejected_by"] = current_user.get("name", "")
+        fu["rejected_at"] = now_iso
+        msg = f"{fu['label']} for {proc['patient_name']} was returned for revision: {fu['rejection_reason']}"
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"followups": followups, "updated_at": datetime.utcnow()}},
+    )
+    if proc.get("student_id"):
+        await db.notifications.insert_one({
+            "user_id": proc["student_id"],
+            "procedure_id": procedure_id,
+            "message": msg,
+            "type": "approved" if action.action == "approve" else "rejected",
+            "read": False,
+            "created_at": datetime.utcnow(),
+        })
+    return {"message": msg, "followup": fu}
 
 
 # Notification Routes

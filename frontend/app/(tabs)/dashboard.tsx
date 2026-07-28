@@ -330,6 +330,12 @@ function SupervisorDashboard({ stats, procedures, selectedDate, setSelectedDate,
 
   const draftCases = useMemo(() => procedures.filter((p: any) => p.status === 'draft'), [procedures]);
 
+  // iter-388: Phase 5 follow-ups awaiting this supervisor's review
+  const pendingFollowups = useMemo(() =>
+    procedures.filter((p: any) => (p.followups || []).some((f: any) => f.status === 'pending_supervisor')),
+    [procedures]
+  );
+
   const pipeline = stats.pipeline || {};
   const pipelineTotal = (pipeline.phase1 || 0) + (pipeline.phase2 || 0) + (pipeline.phase3 || 0) + (pipeline.phase4 || 0) + (pipeline.completed || 0);
 
@@ -383,12 +389,27 @@ function SupervisorDashboard({ stats, procedures, selectedDate, setSelectedDate,
       </View>
 
       {/* Action Needed — phase approvals + case transfers (iter-383) */}
-      {(pendingApproval.length + pendingTransfers.length) > 0 && (
+      {(pendingApproval.length + pendingTransfers.length + pendingFollowups.length) > 0 && (
         <View style={s.section} data-testid="sup-action-needed-section" testID="sup-action-needed-section">
           <View style={s.sectionHeader}>
             <Ionicons name="flash" size={18} color="#E65100" />
-            <Text style={[s.sectionTitle, { color: '#E65100' }]}>Action Needed ({pendingApproval.length + pendingTransfers.length})</Text>
+            <Text style={[s.sectionTitle, { color: '#E65100' }]}>Action Needed ({pendingApproval.length + pendingTransfers.length + pendingFollowups.length})</Text>
           </View>
+          {pendingFollowups.slice(0, 5).map((proc: any) => (
+            <TouchableOpacity key={`fu-${proc.id}`} style={s.approvalCard}
+              onPress={() => router.push(`/procedures/${proc.id}`)} data-testid={`sup-pending-followup-${proc.id}`}>
+              <View style={[s.approvalPhaseWrap, { backgroundColor: '#B2DFDB' }]}>
+                <Ionicons name="repeat" size={16} color="#00695C" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.approvalPatient}>{proc.patient_name}</Text>
+                <Text style={s.approvalSub}>{(proc.followups || []).find((f: any) => f.status !== 'approved')?.label} — Phase 5 review</Text>
+              </View>
+              <View style={[s.reviewChip, { backgroundColor: '#00695C' }]}>
+                <Text style={s.reviewChipText}>Review Now</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
           {pendingTransfers.slice(0, 5).map((proc: any) => {
             const trStatus = proc.transfer_request.status;
             const actionable = trStatus === 'pending_supervisor';
@@ -523,6 +544,16 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
     );
   }, [procedures]);
 
+  // iter-388: Phase 5 follow-ups awaiting In-Charge review (combined rule:
+  // pending_supervisor is also actionable when sup == in-charge).
+  const pendingFollowups = useMemo(() =>
+    procedures.filter((p: any) => (p.followups || []).some((f: any) =>
+      f.status === 'pending_incharge' ||
+      (f.status === 'pending_supervisor' && p.supervisor_id && p.supervisor_id === p.implant_incharge_id)
+    )),
+    [procedures]
+  );
+
   return (
     <>
       {/* Stats */}
@@ -583,12 +614,27 @@ function InChargeDashboard({ stats, procedures, selectedDate, setSelectedDate, r
       )}
 
       {/* Pending Review */}
-      {(pendingApproval.length + pendingTransfers.length) > 0 && (
+      {(pendingApproval.length + pendingTransfers.length + pendingFollowups.length) > 0 && (
         <View style={s.section} data-testid="ic-action-needed-section" testID="ic-action-needed-section">
           <View style={s.sectionHeader}>
             <Ionicons name="flash" size={18} color="#E65100" />
-            <Text style={[s.sectionTitle, { color: '#E65100' }]}>Action Needed ({pendingApproval.length + pendingTransfers.length})</Text>
+            <Text style={[s.sectionTitle, { color: '#E65100' }]}>Action Needed ({pendingApproval.length + pendingTransfers.length + pendingFollowups.length})</Text>
           </View>
+          {pendingFollowups.slice(0, 5).map((proc: any) => (
+            <TouchableOpacity key={`fu-${proc.id}`} style={s.approvalCard}
+              onPress={() => router.push(`/procedures/${proc.id}`)} data-testid={`ic-pending-followup-${proc.id}`}>
+              <View style={[s.approvalPhaseWrap, { backgroundColor: '#B2DFDB' }]}>
+                <Ionicons name="repeat" size={16} color="#00695C" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.approvalPatient}>{proc.patient_name}</Text>
+                <Text style={s.approvalSub}>{(proc.followups || []).find((f: any) => f.status !== 'approved')?.label} — Phase 5 review</Text>
+              </View>
+              <View style={[s.reviewChip, { backgroundColor: '#00695C' }]}>
+                <Text style={s.reviewChipText}>Review Now</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
           {pendingTransfers.slice(0, 5).map((proc: any) => {
             const trStatus = proc.transfer_request.status;
             const samePerson = proc.supervisor_id && proc.supervisor_id === proc.implant_incharge_id;

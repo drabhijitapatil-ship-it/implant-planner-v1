@@ -45,6 +45,7 @@ import CaseImplantPlanning from '../../components/CaseImplantPlanning';// iter-2
 import ExportPrintMenu from '../../components/ExportPrintMenu';
 import Phase2EditModal from '../../components/Phase2EditModal';
 import ContributionTimelineCard from '../../components/ContributionTimelineCard';
+import FollowUpSection from '../../components/FollowUpSection';
 import TransferApprovalCard from '../../components/TransferApprovalCard';
 import RescheduleModal from '../../components/RescheduleModal';
 import ImplantLifecycleTimeline from '../../components/ImplantLifecycleTimeline';
@@ -1062,6 +1063,9 @@ export default function ProcedureDetailScreen() {
             the ownership history of the case with per-student phase segments.
             Auto-hides if the case never changed hands. */}
         <ContributionTimelineCard procedureId={String(id)} />
+
+        {/* iter-388: Phase 5 — Follow-up & Maintenance (completed cases only) */}
+        <FollowUpSection procedure={procedure} onChanged={() => loadProcedure()} />
 
         {/* iter-352: End Treatment REJECTED banner. Shown when the last
             end-treatment request was rejected; auto-hides once a new
