@@ -12,7 +12,7 @@ export default function BackToDashboard({ label = 'Dashboard', floating = true }
   const router = useRouter();
 
   const handlePress = () => {
-    router.push('/(tabs)/dashboard');
+    router.replace('/(tabs)/dashboard');
   };
 
   const button = (

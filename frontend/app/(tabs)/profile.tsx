@@ -329,7 +329,9 @@ export default function ProfileScreen() {
             </View>
             <View style={styles.rowContent}>
               <Text style={styles.rowLabel}>Role</Text>
-              <Text style={styles.rowValue}>{getRoleLabel(user?.role || '')}</Text>
+              <Text style={styles.rowValue} data-testid="profile-role-value">
+                {getRoleLabel(user?.role || '')}{isOrgAdmin ? ' (Org Admin)' : ''}
+              </Text>
             </View>
           </View>
 
@@ -381,7 +383,7 @@ export default function ProfileScreen() {
           {/* Departments — org admin only (the org founder, not every Implant In-Charge). */}
           {isOrgAdmin && (
             <TouchableOpacity
-              style={[styles.rowItem, styles.rowItemLast]}
+              style={styles.rowItem}
               onPress={() => router.push('/admin/departments' as any)}
               data-testid="profile-departments-btn"
             >
@@ -391,6 +393,25 @@ export default function ProfileScreen() {
               <View style={styles.rowContent}>
                 <Text style={styles.rowLabel}>Departments</Text>
                 <Text style={styles.rowValue}>Create departments &amp; assign incharges</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+            </TouchableOpacity>
+          )}
+
+          {/* Subscription — org admin only, view-only (managing the plan itself is a
+              super_admin action from the platform side). */}
+          {isOrgAdmin && (
+            <TouchableOpacity
+              style={[styles.rowItem, styles.rowItemLast]}
+              onPress={() => router.push('/subscription' as any)}
+              data-testid="profile-subscription-btn"
+            >
+              <View style={[styles.iconBadge, { backgroundColor: '#E0F2F1' }]}>
+                <Ionicons name="card-outline" size={20} color="#00695C" />
+              </View>
+              <View style={styles.rowContent}>
+                <Text style={styles.rowLabel}>Subscription</Text>
+                <Text style={styles.rowValue}>Plan, trial status &amp; usage limits</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
             </TouchableOpacity>

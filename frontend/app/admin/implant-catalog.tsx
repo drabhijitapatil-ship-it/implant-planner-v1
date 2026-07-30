@@ -759,6 +759,17 @@ export default function ImplantCatalogAdmin() {
             <Ionicons name="git-compare-outline" size={16} color="#00695C" />
             <Text style={s.tabPillTextCompare}>Compare</Text>
           </TouchableOpacity>
+          {(user?.role === 'administrator' || user?.role === 'super_admin') && (
+            <TouchableOpacity
+              style={s.tabPillLibrary}
+              onPress={() => router.push('/admin/implant-library')}
+              testID="catalog-open-library"
+              data-testid="catalog-open-library"
+            >
+              <Ionicons name="add-circle-outline" size={16} color="#E65100" />
+              <Text style={s.tabPillTextLibrary}>Library</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -925,11 +936,13 @@ const s = StyleSheet.create({
   headerTitleBlock: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   headerTitle: { fontSize: 20, fontWeight: '800', color: '#01579B', lineHeight: 24, textAlign: 'center' },
   headerSub: { fontSize: 12, color: '#607D8B', marginTop: 1, lineHeight: 14, textAlign: 'center' },
-  tabRow: { flexDirection: 'row', gap: 10, marginTop: 12, justifyContent: 'center', alignItems: 'center' },
+  tabRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12, justifyContent: 'center', alignItems: 'center' },
   tabPill: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999, borderWidth: 1.5, borderColor: '#0277BD', backgroundColor: '#E1F5FE', flex: 1, maxWidth: 180 },
   tabPillTextAi: { color: '#0277BD', fontSize: 14, fontWeight: '700' },
   tabPillCompare: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999, borderWidth: 1.5, borderColor: '#00695C', backgroundColor: '#E0F2F1', flex: 1, maxWidth: 180 },
   tabPillTextCompare: { color: '#00695C', fontSize: 14, fontWeight: '700' },
+  tabPillLibrary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999, borderWidth: 1.5, borderColor: '#E65100', backgroundColor: '#FFF3E0', flex: 1, maxWidth: 180 },
+  tabPillTextLibrary: { color: '#E65100', fontSize: 14, fontWeight: '700' },
   addCircleBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#0277BD', alignItems: 'center', justifyContent: 'center' },
   editBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: '#0277BD', backgroundColor: '#E1F5FE' },
   editBtnText: { color: '#0277BD', fontSize: 13, fontWeight: '700' },

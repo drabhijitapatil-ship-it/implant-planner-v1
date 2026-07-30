@@ -63,6 +63,8 @@ import {
   FLAP_DESIGN_OPTIONS,
   DRILLING_TYPE_OPTIONS,
   PROSTHETIC_COMPONENT_OPTIONS,
+  normalizeSurgeryApproach,
+  isGuidedApproach,
   FP_MATERIAL_OPTIONS,
   OVERDENTURE_ATTACHMENT_OPTIONS,
   CUSTOM_ABUTMENT_OPTIONS,
@@ -82,6 +84,7 @@ import { downloadPreopBriefing } from "../../utils/preopBriefingPdf";
 import CaseImplantPlanning from "../../components/CaseImplantPlanning"; // iter-209: removed CaseCompletionBadge — its facts merged into the green
 import TransferApprovalCard from "../../components/TransferApprovalCard";
 import ContributionTimelineCard from "../../components/ContributionTimelineCard";
+import FollowUpSection from "../../components/FollowUpSection";
 // Treatment Complete banner above the timeline.
 import ImplantLifecycleTimeline from "../../components/ImplantLifecycleTimeline";
 import ExportPrintMenu from "../../components/ExportPrintMenu";
@@ -379,6 +382,7 @@ export default function ProcedureDetailScreen() {
   // Generate-Lab-Slip click. Optional. Limited to 150 words. Passed
   // into the slip generator as `lab_slip_note` so the PDF can render it.
   const [labSlipNote, setLabSlipNote] = useState("");
+  const [activeReferral, setActiveReferral] = useState<any>(null);
   const [approvalComment, setApprovalComment] = useState("");
   const [authToken, setAuthToken] = useState("");
   const [cbctToken, setCbctToken] = useState("");
@@ -427,7 +431,7 @@ export default function ProcedureDetailScreen() {
   // on first load, editable by case owner / supervisor / in-charge / admin.
   const [exitSummaryLoading, setExitSummaryLoading] = useState(false);
   const [editingExitSummary, setEditingExitSummary] = useState(false);
-  const [exitSummaryDraft, setExitSummaryDraft] = useState('');
+  const [exitSummaryDraft, setExitSummaryDraft] = useState("");
   const [savingExitSummary, setSavingExitSummary] = useState(false);
 
   const uploadConsentForProcedure = async () => {
@@ -465,9 +469,34 @@ export default function ProcedureDetailScreen() {
     }
   };
 
-  const canEditField = () => {
+  const canEditField = (fieldKey?: string) => {
     if (!isEditMode) return false;
     if (procedure?.status === "completed") return false;
+
+    const isReferredToMyDept = !!(
+      procedure?.department_id &&
+      user?.department_id &&
+      procedure?.department_id !== user?.department_id
+    );
+
+    if (isReferredToMyDept || activeReferral) {
+      const assignedPhase = activeReferral?.assigned_phase_num || 2;
+      if (fieldKey) {
+        let fieldPhase = 1;
+        if (fieldKey.startsWith("phase2_data") || fieldKey.startsWith("torque_values") || fieldKey === "bone_graft_used") {
+          fieldPhase = 2;
+        } else if (fieldKey.startsWith("phase3_data") || fieldKey.startsWith("stage2_surgical") || fieldKey.startsWith("stage2_prosthetic") || fieldKey === "isq_value") {
+          fieldPhase = 3;
+        } else if (fieldKey.startsWith("phase4") || fieldKey === "final_prosthetic_plan") {
+          fieldPhase = 4;
+        }
+
+        if (fieldPhase !== assignedPhase) {
+          return false;
+        }
+      }
+    }
+
     return true;
   };
 
@@ -590,6 +619,7 @@ export default function ProcedureDetailScreen() {
   }));
 
   const loadProcedure = async () => {
+    if (!user) return;
     try {
       const response = await api.get(`/procedures/${id}`);
       setProcedure(response.data);
@@ -610,27 +640,46 @@ export default function ProcedureDetailScreen() {
       if (response.data?.ai_chat_history) {
         setAiChatHistory(response.data.ai_chat_history);
       }
+      try {
+        const refRes = await api.get(`/procedures/${id}/referrals`);
+        const active = (refRes.data?.referrals || []).find((r: any) => r.status === "active" || r.status === "pending");
+        setActiveReferral(active || null);
+      } catch (e) {
+        // silent catch
+      }
       // Auto-generate the AI Exit Summary for terminated cases. Silent,
       // best-effort — the summary is cached on the procedure doc so
       // subsequent loads just hydrate. Never blocks the UI on failure.
-      if (response.data?.status === 'treatment_ended' && !response.data?.ai_exit_summary?.text) {
+      if (
+        response.data?.status === "treatment_ended" &&
+        !response.data?.ai_exit_summary?.text
+      ) {
         (async () => {
           try {
             setExitSummaryLoading(true);
-            const r = await api.post(`/procedures/${id}/generate-exit-summary`, {});
+            const r = await api.post(
+              `/procedures/${id}/generate-exit-summary`,
+              {},
+            );
             if (r?.data?.ai_exit_summary) {
-              setProcedure((prev: any) => (prev ? { ...prev, ai_exit_summary: r.data.ai_exit_summary } : prev));
+              setProcedure((prev: any) =>
+                prev
+                  ? { ...prev, ai_exit_summary: r.data.ai_exit_summary }
+                  : prev,
+              );
             }
           } catch (e) {
-            console.warn('Exit summary auto-generate skipped:', e);
+            console.warn("Exit summary auto-generate skipped:", e);
           } finally {
             setExitSummaryLoading(false);
           }
         })();
       }
-    } catch (error) {
-      console.error("Failed to load procedure:", error);
-      Alert.alert("Error", "Failed to load procedure details");
+    } catch (error: any) {
+      if (error?.response?.status !== 401 && error?.response?.status !== 403) {
+        console.error("Failed to load procedure:", error);
+        Alert.alert("Error", "Failed to load procedure details");
+      }
     } finally {
       setLoading(false);
     }
@@ -640,32 +689,44 @@ export default function ProcedureDetailScreen() {
   const regenerateExitSummary = async () => {
     try {
       setExitSummaryLoading(true);
-      const r = await api.post(`/procedures/${id}/generate-exit-summary`, { force: true });
+      const r = await api.post(`/procedures/${id}/generate-exit-summary`, {
+        force: true,
+      });
       if (r?.data?.ai_exit_summary) {
-        setProcedure((prev: any) => (prev ? { ...prev, ai_exit_summary: r.data.ai_exit_summary } : prev));
+        setProcedure((prev: any) =>
+          prev ? { ...prev, ai_exit_summary: r.data.ai_exit_summary } : prev,
+        );
       }
     } catch (e: any) {
-      Alert.alert('Error', e?.response?.data?.detail || 'Failed to regenerate the AI Exit Summary');
+      Alert.alert(
+        "Error",
+        e?.response?.data?.detail || "Failed to regenerate the AI Exit Summary",
+      );
     } finally {
       setExitSummaryLoading(false);
     }
   };
 
   const saveExitSummaryEdit = async () => {
-    const t = (exitSummaryDraft || '').trim();
+    const t = (exitSummaryDraft || "").trim();
     if (!t) {
-      Alert.alert('Empty', 'Please enter the summary text.');
+      Alert.alert("Empty", "Please enter the summary text.");
       return;
     }
     try {
       setSavingExitSummary(true);
       const r = await api.patch(`/procedures/${id}/exit-summary`, { text: t });
       if (r?.data?.ai_exit_summary) {
-        setProcedure((prev: any) => (prev ? { ...prev, ai_exit_summary: r.data.ai_exit_summary } : prev));
+        setProcedure((prev: any) =>
+          prev ? { ...prev, ai_exit_summary: r.data.ai_exit_summary } : prev,
+        );
       }
       setEditingExitSummary(false);
     } catch (e: any) {
-      Alert.alert('Error', e?.response?.data?.detail || 'Failed to save exit summary edit');
+      Alert.alert(
+        "Error",
+        e?.response?.data?.detail || "Failed to save exit summary edit",
+      );
     } finally {
       setSavingExitSummary(false);
     }
@@ -674,8 +735,18 @@ export default function ProcedureDetailScreen() {
   const canEditExitSummary = () => {
     const role = user?.role;
     if (!role) return false;
-    if (role === 'supervisor' || role === 'implant_incharge' || role === 'administrator') return true;
-    if (role === 'student' && String(procedure?.student_id || '') === String((user as any)?._id || (user as any)?.id || '')) return true;
+    if (
+      role === "supervisor" ||
+      role === "implant_incharge" ||
+      role === "administrator"
+    )
+      return true;
+    if (
+      role === "student" &&
+      String(procedure?.student_id || "") ===
+        String((user as any)?._id || (user as any)?.id || "")
+    )
+      return true;
     return false;
   };
 
@@ -744,35 +815,67 @@ export default function ProcedureDetailScreen() {
   };
 
   const handleApprove = async () => {
-    Alert.alert(
-      "Approve Procedure",
-      "Are you sure you want to approve this procedure?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Approve",
-          onPress: async () => {
-            setActionLoading(true);
-            try {
-              await api.post(getApproveEndpoint(), {
-                action: "approve",
-                comment: approvalComment.trim() || null,
-              });
-              Alert.alert("Success", "Procedure approved successfully");
-              setApprovalComment("");
-              loadProcedure();
-            } catch (error: any) {
-              Alert.alert(
-                "Error",
-                error.response?.data?.detail || "Failed to approve procedure",
-              );
-            } finally {
-              setActionLoading(false);
-            }
+    const isFacultyIncharge = user?.role === "implant_incharge" || user?.is_admin;
+    if (isFacultyIncharge && activeReferral) {
+      Alert.alert(
+        "Approve & Return Options",
+        "This case has an active referral into your department. Do you want to approve this phase and return the case to the originating department?",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Approve Only",
+            onPress: () => processApproval(false),
           },
-        },
-      ],
-    );
+          {
+            text: "Approve & Return Case",
+            style: "default",
+            onPress: () => processApproval(true),
+          },
+        ]
+      );
+    } else {
+      Alert.alert(
+        "Approve Procedure",
+        "Are you sure you want to approve this procedure?",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Approve",
+            onPress: () => processApproval(false),
+          },
+        ],
+      );
+    }
+  };
+
+  const processApproval = async (returnCase: boolean) => {
+    setActionLoading(true);
+    try {
+      await api.post(getApproveEndpoint(), {
+        action: "approve",
+        comment: approvalComment.trim() || null,
+      });
+
+      if (returnCase && activeReferral) {
+        await api.post(`/referrals/${activeReferral.id}/complete`, {
+          outcome: "returned",
+          notes: approvalComment.trim() || "Phase approved and returned to originating department.",
+        });
+        Alert.alert("Success", "Procedure approved and returned to original student in originating department!");
+      } else {
+        Alert.alert("Success", "Procedure approved successfully");
+      }
+
+      setApprovalComment("");
+      loadProcedure();
+    } catch (error: any) {
+      Alert.alert(
+        "Error",
+        error.response?.data?.detail || "Failed to approve procedure",
+      );
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleReject = async () => {
@@ -919,11 +1022,15 @@ export default function ProcedureDetailScreen() {
   };
   const supervisorId = extractId(procedure?.supervisor_id);
   const inchargeId = extractId(procedure?.implant_incharge_id);
-  const isSupervisorOnCase = Boolean(currentUserId && supervisorId && currentUserId === supervisorId);
-  const isInchargeOnCase = Boolean(currentUserId && inchargeId && currentUserId === inchargeId);
+  const isSupervisorOnCase = Boolean(
+    currentUserId && supervisorId && currentUserId === supervisorId,
+  );
+  const isInchargeOnCase = Boolean(
+    currentUserId && inchargeId && currentUserId === inchargeId,
+  );
   const samePersonBothRoles = Boolean(
     (supervisorId && inchargeId && supervisorId === inchargeId) ||
-    (isSupervisorOnCase && isInchargeOnCase)
+    (isSupervisorOnCase && isInchargeOnCase),
   );
 
   const renderApprovalActions = () => {
@@ -937,7 +1044,12 @@ export default function ProcedureDetailScreen() {
     }
 
     let heading = "Your Remarks (optional)";
-    if (samePersonBothRoles && (isSupervisorOnCase || isInchargeOnCase || user?.role === "implant_incharge")) {
+    if (
+      samePersonBothRoles &&
+      (isSupervisorOnCase ||
+        isInchargeOnCase ||
+        user?.role === "implant_incharge")
+    ) {
       heading = "Comment (optional)";
     } else if (isSupervisorOnCase && !isInchargeOnCase) {
       heading = "Supervisor Comment (optional)";
@@ -964,7 +1076,14 @@ export default function ProcedureDetailScreen() {
         }}
         data-testid="approval-action-card"
       >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10,marginBottom:16  }}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 10,
+            marginBottom: 16,
+          }}
+        >
           <View
             style={{
               width: 34,
@@ -996,7 +1115,9 @@ export default function ProcedureDetailScreen() {
                 borderRadius: 999,
               }}
             >
-              <Text style={{ fontSize: 11, fontWeight: "700", color: "#1A237E" }}>
+              <Text
+                style={{ fontSize: 11, fontWeight: "700", color: "#1A237E" }}
+              >
                 Supervisor + In-Charge
               </Text>
             </View>
@@ -1013,7 +1134,14 @@ export default function ProcedureDetailScreen() {
             padding: 12,
           }}
         >
-          <Text style={{ fontSize: 12, fontWeight: "700", color: "#283593", marginBottom: 6 }}>
+          <Text
+            style={{
+              fontSize: 12,
+              fontWeight: "700",
+              color: "#283593",
+              marginBottom: 6,
+            }}
+          >
             {heading}
           </Text>
           <TextInput
@@ -1042,7 +1170,8 @@ export default function ProcedureDetailScreen() {
                 fontStyle: "italic",
               }}
             >
-              This comment will be visible to the student and included in the PDF.
+              This comment will be visible to the student and included in the
+              PDF.
             </Text>
           )}
         </View>
@@ -1228,6 +1357,37 @@ export default function ProcedureDetailScreen() {
             caseSupervisorId={procedure?.supervisor_id}
           />
         </View>
+        {!!(activeReferral || procedure?.active_referral) && (
+          <View style={{
+            marginHorizontal: 16,
+            marginTop: 8,
+            marginBottom: 4,
+            padding: 12,
+            backgroundColor: '#EFF6FF',
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: '#BFDBFE',
+            flexDirection: 'row',
+            alignItems: 'center',
+          }}>
+            <Ionicons name="swap-horizontal" size={22} color="#1D4ED8" style={{ marginRight: 10 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1E40AF' }}>
+                Referred Case (Cross-Department)
+              </Text>
+              <Text style={{ fontSize: 12, color: '#1E3A8A', marginTop: 2 }}>
+                From: <Text style={{ fontWeight: '600' }}>{(activeReferral || procedure?.active_referral)?.from_department_name || 'Primary Dept'}</Text>
+                {'  ➔  '}
+                To: <Text style={{ fontWeight: '600' }}>{(activeReferral || procedure?.active_referral)?.to_department_name || 'Referred Dept'}</Text>
+              </Text>
+              {!!(activeReferral || procedure?.active_referral)?.assigned_phase && (
+                <Text style={{ fontSize: 11, color: '#2563EB', marginTop: 2 }}>
+                  Assigned Phase: {(activeReferral || procedure?.active_referral)?.assigned_phase}
+                </Text>
+              )}
+            </View>
+          </View>
+        )}
         {/* KeyboardAvoidingView so inline inputs (approval/rejection comments,
           field edits) aren't hidden behind the keyboard — the comment box sits
           near the bottom of a long scroll and was fully covered on phones. */}
@@ -1502,7 +1662,8 @@ export default function ProcedureDetailScreen() {
             {/* End Treatment PENDING approval banner. Shown while the case
                 is awaiting the next approver in the chain. Approver sees
                 Approve / Reject buttons; everyone else sees a status-only view. */}
-            {(procedure.status === 'pending_end_treatment_supervisor' || procedure.status === 'pending_end_treatment_incharge') && (
+            {(procedure.status === "pending_end_treatment_supervisor" ||
+              procedure.status === "pending_end_treatment_incharge") && (
               <EndTreatmentPendingBanner
                 procedure={procedure}
                 currentUser={user}
@@ -1513,50 +1674,88 @@ export default function ProcedureDetailScreen() {
             {/* End Treatment REJECTED banner. Shown when the last
                 end-treatment request was rejected; auto-hides once a new
                 survival review or approval cycle overwrites it. */}
-            {procedure.end_treatment_rejected && procedure.status !== 'treatment_ended' && (
-              <View style={styles.rejectedBanner} testID="end-treatment-rejected-banner">
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <Ionicons name="alert-circle" size={18} color="#B71C1C" />
-                  <Text style={styles.rejectedTitle}>End treatment rejected</Text>
+            {procedure.end_treatment_rejected &&
+              procedure.status !== "treatment_ended" && (
+                <View
+                  style={styles.rejectedBanner}
+                  testID="end-treatment-rejected-banner"
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 8,
+                      marginBottom: 4,
+                    }}
+                  >
+                    <Ionicons name="alert-circle" size={18} color="#B71C1C" />
+                    <Text style={styles.rejectedTitle}>
+                      End treatment rejected
+                    </Text>
+                  </View>
+                  <Text style={styles.rejectedBody}>
+                    Rejected by{" "}
+                    {procedure.end_treatment_rejected.by_name || "—"} ·{" "}
+                    {procedure.end_treatment_rejected.by_role || ""}
+                  </Text>
+                  <Text style={styles.rejectedReason}>
+                    "{procedure.end_treatment_rejected.comment}"
+                  </Text>
                 </View>
-                <Text style={styles.rejectedBody}>
-                  Rejected by {procedure.end_treatment_rejected.by_name || '—'} · {procedure.end_treatment_rejected.by_role || ''}
-                </Text>
-                <Text style={styles.rejectedReason}>"{procedure.end_treatment_rejected.comment}"</Text>
-              </View>
-            )}
+              )}
 
             {/* Treatment Termination Summary banner — rendered when the case
                 status is `treatment_ended` (End Implant Treatment on the
                 Survival Review). Provides the download / print entry-point
                 for the medico-legal termination PDF. */}
-            {procedure.status === 'treatment_ended' && (
-              <View style={styles.terminationBanner} testID="termination-banner">
+            {procedure.status === "treatment_ended" && (
+              <View
+                style={styles.terminationBanner}
+                testID="termination-banner"
+              >
                 <View style={styles.terminationTopRow}>
                   <View style={styles.terminationIconWrap}>
                     <Ionicons name="close-circle" size={22} color="#FFF" />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.terminationTitle}>Implant Treatment Terminated</Text>
+                    <Text style={styles.terminationTitle}>
+                      Implant Treatment Terminated
+                    </Text>
                     <Text style={styles.terminationSubtitle}>
-                      Ended by {procedure.treatment_ended_decision_maker || '—'}
-                      {procedure.treatment_ended_at ? ` · ${new Date(procedure.treatment_ended_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}` : ''}
+                      Ended by {procedure.treatment_ended_decision_maker || "—"}
+                      {procedure.treatment_ended_at
+                        ? ` · ${new Date(procedure.treatment_ended_at).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}`
+                        : ""}
                     </Text>
                   </View>
                 </View>
                 {procedure.treatment_ended_reason && (
-                  <View style={styles.terminationReasonBox} testID="termination-reason">
-                    <Text style={styles.terminationReasonLabel}>Reason on record</Text>
-                    <Text style={styles.terminationReasonText}>"{procedure.treatment_ended_reason}"</Text>
+                  <View
+                    style={styles.terminationReasonBox}
+                    testID="termination-reason"
+                  >
+                    <Text style={styles.terminationReasonLabel}>
+                      Reason on record
+                    </Text>
+                    <Text style={styles.terminationReasonText}>
+                      "{procedure.treatment_ended_reason}"
+                    </Text>
                   </View>
                 )}
                 <View style={styles.terminationActions}>
                   <TouchableOpacity
-                    style={[styles.terminationBtn, styles.terminationBtnPrimary, pdfLoading && styles.buttonDisabled]}
+                    style={[
+                      styles.terminationBtn,
+                      styles.terminationBtnPrimary,
+                      pdfLoading && styles.buttonDisabled,
+                    ]}
                     onPress={async () => {
                       setPdfLoading(true);
-                      try { await generateTerminationSummaryPDF(procedure); }
-                      finally { setPdfLoading(false); }
+                      try {
+                        await generateTerminationSummaryPDF(procedure);
+                      } finally {
+                        setPdfLoading(false);
+                      }
                     }}
                     disabled={pdfLoading}
                     testID="termination-download-btn"
@@ -1566,8 +1765,14 @@ export default function ProcedureDetailScreen() {
                       <ActivityIndicator color="#FFF" size="small" />
                     ) : (
                       <>
-                        <Ionicons name="download-outline" size={16} color="#FFF" />
-                        <Text style={styles.terminationBtnText}>Download Summary PDF</Text>
+                        <Ionicons
+                          name="download-outline"
+                          size={16}
+                          color="#FFF"
+                        />
+                        <Text style={styles.terminationBtnText}>
+                          Download Summary PDF
+                        </Text>
                       </>
                     )}
                   </TouchableOpacity>
@@ -1575,67 +1780,110 @@ export default function ProcedureDetailScreen() {
                     style={[styles.terminationBtn, styles.terminationBtnGhost]}
                     onPress={async () => {
                       setPdfLoading(true);
-                      try { await printTerminationSummaryPDF(procedure); }
-                      finally { setPdfLoading(false); }
+                      try {
+                        await printTerminationSummaryPDF(procedure);
+                      } finally {
+                        setPdfLoading(false);
+                      }
                     }}
                     disabled={pdfLoading}
                     testID="termination-print-btn"
                     data-testid="termination-print-btn"
                   >
                     <Ionicons name="print-outline" size={16} color="#C62828" />
-                    <Text style={[styles.terminationBtnText, { color: '#C62828' }]}>Print</Text>
+                    <Text
+                      style={[styles.terminationBtnText, { color: "#C62828" }]}
+                    >
+                      Print
+                    </Text>
                   </TouchableOpacity>
                 </View>
                 <Text style={styles.terminationFoot}>
-                  No further replacement, healing or prosthetic phases can be recorded on this case.
+                  No further replacement, healing or prosthetic phases can be
+                  recorded on this case.
                 </Text>
 
                 {/* AI Exit Summary — soft clinical recommendations
                     auto-generated on first load and editable by case-owner /
                     supervisor / in-charge / administrator. */}
-                <View style={styles.exitSummaryCard} testID="ai-exit-summary-card">
+                <View
+                  style={styles.exitSummaryCard}
+                  testID="ai-exit-summary-card"
+                >
                   <View style={styles.exitSummaryHeader}>
                     <View style={styles.exitSummaryTitleRow}>
-                      <Ionicons name="sparkles-outline" size={16} color="#B71C1C" />
-                      <Text style={styles.exitSummaryTitle}>AI Exit Summary</Text>
+                      <Ionicons
+                        name="sparkles-outline"
+                        size={16}
+                        color="#B71C1C"
+                      />
+                      <Text style={styles.exitSummaryTitle}>
+                        AI Exit Summary
+                      </Text>
                       {procedure.ai_exit_summary?.edited && (
                         <View style={styles.exitSummaryEditedPill}>
-                          <Text style={styles.exitSummaryEditedText}>edited</Text>
+                          <Text style={styles.exitSummaryEditedText}>
+                            edited
+                          </Text>
                         </View>
                       )}
                     </View>
-                    {canEditExitSummary() && !editingExitSummary && !!procedure.ai_exit_summary?.text && (
-                      <View style={{ flexDirection: 'row', gap: 6 }}>
-                        <TouchableOpacity
-                          onPress={() => {
-                            setExitSummaryDraft(procedure.ai_exit_summary?.text || '');
-                            setEditingExitSummary(true);
-                          }}
-                          style={styles.exitSummaryActionBtn}
-                          testID="exit-summary-edit-btn"
-                          data-testid="exit-summary-edit-btn"
-                        >
-                          <Ionicons name="create-outline" size={13} color="#B71C1C" />
-                          <Text style={styles.exitSummaryActionText}>Edit</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          onPress={regenerateExitSummary}
-                          disabled={exitSummaryLoading}
-                          style={[styles.exitSummaryActionBtn, exitSummaryLoading && { opacity: 0.5 }]}
-                          testID="exit-summary-regenerate-btn"
-                          data-testid="exit-summary-regenerate-btn"
-                        >
-                          <Ionicons name="refresh" size={13} color="#B71C1C" />
-                          <Text style={styles.exitSummaryActionText}>Regenerate</Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
+                    {canEditExitSummary() &&
+                      !editingExitSummary &&
+                      !!procedure.ai_exit_summary?.text && (
+                        <View style={{ flexDirection: "row", gap: 6 }}>
+                          <TouchableOpacity
+                            onPress={() => {
+                              setExitSummaryDraft(
+                                procedure.ai_exit_summary?.text || "",
+                              );
+                              setEditingExitSummary(true);
+                            }}
+                            style={styles.exitSummaryActionBtn}
+                            testID="exit-summary-edit-btn"
+                            data-testid="exit-summary-edit-btn"
+                          >
+                            <Ionicons
+                              name="create-outline"
+                              size={13}
+                              color="#B71C1C"
+                            />
+                            <Text style={styles.exitSummaryActionText}>
+                              Edit
+                            </Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={regenerateExitSummary}
+                            disabled={exitSummaryLoading}
+                            style={[
+                              styles.exitSummaryActionBtn,
+                              exitSummaryLoading && { opacity: 0.5 },
+                            ]}
+                            testID="exit-summary-regenerate-btn"
+                            data-testid="exit-summary-regenerate-btn"
+                          >
+                            <Ionicons
+                              name="refresh"
+                              size={13}
+                              color="#B71C1C"
+                            />
+                            <Text style={styles.exitSummaryActionText}>
+                              Regenerate
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
                   </View>
 
                   {exitSummaryLoading && !procedure.ai_exit_summary?.text ? (
-                    <View style={styles.exitSummaryLoading} testID="exit-summary-loading">
+                    <View
+                      style={styles.exitSummaryLoading}
+                      testID="exit-summary-loading"
+                    >
                       <ActivityIndicator size="small" color="#B71C1C" />
-                      <Text style={styles.exitSummaryLoadingText}>Drafting clinical recommendations…</Text>
+                      <Text style={styles.exitSummaryLoadingText}>
+                        Drafting clinical recommendations…
+                      </Text>
                     </View>
                   ) : editingExitSummary ? (
                     <View testID="exit-summary-editor">
@@ -1652,15 +1900,32 @@ export default function ProcedureDetailScreen() {
                       />
                       <View style={styles.exitSummaryEditActions}>
                         <TouchableOpacity
-                          onPress={() => { setEditingExitSummary(false); setExitSummaryDraft(''); }}
-                          style={[styles.exitSummaryActionBtn, { borderColor: '#B0BEC5' }]}
+                          onPress={() => {
+                            setEditingExitSummary(false);
+                            setExitSummaryDraft("");
+                          }}
+                          style={[
+                            styles.exitSummaryActionBtn,
+                            { borderColor: "#B0BEC5" },
+                          ]}
                           disabled={savingExitSummary}
                         >
-                          <Text style={[styles.exitSummaryActionText, { color: '#546E7A' }]}>Cancel</Text>
+                          <Text
+                            style={[
+                              styles.exitSummaryActionText,
+                              { color: "#546E7A" },
+                            ]}
+                          >
+                            Cancel
+                          </Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                           onPress={saveExitSummaryEdit}
-                          style={[styles.exitSummaryActionBtn, styles.exitSummaryActionBtnPrimary, savingExitSummary && { opacity: 0.6 }]}
+                          style={[
+                            styles.exitSummaryActionBtn,
+                            styles.exitSummaryActionBtnPrimary,
+                            savingExitSummary && { opacity: 0.6 },
+                          ]}
                           disabled={savingExitSummary}
                           testID="exit-summary-save-btn"
                           data-testid="exit-summary-save-btn"
@@ -1669,15 +1934,29 @@ export default function ProcedureDetailScreen() {
                             <ActivityIndicator size="small" color="#FFF" />
                           ) : (
                             <>
-                              <Ionicons name="checkmark" size={13} color="#FFF" />
-                              <Text style={[styles.exitSummaryActionText, { color: '#FFF' }]}>Save</Text>
+                              <Ionicons
+                                name="checkmark"
+                                size={13}
+                                color="#FFF"
+                              />
+                              <Text
+                                style={[
+                                  styles.exitSummaryActionText,
+                                  { color: "#FFF" },
+                                ]}
+                              >
+                                Save
+                              </Text>
                             </>
                           )}
                         </TouchableOpacity>
                       </View>
                     </View>
                   ) : procedure.ai_exit_summary?.text ? (
-                    <Text style={styles.exitSummaryBody} testID="exit-summary-text">
+                    <Text
+                      style={styles.exitSummaryBody}
+                      testID="exit-summary-text"
+                    >
                       {procedure.ai_exit_summary.text}
                     </Text>
                   ) : (
@@ -1688,18 +1967,29 @@ export default function ProcedureDetailScreen() {
                       {canEditExitSummary() && (
                         <TouchableOpacity
                           onPress={regenerateExitSummary}
-                          style={[styles.exitSummaryActionBtn, styles.exitSummaryActionBtnPrimary]}
+                          style={[
+                            styles.exitSummaryActionBtn,
+                            styles.exitSummaryActionBtnPrimary,
+                          ]}
                           testID="exit-summary-generate-btn"
                           data-testid="exit-summary-generate-btn"
                         >
                           <Ionicons name="sparkles" size={13} color="#FFF" />
-                          <Text style={[styles.exitSummaryActionText, { color: '#FFF' }]}>Generate</Text>
+                          <Text
+                            style={[
+                              styles.exitSummaryActionText,
+                              { color: "#FFF" },
+                            ]}
+                          >
+                            Generate
+                          </Text>
                         </TouchableOpacity>
                       )}
                     </View>
                   )}
                   <Text style={styles.exitSummaryDisclaimer}>
-                    AI-drafted recommendation · verify clinically before acting · included in the Termination Summary PDF.
+                    AI-drafted recommendation · verify clinically before acting
+                    · included in the Termination Summary PDF.
                   </Text>
                 </View>
               </View>
@@ -2520,7 +2810,7 @@ export default function ProcedureDetailScreen() {
                   )}
               </View>
             )}
-         {/* iter-341/343: Implant Survival Review card. Appears once a
+            {/* iter-341/343: Implant Survival Review card. Appears once a
             case has reached Phase 2 (any post-phase2 status) and stays
             visible even after Phase 3+ so retrospective reviews are
             possible. Requires at least one implant in any of the three
@@ -2897,7 +3187,8 @@ export default function ProcedureDetailScreen() {
                 // Locked window (Phase 2+): no upload/edit, but keep the
                 // already-uploaded form viewable for anyone who could
                 // otherwise see this action row.
-                if (!consentUploaded || !(canUpload || canViewOnly)) return null;
+                if (!consentUploaded || !(canUpload || canViewOnly))
+                  return null;
                 const filename = procedure.patient_consent_form?.filename;
                 const openLockedConsent = async () => {
                   try {
@@ -3488,55 +3779,76 @@ export default function ProcedureDetailScreen() {
                 the survival review screen instead of Phase 3 directly. Once
                 submitted (or if there are no implants), it behaves like the
                 original Phase 3 CTA. */}
-            {canSubmitStage2Surgical() && (() => {
-              const hasImplants = !!(procedure.implants?.length || procedure.existing_implants?.length || procedure.implant_plans?.length);
-              return (
-                <View style={styles.phase2ButtonContainer}>
-                  <TouchableOpacity
-                    style={[styles.phase2Button, { backgroundColor: "#1565C0" }]}
-                    onPress={() =>
-                      router.push(`/procedures/survival-review/${procedure.id || procedure._id}` as any)
-                    }
-                    data-testid="survival-review-cta"
-                    testID="survival-review-cta"
-                  >
-                    <Ionicons name="pulse" size={24} color="#FFF" />
-                    <View style={styles.phase2ButtonTextContainer}>
-                      <Text style={styles.phase2ButtonTitle}>IMPLANT SURVIVAL REVIEW</Text>
-                      <Text style={styles.phase2ButtonSubtitle}>
-                        {hasImplants
-                          ? "Tap to record a new failure or continue to Phase 3"
-                          : "Continue to Phase 3"}
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={24} color="#FFF" />
-                  </TouchableOpacity>
-                  {!hasImplants && (
+            {canSubmitStage2Surgical() &&
+              (() => {
+                const hasImplants = !!(
+                  procedure.implants?.length ||
+                  procedure.existing_implants?.length ||
+                  procedure.implant_plans?.length
+                );
+                return (
+                  <View style={styles.phase2ButtonContainer}>
                     <TouchableOpacity
-                      style={[styles.phase2Button, { backgroundColor: "#2196F3", marginTop: 8 }]}
+                      style={[
+                        styles.phase2Button,
+                        { backgroundColor: "#1565C0" },
+                      ]}
                       onPress={() =>
-                        router.push(`/procedures/submit-stage2-surgical/${id}`)
+                        router.push(
+                          `/procedures/survival-review/${procedure.id || procedure._id}` as any,
+                        )
                       }
-                      data-testid="stage2-surgical-btn"
-                      testID="stage2-surgical-btn"
+                      data-testid="survival-review-cta"
+                      testID="survival-review-cta"
                     >
-                      <Ionicons name="medkit" size={24} color="#FFF" />
+                      <Ionicons name="pulse" size={24} color="#FFF" />
                       <View style={styles.phase2ButtonTextContainer}>
                         <Text style={styles.phase2ButtonTitle}>
-                          {procedure.case_origin === "existing_implants"
-                            ? "PHASE 1 APPROVED"
-                            : "PHASE 2 APPROVED"}
+                          IMPLANT SURVIVAL REVIEW
                         </Text>
                         <Text style={styles.phase2ButtonSubtitle}>
-                          Tap to start Phase 3
+                          {hasImplants
+                            ? "Tap to record a new failure or continue to Phase 3"
+                            : "Continue to Phase 3"}
                         </Text>
                       </View>
                       <Ionicons name="chevron-forward" size={24} color="#FFF" />
                     </TouchableOpacity>
-                  )}
-                </View>
-              );
-            })()}
+                    {!hasImplants && (
+                      <TouchableOpacity
+                        style={[
+                          styles.phase2Button,
+                          { backgroundColor: "#2196F3", marginTop: 8 },
+                        ]}
+                        onPress={() =>
+                          router.push(
+                            `/procedures/submit-stage2-surgical/${id}`,
+                          )
+                        }
+                        data-testid="stage2-surgical-btn"
+                        testID="stage2-surgical-btn"
+                      >
+                        <Ionicons name="medkit" size={24} color="#FFF" />
+                        <View style={styles.phase2ButtonTextContainer}>
+                          <Text style={styles.phase2ButtonTitle}>
+                            {procedure.case_origin === "existing_implants"
+                              ? "PHASE 1 APPROVED"
+                              : "PHASE 2 APPROVED"}
+                          </Text>
+                          <Text style={styles.phase2ButtonSubtitle}>
+                            Tap to start Phase 3
+                          </Text>
+                        </View>
+                        <Ionicons
+                          name="chevron-forward"
+                          size={24}
+                          color="#FFF"
+                        />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              })()}
 
             {/* Start Stage 2 Prosthetic Button */}
             {canSubmitStage2Prosthetic() && (
@@ -3897,23 +4209,48 @@ export default function ProcedureDetailScreen() {
                       </TouchableOpacity>
                     )}
                 </View>
-               <InfoRow icon="construct" label="Type of Implant Procedure" value={procedure.implant_procedure_type} fieldKey="implant_procedure_type" />
-            {/* iter-387: surgical-approach cascade echoed on the case detail */}
-            {procedure.procedure_surgery_type && (
-              <InfoRow icon="hand-left" label="Procedure Type" value={procedure.procedure_surgery_type} />
-            )}
-            {procedure.guided_surgery_type && (
-              <InfoRow icon="navigate" label="Type of Guided Surgery" value={procedure.guided_surgery_type} />
-            )}
-            {procedure.static_guide_type && (
-              <InfoRow icon="grid" label="Type of Static Guide" value={procedure.static_guide_type} />
-            )}
-            {procedure.sleeve_type && (
-              <InfoRow icon="ellipse" label="Type of Sleeve" value={procedure.sleeve_type} />
-            )}
-            {procedure.dynamic_nav_system && (
-              <InfoRow icon="compass" label="Dynamic Navigation System" value={procedure.dynamic_nav_system} />
-            )}
+                <InfoRow
+                  icon="construct"
+                  label="Type of Implant Procedure"
+                  value={procedure.implant_procedure_type}
+                  fieldKey="implant_procedure_type"
+                />
+                {/* iter-387: surgical-approach cascade echoed on the case detail */}
+                {procedure.procedure_surgery_type && (
+                  <InfoRow
+                    icon="hand-left"
+                    label="Procedure Type"
+                    value={procedure.procedure_surgery_type}
+                  />
+                )}
+                {procedure.guided_surgery_type && (
+                  <InfoRow
+                    icon="navigate"
+                    label="Type of Guided Surgery"
+                    value={procedure.guided_surgery_type}
+                  />
+                )}
+                {procedure.static_guide_type && (
+                  <InfoRow
+                    icon="grid"
+                    label="Type of Static Guide"
+                    value={procedure.static_guide_type}
+                  />
+                )}
+                {procedure.sleeve_type && (
+                  <InfoRow
+                    icon="ellipse"
+                    label="Type of Sleeve"
+                    value={procedure.sleeve_type}
+                  />
+                )}
+                {procedure.dynamic_nav_system && (
+                  <InfoRow
+                    icon="compass"
+                    label="Dynamic Navigation System"
+                    value={procedure.dynamic_nav_system}
+                  />
+                )}
                 {/* iter-307: Echo the Number-of-Implants sub-choice (only set
                 for Immediate / PET / GBR / Guided Surgery) so faculty
                 can scan it from the case detail without opening Phase 1. */}
@@ -5362,79 +5699,97 @@ export default function ProcedureDetailScreen() {
                 supervisor, in-charge, administrator (same as CBCT). Renders
                 as a list with thumbnails. Slot labels come from the Phase-1
                 upload (Occlusal, Lateral/Frontal, or extras). */}
-            {Array.isArray(procedure.intraoral_photos) && procedure.intraoral_photos.length > 0 && (
-              <View style={styles.section} data-testid="intraoral-photos-section">
-                <Text style={styles.sectionTitle}>Patient Intra-oral Photograph</Text>
-                {procedure.intraoral_photos.map((f: any, idx: number) => {
-                  const baseUrl = api.defaults.baseURL || "";
-                  const fileUrl = `${baseUrl}/uploads/${f.filename}?token=${authToken}`;
-                  return (
-                    <View
-                      key={idx}
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        marginBottom: 10,
-                        gap: 10,
-                        backgroundColor: "#FFF8E1",
-                        padding: 8,
-                        borderRadius: 10,
-                      }}
-                      data-testid={`intraoral-thumb-${idx}`}
-                    >
-                      <Image
-                        source={{ uri: fileUrl }}
+            {Array.isArray(procedure.intraoral_photos) &&
+              procedure.intraoral_photos.length > 0 && (
+                <View
+                  style={styles.section}
+                  data-testid="intraoral-photos-section"
+                >
+                  <Text style={styles.sectionTitle}>
+                    Patient Intra-oral Photograph
+                  </Text>
+                  {procedure.intraoral_photos.map((f: any, idx: number) => {
+                    const baseUrl = api.defaults.baseURL || "";
+                    const fileUrl = `${baseUrl}/uploads/${f.filename}?token=${authToken}`;
+                    return (
+                      <View
+                        key={idx}
                         style={{
-                          width: 50,
-                          height: 50,
-                          borderRadius: 8,
-                          borderWidth: 1,
-                          borderColor: "#FFD54F",
-                        }}
-                        resizeMode="cover"
-                      />
-                      <View style={{ flex: 1 }}>
-                        <Text
-                          style={{ fontSize: 13, fontWeight: "700", color: "#333" }}
-                        >
-                          {f.label || `Photo ${idx + 1}`}
-                        </Text>
-                        <Text
-                          style={{ fontSize: 11, color: "#888" }}
-                          numberOfLines={1}
-                        >
-                          {f.original_name}
-                        </Text>
-                      </View>
-                      <TouchableOpacity
-                        style={{
-                          backgroundColor: "#F57C00",
-                          borderRadius: 8,
-                          paddingVertical: 6,
-                          paddingHorizontal: 12,
                           flexDirection: "row",
                           alignItems: "center",
-                          gap: 4,
+                          marginBottom: 10,
+                          gap: 10,
+                          backgroundColor: "#FFF8E1",
+                          padding: 8,
+                          borderRadius: 10,
                         }}
-                        onPress={() =>
-                          Linking.openURL(fileUrl).catch(() =>
-                            Alert.alert("Error", "Could not open file"),
-                          )
-                        }
-                        data-testid={`view-intraoral-detail-${idx}`}
+                        data-testid={`intraoral-thumb-${idx}`}
                       >
-                        <Ionicons name="open-outline" size={14} color="#FFF" />
-                        <Text
-                          style={{ color: "#FFF", fontSize: 12, fontWeight: "700" }}
+                        <Image
+                          source={{ uri: fileUrl }}
+                          style={{
+                            width: 50,
+                            height: 50,
+                            borderRadius: 8,
+                            borderWidth: 1,
+                            borderColor: "#FFD54F",
+                          }}
+                          resizeMode="cover"
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            style={{
+                              fontSize: 13,
+                              fontWeight: "700",
+                              color: "#333",
+                            }}
+                          >
+                            {f.label || `Photo ${idx + 1}`}
+                          </Text>
+                          <Text
+                            style={{ fontSize: 11, color: "#888" }}
+                            numberOfLines={1}
+                          >
+                            {f.original_name}
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          style={{
+                            backgroundColor: "#F57C00",
+                            borderRadius: 8,
+                            paddingVertical: 6,
+                            paddingHorizontal: 12,
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 4,
+                          }}
+                          onPress={() =>
+                            Linking.openURL(fileUrl).catch(() =>
+                              Alert.alert("Error", "Could not open file"),
+                            )
+                          }
+                          data-testid={`view-intraoral-detail-${idx}`}
                         >
-                          View
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  );
-                })}
-              </View>
-            )}
+                          <Ionicons
+                            name="open-outline"
+                            size={14}
+                            color="#FFF"
+                          />
+                          <Text
+                            style={{
+                              color: "#FFF",
+                              fontSize: 12,
+                              fontWeight: "700",
+                            }}
+                          >
+                            View
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
 
             {procedure.remark && (
               <View style={styles.section}>
@@ -5649,6 +6004,174 @@ export default function ProcedureDetailScreen() {
                         fieldKey="phase2_data.drilling_type"
                       />
                     )}
+                    {/* iter-391: actual drilling cascade + plan-vs-actual comparison */}
+                    {isGuidedApproach(procedure.phase2_data.drilling_type) &&
+                      procedure.phase2_data.drilling_guided_surgery_type && (
+                        <InfoRow
+                          icon="navigate"
+                          label="Type of Guided Surgery (actual)"
+                          value={
+                            procedure.phase2_data.drilling_guided_surgery_type
+                          }
+                        />
+                      )}
+                    {isGuidedApproach(procedure.phase2_data.drilling_type) &&
+                      procedure.phase2_data.drilling_static_guide_type && (
+                        <InfoRow
+                          icon="layers"
+                          label="Type of Static Guide (actual)"
+                          value={
+                            procedure.phase2_data.drilling_static_guide_type
+                          }
+                        />
+                      )}
+                    {isGuidedApproach(procedure.phase2_data.drilling_type) &&
+                      procedure.phase2_data.drilling_sleeve_type && (
+                        <InfoRow
+                          icon="ellipse-outline"
+                          label="Type of Sleeve (actual)"
+                          value={procedure.phase2_data.drilling_sleeve_type}
+                        />
+                      )}
+                    {isGuidedApproach(procedure.phase2_data.drilling_type) &&
+                      procedure.phase2_data.drilling_dynamic_nav_system && (
+                        <InfoRow
+                          icon="compass"
+                          label="Dynamic Navigation System (actual)"
+                          value={
+                            procedure.phase2_data.drilling_dynamic_nav_system
+                          }
+                        />
+                      )}
+                    {(() => {
+                      const p2: any = procedure.phase2_data;
+                      const plannedApproach = normalizeSurgeryApproach(
+                        procedure.procedure_surgery_type,
+                      );
+                      if (!plannedApproach || !p2.drilling_type) return null;
+                      const diffs: string[] = [];
+                      if (p2.drilling_type !== plannedApproach)
+                        diffs.push(
+                          `Drilling Type: ${plannedApproach} → ${p2.drilling_type}`,
+                        );
+                      if (isGuidedApproach(p2.drilling_type)) {
+                        if (
+                          p2.drilling_guided_surgery_type &&
+                          p2.drilling_guided_surgery_type !==
+                            (procedure.guided_surgery_type || "")
+                        )
+                          diffs.push(
+                            `Guided Surgery: ${procedure.guided_surgery_type || "—"} → ${p2.drilling_guided_surgery_type}`,
+                          );
+                        if (
+                          p2.drilling_static_guide_type &&
+                          p2.drilling_static_guide_type !==
+                            (procedure.static_guide_type || "")
+                        )
+                          diffs.push(
+                            `Static Guide: ${procedure.static_guide_type || "—"} → ${p2.drilling_static_guide_type}`,
+                          );
+                        if (
+                          p2.drilling_sleeve_type &&
+                          p2.drilling_sleeve_type !==
+                            (procedure.sleeve_type || "")
+                        )
+                          diffs.push(
+                            `Sleeve: ${procedure.sleeve_type || "—"} → ${p2.drilling_sleeve_type}`,
+                          );
+                        if (
+                          p2.drilling_dynamic_nav_system &&
+                          p2.drilling_dynamic_nav_system !==
+                            (procedure.dynamic_nav_system || "")
+                        )
+                          diffs.push(
+                            `Dynamic Nav System: ${procedure.dynamic_nav_system || "—"} → ${p2.drilling_dynamic_nav_system}`,
+                          );
+                      }
+                      if (diffs.length === 0) {
+                        return (
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: 6,
+                              backgroundColor: "#E8F5E9",
+                              borderRadius: 8,
+                              borderWidth: 1,
+                              borderColor: "#A5D6A7",
+                              padding: 8,
+                              marginVertical: 6,
+                            }}
+                            testID="drilling-as-planned-tag"
+                          >
+                            <Ionicons
+                              name="checkmark-circle"
+                              size={16}
+                              color="#1B5E20"
+                            />
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                fontWeight: "700",
+                                color: "#1B5E20",
+                                flex: 1,
+                              }}
+                            >
+                              Drilling performed as planned in Phase 1
+                            </Text>
+                          </View>
+                        );
+                      }
+                      return (
+                        <View
+                          style={{
+                            backgroundColor: "#FFF3E0",
+                            borderRadius: 8,
+                            borderWidth: 1,
+                            borderColor: "#FFB74D",
+                            padding: 8,
+                            marginVertical: 6,
+                          }}
+                          testID="drilling-protocol-changed-tag"
+                        >
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: 6,
+                              marginBottom: 2,
+                            }}
+                          >
+                            <Ionicons
+                              name="warning"
+                              size={15}
+                              color="#E65100"
+                            />
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                fontWeight: "800",
+                                color: "#E65100",
+                              }}
+                            >
+                              Protocol changed vs Phase 1 plan
+                            </Text>
+                          </View>
+                          {diffs.map((d, i) => (
+                            <Text
+                              key={i}
+                              style={{
+                                fontSize: 11.5,
+                                color: "#5D4037",
+                                marginTop: 1,
+                              }}
+                            >
+                              {d}
+                            </Text>
+                          ))}
+                        </View>
+                      );
+                    })()}
                     {procedure.phase2_data.implant_seated_correctly !==
                       undefined && (
                       <InfoRow
@@ -5707,11 +6230,16 @@ export default function ProcedureDetailScreen() {
                         Screw shows no cuff height; Healing Abutment shows the
                         mm; Immediate Loading shows the prosthesis type. */}
                     {(() => {
-                      const perImplant = procedure.phase2_data.prosthetic_components;
-                      const cuffs = procedure.phase2_data.healing_abutment_cuff_height;
-                      const singleComponent = procedure.phase2_data.prosthetic_component;
-                      const prosthesisType = procedure.phase2_data.prosthesis_type;
-                      const plans = procedure.implant_plans || procedure.implants || [];
+                      const perImplant =
+                        procedure.phase2_data.prosthetic_components;
+                      const cuffs =
+                        procedure.phase2_data.healing_abutment_cuff_height;
+                      const singleComponent =
+                        procedure.phase2_data.prosthetic_component;
+                      const prosthesisType =
+                        procedure.phase2_data.prosthesis_type;
+                      const plans =
+                        procedure.implant_plans || procedure.implants || [];
                       const _fdi = (i: number) => {
                         const p = plans[i] || {};
                         const t = p.tooth_number || p.tooth || p.position;
@@ -5719,47 +6247,136 @@ export default function ProcedureDetailScreen() {
                       };
                       if (Array.isArray(perImplant) && perImplant.length > 0) {
                         return (
-                          <View style={{ marginTop: 8, marginBottom: 8 }} data-testid="phase2-per-implant-readback">
-                            <Text style={{ fontSize: 13, fontWeight: "700", color: "#37474F", marginBottom: 6, marginLeft: 4 }}>
+                          <View
+                            style={{ marginTop: 8, marginBottom: 8 }}
+                            data-testid="phase2-per-implant-readback"
+                          >
+                            <Text
+                              style={{
+                                fontSize: 13,
+                                fontWeight: "700",
+                                color: "#37474F",
+                                marginBottom: 6,
+                                marginLeft: 4,
+                              }}
+                            >
                               Prosthetic Component (per implant)
                             </Text>
                             {perImplant.map((pc: string, idx: number) => {
-                              const cuff = Array.isArray(cuffs) ? cuffs[idx] : null;
-                              const chipColor = pc === "Cover Screw Placed" ? "#6A1B9A"
-                                : pc === "Healing Abutment Placed" ? "#00695C"
-                                : pc === "Immediate Loading Done" ? "#E65100" : "#546E7A";
-                              const chipBg = pc === "Cover Screw Placed" ? "#F3E5F5"
-                                : pc === "Healing Abutment Placed" ? "#E0F2F1"
-                                : pc === "Immediate Loading Done" ? "#FFF3E0" : "#ECEFF1";
+                              const cuff = Array.isArray(cuffs)
+                                ? cuffs[idx]
+                                : null;
+                              const chipColor =
+                                pc === "Cover Screw Placed"
+                                  ? "#6A1B9A"
+                                  : pc === "Healing Abutment Placed"
+                                    ? "#00695C"
+                                    : pc === "Immediate Loading Done"
+                                      ? "#E65100"
+                                      : "#546E7A";
+                              const chipBg =
+                                pc === "Cover Screw Placed"
+                                  ? "#F3E5F5"
+                                  : pc === "Healing Abutment Placed"
+                                    ? "#E0F2F1"
+                                    : pc === "Immediate Loading Done"
+                                      ? "#FFF3E0"
+                                      : "#ECEFF1";
                               return (
                                 <View
                                   key={idx}
                                   style={{
-                                    borderWidth: 1, borderColor: "#E0E0E0", borderRadius: 8,
-                                    backgroundColor: "#FAFAFA", padding: 10, marginBottom: 8,
+                                    borderWidth: 1,
+                                    borderColor: "#E0E0E0",
+                                    borderRadius: 8,
+                                    backgroundColor: "#FAFAFA",
+                                    padding: 10,
+                                    marginBottom: 8,
                                   }}
                                   data-testid={`phase2-implant-card-${idx}`}
                                 >
-                                  <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
-                                    <Text style={{ fontSize: 13, fontWeight: "800", color: "#1A2332" }}>
+                                  <View
+                                    style={{
+                                      flexDirection: "row",
+                                      alignItems: "center",
+                                      flexWrap: "wrap",
+                                      gap: 6,
+                                    }}
+                                  >
+                                    <Text
+                                      style={{
+                                        fontSize: 13,
+                                        fontWeight: "800",
+                                        color: "#1A2332",
+                                      }}
+                                    >
                                       {_fdi(idx)}
                                     </Text>
-                                    <View style={{ backgroundColor: chipBg, borderColor: chipColor, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 }}>
-                                      <Text style={{ fontSize: 10, fontWeight: "700", color: chipColor, letterSpacing: 0.3, textTransform: "uppercase" }}>
+                                    <View
+                                      style={{
+                                        backgroundColor: chipBg,
+                                        borderColor: chipColor,
+                                        borderWidth: 1,
+                                        paddingHorizontal: 8,
+                                        paddingVertical: 2,
+                                        borderRadius: 999,
+                                      }}
+                                    >
+                                      <Text
+                                        style={{
+                                          fontSize: 10,
+                                          fontWeight: "700",
+                                          color: chipColor,
+                                          letterSpacing: 0.3,
+                                          textTransform: "uppercase",
+                                        }}
+                                      >
                                         {pc || "—"}
                                       </Text>
                                     </View>
                                   </View>
-                                  {pc === "Healing Abutment Placed" && cuff !== undefined && cuff !== null && String(cuff).trim() !== "" && (
-                                    <Text style={{ marginTop: 4, fontSize: 12.5, color: "#37474F" }}>
-                                      Healing abutment cuff height: <Text style={{ fontWeight: "700", color: "#00695C" }}>{cuff} mm</Text>
-                                    </Text>
-                                  )}
-                                  {pc === "Immediate Loading Done" && prosthesisType && (
-                                    <Text style={{ marginTop: 4, fontSize: 12.5, color: "#37474F" }}>
-                                      Prosthesis type: <Text style={{ fontWeight: "700", color: "#E65100" }}>{prosthesisType}</Text>
-                                    </Text>
-                                  )}
+                                  {pc === "Healing Abutment Placed" &&
+                                    cuff !== undefined &&
+                                    cuff !== null &&
+                                    String(cuff).trim() !== "" && (
+                                      <Text
+                                        style={{
+                                          marginTop: 4,
+                                          fontSize: 12.5,
+                                          color: "#37474F",
+                                        }}
+                                      >
+                                        Healing abutment cuff height:{" "}
+                                        <Text
+                                          style={{
+                                            fontWeight: "700",
+                                            color: "#00695C",
+                                          }}
+                                        >
+                                          {cuff} mm
+                                        </Text>
+                                      </Text>
+                                    )}
+                                  {pc === "Immediate Loading Done" &&
+                                    prosthesisType && (
+                                      <Text
+                                        style={{
+                                          marginTop: 4,
+                                          fontSize: 12.5,
+                                          color: "#37474F",
+                                        }}
+                                      >
+                                        Prosthesis type:{" "}
+                                        <Text
+                                          style={{
+                                            fontWeight: "700",
+                                            color: "#E65100",
+                                          }}
+                                        >
+                                          {prosthesisType}
+                                        </Text>
+                                      </Text>
+                                    )}
                                 </View>
                               );
                             })}
@@ -5780,7 +6397,9 @@ export default function ProcedureDetailScreen() {
                           {cuffs &&
                             (Array.isArray(cuffs) ? (
                               cuffs.map((val: string, idx: number) =>
-                                val !== undefined && val !== null && String(val).trim() !== "" ? (
+                                val !== undefined &&
+                                val !== null &&
+                                String(val).trim() !== "" ? (
                                   <InfoRow
                                     key={idx}
                                     icon="resize"
@@ -8835,9 +9454,15 @@ export default function ProcedureDetailScreen() {
             happened on this case. Placed right after the phase
             approve/reject section so it reads as the next thing needing
             attention, matching the Phase 1-4 approval UX. */}
-            <TransferApprovalCard procedure={procedure} onChanged={() => loadProcedure()} />
+            <TransferApprovalCard
+              procedure={procedure}
+              onChanged={() => loadProcedure()}
+            />
             <ContributionTimelineCard procedureId={id as string} />
-
+            <FollowUpSection
+              procedure={procedure}
+              onChanged={() => loadProcedure()}
+            />
             {/* Implant Planning - Standalone Section.
             iter-223: hidden for existing-implant cases — those have the
             implants pre-captured in `procedure.existing_implants[]` and the
@@ -10914,71 +11539,215 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 16,
     padding: 16,
-    backgroundColor: '#FFEBEE',
+    backgroundColor: "#FFEBEE",
     borderRadius: 16,
     borderWidth: 2,
-    borderColor: '#C62828',
+    borderColor: "#C62828",
     gap: 12,
   },
-  terminationTopRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  terminationTopRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   terminationIconWrap: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: '#C62828',
-    alignItems: 'center', justifyContent: 'center',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#C62828",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  terminationTitle: { fontSize: 16, fontWeight: '800', color: '#B71C1C', letterSpacing: 0.3 },
-  terminationSubtitle: { fontSize: 12, color: '#8E1B1B', marginTop: 2 },
+  terminationTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#B71C1C",
+    letterSpacing: 0.3,
+  },
+  terminationSubtitle: { fontSize: 12, color: "#8E1B1B", marginTop: 2 },
   terminationReasonBox: {
-    backgroundColor: '#FFF', borderLeftWidth: 3, borderLeftColor: '#C62828',
-    padding: 10, borderRadius: 6, gap: 4,
+    backgroundColor: "#FFF",
+    borderLeftWidth: 3,
+    borderLeftColor: "#C62828",
+    padding: 10,
+    borderRadius: 6,
+    gap: 4,
   },
-  terminationReasonLabel: { fontSize: 10, color: '#B71C1C', fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
-  terminationReasonText: { fontSize: 13, color: '#37474F', fontStyle: 'italic', lineHeight: 18 },
-  terminationActions: { flexDirection: 'row', gap: 10 },
+  terminationReasonLabel: {
+    fontSize: 10,
+    color: "#B71C1C",
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  terminationReasonText: {
+    fontSize: 13,
+    color: "#37474F",
+    fontStyle: "italic",
+    lineHeight: 18,
+  },
+  terminationActions: { flexDirection: "row", gap: 10 },
   terminationBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    paddingVertical: 12, borderRadius: 10,
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 10,
   },
-  terminationBtnPrimary: { backgroundColor: '#C62828' },
-  terminationBtnGhost: { backgroundColor: '#FFF', borderWidth: 1.5, borderColor: '#C62828' },
-  terminationBtnText: { color: '#FFF', fontSize: 13, fontWeight: '800', letterSpacing: 0.4 },
-  terminationFoot: { fontSize: 11, color: '#8E1B1B', fontStyle: 'italic', textAlign: 'center' },
+  terminationBtnPrimary: { backgroundColor: "#C62828" },
+  terminationBtnGhost: {
+    backgroundColor: "#FFF",
+    borderWidth: 1.5,
+    borderColor: "#C62828",
+  },
+  terminationBtnText: {
+    color: "#FFF",
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
+  terminationFoot: {
+    fontSize: 11,
+    color: "#8E1B1B",
+    fontStyle: "italic",
+    textAlign: "center",
+  },
   // AI Exit Summary card (embedded in the termination banner)
   exitSummaryCard: {
-    marginTop: 12, backgroundColor: '#FFF5F5', borderWidth: 1, borderColor: '#FFCDD2',
-    borderRadius: 10, padding: 12, gap: 8,
+    marginTop: 12,
+    backgroundColor: "#FFF5F5",
+    borderWidth: 1,
+    borderColor: "#FFCDD2",
+    borderRadius: 10,
+    padding: 12,
+    gap: 8,
   },
-  exitSummaryHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  exitSummaryTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
-  exitSummaryTitle: { fontSize: 12, fontWeight: '800', color: '#B71C1C', letterSpacing: 0.4, textTransform: 'uppercase' },
-  exitSummaryEditedPill: { backgroundColor: '#FFF', borderColor: '#F48FB1', borderWidth: 1, borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1 },
-  exitSummaryEditedText: { fontSize: 9, fontWeight: '700', color: '#AD1457', letterSpacing: 0.3, textTransform: 'uppercase' },
-  exitSummaryBody: { fontSize: 12.5, lineHeight: 19, color: '#37474F' },
-  exitSummaryLoading: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
-  exitSummaryLoadingText: { fontSize: 12, color: '#B71C1C', fontStyle: 'italic' },
-  exitSummaryEmpty: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' },
-  exitSummaryEmptyText: { fontSize: 12, color: '#78909C', fontStyle: 'italic', flex: 1 },
+  exitSummaryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  exitSummaryTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flex: 1,
+  },
+  exitSummaryTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#B71C1C",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  exitSummaryEditedPill: {
+    backgroundColor: "#FFF",
+    borderColor: "#F48FB1",
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  exitSummaryEditedText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#AD1457",
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+  exitSummaryBody: { fontSize: 12.5, lineHeight: 19, color: "#37474F" },
+  exitSummaryLoading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 6,
+  },
+  exitSummaryLoadingText: {
+    fontSize: 12,
+    color: "#B71C1C",
+    fontStyle: "italic",
+  },
+  exitSummaryEmpty: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  exitSummaryEmptyText: {
+    fontSize: 12,
+    color: "#78909C",
+    fontStyle: "italic",
+    flex: 1,
+  },
   exitSummaryInput: {
-    backgroundColor: '#FFF', borderColor: '#F8BBD0', borderWidth: 1, borderRadius: 8,
-    padding: 10, fontSize: 12.5, color: '#263238', minHeight: 120, textAlignVertical: 'top',
+    backgroundColor: "#FFF",
+    borderColor: "#F8BBD0",
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 12.5,
+    color: "#263238",
+    minHeight: 120,
+    textAlignVertical: "top",
   },
-  exitSummaryEditActions: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end', marginTop: 8 },
+  exitSummaryEditActions: {
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "flex-end",
+    marginTop: 8,
+  },
   exitSummaryActionBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: '#FFF', borderWidth: 1, borderColor: '#F8BBD0',
-    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#FFF",
+    borderWidth: 1,
+    borderColor: "#F8BBD0",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
   },
-  exitSummaryActionBtnPrimary: { backgroundColor: '#C62828', borderColor: '#C62828' },
-  exitSummaryActionText: { fontSize: 11, fontWeight: '700', color: '#B71C1C', letterSpacing: 0.2 },
-  exitSummaryDisclaimer: { fontSize: 10, color: '#B71C1C', fontStyle: 'italic', opacity: 0.75 },
+  exitSummaryActionBtnPrimary: {
+    backgroundColor: "#C62828",
+    borderColor: "#C62828",
+  },
+  exitSummaryActionText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#B71C1C",
+    letterSpacing: 0.2,
+  },
+  exitSummaryDisclaimer: {
+    fontSize: 10,
+    color: "#B71C1C",
+    fontStyle: "italic",
+    opacity: 0.75,
+  },
   // End treatment rejected banner (last-rejection surfaced to the initiator)
   rejectedBanner: {
-    marginHorizontal: 16, marginTop: 8, marginBottom: 8,
-    padding: 12, borderRadius: 12,
-    backgroundColor: '#FFEBEE', borderLeftWidth: 4, borderLeftColor: '#C62828', gap: 4,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 8,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "#FFEBEE",
+    borderLeftWidth: 4,
+    borderLeftColor: "#C62828",
+    gap: 4,
   },
-  rejectedTitle: { fontSize: 13, fontWeight: '800', color: '#B71C1C', letterSpacing: 0.3 },
-  rejectedBody: { fontSize: 12, color: '#8E1B1B', fontWeight: '600' },
-  rejectedReason: { fontSize: 12.5, color: '#3E2723', fontStyle: 'italic', marginTop: 2 },
+  rejectedTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#B71C1C",
+    letterSpacing: 0.3,
+  },
+  rejectedBody: { fontSize: 12, color: "#8E1B1B", fontWeight: "600" },
+  rejectedReason: {
+    fontSize: 12.5,
+    color: "#3E2723",
+    fontStyle: "italic",
+    marginTop: 2,
+  },
   completedBanner: {
     margin: 16,
     padding: 20,

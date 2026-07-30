@@ -918,6 +918,12 @@ class Phase2Submit(BaseModel):
     anesthesia_details: Optional[str] = Field(None, max_length=500)  # If No
     flap_design: Optional[str] = Field(None, max_length=100)
     drilling_type: Optional[str] = Field(None, max_length=100)
+     # iter-391: Drilling Type cascade — actual intra-op protocol (mirrors the
+    # Phase 1 plan cascade so plan-vs-actual deviations are auditable).
+    drilling_guided_surgery_type: Optional[str] = Field(None, max_length=40)
+    drilling_static_guide_type: Optional[str] = Field(None, max_length=40)
+    drilling_sleeve_type: Optional[str] = Field(None, max_length=40)
+    drilling_dynamic_nav_system: Optional[str] = Field(None, max_length=40)
     implant_seated_correctly: Optional[bool] = True
     implant_seated_comment: Optional[str] = Field(None, max_length=500)
     torque_values: Optional[List[float]] = None
@@ -1038,7 +1044,7 @@ class Phase4Step2Submit(BaseModel):
     prosthesis_photos: Optional[List[Dict[str, str]]] = None
     # iter-332: actual date this step was performed (YYYY-MM-DD).
     done_date: Optional[str] = Field(None, max_length=10)
-
+    baseline_probing_depths: Optional[Dict[str, Dict[str, str]]] = None
 
 # ── Treatment Timeline (iter-332) ────────────────────────────────────
 # Each phase / step now captures the date the work was ACTUALLY done
@@ -2066,17 +2072,30 @@ async def create_user(user: UserCreate, current_user: dict = Depends(get_current
 
     department_id = await _resolve_department_assignment(current_user, org_id, user.role, user.department_id)
 
-    # Enforce max 2 per incharge/chief_dentist role — scoped per-department for
-    # implant_incharge (each department gets its own 2-incharge cap) so multi-department
-    # orgs aren't capped at 2 incharges total; chief_dentist (clinics have no departments)
-    # stays capped org-wide.
+    # Expired trial/subscription blocks NEW users — existing users can still
+    # log in and use the app (soft lock, not a full org lockout).
+    await _assert_subscription_not_expired(org_id)
+
+    # Per-org caps — from this org's subscription (super_admin-configurable),
+    # falling back to the legacy hardcoded max-2-incharges/unlimited-users
+    # behavior for orgs with no subscription record yet.
+    caps = await _get_org_caps(org_id)
     if user.role in MAX_2_ROLES:
+        # Unlike department (department-scoped), the org founder DOES count as
+        # an incharge/chief_dentist here — they're self-appointed into that
+        # role from day one, department or not, and genuinely occupy the seat.
         cap_query = {"org_id": org_id, "role": user.role}
         if user.role == "implant_incharge":
             cap_query["department_id"] = department_id
+        incharge_cap = caps["max_implant_incharges"] if caps["max_implant_incharges"] is not None else 2
         count = await db.users.count_documents(cap_query)
-        if count >= 2:
-            raise HTTPException(status_code=400, detail=f"Maximum 2 users allowed with role '{user.role}'" + (f" in this department" if user.role == "implant_incharge" and department_id else ""))
+        if count >= incharge_cap:
+            raise HTTPException(status_code=400, detail=f"Maximum {incharge_cap} users allowed with role '{user.role}'" + (f" in this department" if user.role == "implant_incharge" and department_id else ""))
+
+    if caps.get("max_users"):
+        total_users = await db.users.count_documents({"org_id": org_id})
+        if total_users >= caps["max_users"]:
+            raise HTTPException(status_code=400, detail=f"This organization has reached its plan limit of {caps['max_users']} users. Contact the platform admin to upgrade.")
 
     # Create user
     user_dict = {
@@ -2153,6 +2172,26 @@ class UserUpdate(BaseModel):
             return sanitize_input(v)
         return v
 
+async def _assert_dept_incharge_cap(org_id: str, department_id: str, role: str, exclude_user_id: str) -> None:
+    """Same incharge-cap rule as create_user/invite, but for the
+    "assign an EXISTING user to a department" path (departments.tsx's
+    "Assign Existing" flow, and direct department_id sets) — that path
+    doesn't go through create_user at all, so without this it could push a
+    department past its plan's incharge limit silently."""
+    if role != "implant_incharge":
+        return
+    org_caps = await _get_org_caps(org_id)
+    incharge_cap = org_caps["max_implant_incharges"] if org_caps["max_implant_incharges"] is not None else 2
+    count = await db.users.count_documents({
+        "org_id": org_id,
+        "role": "implant_incharge",
+        "_id": {"$ne": ObjectId(exclude_user_id)},
+        "$or": [{"department_ids": department_id}, {"department_id": department_id}],
+    })
+    if count >= incharge_cap:
+        raise HTTPException(status_code=400, detail=f"Maximum {incharge_cap} Implant In-Charge(s) allowed in this department")
+
+
 @api_router.put("/users/{user_id}")
 async def update_user(user_id: str, user: UserUpdate, current_user: dict = Depends(get_current_user)):
     if current_user["role"] not in ["administrator", "implant_incharge"]:
@@ -2171,6 +2210,16 @@ async def update_user(user_id: str, user: UserUpdate, current_user: dict = Depen
             raise HTTPException(status_code=400, detail="Invalid role")
         if user.role in INCHARGE_ROLES and not (current_user.get("is_admin") or current_user.get("is_super_admin")):
             raise HTTPException(status_code=403, detail="Only the organization admin can assign an Implant In-Charge")
+        # Promoting someone to implant_incharge without also touching their
+        # department in this same call — check the cap against whatever
+        # department they're already in (the add_department_id/department_id
+        # branches below handle the cap when the department is changing too).
+        if (
+            user.role == "implant_incharge"
+            and not user.add_department_id
+            and "department_id" not in user.model_fields_set
+        ):
+            await _assert_dept_incharge_cap(existing.get("org_id"), existing.get("department_id"), "implant_incharge", user_id)
         update_fields["role"] = user.role
     if user.password and user.password.strip():
         update_fields["password_hash"] = hash_password(user.password)
@@ -2192,6 +2241,8 @@ async def update_user(user_id: str, user: UserUpdate, current_user: dict = Depen
         if user.add_department_id not in cur_ids:
             if len(cur_ids) >= 2:
                 raise HTTPException(status_code=400, detail="A user can be incharge of maximum 2 departments at the same time")
+            effective_role = user.role or existing.get("role")
+            await _assert_dept_incharge_cap(existing.get("org_id"), user.add_department_id, effective_role, user_id)
             cur_ids.append(user.add_department_id)
 
         update_fields["department_ids"] = cur_ids
@@ -2221,6 +2272,8 @@ async def update_user(user_id: str, user: UserUpdate, current_user: dict = Depen
                 dept = None
             if not dept:
                 raise HTTPException(status_code=400, detail="Department not found")
+            effective_role = user.role or existing.get("role")
+            await _assert_dept_incharge_cap(existing.get("org_id"), new_dept_id, effective_role, user_id)
             update_fields["department_id"] = new_dept_id
             update_fields["department_ids"] = [new_dept_id]
         else:
@@ -2717,10 +2770,19 @@ async def create_department(payload: DepartmentCreate, current_user: dict = Depe
     })
     if existing:
         raise HTTPException(status_code=400, detail="A department with this name already exists")
+
+    await _assert_subscription_not_expired(org_id)
+    dept_count = await db.departments.count_documents({"org_id": org_id})
+    caps = await _get_org_caps(org_id)
+    if caps.get("max_department") is not None and dept_count >= caps["max_department"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Maximum {caps['max_department']} department(s) allowed on your current plan. Contact your platform admin to upgrade.",
+        )
+
     if payload.color:
         color = payload.color
     else:
-        dept_count = await db.departments.count_documents({"org_id": org_id})
         color = DEPARTMENT_COLOR_PALETTE[dept_count % len(DEPARTMENT_COLOR_PALETTE)]
     doc = {"org_id": org_id, "name": payload.name, "color": color, "created_at": datetime.utcnow()}
     result = await db.departments.insert_one(doc)
@@ -2730,13 +2792,15 @@ async def create_department(payload: DepartmentCreate, current_user: dict = Depe
 @api_router.get("/departments")
 async def list_departments(current_user: dict = Depends(get_current_user)):
     """Any org member can list departments (needed for invite/assignment pickers)."""
-    if current_user.get("is_super_admin"):
-        raise HTTPException(status_code=400, detail="super_admin must act within an organization context")
     org_id = current_user.get("org_id")
-    if not org_id:
-        raise HTTPException(status_code=400, detail="Your account is not linked to an organization")
+    query: Dict[str, Any] = {}
+    if not current_user.get("is_super_admin"):
+        if not org_id:
+            return {"departments": []}
+        query["org_id"] = org_id
+
     departments = []
-    async for d in db.departments.find({"org_id": org_id}).sort("name", 1):
+    async for d in db.departments.find(query).sort("name", 1):
         departments.append({
             "id": str(d["_id"]),
             "name": d["name"],
@@ -2977,9 +3041,39 @@ async def _assert_phase_edit_allowed(proc: dict, current_user: dict, phase_num: 
     )
 
 
-def _serialize_referral(r: dict) -> dict:
+async def _serialize_referral(r: dict) -> dict:
     r = dict(r)
     r["id"] = str(r.pop("_id"))
+
+    # 1. Populate from_department_name if missing
+    if not r.get("from_department_name") and r.get("from_department_id"):
+        try:
+            f_dept_id = r["from_department_id"]
+            f_dept_oid = ObjectId(f_dept_id) if ObjectId.is_valid(f_dept_id) else f_dept_id
+            f_dept = await db.departments.find_one({"_id": f_dept_oid})
+            if f_dept:
+                r["from_department_name"] = f_dept.get("name")
+        except Exception:
+            pass
+
+    # 2. Populate treating student & supervisor in originating department
+    if r.get("case_id"):
+        try:
+            proc_id = r["case_id"]
+            proc_oid = ObjectId(proc_id) if ObjectId.is_valid(proc_id) else proc_id
+            proc = await db.procedures.find_one({"_id": proc_oid})
+            if proc:
+                r["from_student_name"] = proc.get("original_student_name") or proc.get("student_name") or r.get("requested_by_name")
+                r["from_supervisor_name"] = proc.get("original_supervisor_name") or proc.get("supervisor_name")
+                if not r.get("from_department_name") and proc.get("department_id"):
+                    d_id = proc["department_id"]
+                    d_oid = ObjectId(d_id) if ObjectId.is_valid(d_id) else d_id
+                    d_obj = await db.departments.find_one({"_id": d_oid})
+                    if d_obj:
+                        r["from_department_name"] = d_obj.get("name")
+        except Exception:
+            pass
+
     return r
 
 
@@ -3212,24 +3306,24 @@ async def list_pending_my_approval(current_user: dict = Depends(get_current_user
     query: Dict[str, Any] = {"org_id": org_id, "status": {"$in": list(REFERRAL_INTERNAL_APPROVAL_STATUSES)}}
     if not current_user.get("is_admin"):
         query["approver_ids"] = current_user["_id"]
-    referrals = [_serialize_referral(r) async for r in db.case_referrals.find(query).sort("requested_at", -1)]
+    referrals = [await _serialize_referral(r) async for r in db.case_referrals.find(query).sort("requested_at", -1)]
     return {"referrals": referrals}
 
 
 @api_router.get("/referrals/incoming")
 async def list_incoming_referrals(current_user: dict = Depends(get_current_user)):
     if current_user.get("role") not in REFERRAL_MANAGE_ROLES:
-        raise HTTPException(status_code=403, detail="Only Implant In-Charge / Administrator can view referrals")
+        return {"referrals": []}
     org_id = current_user.get("org_id")
     if not org_id:
-        raise HTTPException(status_code=400, detail="Your account is not linked to an organization")
+        return {"referrals": []}
     query: Dict[str, Any] = {"org_id": org_id, "status": {"$in": ["pending", "active"]}}
     if not current_user.get("is_admin"):
         dept_id = current_user.get("department_id")
         if not dept_id:
             return {"referrals": []}
         query["to_department_id"] = dept_id
-    referrals = [_serialize_referral(r) async for r in db.case_referrals.find(query).sort("requested_at", -1)]
+    referrals = [await _serialize_referral(r) async for r in db.case_referrals.find(query).sort("requested_at", -1)]
     return {"referrals": referrals}
 
 
@@ -3237,10 +3331,10 @@ async def list_incoming_referrals(current_user: dict = Depends(get_current_user)
 async def list_outgoing_referrals(current_user: dict = Depends(get_current_user)):
     role = current_user.get("role")
     if role not in REFERRAL_CREATE_ROLES:
-        raise HTTPException(status_code=403, detail="You don't have permission to view referrals")
+        return {"referrals": []}
     org_id = current_user.get("org_id")
     if not org_id:
-        raise HTTPException(status_code=400, detail="Your account is not linked to an organization")
+        return {"referrals": []}
     query: Dict[str, Any] = {"org_id": org_id}
     if role in ("student", "supervisor"):
         # Students/supervisors only track referrals they personally
@@ -3252,7 +3346,7 @@ async def list_outgoing_referrals(current_user: dict = Depends(get_current_user)
         if not dept_id:
             return {"referrals": []}
         query["from_department_id"] = dept_id
-    referrals = [_serialize_referral(r) async for r in db.case_referrals.find(query).sort("requested_at", -1)]
+    referrals = [await _serialize_referral(r) async for r in db.case_referrals.find(query).sort("requested_at", -1)]
     return {"referrals": referrals}
 
 
@@ -3266,7 +3360,7 @@ async def list_case_referrals(procedure_id: str, current_user: dict = Depends(ge
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
     await _assert_procedure_org_access(proc, current_user)
-    referrals = [_serialize_referral(r) async for r in db.case_referrals.find({"case_id": procedure_id}).sort("requested_at", -1)]
+    referrals = [await _serialize_referral(r) async for r in db.case_referrals.find({"case_id": procedure_id}).sort("requested_at", -1)]
     return {"referrals": referrals}
 
 
@@ -3349,6 +3443,26 @@ async def complete_referral(referral_id: str, payload: ReferralComplete, current
 
     now = datetime.utcnow()
     outcome = payload.outcome
+    if outcome == "transfer_further":
+        raise HTTPException(
+            status_code=400,
+            detail="Direct transfer further to third-party departments is disabled. Please return the case to the primary department with transfer notes so they can transfer it further."
+        )
+
+    # Validate that the assigned phase is completed and approved before completing or returning the referral
+    if outcome in ("returned", "treatment_complete"):
+        assigned_phase_num = referral.get("assigned_phase_num")
+        if assigned_phase_num and referral.get("case_id"):
+            proc_id_str = referral["case_id"]
+            if ObjectId.is_valid(proc_id_str):
+                proc_doc = await db.procedures.find_one({"_id": ObjectId(proc_id_str)})
+                if proc_doc and _current_phase_index(proc_doc) < assigned_phase_num:
+                    phase_label = referral.get("assigned_phase") or f"Phase {assigned_phase_num}"
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Cannot complete or return referral: The assigned phase ({phase_label}) has not been completed and approved by the supervisor and incharge yet."
+                    )
+
     new_status = REFERRAL_OUTCOME_TO_STATUS[outcome]
     update: Dict[str, Any] = {
         "status": new_status,
@@ -3415,6 +3529,42 @@ async def complete_referral(referral_id: str, payload: ReferralComplete, current
         )
     else:
         await db.case_referrals.update_one({"_id": referral["_id"]}, {"$set": update, "$push": {"history": history_entry}})
+        # If returned, revert procedure's student_id and supervisor_id back to original student in Dept A
+        if outcome == "returned":
+            proc_id_str = referral.get("case_id")
+            if proc_id_str:
+                try:
+                    proc_obj_id = ObjectId(proc_id_str)
+                    proc_doc = await db.procedures.find_one({"_id": proc_obj_id})
+                    if proc_doc and proc_doc.get("original_student_id"):
+                        orig_stu_id = proc_doc["original_student_id"]
+                        orig_stu_oid = ObjectId(orig_stu_id) if ObjectId.is_valid(orig_stu_id) else orig_stu_id
+                        orig_student = await db.users.find_one({"_id": orig_stu_oid})
+
+                        update_proc: Dict[str, Any] = {
+                            "student_id": orig_stu_id,
+                            "student_name": orig_student.get("name") if orig_student else proc_doc.get("original_student_name"),
+                        }
+                        if proc_doc.get("original_supervisor_id"):
+                            orig_sup_id = proc_doc["original_supervisor_id"]
+                            orig_sup_oid = ObjectId(orig_sup_id) if ObjectId.is_valid(orig_sup_id) else orig_sup_id
+                            orig_supervisor = await db.users.find_one({"_id": orig_sup_oid})
+                            update_proc["supervisor_id"] = orig_sup_id
+                            update_proc["supervisor_name"] = orig_supervisor.get("name") if orig_supervisor else proc_doc.get("original_supervisor_name")
+
+                        await db.procedures.update_one({"_id": proc_obj_id}, {"$set": update_proc})
+
+                        # Notify original student
+                        await _notify_referral_event(
+                            [orig_stu_id],
+                            proc_id_str,
+                            proc_doc.get("patient_name"),
+                            "Referral Returned To You",
+                            f"The referred case for {proc_doc.get('patient_name', 'Patient')} has been returned to your department and re-assigned to you.",
+                            "referral_returned"
+                        )
+                except Exception as e:
+                    logger.error(f"Error reverting procedure student on referral return: {e}")
 
     notify_title = {
         "returned": "Case Returned", "treatment_complete": "Treatment Complete",
@@ -3430,6 +3580,171 @@ async def complete_referral(referral_id: str, payload: ReferralComplete, current
     if new_referral_id:
         resp["new_referral_id"] = new_referral_id
     return resp
+
+
+class ReferredCaseAssignRequest(BaseModel):
+    student_id: str = Field(..., max_length=100)
+    supervisor_id: str = Field(..., max_length=100)
+
+
+@api_router.post("/procedures/{procedure_id}/referral-assign")
+async def assign_referred_case(
+    procedure_id: str,
+    payload: ReferredCaseAssignRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Department Incharge assigns an incoming/active referred case to a student
+    and supervisor in their department (or assigns themselves as supervisor)."""
+    try:
+        obj_pid = ObjectId(procedure_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid procedure_id")
+
+    proc = await db.procedures.find_one({"_id": obj_pid})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    await _assert_procedure_org_access(proc, current_user)
+
+    role = current_user.get("role")
+    if role not in REFERRAL_MANAGE_ROLES:
+        raise HTTPException(status_code=403, detail="Only Implant Incharge or Admin can assign referred cases")
+
+    active_referral = await db.case_referrals.find_one({
+        "case_id": procedure_id,
+        "status": {"$in": ["pending", "active"]}
+    })
+
+    if not active_referral:
+        if not _dept_authority_matches(current_user, proc.get("department_id")):
+            raise HTTPException(status_code=403, detail="No active referral or department authority for this case")
+    else:
+        _assert_referral_org_and_authority(active_referral, current_user, "to_department_id")
+
+    # Fetch student
+    student_oid = ObjectId(payload.student_id) if ObjectId.is_valid(payload.student_id) else payload.student_id
+    student_user = await db.users.find_one({"_id": student_oid})
+    if not student_user or student_user.get("role") != "student":
+        raise HTTPException(status_code=400, detail="Selected student is invalid or not a student")
+
+    # Fetch supervisor
+    sup_oid = ObjectId(payload.supervisor_id) if ObjectId.is_valid(payload.supervisor_id) else payload.supervisor_id
+    sup_user = await db.users.find_one({"_id": sup_oid})
+    if not sup_user or sup_user.get("role") not in ("supervisor", "implant_incharge", "administrator"):
+        raise HTTPException(status_code=400, detail="Selected supervisor is invalid")
+
+    update_doc: Dict[str, Any] = {
+        "student_id": payload.student_id,
+        "student_name": student_user.get("name") or student_user.get("username"),
+        "supervisor_id": payload.supervisor_id,
+        "supervisor_name": sup_user.get("name") or sup_user.get("username"),
+    }
+    if not proc.get("original_student_id"):
+        update_doc["original_student_id"] = proc.get("student_id")
+        update_doc["original_student_name"] = proc.get("student_name")
+    if not proc.get("original_supervisor_id"):
+        update_doc["original_supervisor_id"] = proc.get("supervisor_id")
+        update_doc["original_supervisor_name"] = proc.get("supervisor_name")
+
+    await db.procedures.update_one({"_id": obj_pid}, {"$set": update_doc})
+
+    if active_referral and active_referral.get("status") == "pending":
+        now = datetime.utcnow()
+        await db.case_referrals.update_one({"_id": active_referral["_id"]}, {
+            "$set": {
+                "status": "active",
+                "assigned_student_id": payload.student_id,
+                "assigned_student_name": student_user.get("name"),
+                "assigned_supervisor_id": payload.supervisor_id,
+                "assigned_supervisor_name": sup_user.get("name"),
+                "responded_by_id": current_user["_id"],
+                "responded_by_name": current_user.get("name", ""),
+                "responded_at": now,
+            },
+            "$push": {
+                "history": {
+                    "event": "accepted_and_assigned",
+                    "by_id": current_user["_id"],
+                    "by_name": current_user.get("name", ""),
+                    "by_role": role,
+                    "at": now,
+                    "detail": f"Assigned to student {student_user.get('name')} and supervisor {sup_user.get('name')}",
+                }
+            }
+        })
+
+    await _notify_referral_event(
+        [payload.student_id, payload.supervisor_id],
+        procedure_id,
+        proc.get("patient_name"),
+        "Referred Case Assigned",
+        f"Case {proc.get('patient_name', 'Patient')} has been assigned to you by {current_user.get('name')}.",
+        "referral_assigned"
+    )
+
+    return {
+        "message": "Referred case assigned successfully",
+        "student_id": payload.student_id,
+        "student_name": update_doc["student_name"],
+        "supervisor_id": payload.supervisor_id,
+        "supervisor_name": update_doc["supervisor_name"],
+    }
+
+
+@api_router.get("/procedures/{procedure_id}/referral/eligible-assignees")
+async def get_referral_eligible_assignees(procedure_id: str, current_user: dict = Depends(get_current_user)):
+    """Returns eligible students and supervisors in the receiving department
+    for an active or incoming referral, including the department Incharge."""
+    try:
+        obj_pid = ObjectId(procedure_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid procedure_id")
+
+    proc = await db.procedures.find_one({"_id": obj_pid})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    await _assert_procedure_org_access(proc, current_user)
+    org_id = current_user.get("org_id")
+
+    active_referral = await db.case_referrals.find_one({
+        "case_id": procedure_id,
+        "status": {"$in": ["pending", "active"]}
+    })
+
+    target_dept_id = active_referral.get("to_department_id") if active_referral else proc.get("department_id")
+    if not target_dept_id:
+        target_dept_id = current_user.get("department_id")
+
+    query_students: Dict[str, Any] = {"org_id": org_id, "role": "student"}
+    query_supervisors: Dict[str, Any] = {"org_id": org_id, "role": {"$in": ["supervisor", "implant_incharge"]}}
+
+    if target_dept_id:
+        query_students["department_id"] = target_dept_id
+        query_supervisors["department_id"] = target_dept_id
+
+    students = []
+    async for u in db.users.find(query_students, {"name": 1, "username": 1}):
+        students.append({"id": str(u["_id"]), "name": u.get("name") or u.get("username") or "Unknown"})
+
+    supervisors = []
+    async for u in db.users.find(query_supervisors, {"name": 1, "username": 1, "role": 1}):
+        role_tag = " (Incharge)" if u.get("role") == "implant_incharge" else ""
+        is_me = " (Me)" if str(u["_id"]) == current_user["_id"] else ""
+        supervisors.append({
+            "id": str(u["_id"]),
+            "name": f"{u.get('name') or u.get('username') or 'Unknown'}{role_tag}{is_me}",
+            "role": u.get("role")
+        })
+
+    students.sort(key=lambda x: x["name"].lower())
+    supervisors.sort(key=lambda x: x["name"].lower())
+
+    return {
+        "students": students,
+        "supervisors": supervisors,
+        "department_id": target_dept_id
+    }
 
 
 @api_router.post("/referrals/{referral_id}/cancel")
@@ -3467,6 +3782,7 @@ async def _ensure_org_indexes() -> None:
         await db.procedures.create_index("org_id")
         await db.procedures.create_index("department_id")
         await db.case_referrals.create_index("case_id")
+        await db.org_subscriptions.create_index([("org_id", 1), ("started_at", -1)])
         await db.case_referrals.create_index([("to_department_id", 1), ("status", 1)])
         await db.case_referrals.create_index([("from_department_id", 1), ("status", 1)])
         await db.case_referrals.create_index([("approver_ids", 1), ("status", 1)])
@@ -3759,6 +4075,691 @@ async def update_scheduling_config(payload: SchedulingConfigUpdate, current_user
     return {"scheduling_config": cfg}
 
 
+# ── super_admin: Subscription Plan templates ──────────────────────────────
+# Two collections, deliberately separate:
+#   subscription_plans — the editable price/cap templates managed here.
+#   org_subscriptions   — (future) one snapshot per org, frozen at the moment
+#     they subscribe. Editing a template here must NEVER retroactively change
+#     an org's already-locked-in subscription — that's why org_subscriptions
+#     will store a full copy of the plan's terms, not a live reference.
+
+class SubscriptionPlanCreate(BaseModel):
+    key: str = Field(..., max_length=40, pattern="^[a-z0-9_]+$")
+    org_type: str = Field(..., pattern="^(college|clinic)$")
+    name: str = Field(..., max_length=100)
+    max_users: int = Field(..., ge=1, le=5000)
+    max_students: Optional[int] = Field(None, ge=0, le=5000)
+    max_department: Optional[int] = Field(None, ge=0, le=5000)
+    max_implant_incharges: Optional[int] = Field(None, ge=0, le=50)
+    price_monthly: float = Field(..., ge=0)
+    price_yearly: float = Field(..., ge=0)
+    launch_offer_first_year_price: Optional[float] = Field(None, ge=0)
+    active: bool = True
+
+
+class SubscriptionPlanUpdate(BaseModel):
+    name: Optional[str] = Field(None, max_length=100)
+    max_users: Optional[int] = Field(None, ge=1, le=5000)
+    max_students: Optional[int] = Field(None, ge=0, le=5000)
+    max_department: Optional[int] = Field(None, ge=0, le=5000)
+    max_implant_incharges: Optional[int] = Field(None, ge=0, le=50)
+    price_monthly: Optional[float] = Field(None, ge=0)
+    price_yearly: Optional[float] = Field(None, ge=0)
+    launch_offer_first_year_price: Optional[float] = Field(None, ge=0)
+    active: Optional[bool] = None
+
+
+def _require_super_admin(current_user: dict) -> None:
+    if not current_user.get("is_super_admin"):
+        raise HTTPException(status_code=403, detail="Only the platform super admin can manage subscription plans")
+
+
+def _serialize_plan(doc: dict) -> dict:
+    doc = dict(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.get("/subscription-plans")
+async def list_subscription_plans(current_user: dict = Depends(get_current_user)):
+    _require_super_admin(current_user)
+    plans = [_serialize_plan(p) async for p in db.subscription_plans.find({}).sort([("org_type", 1), ("price_monthly", 1)])]
+    return {"plans": plans}
+
+
+@api_router.get("/subscription-plans/available")
+async def list_available_subscription_plans(current_user: dict = Depends(get_current_user)):
+    """Org-facing (not super_admin-only) — active plans matching the
+    caller's own org_type, for the self-service upgrade-request picker.
+    Deliberately narrower than /subscription-plans: no inactive/retired
+    plans, no cross-org_type noise, no admin metadata like updated_by."""
+    org_id = current_user.get("org_id")
+    if not org_id:
+        raise HTTPException(status_code=400, detail="Your account is not linked to an organization")
+    org = await db.organizations.find_one({"_id": ObjectId(org_id)}, {"org_type": 1})
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    plans = []
+    async for p in db.subscription_plans.find(
+        {"org_type": org.get("org_type", "college"), "active": True},
+    ).sort("price_monthly", 1):
+        plans.append({
+            "key": p["key"], "name": p["name"], "max_users": p.get("max_users"),
+            "max_students": p.get("max_students"), "max_department": p.get("max_department"),
+            "max_implant_incharges": p.get("max_implant_incharges"),
+            "price_monthly": p["price_monthly"], "price_yearly": p["price_yearly"],
+            "launch_offer_first_year_price": p.get("launch_offer_first_year_price"),
+        })
+    return {"plans": plans}
+
+
+@api_router.post("/subscription-plans")
+async def create_subscription_plan(payload: SubscriptionPlanCreate, current_user: dict = Depends(get_current_user)):
+    _require_super_admin(current_user)
+    if await db.subscription_plans.find_one({"key": payload.key}, {"_id": 1}):
+        raise HTTPException(status_code=400, detail=f"Plan key '{payload.key}' already exists")
+    now = datetime.now(timezone.utc).isoformat()
+    doc = payload.model_dump()
+    doc["created_at"] = now
+    doc["updated_at"] = now
+    doc["updated_by"] = current_user.get("name") or current_user.get("email")
+    await db.subscription_plans.insert_one(doc)
+    return _serialize_plan(doc)
+
+
+@api_router.put("/subscription-plans/{key}")
+async def update_subscription_plan(key: str, payload: SubscriptionPlanUpdate, current_user: dict = Depends(get_current_user)):
+    _require_super_admin(current_user)
+    existing = await db.subscription_plans.find_one({"key": key})
+    if not existing:
+        raise HTTPException(status_code=404, detail=f"Plan '{key}' not found")
+    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+    updates["updated_by"] = current_user.get("name") or current_user.get("email")
+    await db.subscription_plans.update_one({"key": key}, {"$set": updates})
+    doc = await db.subscription_plans.find_one({"key": key})
+    return _serialize_plan(doc)
+
+
+@api_router.delete("/subscription-plans/{key}")
+async def delete_subscription_plan(key: str, current_user: dict = Depends(get_current_user)):
+    _require_super_admin(current_user)
+    in_use = await db.org_subscriptions.count_documents({"plan_key": key, "status": "active"}) if "org_subscriptions" in await db.list_collection_names() else 0
+    if in_use:
+        raise HTTPException(status_code=400, detail=f"{in_use} organization(s) are actively subscribed to this plan — deactivate it instead of deleting")
+    result = await db.subscription_plans.delete_one({"key": key})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail=f"Plan '{key}' not found")
+    return {"message": "Plan deleted"}
+
+
+LAUNCH_OFFER_PLANS_SEED = [
+    {
+        "key": "dept_essential", "org_type": "college", "name": "Department Essential",
+        "max_users": 30, "max_students": 25, "max_department": 5, "max_implant_incharges": 1,
+        "price_monthly": 6000, "price_yearly": 60000, "launch_offer_first_year_price": 50000,
+    },
+    {
+        "key": "college_professional", "org_type": "college", "name": "College Professional",
+        "max_users": 85, "max_students": 75, "max_department": 10, "max_implant_incharges": 1,
+        "price_monthly": 15000, "price_yearly": 150000, "launch_offer_first_year_price": 125000,
+    },
+    {
+        "key": "college_enterprise", "org_type": "college", "name": "College Enterprise",
+        "max_users": 150, "max_students": 130, "max_department": 20, "max_implant_incharges": 2,
+        "price_monthly": 25000, "price_yearly": 250000, "launch_offer_first_year_price": 200000,
+    },
+    {
+        "key": "clinic_starter", "org_type": "clinic", "name": "Dental Clinic Starter",
+        "max_users": 3, "max_students": None, "max_department": None, "max_implant_incharges": 1,
+        "price_monthly": 2999, "price_yearly": 29999, "launch_offer_first_year_price": 25000,
+    },
+    {
+        "key": "clinic_professional", "org_type": "clinic", "name": "Dental Clinic Professional",
+        "max_users": 6, "max_students": None, "max_department": None, "max_implant_incharges": 1,
+        "price_monthly": 4999, "price_yearly": 49999, "launch_offer_first_year_price": 40000,
+    },
+    {
+        "key": "clinic_premium", "org_type": "clinic", "name": "Dental Clinic Premium",
+        "max_users": 15, "max_students": None, "max_department": None, "max_implant_incharges": 1,
+        "price_monthly": 7999, "price_yearly": 79000, "launch_offer_first_year_price": 65000,
+    },
+]
+
+
+async def _seed_subscription_plans() -> None:
+    """Idempotent seed of the launch-offer plan set. Mirrors the
+    implant_catalog seed's admin-edit-respecting behavior: never overwrites a
+    plan an admin has already edited (updated_by != 'seed')."""
+    now = datetime.now(timezone.utc).isoformat()
+    for plan in LAUNCH_OFFER_PLANS_SEED:
+        existing = await db.subscription_plans.find_one({"key": plan["key"]}, {"updated_by": 1, "_id": 0})
+        if existing and existing.get("updated_by") not in (None, "", "seed"):
+            continue
+        doc = {**plan, "active": True, "updated_at": now, "updated_by": "seed"}
+        await db.subscription_plans.update_one(
+            {"key": plan["key"]}, {"$set": doc, "$setOnInsert": {"created_at": now}}, upsert=True,
+        )
+
+
+# ── super_admin: Free Trial settings (single global doc, applies to both
+# college and clinic org types) ───────────────────────────────────────────
+# Stored separately from subscription_plans (a trial isn't priced/sellable),
+# but configured with the exact same lever set as a real plan — days plus
+# every cap — so admin has full control over what a trial actually grants.
+# Singleton doc keyed by a fixed _id.
+
+TRIAL_SETTINGS_DEFAULTS = {
+    "enabled": True,
+    "trial_days": 14,
+    "max_users": None,
+    "max_students": None,
+    "max_department": None,
+    "max_implant_incharges": 2,
+}
+
+
+class TrialSettingsUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    trial_days: Optional[int] = Field(None, ge=1, le=365)
+    max_users: Optional[int] = Field(None, ge=1, le=5000)
+    max_students: Optional[int] = Field(None, ge=0, le=5000)
+    max_department: Optional[int] = Field(None, ge=0, le=5000)
+    max_implant_incharges: Optional[int] = Field(None, ge=0, le=50)
+
+
+def _serialize_trial(doc: dict) -> dict:
+    return {k: doc.get(k, default) for k, default in TRIAL_SETTINGS_DEFAULTS.items()}
+
+
+@api_router.get("/trial-settings")
+async def get_trial_settings(current_user: dict = Depends(get_current_user)):
+    _require_super_admin(current_user)
+    doc = await db.platform_settings.find_one({"_id": "trial"}) or {}
+    return _serialize_trial(doc)
+
+
+@api_router.put("/trial-settings")
+async def update_trial_settings(payload: TrialSettingsUpdate, current_user: dict = Depends(get_current_user)):
+    _require_super_admin(current_user)
+    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+    updates["updated_by"] = current_user.get("name") or current_user.get("email")
+    await db.platform_settings.update_one({"_id": "trial"}, {"$set": updates}, upsert=True)
+    doc = await db.platform_settings.find_one({"_id": "trial"})
+    return _serialize_trial(doc)
+
+
+async def _seed_trial_settings() -> None:
+    """Only creates the doc if missing — never overwrites, so an admin's
+    saved trial config is permanent once set."""
+    await db.platform_settings.update_one(
+        {"_id": "trial"},
+        {"$setOnInsert": {**TRIAL_SETTINGS_DEFAULTS, "created_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
+
+
+# ── org_subscriptions: per-org subscription record ────────────────────────
+# One doc per org (most recent = current). Two ways it gets here:
+#   1. Auto-created as a "trial" doc at signup (see workspace_signup) using
+#      whatever /trial-settings says at that moment — snapshotted, so a later
+#      change to the global trial length doesn't shrink/extend a trial
+#      already in progress.
+#   2. super_admin assigns a real subscription_plans entry (also a snapshot —
+#      editing the plan template afterward never touches this doc), or
+#      directly overrides this org's caps without picking a template plan at
+#      all (e.g. "give this specific college 3 implant in-charges instead of
+#      the plan's default 2").
+#
+# Enforcement: _get_org_caps() is the single source of truth read by
+# create_user/invite for the max-users and max-implant-incharge checks. Orgs
+# with no org_subscriptions doc at all (pre-dating this feature) fall back to
+# the old hardcoded behavior (unlimited users, max 2 incharges) so nothing
+# existing breaks.
+
+DEFAULT_ORG_CAPS = {"max_users": None, "max_students": None, "max_department": None, "max_implant_incharges": 2}
+
+TRIAL_LOW_WARNING_DAYS = 3
+
+
+def _parse_iso_dt(s: str) -> datetime:
+    """org_subscriptions timestamps have been written by both
+    datetime.utcnow() (naive) and datetime.now(timezone.utc) (aware) across
+    this feature's history — normalize naive as UTC so comparisons never
+    raise "can't compare offset-naive and offset-aware datetimes"."""
+    dt = datetime.fromisoformat(s)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+async def _notify_trial_low(org_id: str, days_left: int) -> None:
+    founder = await db.users.find_one({"org_id": org_id, "is_admin": True})
+    if not founder or not founder.get("email"):
+        return
+    org = await db.organizations.find_one({"_id": ObjectId(org_id)}, {"name": 1})
+    org_name = org.get("name") if org else None
+    org_name = org_name or "your organization"
+    day_word = "day" if days_left == 1 else "days"
+    subject = f"Your Implanr free trial ends in {days_left} {day_word}"
+    text = (
+        f"Hi,\n\n{org_name}'s free trial on Implanr ends in {days_left} {day_word}. "
+        "Contact your platform admin to activate a paid plan and avoid any interruption to adding new users.\n\n— Implanr"
+    )
+    html = (
+        f"<p>Hi,</p><p><b>{org_name}</b>'s free trial on Implanr ends in <b>{days_left} {day_word}</b>.</p>"
+        "<p>Contact your platform admin to activate a paid plan and avoid any interruption to adding new users.</p><p>— Implanr</p>"
+    )
+    await _send_smtp_email(founder["email"], subject, html, text, log_tag="trial_low")
+
+
+async def _notify_trial_expired(org_id: str) -> None:
+    founder = await db.users.find_one({"org_id": org_id, "is_admin": True})
+    if not founder or not founder.get("email"):
+        return
+    org = await db.organizations.find_one({"_id": ObjectId(org_id)}, {"name": 1})
+    org_name = org.get("name") if org else None
+    org_name = org_name or "your organization"
+    subject = "Your Implanr free trial has ended"
+    text = (
+        f"Hi,\n\n{org_name}'s free trial on Implanr has ended. Existing users can still log in, but no new users "
+        "can be added until a plan is activated. Contact your platform admin to continue.\n\n— Implanr"
+    )
+    html = (
+        f"<p>Hi,</p><p><b>{org_name}</b>'s free trial on Implanr has ended.</p>"
+        "<p>Existing users can still log in, but no new users can be added until a plan is activated. "
+        "Contact your platform admin to continue.</p><p>— Implanr</p>"
+    )
+    await _send_smtp_email(founder["email"], subject, html, text, log_tag="trial_expired")
+
+
+async def _get_current_org_subscription(org_id: str) -> Optional[dict]:
+    """Single read path for an org's subscription doc. Lazily flips a trial
+    to 'expired' the moment anything reads it after trial_ends_at has
+    passed — no cron needed, it self-heals on next access (login, user
+    creation, the subscription screen, etc. all go through here). Also
+    fires the "trial running low" / "trial expired" emails exactly once
+    each, tracked via low_trial_notified/expiry_notified flags on the doc.
+    Active/paid plans have no date-based expiry yet (no recurring billing
+    wired up), so only 'trial' auto-expires here."""
+    doc = await db.org_subscriptions.find_one({"org_id": org_id}, sort=[("started_at", -1)])
+    if not doc:
+        return None
+    if doc.get("status") == "trial" and doc.get("trial_ends_at"):
+        try:
+            ends_at = _parse_iso_dt(doc["trial_ends_at"])
+        except (ValueError, TypeError):
+            return doc
+        now = datetime.now(timezone.utc)
+        if ends_at < now:
+            now_iso = now.isoformat()
+            updates: Dict[str, Any] = {"status": "expired", "updated_at": now_iso, "updated_by": "system"}
+            history_entry = {"event": "trial_expired", "at": now_iso, "by": "system", "detail": "Trial period ended"}
+            if not doc.get("expiry_notified"):
+                updates["expiry_notified"] = True
+                asyncio.create_task(_notify_trial_expired(org_id))
+            await db.org_subscriptions.update_one(
+                {"_id": doc["_id"]}, {"$set": updates, "$push": {"history": history_entry}},
+            )
+            doc.update(updates)
+            doc.setdefault("history", []).append(history_entry)
+        else:
+            days_left = (ends_at - now).days
+            if days_left <= TRIAL_LOW_WARNING_DAYS and not doc.get("low_trial_notified"):
+                await db.org_subscriptions.update_one({"_id": doc["_id"]}, {"$set": {"low_trial_notified": True}})
+                doc["low_trial_notified"] = True
+                asyncio.create_task(_notify_trial_low(org_id, max(0, days_left)))
+    return doc
+
+
+async def _assert_subscription_not_expired(org_id: str) -> None:
+    doc = await _get_current_org_subscription(org_id)
+    if doc and doc.get("status") in ("expired", "cancelled"):
+        label = "free trial" if doc.get("plan_key") is None else "subscription"
+        raise HTTPException(
+            status_code=403,
+            detail=f"Your organization's {label} has expired. Existing users can still log in, but no new users can be added until your platform admin renews it.",
+        )
+
+
+async def _get_org_caps(org_id: str) -> dict:
+    sub = await _get_current_org_subscription(org_id)
+    if not sub:
+        return dict(DEFAULT_ORG_CAPS)
+    return {
+        "max_users": sub.get("max_users"),
+        "max_students": sub.get("max_students"),
+        "max_department": sub.get("max_department"),
+        "max_implant_incharges": sub.get("max_implant_incharges") if sub.get("max_implant_incharges") is not None else 2,
+    }
+
+
+class OrgSubscriptionOverride(BaseModel):
+    plan_key: Optional[str] = Field(None, max_length=40)
+    billing_cycle: Optional[str] = Field(None, pattern="^(monthly|yearly)$")
+    is_launch_offer: Optional[bool] = None
+    max_users: Optional[int] = Field(None, ge=1, le=5000)
+    max_students: Optional[int] = Field(None, ge=0, le=5000)
+    max_department: Optional[int] = Field(None, ge=0, le=5000)
+    max_implant_incharges: Optional[int] = Field(None, ge=0, le=50)
+    status: Optional[str] = Field(None, pattern="^(trial|active|expired|cancelled)$")
+    # Per-org trial override — independent of the global /trial-settings
+    # default. Setting this (re)starts/extends a trial for THIS org only,
+    # counted from now: trial_ends_at = now + trial_days.
+    trial_days: Optional[int] = Field(None, ge=1, le=365)
+
+
+def _serialize_org_sub(doc: Optional[dict], org_id: str) -> dict:
+    if not doc:
+        return {"org_id": org_id, "status": "none", "plan_key": None, "plan_name": None, **DEFAULT_ORG_CAPS}
+    doc = dict(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.get("/organizations/me/subscription")
+async def get_my_org_subscription(current_user: dict = Depends(get_current_user)):
+    """Any org member's own view of their org's subscription — status, caps,
+    and current usage against those caps. Powers the Subscription screen
+    reachable from Profile. Scoped strictly to the caller's own org_id.
+    Registered before /organizations/{org_id}/subscription so "me" doesn't
+    get swallowed as a literal org_id by that dynamic route."""
+    org_id = current_user.get("org_id")
+    if not org_id:
+        raise HTTPException(status_code=400, detail="Your account is not linked to an organization")
+    org = await db.organizations.find_one({"_id": ObjectId(org_id)})
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    sub = await _get_current_org_subscription(org_id)
+    data = _serialize_org_sub(sub, org_id)
+
+    org_type = org.get("org_type", "college")
+    incharge_role = "chief_dentist" if org_type == "clinic" else "implant_incharge"
+    total_users = await db.users.count_documents({"org_id": org_id})
+    # The org founder DOES count as an incharge/chief_dentist — self-appointed
+    # into that role from day one. "department" is a real count of created
+    # departments (db.departments), not a role/headcount — max_users already
+    # covers total headcount, so this isn't a duplicate of that.
+    incharge_count = await db.users.count_documents({"org_id": org_id, "role": incharge_role})
+    student_count = (
+        await db.users.count_documents({"org_id": org_id, "role": "student"}) if org_type == "college" else 0
+    )
+    department_count = await db.departments.count_documents({"org_id": org_id})
+
+    data["org_type"] = org_type
+    data["org_name"] = org.get("name")
+    data["usage"] = {
+        "users": total_users,
+        "implant_incharges": incharge_count,
+        "students": student_count,
+        "department": department_count,
+    }
+    return data
+
+
+@api_router.get("/organizations/{org_id}/subscription")
+async def get_org_subscription(org_id: str, current_user: dict = Depends(get_current_user)):
+    _require_super_admin(current_user)
+    if not await db.organizations.find_one({"_id": ObjectId(org_id)}, {"_id": 1}):
+        raise HTTPException(status_code=404, detail="Organization not found")
+    sub = await _get_current_org_subscription(org_id)
+    return _serialize_org_sub(sub, org_id)
+
+
+@api_router.put("/organizations/{org_id}/subscription")
+async def update_org_subscription(org_id: str, payload: OrgSubscriptionOverride, current_user: dict = Depends(get_current_user)):
+    _require_super_admin(current_user)
+    if not await db.organizations.find_one({"_id": ObjectId(org_id)}, {"_id": 1}):
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    existing = await db.org_subscriptions.find_one({"org_id": org_id}, sort=[("started_at", -1)])
+    now = datetime.now(timezone.utc)
+    who = current_user.get("name") or current_user.get("email")
+
+    if payload.plan_key:
+        plan = await db.subscription_plans.find_one({"key": payload.plan_key})
+        if not plan:
+            raise HTTPException(status_code=404, detail=f"Plan '{payload.plan_key}' not found")
+        billing_cycle = payload.billing_cycle or "monthly"
+        is_launch = bool(payload.is_launch_offer) and plan.get("launch_offer_first_year_price") is not None
+        price = (
+            plan["launch_offer_first_year_price"] if is_launch
+            else plan["price_yearly"] if billing_cycle == "yearly"
+            else plan["price_monthly"]
+        )
+        history = list(existing.get("history", [])) if existing else []
+        history.append({
+            "event": "plan_assigned", "at": now.isoformat(), "by": who,
+            "detail": f"Assigned to {plan['name']} ({billing_cycle})" + (" — launch offer" if is_launch else ""),
+        })
+        new_doc = {
+            "org_id": org_id,
+            "status": "active",
+            "plan_key": plan["key"],
+            "plan_name": plan["name"],
+            "billing_cycle": billing_cycle,
+            "is_launch_offer": is_launch,
+            "price_locked_in": price,
+            "max_users": payload.max_users if payload.max_users is not None else plan.get("max_users"),
+            "max_students": payload.max_students if payload.max_students is not None else plan.get("max_students"),
+            "max_department": payload.max_department if payload.max_department is not None else plan.get("max_department"),
+            "max_implant_incharges": payload.max_implant_incharges if payload.max_implant_incharges is not None else plan.get("max_implant_incharges"),
+            "started_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+            "updated_by": who,
+            "history": history,
+        }
+        if existing:
+            # Assigning a plan (whether or not it matches what was requested)
+            # resolves any pending self-service upgrade request.
+            await db.org_subscriptions.update_one(
+                {"_id": existing["_id"]},
+                {
+                    "$set": new_doc,
+                    "$unset": {
+                        "requested_plan_key": "", "requested_billing_cycle": "",
+                        "requested_at": "", "requested_by": "",
+                    },
+                },
+            )
+        else:
+            await db.org_subscriptions.insert_one(new_doc)
+    else:
+        payload_dict = payload.model_dump()
+        trial_days_override = payload_dict.pop("trial_days", None)
+        cap_updates = {
+            k: v for k, v in payload_dict.items()
+            if v is not None and k not in ("plan_key",)
+        }
+
+        if trial_days_override is not None:
+            # Grants/extends a trial for THIS org specifically — works even
+            # for a legacy org with no subscription doc yet (trial was off
+            # globally when they signed up, or they pre-date this feature).
+            trial_ends_at = (now + timedelta(days=trial_days_override)).isoformat()
+            if existing:
+                updates = {
+                    **cap_updates, "trial_days": trial_days_override, "trial_ends_at": trial_ends_at,
+                    "status": "trial", "updated_at": now.isoformat(), "updated_by": who,
+                }
+                history_entry = {
+                    "event": "trial_overridden", "at": now.isoformat(), "by": who,
+                    "detail": f"Trial set to {trial_days_override} day(s) from now",
+                }
+                await db.org_subscriptions.update_one(
+                    {"_id": existing["_id"]}, {"$set": updates, "$push": {"history": history_entry}},
+                )
+            else:
+                new_doc = {
+                    "org_id": org_id, "status": "trial", "plan_key": None, "plan_name": "Free Trial",
+                    "billing_cycle": None, "is_launch_offer": False, "price_locked_in": 0,
+                    "max_users": cap_updates.get("max_users"),
+                    "max_students": cap_updates.get("max_students"),
+                    "max_department": cap_updates.get("max_department"),
+                    "max_implant_incharges": cap_updates.get("max_implant_incharges", 2),
+                    "trial_days": trial_days_override, "started_at": now.isoformat(), "trial_ends_at": trial_ends_at,
+                    "updated_at": now.isoformat(), "updated_by": who,
+                    "history": [{
+                        "event": "trial_overridden", "at": now.isoformat(), "by": who,
+                        "detail": f"Trial started by admin ({trial_days_override} day(s))",
+                    }],
+                }
+                await db.org_subscriptions.insert_one(new_doc)
+        else:
+            if not existing:
+                raise HTTPException(status_code=400, detail="No existing subscription for this org — assign a plan_key first")
+            if not cap_updates:
+                raise HTTPException(status_code=400, detail="No fields to update")
+            updates = {**cap_updates, "updated_at": now.isoformat(), "updated_by": who}
+            history_entry = {
+                "event": "caps_overridden", "at": now.isoformat(), "by": who,
+                "detail": ", ".join(f"{k}={v}" for k, v in cap_updates.items()),
+            }
+            await db.org_subscriptions.update_one(
+                {"_id": existing["_id"]}, {"$set": updates, "$push": {"history": history_entry}},
+            )
+
+    doc = await db.org_subscriptions.find_one({"org_id": org_id}, sort=[("started_at", -1)])
+    return _serialize_org_sub(doc, org_id)
+
+
+# ── Self-service upgrade requests — org admin picks a plan, super_admin
+# approves (via the assign-plan PUT above, which auto-clears the request) or
+# dismisses it. No payment is collected here — this only records intent so
+# an org isn't just granted whatever paid tier it wants for free.
+
+class UpgradeRequestCreate(BaseModel):
+    plan_key: str = Field(..., max_length=40)
+    billing_cycle: str = Field("monthly", pattern="^(monthly|yearly)$")
+
+
+def _require_org_admin_simple(current_user: dict) -> str:
+    org_id = current_user.get("org_id")
+    if not org_id:
+        raise HTTPException(status_code=400, detail="Your account is not linked to an organization")
+    if not current_user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Only the organization admin can manage the subscription")
+    return org_id
+
+
+@api_router.post("/organizations/me/subscription/request-upgrade")
+async def request_subscription_upgrade(payload: UpgradeRequestCreate, current_user: dict = Depends(get_current_user)):
+    org_id = _require_org_admin_simple(current_user)
+    org = await db.organizations.find_one({"_id": ObjectId(org_id)}, {"org_type": 1})
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    plan = await db.subscription_plans.find_one({"key": payload.plan_key, "active": True})
+    if not plan:
+        raise HTTPException(status_code=404, detail=f"Plan '{payload.plan_key}' not found or no longer available")
+    if plan.get("org_type") != org.get("org_type"):
+        raise HTTPException(status_code=400, detail="That plan isn't available for your organization type")
+
+    now = datetime.now(timezone.utc)
+    who = current_user.get("name") or current_user.get("email")
+    existing = await db.org_subscriptions.find_one({"org_id": org_id}, sort=[("started_at", -1)])
+    history_entry = {
+        "event": "upgrade_requested", "at": now.isoformat(), "by": who,
+        "detail": f"Requested {plan['name']} ({payload.billing_cycle})",
+    }
+    updates = {
+        "requested_plan_key": payload.plan_key,
+        "requested_plan_name": plan["name"],
+        "requested_billing_cycle": payload.billing_cycle,
+        "requested_at": now.isoformat(),
+        "requested_by": who,
+    }
+    if existing:
+        await db.org_subscriptions.update_one(
+            {"_id": existing["_id"]}, {"$set": updates, "$push": {"history": history_entry}},
+        )
+    else:
+        await db.org_subscriptions.insert_one({
+            "org_id": org_id, "status": "none", "plan_key": None, "plan_name": None,
+            **DEFAULT_ORG_CAPS, "started_at": now.isoformat(),
+            "updated_at": now.isoformat(), "updated_by": who,
+            "history": [history_entry], **updates,
+        })
+    return {"message": f"Upgrade request for {plan['name']} sent to your platform admin"}
+
+
+@api_router.post("/organizations/me/subscription/cancel-request")
+async def cancel_my_upgrade_request(current_user: dict = Depends(get_current_user)):
+    org_id = _require_org_admin_simple(current_user)
+    existing = await db.org_subscriptions.find_one({"org_id": org_id}, sort=[("started_at", -1)])
+    if not existing or not existing.get("requested_plan_key"):
+        raise HTTPException(status_code=400, detail="No pending upgrade request to cancel")
+    now = datetime.now(timezone.utc)
+    who = current_user.get("name") or current_user.get("email")
+    history_entry = {"event": "upgrade_request_cancelled", "at": now.isoformat(), "by": who, "detail": "Cancelled by org admin"}
+    await db.org_subscriptions.update_one(
+        {"_id": existing["_id"]},
+        {
+            "$unset": {"requested_plan_key": "", "requested_plan_name": "", "requested_billing_cycle": "", "requested_at": "", "requested_by": ""},
+            "$push": {"history": history_entry},
+        },
+    )
+    return {"message": "Upgrade request cancelled"}
+
+
+@api_router.post("/organizations/{org_id}/subscription/dismiss-request")
+async def dismiss_org_upgrade_request(org_id: str, current_user: dict = Depends(get_current_user)):
+    _require_super_admin(current_user)
+    existing = await db.org_subscriptions.find_one({"org_id": org_id}, sort=[("started_at", -1)])
+    if not existing or not existing.get("requested_plan_key"):
+        raise HTTPException(status_code=400, detail="No pending upgrade request for this org")
+    now = datetime.now(timezone.utc)
+    who = current_user.get("name") or current_user.get("email")
+    history_entry = {"event": "upgrade_request_dismissed", "at": now.isoformat(), "by": who, "detail": "Dismissed by platform admin"}
+    await db.org_subscriptions.update_one(
+        {"_id": existing["_id"]},
+        {
+            "$unset": {"requested_plan_key": "", "requested_plan_name": "", "requested_billing_cycle": "", "requested_at": "", "requested_by": ""},
+            "$push": {"history": history_entry},
+        },
+    )
+    return {"message": "Upgrade request dismissed"}
+
+
+# ── super_admin: platform-wide rollup for the standalone super_admin dashboard ──
+
+@api_router.get("/platform/summary")
+async def get_platform_summary(current_user: dict = Depends(get_current_user)):
+    """Total colleges/clinics/orgs, total users (by role), total cases —
+    super_admin only. Feeds the top-level nav-card dashboard, not any
+    per-org drill-down (see /organizations/details for that)."""
+    if not current_user.get("is_super_admin"):
+        raise HTTPException(status_code=403, detail="Only super admin can view the platform summary")
+
+    total_orgs = await db.organizations.count_documents({})
+    colleges = await db.organizations.count_documents({"org_type": "college"})
+    clinics = await db.organizations.count_documents({"org_type": "clinic"})
+
+    total_users = await db.users.count_documents({})
+    role_counts: Dict[str, int] = {}
+    async for doc in db.users.aggregate([{"$group": {"_id": "$role", "count": {"$sum": 1}}}]):
+        role_counts[doc.get("_id") or "unknown"] = doc["count"]
+
+    total_cases = await db.procedures.count_documents({"archived": {"$ne": True}})
+    completed_cases = await db.procedures.count_documents({"status": "completed", "archived": {"$ne": True}})
+
+    return {
+        "organizations": {
+            "total": total_orgs,
+            "colleges": colleges,
+            "clinics": clinics,
+            "other": max(0, total_orgs - colleges - clinics),
+        },
+        "users": {"total": total_users, "by_role": role_counts},
+        "cases": {"total": total_cases, "completed": completed_cases},
+    }
+
+
 # ── super_admin: list all organizations (for the cross-org "Add User" picker) ──
 
 @api_router.get("/organizations")
@@ -4032,6 +5033,40 @@ async def workspace_signup(payload: WorkspaceSignup):
     org_result = await db.organizations.insert_one(org_doc)
     org_id = str(org_result.inserted_id)
 
+    # Free trial — auto-activated on signup per the global /trial-settings
+    # config, applies the same way to both college and clinic. Snapshotted
+    # (trial_days copied in) so a later change to the global setting doesn't
+    # shrink/extend a trial already in progress.
+    trial_cfg = await db.platform_settings.find_one({"_id": "trial"}) or {}
+    if trial_cfg.get("enabled", True):
+        trial_days = trial_cfg.get("trial_days", 14)
+        trial_end = now + timedelta(days=trial_days)
+        await db.org_subscriptions.insert_one({
+            "org_id": org_id,
+            "status": "trial",
+            "plan_key": None,
+            "plan_name": "Free Trial",
+            "billing_cycle": None,
+            "is_launch_offer": False,
+            "price_locked_in": 0,
+            # Caps come from the admin-configured trial template, not the
+            # org's self-declared num_users — the trial behaves exactly
+            # like any other plan (admin sets the numbers, org gets them).
+            "max_users": trial_cfg.get("max_users"),
+            "max_students": trial_cfg.get("max_students"),
+            "max_department": trial_cfg.get("max_department"),
+            "max_implant_incharges": trial_cfg.get("max_implant_incharges", 2),
+            "trial_days": trial_days,
+            "started_at": now.isoformat(),
+            "trial_ends_at": trial_end.isoformat(),
+            "updated_at": now.isoformat(),
+            "updated_by": "system",
+            "history": [{
+                "event": "trial_started", "at": now.isoformat(), "by": "system",
+                "detail": f"{trial_days}-day free trial",
+            }],
+        })
+
     user_doc = {
         "name": full_name,
         "email": payload.email,
@@ -4104,15 +5139,24 @@ async def send_invite(payload: InviteCreate, current_user: dict = Depends(get_cu
 
     department_id = await _resolve_department_assignment(current_user, org_id, payload.role, payload.department_id)
 
-    # Enforce max 2 per incharge/chief_dentist role — scoped per-department for
-    # implant_incharge (see create_user for the same rule + rationale).
+    # Expired trial/subscription blocks new invites too.
+    await _assert_subscription_not_expired(org_id)
+
+    # Per-org caps — see create_user for the same rule + rationale.
+    caps = await _get_org_caps(org_id)
     if payload.role in MAX_2_ROLES:
         cap_query = {"org_id": org_id, "role": payload.role}
         if payload.role == "implant_incharge":
             cap_query["department_id"] = department_id
+        incharge_cap = caps["max_implant_incharges"] if caps["max_implant_incharges"] is not None else 2
         count = await db.users.count_documents(cap_query)
-        if count >= 2:
-            raise HTTPException(400, f"Maximum 2 users allowed with role '{payload.role}'" + (" in this department" if payload.role == "implant_incharge" and department_id else ""))
+        if count >= incharge_cap:
+            raise HTTPException(400, f"Maximum {incharge_cap} users allowed with role '{payload.role}'" + (" in this department" if payload.role == "implant_incharge" and department_id else ""))
+
+    if caps.get("max_users"):
+        total_users = await db.users.count_documents({"org_id": org_id})
+        if total_users >= caps["max_users"]:
+            raise HTTPException(400, f"This organization has reached its plan limit of {caps['max_users']} users. Contact the platform admin to upgrade.")
 
     existing_user = await db.users.find_one({"email": payload.email})
     if existing_user:
@@ -5234,11 +6278,18 @@ async def get_procedures(
         query["procedure_date"] = date
     
     procedures = await db.procedures.find(query).sort("created_at", -1).to_list(100)
-    
+
+    proc_id_strs = [str(p["_id"]) for p in procedures]
+    active_referrals = {}
+    if proc_id_strs:
+        async for ref in db.case_referrals.find({"case_id": {"$in": proc_id_strs}, "status": {"$in": ["active", "pending", "pending_supervisor_approval", "pending_incharge_approval"]}}):
+            active_referrals[ref["case_id"]] = await _serialize_referral(ref)
+
     for proc in procedures:
         proc["_id"] = str(proc["_id"])
         proc["id"] = proc["_id"]
-    
+        proc["active_referral"] = active_referrals.get(proc["_id"])
+
     return procedures
 
 
@@ -6211,6 +7262,14 @@ async def get_procedure(procedure_id: str, request: Request, current_user: dict 
     # keeping the response contract identical to POST mark-instruments-autoclaved and
     # GET /procedures/nurse/scheduled-cases.
     procedure["instruments_autoclaved"] = _serialise_instruments_autoclaved(procedure.get("instruments_autoclaved"))
+    
+    active_ref = await db.case_referrals.find_one({
+        "case_id": procedure_id,
+        "status": {"$in": ["active", "pending", "pending_supervisor_approval", "pending_incharge_approval"]}
+    })
+    if active_ref:
+        procedure["active_referral"] = await _serialize_referral(active_ref)
+
     await log_access(action="procedure_view", resource_type="procedure", resource_id=procedure_id, user=current_user, request=request, extra={"patient_name": procedure.get("patient_name"), "redacted": redact_pii})
     return procedure
 
@@ -6305,6 +7364,28 @@ async def edit_procedure_fields(procedure_id: str, request: Request, current_use
     # Prevent editing protected fields
     protected = {"_id", "id", "created_by_id", "created_by_name", "created_by_role", "created_at", "edit_log", "org_id", "department_id"}
     fields = {k: v for k, v in fields.items() if k not in protected}
+    
+    # Enforce referred department phase restrictions
+    active_referral = await db.case_referrals.find_one({"case_id": procedure_id, "status": "active"})
+    if active_referral:
+        owner_dept = active_referral.get("to_department_id")
+        assigned_phase = active_referral.get("assigned_phase_num") or 2
+        is_referred_dept_user = (current_user.get("department_id") == owner_dept or proc.get("department_id") != current_user.get("department_id"))
+        if is_referred_dept_user and not current_user.get("is_admin"):
+            for k in fields.keys():
+                field_phase = 1
+                if k.startswith("phase2_data") or k.startswith("torque_values") or k == "bone_graft_used":
+                    field_phase = 2
+                elif k.startswith("phase3_data") or k.startswith("stage2_surgical") or k.startswith("stage2_prosthetic") or k == "isq_value":
+                    field_phase = 3
+                elif k.startswith("phase4") or k == "final_prosthetic_plan":
+                    field_phase = 4
+
+                if field_phase != assigned_phase:
+                    raise HTTPException(
+                        status_code=403,
+                        detail=f"As the referred department, you can only edit fields belonging to your assigned phase (Phase {assigned_phase}). Earlier completed phases are read-only."
+                    )
     
     # Build per-field edit log entries (diff old vs new)
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -6470,13 +7551,20 @@ async def edit_procedure_fields(procedure_id: str, request: Request, current_use
 #  - TOGGLE: only Supervisor / Implant In-Charge / Admin (sign-off authority).
 # ───────────────────────────────────────────────────────────────────
 
-def _is_case_stakeholder(proc: dict, user: dict) -> bool:
+async def _is_case_stakeholder(proc: dict, user: dict) -> bool:
     uid = user.get("_id")
     if not uid:
         return False
-    if user.get("role") in ("administrator", "implant_incharge"):
+    if user.get("role") in ("administrator", "implant_incharge", "super_admin"):
         return True
-    return uid in (proc.get("student_id"), proc.get("supervisor_id"), proc.get("implant_incharge_id"))
+    if uid in (proc.get("student_id"), proc.get("supervisor_id"), proc.get("implant_incharge_id"), proc.get("created_by_id"), proc.get("original_student_id"), proc.get("original_supervisor_id")):
+        return True
+    case_id = str(proc.get("_id") or proc.get("id") or "")
+    if case_id:
+        ref = await db.case_referrals.find_one({"case_id": case_id, "status": "active"})
+        if ref and ref.get("to_department_id") and ref.get("to_department_id") == user.get("department_id"):
+            return True
+    return False
 
 
 async def _is_case_readable(procedure_id: str, proc: dict, user: dict) -> bool:
@@ -6485,7 +7573,7 @@ async def _is_case_readable(procedure_id: str, proc: dict, user: dict) -> bool:
     /procedures/{id}). Anonymous-share PII redaction doesn't apply here since
     these endpoints only return checklist items / rule-engine hits, not
     patient identity. Write endpoints (regenerate/toggle) stay stakeholder-only."""
-    if _is_case_stakeholder(proc, user):
+    if await _is_case_stakeholder(proc, user):
         return True
     if user.get("role") == "nurse":
         return False
@@ -6562,7 +7650,7 @@ async def regenerate_augmentation_checklist(procedure_id: str, current_user: dic
     if not proc:
         raise HTTPException(status_code=404, detail="Case not found")
     await _assert_procedure_org_access(proc, current_user)
-    if not _is_case_stakeholder(proc, current_user):
+    if not await _is_case_stakeholder(proc, current_user):
         raise HTTPException(status_code=403, detail="Not authorized")
     new_items = generate_augmentation_checklist(proc)
     # Preserve completed-state on items whose title still matches.
@@ -6800,6 +7888,10 @@ async def delete_procedure(procedure_id: str, current_user: dict = Depends(get_c
         raise HTTPException(status_code=404, detail="Procedure not found")
     await _assert_procedure_org_access(proc, current_user)
 
+    # Referred department members cannot delete referred cases
+    if proc.get("department_id") and current_user.get("department_id") and proc.get("department_id") != current_user.get("department_id"):
+        raise HTTPException(status_code=403, detail="Members of a referred department cannot delete cases originating from another department.")
+
     # Allow any user to delete their own draft cases
     is_owner = proc.get("created_by_id") == current_user["_id"] or proc.get("student_id") == current_user["_id"]
     is_draft = proc.get("status") == "draft"
@@ -6828,6 +7920,9 @@ async def archive_procedure(procedure_id: str, current_user: dict = Depends(get_
     await _assert_procedure_org_access(proc, current_user)
     if current_user["role"] == "nurse":
         raise HTTPException(status_code=403, detail="Nurses cannot archive procedures")
+    # Referred department members cannot archive referred cases
+    if proc.get("department_id") and current_user.get("department_id") and proc.get("department_id") != current_user.get("department_id"):
+        raise HTTPException(status_code=403, detail="Members of a referred department cannot archive cases originating from another department.")
     await db.procedures.update_one(
         {"_id": ObjectId(procedure_id)},
         {"$set": {"archived": True, "archived_by": current_user["_id"], "archived_at": datetime.now(timezone.utc).isoformat()}}
@@ -10291,7 +11386,7 @@ async def get_implant_catalog_one(key: str, current_user: dict = Depends(get_cur
 @api_router.put("/implant-catalog/by-key")
 async def upsert_implant_catalog(request: Request, key: str, current_user: dict = Depends(get_current_user)):
     """Admin / In-Charge: upsert a catalog record."""
-    if current_user.get("role") not in ("administrator", "implant_incharge"):
+    if current_user.get("role") not in ("administrator", "implant_incharge", "super_admin"):
         raise HTTPException(status_code=403, detail="Only Administrator or Implant In-Charge can edit the catalog.")
     body = await request.json()
     if not isinstance(body, dict):
@@ -10313,7 +11408,7 @@ async def upsert_implant_catalog(request: Request, key: str, current_user: dict 
 
 # ─────────── iter-165: Catalog deletion + attachments ───────────
 def _require_catalog_admin(current_user: dict) -> None:
-    if current_user.get("role") not in ("administrator", "implant_incharge"):
+    if current_user.get("role") not in ("administrator", "implant_incharge", "super_admin"):
         raise HTTPException(status_code=403, detail="Only Administrator or Implant In-Charge can edit the catalog.")
 
 
@@ -13683,6 +14778,10 @@ async def submit_phase2(
         "anesthesia_details": phase2_data.anesthesia_details,
         "flap_design": phase2_data.flap_design,
         "drilling_type": phase2_data.drilling_type,
+        "drilling_guided_surgery_type": phase2_data.drilling_guided_surgery_type,
+        "drilling_static_guide_type": phase2_data.drilling_static_guide_type,
+        "drilling_sleeve_type": phase2_data.drilling_sleeve_type,
+        "drilling_dynamic_nav_system": phase2_data.drilling_dynamic_nav_system,
         "implant_seated_correctly": phase2_data.implant_seated_correctly,
         "implant_seated_comment": phase2_data.implant_seated_comment,
         "torque_values": phase2_data.torque_values or [],
@@ -14595,6 +15694,471 @@ async def approve_phase4_step2(
     return updated
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# iter-388: PHASE 5 — Follow-up & Maintenance
+# Unlimited sequential follow-up appointments after case completion. Each
+# starts with an Implant Survival Review, then the 10-section clinical form.
+# Approval chain mirrors Phases 1-4 (supervisor → in-charge, with combined
+# single approval when the same person holds both roles).
+# ─────────────────────────────────────────────────────────────────────────
+
+FOLLOWUP_ORDINALS = ["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth", "Ninth", "Tenth"]
+
+
+def _followup_label(n: int) -> str:
+    word = FOLLOWUP_ORDINALS[n - 1] if 1 <= n <= 10 else f"{n}th"
+    return f"{word} Follow up Appointment"
+
+
+class FollowUpSubmit(BaseModel):
+    date: str = Field(..., max_length=10)
+    survival_review: Dict[str, Any] = {}
+    preexisting_condition_review: Optional[Dict[str, Any]] = None
+    new_systemic_condition: Optional[Dict[str, Any]] = None
+    general: Dict[str, Any] = {}
+    oral_hygiene: Dict[str, Any] = {}
+    probing_depths: Dict[str, Any] = {}
+    iopa_uploads: Optional[Dict[str, Dict[str, str]]] = None
+    opg_upload: Optional[Dict[str, str]] = None
+    soft_tissue: Dict[str, Any] = {}
+    prosthesis_occlusion: Dict[str, Any] = {}
+    overdenture: Optional[Dict[str, Any]] = None
+    patient_feedback: Optional[str] = Field("", max_length=2000)
+
+
+@api_router.post("/procedures/{procedure_id}/followups")
+async def submit_followup(
+    procedure_id: str,
+    data: FollowUpSubmit,
+    current_user: dict = Depends(get_current_user),
+):
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if proc.get("status") != "completed":
+        raise HTTPException(status_code=400, detail="Follow-up appointments activate only after Phase 4 is approved (case completed).")
+    is_owner_student = current_user["role"] == "student" and proc.get("student_id") == current_user["_id"]
+    is_creator = proc.get("created_by_id") == current_user["_id"]
+    if not (is_owner_student or is_creator):
+        raise HTTPException(status_code=403, detail="Only the case owner can submit a follow-up appointment.")
+    if not data.survival_review:
+        raise HTTPException(status_code=400, detail="Complete the Implant Survival Review first — it starts every follow-up appointment.")
+
+    followups = proc.get("followups") or []
+    if followups and followups[-1].get("status") == "rejected":
+        number = followups[-1]["number"]
+        followups = followups[:-1]
+    elif followups and followups[-1].get("status") != "approved":
+        raise HTTPException(status_code=400, detail=f"{followups[-1].get('label')} is still awaiting approval.")
+    else:
+        number = len(followups) + 1
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    is_incharge_self_created = proc.get("created_by_role") == "implant_incharge" and proc.get("created_by_id") == current_user["_id"]
+    entry = {
+        "number": number,
+        "label": _followup_label(number),
+        "status": "approved" if is_incharge_self_created else "pending_supervisor",
+        "date": data.date,
+        "survival_review": data.survival_review,
+        "preexisting_condition_review": data.preexisting_condition_review,
+        "new_systemic_condition": data.new_systemic_condition,
+        "general": data.general,
+        "oral_hygiene": data.oral_hygiene,
+        "probing_depths": data.probing_depths,
+        "iopa_uploads": data.iopa_uploads,
+        "opg_upload": data.opg_upload,
+        "soft_tissue": data.soft_tissue,
+        "prosthesis_occlusion": data.prosthesis_occlusion,
+        "overdenture": data.overdenture,
+        "patient_feedback": data.patient_feedback or "",
+        "submitted_at": now_iso,
+        "submitted_by_id": current_user["_id"],
+        "submitted_by_name": current_user.get("name", ""),
+    }
+    if is_incharge_self_created:
+        entry["supervisor_approved_at"] = now_iso
+        entry["incharge_approved_at"] = now_iso
+        entry["combined_approval"] = True
+    followups.append(entry)
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"followups": followups, "updated_at": datetime.utcnow()}},
+    )
+    if not is_incharge_self_created:
+        for uid in filter(None, {proc.get("supervisor_id"), proc.get("implant_incharge_id")}):
+            await db.notifications.insert_one({
+                "user_id": uid,
+                "procedure_id": procedure_id,
+                "message": f"Phase 5: {entry['label']} submitted for {proc['patient_name']}. Review required.",
+                "type": "approval_request",
+                "read": False,
+                "created_at": datetime.utcnow(),
+            })
+    return {"message": "Follow-up submitted", "followup": entry}
+
+
+@api_router.post("/procedures/{procedure_id}/followups/{number}/approve")
+async def approve_followup(
+    procedure_id: str,
+    number: int,
+    action: ApprovalAction,
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user["role"] in ("student", "nurse"):
+        raise HTTPException(status_code=403, detail="Only supervisors and implant in-charge can review follow-ups")
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    followups = proc.get("followups") or []
+    fu = next((f for f in followups if f.get("number") == number), None)
+    if not fu:
+        raise HTTPException(status_code=404, detail="Follow-up appointment not found")
+    if fu.get("status") not in ("pending_supervisor", "pending_incharge"):
+        raise HTTPException(status_code=400, detail=f"This follow-up is not awaiting review (current: {fu.get('status')}).")
+
+    uid = current_user["_id"]
+    role = current_user.get("role")
+    is_sup = uid == proc.get("supervisor_id")
+    is_inc = uid == proc.get("implant_incharge_id")
+    same_person = proc.get("supervisor_id") and proc.get("supervisor_id") == proc.get("implant_incharge_id")
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    if action.action == "approve":
+        if same_person and uid == proc.get("supervisor_id") and role in ("supervisor", "implant_incharge"):
+            fu["supervisor_approved_at"] = fu.get("supervisor_approved_at") or now_iso
+            fu["incharge_approved_at"] = now_iso
+            fu["combined_approval"] = True
+            fu["status"] = "approved"
+        elif fu["status"] == "pending_supervisor":
+            if not (role == "supervisor" and is_sup):
+                raise HTTPException(status_code=403, detail="Awaiting the assigned Supervisor's approval.")
+            fu["supervisor_approved_at"] = now_iso
+            fu["status"] = "pending_incharge"
+        else:  # pending_incharge
+            if not (role == "implant_incharge" and is_inc):
+                raise HTTPException(status_code=403, detail="Awaiting the assigned Implant In-Charge's approval.")
+            fu["incharge_approved_at"] = now_iso
+            fu["status"] = "approved"
+        if action.comment and action.comment.strip():
+            fu.setdefault("faculty_comments", []).append({"by": current_user.get("name", ""), "role": role, "comment": action.comment.strip(), "at": now_iso})
+        msg = (f"{fu['label']} approved for {proc['patient_name']}."
+               if fu["status"] == "approved"
+               else f"{fu['label']} for {proc['patient_name']} approved by Supervisor — awaiting Implant In-Charge.")
+    else:
+        if not ((role == "supervisor" and is_sup) or (role == "implant_incharge" and is_inc)):
+            raise HTTPException(status_code=403, detail="Only the assigned faculty can reject this follow-up.")
+        fu["status"] = "rejected"
+        fu["rejection_reason"] = action.rejection_reason or action.comment or "No reason provided"
+        fu["rejected_by"] = current_user.get("name", "")
+        fu["rejected_at"] = now_iso
+        msg = f"{fu['label']} for {proc['patient_name']} was returned for revision: {fu['rejection_reason']}"
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"followups": followups, "updated_at": datetime.utcnow()}},
+    )
+    if proc.get("student_id"):
+        await db.notifications.insert_one({
+            "user_id": proc["student_id"],
+            "procedure_id": procedure_id,
+            "message": msg,
+            "type": "approved" if action.action == "approve" else "rejected",
+            "read": False,
+            "created_at": datetime.utcnow(),
+        })
+    return {"message": msg, "followup": fu}
+
+# ─────────────────────────────────────────────────────────────────────────
+# iter-389: PHASE 5 Analytics — survival-over-time, probing-depth trend vs
+# baseline, and follow-up compliance. Role-scoped: student = own cases,
+# supervisor = supervised cases, in-charge/admin = all, nurse = 403.
+# ─────────────────────────────────────────────────────────────────────────
+
+FOLLOWUP_TIME_BUCKETS = [
+    (0, 90, "0–3 mo"), (90, 180, "3–6 mo"), (180, 365, "6–12 mo"),
+    (365, 730, "1–2 yr"), (730, 10**9, "2+ yr"),
+]
+
+
+def _iso_days_between(a, b) -> Optional[int]:
+    try:
+        da = datetime.strptime(str(a)[:10], "%Y-%m-%d").date()
+        db_date = datetime.strptime(str(b)[:10], "%Y-%m-%d").date()
+        return (db_date - da).days
+    except (TypeError, ValueError):
+        return None
+
+
+@api_router.get("/analytics/followup-metrics")
+async def get_followup_metrics(
+    request: Request,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user.get("role") not in ("administrator", "implant_incharge", "supervisor", "student"):
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    match: Dict[str, Any] = {"archived": {"$ne": True}, "status": "completed"}
+    role = current_user.get("role")
+    uid = str(current_user.get("_id") or "")
+    uname = current_user.get("name") or current_user.get("username")
+    if role == "student":
+        match["$or"] = [{"student_id": uid}, {"student_name": uname}]
+    elif role == "supervisor":
+        match["$or"] = [{"supervisor_id": uid}, {"supervisor_name": uname}]
+    procs = await db.procedures.find(match, {
+        "followups": 1, "baseline_probing_depths": 1, "phase4_step2_done_date": 1,
+        "completed_at": 1, "patient_name": 1, "student_name": 1,
+    }).to_list(20000)
+
+    total_followups = 0
+    with_fu = 0
+    first_days: List[int] = []
+    interval_days: List[int] = []
+    overdue: List[Dict[str, Any]] = []
+    buckets = {lbl: {"reviewed": 0, "failed": 0} for _, _, lbl in FOLLOWUP_TIME_BUCKETS}
+    latest_status: Dict[str, str] = {}
+    probing_agg: Dict[int, Dict[str, Any]] = {}
+    today_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    for proc in procs:
+        delivery = proc.get("phase4_step2_done_date") or str(proc.get("completed_at") or "")[:10]
+        fus = [f for f in (proc.get("followups") or []) if f.get("status") != "rejected"]
+        if from_date:
+            fus = [f for f in fus if str(f.get("date") or "") >= from_date]
+        if to_date:
+            fus = [f for f in fus if str(f.get("date") or "") <= to_date]
+        if fus:
+            with_fu += 1
+            total_followups += len(fus)
+            d0 = _iso_days_between(delivery, fus[0].get("date"))
+            if d0 is not None and d0 >= 0:
+                first_days.append(d0)
+            for prev_fu, next_fu in zip(fus, fus[1:]):
+                di = _iso_days_between(prev_fu.get("date"), next_fu.get("date"))
+                if di is not None and di >= 0:
+                    interval_days.append(di)
+        last_seen = fus[-1].get("date") if fus else delivery
+        overdue_days = _iso_days_between(last_seen, today_iso)
+        if overdue_days is not None and overdue_days > 180:
+            overdue.append({
+                "patient_name": proc.get("patient_name"),
+                "student_name": proc.get("student_name"),
+                "followup_count": len(fus),
+                "days_since_last": overdue_days,
+            })
+        base = proc.get("baseline_probing_depths") or {}
+        for fu in fus:
+            dd = _iso_days_between(delivery, fu.get("date"))
+            bucket_lbl = None
+            if dd is not None and dd >= 0:
+                for lo, hi, lbl in FOLLOWUP_TIME_BUCKETS:
+                    if lo <= dd < hi:
+                        bucket_lbl = lbl
+                        break
+            for tooth, v in (fu.get("survival_review") or {}).items():
+                status = (v or {}).get("status") if isinstance(v, dict) else str(v or "")
+                if bucket_lbl:
+                    buckets[bucket_lbl]["reviewed"] += 1
+                    if status == "Failed":
+                        buckets[bucket_lbl]["failed"] += 1
+                latest_status[f"{proc['_id']}::{tooth}"] = status or ""
+            n = int(fu.get("number") or 0)
+            agg = probing_agg.setdefault(n, {"sum": 0.0, "count": 0, "max": None, "label": fu.get("label")})
+            for tooth, sites in (fu.get("probing_depths") or {}).items():
+                b = base.get(tooth) or base.get("case") or {}
+                for k in ("vestibular", "distal", "mesial", "lingual"):
+                    try:
+                        delta = float((sites or {}).get(k)) - float(b.get(k))
+                    except (TypeError, ValueError):
+                        continue
+                    agg["sum"] += delta
+                    agg["count"] += 1
+                    if agg["max"] is None or delta > agg["max"]:
+                        agg["max"] = delta
+
+    tracked = len(latest_status)
+    surviving = sum(1 for v in latest_status.values() if v != "Failed")
+    completed_cases = len(procs)
+    result = {
+        "compliance": {
+            "completed_cases": completed_cases,
+            "cases_with_followup": with_fu,
+            "compliance_rate": round(100.0 * with_fu / completed_cases, 1) if completed_cases else 0.0,
+            "total_followups": total_followups,
+            "avg_days_to_first": round(sum(first_days) / len(first_days), 1) if first_days else None,
+            "avg_interval_days": round(sum(interval_days) / len(interval_days), 1) if interval_days else None,
+            "overdue": sorted(overdue, key=lambda r: -r["days_since_last"])[:50],
+        },
+        "survival_over_time": [
+            {
+                "bucket": lbl,
+                "reviewed": buckets[lbl]["reviewed"],
+                "failed": buckets[lbl]["failed"],
+                "survival_rate": (
+                    round(100.0 * (buckets[lbl]["reviewed"] - buckets[lbl]["failed"]) / buckets[lbl]["reviewed"], 1)
+                    if buckets[lbl]["reviewed"] else None
+                ),
+            }
+            for _, _, lbl in FOLLOWUP_TIME_BUCKETS
+        ],
+        "current_survival": {
+            "implants_tracked": tracked,
+            "surviving": surviving,
+            "rate": round(100.0 * surviving / tracked, 1) if tracked else None,
+        },
+        "probing_trend": [
+            {
+                "followup": n,
+                "label": a.get("label") or _followup_label(n),
+                "n_sites": a["count"],
+                "mean_delta_mm": round(a["sum"] / a["count"], 2) if a["count"] else None,
+                "max_delta_mm": round(a["max"], 1) if a["max"] is not None else None,
+            }
+            for n, a in sorted(probing_agg.items())
+        ],
+        "scope": {"role": role, "read_only": role in ("student", "supervisor")},
+    }
+    await log_access(
+        action="analytics_view", outcome="success", resource_type="followup_metrics",
+        resource_id="global", user=current_user, request=request,
+    )
+    return result
+
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# iter-392: Guided-plan adherence analytics — how often the Phase 2 actual
+# drilling protocol matches the Phase 1 plan (per student + deviation types).
+# ─────────────────────────────────────────────────────────────────────────
+
+def _normalize_surgery_approach(v) -> str:
+    s = str(v or "")
+    if s == "Free Hand Surgery":
+        return "Free Hand Sequential Drilling"
+    if s == "Combination of Free hand and Guided Surgery":
+        return "Combination of Guided and Free Hand Sequential Drilling"
+    return s
+
+
+def _is_guided_approach(v) -> bool:
+    return str(v or "") in (
+        "Guided Surgery",
+        "Combination of Guided and Free Hand Sequential Drilling",
+        "Combination of Free hand and Guided Surgery",
+    )
+
+
+def _drilling_protocol_diffs(proc: Dict[str, Any]) -> Optional[List[Dict[str, str]]]:
+    """None = not comparable (missing plan or actual); [] = performed as planned."""
+    p2 = proc.get("phase2_data") or {}
+    planned = _normalize_surgery_approach(proc.get("procedure_surgery_type"))
+    actual = str(p2.get("drilling_type") or "")
+    if not planned or not actual:
+        return None
+    diffs: List[Dict[str, str]] = []
+    if actual != planned:
+        diffs.append({"field": "Drilling Type", "planned": planned, "actual": actual})
+    if _is_guided_approach(actual):
+        pairs = [
+            ("Type of Guided Surgery", proc.get("guided_surgery_type"), p2.get("drilling_guided_surgery_type")),
+            ("Type of Static Guide", proc.get("static_guide_type"), p2.get("drilling_static_guide_type")),
+            ("Type of Sleeve", proc.get("sleeve_type"), p2.get("drilling_sleeve_type")),
+            ("Dynamic Navigation System", proc.get("dynamic_nav_system"), p2.get("drilling_dynamic_nav_system")),
+        ]
+        for field, plan_v, act_v in pairs:
+            if act_v and str(act_v) != str(plan_v or ""):
+                diffs.append({"field": field, "planned": str(plan_v or "—"), "actual": str(act_v)})
+    return diffs
+
+
+@api_router.get("/analytics/protocol-adherence")
+async def get_protocol_adherence(
+    request: Request,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user.get("role") not in ("administrator", "implant_incharge", "supervisor", "student"):
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    match: Dict[str, Any] = {"archived": {"$ne": True}, "phase2_data.drilling_type": {"$exists": True, "$nin": [None, ""]}}
+    role = current_user.get("role")
+    uid = str(current_user.get("_id") or "")
+    uname = current_user.get("name") or current_user.get("username")
+    if role == "student":
+        match["$or"] = [{"student_id": uid}, {"student_name": uname}]
+    elif role == "supervisor":
+        match["$or"] = [{"supervisor_id": uid}, {"supervisor_name": uname}]
+    procs = await db.procedures.find(match, {
+        "patient_name": 1, "student_name": 1, "procedure_surgery_type": 1,
+        "guided_surgery_type": 1, "static_guide_type": 1, "sleeve_type": 1,
+        "dynamic_nav_system": 1, "phase2_data": 1, "phase2_submitted_at": 1,
+        "phase2_actual_done_date": 1,
+    }).to_list(20000)
+
+    comparable = 0
+    deviated = 0
+    by_student: Dict[str, Dict[str, int]] = {}
+    field_counts: Dict[str, int] = {}
+    recent: List[Dict[str, Any]] = []
+    for proc in procs:
+        p2_date = str(proc.get("phase2_actual_done_date") or proc.get("phase2_submitted_at") or "")[:10]
+        if from_date and p2_date and p2_date < from_date:
+            continue
+        if to_date and p2_date and p2_date > to_date:
+            continue
+        diffs = _drilling_protocol_diffs(proc)
+        if diffs is None:
+            continue
+        comparable += 1
+        student = proc.get("student_name") or "Unknown"
+        stats = by_student.setdefault(student, {"total": 0, "deviated": 0})
+        stats["total"] += 1
+        if diffs:
+            deviated += 1
+            stats["deviated"] += 1
+            for d in diffs:
+                field_counts[d["field"]] = field_counts.get(d["field"], 0) + 1
+            recent.append({
+                "patient_name": proc.get("patient_name"),
+                "student_name": student,
+                "date": p2_date or None,
+                "diffs": diffs,
+            })
+
+    recent.sort(key=lambda r: r.get("date") or "", reverse=True)
+    result = {
+        "summary": {
+            "comparable_cases": comparable,
+            "as_planned": comparable - deviated,
+            "deviated": deviated,
+            "adherence_rate": round(100.0 * (comparable - deviated) / comparable, 1) if comparable else None,
+        },
+        "by_student": sorted([
+            {
+                "student_name": name,
+                "total": s["total"],
+                "deviated": s["deviated"],
+                "adherence_rate": round(100.0 * (s["total"] - s["deviated"]) / s["total"], 1),
+            }
+            for name, s in by_student.items()
+        ], key=lambda r: (r["adherence_rate"], -r["total"])),
+        "deviation_fields": sorted(
+            [{"field": f, "count": c} for f, c in field_counts.items()],
+            key=lambda r: -r["count"],
+        ),
+        "recent_deviations": recent[:20],
+        "scope": {"role": role},
+    }
+    await log_access(
+        action="analytics_view", outcome="success", resource_type="protocol_adherence",
+        resource_id="global", user=current_user, request=request,
+    )
+    return result
+
+
+
 # Notification Routes
 @api_router.get("/notifications")
 async def get_notifications(current_user: dict = Depends(get_current_user)):
@@ -15465,6 +17029,126 @@ async def get_implant_systems(response: Response, current_user: dict = Depends(g
             entry["indicated_teeth"] = ind_data["indicated_teeth"]
         systems.append(entry)
     return systems
+
+def _require_implant_library_admin(current_user: dict) -> None:
+    if current_user.get("role") not in ("administrator", "super_admin"):
+        raise HTTPException(status_code=403, detail="Only Administrator can edit the implant library")
+
+
+class ImplantLibrarySize(BaseModel):
+    diameter: float
+    length: float
+
+
+class ImplantLibrarySystemCreate(BaseModel):
+    brand: str = Field(..., max_length=80)
+    system: str = Field(..., max_length=80)
+    sizes: List[ImplantLibrarySize] = Field(..., min_length=1)
+
+
+class ImplantLibrarySizeAdd(BaseModel):
+    brand: str = Field(..., max_length=80)
+    system: str = Field(..., max_length=80)
+    diameter: float
+    length: float
+
+
+@api_router.get("/implant-library/rows")
+async def list_implant_library_rows(
+    brand: Optional[str] = None,
+    system: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """Admin: raw size rows (with source/added-by metadata) for the implant
+    library management screen — /implant-library/systems (used by the
+    picker) only exposes aggregated diameter/length sets, not individual
+    rows, so add/delete needs this instead."""
+    _require_implant_library_admin(current_user)
+    query: Dict[str, Any] = {}
+    if brand:
+        query["brand"] = brand
+    if system:
+        query["system"] = system
+    rows = await db.implant_library.find(query, {"_id": 0}).sort(
+        [("brand", 1), ("system", 1), ("diameter", 1), ("length", 1)]
+    ).to_list(2000)
+    return {"rows": rows}
+
+
+@api_router.post("/implant-library/system")
+async def add_implant_library_system(
+    payload: ImplantLibrarySystemCreate,
+    current_user: dict = Depends(get_current_user),
+):
+    """Admin: add a new implant system (brand+system) with one or more
+    sizes in one call — this is how a brand-new company/system shows up
+    in the app with no build/deploy needed."""
+    _require_implant_library_admin(current_user)
+    now = datetime.now(timezone.utc).isoformat()
+    who = current_user.get("name") or current_user.get("email")
+    inserted, skipped = 0, 0
+    for sz in payload.sizes:
+        key = {"brand": payload.brand, "system": payload.system, "diameter": sz.diameter, "length": sz.length}
+        if await db.implant_library.find_one(key, {"_id": 1}):
+            skipped += 1
+            continue
+        await db.implant_library.insert_one({**key, "source": "admin", "added_by": who, "added_at": now})
+        inserted += 1
+    if inserted == 0:
+        raise HTTPException(status_code=400, detail="All of those sizes already exist for this system")
+    msg = f"Added {inserted} size(s)"
+    if skipped:
+        msg += f", {skipped} already existed"
+    return {"message": msg, "inserted": inserted, "skipped": skipped}
+
+
+@api_router.post("/implant-library/size")
+async def add_implant_library_size(
+    payload: ImplantLibrarySizeAdd,
+    current_user: dict = Depends(get_current_user),
+):
+    """Admin: add a single diameter/length size to an existing (or new) system."""
+    _require_implant_library_admin(current_user)
+    key = {"brand": payload.brand, "system": payload.system, "diameter": payload.diameter, "length": payload.length}
+    if await db.implant_library.find_one(key, {"_id": 1}):
+        raise HTTPException(status_code=400, detail="This size already exists for this system")
+    now = datetime.now(timezone.utc).isoformat()
+    who = current_user.get("name") or current_user.get("email")
+    await db.implant_library.insert_one({**key, "source": "admin", "added_by": who, "added_at": now})
+    return {"message": "Size added"}
+
+
+@api_router.delete("/implant-library/size")
+async def delete_implant_library_size(
+    brand: str,
+    system: str,
+    diameter: float,
+    length: float,
+    current_user: dict = Depends(get_current_user),
+):
+    """Admin: remove a single size row."""
+    _require_implant_library_admin(current_user)
+    result = await db.implant_library.delete_one(
+        {"brand": brand, "system": system, "diameter": diameter, "length": length}
+    )
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Size not found")
+    return {"message": "Size removed"}
+
+
+@api_router.delete("/implant-library/system")
+async def delete_implant_library_system(
+    brand: str,
+    system: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Admin: remove an entire system (all its sizes)."""
+    _require_implant_library_admin(current_user)
+    result = await db.implant_library.delete_many({"brand": brand, "system": system})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="System not found")
+    return {"message": f"Removed system and {result.deleted_count} size(s)"}
+
 
 @api_router.get("/implant-library/tooth-recommendations")
 async def get_tooth_recommendations(current_user: dict = Depends(get_current_user)):
@@ -23558,12 +25242,23 @@ async def _transfer_initiator_check(proc: dict, current_user: dict) -> Tuple[boo
     is_org_admin = bool(current_user.get("is_admin"))
 
     owner = None
-    if proc.get("student_id") and ObjectId.is_valid(proc["student_id"]):
-        owner = await db.users.find_one({"_id": ObjectId(proc["student_id"])})
-    owner_dept = owner.get("department_id") if owner else None
+    stu_id = proc.get("student_id")
+    if stu_id:
+        stu_oid = ObjectId(stu_id) if ObjectId.is_valid(stu_id) else stu_id
+        owner = await db.users.find_one({"_id": stu_oid})
+
+    if not owner and proc.get("created_by_id"):
+        creator_id = proc["created_by_id"]
+        creator_oid = ObjectId(creator_id) if ObjectId.is_valid(creator_id) else creator_id
+        owner = await db.users.find_one({"_id": creator_oid})
+
+    if not owner and (is_org_admin or role in ("implant_incharge", "administrator")):
+        owner = current_user
+
+    owner_dept = (owner.get("department_id") if owner else None) or proc.get("department_id") or current_user.get("department_id")
 
     is_dept_incharge = _is_dept_incharge_for(current_user, owner_dept)
-    privileged = is_org_admin or is_dept_incharge
+    privileged = is_org_admin or is_dept_incharge or role in ("implant_incharge", "administrator")
     allowed = is_case_owner or privileged
     return allowed, privileged, owner
 
@@ -23584,15 +25279,24 @@ async def transfer_eligible_students(procedure_id: str, current_user: dict = Dep
     allowed, _privileged, owner = await _transfer_initiator_check(proc, current_user)
     if not allowed:
         raise HTTPException(status_code=403, detail="You are not permitted to view transfer candidates for this case.")
-    if not owner:
-        raise HTTPException(status_code=404, detail="Case owner not found.")
+
+    org_id = (owner.get("org_id") if owner else None) or proc.get("org_id") or current_user.get("org_id")
+    dept_id = (owner.get("department_id") if owner else None) or proc.get("department_id") or current_user.get("department_id")
+
+    exclude_ids = []
+    if owner and owner.get("_id"):
+        exclude_ids.append(owner["_id"])
+    if proc.get("student_id"):
+        stu_oid = ObjectId(proc["student_id"]) if ObjectId.is_valid(proc["student_id"]) else proc["student_id"]
+        exclude_ids.append(stu_oid)
 
     query: Dict[str, Any] = {
         "role": "student",
-        "org_id": owner.get("org_id") or current_user.get("org_id"),
-        "_id": {"$ne": owner["_id"]},
+        "org_id": org_id,
     }
-    dept_id = owner.get("department_id")
+    if exclude_ids:
+        query["_id"] = {"$nin": exclude_ids}
+
     if dept_id:
         query["department_id"] = dept_id
 
@@ -23624,8 +25328,6 @@ async def transfer_case_request(
             status_code=403,
             detail="Only the current student owner, the department Implant In-Charge, or the org admin can initiate a transfer.",
         )
-    if not owner:
-        raise HTTPException(status_code=404, detail="Case owner not found.")
 
     if proc.get("archived") or proc.get("status") == "completed":
         raise HTTPException(status_code=400, detail="This case is archived or completed and cannot be transferred.")
@@ -23653,14 +25355,11 @@ async def transfer_case_request(
     if recipient.get("role") != "student":
         raise HTTPException(status_code=400, detail="Selected user is not a student.")
 
-    # iter-385: same department as the case's current owner (org-wide
-    # fallback when the owner has no department assigned — mirrors
-    # _dept_scope_query). Using the case owner's department (rather than the
-    # initiator's) covers both self-service student transfers and
-    # admin/incharge-initiated transfers uniformly.
-    if recipient.get("org_id") != (owner.get("org_id") or current_user.get("org_id")):
+    org_id = (owner.get("org_id") if owner else None) or proc.get("org_id") or current_user.get("org_id")
+    owner_dept = (owner.get("department_id") if owner else None) or proc.get("department_id") or current_user.get("department_id")
+
+    if recipient.get("org_id") != org_id:
         raise HTTPException(status_code=400, detail="Selected student is outside the organization.")
-    owner_dept = owner.get("department_id")
     if owner_dept and recipient.get("department_id") != owner_dept:
         raise HTTPException(status_code=400, detail="Selected student is not in the case's department.")
 
@@ -24125,6 +25824,8 @@ async def seed_implant_catalog_on_start():
     """iter-142: ensure the implant_catalog collection has the curated data
     for Ankylos C/X + Osstem TS III, plus stub records for every other system."""
     await _seed_implant_catalog()
+    await _seed_subscription_plans()
+    await _seed_trial_settings()
     # iter-178 (re-wired in iter-207): seed the 7 Alpha-Bio brochure systems
     # (NeO Conical Standard / Hex / Internal Hex, ICE, ATID, DFI, NICE) +
     # the shared Surgical & Prosthetic Instrumentation doc into both

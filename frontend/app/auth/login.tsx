@@ -116,6 +116,11 @@ export default function LoginScreen() {
         () => {},
       );
 
+      if (me?.role === "super_admin") {
+        router.replace("/super-admin-dashboard");
+        return;
+      }
+
       if (!me?.workflow_seen_at || seenVersion < ONBOARDING_VERSION) {
         router.replace("/onboarding");
         return;

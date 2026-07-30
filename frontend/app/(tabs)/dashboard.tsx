@@ -858,7 +858,10 @@ function SupervisorDashboard({
     () => procedures.filter((p: any) => PENDING_STATUSES.includes(p.status)),
     [procedures],
   );
-
+  const pendingFollowups = useMemo(() =>
+    procedures.filter((p: any) => (p.followups || []).some((f: any) => f.status === 'pending_supervisor')),
+    [procedures]
+  );
   const draftCases = useMemo(
     () => procedures.filter((p: any) => p.status === "draft"),
     [procedures],
@@ -989,14 +992,47 @@ function SupervisorDashboard({
           </View>
 
           {/* Pending Approval Queue */}
-          {pendingApproval.length > 0 && (
+          {pendingApproval.length + pendingFollowups.length > 0 && (
             <View style={s.section}>
               <View style={s.sectionHeader}>
                 <Ionicons name="clipboard-outline" size={18} color="#E65100" />
                 <Text style={[s.sectionTitle, { color: "#E65100" }]}>
-                  Pending Your Approval ({pendingApproval.length})
+                  Pending Your Approval (
+                  {pendingApproval.length + pendingFollowups.length})
                 </Text>
               </View>
+              {pendingFollowups.slice(0, 5).map((proc: any) => (
+                <TouchableOpacity
+                  key={`fu-${proc.id}`}
+                  style={s.approvalCard}
+                  onPress={() => router.push(`/procedures/${proc.id}`)}
+                  data-testid={`sup-pending-followup-${proc.id}`}
+                  testID={`sup-pending-followup-${proc.id}`}
+                >
+                  <View
+                    style={[
+                      s.approvalPhaseWrap,
+                      { backgroundColor: "#B2DFDB" },
+                    ]}
+                  >
+                    <Ionicons name="repeat" size={16} color="#00695C" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.approvalPatient}>{proc.patient_name}</Text>
+                    <Text style={s.approvalSub}>
+                      {
+                        (proc.followups || []).find(
+                          (f: any) => f.status !== "approved",
+                        )?.label
+                      }{" "}
+                      — Phase 5 review
+                    </Text>
+                  </View>
+                  <View style={[s.reviewChip, { backgroundColor: "#00695C" }]}>
+                    <Text style={s.reviewChipText}>Review Now</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
               {pendingApproval.slice(0, 5).map((proc: any) => {
                 const phase = getPhaseFromStatus(proc.status);
                 return (
@@ -1129,6 +1165,13 @@ function InChargeDashboard({
   const pendingApproval = useMemo(
     () => procedures.filter((p: any) => PENDING_STATUSES.includes(p.status)),
     [procedures],
+  );
+  const pendingFollowups = useMemo(() =>
+    procedures.filter((p: any) => (p.followups || []).some((f: any) =>
+      f.status === 'pending_incharge' ||
+      (f.status === 'pending_supervisor' && p.supervisor_id && p.supervisor_id === p.implant_incharge_id)
+    )),
+    [procedures]
   );
 
   return (
@@ -1276,14 +1319,47 @@ function InChargeDashboard({
           )}
 
           {/* Pending Review */}
-          {pendingApproval.length > 0 && (
+          {pendingApproval.length + pendingFollowups.length > 0 && (
             <View style={s.section}>
               <View style={s.sectionHeader}>
                 <Ionicons name="clipboard-outline" size={18} color="#E65100" />
                 <Text style={[s.sectionTitle, { color: "#E65100" }]}>
-                  Pending Review ({pendingApproval.length})
+                  Pending Review (
+                  {pendingApproval.length + pendingFollowups.length})
                 </Text>
               </View>
+              {pendingFollowups.slice(0, 5).map((proc: any) => (
+                <TouchableOpacity
+                  key={`fu-${proc.id}`}
+                  style={s.approvalCard}
+                  onPress={() => router.push(`/procedures/${proc.id}`)}
+                  data-testid={`ic-pending-followup-${proc.id}`}
+                  testID={`ic-pending-followup-${proc.id}`}
+                >
+                  <View
+                    style={[
+                      s.approvalPhaseWrap,
+                      { backgroundColor: "#B2DFDB" },
+                    ]}
+                  >
+                    <Ionicons name="repeat" size={16} color="#00695C" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.approvalPatient}>{proc.patient_name}</Text>
+                    <Text style={s.approvalSub}>
+                      {
+                        (proc.followups || []).find(
+                          (f: any) => f.status !== "approved",
+                        )?.label
+                      }{" "}
+                      — Phase 5 review
+                    </Text>
+                  </View>
+                  <View style={[s.reviewChip, { backgroundColor: "#00695C" }]}>
+                    <Text style={s.reviewChipText}>Review Now</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
               {pendingApproval.slice(0, 5).map((proc: any) => {
                 const phase = getPhaseFromStatus(proc.status);
                 return (
@@ -2116,6 +2192,7 @@ export default function DashboardScreen() {
   );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [subBanner, setSubBanner] = useState<{ status: string; daysLeft: number | null } | null>(null);
   const { user } = useAuth();
   const router = useRouter();
 
@@ -2126,6 +2203,7 @@ export default function DashboardScreen() {
   );
 
   const loadData = async () => {
+    if (!user) return;
     try {
       const [proceduresRes, statsRes] = await Promise.all([
         api.get("/procedures"),
@@ -2133,11 +2211,31 @@ export default function DashboardScreen() {
       ]);
       setProcedures(proceduresRes.data);
       setStats(statsRes.data);
-    } catch (error) {
-      console.error("Failed to load dashboard:", error);
+    } catch (error: any) {
+      if (error?.response?.status !== 401 && error?.response?.status !== 403) {
+        console.error("Failed to load dashboard:", error);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+    // super_admin has no org_id — this route 400s for them, so skip.
+    if (user?.org_id) {
+      try {
+        const subRes = await api.get("/organizations/me/subscription");
+        const status = subRes.data?.status;
+        const trialEndsAt = subRes.data?.trial_ends_at;
+        if (status === "expired") {
+          setSubBanner({ status: "expired", daysLeft: null });
+        } else if (status === "trial" && trialEndsAt) {
+          const daysLeft = Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / 86400000));
+          setSubBanner(daysLeft <= 3 ? { status: "trial", daysLeft } : null);
+        } else {
+          setSubBanner(null);
+        }
+      } catch {
+        // best-effort — dashboard works fine without this
+      }
     }
   };
 
@@ -2159,6 +2257,21 @@ export default function DashboardScreen() {
 
   return (
     <View style={s.container}>
+      {subBanner && (
+        <TouchableOpacity
+          style={[s.subBanner, subBanner.status === "expired" ? s.subBannerExpired : s.subBannerLow]}
+          onPress={() => router.push("/subscription" as any)}
+          data-testid="subscription-status-banner"
+        >
+          <Ionicons name="alert-circle" size={16} color="#FFF" />
+          <Text style={s.subBannerText}>
+            {subBanner.status === "expired"
+              ? "Your organization's free trial has expired — contact your platform admin to renew."
+              : `Free trial ends in ${subBanner.daysLeft} day${subBanner.daysLeft === 1 ? "" : "s"} — tap for details.`}
+          </Text>
+          <Ionicons name="chevron-forward" size={16} color="#FFF" />
+        </TouchableOpacity>
+      )}
       <ScrollView
         refreshControl={
           <RefreshControl
@@ -2364,6 +2477,16 @@ export default function DashboardScreen() {
 // ── Styles ────────────────────────────────────────────────
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F7FA" },
+  subBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  subBannerExpired: { backgroundColor: "#DC2626" },
+  subBannerLow: { backgroundColor: "#EA580C" },
+  subBannerText: { flex: 1, color: "#FFF", fontSize: 12.5, fontWeight: "700" },
   tabletMainContainer: {
     flexDirection: "row",
     paddingHorizontal: 16,

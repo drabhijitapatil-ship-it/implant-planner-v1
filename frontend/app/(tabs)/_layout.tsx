@@ -544,53 +544,59 @@ export default function TabsLayout() {
   // Header menu button (hamburger) — red dot appears when there are unseen
   // What's-new entries (cleared on ack via GET /whatsnew returning empty).
   const HeaderLeft = () => (
-    <TouchableOpacity
-      onPress={() => { tapLight(); setDrawerOpen(true); }}
-      style={{
-        width: 48,
-        height: 48,
-        justifyContent: 'center',
-        alignItems: 'flex-start',
-        paddingLeft: 14,
-      }}
-      testID="hamburger-btn"
-      accessibilityLabel="hamburger-btn"
-      // @ts-ignore - RNW passes through
-      data-testid="hamburger-btn"
-    >
-      <View>
-        <Ionicons name="menu" size={28} color="#1565C0" />
-        {(hasUnseenWhatsNew || hasUnreadForum) && (
-          <View style={badgeStyles.reddot} data-testid="profile-whatsnew-reddot" />
-        )}
-      </View>
-    </TouchableOpacity>
+    <View style={{ backgroundColor: '#FFF', paddingLeft: 8, height: '100%', justifyContent: 'center' }}>
+      <TouchableOpacity
+        onPress={() => { tapLight(); setDrawerOpen(true); }}
+        style={{
+          width: 44,
+          height: 44,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: '#FFF',
+          borderRadius: 22,
+        }}
+        testID="hamburger-btn"
+        accessibilityLabel="hamburger-btn"
+        // @ts-ignore - RNW passes through
+        data-testid="hamburger-btn"
+      >
+        <View>
+          <Ionicons name="menu" size={28} color="#1565C0" />
+          {(hasUnseenWhatsNew || hasUnreadForum) && (
+            <View style={badgeStyles.reddot} data-testid="profile-whatsnew-reddot" />
+          )}
+        </View>
+      </TouchableOpacity>
+    </View>
   );
 
   const HeaderRight = () => (
-    <TouchableOpacity
-      onPress={() => { tapLight(); router.push('/(tabs)/notifications'); }}
-      style={{
-        width: 48,
-        height: 48,
-        justifyContent: 'center',
-        alignItems: 'flex-end',
-        paddingRight: 14,
-      }}
-      testID="header-notification-btn"
-      accessibilityLabel="header-notification-btn"
-    >
-      <View>
-        <Ionicons name="notifications-outline" size={24} color="#1565C0" />
-        {unreadCount > 0 && (
-          <View style={[badgeStyles.badge, { top: -4, right: -4 }]} data-testid="header-alerts-badge">
-            <Text style={badgeStyles.badgeText}>
-              {unreadCount > 99 ? '99+' : unreadCount}
-            </Text>
-          </View>
-        )}
-      </View>
-    </TouchableOpacity>
+    <View style={{ backgroundColor: '#FFF', paddingRight: 8, height: '100%', justifyContent: 'center' }}>
+      <TouchableOpacity
+        onPress={() => { tapLight(); router.push('/(tabs)/notifications'); }}
+        style={{
+          width: 44,
+          height: 44,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: '#FFF',
+          borderRadius: 22,
+        }}
+        testID="header-notification-btn"
+        accessibilityLabel="header-notification-btn"
+      >
+        <View>
+          <Ionicons name="notifications-outline" size={24} color="#1565C0" />
+          {unreadCount > 0 && (
+            <View style={[badgeStyles.badge, { top: -4, right: -4 }]} data-testid="header-alerts-badge">
+              <Text style={badgeStyles.badgeText}>
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </Text>
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
+    </View>
   );
 
   return (
@@ -616,6 +622,10 @@ export default function TabsLayout() {
           tabBarActiveTintColor: '#1E88E5',
           tabBarInactiveTintColor: '#8E8E93',
           headerShown: true,
+          headerBackVisible: false,
+          headerLeftContainerStyle: { paddingLeft: 0, marginLeft: 0 },
+          headerRightContainerStyle: { paddingRight: 0, marginRight: 0 },
+          headerStyle: { backgroundColor: '#FFF' },
           headerLeft: () => <HeaderLeft />,
           headerRight: () => <HeaderRight />,
           headerTitle: () => (

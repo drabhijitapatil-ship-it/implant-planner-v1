@@ -31,11 +31,14 @@ export default function NotificationsScreen() {
   }, []);
 
   const loadNotifications = async () => {
+    if (!user) return;
     try {
       const response = await api.get('/notifications');
       setNotifications(response.data);
-    } catch (error) {
-      console.error('Failed to load notifications:', error);
+    } catch (error: any) {
+      if (error?.response?.status !== 401 && error?.response?.status !== 403) {
+        console.error('Failed to load notifications:', error);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);

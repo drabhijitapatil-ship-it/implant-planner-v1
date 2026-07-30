@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -9,11 +9,24 @@ import {
   ActivityIndicator,
   Alert,
   StyleSheet,
+  Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import api from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
 import CalendarPicker from './CalendarPicker';
+
+// Mirrors the backend's "referral in progress" set (server.py, refer_procedure) —
+// while any of these is true for the case, the receiving department hasn't sent
+// it back yet, so the originating department can't open a new referral on it.
+const REFERRAL_IN_PROGRESS_STATUSES = [
+  'pending_supervisor_approval',
+  'pending_incharge_approval',
+  'pending',
+  'active',
+];
 
 /**
  * Header-icon action for referring a case to another department for
@@ -64,6 +77,30 @@ export default function ReferCaseButton({
 
   const targetDepartments = departments.filter((d) => d.id !== caseDepartmentId);
 
+  // Re-checked on every screen focus so returning from another referral
+  // action (e.g. the receiving department just sent it back) unlocks this
+  // button again without needing an app restart.
+  const [hasActiveReferral, setHasActiveReferral] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (!canRefer) return;
+      let cancelled = false;
+      api
+        .get(`/procedures/${procedureId}/referrals`)
+        .then((res) => {
+          if (cancelled) return;
+          const referrals = res.data?.referrals || [];
+          setHasActiveReferral(
+            referrals.some((r: any) => REFERRAL_IN_PROGRESS_STATUSES.includes(r.status)),
+          );
+        })
+        .catch(() => {});
+      return () => {
+        cancelled = true;
+      };
+    }, [canRefer, procedureId]),
+  );
+
   const [showModal, setShowModal] = useState(false);
   const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null);
   const [reason, setReason] = useState('');
@@ -103,6 +140,7 @@ export default function ReferCaseButton({
         notes: notes.trim() || undefined,
       });
       setShowModal(false);
+      setHasActiveReferral(true);
       const needsApproval = user?.role === 'student' || user?.role === 'supervisor';
       Alert.alert(
         needsApproval ? 'Referral Submitted' : 'Referral Sent',
@@ -119,7 +157,7 @@ export default function ReferCaseButton({
     }
   };
 
-  const canShow = canRefer && targetDepartments.length > 0;
+  const canShow = canRefer && targetDepartments.length > 0 && !hasActiveReferral;
 
   return (
     <>
@@ -138,7 +176,10 @@ export default function ReferCaseButton({
       </View>
 
       <Modal visible={showModal} animationType="slide" transparent onRequestClose={() => setShowModal(false)}>
-        <View style={styles.overlay}>
+        <KeyboardAvoidingView
+          style={styles.overlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           <View style={styles.sheet} data-testid="refer-case-modal">
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <View style={styles.header}>
@@ -242,7 +283,7 @@ export default function ReferCaseButton({
               </TouchableOpacity>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </>
   );

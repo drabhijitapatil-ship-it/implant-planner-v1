@@ -10,7 +10,7 @@ export default function Index() {
   useEffect(() => {
     if (!loading) {
       if (user) {
-        router.replace('/(tabs)/dashboard');
+        router.replace(user.role === 'super_admin' ? '/super-admin-dashboard' : '/(tabs)/dashboard');
       } else {
         router.replace('/auth/login');
       }

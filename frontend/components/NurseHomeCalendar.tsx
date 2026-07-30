@@ -98,7 +98,7 @@ export function NurseHomeCalendar({ router }: { router: any }) {
   }, [cases, selectedDate]);
 
   const goToCases = (filter: 'completed' | 'pending') => {
-    router.push({ pathname: '/(tabs)/procedures', params: { nurseFilter: filter } });
+    router.replace({ pathname: '/(tabs)/procedures', params: { nurseFilter: filter } });
   };
 
   return (

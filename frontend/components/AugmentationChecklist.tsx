@@ -48,7 +48,9 @@ export default function AugmentationChecklist({
       const r = await api.get(`/procedures/${procedureId}/augmentation-checklist`);
       setItems(Array.isArray(r.data?.items) ? r.data.items : []);
     } catch (e: any) {
-      console.error('[AugChecklist] load failed:', e);
+      if (e?.response?.status !== 401 && e?.response?.status !== 403) {
+        console.error('[AugChecklist] load failed:', e);
+      }
     } finally {
       setLoading(false);
     }

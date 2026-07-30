@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl, TouchableOpacity, Image, ScrollView,
+  Modal, TextInput, KeyboardAvoidingView, Platform, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -35,6 +36,41 @@ type OrgDetailData = {
   phase_pipeline: { phase1: number; phase2: number; phase3: number; phase4: number; completed: number; rejected: number };
   role_breakdown: Record<string, number>;
   monthly_throughput: { label: string; count: number }[];
+};
+
+type SubHistoryEntry = { event: string; at: string; by: string; detail: string };
+
+type OrgSubscription = {
+  org_id: string;
+  status: 'none' | 'trial' | 'active' | 'expired' | 'cancelled';
+  plan_key: string | null;
+  plan_name: string | null;
+  billing_cycle?: 'monthly' | 'yearly' | null;
+  price_locked_in?: number | null;
+  max_users: number | null;
+  max_students: number | null;
+  max_department: number | null;
+  max_implant_incharges: number | null;
+  trial_ends_at?: string | null;
+  history?: SubHistoryEntry[];
+  requested_plan_key?: string | null;
+  requested_plan_name?: string | null;
+  requested_billing_cycle?: 'monthly' | 'yearly' | null;
+  requested_at?: string | null;
+  requested_by?: string | null;
+};
+
+type Plan = {
+  key: string;
+  org_type: 'college' | 'clinic';
+  name: string;
+  max_users: number;
+  max_students?: number | null;
+  max_department?: number | null;
+  max_implant_incharges?: number | null;
+  price_monthly: number;
+  price_yearly: number;
+  launch_offer_first_year_price?: number | null;
 };
 
 type OrgUser = {
@@ -86,6 +122,15 @@ export default function OrganizationDetailScreen() {
   const [detail, setDetail] = useState<OrgDetailData | null>(null);
   const [detailLoading, setDetailLoading] = useState(true);
 
+  const [subscription, setSubscription] = useState<OrgSubscription | null>(null);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [showSubModal, setShowSubModal] = useState(false);
+  const [subForm, setSubForm] = useState<Record<string, string>>({});
+  const [selectedPlanKey, setSelectedPlanKey] = useState<string | null>(null);
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+  const [useLaunchOffer, setUseLaunchOffer] = useState(false);
+  const [savingSub, setSavingSub] = useState(false);
+
   const [users, setUsers] = useState<OrgUser[]>([]);
   const [usersTotal, setUsersTotal] = useState(0);
   const [usersLoading, setUsersLoading] = useState(true);
@@ -110,6 +155,23 @@ export default function OrganizationDetailScreen() {
     }
   }, [id]);
 
+  const loadSubscription = useCallback(async () => {
+    if (!id) return;
+    try {
+      const res = await api.get(`/organizations/${id}/subscription`);
+      setSubscription(res.data || null);
+    } catch {
+    }
+  }, [id]);
+
+  const loadPlans = useCallback(async () => {
+    try {
+      const res = await api.get('/subscription-plans');
+      setPlans(res.data?.plans || []);
+    } catch {
+    }
+  }, []);
+
   const loadUsers = useCallback(async (skip: number, replace: boolean) => {
     if (!id) return;
     try {
@@ -128,13 +190,112 @@ export default function OrganizationDetailScreen() {
   }, [id, roleFilter]);
 
   useEffect(() => { loadDetail(); }, [loadDetail]);
+  useEffect(() => { loadSubscription(); loadPlans(); }, [loadSubscription, loadPlans]);
   useEffect(() => { setUsersLoading(true); loadUsers(0, true); }, [loadUsers]);
 
   const onRefresh = () => {
     setRefreshing(true);
     loadDetail();
+    loadSubscription();
     loadUsers(0, true);
   };
+
+  const openSubModal = () => {
+    setSelectedPlanKey(subscription?.plan_key || null);
+    setBillingCycle((subscription?.billing_cycle as 'monthly' | 'yearly') || 'monthly');
+    setUseLaunchOffer(false);
+    setSubForm({
+      max_users: subscription?.max_users != null ? String(subscription.max_users) : '',
+      max_students: subscription?.max_students != null ? String(subscription.max_students) : '',
+      max_department: subscription?.max_department != null ? String(subscription.max_department) : '',
+      max_implant_incharges: subscription?.max_implant_incharges != null ? String(subscription.max_implant_incharges) : '',
+      trial_days: '',
+    });
+    setShowSubModal(true);
+  };
+
+  const numOrUndef = (v: string) => (v.trim() === '' ? undefined : parseInt(v, 10));
+
+  const saveOverrideOnly = async () => {
+    setSavingSub(true);
+    try {
+      const res = await api.put(`/organizations/${id}/subscription`, {
+        max_users: numOrUndef(subForm.max_users),
+        max_students: numOrUndef(subForm.max_students),
+        max_department: numOrUndef(subForm.max_department),
+        max_implant_incharges: numOrUndef(subForm.max_implant_incharges),
+        trial_days: numOrUndef(subForm.trial_days),
+      });
+      setSubscription(res.data);
+      setShowSubModal(false);
+    } catch (e: any) {
+      Alert.alert('Error', e?.response?.data?.detail || 'Failed to update caps');
+    } finally {
+      setSavingSub(false);
+    }
+  };
+
+  const assignPlan = async () => {
+    if (!selectedPlanKey) {
+      Alert.alert('Error', 'Pick a plan to assign');
+      return;
+    }
+    setSavingSub(true);
+    try {
+      const res = await api.put(`/organizations/${id}/subscription`, {
+        plan_key: selectedPlanKey,
+        billing_cycle: billingCycle,
+        is_launch_offer: useLaunchOffer,
+        max_users: numOrUndef(subForm.max_users),
+        max_students: numOrUndef(subForm.max_students),
+        max_department: numOrUndef(subForm.max_department),
+        max_implant_incharges: numOrUndef(subForm.max_implant_incharges),
+      });
+      setSubscription(res.data);
+      setShowSubModal(false);
+    } catch (e: any) {
+      Alert.alert('Error', e?.response?.data?.detail || 'Failed to assign plan');
+    } finally {
+      setSavingSub(false);
+    }
+  };
+
+  // Pending self-service upgrade request — Approve pre-fills the assign-plan
+  // modal with what they asked for (still reviewable/editable before saving);
+  // Dismiss just clears the request without changing their current plan.
+  const [showHistory, setShowHistory] = useState(false);
+  const [dismissingRequest, setDismissingRequest] = useState(false);
+
+  const approveRequest = () => {
+    if (!subscription?.requested_plan_key) return;
+    setSelectedPlanKey(subscription.requested_plan_key);
+    setBillingCycle((subscription.requested_billing_cycle as 'monthly' | 'yearly') || 'monthly');
+    setUseLaunchOffer(false);
+    setSubForm({
+      max_users: '', max_students: '', max_department: '', max_implant_incharges: '', trial_days: '',
+    });
+    setShowSubModal(true);
+  };
+
+  const dismissRequest = async () => {
+    setDismissingRequest(true);
+    try {
+      const res = await api.post(`/organizations/${id}/subscription/dismiss-request`);
+      setSubscription(res.data);
+    } catch (e: any) {
+      Alert.alert('Error', e?.response?.data?.detail || 'Failed to dismiss request');
+    } finally {
+      setDismissingRequest(false);
+    }
+  };
+
+  const trialDaysLeft = (() => {
+    if (subscription?.status !== 'trial' || !subscription.trial_ends_at) return null;
+    const ms = new Date(subscription.trial_ends_at).getTime() - Date.now();
+    return Math.max(0, Math.ceil(ms / 86400000));
+  })();
+
+  const orgPlans = plans.filter((p) => p.org_type === (detail?.profile?.org_type || 'college'));
 
   const onEndReached = () => {
     if (usersLoading || usersLoadingMore || refreshing || users.length >= usersTotal) return;
@@ -185,6 +346,99 @@ export default function OrganizationDetailScreen() {
               <InfoRow icon="calendar-outline" label="Onboarded" value={formatDate(profile?.created_at)} />
               <InfoRow icon="people-outline" label="Planned Users" value={String(profile?.declared_num_users ?? '—')} />
             </View>
+          </View>
+
+          {subscription?.requested_plan_key && (
+            <View style={s.requestCard} data-testid="org-upgrade-request-card">
+              <View style={s.requestHeaderRow}>
+                <Ionicons name="arrow-up-circle" size={18} color="#B7791F" />
+                <Text style={s.requestTitle}>Upgrade Requested</Text>
+              </View>
+              <Text style={s.requestBody}>
+                {subscription.requested_by || 'Org admin'} requested <Text style={{ fontWeight: '700' }}>{subscription.requested_plan_name}</Text>
+                {' '}({subscription.requested_billing_cycle}) {subscription.requested_at ? `on ${formatDate(subscription.requested_at)}` : ''}
+              </Text>
+              <View style={s.requestBtnRow}>
+                <TouchableOpacity style={s.requestApproveBtn} onPress={approveRequest} data-testid="org-upgrade-approve-btn">
+                  <Ionicons name="checkmark" size={14} color="#FFF" />
+                  <Text style={s.requestApproveBtnText}>Review &amp; Approve</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[s.requestDismissBtn, dismissingRequest && { opacity: 0.6 }]}
+                  onPress={dismissRequest}
+                  disabled={dismissingRequest}
+                  data-testid="org-upgrade-dismiss-btn"
+                >
+                  {dismissingRequest ? <ActivityIndicator size="small" color="#B7791F" /> : <Text style={s.requestDismissBtnText}>Dismiss</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          <View style={s.subCard} data-testid="org-subscription-card">
+            <View style={s.subHeaderRow}>
+              <Text style={s.sectionTitle}>Subscription</Text>
+              <TouchableOpacity style={s.subEditBtn} onPress={openSubModal} data-testid="org-subscription-edit-btn">
+                <Ionicons name="create-outline" size={14} color="#0D47A1" />
+                <Text style={s.subEditBtnText}>Manage</Text>
+              </TouchableOpacity>
+            </View>
+            {subscription?.status === 'none' || !subscription ? (
+              <Text style={s.subNone}>No subscription record — legacy org, unlimited by default.</Text>
+            ) : (
+              <>
+                <View style={s.subStatusRow}>
+                  <View style={[s.subStatusChip, subStatusStyle(subscription.status)]}>
+                    <Text style={[s.subStatusChipText, subStatusTextStyle(subscription.status)]}>
+                      {subscription.status.toUpperCase()}
+                    </Text>
+                  </View>
+                  <Text style={s.subPlanName}>{subscription.plan_name || 'Free Trial'}</Text>
+                </View>
+                {subscription.status === 'trial' && trialDaysLeft !== null && (
+                  <Text style={s.subTrialDays}>{trialDaysLeft} day{trialDaysLeft === 1 ? '' : 's'} left in trial</Text>
+                )}
+                {subscription.price_locked_in != null && subscription.status === 'active' && (
+                  <Text style={s.subPrice}>₹{subscription.price_locked_in.toLocaleString('en-IN')} / {subscription.billing_cycle === 'yearly' ? 'year' : 'month'} (locked in)</Text>
+                )}
+                <View style={s.subCapsRow}>
+                  <Text style={s.subCapChip}>{subscription.max_users ?? '∞'} users max</Text>
+                  {subscription.max_implant_incharges != null && (
+                    <Text style={s.subCapChip}>{subscription.max_implant_incharges} incharge{subscription.max_implant_incharges === 1 ? '' : 's'}</Text>
+                  )}
+                  {subscription.max_department != null && <Text style={s.subCapChip}>{subscription.max_department} dept</Text>}
+                  {subscription.max_students != null && <Text style={s.subCapChip}>{subscription.max_students} students</Text>}
+                </View>
+
+                {!!subscription.history?.length && (
+                  <>
+                    <TouchableOpacity
+                      style={s.historyToggle}
+                      onPress={() => setShowHistory((v) => !v)}
+                      data-testid="org-subscription-history-toggle"
+                    >
+                      <Ionicons name={showHistory ? 'chevron-up' : 'chevron-down'} size={14} color="#0D47A1" />
+                      <Text style={s.historyToggleText}>
+                        {showHistory ? 'Hide' : 'Show'} history ({subscription.history.length})
+                      </Text>
+                    </TouchableOpacity>
+                    {showHistory && (
+                      <View style={s.historyList} data-testid="org-subscription-history-list">
+                        {[...subscription.history].reverse().map((h, idx) => (
+                          <View key={idx} style={s.historyRow}>
+                            <View style={s.historyDot} />
+                            <View style={{ flex: 1 }}>
+                              <Text style={s.historyDetail}>{h.detail}</Text>
+                              <Text style={s.historyMeta}>{h.by} · {formatDate(h.at)}</Text>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </>
+                )}
+              </>
+            )}
           </View>
 
           <Text style={s.sectionTitle}>Case KPIs</Text>
@@ -294,8 +548,124 @@ export default function OrganizationDetailScreen() {
           }
         />
       )}
+
+      <Modal visible={showSubModal} animationType="slide" transparent onRequestClose={() => setShowSubModal(false)}>
+        <KeyboardAvoidingView style={s.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <View style={s.modalContent} data-testid="org-subscription-modal">
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <View style={s.modalHeader}>
+                <Text style={s.modalTitle}>Manage Subscription</Text>
+                <TouchableOpacity onPress={() => setShowSubModal(false)}>
+                  <Ionicons name="close" size={24} color="#666" />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={s.modalLabel}>Assign / Change Plan</Text>
+              {orgPlans.map((p) => (
+                <TouchableOpacity
+                  key={p.key}
+                  style={[s.planOptRow, selectedPlanKey === p.key && s.planOptRowActive]}
+                  onPress={() => setSelectedPlanKey(p.key)}
+                  data-testid={`assign-plan-${p.key}`}
+                >
+                  <Ionicons name={selectedPlanKey === p.key ? 'radio-button-on' : 'radio-button-off'} size={18} color={selectedPlanKey === p.key ? '#0D47A1' : '#94A3B8'} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.planOptName}>{p.name}</Text>
+                    <Text style={s.planOptPrice}>₹{p.price_monthly.toLocaleString('en-IN')}/mo · ₹{p.price_yearly.toLocaleString('en-IN')}/yr{p.launch_offer_first_year_price != null ? ` · launch ₹${p.launch_offer_first_year_price.toLocaleString('en-IN')}` : ''}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+
+              {selectedPlanKey && (
+                <>
+                  <View style={s.segmentRow}>
+                    {(['monthly', 'yearly'] as const).map((c) => (
+                      <TouchableOpacity key={c} style={[s.segmentBtn, billingCycle === c && s.segmentBtnActive]} onPress={() => setBillingCycle(c)} data-testid={`billing-cycle-${c}`}>
+                        <Text style={[s.segmentBtnText, billingCycle === c && s.segmentBtnTextActive]}>{c === 'monthly' ? 'Monthly' : 'Yearly'}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <TouchableOpacity style={s.launchToggleRow} onPress={() => setUseLaunchOffer((v) => !v)} data-testid="use-launch-offer-toggle">
+                    <Ionicons name={useLaunchOffer ? 'checkbox' : 'square-outline'} size={20} color="#0D47A1" />
+                    <Text style={s.launchToggleText}>Apply launch offer (first year)</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+
+              <Text style={[s.modalLabel, { marginTop: 18 }]}>Free Trial</Text>
+              <Text style={s.smallLabel}>
+                Extend or grant a trial for this org only (independent of the global default) — counted from today.
+              </Text>
+              <TextInput
+                style={s.input}
+                keyboardType="number-pad"
+                placeholder={subscription?.status === 'trial' ? 'e.g. 14 — resets countdown from today' : 'e.g. 14 — starts a fresh trial'}
+                placeholderTextColor="#999"
+                value={subForm.trial_days}
+                onChangeText={(v) => setSubForm((f) => ({ ...f, trial_days: v }))}
+                data-testid="override-trial-days"
+              />
+
+              <Text style={[s.modalLabel, { marginTop: 18 }]}>Override Caps (optional — blank = use plan default)</Text>
+              <View style={s.fieldRow}>
+                <View style={s.fieldHalf}>
+                  <Text style={s.smallLabel}>Max Users</Text>
+                  <TextInput style={s.input} keyboardType="number-pad" value={subForm.max_users} placeholder="—" placeholderTextColor="#999"
+                    onChangeText={(v) => setSubForm((f) => ({ ...f, max_users: v }))} data-testid="override-max-users" />
+                </View>
+                <View style={s.fieldHalf}>
+                  <Text style={s.smallLabel}>Max Implant In-Charges</Text>
+                  <TextInput style={s.input} keyboardType="number-pad" value={subForm.max_implant_incharges} placeholder="—" placeholderTextColor="#999"
+                    onChangeText={(v) => setSubForm((f) => ({ ...f, max_implant_incharges: v }))} data-testid="override-max-incharges" />
+                </View>
+              </View>
+              <View style={s.fieldRow}>
+                <View style={s.fieldHalf}>
+                  <Text style={s.smallLabel}>Max Department</Text>
+                  <TextInput style={s.input} keyboardType="number-pad" value={subForm.max_department} placeholder="—" placeholderTextColor="#999"
+                    onChangeText={(v) => setSubForm((f) => ({ ...f, max_department: v }))} data-testid="override-max-department" />
+                </View>
+                <View style={s.fieldHalf}>
+                  <Text style={s.smallLabel}>Max Students</Text>
+                  <TextInput style={s.input} keyboardType="number-pad" value={subForm.max_students} placeholder="—" placeholderTextColor="#999"
+                    onChangeText={(v) => setSubForm((f) => ({ ...f, max_students: v }))} data-testid="override-max-students" />
+                </View>
+              </View>
+
+              {selectedPlanKey ? (
+                <TouchableOpacity style={[s.saveBtn, savingSub && s.btnDisabled]} onPress={assignPlan} disabled={savingSub} data-testid="submit-assign-plan">
+                  {savingSub ? <ActivityIndicator color="#FFF" /> : <Text style={s.saveBtnText}>Assign Plan</Text>}
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[s.saveBtn, savingSub && s.btnDisabled]}
+                  onPress={saveOverrideOnly}
+                  disabled={savingSub}
+                  data-testid="submit-override-caps"
+                >
+                  {savingSub ? <ActivityIndicator color="#FFF" /> : <Text style={s.saveBtnText}>Save</Text>}
+                </TouchableOpacity>
+              )}
+              {!selectedPlanKey && (!subscription || subscription.status === 'none') && (
+                <Text style={s.subNone}>No existing subscription — enter a trial length above to start one, or pick a plan.</Text>
+              )}
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
+}
+
+function subStatusStyle(status: string) {
+  if (status === 'trial') return { backgroundColor: '#FFF3E0', borderColor: '#FFCC80' };
+  if (status === 'active') return { backgroundColor: '#E8F5E9', borderColor: '#A5D6A7' };
+  return { backgroundColor: '#FFEBEE', borderColor: '#FFCDD2' };
+}
+function subStatusTextStyle(status: string) {
+  if (status === 'trial') return { color: '#E65100' };
+  if (status === 'active') return { color: '#2E7D32' };
+  return { color: '#C62828' };
 }
 
 function InfoRow({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string }) {
@@ -401,4 +771,63 @@ const s = StyleSheet.create({
   userEmail: { fontSize: 12, color: '#607D8B', marginTop: 1 },
   userRoleTag: { borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5 },
   userRoleTagText: { fontSize: 10.5, fontWeight: '700' },
+  // Subscription card
+  subCard: {
+    backgroundColor: '#FFF', borderRadius: 14, padding: 14, marginBottom: 4,
+    borderWidth: 1, borderColor: '#E8EEF5',
+  },
+  subHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 0 },
+  subEditBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, borderWidth: 1, borderColor: '#BBDEFB', backgroundColor: '#E3F2FD' },
+  subEditBtnText: { fontSize: 12, fontWeight: '700', color: '#0D47A1' },
+  subNone: { fontSize: 12.5, color: '#90A4AE', marginTop: 8 },
+  subStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
+  subStatusChip: { borderRadius: 999, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 3 },
+  subStatusChipText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.3 },
+  subPlanName: { fontSize: 14, fontWeight: '700', color: '#1A202C' },
+  subTrialDays: { fontSize: 12.5, color: '#E65100', fontWeight: '600', marginTop: 6 },
+  subPrice: { fontSize: 12.5, color: '#2E7D32', fontWeight: '600', marginTop: 6 },
+  subCapsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+  subCapChip: { fontSize: 11, fontWeight: '600', color: '#546E7A', backgroundColor: '#F5F7FA', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: '#E2E8F0' },
+  // Pending upgrade request card
+  requestCard: { backgroundColor: '#FFFBEB', borderRadius: 14, borderWidth: 1, borderColor: '#FDE68A', padding: 14, marginBottom: 4 },
+  requestHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  requestTitle: { fontSize: 14, fontWeight: '800', color: '#B7791F' },
+  requestBody: { fontSize: 12.5, color: '#78350F', lineHeight: 18 },
+  requestBtnRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  requestApproveBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#B7791F', borderRadius: 10, paddingVertical: 10 },
+  requestApproveBtnText: { color: '#FFF', fontSize: 12.5, fontWeight: '700' },
+  requestDismissBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#FDE68A', alignItems: 'center', justifyContent: 'center' },
+  requestDismissBtnText: { color: '#B7791F', fontSize: 12.5, fontWeight: '700' },
+  // History timeline
+  historyToggle: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#F0F4F8' },
+  historyToggleText: { fontSize: 12.5, fontWeight: '700', color: '#0D47A1' },
+  historyList: { marginTop: 10, gap: 10 },
+  historyRow: { flexDirection: 'row', gap: 8 },
+  historyDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#90A4AE', marginTop: 5 },
+  historyDetail: { fontSize: 12.5, color: '#263238', fontWeight: '600' },
+  historyMeta: { fontSize: 11, color: '#90A4AE', marginTop: 2 },
+  // Subscription modal
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 32, maxHeight: '90%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: '#1A202C', flex: 1, marginRight: 8 },
+  modalLabel: { fontSize: 13, fontWeight: '700', color: '#0D47A1', marginBottom: 8 },
+  smallLabel: { fontSize: 12, fontWeight: '600', color: '#546E7A', marginBottom: 6 },
+  planOptRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 8 },
+  planOptRowActive: { borderColor: '#0D47A1', backgroundColor: '#E3F2FD' },
+  planOptName: { fontSize: 14, fontWeight: '700', color: '#1A202C' },
+  planOptPrice: { fontSize: 11.5, color: '#607D8B', marginTop: 2 },
+  segmentRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  segmentBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', alignItems: 'center' },
+  segmentBtnActive: { borderColor: '#0D47A1', backgroundColor: '#E3F2FD' },
+  segmentBtnText: { fontSize: 13, fontWeight: '600', color: '#64748B' },
+  segmentBtnTextActive: { color: '#0D47A1' },
+  launchToggleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },
+  launchToggleText: { fontSize: 13, fontWeight: '600', color: '#1A202C' },
+  fieldRow: { flexDirection: 'row', gap: 10 },
+  fieldHalf: { flex: 1 },
+  input: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, padding: 12, fontSize: 15, color: '#1A202C' },
+  saveBtn: { backgroundColor: '#0D47A1', borderRadius: 10, padding: 14, alignItems: 'center', marginTop: 20 },
+  saveBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
+  btnDisabled: { opacity: 0.5 },
 });

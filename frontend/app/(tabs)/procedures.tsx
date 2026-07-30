@@ -28,6 +28,7 @@ import ShareToForumModal from "../../components/ShareToForumModal";
 import RescheduleModal from "../../components/RescheduleModal";
 import CancelCaseModal from "../../components/CancelCaseModal";
 import TransferCaseModal from "../../components/TransferCaseModal";
+import ReferredCaseAssignModal from "../../components/ReferredCaseAssignModal";
 
 export default function ProceduresScreen() {
   const { user } = useAuth();
@@ -139,6 +140,7 @@ function DefaultProceduresScreen() {
   } | null>(null);
   // iter-385: case selected for Transfer Case via the three-dot menu.
   const [transferCase, setTransferCase] = useState<{ id: string; privileged?: boolean } | null>(null);
+  const [assignReferredCase, setAssignReferredCase] = useState<{ id: string; patientName: string } | null>(null);
   const [selectedProcedureForActions, setSelectedProcedureForActions] = useState<any | null>(null);
 
   const router = useRouter();
@@ -167,6 +169,7 @@ function DefaultProceduresScreen() {
   }, [user?.is_admin]);
 
   const loadProcedures = useCallback(async () => {
+    if (!user) return;
     try {
       const reqParams: any = {};
       const f = String(filter);
@@ -184,13 +187,15 @@ function DefaultProceduresScreen() {
         ? response.data
         : response.data.filter((p: any) => p.status !== "draft");
       setProcedures(filtered);
-    } catch (error) {
-      console.error("Failed to load procedures:", error);
+    } catch (error: any) {
+      if (error?.response?.status !== 401 && error?.response?.status !== 403) {
+        console.error("Failed to load procedures:", error);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [deptFilter, filter, user?.is_admin]);
+  }, [deptFilter, filter, user]);
 
   useEffect(() => {
     loadProcedures();
@@ -300,8 +305,14 @@ function DefaultProceduresScreen() {
     const transferEligible =
       !isCompleted && !transferPendingStatuses.has(item.status) && !hasPendingTransfer;
 
+    const isReferredToMyDept = !!(
+      item.department_id &&
+      user?.department_id &&
+      item.department_id !== user?.department_id
+    );
+
     if (role === "implant_incharge") {
-      if (!isCompleted)
+      if (!isCompleted && !isReferredToMyDept)
         actions.push({
           key: "edit",
           label: "Edit",
@@ -309,20 +320,22 @@ function DefaultProceduresScreen() {
           color: "#1565C0",
           onPress: () => handleEdit(pid),
         });
-      actions.push({
-        key: "delete",
-        label: "Delete",
-        icon: "trash-outline",
-        color: "#1565C0",
-        onPress: () => handleDelete(pid),
-      });
-      actions.push({
-        key: "archive",
-        label: "Archive",
-        icon: "archive-outline",
-        color: "#1565C0",
-        onPress: () => handleArchive(pid),
-      });
+      if (!isReferredToMyDept) {
+        actions.push({
+          key: "delete",
+          label: "Delete",
+          icon: "trash-outline",
+          color: "#1565C0",
+          onPress: () => handleDelete(pid),
+        });
+        actions.push({
+          key: "archive",
+          label: "Archive",
+          icon: "archive-outline",
+          color: "#1565C0",
+          onPress: () => handleArchive(pid),
+        });
+      }
       // Department In-Charge — transfer within own department, skips
       // Supervisor/In-Charge approval (they already have that authority).
       if (user?.department_id && transferEligible) {
@@ -334,6 +347,13 @@ function DefaultProceduresScreen() {
           onPress: () => setTransferCase({ id: pid, privileged: true }),
         });
       }
+      actions.push({
+        key: "referral_assign",
+        label: "Assign / Transfer to Student",
+        icon: "person-add-outline",
+        color: "#1565C0",
+        onPress: () => setAssignReferredCase({ id: pid, patientName: item.patient_name }),
+      });
     } else if (role === "administrator") {
       // Organization Admin — transfer within the case's own department,
       // skips Supervisor/In-Charge approval.
@@ -346,8 +366,15 @@ function DefaultProceduresScreen() {
           onPress: () => setTransferCase({ id: pid, privileged: true }),
         });
       }
+      actions.push({
+        key: "referral_assign",
+        label: "Assign / Transfer to Student",
+        icon: "person-add-outline",
+        color: "#1565C0",
+        onPress: () => setAssignReferredCase({ id: pid, patientName: item.patient_name }),
+      });
     } else if (role === "supervisor") {
-      if (!isCompleted)
+      if (!isCompleted && !isReferredToMyDept)
         actions.push({
           key: "edit",
           label: "Edit",
@@ -355,21 +382,25 @@ function DefaultProceduresScreen() {
           color: "#1565C0",
           onPress: () => handleEdit(pid),
         });
-      actions.push({
-        key: "archive",
-        label: "Archive",
-        icon: "archive-outline",
-        color: "#1565C0",
-        onPress: () => handleArchive(pid),
-      });
+      if (!isReferredToMyDept) {
+        actions.push({
+          key: "archive",
+          label: "Archive",
+          icon: "archive-outline",
+          color: "#1565C0",
+          onPress: () => handleArchive(pid),
+        });
+      }
     } else if (role === "student") {
-      actions.push({
-        key: "archive",
-        label: "Archive",
-        icon: "archive-outline",
-        color: "#1565C0",
-        onPress: () => handleArchive(pid),
-      });
+      if (!isReferredToMyDept) {
+        actions.push({
+          key: "archive",
+          label: "Archive",
+          icon: "archive-outline",
+          color: "#1565C0",
+          onPress: () => handleArchive(pid),
+        });
+      }
       // iter-385: Transfer Case — student can only initiate transfer of a
       // case they currently own.
       const isCurrentOwner = item.student_id === user?.id;
@@ -504,6 +535,27 @@ function DefaultProceduresScreen() {
             {STATUS_LABELS[item.status as keyof typeof STATUS_LABELS] || item.status}
           </Text>
         </View>
+
+        {/* Referred Case Chip (conditional) */}
+        {!!item.active_referral && (
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: '#EFF6FF',
+            borderColor: '#BFDBFE',
+            borderWidth: 1,
+            borderRadius: 8,
+            paddingHorizontal: 8,
+            paddingVertical: 5,
+            marginTop: 6,
+          }}>
+            <Ionicons name="swap-horizontal" size={14} color="#1D4ED8" style={{ marginRight: 6 }} />
+            <Text style={{ fontSize: 11, fontWeight: '700', color: '#1E40AF', flex: 1 }} numberOfLines={1}>
+              Referred: {item.active_referral.from_department_name || 'Primary Dept'} ➔ {item.active_referral.to_department_name || 'Referred Dept'}
+              {item.active_referral.assigned_phase ? ` (${item.active_referral.assigned_phase})` : ''}
+            </Text>
+          </View>
+        )}
 
         {/* Rescheduled Badge (conditional) */}
         {Array.isArray(item.reschedule_history) && item.reschedule_history.length > 0 ? (
@@ -853,6 +905,18 @@ function DefaultProceduresScreen() {
           privileged={transferCase.privileged}
           onClose={() => setTransferCase(null)}
           onSubmitted={() => { setTransferCase(null); loadProcedures(); }}
+        />
+      )}
+      {assignReferredCase && (
+        <ReferredCaseAssignModal
+          visible={!!assignReferredCase}
+          procedureId={assignReferredCase.id}
+          patientName={assignReferredCase.patientName}
+          onClose={() => setAssignReferredCase(null)}
+          onSuccess={() => {
+            setAssignReferredCase(null);
+            loadProcedures();
+          }}
         />
       )}
       {selectedProcedureForActions && (

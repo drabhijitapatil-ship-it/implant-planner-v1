@@ -11,6 +11,8 @@ import {
   Modal,
   ScrollView,
   TextInput,
+  Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -36,6 +38,9 @@ type Referral = {
   id: string;
   case_id: string;
   from_department_id: string | null;
+  from_department_name?: string | null;
+  from_student_name?: string | null;
+  from_supervisor_name?: string | null;
   to_department_id: string;
   to_department_name: string;
   reason?: string;
@@ -82,7 +87,6 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
 const OUTCOME_OPTIONS: { key: string; label: string; needsTarget?: boolean }[] = [
   { key: 'returned', label: 'Return Patient' },
   { key: 'treatment_complete', label: 'Treatment Complete' },
-  { key: 'transfer_further', label: 'Transfer Further', needsTarget: true },
   { key: 'cancelled', label: 'Referral Cancelled' },
   { key: 'patient_did_not_report', label: 'Patient Did Not Report' },
 ];
@@ -113,6 +117,7 @@ export default function ReferralsScreen() {
   const [completing, setCompleting] = useState(false);
 
   const load = useCallback(async () => {
+    if (!user) return;
     try {
       const calls: Promise<any>[] = [];
       calls.push(isManager ? api.get('/referrals/incoming') : Promise.resolve({ data: { referrals: [] } }));
@@ -122,13 +127,15 @@ export default function ReferralsScreen() {
       setIncoming(inRes.data?.referrals || []);
       setOutgoing(outRes.data?.referrals || []);
       setApprovals(apprRes.data?.referrals || []);
-    } catch (error) {
-      console.error('Failed to load referrals:', error);
+    } catch (error: any) {
+      if (error?.response?.status !== 401 && error?.response?.status !== 403) {
+        console.error('Failed to load referrals:', error);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [isManager, canApprove]);
+  }, [isManager, canApprove, user]);
 
   useEffect(() => {
     if (canView) load();
@@ -243,9 +250,29 @@ export default function ReferralsScreen() {
         <View style={styles.cardRow}>
           <Ionicons name="business-outline" size={13} color="#64748B" />
           <Text style={styles.cardMetaSmall}>
-            {tab === 'incoming' ? `From: ${item.requested_by_name} (${item.requested_by_role || ''})` : `To: ${item.to_department_name}`}
+            {tab === 'incoming'
+              ? `From Dept: ${item.from_department_name || 'Primary Department'}`
+              : `To Dept: ${item.to_department_name}`}
           </Text>
         </View>
+        <View style={styles.cardRow}>
+          <Ionicons name="person-outline" size={13} color="#64748B" />
+          <Text style={styles.cardMetaSmall}>
+            Referred By: {item.requested_by_name} ({item.requested_by_role || ''})
+          </Text>
+        </View>
+        {!!item.from_student_name && (
+          <View style={styles.cardRow}>
+            <Ionicons name="school-outline" size={13} color="#64748B" />
+            <Text style={styles.cardMetaSmall}>Treating Student: {item.from_student_name}</Text>
+          </View>
+        )}
+        {!!item.from_supervisor_name && (
+          <View style={styles.cardRow}>
+            <Ionicons name="ribbon-outline" size={13} color="#64748B" />
+            <Text style={styles.cardMetaSmall}>Assigned Supervisor: {item.from_supervisor_name}</Text>
+          </View>
+        )}
         {!!item.assigned_phase && (
           <View style={styles.cardRow}>
             <Ionicons name="layers-outline" size={13} color="#64748B" />
@@ -397,7 +424,10 @@ export default function ReferralsScreen() {
 
       {/* Complete Referral — structured outcome picker */}
       <Modal visible={!!completeTarget} animationType="slide" transparent onRequestClose={() => setCompleteTarget(null)}>
-        <View style={styles.overlay}>
+        <KeyboardAvoidingView
+          style={styles.overlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           <View style={styles.sheet} data-testid="complete-referral-modal">
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <View style={styles.sheetHeaderRow}>
@@ -469,7 +499,7 @@ export default function ReferralsScreen() {
               </TouchableOpacity>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

@@ -473,18 +473,21 @@ export default function UserManagementScreen() {
   const [updating, setUpdating] = useState(false);
 
   const loadUsers = useCallback(async () => {
+    if (!user) return;
     try {
       const params: any = {};
       if (filterRole !== "all") params.role = filterRole;
       const response = await api.get("/users", { params });
       setUsers(response.data);
-    } catch (error) {
-      console.error("Failed to load users:", error);
+    } catch (error: any) {
+      if (error?.response?.status !== 401 && error?.response?.status !== 403) {
+        console.error("Failed to load users:", error);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [filterRole]);
+  }, [filterRole, user]);
 
   useEffect(() => {
     loadUsers();

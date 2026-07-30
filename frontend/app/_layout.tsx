@@ -62,12 +62,13 @@ export default function RootLayout() {
         <TabletFrame>
           <ActivityTracker>
             <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="index" />
-              <Stack.Screen name="auth/login" />
-              <Stack.Screen name="auth/register" />
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="implantlens/index" />
-              <Stack.Screen name="implantlens/[caseId]" />
+              <Stack.Screen name="index" options={{ headerShown: false }} />
+              <Stack.Screen name="auth/login" options={{ headerShown: false }} />
+              <Stack.Screen name="auth/register" options={{ headerShown: false }} />
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="super-admin-dashboard" options={{ headerShown: false }} />
+              <Stack.Screen name="implantlens/index" options={{ headerShown: false }} />
+              <Stack.Screen name="implantlens/[caseId]" options={{ headerShown: false }} />
               <Stack.Screen name="procedures/[id]" options={{ headerShown: false }} />
               <Stack.Screen name="procedures/submit-phase2/[id]" options={{ headerShown: false }} />
               <Stack.Screen name="procedures/submit-stage2-surgical/[id]" options={{ headerShown: false }} />
@@ -75,13 +76,16 @@ export default function RootLayout() {
               <Stack.Screen name="procedures/submit-phase4-step2/[id]" options={{ headerShown: false }} />
               <Stack.Screen name="legal/privacy-policy" options={{ headerShown: false }} />
               <Stack.Screen name="legal/terms" options={{ headerShown: false }} />
-              <Stack.Screen name="onboarding" />
-              <Stack.Screen name="help-workflow" />
-              <Stack.Screen name="whatsnew" />
+              <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+              <Stack.Screen name="help-workflow" options={{ headerShown: false }} />
+              <Stack.Screen name="whatsnew" options={{ headerShown: false }} />
               <Stack.Screen name="admin/audit-log" options={{ headerShown: false }} />
               <Stack.Screen name="admin/departments" options={{ headerShown: false }} />
+              <Stack.Screen name="subscription" options={{ headerShown: false }} />
               <Stack.Screen name="referrals" options={{ headerShown: false }} />
               <Stack.Screen name="admin/implant-catalog" options={{ headerShown: false }} />
+              <Stack.Screen name="admin/implant-library" options={{ headerShown: false }} />
+              <Stack.Screen name="admin/subscription-plans" options={{ headerShown: false }} />
               <Stack.Screen name="admin/implant-catalog-edit" options={{ headerShown: false }} />
               <Stack.Screen name="admin/implant-compare" options={{ headerShown: false }} />
               <Stack.Screen name="ask-implanr" options={{ headerShown: false }} />
