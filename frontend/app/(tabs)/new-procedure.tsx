@@ -185,7 +185,7 @@ function CalendarPicker({ value, onChange, label, required }: {
   return (
     <View style={styles.fieldContainer}>
       <Text style={styles.label}>{label}{required && <Text style={{ color: '#DC3545' }}> *</Text>}</Text>
-      <TouchableOpacity style={styles.dropdown} onPress={() => setOpen(!open)} data-testid="calendar-trigger">
+      <TouchableOpacity style={styles.dropdown} onPress={() => setOpen(!open)} testID="calendar-trigger" data-testid="calendar-trigger">
         <Text style={[styles.dropdownText, !value && { color: '#999' }]}>
           {value || 'Select Date'}
         </Text>
@@ -194,11 +194,11 @@ function CalendarPicker({ value, onChange, label, required }: {
       {open && (
         <View style={calStyles.container}>
           <View style={calStyles.header}>
-            <TouchableOpacity onPress={prevMonth} style={calStyles.navBtn}>
+            <TouchableOpacity onPress={prevMonth} style={calStyles.navBtn} testID="cal-prev">
               <Ionicons name="chevron-back" size={20} color="#1A73E8" />
             </TouchableOpacity>
-            <Text style={calStyles.monthYear}>{monthNames[viewMonth]} {viewYear}</Text>
-            <TouchableOpacity onPress={nextMonth} style={calStyles.navBtn}>
+            <Text style={calStyles.monthYear} testID="cal-header-title">{monthNames[viewMonth]} {viewYear}</Text>
+            <TouchableOpacity onPress={nextMonth} style={calStyles.navBtn} testID="cal-next">
               <Ionicons name="chevron-forward" size={20} color="#1A73E8" />
             </TouchableOpacity>
           </View>
@@ -214,6 +214,7 @@ function CalendarPicker({ value, onChange, label, required }: {
                 style={calStyles.cell}
                 disabled={!day || isDisabled(day)}
                 onPress={() => day && selectDate(day)}
+                testID={day ? `cal-day-${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` : undefined}
               >
                 {/* iter-241: inner 30×30 circle holds the today-outline /
                     selected-fill so the day numeral sits dead-centre instead
@@ -439,6 +440,51 @@ export default function NewProcedureScreen() {
   // Assessment blocks fire with the same gates (cluster, non-cluster, full-arch,
   // overdenture-as-full-arch) as routine cases.
   const isExistingImplantCase = formData.implant_procedure_type === 'Existing Implant';
+  // iter-393: Pre-Implant Augmentation — when Yes, the implant-specific
+  // sections are deferred and the case is created via a minimal endpoint.
+  const [augmentationRequired, setAugmentationRequired] = useState<'' | 'Yes' | 'No'>('');
+  const [submittingAug, setSubmittingAug] = useState(false);
+  const isAugCase = augmentationRequired === 'Yes' && !isExistingImplantCase;
+
+  const submitAugmentationCase = async () => {
+    const missing: string[] = [];
+    if (!formData.patient_name?.trim()) missing.push('Patient Name');
+    if (!formData.registration_number?.trim()) missing.push('Registration Number');
+    if (!formData.supervisor_id) missing.push('Supervisor');
+    if (!formData.implant_incharge_id) missing.push('Implant In-Charge');
+    if (!formData.receipt_number?.trim()) missing.push('Receipt Number');
+    if (!formData.amount_paid) missing.push('Amount Paid');
+    if (!formData.procedure_date) missing.push('Augmentation Surgery Date');
+    if (!formData.procedure_time) missing.push('Time Slot');
+    if (missing.length) {
+      Alert.alert('Incomplete', `Please complete:\n• ${missing.join('\n• ')}`);
+      return;
+    }
+    setSubmittingAug(true);
+    try {
+      const res = await api.post('/procedures/augmentation-case', {
+        student_name: (formData as any).student_name || user?.name || '',
+        patient_name: formData.patient_name,
+        age: formData.age, sex: formData.sex, profession: formData.profession,
+        mobile_number: formData.mobile_number, patient_email: (formData as any).patient_email || '',
+        registration_number: formData.registration_number,
+        chief_complaint: formData.chief_complaint,
+        supervisor_id: formData.supervisor_id, supervisor_name: formData.supervisor_name,
+        implant_incharge_id: formData.implant_incharge_id, implant_incharge_name: formData.implant_incharge_name,
+        receipt_number: formData.receipt_number,
+        amount_paid: parseFloat(String(formData.amount_paid)) || 0,
+        procedure_date: formData.procedure_date, procedure_time: formData.procedure_time,
+        remark: (formData as any).remark || '',
+      });
+      const newId = res.data?.id;
+      Alert.alert('Case Created', 'Pre-Implant Augmentation case created. Fill Step 1 — Pre-procedure Details from the case screen.', [
+        { text: 'View Case', onPress: () => router.replace(`/procedures/${newId}`) },
+      ]);
+    } catch (e: any) {
+      Alert.alert('Error', e?.response?.data?.detail || 'Failed to create case');
+    } finally { setSubmittingAug(false); }
+  };
+
   const effectiveProcType = isExistingImplantCase ? existingOrigProcedure : formData.implant_procedure_type;
   const isFullArch = FULL_ARCH_GROUP.has(effectiveProcType);
   const isNonFullArch = NON_FULL_ARCH_TYPES.has(effectiveProcType);
@@ -1842,6 +1888,7 @@ export default function NewProcedureScreen() {
       </View>
       )}
 
+      {!isAugCase && (<>
       {/* ─── Procedure Type ─── */}
       {/* iter-213: Procedure Information now precedes Payment Details so the
           operator picks the procedure type (which may be "Existing Implant"
@@ -2016,6 +2063,8 @@ export default function NewProcedureScreen() {
         )}
       </View>
 
+      </>)}
+
       {/* ─── Payment Details ─── */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Payment Details</Text>
@@ -2105,7 +2154,97 @@ export default function NewProcedureScreen() {
         </View>
       )}
 
-      {formData.implant_procedure_type !== 'Existing Implant' && (<>
+      {/* ─── iter-393: Pre-Implant Augmentation gate (after Payment Details) ─── */}
+      {!isExistingImplantCase && (
+        <View style={styles.section} testID="augmentation-question-section" data-testid="augmentation-question-section">
+          <Text style={styles.sectionTitle}>Is Bone Augmentation Required Before Implant Placement? <Text style={{ color: '#DC3545' }}>*</Text></Text>
+          <View style={styles.chipRow}>
+            {['Yes', 'No'].map(o => (
+              <TouchableOpacity key={o}
+                style={[styles.chip, augmentationRequired === o && styles.chipActive]}
+                onPress={() => setAugmentationRequired(o as any)}
+                testID={`aug-required-${o.toLowerCase()}`} data-testid={`aug-required-${o.toLowerCase()}`}>
+                <Text style={[styles.chipText, augmentationRequired === o && styles.chipTextActive]}>{o}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {isAugCase && (
+            <View style={[styles.riskBadge, { backgroundColor: '#EFEBE9', marginTop: 10 }]}>
+              <Text style={{ color: '#5D4037', fontSize: 12.5 }}>
+                Bone grafting will be completed and reviewed first. The implant-specific sections (Procedure Type, CBCT, Implant Selection…) are deferred until the graft heals and is approved — then the regular Phase 1 workflow resumes.
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
+
+      {isAugCase && (
+        <>
+          <View style={styles.section} testID="aug-schedule-section" data-testid="aug-schedule-section">
+            <Text style={styles.sectionTitle}>Schedule Pre-Implant Augmentation Surgery</Text>
+            <CalendarPicker
+              label="Augmentation Surgery Date"
+              value={formData.procedure_date}
+              onChange={(date) => {
+                updateForm('procedure_date', date);
+                updateForm('procedure_time', '');
+              }}
+              required
+            />
+            {formData.procedure_date && (() => {
+              const d = new Date(formData.procedure_date + 'T00:00:00');
+              const dayOfWeek = d.getDay();
+              if (dayOfWeek === 0) {
+                return (
+                  <View style={[styles.riskBadge, { backgroundColor: '#FFF3E0' }]}>
+                    <Text style={{ color: '#E65100', fontWeight: '600', fontSize: 13 }}>No procedure slots available on Sundays</Text>
+                  </View>
+                );
+              }
+              const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+              const dayName = dayNames[dayOfWeek];
+              const availableSlots = PROCEDURE_TIME_SLOTS.filter(sl => sl.days.includes(dayName));
+              return (
+                <View style={styles.fieldContainer}>
+                  <Text style={styles.label}>Time Slot <Text style={{ color: '#DC3545' }}>*</Text></Text>
+                  <View style={styles.chipRow}>
+                    {availableSlots.map(slot => {
+                      const booked = bookedSlots[slot.value];
+                      const isBooked = !!booked;
+                      const isSelected = formData.procedure_time === slot.value;
+                      return (
+                        <View key={slot.value}>
+                          <TouchableOpacity
+                            style={[styles.chip, isSelected && styles.chipActive, isBooked && styles.chipBooked]}
+                            onPress={() => !isBooked && updateForm('procedure_time', slot.value)}
+                            disabled={isBooked}
+                            testID={`aug-slot-${slot.value}`} data-testid={`aug-slot-${slot.value}`}>
+                            <Text style={[styles.chipText, isSelected && styles.chipTextActive, isBooked && styles.chipBookedText]}>{slot.label}</Text>
+                            {isBooked && <Ionicons name="lock-closed" size={12} color="#999" style={{ marginLeft: 4 }} />}
+                          </TouchableOpacity>
+                          {isBooked && (
+                            <Text style={styles.bookedInfo} numberOfLines={1}>{booked.patient_name} ({booked.scheduled_by})</Text>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              );
+            })()}
+          </View>
+          <View style={{ paddingHorizontal: 16, paddingBottom: 28 }}>
+            <TouchableOpacity style={[styles.submitBtn, submittingAug && { opacity: 0.6 }]}
+              onPress={submitAugmentationCase} disabled={submittingAug} testID="aug-create-case-btn" data-testid="aug-create-case-btn">
+              {submittingAug ? <ActivityIndicator color="#FFF" /> : (
+                <><Ionicons name="bandage" size={18} color="#FFF" /><Text style={styles.submitBtnText}>Create Case — Pre-Implant Augmentation</Text></>
+              )}
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
+
+      {formData.implant_procedure_type !== 'Existing Implant' && !isAugCase && (<>
 
       {/* ─── Prosthetic Treatment Plan ─── (moved here per iter-134; now appears
             BEFORE the FDI chart so that an Overdenture-with-Attachment choice
@@ -2216,6 +2355,7 @@ export default function NewProcedureScreen() {
 
       </>)}
 
+      {!isAugCase && (<>
       {/* ─── Clinical Examination ─── */}
       {/* iter-233: rendered for BOTH routine cases AND Existing Implant cases.
           For Existing Implant the gate is `effectiveProcType` (= the inner
@@ -2649,7 +2789,8 @@ export default function NewProcedureScreen() {
           Graft, Continue button) belongs only to the routine flow; Existing
           Implant cases skip straight to the Medical Assessment + lifted
           submit buttons rendered further down. */}
-      {!isExistingImplantCase && (<>
+      </>)}
+      {!isExistingImplantCase && !isAugCase && (<>
 
       {/* ─── Schedule ─── */}
       <View style={styles.section}>
@@ -2734,7 +2875,7 @@ export default function NewProcedureScreen() {
       {/* ─── CBCT Report Upload (Mandatory: 2 minimum) ─── */}
       {/* iter-231: skipped for Existing Implant cases — intake CBCT is
           captured directly on the implant cards instead. */}
-      {!isExistingImplantCase && (
+      {!isExistingImplantCase && !isAugCase && (
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>CBCT Report <Text style={{ color: '#DC3545' }}>*</Text></Text>
         {cbctFiles.map((file, idx) => {
@@ -2807,7 +2948,7 @@ export default function NewProcedureScreen() {
           slot-based UX as CBCT but slots 0+1 have fixed labels ("Occlusal
           View" / "Lateral view/Frontal view"). Extras get an editable custom
           label. */}
-      {!isExistingImplantCase && (
+      {!isExistingImplantCase && !isAugCase && (
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Patient Intra-oral Photograph <Text style={{ color: '#DC3545' }}>*</Text></Text>
         {intraoralPhotos.map((file, idx) => {
@@ -2905,7 +3046,7 @@ export default function NewProcedureScreen() {
       {/* iter-231: routine flow only. Existing Implant cases render a
           standalone Medical Assessment block below instead (no pre-surgical
           checklist items because no surgery is performed). */}
-      {!isExistingImplantCase && (
+      {!isExistingImplantCase && !isAugCase && (
       <View style={styles.section} onLayout={showFlowStrip ? onExistingStepLayout(3) : undefined}>
         <Text style={styles.sectionTitle}>Phase 1 Checklist <Text style={{ color: '#DC3545' }}>*</Text></Text>
         {CHECKLIST_DATA.pre_surgical.items.filter(item => item.id !== 'medical_assessment').filter(item => !(isFullArch && item.id === 'oral_prophylaxis')).map(item => (
@@ -3129,7 +3270,7 @@ export default function NewProcedureScreen() {
       })()}
 
       {/* iter-233: resume the routine-only block for Bone Graft + Continue. */}
-      {!isExistingImplantCase && (<>
+      {!isExistingImplantCase && !isAugCase && (<>
 
       {/* ─── Bone Graft (if applicable) ─── */}
       {formData.implant_procedure_type.includes('Bone') && (
@@ -3148,7 +3289,7 @@ export default function NewProcedureScreen() {
           iter-260: visually disabled (greyed + lock icon + helper text)
           until all 4 sections are complete. Tap still works to surface
           the holistic Alert listing what's missing. */}
-      {!isExistingImplantCase && (() => {
+      {!isExistingImplantCase && !isAugCase && (() => {
         const canContinue = [0, 1, 2, 3].every(i => existingStepDone[i]);
         const incompleteCount = [0, 1, 2, 3].filter(i => !existingStepDone[i]).length;
         return (

@@ -68,6 +68,7 @@ export default function FDIChart({
   onSelect,
   restrictToQuadrantOf,
   excludeTooth,
+  selectedTeeth,
 }: {
   selectedTooth: string | null;
   onSelect: (tooth: string) => void;
@@ -77,6 +78,9 @@ export default function FDIChart({
   /** iter-344: Optional tooth to render disabled (e.g. the already-failed
    * tooth so the user picks a different one). */
   excludeTooth?: string | null;
+  /** iter-393: multi-select mode — when provided, highlights every tooth
+   * in the list (selectedTooth is ignored for highlighting). */
+  selectedTeeth?: string[];
 }) {
   const allowedQuadrant = restrictToQuadrantOf ? quadrantOf(restrictToQuadrantOf) : null;
   const isEnabled = (tooth: string): boolean => {
@@ -91,7 +95,7 @@ export default function FDIChart({
       <View style={styles.quadrant}>
         <View style={styles.teethRow}>
           {rightTeeth.map((t) => (
-            <Tooth key={t} tooth={t} isSelected={selectedTooth === t} isDisabled={!isEnabled(t)}
+            <Tooth key={t} tooth={t} isSelected={selectedTeeth ? selectedTeeth.includes(t) : selectedTooth === t} isDisabled={!isEnabled(t)}
               onPress={() => onSelect(t)} />
           ))}
         </View>
@@ -100,7 +104,7 @@ export default function FDIChart({
       <View style={styles.quadrant}>
         <View style={styles.teethRow}>
           {leftTeeth.map((t) => (
-            <Tooth key={t} tooth={t} isSelected={selectedTooth === t} isDisabled={!isEnabled(t)}
+            <Tooth key={t} tooth={t} isSelected={selectedTeeth ? selectedTeeth.includes(t) : selectedTooth === t} isDisabled={!isEnabled(t)}
               onPress={() => onSelect(t)} />
           ))}
         </View>

@@ -131,6 +131,7 @@ export default function CalendarPicker({
           }}
           style={cs.navBtn}
           testID="cal-prev"
+          /* @ts-ignore */ data-testid={'cal-prev'}
         >
           <Ionicons name="chevron-back" size={18} color="#1A73E8" />
         </TouchableOpacity>
@@ -145,6 +146,7 @@ export default function CalendarPicker({
           }}
           style={cs.headerTitleBtn}
           testID="cal-header-title"
+          /* @ts-ignore */ data-testid={'cal-header-title'}
           disabled={view === 'year'}
         >
           <Text style={cs.monthYear}>
@@ -163,6 +165,7 @@ export default function CalendarPicker({
           }}
           style={cs.navBtn}
           testID="cal-next"
+          /* @ts-ignore */ data-testid={'cal-next'}
         >
           <Ionicons name="chevron-forward" size={18} color="#1A73E8" />
         </TouchableOpacity>
@@ -193,6 +196,7 @@ export default function CalendarPicker({
                     !selected && todayFlag && cs.dayCellToday,
                   ]}
                   testID={`cal-day-${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`}
+                  /* @ts-ignore */ data-testid={`cal-day-${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`}
                 >
                   <Text style={[
                     cs.dayTxt,
@@ -225,6 +229,7 @@ export default function CalendarPicker({
                   !selected && isThisMonth && cs.tileToday,
                 ]}
                 testID={`cal-month-${mi + 1}`}
+                /* @ts-ignore */ data-testid={`cal-month-${mi + 1}`}
               >
                 <Text style={[
                   cs.tileTxt,
@@ -256,6 +261,7 @@ export default function CalendarPicker({
                   !selected && isThisYear && cs.tileToday,
                 ]}
                 testID={`cal-year-${y}`}
+                /* @ts-ignore */ data-testid={`cal-year-${y}`}
               >
                 <Text style={[
                   cs.tileTxt,
@@ -271,7 +277,7 @@ export default function CalendarPicker({
 
       {compact && (
         <View style={cs.modalFooter}>
-          <TouchableOpacity onPress={clear} style={cs.footerBtn} testID={`${testID || 'calendar'}-modal-clear`}>
+          <TouchableOpacity onPress={clear} style={cs.footerBtn} testID={`${testID || 'calendar'}-modal-clear`} /* @ts-ignore */ data-testid={`${testID || 'calendar'}-modal-clear`}>
             <Ionicons name="trash-outline" size={14} color="#78909C" />
             <Text style={cs.footerBtnTxt}>Clear</Text>
           </TouchableOpacity>
@@ -279,11 +285,12 @@ export default function CalendarPicker({
             onPress={jumpToToday}
             style={[cs.footerBtn, { backgroundColor: '#E3F2FD' }]}
             testID={`${testID || 'calendar'}-modal-today`}
+            /* @ts-ignore */ data-testid={`${testID || 'calendar'}-modal-today`}
           >
             <Ionicons name="today-outline" size={14} color="#1565C0" />
             <Text style={[cs.footerBtnTxt, { color: '#1565C0', fontWeight: '700' }]}>Today</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => { setOpen(false); setView('day'); }} style={[cs.footerBtn, { backgroundColor: '#F5F7FB' }]} testID={`${testID || 'calendar'}-modal-close`}>
+          <TouchableOpacity onPress={() => { setOpen(false); setView('day'); }} style={[cs.footerBtn, { backgroundColor: '#F5F7FB' }]} testID={`${testID || 'calendar'}-modal-close`} /* @ts-ignore */ data-testid={`${testID || 'calendar'}-modal-close`}>
             <Text style={[cs.footerBtnTxt, { color: '#1A2332', fontWeight: '700' }]}>Done</Text>
           </TouchableOpacity>
         </View>
@@ -309,6 +316,7 @@ export default function CalendarPicker({
               onPress={(e) => { e.stopPropagation(); clear(); }}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               testID={`${testID || 'calendar'}-clear`}
+              /* @ts-ignore */ data-testid={`${testID || 'calendar'}-clear`}
             >
               <Ionicons name="close-circle" size={14} color="#90A4AE" />
             </TouchableOpacity>

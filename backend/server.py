@@ -15292,6 +15292,298 @@ async def approve_followup(
 
 
 # ─────────────────────────────────────────────────────────────────────────
+# iter-393: PRE-IMPLANT AUGMENTATION STAGE (Phase 1 module).
+# Optional bone-grafting workflow between Phase 1 planning and Phase 2.
+# Iteration 1: minimal case creation + Step 1 (pre-procedure) + Step 2
+# (post-procedure) + supervisor/in-charge approval (mirrors follow-ups).
+# ─────────────────────────────────────────────────────────────────────────
+
+class AugmentationCaseCreate(BaseModel):
+    student_name: Optional[str] = Field("", max_length=100)
+    patient_name: str = Field(..., max_length=100)
+    age: Optional[str] = Field("", max_length=5)
+    sex: Optional[str] = Field("", max_length=10)
+    profession: Optional[str] = Field("", max_length=100)
+    mobile_number: Optional[str] = Field("", max_length=20)
+    patient_email: Optional[str] = Field("", max_length=255)
+    registration_number: str = Field(..., max_length=50)
+    chief_complaint: Optional[str] = Field("", max_length=1000)
+    supervisor_id: str = Field(..., max_length=50)
+    supervisor_name: str = Field(..., max_length=100)
+    implant_incharge_id: str = Field(..., max_length=50)
+    implant_incharge_name: str = Field(..., max_length=100)
+    receipt_number: str = Field(..., max_length=50)
+    amount_paid: float
+    procedure_date: str = Field(..., max_length=30)
+    procedure_time: str = Field(..., max_length=20)
+    remark: Optional[str] = Field("", max_length=1000)
+
+
+class AugmentationStep1Submit(BaseModel):
+    reasons: List[str] = []
+    reason_other_text: Optional[str] = Field("", max_length=300)
+    defect_teeth: List[str] = []
+    defect_sides: List[str] = []
+    horizontal_defect: Optional[str] = Field("", max_length=20)
+    vertical_defect: Optional[str] = Field("", max_length=20)
+    defect_other: Optional[str] = Field("", max_length=300)
+    bone_width_before: Optional[str] = Field("", max_length=10)
+    bone_height_before: Optional[str] = Field("", max_length=10)
+    medical_assessment: Optional[Dict[str, str]] = None
+    medical_risk_level: Optional[str] = Field("", max_length=30)
+
+
+class AugmentationStep2Submit(BaseModel):
+    procedures_performed: List[str] = []
+    procedure_other_text: Optional[str] = Field("", max_length=300)
+    autogenous_used: Optional[str] = Field("", max_length=5)
+    autogenous_sites: List[str] = []
+    autogenous_other_text: Optional[str] = Field("", max_length=200)
+    allograft_used: Optional[str] = Field("", max_length=5)
+    other_graft_materials: List[str] = []
+    graft_material_other_text: Optional[str] = Field("", max_length=200)
+    membrane_used: Optional[str] = Field("", max_length=5)
+    membrane_types: List[str] = []
+    membrane_other_text: Optional[str] = Field("", max_length=200)
+    fixation: List[str] = []
+    soft_tissue_graft: Optional[str] = Field("", max_length=5)
+    soft_tissue_types: List[str] = []
+    soft_tissue_donor_sites: List[str] = []
+    soft_tissue_indications: List[str] = []
+    soft_tissue_other_text: Optional[str] = Field("", max_length=300)
+    healing_protocol: Optional[str] = Field("", max_length=30)
+    healing_custom_text: Optional[str] = Field("", max_length=100)
+
+
+def _aug_current_round(proc: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    rounds = proc.get("augmentations") or []
+    return rounds[-1] if rounds else None
+
+
+def _aug_is_owner(proc: Dict[str, Any], user: dict) -> bool:
+    uid = user.get("_id")
+    return uid in (proc.get("student_id"), proc.get("created_by_id"))
+
+
+@api_router.post("/procedures/augmentation-case")
+async def create_augmentation_case(payload: AugmentationCaseCreate, current_user: dict = Depends(get_current_user)):
+    allowed_roles = {"student", "supervisor", "implant_incharge", "administrator"}
+    if current_user["role"] not in allowed_roles:
+        raise HTTPException(status_code=403, detail="You do not have permission to create procedures")
+    is_student = current_user["role"] == "student"
+    try:
+        dt = datetime.strptime(f"{payload.procedure_date} {payload.procedure_time}", "%Y-%m-%d %H:%M")
+        if dt.weekday() == 6:
+            raise HTTPException(status_code=400, detail="No scheduling is available on Sundays.")
+        if dt.weekday() == 5 and payload.procedure_time != "10:00":
+            raise HTTPException(status_code=400, detail="Only 10:00 AM slot is available on Saturdays.")
+        if is_student and (dt - datetime.now()).total_seconds() / 3600 < 24:
+            raise HTTPException(status_code=400, detail="Students cannot schedule procedures less than 24 hours in advance.")
+    except ValueError:
+        pass
+    existing = await db.procedures.find_one({
+        "procedure_date": payload.procedure_date,
+        "procedure_time": payload.procedure_time,
+    })
+    if existing:
+        booked_by = existing.get("created_by_name") or existing.get("student_name") or "Unknown"
+        raise HTTPException(
+            status_code=409,
+            detail=f"That slot on {payload.procedure_date} is already booked for patient {existing.get('patient_name', 'Unknown')} (scheduled by {booked_by}).",
+        )
+    now = datetime.utcnow()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    doc = payload.dict()
+    doc.update({
+        "status": "augmentation_in_progress",
+        "current_phase": 1,
+        "augmentation_required": True,
+        "augmentations": [{
+            "round": 1,
+            "status": "step1_pending",
+            "scheduled_date": payload.procedure_date,
+            "scheduled_time": payload.procedure_time,
+            "created_at": now_iso,
+        }],
+        "student_id": current_user["_id"] if is_student else None,
+        "student_name": current_user.get("name", "") if is_student else (payload.student_name or current_user.get("name", "")),
+        "created_at": now,
+        "updated_at": now,
+        "created_by_role": current_user["role"],
+        "created_by_id": current_user["_id"],
+        "created_by_name": current_user.get("name", ""),
+    })
+    result = await db.procedures.insert_one(doc)
+    return {"message": "Pre-Implant Augmentation case created", "id": str(result.inserted_id)}
+
+
+@api_router.post("/procedures/{procedure_id}/augmentation/step1")
+async def submit_augmentation_step1(
+    procedure_id: str,
+    payload: AugmentationStep1Submit,
+    current_user: dict = Depends(get_current_user),
+):
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if not _aug_is_owner(proc, current_user):
+        raise HTTPException(status_code=403, detail="Only the case owner can submit augmentation details")
+    rounds = proc.get("augmentations") or []
+    rnd = rounds[-1] if rounds else None
+    if not rnd:
+        raise HTTPException(status_code=400, detail="No augmentation round found on this case")
+    if rnd.get("status") not in ("step1_pending", "step2_pending"):
+        raise HTTPException(status_code=400, detail="Step 1 can no longer be edited for this round.")
+    if not payload.reasons:
+        raise HTTPException(status_code=400, detail="Select at least one Reason for Bone Grafting.")
+    if not payload.defect_teeth:
+        raise HTTPException(status_code=400, detail="Select the Defect Location on the FDI chart.")
+    if not payload.medical_assessment:
+        raise HTTPException(status_code=400, detail="Medical Assessment is compulsory.")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    rnd["step1"] = payload.dict()
+    rnd["step1_completed_at"] = now_iso
+    if rnd.get("status") == "step1_pending":
+        rnd["status"] = "step2_pending"
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {
+            "augmentations": rounds,
+            "medical_assessment": payload.medical_assessment,
+            "medical_risk_level": payload.medical_risk_level or "",
+            "updated_at": datetime.utcnow(),
+        }},
+    )
+    return {"message": "Step 1 complete — Step 2 unlocked", "round": rnd}
+
+
+@api_router.post("/procedures/{procedure_id}/augmentation/step2")
+async def submit_augmentation_step2(
+    procedure_id: str,
+    payload: AugmentationStep2Submit,
+    current_user: dict = Depends(get_current_user),
+):
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if not _aug_is_owner(proc, current_user):
+        raise HTTPException(status_code=403, detail="Only the case owner can submit augmentation details")
+    rounds = proc.get("augmentations") or []
+    rnd = rounds[-1] if rounds else None
+    if not rnd:
+        raise HTTPException(status_code=400, detail="No augmentation round found on this case")
+    if rnd.get("status") not in ("step2_pending", "rejected"):
+        raise HTTPException(status_code=400, detail="Complete Step 1 first, or this round is already under review.")
+    if not payload.procedures_performed:
+        raise HTTPException(status_code=400, detail="Select at least one Bone Graft Procedure performed.")
+    if not payload.healing_protocol:
+        raise HTTPException(status_code=400, detail="Select the Healing Protocol.")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    is_incharge_self_created = (
+        current_user.get("role") in ("implant_incharge", "administrator")
+        and proc.get("created_by_id") == current_user["_id"]
+        and proc.get("supervisor_id") == proc.get("implant_incharge_id")
+    )
+    rnd["step2"] = payload.dict()
+    rnd["step2_submitted_at"] = now_iso
+    rnd["submitted_by_name"] = current_user.get("name", "")
+    for k in ("rejection_reason", "rejected_by", "rejected_at"):
+        rnd.pop(k, None)
+    if is_incharge_self_created:
+        rnd["supervisor_approved_at"] = now_iso
+        rnd["incharge_approved_at"] = now_iso
+        rnd["combined_approval"] = True
+        rnd["status"] = "approved"
+    else:
+        rnd["status"] = "pending_supervisor"
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"augmentations": rounds, "updated_at": datetime.utcnow()}},
+    )
+    if not is_incharge_self_created:
+        for uid in filter(None, {proc.get("supervisor_id"), proc.get("implant_incharge_id")}):
+            await db.notifications.insert_one({
+                "user_id": uid,
+                "procedure_id": procedure_id,
+                "message": f"Pre-Implant Augmentation (Round {rnd.get('round')}) submitted for {proc['patient_name']}. Review required.",
+                "type": "approval_request",
+                "read": False,
+                "created_at": datetime.utcnow(),
+            })
+    return {"message": "Augmentation submitted for approval", "round": rnd}
+
+
+@api_router.post("/procedures/{procedure_id}/augmentation/approve")
+async def approve_augmentation(
+    procedure_id: str,
+    action: ApprovalAction,
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user["role"] in ("student", "nurse"):
+        raise HTTPException(status_code=403, detail="Only supervisors and implant in-charge can review augmentation")
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    rounds = proc.get("augmentations") or []
+    rnd = rounds[-1] if rounds else None
+    if not rnd or rnd.get("status") not in ("pending_supervisor", "pending_incharge"):
+        raise HTTPException(status_code=400, detail="This augmentation round is not awaiting review.")
+
+    uid = current_user["_id"]
+    role = current_user.get("role")
+    is_sup = uid == proc.get("supervisor_id")
+    is_inc = uid == proc.get("implant_incharge_id")
+    same_person = proc.get("supervisor_id") and proc.get("supervisor_id") == proc.get("implant_incharge_id")
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    if action.action == "approve":
+        if same_person and uid == proc.get("supervisor_id") and role in ("supervisor", "implant_incharge"):
+            rnd["supervisor_approved_at"] = rnd.get("supervisor_approved_at") or now_iso
+            rnd["incharge_approved_at"] = now_iso
+            rnd["combined_approval"] = True
+            rnd["status"] = "approved"
+        elif rnd["status"] == "pending_supervisor":
+            if not (role == "supervisor" and is_sup):
+                raise HTTPException(status_code=403, detail="Awaiting the assigned Supervisor's approval.")
+            rnd["supervisor_approved_at"] = now_iso
+            rnd["status"] = "pending_incharge"
+        else:
+            if not (role == "implant_incharge" and is_inc):
+                raise HTTPException(status_code=403, detail="Awaiting the assigned Implant In-Charge's approval.")
+            rnd["incharge_approved_at"] = now_iso
+            rnd["status"] = "approved"
+        if action.comment and action.comment.strip():
+            rnd.setdefault("faculty_comments", []).append({"by": current_user.get("name", ""), "role": role, "comment": action.comment.strip(), "at": now_iso})
+        msg = (f"Pre-Implant Augmentation (Round {rnd.get('round')}) approved for {proc['patient_name']}."
+               if rnd["status"] == "approved"
+               else f"Pre-Implant Augmentation for {proc['patient_name']} approved by Supervisor — awaiting Implant In-Charge.")
+    else:
+        if not ((role == "supervisor" and is_sup) or (role == "implant_incharge" and is_inc)):
+            raise HTTPException(status_code=403, detail="Only the assigned faculty can reject this augmentation.")
+        rnd["status"] = "rejected"
+        rnd["rejection_reason"] = action.rejection_reason or action.comment or "No reason provided"
+        rnd["rejected_by"] = current_user.get("name", "")
+        rnd["rejected_at"] = now_iso
+        msg = f"Pre-Implant Augmentation for {proc['patient_name']} was returned for revision: {rnd['rejection_reason']}"
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"augmentations": rounds, "updated_at": datetime.utcnow()}},
+    )
+    target = proc.get("student_id") or proc.get("created_by_id")
+    if target:
+        await db.notifications.insert_one({
+            "user_id": target,
+            "procedure_id": procedure_id,
+            "message": msg,
+            "type": "approved" if action.action == "approve" else "rejected",
+            "read": False,
+            "created_at": datetime.utcnow(),
+        })
+    return {"message": msg, "round": rnd}
+
+
+# ─────────────────────────────────────────────────────────────────────────
 # iter-389: PHASE 5 Analytics — survival-over-time, probing-depth trend vs
 # baseline, and follow-up compliance. Role-scoped: student = own cases,
 # supervisor = supervised cases, in-charge/admin = all, nurse = 403.

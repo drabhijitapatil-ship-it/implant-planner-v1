@@ -639,6 +639,7 @@ export const STATUS_COLORS: Record<string, string> = {
   approved: '#4CAF50',
   rejected: '#F44336',
   permanently_rejected: '#B71C1C',
+  augmentation_in_progress: '#8D6E63',
 };
 
 export const STATUS_LABELS: Record<string, string> = {
@@ -658,7 +659,44 @@ export const STATUS_LABELS: Record<string, string> = {
   approved: 'Approved',
   rejected: 'Rejected',
   permanently_rejected: 'Permanently Rejected',
+  augmentation_in_progress: 'Pre-Implant Augmentation: In Progress',
 };
+
+// ─── iter-393: Pre-Implant Augmentation Stage (Phase 1 module) ───────
+export const AUGMENTATION_REASONS = [
+  'Horizontal ridge deficiency', 'Vertical ridge deficiency', 'Combined defect',
+  'Sinus pneumatization', 'Extraction socket preservation', 'Peri-implant defect',
+  'Ridge preservation', 'Ridge reconstruction', 'Others',
+];
+export const BONE_DEFECT_SIDES = ['Labial', 'Buccal', 'Palatal', 'Lingual', 'Crest of the ridge'];
+export const DEFECT_SEVERITY = ['Absent', 'Mild', 'Moderate', 'Severe'];
+export const AUGMENTATION_PROCEDURES = [
+  'Guided Bone Regeneration (GBR)', 'Ridge Split', 'Ridge Expansion', 'Block Bone Graft',
+  'Socket Preservation', 'Socket Augmentation', 'Indirect Sinus Lift (Internal)',
+  'Direct Sinus Lift (Lateral Window)', 'Vertical Ridge Augmentation',
+  'Horizontal Ridge Augmentation', 'Combination Technique', 'Other',
+];
+export const AUTOGENOUS_SITES = ['Chin', 'Ramus', 'Tuberosity', 'Iliac Crest', 'Other'];
+export const OTHER_GRAFT_MATERIALS = [
+  'Xenograft', 'Alloplast', 'Bone Morphogenetic Protein (BMP)',
+  'Platelet Rich Fibrin', 'Sticky Bone', 'Others',
+];
+export const MEMBRANE_TYPES = [
+  'Collagen membrane', 'Collagen membrane cross-linked', 'Titanium Mesh',
+  'Titanium Reinforced', 'PTFE', 'd-PTFE', 'Others',
+];
+export const FIXATION_OPTIONS = ['Bone tacks', 'Tag screws', 'Titanium screws', 'Pins', 'None'];
+export const SOFT_TISSUE_GRAFT_TYPES = [
+  'Connective Tissue Graft (CTG)', 'Subepithelial Connective Tissue Graft (SCTG)',
+  'Free Gingival Graft (FGG)', 'Pedicle Flap (CAF/LPF)',
+  'Soft Tissue Substitute (ADM/Collagen Matrix)', 'Vestibuloplasty', 'Papilla Augmentation', 'Other',
+];
+export const SOFT_TISSUE_DONOR_SITES = ['Palate', 'Maxillary Tuberosity', 'Acellular Matrix (No Donor Site)', 'Other'];
+export const SOFT_TISSUE_INDICATIONS = [
+  'Thin Tissue Biotype', 'Inadequate Keratinized Tissue', 'Buccal Soft Tissue Deficiency',
+  'Esthetic Enhancement', 'Peri-implant Tissue Augmentation', 'Other',
+];
+export const HEALING_PROTOCOLS = ['2 months', '3 months', '4 months', '6 months', '9 months', 'Custom'];
 
 export const USER_ROLES = {
   student: 'Student',
