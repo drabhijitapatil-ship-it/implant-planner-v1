@@ -1504,7 +1504,9 @@ export default function ProcedureDetailScreen() {
                 { key: 'phase1', label: 'Phase 1', subtitle: isExistingImplant ? 'Examination & Case Details' : 'Diagnosis & Treatment Planning',
                   done: ['phase1_approved','pending_phase2','phase2_approved','pending_stage2_surgical','stage2_surgical_approved','pending_stage2_prosthetic','completed'].includes(procedure.status),
                   active: procedure.status === 'pending_phase1' || procedure.status === 'augmentation_in_progress',
-                  doneOn: procedure.status === 'augmentation_in_progress' ? null : procedure.procedure_date,
+                  doneOn: (procedure.status === 'augmentation_in_progress'
+                    || (procedure.status === 'treatment_ended' && procedure.augmentation_outcome === 'terminated'))
+                    ? null : procedure.procedure_date,
                   legacy: procedure.phase1_completed_at,
                   approver: phaseApprover },
                 { key: 'phase2', label: 'Phase 2', subtitle: 'Implant Surgery',

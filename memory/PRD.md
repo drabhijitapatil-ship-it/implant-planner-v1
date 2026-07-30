@@ -7068,3 +7068,65 @@ implant diameter before placement.
   adherence bars (green ≥90 / amber ≥70 / red), deviation-field counts, recent deviation list.
 - Self-tested: admin curl returns correct data (picks up Phase2 Test sleeve deviation),
   nurse 403, screenshot shows all 4 cards populated live.
+
+## 2026-07-30 — Pre-Implant Augmentation Iteration 2: Step 3 Review + Phase 2 Resume (iter-393 Iter2)
+
+### Spec (from user's "Pri Implant Bone Augmentation Workflow.docx")
+Step 3 — Review of Pre-Implant Augmentation after Step 2 approval: Healing status (Completed/Failed),
+Complications multi-select (None/Flap dehiscence/Membrane exposure/Infection/Partial graft loss/
+Complete graft failure/Pain/Swelling/Other+text), Bone graft outcome (Successful/Partially successful/
+Failed), Bone gain achieved (Horizontal/Vertical after graft in mm), optional CBCT upload, then decision:
+"Bone Graft Augmentation Complete" OR "Failed" → next step (Terminate Treatment / Repeat Augmentation /
+Proceed to Phase 2). Step 3 goes through Supervisor → In-Charge approval (same protocol, combined when
+same person, auto-approve for in-charge self-created). On approval: complete or failed+proceed →
+augmentation_outcome='proceed_phase2' and owner completes Phase 1 implant details; failed+terminate →
+status treatment_ended; failed+repeat → Round N+1 opens at step1_pending ("Surgery: To be scheduled").
+Phase 2 window (phase1_approved/pending_phase2) shows "Review Pre-Implant Bone Graft Augmentation"
+summary card (bone graft performed/date/technique/healing period/bone gain deltas/complications/CBCT/outcome).
+
+### Implementation
+- server.py: AugmentationStep3Submit model + _apply_step3_outcome helper (~line 15358);
+  POST /api/procedures/{id}/augmentation/step3 (validations, prefill-revision on rejected+step3,
+  in-charge auto-approve applies outcome immediately); approve endpoint upgraded (step3 rounds →
+  status 'step3_approved' + outcome $set fields, step-aware notification messages); step2 endpoint
+  blocks resubmission when rejected round has step3; PUT /api/procedures/{id}/augmentation/complete-phase1
+  (owner-only, requires augmentation_outcome=proceed_phase2, slot-conflict excl. self, Sunday/Saturday/24h
+  rules, ProcedureCreate payload merged onto the SAME case → status 'draft' with role-scoped approval
+  flags + regenerated pre-op augmentation checklist; case then flows through implant selection →
+  request-phase1-approval → pending_phase1 like a normal draft).
+- app/procedures/augmentation-step3/[id].tsx (new): full Step 3 form, prefilled on revision, CBCT upload
+  via /uploads/cbct-temp, decision buttons + 3 failed-action radios. testIDs: aug-heal-*, aug-comp-*,
+  aug-outcome-*, aug-bone-width-after/height-after, aug-cbct-upload-btn, aug-graft-complete-btn,
+  aug-graft-failed-btn, aug-failed-{terminate,repeat,proceed-phase2}, aug-step3-submit.
+- AugmentationSection.tsx: status pills ('Approved — Step 3 Review Pending', 'Step 3 — Awaiting
+  Supervisor/In-Charge', 'Augmentation Complete', 'Reviewed — Graft Failed'); aug-fill-step3-btn,
+  aug-revise-step3-btn (vs step2), aug-proceed-phase2-btn (→ /new-procedure?augResumeId=), Step 3
+  readback rows, "Surgery: To be scheduled" for repeat rounds.
+- components/AugmentationPhase2Review.tsx (new): collapsible summary card, renders only at
+  phase1_approved/pending_phase2 with a step3_approved round (testID aug-phase2-review-card).
+- new-procedure.tsx: augResumeId param loader (prefills patient/faculty/chief complaint; payment+schedule
+  blank; hides augmentation question; shows aug-resume-banner); submit branches to PUT complete-phase1.
+- procedures/[id].tsx: timeline Phase 1 no longer shows "Done on <future date>" for
+  augmentation_in_progress or terminated-during-augmentation cases (shows ACTIVE / no date).
+- Bug fixes: testID slug trailing-dash (e.g. aug-proc-guided-bone-regeneration-gbr- → …-gbr) in
+  step1/step2 chips — root cause of the iter-310 E2E timeout.
+
+### Testing (all PASS)
+- Backend self-tests: /app/backend/tests/test_aug_step3_flow.py (complete path incl. step3 reject/revise,
+  step2-block, complete-phase1 → draft with rounds kept) and test_aug_step3_repeat_terminate.py
+  (repeat → Round 2 step1_pending; terminate → treatment_ended).
+- Testing agent iteration_311.json: 14/14 scenarios PASS (Step 3 form, reject/revise prefill, approve
+  chain, proceed-phase2 resume banner/prefill/gating, timeline fix, 2-round terminated readback).
+- Follow-up self-checks: aug-phase2-review-card verified live at phase1_approved (case
+  6a6b300e811c1535451fde6a); failed-decision 3 options render; terminated-timeline guard added.
+
+### Seeded/known cases
+- 6a6b300e811c1535451fde6a — phase1_approved with completed augmentation + Phase 2 review card.
+- 6a6b3abbfaa51605761c69a5 / …c69aa — 'Step3 UI Patient', step3_approved + proceed_phase2 (resumable).
+- 6a6b2d12811c1535451fde5d — treatment_ended, 2 failed rounds (readback demo).
+- Booked slots: 2026-08-20 11:00, 2026-08-21 12:00, 2026-09-03 10:00, 2026-09-10 10:00,
+  2026-09-11 10:00, 2026-10-15 10:00.
+
+### Remaining (backlog)
+- LOW: RN-Web "Unexpected text node" console warning on case detail (pre-existing, elusive).
+- Deferred per user: augmentation data in PDF export.
