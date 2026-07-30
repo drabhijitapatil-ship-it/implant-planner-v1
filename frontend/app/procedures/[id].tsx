@@ -47,6 +47,7 @@ import ExportPrintMenu from '../../components/ExportPrintMenu';
 import Phase2EditModal from '../../components/Phase2EditModal';
 import ContributionTimelineCard from '../../components/ContributionTimelineCard';
 import FollowUpSection from '../../components/FollowUpSection';
+import AugmentationSection from '../../components/AugmentationSection';
 import TransferApprovalCard from '../../components/TransferApprovalCard';
 import RescheduleModal from '../../components/RescheduleModal';
 import ImplantLifecycleTimeline from '../../components/ImplantLifecycleTimeline';
@@ -1066,6 +1067,7 @@ export default function ProcedureDetailScreen() {
         <ContributionTimelineCard procedureId={String(id)} />
 
         {/* iter-388: Phase 5 — Follow-up & Maintenance (completed cases only) */}
+        <AugmentationSection procedure={procedure} onChanged={() => loadProcedure()} />
         <FollowUpSection procedure={procedure} onChanged={() => loadProcedure()} />
 
         {/* iter-352: End Treatment REJECTED banner. Shown when the last

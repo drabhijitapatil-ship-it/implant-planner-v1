@@ -1,0 +1,50 @@
+{
+  "summary": "iter-393 Iter1 RETEST — Phase 1 Pre-Implant Augmentation gate & schedule. BUG-1 (section gate on aug=Yes) and BUG-2 (calendar/slot testIDs) BOTH CONFIRMED FIXED. Successfully executed T1 E2E case creation end-to-end (previously blocked), plus quick verification of Step 1 form structure (dual-tooth FDI select), and T8/T2 regressions (aug=No restores routine sections; Test Approval Patient legacy case still renders normally without augmentation section). Approval/rejection/revision flow and Step 1/Step 2 SUBMIT paths were NOT executed due to scope/time — see action_items.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "aug-create-case-btn success alert", "issue": "React-Native Alert.alert on RN-Web with a single custom button ('View Case') falls back to window.alert which does NOT fire the onPress callback → after successful POST /api/procedures/augmentation-case (200 OK) the user is left on /new-procedure with a dismissed dialog and no auto-navigation to /procedures/{newId}. Case IS created (verified via GET /api/procedures) but the 'View Case' click has no effect. Consider using Platform.OS==='web' branch that navigates directly or renders an in-page toast/modal with a real button.", "affected_selectors": ["aug-create-case-btn"], "priority": "MEDIUM"}
+    ],
+    "design_issues": [
+      {"screen": "Case detail (augmentation case)", "issues": ["Treatment Progress renders 'Phase 1 — Done on Sep 03, 2026' (the future scheduled augmentation date) while the case status is 'Pre-Implant Augmentation: In Progress' — the Phase 1 pill/date should probably say 'Scheduled' not 'Done on <future date>' until the grafting actually completes and Phase 1 workflow begins."]}
+    ]
+  },
+  "verified_scenarios": [
+    {"id": "T1a", "case": "E2E create — fill Patient Info (UI Aug Patient / AUG-UI-2), Chief Complaint, Supervisor=Paresh Gandhi, In-Charge=Abhijit Patil, Receipt=R-UI-1, Amount=3000, aug-required-yes, calendar-trigger → cal-next → Sept 2026 → cal-day-2026-09-03 → aug-slot-10:00 → aug-create-case-btn", "result": "PASS", "detail": "POST /api/procedures/augmentation-case → 200 OK. Case _id=6a6b300e811c1535451fde6a status=augmentation_in_progress persisted."},
+    {"id": "T1b (BUG-1 retest)", "case": "With aug=Yes, sections below aug-schedule-section are gated OFF", "result": "PASS", "detail": "Only these section titles render below Payment Details: 'Is Bone Augmentation Required…', 'Schedule Pre-Implant Augmentation Surgery', 'Create Case — Pre-Implant Augmentation'. NO 'Procedure Information / Clinical Examination / Type of Loading / CBCT / Photograph / Phase 1 Checklist / Medical Assessment / Bone Graft Specifications / Schedule Implant Placement' sections rendered (verified via title-text scan of DOM)."},
+    {"id": "T1c (BUG-2 retest)", "case": "Calendar & time-slot testIDs on augmentation schedule", "result": "PASS", "detail": "calendar-trigger, cal-header-title ('July 2026' → nav via cal-next to 'September 2026'), cal-day-2026-09-03, aug-slot-10:00, aug-slot-14:00, aug-create-case-btn all present & clickable. (aug-slot-09:00 not offered — Thursday Sept 3 in the app config only has 10:00 & 14:00 slots; this is a data config, not a bug.)"},
+    {"id": "T1d", "case": "Case detail after create shows expected UI", "result": "PASS", "detail": "Status pill 'Pre-Implant Augmentation: In Progress' visible; augmentation-section testid rendered; round card 'Bone Grafting — Round 1' with 'Surgery: 2026-09-03 · 10:00' and 'Step 1 — Pre-procedure Pending' pill; aug-fill-step1-btn ('Fill Step 1 — Pre-procedure Details') present and clickable."},
+    {"id": "T3a partial", "case": "Step 1 form structure (aug-fill-step1-btn)", "result": "PASS (structure only, not submitted)", "detail": "Navigated to /procedures/augmentation-step1/{id}. All expected testIDs present: aug-reason-* chips (9 options), aug-defect-section, fdi-tooth-11..47 (32 teeth), aug-side-* chips (5), aug-hdefect-*/aug-vdefect-* severity chips, aug-bone-width/height inputs, aug-medical-* chips for diabetes/smoking/anticoagulant/osteoporosis/radiation, aug-haem-* haematology fields. Dual FDI-tooth selection VERIFIED: tapping fdi-tooth-24 then fdi-tooth-25 leaves BOTH highlighted (bg rgb(30,136,229)) and 'Selected: 24, 25' text renders. 'Step 1 Complete' submit button visible."},
+    {"id": "T8 regression", "case": "New Case with aug=No — routine sections reappear", "result": "PASS", "detail": "After tapping aug-required-no: Procedure Information, Clinical Examination, Phase 1 Checklist, Medical Assessment, Schedule, Type of Loading, CBCT Report, Patient Intra-oral Photograph all render (verified visually and via title scan). aug-schedule-section and aug-create-case-btn are correctly HIDDEN."},
+    {"id": "T8b regression", "case": "Legacy 'Test Approval Patient' 69cfb036a19e1d1819e0f6fd renders without augmentation-section", "result": "PASS", "detail": "Case detail loaded; no [data-testid=augmentation-section] present; case name 'Test Approval Patient' visible."}
+  ],
+  "not_tested": [
+    "T3 full — aug-step1-submit (form filled UI-side but not submitted); risk badge computation.",
+    "T4 — Step 2 form (aug-fill-step2-btn) & submission → 'Awaiting Supervisor'.",
+    "T5 — Approval flow: Paresh Supervisor pending-aug card → aug-review-box → reject with reason.",
+    "T5b — Gaurav revision via aug-revise-step2-btn (prefill check) → resubmit.",
+    "T5c — Paresh approve → Abhijit In-Charge approve → 'Approved' pill.",
+    "T6 — Readback of auto-expanded round card with Step 1 + Step 2 row values."
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "MEDIUM: Fix Alert.alert with single 'View Case' button on aug-create-case-btn success — on RN-Web the callback never fires (falls back to native window.alert). Either navigate directly after successful POST or use a two-button prompt / in-page toast.",
+    "LOW/design: On a fresh augmentation case, Treatment Progress shows 'Phase 1 — Done on Sep 03, 2026' before Phase 1 actually runs — the augmentation surgery date is being surfaced as Phase 1 completion date. Change to 'Scheduled' state until augmentation is Approved and Phase 1 workflow starts.",
+    "NEXT AGENT: cover Step 1 submit → Step 2 form → Step 2 submit → Supervisor reject → student revise → Supervisor approve → In-Charge approve → readback. Two seed cases available: 6a6b300e811c1535451fde6a (AUG-UI-2, Sept 3 2026 10:00) and 6a6b2d12811c1535451fde5d (AUG-UI-1). Both are status=augmentation_in_progress with Step 1 pending. Booked slots per prior context: 2026-08-20 11:00, 2026-08-21 12:00, plus now 2026-09-03 10:00 (this run)."
+  ],
+  "critical_code_review_comments": [
+    "new-procedure.tsx:480-482 — Alert.alert('Case Created', …, [{text:'View Case', onPress: ...}]) only wires router.replace inside onPress; on RN-Web single-button Alert falls back to window.alert which discards the callback. This silently defeats the intended UX. Please branch on Platform.OS==='web' and navigate directly (router.replace(`/procedures/${newId}`) after POST resolves).",
+    "new-procedure.tsx:2158-2245 — the isAugCase gate is correctly wrapped around every non-augmentation section (verified DOM shows only aug-question + aug-schedule-section + aug-create-case-btn below Payment Details when Yes is selected). BUG-1 fix confirmed working.",
+    "new-procedure.tsx:135-232 — CalendarPicker now correctly exposes calendar-trigger / cal-prev / cal-next / cal-header-title / cal-day-YYYY-MM-DD; BUG-2 fix confirmed working end-to-end.",
+    "Design: augmentation case detail shows Treatment Progress 'Phase 1 — Done on <future augmentation date>' which is misleading — should be 'Scheduled' until augmentation is Approved and Phase 1 begins.",
+    "Non-blocking: 20+ 'Unexpected text node: . A text node cannot be a child of a <View>.' RN-Web warnings on every case-detail render. Likely a stray whitespace/newline literal between JSX siblings. Doesn't affect functionality but pollutes console."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only run)", "frontend": "100% of the retest goals (T1 E2E create, BUG-1 gate, BUG-2 calendar testIDs, T3 Step-1 form structure incl. dual-tooth FDI select, T8/T8b regressions). Step 1/2 submit + approval flow NOT executed."},
+  "test_credentials": "Student Gaurav.pandey / Student@123 — working. Supervisor Paresh.gandhi / Supervisor@123 and Admin/In-Charge Abhijit.patil / Admin@123 not exercised this run.",
+  "seed_data_creation": "Created 2 augmentation cases as side-effect of retest: (1) 6a6b2d12811c1535451fde5d 'UI Aug Patient' Reg=AUG-UI-1 (2) 6a6b300e811c1535451fde6a 'UI Aug Patient' Reg=AUG-UI-2, procedure_date=2026-09-03 procedure_time=10:00. Both status=augmentation_in_progress with Step 1 pending — ready for a next agent to test Step 1/2 submit + approval flow. Booked slot 2026-09-03 10:00 (avoid).",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "iter-393 iter1 BUG-1 (section gate) and BUG-2 (calendar/slot testIDs) confirmed fixed. E2E create-case works end-to-end (except UX bug: single-button Alert on web doesn't navigate — see action_items). Two fresh augmentation cases seeded (see seed_data_creation). Next run should exercise: aug-fill-step1-btn form submit (fill reason chips, tap 24+25, side, severity, bone WxH, medical chips) → risk badge → aug-step1-submit → aug-fill-step2-btn → aug-step2-submit → login as Paresh, find sup-pending-aug-* card on dashboard → aug-review-box → aug-reject-btn with aug-reject-reason → student aug-revise-step2-btn → resubmit → Paresh approve → login as Abhijit → ic-pending-aug-* card → approve → 'Approved' pill → auto-expanded round card readback of Step 1 & Step 2 rows."
+}
