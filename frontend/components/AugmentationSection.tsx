@@ -82,16 +82,25 @@ export default function AugmentationSection({ procedure, onChanged }: { procedur
       </View>
 
       {rounds.map(rnd => {
-        const meta = STATUS_META[rnd.status] || { label: rnd.status, bg: '#ECEFF1', fg: '#546E7A' };
+        let meta = STATUS_META[rnd.status] || { label: rnd.status, bg: '#ECEFF1', fg: '#546E7A' };
+        if (rnd.status === 'step3_approved') {
+          meta = rnd.step3?.decision === 'failed'
+            ? { label: 'Reviewed — Graft Failed', bg: '#FFEBEE', fg: '#C62828' }
+            : { label: 'Augmentation Complete', bg: '#E8F5E9', fg: '#1B5E20' };
+        } else if ((rnd.status === 'pending_supervisor' || rnd.status === 'pending_incharge') && rnd.step3) {
+          meta = { ...meta, label: `Step 3 — ${meta.label}` };
+        } else if (rnd.status === 'approved') {
+          meta = { label: 'Approved — Step 3 Review Pending', bg: '#E8F5E9', fg: '#1B5E20' };
+        }
         const open = openRound === rnd.round;
         const isCurrent = rnd.round === current.round;
-        const s1 = rnd.step1; const s2 = rnd.step2;
+        const s1 = rnd.step1; const s2 = rnd.step2; const s3 = rnd.step3;
         return (
           <View key={rnd.round} style={s.card} testID={`aug-round-${rnd.round}`}>
             <TouchableOpacity style={s.cardHead} onPress={() => setOpenRound(open ? null : rnd.round)} testID={`aug-toggle-${rnd.round}`}>
               <View style={{ flex: 1 }}>
                 <Text style={s.cardTitle}>Bone Grafting — Round {rnd.round}</Text>
-                <Text style={s.cardSub}>Surgery: {rnd.scheduled_date} · {rnd.scheduled_time}</Text>
+                <Text style={s.cardSub}>Surgery: {rnd.scheduled_date ? `${rnd.scheduled_date} · ${rnd.scheduled_time}` : 'To be scheduled'}</Text>
               </View>
               <View style={[s.pill, { backgroundColor: meta.bg }]}>
                 <Text style={[s.pillText, { color: meta.fg }]}>{meta.label}</Text>
@@ -125,10 +134,30 @@ export default function AugmentationSection({ procedure, onChanged }: { procedur
                 </TouchableOpacity>
               </View>
             )}
-            {isOwner && isCurrent && rnd.status === 'rejected' && (
+            {isOwner && isCurrent && rnd.status === 'rejected' && !rnd.step3 && (
               <TouchableOpacity style={[s.actionBtn, { backgroundColor: '#C62828' }]} onPress={() => router.push(`/procedures/augmentation-step2/${procedure._id || procedure.id}`)} testID="aug-revise-step2-btn">
                 <Ionicons name="refresh-outline" size={16} color="#FFF" />
                 <Text style={s.actionBtnText}>Revise & Resubmit Step 2</Text>
+              </TouchableOpacity>
+            )}
+            {isOwner && isCurrent && rnd.status === 'rejected' && !!rnd.step3 && (
+              <TouchableOpacity style={[s.actionBtn, { backgroundColor: '#C62828' }]} onPress={() => router.push(`/procedures/augmentation-step3/${procedure._id || procedure.id}`)} testID="aug-revise-step3-btn">
+                <Ionicons name="refresh-outline" size={16} color="#FFF" />
+                <Text style={s.actionBtnText}>Revise & Resubmit Step 3 Review</Text>
+              </TouchableOpacity>
+            )}
+            {isOwner && isCurrent && rnd.status === 'approved' && !rnd.step3 && (
+              <TouchableOpacity style={[s.actionBtn, { backgroundColor: '#6A1B9A' }]} onPress={() => router.push(`/procedures/augmentation-step3/${procedure._id || procedure.id}`)} testID="aug-fill-step3-btn">
+                <Ionicons name="clipboard-outline" size={16} color="#FFF" />
+                <Text style={s.actionBtnText}>Proceed to Step 3 — Review of Pre-Implant Augmentation</Text>
+              </TouchableOpacity>
+            )}
+            {isOwner && isCurrent && rnd.status === 'step3_approved'
+              && procedure.augmentation_outcome === 'proceed_phase2'
+              && procedure.status === 'augmentation_in_progress' && (
+              <TouchableOpacity style={[s.actionBtn, { backgroundColor: '#1B5E20' }]} onPress={() => router.push(`/(tabs)/new-procedure?augResumeId=${procedure._id || procedure.id}`)} testID="aug-proceed-phase2-btn">
+                <Ionicons name="arrow-forward-circle" size={16} color="#FFF" />
+                <Text style={s.actionBtnText}>Proceed to Phase 2 — Complete Phase 1 Details</Text>
               </TouchableOpacity>
             )}
 
@@ -177,6 +206,19 @@ export default function AugmentationSection({ procedure, onChanged }: { procedur
                       ? `Yes — ${list(s2.soft_tissue_types)} · Donor: ${list(s2.soft_tissue_donor_sites)} · Indication: ${list(s2.soft_tissue_indications)}${s2.soft_tissue_other_text ? ` (${s2.soft_tissue_other_text})` : ''}`
                       : s2.soft_tissue_graft} />
                     <Row label="Healing protocol" value={s2.healing_protocol === 'Custom' ? `Custom — ${s2.healing_custom_text}` : s2.healing_protocol} />
+                  </>
+                ) : null}
+                {s3 ? (
+                  <>
+                    <Text style={[s.subHead, { marginTop: 10 }]}>Step 3 — Review of Augmentation</Text>
+                    <Row label="Healing status" value={s3.healing_status} />
+                    <Row label="Complications" value={`${(s3.complications || []).join(', ')}${s3.complication_other_text ? ` — ${s3.complication_other_text}` : ''}` || undefined} />
+                    <Row label="Bone graft outcome" value={s3.outcome} />
+                    <Row label="Bone gain (H × V after graft)" value={(s3.bone_width_after || s3.bone_height_after) ? `${s3.bone_width_after || '—'} mm × ${s3.bone_height_after || '—'} mm` : undefined} />
+                    <Row label="CBCT after graft" value={(s3.cbct_files || []).length ? `${s3.cbct_files.length} file(s) uploaded` : 'Not uploaded'} />
+                    <Row label="Decision" value={s3.decision === 'complete'
+                      ? 'Bone Graft Augmentation Complete'
+                      : `Bone Graft Augmentation Failed — ${({ terminate: 'Terminate Treatment', repeat: 'Repeat Pre-Implant Bone Augmentation', proceed_phase2: 'Proceed to Phase 2' } as any)[s3.failed_action] || ''}`} />
                   </>
                 ) : null}
                 {(rnd.faculty_comments || []).map((c: any, i: number) => (

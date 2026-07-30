@@ -48,6 +48,7 @@ import Phase2EditModal from '../../components/Phase2EditModal';
 import ContributionTimelineCard from '../../components/ContributionTimelineCard';
 import FollowUpSection from '../../components/FollowUpSection';
 import AugmentationSection from '../../components/AugmentationSection';
+import AugmentationPhase2Review from '../../components/AugmentationPhase2Review';
 import TransferApprovalCard from '../../components/TransferApprovalCard';
 import RescheduleModal from '../../components/RescheduleModal';
 import ImplantLifecycleTimeline from '../../components/ImplantLifecycleTimeline';
@@ -1068,6 +1069,7 @@ export default function ProcedureDetailScreen() {
 
         {/* iter-388: Phase 5 — Follow-up & Maintenance (completed cases only) */}
         <AugmentationSection procedure={procedure} onChanged={() => loadProcedure()} />
+        <AugmentationPhase2Review procedure={procedure} />
         <FollowUpSection procedure={procedure} onChanged={() => loadProcedure()} />
 
         {/* iter-352: End Treatment REJECTED banner. Shown when the last
@@ -1501,8 +1503,8 @@ export default function ProcedureDetailScreen() {
               const allSteps = [
                 { key: 'phase1', label: 'Phase 1', subtitle: isExistingImplant ? 'Examination & Case Details' : 'Diagnosis & Treatment Planning',
                   done: ['phase1_approved','pending_phase2','phase2_approved','pending_stage2_surgical','stage2_surgical_approved','pending_stage2_prosthetic','completed'].includes(procedure.status),
-                  active: procedure.status === 'pending_phase1',
-                  doneOn: procedure.procedure_date,
+                  active: procedure.status === 'pending_phase1' || procedure.status === 'augmentation_in_progress',
+                  doneOn: procedure.status === 'augmentation_in_progress' ? null : procedure.procedure_date,
                   legacy: procedure.phase1_completed_at,
                   approver: phaseApprover },
                 { key: 'phase2', label: 'Phase 2', subtitle: 'Implant Surgery',

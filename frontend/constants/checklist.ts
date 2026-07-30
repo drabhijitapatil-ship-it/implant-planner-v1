@@ -697,6 +697,12 @@ export const SOFT_TISSUE_INDICATIONS = [
   'Esthetic Enhancement', 'Peri-implant Tissue Augmentation', 'Other',
 ];
 export const HEALING_PROTOCOLS = ['2 months', '3 months', '4 months', '6 months', '9 months', 'Custom'];
+export const GRAFT_HEALING_STATUS = ['Completed', 'Failed'];
+export const AUGMENTATION_COMPLICATIONS = [
+  'None', 'Flap dehiscence', 'Membrane exposure', 'Infection',
+  'Partial graft loss', 'Complete graft failure', 'Pain', 'Swelling', 'Other',
+];
+export const GRAFT_OUTCOMES = ['Successful', 'Partially successful', 'Failed'];
 
 export const USER_ROLES = {
   student: 'Student',

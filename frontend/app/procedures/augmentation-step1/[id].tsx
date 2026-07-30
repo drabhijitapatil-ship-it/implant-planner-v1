@@ -35,7 +35,7 @@ const MultiChips = ({ options, values, onToggle, testPrefix }: any) => (
       const on = values.includes(opt);
       return (
         <TouchableOpacity key={opt} style={[s.chip, on && s.chipActive]} onPress={() => onToggle(opt)}
-          testID={`${testPrefix}-${opt.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}>
+          testID={`${testPrefix}-${opt.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`}>
           <Text style={[s.chipText, on && s.chipTextActive]}>{opt}</Text>
         </TouchableOpacity>
       );
@@ -119,9 +119,8 @@ export default function AugmentationStep1() {
         bone_width_before: boneWidth, bone_height_before: boneHeight,
         medical_assessment: medical, medical_risk_level: risk.level,
       });
-      Alert.alert('Step 1 Complete', 'Step 2 — Post-procedure Details is now unlocked.', [
-        { text: 'OK', onPress: () => router.replace(`/procedures/${id}`) },
-      ]);
+      Alert.alert('Step 1 Complete', 'Step 2 — Post-procedure Details is now unlocked.');
+      router.replace(`/procedures/${id}`);
     } catch (e: any) {
       Alert.alert('Error', e?.response?.data?.detail || 'Failed to save Step 1');
     } finally { setLoading(false); }
@@ -216,7 +215,7 @@ export default function AugmentationStep1() {
                   {f.options.map(o => (
                     <TouchableOpacity key={o} style={[s.chip, medical[f.id] === o && s.chipActive]}
                       onPress={() => setMedical(prev => ({ ...prev, [f.id]: o }))}
-                      testID={`aug-medical-${f.id}-${o.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}>
+                      testID={`aug-medical-${f.id}-${o.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`}>
                       <Text style={[s.chipText, medical[f.id] === o && s.chipTextActive]}>{o}</Text>
                     </TouchableOpacity>
                   ))}
