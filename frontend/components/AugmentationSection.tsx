@@ -98,14 +98,18 @@ export default function AugmentationSection({ procedure, onChanged }: { procedur
         return (
           <View key={rnd.round} style={s.card} testID={`aug-round-${rnd.round}`}>
             <TouchableOpacity style={s.cardHead} onPress={() => setOpenRound(open ? null : rnd.round)} testID={`aug-toggle-${rnd.round}`}>
-              <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Text style={s.cardTitle}>Bone Grafting — Round {rnd.round}</Text>
-                <Text style={s.cardSub}>Surgery: {rnd.scheduled_date ? `${rnd.scheduled_date} · ${rnd.scheduled_time}` : 'To be scheduled'}</Text>
+                <View style={{ flex: 1 }} />
+                <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color="#78909C" />
               </View>
-              <View style={[s.pill, { backgroundColor: meta.bg }]}>
+              <View style={[s.pill, { backgroundColor: meta.bg, alignSelf: 'flex-start', marginTop: 7 }]}>
                 <Text style={[s.pillText, { color: meta.fg }]}>{meta.label}</Text>
               </View>
-              <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color="#78909C" />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 7 }}>
+                <Ionicons name="calendar-outline" size={13} color="#90A4AE" />
+                <Text style={s.cardSub}>Surgery: {rnd.scheduled_date ? `${rnd.scheduled_date} · ${rnd.scheduled_time}` : 'To be scheduled'}</Text>
+              </View>
             </TouchableOpacity>
 
             {rnd.status === 'rejected' && rnd.rejection_reason ? (
@@ -123,14 +127,14 @@ export default function AugmentationSection({ procedure, onChanged }: { procedur
               </TouchableOpacity>
             )}
             {isOwner && isCurrent && rnd.status === 'step2_pending' && (
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                <TouchableOpacity style={[s.actionBtn, { flex: 1, backgroundColor: '#546E7A' }]} onPress={() => router.push(`/procedures/augmentation-step1/${procedure._id || procedure.id}`)} testID="aug-edit-step1-btn">
+              <View>
+                <TouchableOpacity style={[s.actionBtn, { backgroundColor: '#546E7A', alignSelf: 'center', paddingHorizontal: 28 }]} onPress={() => router.push(`/procedures/augmentation-step1/${procedure._id || procedure.id}`)} testID="aug-edit-step1-btn">
                   <Ionicons name="pencil-outline" size={15} color="#FFF" />
                   <Text style={s.actionBtnText}>Edit Step 1</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[s.actionBtn, { flex: 2 }]} onPress={() => router.push(`/procedures/augmentation-step2/${procedure._id || procedure.id}`)} testID="aug-fill-step2-btn">
-                  <Ionicons name="create-outline" size={16} color="#FFF" />
-                  <Text style={s.actionBtnText}>Fill Step 2 — Post-procedure Details</Text>
+                <TouchableOpacity style={s.bigBtn} onPress={() => router.push(`/procedures/augmentation-step2/${procedure._id || procedure.id}`)} testID="aug-fill-step2-btn">
+                  <Ionicons name="create-outline" size={18} color="#FFF" />
+                  <Text style={s.bigBtnText}>Fill Step 2 — Post-procedure Details</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -144,20 +148,6 @@ export default function AugmentationSection({ procedure, onChanged }: { procedur
               <TouchableOpacity style={[s.actionBtn, { backgroundColor: '#C62828' }]} onPress={() => router.push(`/procedures/augmentation-step3/${procedure._id || procedure.id}`)} testID="aug-revise-step3-btn">
                 <Ionicons name="refresh-outline" size={16} color="#FFF" />
                 <Text style={s.actionBtnText}>Revise & Resubmit Step 3 Review</Text>
-              </TouchableOpacity>
-            )}
-            {isOwner && isCurrent && rnd.status === 'approved' && !rnd.step3 && (
-              <TouchableOpacity style={[s.actionBtn, { backgroundColor: '#6A1B9A' }]} onPress={() => router.push(`/procedures/augmentation-step3/${procedure._id || procedure.id}`)} testID="aug-fill-step3-btn">
-                <Ionicons name="clipboard-outline" size={16} color="#FFF" />
-                <Text style={s.actionBtnText}>Proceed to Step 3 — Review of Pre-Implant Augmentation</Text>
-              </TouchableOpacity>
-            )}
-            {isOwner && isCurrent && rnd.status === 'step3_approved'
-              && procedure.augmentation_outcome === 'proceed_phase2'
-              && procedure.status === 'augmentation_in_progress' && (
-              <TouchableOpacity style={[s.actionBtn, { backgroundColor: '#1B5E20' }]} onPress={() => router.push(`/(tabs)/new-procedure?augResumeId=${procedure._id || procedure.id}`)} testID="aug-proceed-phase2-btn">
-                <Ionicons name="arrow-forward-circle" size={16} color="#FFF" />
-                <Text style={s.actionBtnText}>Proceed to Phase 2 — Complete Phase 1 Details</Text>
               </TouchableOpacity>
             )}
 
@@ -226,6 +216,23 @@ export default function AugmentationSection({ procedure, onChanged }: { procedur
                 ))}
               </View>
             )}
+
+            {/* iter-394: big CTAs live at the bottom of the card, below the
+                step readback details and just above Treatment Progress. */}
+            {isOwner && isCurrent && rnd.status === 'approved' && !rnd.step3 && (
+              <TouchableOpacity style={[s.bigBtn, { backgroundColor: '#6A1B9A' }]} onPress={() => router.push(`/procedures/augmentation-step3/${procedure._id || procedure.id}`)} testID="aug-fill-step3-btn">
+                <Ionicons name="clipboard-outline" size={18} color="#FFF" />
+                <Text style={s.bigBtnText}>Proceed to Step 3 — Review of Pre-Implant Augmentation</Text>
+              </TouchableOpacity>
+            )}
+            {isOwner && isCurrent && rnd.status === 'step3_approved'
+              && procedure.augmentation_outcome === 'proceed_phase2'
+              && procedure.status === 'augmentation_in_progress' && (
+              <TouchableOpacity style={[s.bigBtn, { backgroundColor: '#1B5E20' }]} onPress={() => router.push(`/(tabs)/new-procedure?augResumeId=${procedure._id || procedure.id}`)} testID="aug-proceed-phase2-btn">
+                <Ionicons name="arrow-forward-circle" size={18} color="#FFF" />
+                <Text style={s.bigBtnText}>Proceed to Phase 2 — Complete Phase 1 Details</Text>
+              </TouchableOpacity>
+            )}
           </View>
         );
       })}
@@ -238,13 +245,15 @@ const s = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   title: { fontSize: 16, fontWeight: '700', color: '#1A1A2E', flex: 1 },
   card: { borderWidth: 1, borderColor: '#E0E7EE', borderRadius: 10, padding: 12, marginBottom: 10, backgroundColor: '#FAFCFD' },
-  cardHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cardHead: { },
   cardTitle: { fontSize: 14, fontWeight: '800', color: '#37474F' },
-  cardSub: { fontSize: 11.5, color: '#90A4AE', marginTop: 2 },
+  cardSub: { fontSize: 11.5, color: '#78909C', fontWeight: '600' },
   pill: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999 },
   pillText: { fontSize: 10.5, fontWeight: '800' },
   actionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#1565C0', borderRadius: 9, paddingVertical: 11, marginTop: 10 },
   actionBtnText: { color: '#FFF', fontSize: 13, fontWeight: '800' },
+  bigBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, backgroundColor: '#1565C0', borderRadius: 11, paddingVertical: 15, paddingHorizontal: 18, marginTop: 12, alignSelf: 'center', width: '100%', maxWidth: 480 },
+  bigBtnText: { color: '#FFF', fontSize: 13.5, fontWeight: '800', textAlign: 'center', flexShrink: 1 },
   rejectBox: { backgroundColor: '#FFEBEE', borderRadius: 8, borderWidth: 1, borderColor: '#EF9A9A', padding: 9, marginTop: 8 },
   reviewBox: { marginTop: 10, borderTopWidth: 1, borderTopColor: '#ECEFF1', paddingTop: 10 },
   inputSm: { borderWidth: 1, borderColor: '#DDD', borderRadius: 8, padding: 9, fontSize: 12.5, backgroundColor: '#FFF', marginTop: 6 },

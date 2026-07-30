@@ -2198,12 +2198,17 @@ export default function NewProcedureScreen() {
 
       {/* ─── iter-393: Pre-Implant Augmentation gate (after Payment Details) ─── */}
       {!!augResumeId && (
-        <View style={[styles.section, { backgroundColor: '#E8F5E9', borderColor: '#A5D6A7', borderWidth: 1 }]} testID="aug-resume-banner" data-testid="aug-resume-banner">
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Ionicons name="bandage" size={18} color="#1B5E20" />
-            <Text style={{ color: '#1B5E20', fontWeight: '700', fontSize: 13.5, flex: 1 }}>
-              Pre-Implant Augmentation approved — complete the Phase 1 implant details below to proceed to Phase 2.
-            </Text>
+        <View style={[styles.section, { backgroundColor: '#F1F8F2', borderColor: '#A5D6A7', borderWidth: 1 }]} testID="aug-resume-banner" data-testid="aug-resume-banner">
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: '#1B5E20', alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="checkmark-done" size={21} color="#FFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: '#1B5E20', fontWeight: '800', fontSize: 14.5 }}>Pre-Implant Augmentation Approved</Text>
+              <Text style={{ color: '#33691E', fontSize: 12.5, marginTop: 3, lineHeight: 18 }}>
+                The bone graft has healed and been signed off. Complete the Phase 1 implant details below to proceed to Phase 2.
+              </Text>
+            </View>
           </View>
         </View>
       )}
