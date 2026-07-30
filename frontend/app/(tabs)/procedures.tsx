@@ -226,8 +226,16 @@ function DefaultProceduresScreen() {
               </View>
             ) : null}
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[item.status as keyof typeof STATUS_COLORS] }]}>
-            <Text style={styles.statusText}>{STATUS_LABELS[item.status as keyof typeof STATUS_LABELS]}</Text>
+          <View style={{ alignItems: 'flex-end', gap: 4 }}>
+            <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[item.status as keyof typeof STATUS_COLORS] }]}>
+              <Text style={styles.statusText}>{STATUS_LABELS[item.status as keyof typeof STATUS_LABELS]}</Text>
+            </View>
+            {item.augmentation_required && (item.augmentations || []).length > 0 && item.status !== 'augmentation_in_progress' && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#EFEBE9', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3, borderWidth: 1, borderColor: '#D7CCC8' }} data-testid={`aug-done-badge-${item.id}`}>
+                <Ionicons name="bandage" size={11} color="#5D4037" />
+                <Text style={{ fontSize: 10, fontWeight: '700', color: '#5D4037' }}>Pre-Implant Augmentation ✓</Text>
+              </View>
+            )}
           </View>
         </View>
 

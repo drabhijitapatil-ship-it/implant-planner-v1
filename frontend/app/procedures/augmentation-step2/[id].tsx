@@ -13,6 +13,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import api from '../../../utils/api';
 import { PhaseHeader } from '../../../components/PhaseHeader';
 import { Ionicons } from '@expo/vector-icons';
+import AugDropdown from '../../../components/AugDropdown';
 import {
   AUGMENTATION_PROCEDURES, AUTOGENOUS_SITES, OTHER_GRAFT_MATERIALS,
   MEMBRANE_TYPES, FIXATION_OPTIONS, SOFT_TISSUE_GRAFT_TYPES,
@@ -32,6 +33,7 @@ const MultiChips = ({ options, values, onToggle, testPrefix }: any) => (
     })}
   </View>
 );
+void MultiChips;
 
 const YesNo = ({ value, onChange, testPrefix }: any) => (
   <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -192,7 +194,7 @@ export default function AugmentationStep2() {
               <Text style={s.sectionTitle}>Bone Graft Procedure</Text>
             </View>
             <Field label="Procedure performed" required>
-              <MultiChips options={AUGMENTATION_PROCEDURES} values={proceduresPerformed} onToggle={toggle(setProceduresPerformed)} testPrefix="aug-proc" />
+              <AugDropdown options={AUGMENTATION_PROCEDURES} selected={proceduresPerformed} onChange={setProceduresPerformed} testPrefix="aug-proc" placeholder="Select procedure(s)…" />
               {proceduresPerformed.includes('Other') && (
                 <TextInput style={[s.input, { marginTop: 8 }]} placeholder="Describe the other procedure..." value={procedureOther} onChangeText={setProcedureOther} testID="aug-proc-other" />
               )}
@@ -208,7 +210,7 @@ export default function AugmentationStep2() {
               <YesNo value={autogenous} onChange={(v: string) => { setAutogenous(v); if (v === 'No') { setAutogenousSites([]); setAutogenousOther(''); } }} testPrefix="aug-autogenous" />
               {autogenous === 'Yes' && (
                 <View style={{ marginTop: 10 }}>
-                  <MultiChips options={AUTOGENOUS_SITES} values={autogenousSites} onToggle={toggle(setAutogenousSites)} testPrefix="aug-auto-site" />
+                  <AugDropdown options={AUTOGENOUS_SITES} selected={autogenousSites} onChange={setAutogenousSites} testPrefix="aug-auto-site" placeholder="Select harvest site(s)…" />
                   {autogenousSites.includes('Other') && (
                     <TextInput style={[s.input, { marginTop: 8 }]} placeholder="Other donor site..." value={autogenousOther} onChangeText={setAutogenousOther} testID="aug-auto-other" />
                   )}
@@ -219,7 +221,7 @@ export default function AugmentationStep2() {
               <YesNo value={allograft} onChange={setAllograft} testPrefix="aug-allograft" />
             </Field>
             <Field label="Other graft materials">
-              <MultiChips options={OTHER_GRAFT_MATERIALS} values={otherMaterials} onToggle={toggle(setOtherMaterials)} testPrefix="aug-material" />
+              <AugDropdown options={OTHER_GRAFT_MATERIALS} selected={otherMaterials} onChange={setOtherMaterials} testPrefix="aug-material" placeholder="Select graft material(s)…" />
               {otherMaterials.includes('Others') && (
                 <TextInput style={[s.input, { marginTop: 8 }]} placeholder="Other material details..." value={materialOther} onChangeText={setMaterialOther} testID="aug-material-other" />
               )}
@@ -235,7 +237,7 @@ export default function AugmentationStep2() {
               <YesNo value={membrane} onChange={(v: string) => { setMembrane(v); if (v === 'No') { setMembraneTypes([]); setMembraneOther(''); } }} testPrefix="aug-membrane" />
               {membrane === 'Yes' && (
                 <View style={{ marginTop: 10 }}>
-                  <MultiChips options={MEMBRANE_TYPES} values={membraneTypes} onToggle={toggle(setMembraneTypes)} testPrefix="aug-membrane-type" />
+                  <AugDropdown options={MEMBRANE_TYPES} selected={membraneTypes} onChange={setMembraneTypes} testPrefix="aug-membrane-type" placeholder="Select membrane type(s)…" />
                   {membraneTypes.includes('Others') && (
                     <TextInput style={[s.input, { marginTop: 8 }]} placeholder="Other membrane details..." value={membraneOther} onChangeText={setMembraneOther} testID="aug-membrane-other" />
                   )}
@@ -243,7 +245,7 @@ export default function AugmentationStep2() {
               )}
             </Field>
             <Field label="Fixation" required>
-              <MultiChips options={FIXATION_OPTIONS} values={fixation} onToggle={toggle(setFixation)} testPrefix="aug-fixation" />
+              <AugDropdown options={FIXATION_OPTIONS} selected={fixation} onChange={setFixation} testPrefix="aug-fixation" placeholder="Select fixation…" />
             </Field>
           </View>
 
@@ -258,13 +260,13 @@ export default function AugmentationStep2() {
             {softTissue === 'Yes' && (
               <>
                 <Field label="Type of Soft Tissue Graft" required>
-                  <MultiChips options={SOFT_TISSUE_GRAFT_TYPES} values={sttTypes} onToggle={toggle(setSttTypes)} testPrefix="aug-stt-type" />
+                  <AugDropdown options={SOFT_TISSUE_GRAFT_TYPES} selected={sttTypes} onChange={setSttTypes} testPrefix="aug-stt-type" placeholder="Select graft type(s)…" />
                 </Field>
                 <Field label="Donor Site" required>
-                  <MultiChips options={SOFT_TISSUE_DONOR_SITES} values={sttDonors} onToggle={toggle(setSttDonors)} testPrefix="aug-stt-donor" />
+                  <AugDropdown options={SOFT_TISSUE_DONOR_SITES} selected={sttDonors} onChange={setSttDonors} testPrefix="aug-stt-donor" placeholder="Select donor site(s)…" />
                 </Field>
                 <Field label="Indication" required>
-                  <MultiChips options={SOFT_TISSUE_INDICATIONS} values={sttIndications} onToggle={toggle(setSttIndications)} testPrefix="aug-stt-indication" />
+                  <AugDropdown options={SOFT_TISSUE_INDICATIONS} selected={sttIndications} onChange={setSttIndications} testPrefix="aug-stt-indication" placeholder="Select indication(s)…" />
                 </Field>
                 {(sttTypes.includes('Other') || sttDonors.includes('Other') || sttIndications.includes('Other')) && (
                   <TextInput style={s.input} placeholder="Other soft-tissue details..." value={sttOther} onChangeText={setSttOther} testID="aug-stt-other" />
@@ -278,13 +280,7 @@ export default function AugmentationStep2() {
               <Ionicons name="hourglass-outline" size={20} color="#E65100" />
               <Text style={s.sectionTitle}>Healing Protocol <Text style={{ color: '#DC3545' }}>*</Text></Text>
             </View>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              {HEALING_PROTOCOLS.map(o => (
-                <TouchableOpacity key={o} style={[s.chip, healing === o && s.chipActive]} onPress={() => setHealing(o)} testID={`aug-healing-${o.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`}>
-                  <Text style={[s.chipText, healing === o && s.chipTextActive]}>{o}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <AugDropdown options={HEALING_PROTOCOLS} selected={healing ? [healing] : []} onChange={(v) => setHealing(v[0] || '')} multi={false} testPrefix="aug-healing" placeholder="Select healing period…" />
             {healing === 'Custom' && (
               <TextInput style={[s.input, { marginTop: 10 }]} placeholder="Custom healing period (e.g. 5 months)" value={healingCustom} onChangeText={setHealingCustom} testID="aug-healing-custom" />
             )}
@@ -308,8 +304,8 @@ const s = StyleSheet.create({
   scroll: { paddingBottom: 32, paddingTop: 8 },
   section: { backgroundColor: '#FFF', marginHorizontal: 16, marginBottom: 16, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#E8EDF2' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1A1A2E', flex: 1 },
-  label: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 6 },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1565C0', flex: 1, letterSpacing: 0.3 },
+  label: { fontSize: 13, fontWeight: '600', color: '#1565C0', marginBottom: 6 },
   input: { borderWidth: 1, borderColor: '#DDD', borderRadius: 8, padding: 10, fontSize: 13, backgroundColor: '#FAFAFA', minHeight: 40 },
   chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1.5, borderColor: '#D0DCE8', backgroundColor: '#F8FAFC' },
   chipActive: { borderColor: '#1565C0', backgroundColor: '#1565C0' },

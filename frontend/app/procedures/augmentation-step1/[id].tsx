@@ -15,6 +15,7 @@ import api from '../../../utils/api';
 import { PhaseHeader } from '../../../components/PhaseHeader';
 import { Ionicons } from '@expo/vector-icons';
 import FDIChart from '../../../components/FDIChart';
+import AugDropdown from '../../../components/AugDropdown';
 import {
   AUGMENTATION_REASONS, BONE_DEFECT_SIDES, DEFECT_SEVERITY,
   MEDICAL_RISK_FACTORS, calculateMedicalRisk,
@@ -146,7 +147,7 @@ export default function AugmentationStep1() {
               <Ionicons name="help-circle-outline" size={20} color="#6A1B9A" />
               <Text style={s.sectionTitle}>Reason for Bone Grafting <Text style={{ color: '#DC3545' }}>*</Text></Text>
             </View>
-            <MultiChips options={AUGMENTATION_REASONS} values={reasons} onToggle={toggle(setReasons)} testPrefix="aug-reason" />
+            <AugDropdown options={AUGMENTATION_REASONS} selected={reasons} onChange={setReasons} testPrefix="aug-reason" placeholder="Select reason(s) for grafting…" />
             {reasons.includes('Others') && (
               <TextInput style={[s.input, { marginTop: 10 }]} placeholder="Describe the other reason..."
                 value={reasonOther} onChangeText={setReasonOther} testID="aug-reason-other" />
@@ -168,24 +169,12 @@ export default function AugmentationStep1() {
             )}
 
             <Text style={[s.label, { marginTop: 16 }]}>Bone Defect Side <Text style={{ color: '#DC3545' }}>*</Text></Text>
-            <MultiChips options={BONE_DEFECT_SIDES} values={defectSides} onToggle={toggle(setDefectSides)} testPrefix="aug-side" />
+            <AugDropdown options={BONE_DEFECT_SIDES} selected={defectSides} onChange={setDefectSides} testPrefix="aug-side" placeholder="Select side(s)…" />
 
             <Text style={[s.label, { marginTop: 16 }]}>Horizontal defect <Text style={{ color: '#DC3545' }}>*</Text></Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              {DEFECT_SEVERITY.map(o => (
-                <TouchableOpacity key={o} style={[s.chip, horizontalDefect === o && s.chipActive]} onPress={() => setHorizontalDefect(o)} testID={`aug-hdefect-${o.toLowerCase()}`}>
-                  <Text style={[s.chipText, horizontalDefect === o && s.chipTextActive]}>{o}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <AugDropdown options={DEFECT_SEVERITY} selected={horizontalDefect ? [horizontalDefect] : []} onChange={(v) => setHorizontalDefect(v[0] || '')} multi={false} testPrefix="aug-hdefect" placeholder="Select severity…" />
             <Text style={[s.label, { marginTop: 12 }]}>Vertical defect <Text style={{ color: '#DC3545' }}>*</Text></Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              {DEFECT_SEVERITY.map(o => (
-                <TouchableOpacity key={o} style={[s.chip, verticalDefect === o && s.chipActive]} onPress={() => setVerticalDefect(o)} testID={`aug-vdefect-${o.toLowerCase()}`}>
-                  <Text style={[s.chipText, verticalDefect === o && s.chipTextActive]}>{o}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <AugDropdown options={DEFECT_SEVERITY} selected={verticalDefect ? [verticalDefect] : []} onChange={(v) => setVerticalDefect(v[0] || '')} multi={false} testPrefix="aug-vdefect" placeholder="Select severity…" />
             <Text style={[s.label, { marginTop: 12 }]}>Other</Text>
             <TextInput style={s.input} placeholder="Other defect details (optional)..." value={defectOther} onChangeText={setDefectOther} testID="aug-defect-other" />
 
@@ -263,8 +252,8 @@ const s = StyleSheet.create({
   scroll: { paddingBottom: 32, paddingTop: 8 },
   section: { backgroundColor: '#FFF', marginHorizontal: 16, marginBottom: 16, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#E8EDF2' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1A1A2E', flex: 1 },
-  label: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 6 },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1565C0', flex: 1, letterSpacing: 0.3 },
+  label: { fontSize: 13, fontWeight: '600', color: '#1565C0', marginBottom: 6 },
   helperText: { fontSize: 12, color: '#999', fontStyle: 'italic', marginBottom: 10 },
   input: { borderWidth: 1, borderColor: '#DDD', borderRadius: 8, padding: 10, fontSize: 13, backgroundColor: '#FAFAFA', minHeight: 40 },
   chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1.5, borderColor: '#D0DCE8', backgroundColor: '#F8FAFC' },

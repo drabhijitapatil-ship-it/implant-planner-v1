@@ -1,0 +1,42 @@
+{
+  "summary": "iter-394 UI/UX rework of Pre-Implant Augmentation — frontend verified via Playwright. Verified: (1) round card stacked layout (title → status pill → surgery date → CTA at bottom) on cases AUG-003 and AUG-S3-A; (2) NEW inline expanding tick-box dropdowns on Steps 1/2/3 render with all documented testIDs (aug-reason-trigger + 9 options + done, aug-side/hdefect/vdefect-trigger, aug-proc-trigger + 12 options + done, aug-material/fixation/healing-trigger, aug-comp-trigger with None-exclusivity, aug-outcome-trigger single-select auto-close, aug-graft-failed-btn → aug-failed-{terminate,repeat,proceed-phase2} radios visible); (3) blue headings/labels (#1565C0) confirmed across Steps 1/2/3 in screenshots; (4) BIG PURPLE aug-fill-step3-btn 'Proceed to Step 3 — Review of Pre-Implant Augmentation' rendered at BOTTOM of round card (below Step1+Step2 readback rows) on AUG-003 and AUG-001; (5) BIG GREEN aug-proceed-phase2-btn 'Proceed to Phase 2 — Complete Phase 1 Details' at BOTTOM of round card on AUG-S3-A (Augmentation Complete); (6) NEW aug-resume-banner design (circular check icon + 'Pre-Implant Augmentation Approved' title + subtitle 'The bone graft has healed and been signed off. Complete the Phase 1 implant details below to proceed to Phase 2.'), patient/faculty/chief-complaint prefilled, augmentation-question-section ABSENT, payment/schedule empty; (7) My Cases: all 'Pre-Implant Augmentation: In Progress' cases (AUG-S3-A, AUG-S3-B, AUG-003, AUG-001) show P1 P2 P3 P4 all 'Locked' (bug fix confirmed); (8) brown 'Pre-Implant Augmentation ✓' badge visible on My Cases for AUG-UI-2 (Phase 1: Approved) and AUG-UI-1. None-exclusivity in complications verified: clicking None then Pain leaves only Pain selected. Failed-decision radios (terminate/repeat/proceed-phase2) all present.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_scenarios": [
+    {"id": "V1", "case": "My Cases: 4 augmentation_in_progress cases (AUG-S3-A, AUG-S3-B, AUG-003, AUG-001) all show P1-P4 'Locked'", "result": "PASS"},
+    {"id": "V2", "case": "My Cases: AUG-UI-2 shows 'Phase 1: Approved' green pill + 'Pre-Implant Augmentation ✓' brown badge; AUG-UI-1 also shows brown badge", "result": "PASS"},
+    {"id": "V3", "case": "Case detail AUG-S3-A (Augmentation Complete): round card stacked (title/pill/surgery/readback) with BIG GREEN aug-proceed-phase2-btn at bottom", "result": "PASS"},
+    {"id": "V4", "case": "Click aug-proceed-phase2-btn → /new-procedure?augResumeId=…: aug-resume-banner (circular check + title + subtitle) visible, patient info prefilled, augmentation-question-section ABSENT, payment/schedule empty", "result": "PASS"},
+    {"id": "V5", "case": "Case detail AUG-003 & AUG-001 (Approved — Step 3 Review Pending): BIG PURPLE aug-fill-step3-btn rendered at BOTTOM of card below Step1+Step2 readback rows", "result": "PASS"},
+    {"id": "V6", "case": "Step 3 form (aug-fill-step3-btn on AUG-003): blue headings; aug-comp-trigger opens dropdown with all 9 options + aug-comp-done; None-exclusivity verified (tick None then Pain → only Pain remains); aug-outcome-trigger single-select auto-closes on selection", "result": "PASS"},
+    {"id": "V7", "case": "Step 3 form: click aug-graft-failed-btn → aug-failed-terminate, aug-failed-repeat, aug-failed-proceed-phase2 radios all render", "result": "PASS"},
+    {"id": "V8", "case": "Step 1 form (/procedures/augmentation-step1/{id}): blue headings; aug-reason-trigger dropdown with 9 options (horizontal-ridge-deficiency, vertical-ridge-deficiency, combined-defect, sinus-pneumatization, extraction-socket-preservation, peri-implant-defect, ridge-preservation, ridge-reconstruction, others) + aug-reason-done; aug-side-trigger, aug-hdefect-trigger, aug-vdefect-trigger all present; FDI chart unchanged (tooth 36 highlighted)", "result": "PASS"},
+    {"id": "V9", "case": "Step 2 form: blue headings; aug-proc-trigger dropdown with 12 options + aug-proc-done (guided-bone-regeneration-gbr, ridge-split, ridge-expansion, block-bone-graft, socket-preservation, socket-augmentation, indirect-sinus-lift-internal, direct-sinus-lift-lateral-window, vertical-ridge-augmentation, horizontal-ridge-augmentation, combination-technique, other); aug-material-trigger, aug-fixation-trigger, aug-healing-trigger all present; Yes/No chips (autogenous/allograft/membrane/soft-tissue) remain as buttons", "result": "PASS"}
+  ],
+  "not_tested_this_run": [
+    "Full new-case creation flow (New Case → payment → aug=Yes → calendar → aug-create-case-btn) not exercised — no fresh case in step1_pending state currently exists; existing cases (AUG-S3-A/S3-B) already at step3_approved+, AUG-003/001 at approved+step3-pending. Iter-311 covered creation and full step1→step3 approve chain with OLD chip UI; this iteration re-verified the new dropdown UI structure/testIDs/behavior via existing cases and direct navigation to step1/step2 forms.",
+    "Step 2-pending stacked layout (centered aug-edit-step1-btn above big blue aug-fill-step2-btn) not exercised at runtime — no case currently in step2_pending state. Code review of AugmentationSection.tsx L129-140 confirms both buttons live inside a plain <View> stack (aug-edit-step1-btn first with alignSelf='center' + paddingHorizontal:28; then bigBtn aug-fill-step2-btn full-width below). Implementation matches spec.",
+    "Full Step 1 & Step 2 submissions through dropdowns → approve chain not run end-to-end. Iter-311 verified backend + form submission; only the UI dropdown widget is new this iteration and its interactive behavior (toggle, tick, done, single-select auto-close, None-exclusivity) has been directly verified on Step 3."
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AugDropdown.tsx cleanly implements both multi-select (checkboxes + Done button) and single-select (radios + auto-close on select) via `multi` prop. Slug helper matches the documented rule (lowercase, non-alphanumerics → '-', trimmed). Good.",
+    "AugmentationSection.tsx L129-140: step2_pending state correctly renders aug-edit-step1-btn (centered, grey #546E7A) ABOVE aug-fill-step2-btn (full-width bigBtn blue) — stacked layout matches spec.",
+    "AugmentationSection.tsx L222-235: big CTAs (purple aug-fill-step3-btn + green aug-proceed-phase2-btn) are placed AFTER the readback `{open && (...)}` block, so they render at the visual bottom of the card. Confirmed live on AUG-003, AUG-001, AUG-S3-A.",
+    "None-exclusivity for complications: verified interactively — selecting 'None' then 'Pain' unchecks None. Implementation in step3 form correctly enforces this constraint (only 'Pain' remained in trigger summary after both clicks).",
+    "aug-resume-banner redesign matches spec (circular check icon, bold 'Pre-Implant Augmentation Approved', subtitle). No layout issues."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only run per E1 instruction)", "frontend": "100% of items directly verifiable without running an end-to-end fresh-case creation. Items 1,3,4,5,6,7,8 fully verified live. Item 2 (dropdowns): all trigger + option + done testIDs verified for Steps 1/2/3; interactive behavior verified on Step 3 (None-exclusivity, single-select auto-close, multi-select Done). Item 4 (step2-pending stacked layout): verified via code review only — no runtime case in that state currently."},
+  "test_credentials": "Student Gaurav.pandey / Student@123 OK.",
+  "seed_data_creation": "None. Used existing cases AUG-S3-A/S3-B/UI-1/UI-2/003/001.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "iter-394 UI rework verified — all NEW testIDs (AugDropdown triggers/options/done buttons), stacked round card layout, purple step3 CTA + green phase2 CTA at bottom, resume banner redesign, My Cases P1-P4 all-Locked strip, brown 'Pre-Implant Augmentation ✓' badge — all confirmed live. If a step2_pending runtime verification is desired, seed a fresh case: New Case (Gaurav) → aug=Yes → schedule → aug-create-case-btn → fill Step 1 → submit; case will then sit at step2_pending and the aug-edit-step1-btn / aug-fill-step2-btn stacked layout can be visually verified. Cases AUG-S3-A (a5) and AUG-S3-B (aa) remain at step3_approved+proceed_phase2; AUG-003 and AUG-001 remain at status='approved' with step3 pending.",
+  "rca of the issue": "N/A — no bugs found. iter-394 UI rework matches spec."
+}

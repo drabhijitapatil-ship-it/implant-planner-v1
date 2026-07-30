@@ -15,6 +15,7 @@ import api from '../../../utils/api';
 import { PhaseHeader } from '../../../components/PhaseHeader';
 import { Ionicons } from '@expo/vector-icons';
 import { showUploadPicker } from '../../../utils/uploadPicker';
+import AugDropdown from '../../../components/AugDropdown';
 import {
   GRAFT_HEALING_STATUS, AUGMENTATION_COMPLICATIONS, GRAFT_OUTCOMES,
 } from '../../../constants/checklist';
@@ -82,11 +83,10 @@ export default function AugmentationStep3() {
     })();
   }, [id]);
 
-  const toggleComplication = (opt: string) =>
+  const onComplicationsChange = (next: string[]) =>
     setComplications(prev => {
-      if (opt === 'None') return prev.includes('None') ? [] : ['None'];
-      const next = prev.includes(opt) ? prev.filter(o => o !== opt) : [...prev.filter(o => o !== 'None'), opt];
-      return next;
+      if (next.includes('None') && !prev.includes('None')) return ['None'];
+      return next.filter(o => o !== 'None' || !next.some(x => x !== 'None'));
     });
 
   const pickCbct = async () => {
@@ -177,7 +177,7 @@ export default function AugmentationStep3() {
               <Ionicons name="warning-outline" size={20} color="#E65100" />
               <Text style={s.sectionTitle}>Complications <Text style={{ color: '#DC3545' }}>*</Text></Text>
             </View>
-            <Chips options={AUGMENTATION_COMPLICATIONS} values={complications} onToggle={toggleComplication} testPrefix="aug-comp" />
+            <AugDropdown options={AUGMENTATION_COMPLICATIONS} selected={complications} onChange={onComplicationsChange} testPrefix="aug-comp" placeholder="Select complication(s), or None…" />
             {complications.includes('Other') && (
               <TextInput style={[s.input, { marginTop: 10 }]} placeholder="Describe the other complication..."
                 value={complicationOther} onChangeText={setComplicationOther} testID="aug-comp-other" />
@@ -189,7 +189,7 @@ export default function AugmentationStep3() {
               <Ionicons name="analytics-outline" size={20} color="#6A1B9A" />
               <Text style={s.sectionTitle}>Bone graft outcome <Text style={{ color: '#DC3545' }}>*</Text></Text>
             </View>
-            <Chips options={GRAFT_OUTCOMES} value={outcome} onSelect={setOutcome} testPrefix="aug-outcome" />
+            <AugDropdown options={GRAFT_OUTCOMES} selected={outcome ? [outcome] : []} onChange={(v) => setOutcome(v[0] || '')} multi={false} testPrefix="aug-outcome" placeholder="Select outcome…" />
 
             <Text style={[s.label, { marginTop: 16 }]}>Bone gain achieved</Text>
             <View style={{ flexDirection: 'row', gap: 12 }}>
@@ -289,8 +289,8 @@ const s = StyleSheet.create({
   scroll: { paddingBottom: 32, paddingTop: 8 },
   section: { backgroundColor: '#FFF', marginHorizontal: 16, marginBottom: 16, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#E8EDF2' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1A1A2E', flex: 1 },
-  label: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 6 },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1565C0', flex: 1, letterSpacing: 0.3 },
+  label: { fontSize: 13, fontWeight: '600', color: '#1565C0', marginBottom: 6 },
   helperText: { fontSize: 12, color: '#999', fontStyle: 'italic', marginBottom: 10 },
   input: { borderWidth: 1, borderColor: '#DDD', borderRadius: 8, padding: 10, fontSize: 13, backgroundColor: '#FAFAFA', minHeight: 40 },
   chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1.5, borderColor: '#D0DCE8', backgroundColor: '#F8FAFC' },
