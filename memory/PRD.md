@@ -7130,3 +7130,25 @@ summary card (bone graft performed/date/technique/healing period/bone gain delta
 ### Remaining (backlog)
 - LOW: RN-Web "Unexpected text node" console warning on case detail (pre-existing, elusive).
 - Deferred per user: augmentation data in PDF export.
+
+## 2026-07-30 — iter-394: Pre-Implant Augmentation UI/UX rework (9 user-requested changes)
+User choices: inline expanding dropdowns with tick-boxes (not modal); brown "Pre-Implant Augmentation ✓"
+badge on My Cases once case enters regular workflow; Step 3 complications also a dropdown.
+1. Round cards stack vertically: title line → status pill → "Surgery: date · time" line → buttons
+   (AugmentationSection.tsx cardHead rework).
+2. NEW /app/frontend/components/AugDropdown.tsx — inline dropdown, checkbox multi / radio single,
+   testIDs {prefix}-trigger, {prefix}-{option-slug}, {prefix}-done. Used for: Step 1 (reasons, defect
+   sides, horizontal/vertical severity), Step 2 (procedures, autogenous sites, graft materials, membrane
+   types, fixation, soft-tissue type/donor/indication, healing protocol single), Step 3 (complications
+   with None-exclusivity, outcome single). Yes/No stays buttons; FDI chart & medical chips unchanged.
+3. Blue headings/labels (#1565C0) across Steps 1–3 (matches Phase 1–4).
+4. step2_pending card: centered grey "Edit Step 1" ABOVE big blue "Fill Step 2" (stacked).
+5. My Cases phase-strip bug FIXED (CaseSubmissionStatus.tsx): augmentation_in_progress (and
+   terminated-during-augmentation) cases show P1–P4 all 'Locked' (previously P1–P3 wrongly 'Done').
+6. Big purple "Proceed to Step 3" & big green "Proceed to Phase 2" CTAs moved to BOTTOM of round card
+   (below step readback), larger (s.bigBtn), centered.
+7. Brown "Pre-Implant Augmentation ✓" badge on My Cases card (procedures.tsx, aug-done-badge-{id})
+   when augmentation done and status != augmentation_in_progress.
+8. Redesigned green resume banner (circular check icon + title + subtitle) on post-augmentation Phase 1 form.
+Testing: testing agent iteration_312.json — 9/9 PASS, no issues; step2_pending stacked layout verified
+live afterwards via seeded case 6a6b6c41de8b0b9e3366fce9 (AUG-S2P-1, slot 2026-09-16 11:00 booked).
