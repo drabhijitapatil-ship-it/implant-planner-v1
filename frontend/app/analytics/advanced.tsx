@@ -29,7 +29,7 @@ import { downloadAuthenticated } from '../../utils/csvDownload';
 import CalendarPicker from '../../components/CalendarPicker';
 import { useAuth } from '../../contexts/AuthContext';
 
-type Section = 'km' | 'scatter' | 'heatmap' | 'crosstab' | 'learning' | 'cmi' | 'complications' | 'failures' | 'followup' | 'adherence' | 'benchmarks' | 'export';
+type Section = 'km' | 'scatter' | 'heatmap' | 'crosstab' | 'learning' | 'cmi' | 'complications' | 'failures' | 'followup' | 'adherence' | 'augmentation' | 'benchmarks' | 'export';
 
 const SECTIONS: { key: Section; label: string; icon: keyof typeof Ionicons.glyphMap; facultyOnly?: boolean }[] = [
   { key: 'km', label: 'Kaplan-Meier', icon: 'pulse-outline' },
@@ -42,6 +42,7 @@ const SECTIONS: { key: Section; label: string; icon: keyof typeof Ionicons.glyph
   { key: 'failures', label: 'Failure Analysis', icon: 'sad-outline' },
   { key: 'followup', label: 'Follow-up', icon: 'repeat-outline' },
   { key: 'adherence', label: 'Plan Adherence', icon: 'git-compare-outline' },
+  { key: 'augmentation', label: 'Augmentation', icon: 'bandage-outline' },
   { key: 'benchmarks', label: 'Benchmarks', icon: 'ribbon-outline' },
   { key: 'export', label: 'Research Export', icon: 'download-outline' },
 ];
@@ -130,6 +131,7 @@ export default function AdvancedAnalyticsHub() {
         {section === 'complications' && <ComplicationsPane fromDate={fromDate} toDate={toDate} />}
         {section === 'failures' && <FailurePane fromDate={fromDate} toDate={toDate} />}
         {section === 'followup' && <FollowUpPane fromDate={fromDate} toDate={toDate} />}
+        {section === 'augmentation' && <AugmentationPane fromDate={fromDate} toDate={toDate} />}
         {section === 'adherence' && <AdherencePane fromDate={fromDate} toDate={toDate} />}
         {section === 'benchmarks' && <BenchmarksPane fromDate={fromDate} toDate={toDate} />}
         {section === 'export' && <ResearchExportPane fromDate={fromDate} toDate={toDate} />}
@@ -1110,6 +1112,142 @@ function AdherencePane({ fromDate, toDate }: { fromDate: string; toDate: string 
   );
 }
 
+// iter-395 — Pre-Implant & Phase 2 augmentation analytics.
+function AugmentationPane({ fromDate, toDate }: { fromDate: string; toDate: string }) {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params: any = {};
+      if (fromDate) params.from_date = fromDate;
+      if (toDate) params.to_date = toDate;
+      const r = await api.get('/analytics/augmentation', { params });
+      setData(r.data);
+    } finally { setLoading(false); }
+  }, [fromDate, toDate]);
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) return <View style={s.pane}><ActivityIndicator style={{ marginVertical: 24 }} /></View>;
+  if (!data) return <View style={s.pane}><EmptyMsg /></View>;
+  const sm = data.summary || {};
+  const maxComp = Math.max(1, ...(data.complications || []).map((c: any) => c.count));
+  const rateColor = (r: number | null) => r == null ? '#90A4AE' : r >= 85 ? '#2E7D32' : r >= 60 ? '#F9A825' : '#C62828';
+  const gain = (h: number | null, v: number | null) =>
+    (h == null && v == null) ? '—' : `H ${h != null ? `+${h}` : '—'} / V ${v != null ? `+${v}` : '—'} mm`;
+
+  const CompareTable = ({ rows, testPrefix }: { rows: any[]; testPrefix: string }) => (
+    !rows.length ? <EmptyMsg /> : (
+      <>
+        {rows.map((t: any) => (
+          <View key={t.name} style={s.failRow} testID={`${testPrefix}-${t.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.failName}>{t.name}</Text>
+              <Text style={s.failN}>
+                staged n={t.staged_n} · simultaneous n={t.simultaneous_n}
+                {t.complication_rate != null ? ` · compl. ${t.complication_rate}%` : ''}
+              </Text>
+              <Text style={s.failN}>bone gain: {gain(t.mean_gain_h, t.mean_gain_v)}</Text>
+            </View>
+            <Text style={[s.failRate, { color: rateColor(t.success_rate) }]}>
+              {t.success_rate != null ? `${t.success_rate}%` : 'no outcome'}
+            </Text>
+          </View>
+        ))}
+      </>
+    )
+  );
+
+  return (
+    <View style={s.pane} testID="augmentation-analytics-pane">
+      <SectionCard title="Augmentation overview" hint="Staged = Pre-Implant Augmentation workflow (Phase 1). Simultaneous = Bone & Soft Tissue Augmentation done during Phase 2 implant surgery.">
+        <View style={s.bucketsRow}>
+          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#5D4037' }]}>{sm.staged_cases ?? 0}</Text><Text style={s.bucketLbl}>Staged cases</Text></View>
+          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#1565C0' }]}>{sm.simultaneous_cases ?? 0}</Text><Text style={s.bucketLbl}>Simultaneous (Phase 2)</Text></View>
+          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#37474F' }]}>{sm.total_rounds ?? 0}</Text><Text style={s.bucketLbl}>Graft rounds</Text></View>
+        </View>
+        <View style={[s.bucketsRow, { marginTop: 8 }]}>
+          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#1B5E20' }]}>{sm.success ?? 0}</Text><Text style={s.bucketLbl}>Successful</Text></View>
+          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#F9A825' }]}>{sm.partially_successful ?? 0}</Text><Text style={s.bucketLbl}>Partially successful</Text></View>
+          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#C62828' }]}>{sm.failed ?? 0}</Text><Text style={s.bucketLbl}>Failed</Text></View>
+        </View>
+        <View style={[s.bucketsRow, { marginTop: 8 }]}>
+          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#00695C', fontSize: 14, lineHeight: 20 }]}>{gain(sm.mean_gain_h, sm.mean_gain_v)}</Text><Text style={s.bucketLbl}>Mean bone gain</Text></View>
+          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#E65100' }]}>{sm.repeat_cases ?? 0}</Text><Text style={s.bucketLbl}>Repeat rounds needed</Text></View>
+          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#C62828' }]}>{sm.terminated_cases ?? 0}</Text><Text style={s.bucketLbl}>Treatment terminated</Text></View>
+        </View>
+      </SectionCard>
+
+      <SectionCard title="Technique comparison" hint="Success rate & mean bone gain per grafting procedure (outcomes from Step 3 reviews; simultaneous events count usage only).">
+        <CompareTable rows={data.techniques || []} testPrefix="aug-an-tech" />
+      </SectionCard>
+
+      <SectionCard title="Graft material performance" hint="Autogenous / Allograft / Xenograft / Alloplast and others — success and complication rates.">
+        <CompareTable rows={data.materials || []} testPrefix="aug-an-mat" />
+      </SectionCard>
+
+      <SectionCard title="Complication pareto" hint="Most frequent graft complications recorded in Step 3 reviews.">
+        {!(data.complications || []).length ? <EmptyMsg /> :
+          (data.complications || []).map((c: any) => (
+            <View key={c.name} style={{ marginBottom: 8 }} testID={`aug-an-comp-${c.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={s.paretoLbl}>{c.name}</Text>
+                <Text style={s.paretoRight}>{c.count}</Text>
+              </View>
+              <View style={s.paretoBar}>
+                <View style={[s.paretoBarFill, { width: `${(c.count / maxComp) * 100}%`, backgroundColor: '#C62828' }]} />
+              </View>
+            </View>
+          ))}
+      </SectionCard>
+
+      <SectionCard title="Risk factors × outcome" hint="Graft success rate split by smoking and diabetes status captured in Step 1.">
+        {['smoking', 'diabetes'].map(f => (
+          <View key={f} style={{ marginBottom: 6 }}>
+            <Text style={[s.failName, { marginBottom: 4, textTransform: 'capitalize' }]}>{f}</Text>
+            {!((data.risk_factors || {})[f] || []).length ? <EmptyMsg /> :
+              (data.risk_factors[f] || []).map((r: any) => (
+                <View key={r.level} style={s.failRow} testID={`aug-an-risk-${f}-${String(r.level).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.failName}>{r.level}</Text>
+                    <Text style={s.failN}>n={r.n} rounds with outcome</Text>
+                  </View>
+                  <Text style={[s.failRate, { color: rateColor(r.success_rate) }]}>{r.success_rate != null ? `${r.success_rate}%` : '—'}</Text>
+                </View>
+              ))}
+          </View>
+        ))}
+      </SectionCard>
+
+      <SectionCard title="Healing period vs outcome" hint="Does a longer healing protocol improve graft success?">
+        {!(data.healing || []).length ? <EmptyMsg /> :
+          (data.healing || []).map((h: any) => (
+            <View key={h.protocol} style={s.failRow} testID={`aug-an-heal-${h.protocol.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.failName}>{h.protocol}</Text>
+                <Text style={s.failN}>staged n={h.staged_n} · simultaneous n={h.simultaneous_n}</Text>
+              </View>
+              <Text style={[s.failRate, { color: rateColor(h.success_rate) }]}>{h.success_rate != null ? `${h.success_rate}%` : 'no outcome'}</Text>
+            </View>
+          ))}
+      </SectionCard>
+
+      <SectionCard title="Implant survival by augmentation timing" hint="Correlates Phase 5 survival reviews with whether/when augmentation was done (staged vs simultaneous vs none).">
+        {!(data.survival_by_timing || []).length ? <EmptyMsg /> :
+          (data.survival_by_timing || []).map((g: any) => (
+            <View key={g.group} style={s.failRow} testID={`aug-an-surv-${g.group.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.failName}>{g.group}</Text>
+                <Text style={s.failN}>{g.cases} case{g.cases === 1 ? '' : 's'} · {g.implants_placed} implants · {g.implants_failed} failed</Text>
+              </View>
+              <Text style={[s.failRate, { color: rateColor(g.survival_rate) }]}>{g.survival_rate != null ? `${g.survival_rate}%` : '—'}</Text>
+            </View>
+          ))}
+      </SectionCard>
+    </View>
+  );
+}
+
 function SectionCard({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
     <View style={s.card}>
@@ -1223,7 +1361,7 @@ const s = StyleSheet.create({
 
   bucketsRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
   bucketCard: { flex: 1, backgroundColor: '#F5F7FB', borderRadius: 10, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#E1E7EF' },
-  bucketCount: { fontSize: 22, fontWeight: '800', color: '#C62828' },
+  bucketCount: { fontSize: 22, fontWeight: '800', color: '#C62828', textAlign: 'center' },
   bucketLbl: { fontSize: 10, color: '#546E7A', textAlign: 'center', marginTop: 2 },
 
   replBox: { flex: 1, borderRadius: 10, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#E1E7EF' },

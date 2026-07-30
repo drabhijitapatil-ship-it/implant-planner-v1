@@ -5,6 +5,69 @@ import { format } from 'date-fns';
 import { getImplantSite, getImplantSpec } from './implantPlan';
 
 /** Build the full HTML for the procedure case report (shared by download + print flows). */
+
+// iter-395: shared rows for a Step-2-style augmentation capture (staged round
+// or Phase 2 simultaneous). Returns <tr> rows.
+const augStep2RowsHtml = (a: any): string => {
+  if (!a) return '';
+  const mats = [
+    ...(a.autogenous_used === 'Yes' ? [`Autogenous${(a.autogenous_sites || []).length ? ` (${a.autogenous_sites.join(', ')})` : ''}`] : []),
+    ...(a.allograft_used === 'Yes' ? ['Allograft'] : []),
+    ...(a.other_graft_materials || []),
+  ];
+  return `
+    ${(a.procedures_performed || []).length ? `<tr><td class="info-label">Procedure Performed:</td><td class="info-value">${a.procedures_performed.join(', ')}${a.procedure_other_text ? ` — ${a.procedure_other_text}` : ''}</td></tr>` : ''}
+    ${mats.length ? `<tr><td class="info-label">Graft Materials:</td><td class="info-value">${mats.join(', ')}${a.graft_material_other_text ? ` — ${a.graft_material_other_text}` : ''}</td></tr>` : ''}
+    ${a.membrane_used ? `<tr><td class="info-label">Membrane:</td><td class="info-value">${a.membrane_used === 'Yes' ? ((a.membrane_types || []).join(', ') || 'Yes') : 'No'}</td></tr>` : ''}
+    ${(a.fixation || []).length ? `<tr><td class="info-label">Fixation:</td><td class="info-value">${a.fixation.join(', ')}</td></tr>` : ''}
+    ${a.soft_tissue_graft ? `<tr><td class="info-label">Soft Tissue Graft:</td><td class="info-value">${a.soft_tissue_graft === 'Yes' ? `${(a.soft_tissue_types || []).join(', ') || 'Yes'}${(a.soft_tissue_donor_sites || []).length ? ` · Donor: ${a.soft_tissue_donor_sites.join(', ')}` : ''}${(a.soft_tissue_indications || []).length ? ` · Indication: ${a.soft_tissue_indications.join(', ')}` : ''}` : 'No'}</td></tr>` : ''}
+    ${a.healing_protocol ? `<tr><td class="info-label">Healing Protocol:</td><td class="info-value">${a.healing_protocol === 'Custom' ? (a.healing_custom_text || 'Custom') : a.healing_protocol}</td></tr>` : ''}
+  `;
+};
+
+// iter-395: Pre-Implant Augmentation section — all Step 1–3 data per round.
+// CBCT files are intentionally NOT embedded (only availability is noted).
+const augmentationSectionHtml = (procedure: any): string => {
+  const rounds: any[] = procedure?.augmentations || [];
+  if (!rounds.length) return '';
+  const FAILED_LBL: any = { terminate: 'Terminate Treatment', repeat: 'Repeat Pre-Implant Bone Augmentation', proceed_phase2: 'Proceed to Phase 2' };
+  return `
+    <div class="stage-divider">PRE-IMPLANT BONE &amp; SOFT TISSUE AUGMENTATION</div>
+    ${rounds.map((rnd: any) => {
+      const s1 = rnd.step1 || {}; const s2 = rnd.step2 || {}; const s3 = rnd.step3 || {};
+      return `
+      <div class="section">
+        <div class="section-title">Bone Grafting — Round ${rnd.round}${rnd.scheduled_date ? ` (Surgery: ${rnd.scheduled_date}${rnd.scheduled_time ? ` · ${rnd.scheduled_time}` : ''})` : ''}</div>
+        <table>
+          ${rnd.step1 ? `
+          <tr><td class="info-label" style="color:#007AFF;font-weight:bold;" colspan="2">Step 1 — Pre-procedure</td></tr>
+          ${(s1.reasons || []).length ? `<tr><td class="info-label">Reason for Grafting:</td><td class="info-value">${s1.reasons.join(', ')}${s1.reason_other_text ? ` — ${s1.reason_other_text}` : ''}</td></tr>` : ''}
+          ${(s1.defect_teeth || []).length ? `<tr><td class="info-label">Defect Location (FDI):</td><td class="info-value">${s1.defect_teeth.join(', ')}</td></tr>` : ''}
+          ${(s1.defect_sides || []).length ? `<tr><td class="info-label">Bone Defect Side:</td><td class="info-value">${s1.defect_sides.join(', ')}</td></tr>` : ''}
+          ${(s1.horizontal_defect || s1.vertical_defect) ? `<tr><td class="info-label">Horizontal / Vertical Defect:</td><td class="info-value">${s1.horizontal_defect || '—'} / ${s1.vertical_defect || '—'}</td></tr>` : ''}
+          ${s1.defect_other ? `<tr><td class="info-label">Other Defect Notes:</td><td class="info-value">${s1.defect_other}</td></tr>` : ''}
+          ${(s1.bone_width_before || s1.bone_height_before) ? `<tr><td class="info-label">Bone Before Graft (W × H):</td><td class="info-value">${s1.bone_width_before || '—'} mm × ${s1.bone_height_before || '—'} mm</td></tr>` : ''}
+          ${s1.medical_risk_level ? `<tr><td class="info-label">Medical Risk Level:</td><td class="info-value">${s1.medical_risk_level}</td></tr>` : ''}
+          ` : ''}
+          ${rnd.step2 ? `
+          <tr><td class="info-label" style="color:#007AFF;font-weight:bold;" colspan="2">Step 2 — Post-procedure</td></tr>
+          ${augStep2RowsHtml(s2)}
+          ` : ''}
+          ${rnd.step3 ? `
+          <tr><td class="info-label" style="color:#007AFF;font-weight:bold;" colspan="2">Step 3 — Review of Augmentation</td></tr>
+          ${s3.healing_status ? `<tr><td class="info-label">Healing Status:</td><td class="info-value">${s3.healing_status}</td></tr>` : ''}
+          ${(s3.complications || []).length ? `<tr><td class="info-label">Complications:</td><td class="info-value">${s3.complications.join(', ')}${s3.complication_other_text ? ` — ${s3.complication_other_text}` : ''}</td></tr>` : ''}
+          ${s3.outcome ? `<tr><td class="info-label">Bone Graft Outcome:</td><td class="info-value">${s3.outcome}</td></tr>` : ''}
+          ${(s3.bone_width_after || s3.bone_height_after) ? `<tr><td class="info-label">Bone After Graft (W × H):</td><td class="info-value">${s3.bone_width_after || '—'} mm × ${s3.bone_height_after || '—'} mm</td></tr>` : ''}
+          <tr><td class="info-label">CBCT After Graft:</td><td class="info-value">${(s3.cbct_files || []).length ? `Available (${s3.cbct_files.length} file${s3.cbct_files.length === 1 ? '' : 's'})` : 'Not uploaded'}</td></tr>
+          ${s3.decision ? `<tr><td class="info-label">Decision:</td><td class="info-value">${s3.decision === 'complete' ? 'Bone Graft Augmentation Complete' : `Bone Graft Augmentation Failed — ${FAILED_LBL[s3.failed_action] || ''}`}</td></tr>` : ''}
+          ` : ''}
+        </table>
+      </div>`;
+    }).join('')}
+  `;
+};
+
 export const buildProcedurePdfHtml = (procedure: any): string => {
   const isCompleted = procedure.status === 'completed';
   const statusBadgeText = isCompleted
@@ -194,6 +257,8 @@ export const buildProcedurePdfHtml = (procedure: any): string => {
             <p class="info-value">${procedure.remark}</p>
           </div>` : ''}
 
+          ${augmentationSectionHtml(procedure)}
+
           ${procedure.phase2_data || procedure.checklist?.surgical ? `
           <div class="stage-divider">PHASE 2 — SURGICAL PROTOCOLS</div>
 
@@ -221,6 +286,7 @@ export const buildProcedurePdfHtml = (procedure: any): string => {
               ${procedure.phase2_data.implant_seated_correctly !== undefined ? `<tr><td class="info-label">Implant Seated Correctly:</td><td class="info-value">${procedure.phase2_data.implant_seated_correctly ? 'Yes' : 'No'}</td></tr>` : ''}
               ${procedure.phase2_data.implant_seated_comment ? `<tr><td class="info-label">Seating Notes:</td><td class="info-value">${procedure.phase2_data.implant_seated_comment}</td></tr>` : ''}
               ${procedure.phase2_data.torque_values?.length ? `<tr><td class="info-label">Torque Values:</td><td class="info-value" style="font-weight:bold;color:#E65100;">${procedure.phase2_data.torque_values.map((tv: number, i: number) => 'Implant ' + (i + 1) + ': ' + tv + ' Ncm').join(', ')}</td></tr>` : ''}
+              ${procedure.phase2_data.augmentation ? `<tr><td class="info-label">Bone &amp; Soft Tissue Augmentation:</td><td class="info-value">Yes — during implant surgery</td></tr>${augStep2RowsHtml(procedure.phase2_data.augmentation)}` : (procedure.phase2_data.bone_graft_used !== undefined ? `<tr><td class="info-label">Bone &amp; Soft Tissue Augmentation:</td><td class="info-value">${procedure.phase2_data.bone_graft_used ? `Yes${procedure.phase2_data.bone_graft_details ? ` — ${procedure.phase2_data.bone_graft_details}` : ''}` : 'No'}</td></tr>` : '')}
               ${procedure.phase2_data.implant_other_notes ? `<tr><td class="info-label">Other Implant Notes:</td><td class="info-value">${procedure.phase2_data.implant_other_notes}</td></tr>` : ''}
               ${procedure.phase2_data.prosthetic_component ? `<tr><td class="info-label">Prosthetic Component:</td><td class="info-value">${procedure.phase2_data.prosthetic_component}</td></tr>` : ''}
               ${procedure.phase2_data.healing_abutment_cuff_height ? `<tr><td class="info-label">Cuff Height:</td><td class="info-value">${procedure.phase2_data.healing_abutment_cuff_height} mm</td></tr>` : ''}

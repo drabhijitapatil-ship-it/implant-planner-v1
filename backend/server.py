@@ -595,6 +595,9 @@ class Phase2Submit(BaseModel):
     torque_values: Optional[List[float]] = None
     bone_graft_used: Optional[bool] = False
     bone_graft_details: Optional[str] = Field(None, max_length=1000)
+    # iter-395: "Bone and Soft Tissue Augmentation" — full Step-2-style capture
+    # done simultaneously during Phase 2 implant surgery (no separate approval).
+    augmentation: Optional[Dict[str, Any]] = None
     implant_other_notes: Optional[str] = Field(None, max_length=500)
     prosthetic_component: Optional[str] = Field(None, max_length=100)
     # iter-356: Per-implant Prosthetic Component (multi-implant, non-full-arch,
@@ -12799,9 +12802,31 @@ async def generate_case_report(
                     pos_label = f" (Tooth {implant_plans[i].get('position', '')})"
                 pdf.cell(0, 6, safe(f"  Implant {i+1}{pos_label}: {tv} Ncm"), ln=True)
             pdf.ln(2)
-    # Bone Graft and Membrane
+    # Bone and Soft Tissue Augmentation (iter-395; legacy: Bone Graft and Membrane)
     p2 = procedure.get("phase2_data", {})
-    if isinstance(p2, dict) and p2.get("bone_graft_used"):
+    p2aug = p2.get("augmentation") if isinstance(p2, dict) else None
+    if isinstance(p2aug, dict) and p2aug:
+        add_field("Bone & Soft Tissue Augmentation", "Yes")
+        if p2aug.get("procedures_performed"):
+            add_field("Augmentation Procedure", ", ".join(p2aug["procedures_performed"]))
+        mats = []
+        if p2aug.get("autogenous_used") == "Yes":
+            mats.append("Autogenous (" + ", ".join(p2aug.get("autogenous_sites") or []) + ")")
+        if p2aug.get("allograft_used") == "Yes":
+            mats.append("Allograft")
+        mats.extend(p2aug.get("other_graft_materials") or [])
+        if mats:
+            add_field("Graft Materials", ", ".join(mats))
+        if p2aug.get("membrane_used") == "Yes":
+            add_field("Membrane", ", ".join(p2aug.get("membrane_types") or []) or "Yes")
+        if p2aug.get("fixation"):
+            add_field("Fixation", ", ".join(p2aug["fixation"]))
+        if p2aug.get("soft_tissue_graft") == "Yes":
+            add_field("Soft Tissue Graft", ", ".join(p2aug.get("soft_tissue_types") or []) or "Yes")
+        if p2aug.get("healing_protocol"):
+            hp = p2aug["healing_protocol"]
+            add_field("Healing Protocol", p2aug.get("healing_custom_text") or hp if hp == "Custom" else hp)
+    elif isinstance(p2, dict) and p2.get("bone_graft_used"):
         add_field("Bone Graft & Membrane", "Yes")
         if p2.get("bone_graft_details"):
             add_field("Bone Graft Details", p2["bone_graft_details"])
@@ -14146,6 +14171,7 @@ async def submit_phase2(
         "torque_values": phase2_data.torque_values or [],
         "bone_graft_used": phase2_data.bone_graft_used or False,
         "bone_graft_details": phase2_data.bone_graft_details,
+        "augmentation": phase2_data.augmentation,
         "implant_other_notes": phase2_data.implant_other_notes,
         "prosthetic_component": phase2_data.prosthetic_component,
         # iter-356: per-implant Prosthetic Component (multi-implant non-full-arch).
@@ -15783,6 +15809,230 @@ def _iso_days_between(a, b) -> Optional[int]:
         return (db_date - da).days
     except (TypeError, ValueError):
         return None
+
+
+@api_router.get("/analytics/augmentation")
+async def get_augmentation_analytics(
+    request: Request,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """iter-395: Pre-Implant (staged) + Phase 2 (simultaneous) augmentation analytics —
+    technique & material comparison, bone gain, complications, risk cross-tabs,
+    healing vs outcome, repeat/termination rates, and implant-survival correlation."""
+    if current_user.get("role") not in ("administrator", "implant_incharge", "supervisor", "student"):
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    match: Dict[str, Any] = {"archived": {"$ne": True}}
+    role = current_user.get("role")
+    uid = str(current_user.get("_id") or "")
+    uname = current_user.get("name") or current_user.get("username")
+    if role == "student":
+        match["$or"] = [{"student_id": uid}, {"student_name": uname}]
+    elif role == "supervisor":
+        match["$or"] = [{"supervisor_id": uid}, {"supervisor_name": uname}]
+    date_clause: Dict[str, Any] = {}
+    if from_date:
+        date_clause["$gte"] = from_date
+    if to_date:
+        date_clause["$lte"] = to_date
+    if date_clause:
+        match["procedure_date"] = date_clause
+    procs = await db.procedures.find(match, {
+        "augmentations": 1, "augmentation_outcome": 1, "phase2_data.augmentation": 1,
+        "phase2_survival_review": 1, "implants": 1, "existing_implants": 1, "implant_plans": 1,
+        "status": 1, "procedure_date": 1,
+    }).to_list(20000)
+
+    def _f(v):
+        try:
+            return float(str(v).strip())
+        except (ValueError, TypeError):
+            return None
+
+    def _bucket():
+        return {"staged_n": 0, "simultaneous_n": 0, "success": 0, "partial": 0, "failed": 0,
+                "outcomes_n": 0, "complications_n": 0, "gains_h": [], "gains_v": []}
+
+    tech: Dict[str, Dict[str, Any]] = {}
+    mat: Dict[str, Dict[str, Any]] = {}
+    comp_counts: Dict[str, int] = {}
+    risk: Dict[str, Dict[str, Dict[str, int]]] = {"smoking": {}, "diabetes": {}}
+    healing: Dict[str, Dict[str, Any]] = {}
+    staged_cases = simultaneous_cases = both_cases = 0
+    total_rounds = success = partial = failed_cnt = repeat_cases = terminated = 0
+    all_gains_h: List[float] = []
+    all_gains_v: List[float] = []
+    timing: Dict[str, Dict[str, int]] = {}
+
+    def _apply_event(s2: Dict[str, Any], kind: str, outcome: Optional[str], had_comp: bool,
+                     gain_h: Optional[float], gain_v: Optional[float]):
+        names = list(s2.get("procedures_performed") or [])
+        materials: List[str] = []
+        if s2.get("autogenous_used") == "Yes":
+            materials.append("Autogenous")
+        if s2.get("allograft_used") == "Yes":
+            materials.append("Allograft")
+        materials.extend(s2.get("other_graft_materials") or [])
+        for coll, keys in ((tech, names), (mat, materials)):
+            for name in keys:
+                b = coll.setdefault(name, _bucket())
+                b[f"{kind}_n"] += 1
+                if outcome:
+                    b["outcomes_n"] += 1
+                    if outcome == "Successful":
+                        b["success"] += 1
+                    elif outcome == "Partially successful":
+                        b["partial"] += 1
+                    else:
+                        b["failed"] += 1
+                    if had_comp:
+                        b["complications_n"] += 1
+                    if gain_h is not None:
+                        b["gains_h"].append(gain_h)
+                    if gain_v is not None:
+                        b["gains_v"].append(gain_v)
+        hp = s2.get("healing_protocol") or ""
+        if hp:
+            hb = healing.setdefault(hp, {"staged_n": 0, "simultaneous_n": 0, "success": 0, "outcomes_n": 0})
+            hb[f"{kind}_n"] += 1
+            if outcome:
+                hb["outcomes_n"] += 1
+                if outcome == "Successful":
+                    hb["success"] += 1
+
+    for p in procs:
+        rounds = p.get("augmentations") or []
+        p2aug = ((p.get("phase2_data") or {}).get("augmentation")) or None
+        has_staged = bool(rounds)
+        has_sim = bool(p2aug)
+        if has_staged:
+            staged_cases += 1
+        if has_sim:
+            simultaneous_cases += 1
+        if has_staged and has_sim:
+            both_cases += 1
+        if len([r for r in rounds if r.get("step1") or r.get("step2")]) > 1 or (p.get("augmentation_outcome") == "repeat"):
+            repeat_cases += 1
+        if p.get("augmentation_outcome") == "terminated":
+            terminated += 1
+
+        for rnd in rounds:
+            s1 = rnd.get("step1") or {}
+            s2 = rnd.get("step2") or {}
+            s3 = rnd.get("step3") or {}
+            if not s2:
+                continue
+            total_rounds += 1
+            outcome = s3.get("outcome") or None
+            comps = [c for c in (s3.get("complications") or []) if c and c != "None"]
+            had_comp = bool(comps)
+            for c in comps:
+                comp_counts[c] = comp_counts.get(c, 0) + 1
+            gain_h = gain_v = None
+            wb, wa = _f(s1.get("bone_width_before")), _f(s3.get("bone_width_after"))
+            hb_, ha = _f(s1.get("bone_height_before")), _f(s3.get("bone_height_after"))
+            if wb is not None and wa is not None:
+                gain_h = round(wa - wb, 2)
+                all_gains_h.append(gain_h)
+            if hb_ is not None and ha is not None:
+                gain_v = round(ha - hb_, 2)
+                all_gains_v.append(gain_v)
+            if outcome:
+                if outcome == "Successful":
+                    success += 1
+                elif outcome == "Partially successful":
+                    partial += 1
+                else:
+                    failed_cnt += 1
+            _apply_event(s2, "staged", outcome, had_comp, gain_h, gain_v)
+            ma = s1.get("medical_assessment") or {}
+            if outcome:
+                for factor in ("smoking", "diabetes"):
+                    lvl = str(ma.get(factor) or "Unknown")
+                    rb = risk[factor].setdefault(lvl, {"n": 0, "success": 0})
+                    rb["n"] += 1
+                    if outcome == "Successful":
+                        rb["success"] += 1
+        if p2aug:
+            _apply_event(p2aug, "simultaneous", None, False, None, None)
+
+        group = ("Both (Staged + Simultaneous)" if has_staged and has_sim
+                 else "Staged (Pre-Implant)" if has_staged
+                 else "Simultaneous (Phase 2)" if has_sim
+                 else "No Augmentation")
+        tg = timing.setdefault(group, {"cases": 0, "implants_placed": 0, "implants_failed": 0})
+        tg["cases"] += 1
+        implants = _extract_procedure_implants(p)
+        smap = (p.get("phase2_survival_review") or {}).get("implants") or {}
+        for i, _imp in enumerate(implants):
+            tg["implants_placed"] += 1
+            entry = smap.get(str(i)) or smap.get(i) or {}
+            if entry.get("status") == "Failed":
+                tg["implants_failed"] += 1
+
+    def _finalize(coll: Dict[str, Dict[str, Any]]):
+        out = []
+        for name, b in coll.items():
+            n_out = b["outcomes_n"]
+            out.append({
+                "name": name,
+                "staged_n": b["staged_n"],
+                "simultaneous_n": b["simultaneous_n"],
+                "success": b["success"], "partial": b["partial"], "failed": b["failed"],
+                "success_rate": round(b["success"] / n_out * 100, 1) if n_out else None,
+                "complication_rate": round(b["complications_n"] / n_out * 100, 1) if n_out else None,
+                "mean_gain_h": round(sum(b["gains_h"]) / len(b["gains_h"]), 2) if b["gains_h"] else None,
+                "mean_gain_v": round(sum(b["gains_v"]) / len(b["gains_v"]), 2) if b["gains_v"] else None,
+            })
+        out.sort(key=lambda x: -(x["staged_n"] + x["simultaneous_n"]))
+        return out
+
+    survival_rows = []
+    for group in ("Staged (Pre-Implant)", "Simultaneous (Phase 2)", "Both (Staged + Simultaneous)", "No Augmentation"):
+        tg = timing.get(group)
+        if not tg:
+            continue
+        pl, fl = tg["implants_placed"], tg["implants_failed"]
+        survival_rows.append({
+            "group": group, "cases": tg["cases"], "implants_placed": pl, "implants_failed": fl,
+            "survival_rate": round((pl - fl) / pl * 100, 1) if pl else None,
+        })
+
+    result = {
+        "summary": {
+            "staged_cases": staged_cases, "simultaneous_cases": simultaneous_cases, "both_cases": both_cases,
+            "total_rounds": total_rounds, "success": success, "partially_successful": partial,
+            "failed": failed_cnt, "repeat_cases": repeat_cases, "terminated_cases": terminated,
+            "mean_gain_h": round(sum(all_gains_h) / len(all_gains_h), 2) if all_gains_h else None,
+            "mean_gain_v": round(sum(all_gains_v) / len(all_gains_v), 2) if all_gains_v else None,
+        },
+        "techniques": _finalize(tech),
+        "materials": _finalize(mat),
+        "complications": sorted([{"name": k, "count": v} for k, v in comp_counts.items()], key=lambda x: -x["count"]),
+        "risk_factors": {
+            f: sorted([
+                {"level": lvl, "n": b["n"], "success": b["success"],
+                 "success_rate": round(b["success"] / b["n"] * 100, 1) if b["n"] else None}
+                for lvl, b in levels.items()
+            ], key=lambda x: -x["n"])
+            for f, levels in risk.items()
+        },
+        "healing": sorted([
+            {"protocol": k, "staged_n": v["staged_n"], "simultaneous_n": v["simultaneous_n"],
+             "success": v["success"],
+             "success_rate": round(v["success"] / v["outcomes_n"] * 100, 1) if v["outcomes_n"] else None}
+            for k, v in healing.items()
+        ], key=lambda x: -(x["staged_n"] + x["simultaneous_n"])),
+        "survival_by_timing": survival_rows,
+        "scope": {"role": role, "read_only": role in ("student", "supervisor")},
+    }
+    await log_access(
+        action="analytics_view", outcome="success", resource_type="augmentation_analytics",
+        resource_id="global", user=current_user, request=request,
+        extra={"from_date": from_date, "to_date": to_date},
+    )
+    return result
 
 
 @api_router.get("/analytics/followup-metrics")

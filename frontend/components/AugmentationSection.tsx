@@ -4,10 +4,10 @@
  * for the owner, faculty approve/reject actions, and submitted-data readback.
  */
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, TextInput, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, StyleSheet, Alert, ActivityIndicator, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import api from '../utils/api';
+import api, { getAuthFileUrl } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
 
 const STATUS_META: Record<string, { label: string; bg: string; fg: string }> = {
@@ -206,6 +206,21 @@ export default function AugmentationSection({ procedure, onChanged }: { procedur
                     <Row label="Bone graft outcome" value={s3.outcome} />
                     <Row label="Bone gain (H × V after graft)" value={(s3.bone_width_after || s3.bone_height_after) ? `${s3.bone_width_after || '—'} mm × ${s3.bone_height_after || '—'} mm` : undefined} />
                     <Row label="CBCT after graft" value={(s3.cbct_files || []).length ? `${s3.cbct_files.length} file(s) uploaded` : 'Not uploaded'} />
+                    {/* iter-395: faculty & owner can open each uploaded CBCT during review */}
+                    {(s3.cbct_files || []).map((f: any, i: number) => (
+                      <TouchableOpacity key={i} style={s.cbctViewRow}
+                        onPress={async () => {
+                          try {
+                            const url = await getAuthFileUrl(f.filename);
+                            await Linking.openURL(url);
+                          } catch { Alert.alert('Error', 'Could not open CBCT file'); }
+                        }}
+                        testID={`aug-step3-view-cbct-${i}`}>
+                        <Ionicons name="scan-outline" size={15} color="#1565C0" />
+                        <Text style={s.cbctViewTxt} numberOfLines={1}>View CBCT {i + 1} — {f.original_name || 'file'}</Text>
+                        <Ionicons name="open-outline" size={14} color="#1565C0" />
+                      </TouchableOpacity>
+                    ))}
                     <Row label="Decision" value={s3.decision === 'complete'
                       ? 'Bone Graft Augmentation Complete'
                       : `Bone Graft Augmentation Failed — ${({ terminate: 'Terminate Treatment', repeat: 'Repeat Pre-Implant Bone Augmentation', proceed_phase2: 'Proceed to Phase 2' } as any)[s3.failed_action] || ''}`} />
@@ -264,4 +279,6 @@ const s = StyleSheet.create({
   rowLabel: { fontSize: 12, color: '#78909C', flex: 1 },
   rowValue: { fontSize: 12, color: '#263238', fontWeight: '600', flex: 1.4, textAlign: 'right' },
   emptyTxt: { fontSize: 12, color: '#B0BEC5', fontStyle: 'italic' },
+  cbctViewRow: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#E3F2FD', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10, marginTop: 6, borderWidth: 1, borderColor: '#BBDEFB' },
+  cbctViewTxt: { flex: 1, fontSize: 12, fontWeight: '700', color: '#1565C0' },
 });

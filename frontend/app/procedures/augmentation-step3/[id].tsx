@@ -7,11 +7,11 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity,
-  KeyboardAvoidingView, Platform, Alert, ActivityIndicator,
+  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Image, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import api from '../../../utils/api';
+import api, { getToken } from '../../../utils/api';
 import { PhaseHeader } from '../../../components/PhaseHeader';
 import { Ionicons } from '@expo/vector-icons';
 import { showUploadPicker } from '../../../utils/uploadPicker';
@@ -56,7 +56,9 @@ export default function AugmentationStep3() {
   const [outcome, setOutcome] = useState('');
   const [widthAfter, setWidthAfter] = useState('');
   const [heightAfter, setHeightAfter] = useState('');
-  const [cbctFiles, setCbctFiles] = useState<{ filename: string; original_name: string; content_type: string }[]>([]);
+  const [cbctFiles, setCbctFiles] = useState<({ filename: string; original_name: string; content_type: string } | null)[]>([null, null]);
+  const [cbctUploadingIdx, setCbctUploadingIdx] = useState<number | null>(null);
+  const [authToken, setAuthToken] = useState('');
   const [decision, setDecision] = useState<'' | 'complete' | 'failed'>('');
   const [failedAction, setFailedAction] = useState('');
 
@@ -73,7 +75,8 @@ export default function AugmentationStep3() {
           setOutcome(s3.outcome || '');
           setWidthAfter(s3.bone_width_after || '');
           setHeightAfter(s3.bone_height_after || '');
-          setCbctFiles(s3.cbct_files || []);
+          const files = (s3.cbct_files || []) as any[];
+          setCbctFiles(files.length >= 2 ? files : [...files, ...new Array(2 - files.length).fill(null)]);
           setDecision(s3.decision || '');
           setFailedAction(s3.failed_action || '');
         }
@@ -89,22 +92,28 @@ export default function AugmentationStep3() {
       return next.filter(o => o !== 'None' || !next.some(x => x !== 'None'));
     });
 
-  const pickCbct = async () => {
+  useEffect(() => { getToken('access_token').then(t => setAuthToken(t || '')); }, []);
+
+  const pickCbctAtIndex = async (idx: number) => {
     try {
       const picked = await showUploadPicker(['application/pdf', 'image/png', 'image/jpeg', 'image/heic', 'image/heif']);
       if (!picked) return;
-      setUploading(true);
+      setCbctUploadingIdx(idx);
       const fd = new FormData();
       fd.append('file', { uri: picked.uri, name: picked.name || 'cbct_report.pdf', type: picked.type || 'application/pdf' } as any);
       const res = await api.post('/uploads/cbct-temp', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      setCbctFiles(prev => [...prev, {
-        filename: res.data.cbct_file,
-        original_name: res.data.cbct_original_name,
-        content_type: res.data.cbct_content_type,
-      }]);
+      setCbctFiles(prev => {
+        const u = [...prev];
+        u[idx] = {
+          filename: res.data.cbct_file,
+          original_name: res.data.cbct_original_name,
+          content_type: res.data.cbct_content_type,
+        };
+        return u;
+      });
     } catch (e: any) {
       Alert.alert('Upload Failed', e?.response?.data?.detail || 'Could not upload CBCT file');
-    } finally { setUploading(false); }
+    } finally { setCbctUploadingIdx(null); }
   };
 
   const handleSubmit = async () => {
@@ -126,7 +135,7 @@ export default function AugmentationStep3() {
         complications, complication_other_text: complicationOther,
         outcome,
         bone_width_after: widthAfter, bone_height_after: heightAfter,
-        cbct_files: cbctFiles,
+        cbct_files: cbctFiles.filter(Boolean),
         decision, failed_action: decision === 'failed' ? failedAction : '',
       });
       setCompleted(true);
@@ -211,20 +220,64 @@ export default function AugmentationStep3() {
               <Ionicons name="scan-outline" size={20} color="#0277BD" />
               <Text style={s.sectionTitle}>CBCT Report</Text>
             </View>
-            <Text style={s.helperText}>Upload the post-graft CBCT report (PDF or image).</Text>
-            {cbctFiles.map((f, i) => (
-              <View key={i} style={s.fileRow} testID={`aug-cbct-file-${i}`}>
-                <Ionicons name="document-attach-outline" size={16} color="#1565C0" />
-                <Text style={{ flex: 1, fontSize: 12.5, color: '#37474F' }} numberOfLines={1}>{f.original_name}</Text>
-                <TouchableOpacity onPress={() => setCbctFiles(prev => prev.filter((_, j) => j !== i))} testID={`aug-cbct-remove-${i}`}>
-                  <Ionicons name="trash-outline" size={16} color="#C62828" />
-                </TouchableOpacity>
-              </View>
-            ))}
-            <TouchableOpacity style={s.uploadBtn} onPress={pickCbct} disabled={uploading} testID="aug-cbct-upload-btn">
-              {uploading ? <ActivityIndicator size="small" color="#1565C0" /> : (
-                <><Ionicons name="cloud-upload-outline" size={17} color="#1565C0" /><Text style={s.uploadBtnText}>Upload CBCT Report</Text></>
-              )}
+            <Text style={s.helperText}>Upload the post-graft CBCT report (PDF or image) — same as Phase 1.</Text>
+            {cbctFiles.map((file, idx) => {
+              const isExtra = idx >= 2;
+              const baseUrl = api.defaults.baseURL || '';
+              return (
+                <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }} testID={`aug-cbct-slot-${idx}`}>
+                  <View style={{ width: 30, alignItems: 'center' }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#555' }}>{idx + 1}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    {file ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        {file.filename.match(/\.(png|jpg|jpeg)$/i) ? (
+                          <Image source={{ uri: `${baseUrl}/uploads/${file.filename}?token=${authToken}`, headers: { Authorization: `Bearer ${authToken}` } }}
+                            style={{ width: 36, height: 36, borderRadius: 6 }} resizeMode="cover" />
+                        ) : (
+                          <Ionicons name="document-attach" size={22} color="#4CAF50" />
+                        )}
+                        <TouchableOpacity
+                          style={s.cbctViewBtn}
+                          onPress={() => Linking.openURL(`${baseUrl}/uploads/${file.filename}?token=${authToken}`).catch(() => Alert.alert('Error', 'Could not open file'))}
+                          testID={`aug-view-cbct-${idx}`}
+                        >
+                          <Text style={s.cbctViewBtnText} numberOfLines={1}>View CBCT Report</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => { const u = [...cbctFiles]; u[idx] = null; setCbctFiles(u); }} testID={`aug-remove-cbct-${idx}`}>
+                          <Ionicons name="close-circle" size={22} color="#E53935" />
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={s.cbctUploadBtn}
+                        onPress={() => pickCbctAtIndex(idx)} disabled={cbctUploadingIdx === idx}
+                        testID={`aug-upload-cbct-${idx}`}
+                      >
+                        {cbctUploadingIdx === idx ? (
+                          <ActivityIndicator color="#FFF" size="small" />
+                        ) : (
+                          <>
+                            <Ionicons name="cloud-upload" size={18} color="#FFF" />
+                            <Text style={s.cbctUploadBtnText}>Upload CBCT Report</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  {isExtra && (
+                    <TouchableOpacity onPress={() => setCbctFiles(prev => prev.filter((_, j) => j !== idx))} testID={`aug-remove-extra-cbct-${idx}`}>
+                      <Ionicons name="remove-circle" size={26} color="#E53935" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })}
+            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10 }}
+              onPress={() => setCbctFiles(prev => [...prev, null])} testID="aug-add-extra-cbct-btn">
+              <Ionicons name="add-circle" size={26} color="#4CAF50" />
+              <Text style={{ color: '#4CAF50', fontWeight: '700', fontSize: 14 }}>Add CBCT Report</Text>
             </TouchableOpacity>
           </View>
 
@@ -298,6 +351,10 @@ const s = StyleSheet.create({
   chipText: { fontSize: 12.5, color: '#666', fontWeight: '600' },
   chipTextActive: { color: '#FFF' },
   fileRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#F1F7FE', borderRadius: 8, padding: 9, marginBottom: 8 },
+  cbctViewBtn: { flex: 1, backgroundColor: '#E3F2FD', borderRadius: 8, paddingVertical: 9, paddingHorizontal: 12, borderWidth: 1, borderColor: '#90CAF9' },
+  cbctViewBtnText: { color: '#1565C0', fontSize: 13, fontWeight: '700' },
+  cbctUploadBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1565C0', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 20, borderStyle: 'dashed' as any },
+  cbctUploadBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
   uploadBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderColor: '#1565C0', borderStyle: 'dashed', borderRadius: 10, paddingVertical: 12 },
   uploadBtnText: { color: '#1565C0', fontSize: 13.5, fontWeight: '700' },
   decisionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderRadius: 10, paddingVertical: 13 },

@@ -2960,11 +2960,43 @@ export default function ProcedureDetailScreen() {
                   Achieved" card (rendered above, near the Final Prosthetic
                   Plan) is the single source of truth so the value isn't
                   displayed twice on the case page. */}
-              {procedure.phase2_data.bone_graft_used !== undefined && (
-                <InfoRow icon="fitness" label="Bone Graft & Membrane" value={procedure.phase2_data.bone_graft_used ? 'Yes' : 'No'} />
-              )}
-              {procedure.phase2_data.bone_graft_used && procedure.phase2_data.bone_graft_details && (
-                <InfoRow icon="document-text" label="Bone Graft Details" value={procedure.phase2_data.bone_graft_details} />
+              {procedure.phase2_data.augmentation ? (
+                <>
+                  <InfoRow icon="fitness" label="Bone & Soft Tissue Augmentation" value="Yes" />
+                  {(procedure.phase2_data.augmentation.procedures_performed || []).length > 0 && (
+                    <InfoRow icon="construct" label="Augmentation Procedure" value={procedure.phase2_data.augmentation.procedures_performed.join(', ')} />
+                  )}
+                  {(() => {
+                    const a = procedure.phase2_data.augmentation;
+                    const mats = [
+                      ...(a.autogenous_used === 'Yes' ? [`Autogenous${(a.autogenous_sites || []).length ? ` (${a.autogenous_sites.join(', ')})` : ''}`] : []),
+                      ...(a.allograft_used === 'Yes' ? ['Allograft'] : []),
+                      ...(a.other_graft_materials || []),
+                    ];
+                    return mats.length ? <InfoRow icon="flask" label="Graft Materials" value={mats.join(', ')} /> : null;
+                  })()}
+                  {procedure.phase2_data.augmentation.membrane_used === 'Yes' && (
+                    <InfoRow icon="layers" label="Membrane" value={(procedure.phase2_data.augmentation.membrane_types || []).join(', ') || 'Yes'} />
+                  )}
+                  {(procedure.phase2_data.augmentation.fixation || []).length > 0 && (
+                    <InfoRow icon="hardware-chip" label="Fixation" value={procedure.phase2_data.augmentation.fixation.join(', ')} />
+                  )}
+                  {procedure.phase2_data.augmentation.soft_tissue_graft === 'Yes' && (
+                    <InfoRow icon="leaf" label="Soft Tissue Graft" value={(procedure.phase2_data.augmentation.soft_tissue_types || []).join(', ') || 'Yes'} />
+                  )}
+                  {!!procedure.phase2_data.augmentation.healing_protocol && (
+                    <InfoRow icon="hourglass" label="Healing Protocol" value={procedure.phase2_data.augmentation.healing_protocol === 'Custom' ? procedure.phase2_data.augmentation.healing_custom_text : procedure.phase2_data.augmentation.healing_protocol} />
+                  )}
+                </>
+              ) : (
+                <>
+                  {procedure.phase2_data.bone_graft_used !== undefined && (
+                    <InfoRow icon="fitness" label="Bone & Soft Tissue Augmentation" value={procedure.phase2_data.bone_graft_used ? 'Yes' : 'No'} />
+                  )}
+                  {procedure.phase2_data.bone_graft_used && procedure.phase2_data.bone_graft_details && (
+                    <InfoRow icon="document-text" label="Bone Graft Details" value={procedure.phase2_data.bone_graft_details} />
+                  )}
+                </>
               )}
               {procedure.phase2_data.implant_other_notes && (
                 <InfoRow icon="document-text" label="Other Implant Notes" value={procedure.phase2_data.implant_other_notes} />
