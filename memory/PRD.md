@@ -7152,3 +7152,34 @@ badge on My Cases once case enters regular workflow; Step 3 complications also a
 8. Redesigned green resume banner (circular check icon + title + subtitle) on post-augmentation Phase 1 form.
 Testing: testing agent iteration_312.json — 9/9 PASS, no issues; step2_pending stacked layout verified
 live afterwards via seeded case 6a6b6c41de8b0b9e3366fce9 (AUG-S2P-1, slot 2026-09-16 11:00 booked).
+
+## 2026-07-30 — iter-395: Step 3 CBCT visibility/UI, PDF export, Phase 2 simultaneous augmentation, Augmentation Analytics
+User choices: analytics = all 8 factors + implant-survival correlation (Q1-b); new "Augmentation" tab in
+existing Advanced Analytics with same role scoping (Q2-a); staged & simultaneous count as separate events
+(Q3-a); Step 3 CBCT upload UI must match Phase 1's.
+1. Step 3 CBCT upload UI = Phase-1 style: 2 numbered slots + blue "Upload CBCT Report" buttons +
+   "View CBCT Report" link + remove X + green "Add CBCT Report" (augmentation-step3/[id].tsx).
+2. Faculty/owner "View CBCT n — filename" links in round readback (AugmentationSection, testID
+   aug-step3-view-cbct-{i}, via getAuthFileUrl + Linking).
+3. Case summary PDF (utils/pdfGenerator.ts): new "PRE-IMPLANT BONE & SOFT TISSUE AUGMENTATION" divider
+   with per-round Step 1–3 tables (CBCT noted as available, not embedded) + Phase 2 augmentation rows in
+   Surgical Protocols. Backend fpdf generate_case_report also updated.
+4. Phase 2 form: "Bone Graft and Membrane" REPLACED by "Bone and Soft Tissue Augmentation" Yes/No
+   (testID p2-aug-yes/no). Yes → inline AugStep2Form (NEW /components/AugStep2Form.tsx, 6 numbered blue
+   sections, dropdown UI, testPrefix p2aug). Stored as phase2_data.augmentation (Phase2Submit.augmentation
+   dict); NO separate approval — part of normal Phase 2 approval. Case detail Surgical readback +
+   legacy bone_graft_used fallback preserved.
+5. NEW GET /api/analytics/augmentation (~line 15790): summary (staged/simultaneous/both, rounds,
+   outcomes, repeat/terminated, mean bone gain H/V), technique & material comparison (success rate,
+   complication rate, mean gains; simultaneous events count usage only), complication pareto, risk
+   cross-tabs (smoking/diabetes × outcome), healing vs outcome, implant survival by augmentation timing
+   (Staged/Simultaneous/Both/None via phase2_survival_review). Role-scoped (student own, supervisor assigned).
+6. NEW "Augmentation" tab in /analytics/advanced (AugmentationPane) with 7 SectionCards.
+Testing: testing agent iteration_313.json — ALL PASS (backend 4/4, frontend 100%); follow-up self-tests:
+p2-aug-yes toggle + inline form + dropdowns verified live on seeded case 6a6b7fbf6633443cf356df15
+(P2AUG-UI-1, phase1_approved, slot 2026-09-17 11:00 booked); Step 3 CBCT slot hydration bug (lost edit
+in parallel batch) re-applied and verified.
+LESSON: never batch multiple search_replace calls on the SAME file in one parallel call — two edits were
+silently lost this way (new-procedure submit branch in iter-393, step3 hydration in iter-395).
+Known cases: 6a6b300e811c1535451fde6a = pending_phase2 with staged + phase2 augmentation (demo-rich).
+Backlog: LOW console 'Unexpected text node' warning on case detail (since iter-310).
