@@ -1004,6 +1004,7 @@ export default function Phase2SubmissionScreen() {
                 <TouchableOpacity
                   style={[s.toggleBtn, boneGraftUsed && s.toggleBtnActive]}
                   onPress={() => setBoneGraftUsed(true)}
+                  testID="p2-aug-yes"
                   data-testid="p2-aug-yes"
                 >
                   <Text style={[s.toggleBtnText, boneGraftUsed && s.toggleBtnTextActive]}>Yes</Text>
@@ -1011,6 +1012,7 @@ export default function Phase2SubmissionScreen() {
                 <TouchableOpacity
                   style={[s.toggleBtn, !boneGraftUsed && s.toggleBtnActive]}
                   onPress={() => { setBoneGraftUsed(false); setAugData(emptyAugStep2()); }}
+                  testID="p2-aug-no"
                   data-testid="p2-aug-no"
                 >
                   <Text style={[s.toggleBtnText, !boneGraftUsed && s.toggleBtnTextActive]}>No</Text>
