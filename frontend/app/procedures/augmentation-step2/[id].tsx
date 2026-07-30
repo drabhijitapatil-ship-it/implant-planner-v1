@@ -25,7 +25,7 @@ const MultiChips = ({ options, values, onToggle, testPrefix }: any) => (
       const on = values.includes(opt);
       return (
         <TouchableOpacity key={opt} style={[s.chip, on && s.chipActive]} onPress={() => onToggle(opt)}
-          testID={`${testPrefix}-${opt.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}>
+          testID={`${testPrefix}-${opt.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`}>
           <Text style={[s.chipText, on && s.chipTextActive]}>{opt}</Text>
         </TouchableOpacity>
       );
@@ -280,7 +280,7 @@ export default function AugmentationStep2() {
             </View>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
               {HEALING_PROTOCOLS.map(o => (
-                <TouchableOpacity key={o} style={[s.chip, healing === o && s.chipActive]} onPress={() => setHealing(o)} testID={`aug-healing-${o.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}>
+                <TouchableOpacity key={o} style={[s.chip, healing === o && s.chipActive]} onPress={() => setHealing(o)} testID={`aug-healing-${o.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`}>
                   <Text style={[s.chipText, healing === o && s.chipTextActive]}>{o}</Text>
                 </TouchableOpacity>
               ))}

@@ -269,7 +269,7 @@ const calStyles = StyleSheet.create({
 export default function NewProcedureScreen() {
   const { user } = useAuth();
   const router = useRouter();
-  const params = useLocalSearchParams<{ draftId?: string }>();
+  const params = useLocalSearchParams<{ draftId?: string; augResumeId?: string }>();
   const [step, setStep] = useState<'details' | 'implants'>('details');
   const [loading, setLoading] = useState(false);
   const [supervisors, setSupervisors] = useState<any[]>([]);
@@ -444,6 +444,10 @@ export default function NewProcedureScreen() {
   // sections are deferred and the case is created via a minimal endpoint.
   const [augmentationRequired, setAugmentationRequired] = useState<'' | 'Yes' | 'No'>('');
   const [submittingAug, setSubmittingAug] = useState(false);
+  // iter-393: set when resuming Phase 1 after an approved augmentation
+  // ("Proceed to Phase 2"). The augmentation question is hidden and the final
+  // submit PUTs onto the existing case instead of creating a new one.
+  const [augResumeId, setAugResumeId] = useState<string | null>(null);
   const isAugCase = augmentationRequired === 'Yes' && !isExistingImplantCase;
 
   const submitAugmentationCase = async () => {
@@ -477,9 +481,8 @@ export default function NewProcedureScreen() {
         remark: (formData as any).remark || '',
       });
       const newId = res.data?.id;
-      Alert.alert('Case Created', 'Pre-Implant Augmentation case created. Fill Step 1 — Pre-procedure Details from the case screen.', [
-        { text: 'View Case', onPress: () => router.replace(`/procedures/${newId}`) },
-      ]);
+      Alert.alert('Case Created', 'Pre-Implant Augmentation case created. Fill Step 1 — Pre-procedure Details from the case screen.');
+      router.replace(`/procedures/${newId}`);
     } catch (e: any) {
       Alert.alert('Error', e?.response?.data?.detail || 'Failed to create case');
     } finally { setSubmittingAug(false); }
@@ -686,6 +689,37 @@ export default function NewProcedureScreen() {
           } catch { /* ignore — draft may have been deleted */ }
         };
         loadDraft();
+      } else if (params.augResumeId) {
+        // iter-393: resume Phase 1 after approved augmentation Step 3 Review.
+        const loadAugResume = async () => {
+          try {
+            const res = await api.get(`/procedures/${params.augResumeId}`);
+            const proc = res.data;
+            if (proc.augmentation_outcome !== 'proceed_phase2') return;
+            setAugResumeId(params.augResumeId!);
+            setAugmentationRequired('No');
+            setCreatedProcedureId(null);
+            setFormData(prev => ({
+              ...prev,
+              patient_name: proc.patient_name || '',
+              age: proc.age || '',
+              sex: proc.sex || '',
+              profession: proc.profession || '',
+              mobile_number: proc.mobile_number || '',
+              patient_email: proc.patient_email || '',
+              registration_number: proc.registration_number || '',
+              chief_complaint: proc.chief_complaint || '',
+              student_name: proc.student_name || prev.student_name || '',
+              supervisor_id: proc.supervisor_id || '',
+              supervisor_name: proc.supervisor_name || '',
+              implant_incharge_id: proc.implant_incharge_id || '',
+              implant_incharge_name: proc.implant_incharge_name || '',
+              receipt_number: '', amount_paid: '', procedure_date: '', procedure_time: '',
+            }));
+            setStep('details');
+          } catch { /* ignore */ }
+        };
+        loadAugResume();
       } else {
         // iter-229: No draftId in route → start a fresh case. (Previously this
         // branch was gated on `!createdProcedureId` and `createdProcedureId`
@@ -717,10 +751,12 @@ export default function NewProcedureScreen() {
         setExtraIntraoralCount(0);
         setCreatedProcedureId(null);
         setIsDraftResume(false);
+        setAugResumeId(null);
+        setAugmentationRequired('');
         setStep('details');
         AsyncStorage.removeItem(FORM_STORAGE_KEY).catch(() => {});
       }
-    }, [params.draftId, user?.name])
+    }, [params.draftId, params.augResumeId, user?.name])
   );
 
   // iter-223: defensive — whenever an existing-implant draft is hydrated,
@@ -1254,9 +1290,15 @@ export default function NewProcedureScreen() {
         } : {}),
       };
 
-      const res = await api.post('/procedures', payload);
+      let res;
+      if (augResumeId) {
+        // iter-393: post-augmentation — merge Phase 1 details onto the existing case.
+        res = await api.put(`/procedures/${augResumeId}/augmentation/complete-phase1`, payload);
+      } else {
+        res = await api.post('/procedures', payload);
+      }
 
-      const procId = res.data.id || res.data._id;
+      const procId = res.data.id || res.data._id || augResumeId;
 
       // ── Persist Atrophy Assessment for Full-Arch cases (silent guidance) ──
       if (isFullArch && procId) {
@@ -2155,7 +2197,17 @@ export default function NewProcedureScreen() {
       )}
 
       {/* ─── iter-393: Pre-Implant Augmentation gate (after Payment Details) ─── */}
-      {!isExistingImplantCase && (
+      {!!augResumeId && (
+        <View style={[styles.section, { backgroundColor: '#E8F5E9', borderColor: '#A5D6A7', borderWidth: 1 }]} testID="aug-resume-banner" data-testid="aug-resume-banner">
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name="bandage" size={18} color="#1B5E20" />
+            <Text style={{ color: '#1B5E20', fontWeight: '700', fontSize: 13.5, flex: 1 }}>
+              Pre-Implant Augmentation approved — complete the Phase 1 implant details below to proceed to Phase 2.
+            </Text>
+          </View>
+        </View>
+      )}
+      {!isExistingImplantCase && !augResumeId && (
         <View style={styles.section} testID="augmentation-question-section" data-testid="augmentation-question-section">
           <Text style={styles.sectionTitle}>Is Bone Augmentation Required Before Implant Placement? <Text style={{ color: '#DC3545' }}>*</Text></Text>
           <View style={styles.chipRow}>
