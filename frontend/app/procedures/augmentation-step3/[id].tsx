@@ -61,6 +61,7 @@ export default function AugmentationStep3() {
   const [authToken, setAuthToken] = useState('');
   const [decision, setDecision] = useState<'' | 'complete' | 'failed'>('');
   const [failedAction, setFailedAction] = useState('');
+  const [boneBefore, setBoneBefore] = useState<{ w: string; h: string }>({ w: '', h: '' });
 
   useEffect(() => {
     (async () => {
@@ -68,6 +69,8 @@ export default function AugmentationStep3() {
         const res = await api.get(`/procedures/${id}`);
         const rnd = (res.data.augmentations || []).slice(-1)[0];
         const s3 = rnd?.step3;
+        const s1 = rnd?.step1 || {};
+        setBoneBefore({ w: s1.bone_width_before || '', h: s1.bone_height_before || '' });
         if (s3) {
           setHealing(s3.healing_status || '');
           setComplications(s3.complications || []);
@@ -213,6 +216,28 @@ export default function AugmentationStep3() {
                   onChangeText={v => setHeightAfter(v.replace(/[^0-9.]/g, ''))} testID="aug-bone-height-after" />
               </View>
             </View>
+            {/* iter-396: live pre-op → post-op bone gain comparison */}
+            {(() => {
+              const seg = (before: string, after: string) => {
+                const b = parseFloat(before); const a = parseFloat(after);
+                if (isNaN(b) || isNaN(a)) return null;
+                const d = Math.round((a - b) * 100) / 100;
+                return `${b} → ${a} mm (${d >= 0 ? '+' : ''}${d} mm)`;
+              };
+              const w = seg(boneBefore.w, widthAfter);
+              const h = seg(boneBefore.h, heightAfter);
+              if (!w && !h) return null;
+              return (
+                <View style={s.gainBox} testID="aug-gain-preview">
+                  <Ionicons name="trending-up" size={16} color="#1B5E20" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.gainTitle}>Bone gain vs pre-operative (Step 1)</Text>
+                    {w ? <Text style={s.gainLine} testID="aug-gain-width">Width: {w}</Text> : null}
+                    {h ? <Text style={s.gainLine} testID="aug-gain-height">Height: {h}</Text> : null}
+                  </View>
+                </View>
+              );
+            })()}
           </View>
 
           <View style={s.section} testID="aug-cbct-section">
@@ -363,6 +388,9 @@ const s = StyleSheet.create({
   radio: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: '#CFD8DC', alignItems: 'center', justifyContent: 'center' },
   radioDot: { width: 9, height: 9, borderRadius: 5 },
   warnText: { fontSize: 12, color: '#8D6E63', marginTop: 10, fontStyle: 'italic' },
+  gainBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: '#E8F5E9', borderRadius: 10, borderWidth: 1, borderColor: '#A5D6A7', padding: 12, marginTop: 14 },
+  gainTitle: { fontSize: 12, fontWeight: '800', color: '#1B5E20', marginBottom: 3 },
+  gainLine: { fontSize: 12.5, fontWeight: '700', color: '#2E7D32' },
   submitBtn: { flexDirection: 'row', backgroundColor: '#1B5E20', borderRadius: 12, padding: 16, alignItems: 'center', justifyContent: 'center', gap: 8 },
   submitText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
 });

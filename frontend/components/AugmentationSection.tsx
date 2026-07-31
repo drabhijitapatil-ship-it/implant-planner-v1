@@ -181,6 +181,21 @@ export default function AugmentationSection({ procedure, onChanged }: { procedur
                     <Row label="Horizontal / Vertical defect" value={`${s1.horizontal_defect || '—'} / ${s1.vertical_defect || '—'}`} />
                     <Row label="Other defect notes" value={s1.defect_other} />
                     <Row label="Bone before graft (W × H)" value={`${s1.bone_width_before || '—'} mm × ${s1.bone_height_before || '—'} mm`} />
+                    <Row label="Pre-operative CBCT" value={(s1.cbct_files || []).length ? `${s1.cbct_files.length} file(s) uploaded` : 'Not uploaded'} />
+                    {(s1.cbct_files || []).map((f: any, i: number) => (
+                      <TouchableOpacity key={i} style={s.cbctViewRow}
+                        onPress={async () => {
+                          try {
+                            const url = await getAuthFileUrl(f.filename);
+                            await Linking.openURL(url);
+                          } catch { Alert.alert('Error', 'Could not open CBCT file'); }
+                        }}
+                        testID={`aug-step1-view-cbct-${i}`}>
+                        <Ionicons name="scan-outline" size={15} color="#1565C0" />
+                        <Text style={s.cbctViewTxt} numberOfLines={1}>View Pre-op CBCT {i + 1} — {f.original_name || 'file'}</Text>
+                        <Ionicons name="open-outline" size={14} color="#1565C0" />
+                      </TouchableOpacity>
+                    ))}
                   </>
                 ) : <Text style={s.emptyTxt}>Step 1 not yet completed.</Text>}
                 {s2 ? (
@@ -204,7 +219,20 @@ export default function AugmentationSection({ procedure, onChanged }: { procedur
                     <Row label="Healing status" value={s3.healing_status} />
                     <Row label="Complications" value={`${(s3.complications || []).join(', ')}${s3.complication_other_text ? ` — ${s3.complication_other_text}` : ''}` || undefined} />
                     <Row label="Bone graft outcome" value={s3.outcome} />
-                    <Row label="Bone gain (H × V after graft)" value={(s3.bone_width_after || s3.bone_height_after) ? `${s3.bone_width_after || '—'} mm × ${s3.bone_height_after || '—'} mm` : undefined} />
+                    {(() => {
+                      const seg = (before: any, after: any) => {
+                        const b = parseFloat(before); const a = parseFloat(after);
+                        const delta = (!isNaN(b) && !isNaN(a)) ? ` (${a - b >= 0 ? '+' : ''}${Math.round((a - b) * 100) / 100} mm gain)` : '';
+                        return `${before || '—'} → ${after || '—'} mm${delta}`;
+                      };
+                      const sw1 = rnd.step1 || {};
+                      return (
+                        <>
+                          <Row label="Bone width (pre-op → post-op)" value={(sw1.bone_width_before || s3.bone_width_after) ? seg(sw1.bone_width_before, s3.bone_width_after) : undefined} />
+                          <Row label="Bone height (pre-op → post-op)" value={(sw1.bone_height_before || s3.bone_height_after) ? seg(sw1.bone_height_before, s3.bone_height_after) : undefined} />
+                        </>
+                      );
+                    })()}
                     <Row label="CBCT after graft" value={(s3.cbct_files || []).length ? `${s3.cbct_files.length} file(s) uploaded` : 'Not uploaded'} />
                     {/* iter-395: faculty & owner can open each uploaded CBCT during review */}
                     {(s3.cbct_files || []).map((f: any, i: number) => (

@@ -15357,6 +15357,8 @@ class AugmentationStep1Submit(BaseModel):
     bone_height_before: Optional[str] = Field("", max_length=10)
     medical_assessment: Optional[Dict[str, str]] = None
     medical_risk_level: Optional[str] = Field("", max_length=30)
+    # iter-396: mandatory pre-operative CBCT (compared against Step 3 post-op)
+    cbct_files: List[Dict[str, str]] = []
 
 
 class AugmentationStep2Submit(BaseModel):
@@ -15506,6 +15508,8 @@ async def submit_augmentation_step1(
         raise HTTPException(status_code=400, detail="Step 1 can no longer be edited for this round.")
     if not payload.reasons:
         raise HTTPException(status_code=400, detail="Select at least one Reason for Bone Grafting.")
+    if not payload.cbct_files:
+        raise HTTPException(status_code=400, detail="Upload at least one Pre-operative CBCT report.")
     if not payload.defect_teeth:
         raise HTTPException(status_code=400, detail="Select the Defect Location on the FDI chart.")
     if not payload.medical_assessment:

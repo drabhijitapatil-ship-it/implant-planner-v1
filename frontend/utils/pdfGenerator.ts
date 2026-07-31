@@ -47,6 +47,7 @@ const augmentationSectionHtml = (procedure: any): string => {
           ${(s1.horizontal_defect || s1.vertical_defect) ? `<tr><td class="info-label">Horizontal / Vertical Defect:</td><td class="info-value">${s1.horizontal_defect || '—'} / ${s1.vertical_defect || '—'}</td></tr>` : ''}
           ${s1.defect_other ? `<tr><td class="info-label">Other Defect Notes:</td><td class="info-value">${s1.defect_other}</td></tr>` : ''}
           ${(s1.bone_width_before || s1.bone_height_before) ? `<tr><td class="info-label">Bone Before Graft (W × H):</td><td class="info-value">${s1.bone_width_before || '—'} mm × ${s1.bone_height_before || '—'} mm</td></tr>` : ''}
+          <tr><td class="info-label">Pre-operative CBCT:</td><td class="info-value">${(s1.cbct_files || []).length ? `Available (${s1.cbct_files.length} file${s1.cbct_files.length === 1 ? '' : 's'})` : 'Not uploaded'}</td></tr>
           ${s1.medical_risk_level ? `<tr><td class="info-label">Medical Risk Level:</td><td class="info-value">${s1.medical_risk_level}</td></tr>` : ''}
           ` : ''}
           ${rnd.step2 ? `
@@ -58,7 +59,15 @@ const augmentationSectionHtml = (procedure: any): string => {
           ${s3.healing_status ? `<tr><td class="info-label">Healing Status:</td><td class="info-value">${s3.healing_status}</td></tr>` : ''}
           ${(s3.complications || []).length ? `<tr><td class="info-label">Complications:</td><td class="info-value">${s3.complications.join(', ')}${s3.complication_other_text ? ` — ${s3.complication_other_text}` : ''}</td></tr>` : ''}
           ${s3.outcome ? `<tr><td class="info-label">Bone Graft Outcome:</td><td class="info-value">${s3.outcome}</td></tr>` : ''}
-          ${(s3.bone_width_after || s3.bone_height_after) ? `<tr><td class="info-label">Bone After Graft (W × H):</td><td class="info-value">${s3.bone_width_after || '—'} mm × ${s3.bone_height_after || '—'} mm</td></tr>` : ''}
+          ${(s3.bone_width_after || s3.bone_height_after || s1.bone_width_before || s1.bone_height_before) ? (() => {
+            const seg = (before: any, after: any) => {
+              const b = parseFloat(before); const a = parseFloat(after);
+              const delta = (!isNaN(b) && !isNaN(a)) ? ` (${a - b >= 0 ? '+' : ''}${Math.round((a - b) * 100) / 100} mm gain)` : '';
+              return `${before || '—'} → ${after || '—'} mm${delta}`;
+            };
+            return `<tr><td class="info-label">Bone Width (pre-op → post-op):</td><td class="info-value" style="font-weight:bold;color:#2E7D32;">${seg(s1.bone_width_before, s3.bone_width_after)}</td></tr>
+            <tr><td class="info-label">Bone Height (pre-op → post-op):</td><td class="info-value" style="font-weight:bold;color:#2E7D32;">${seg(s1.bone_height_before, s3.bone_height_after)}</td></tr>`;
+          })() : ''}
           <tr><td class="info-label">CBCT After Graft:</td><td class="info-value">${(s3.cbct_files || []).length ? `Available (${s3.cbct_files.length} file${s3.cbct_files.length === 1 ? '' : 's'})` : 'Not uploaded'}</td></tr>
           ${s3.decision ? `<tr><td class="info-label">Decision:</td><td class="info-value">${s3.decision === 'complete' ? 'Bone Graft Augmentation Complete' : `Bone Graft Augmentation Failed — ${FAILED_LBL[s3.failed_action] || ''}`}</td></tr>` : ''}
           ` : ''}
