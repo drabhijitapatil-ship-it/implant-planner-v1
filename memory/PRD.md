@@ -7183,3 +7183,22 @@ LESSON: never batch multiple search_replace calls on the SAME file in one parall
 silently lost this way (new-procedure submit branch in iter-393, step3 hydration in iter-395).
 Known cases: 6a6b300e811c1535451fde6a = pending_phase2 with staged + phase2 augmentation (demo-rich).
 Backlog: LOW console 'Unexpected text node' warning on case detail (since iter-310).
+
+## 2026-07-31 — iter-396: Pre-operative CBCT in Step 1 + bone gain comparison
+User choices: pre-op CBCT MANDATORY in Step 1 (Q1-a); gain comparison in all 4 spots — readback,
+Step 3 form live, Phase 2 review card, PDF (Q2-a); both Step 1 & Step 3 CBCT links in readback (Q3-a).
+1. NEW /components/CbctSlots.tsx — reusable Phase-1-style CBCT slot uploader (padCbct helper); used in
+   Step 1 (testPrefix aug-s1). Step 3 keeps its own identical inline implementation.
+2. Step 1 form: "Pre-operative CBCT *" section BEFORE Medical Assessment (testID aug-preop-cbct-section);
+   required ≥1 file (frontend validation + backend 400 "Upload at least one Pre-operative CBCT report.").
+   AugmentationStep1Submit.cbct_files added.
+3. Readback (AugmentationSection): Step 1 shows "Pre-operative CBCT" row + View Pre-op CBCT links
+   (aug-step1-view-cbct-{i}) for faculty/owner during review and after approval; Step 3 gain rows now
+   show "Bone width/height (pre-op → post-op): X → Y mm (+Z mm gain)".
+4. Step 3 form: live green gain preview box (aug-gain-preview / aug-gain-width / aug-gain-height)
+   computed from Step 1 before-values as the user types.
+5. AugmentationPhase2Review + pdfGenerator.ts: gain deltas (+mm) added; PDF Step 1 rows note
+   "Pre-operative CBCT: Available (n)".
+Testing: backend curl (400 without cbct / 200 with, stored correctly) + 3 UI screenshots verified all
+placements (section order, hydrated slot with View link, live gain preview, readback rows/links).
+No testing-agent run this iteration (targeted self-tests); flows reuse widgets validated in iter 312/313.

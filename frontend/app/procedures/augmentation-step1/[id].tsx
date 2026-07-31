@@ -16,6 +16,7 @@ import { PhaseHeader } from '../../../components/PhaseHeader';
 import { Ionicons } from '@expo/vector-icons';
 import FDIChart from '../../../components/FDIChart';
 import AugDropdown from '../../../components/AugDropdown';
+import CbctSlots, { padCbct, CbctFile } from '../../../components/CbctSlots';
 import {
   AUGMENTATION_REASONS, BONE_DEFECT_SIDES, DEFECT_SEVERITY,
   MEDICAL_RISK_FACTORS, calculateMedicalRisk,
@@ -61,6 +62,7 @@ export default function AugmentationStep1() {
   const [boneWidth, setBoneWidth] = useState('');
   const [boneHeight, setBoneHeight] = useState('');
   const [medical, setMedical] = useState<Record<string, string>>({});
+  const [cbctFiles, setCbctFiles] = useState<CbctFile[]>([null, null]);
 
   useEffect(() => {
     (async () => {
@@ -80,6 +82,7 @@ export default function AugmentationStep1() {
           setBoneWidth(s1.bone_width_before || '');
           setBoneHeight(s1.bone_height_before || '');
           setMedical(s1.medical_assessment || {});
+          setCbctFiles(padCbct(s1.cbct_files || []));
         } else if (res.data.medical_assessment) {
           setMedical(res.data.medical_assessment);
         }
@@ -105,6 +108,7 @@ export default function AugmentationStep1() {
     if (!verticalDefect) missing.push('Vertical defect');
     if (!boneWidth.trim()) missing.push('Bone width before graft');
     if (!boneHeight.trim()) missing.push('Bone height before graft');
+    if (cbctFiles.filter(Boolean).length === 0) missing.push('Pre-operative CBCT report (at least one)');
     if (!medicalComplete) missing.push('Medical Assessment (all factors)');
     if (missing.length) {
       Alert.alert('Incomplete', `Please complete:\n• ${missing.join('\n• ')}`);
@@ -119,6 +123,7 @@ export default function AugmentationStep1() {
         defect_other: defectOther,
         bone_width_before: boneWidth, bone_height_before: boneHeight,
         medical_assessment: medical, medical_risk_level: risk.level,
+        cbct_files: cbctFiles.filter(Boolean),
       });
       Alert.alert('Step 1 Complete', 'Step 2 — Post-procedure Details is now unlocked.');
       router.replace(`/procedures/${id}`);
@@ -190,6 +195,16 @@ export default function AugmentationStep1() {
                   onChangeText={v => setBoneHeight(v.replace(/[^0-9.]/g, ''))} testID="aug-bone-height" />
               </View>
             </View>
+          </View>
+
+          {/* iter-396: mandatory Pre-operative CBCT — compared with Step 3 post-op */}
+          <View style={s.section} testID="aug-preop-cbct-section">
+            <View style={s.sectionHeader}>
+              <Ionicons name="scan-outline" size={20} color="#0277BD" />
+              <Text style={s.sectionTitle}>Pre-operative CBCT <Text style={{ color: '#DC3545' }}>*</Text></Text>
+            </View>
+            <Text style={s.helperText}>Upload the pre-operative CBCT report (PDF or image). It will be compared with the post-operative CBCT in Step 3 — Review of Augmentation.</Text>
+            <CbctSlots files={cbctFiles} onChange={setCbctFiles} testPrefix="aug-s1" />
           </View>
 
           <View style={s.section} testID="aug-medical-section">

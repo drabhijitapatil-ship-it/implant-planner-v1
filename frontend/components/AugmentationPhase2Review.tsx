@@ -26,8 +26,13 @@ export default function AugmentationPhase2Review({ procedure }: { procedure: any
   const s1 = rnd.step1 || {};
   const s2 = rnd.step2 || {};
   const s3 = rnd.step3 || {};
+  const seg = (before: any, after: any) => {
+    const b = parseFloat(before); const a = parseFloat(after);
+    const delta = (!isNaN(b) && !isNaN(a)) ? ` (${a - b >= 0 ? '+' : ''}${Math.round((a - b) * 100) / 100} mm)` : '';
+    return `${before || '—'} → ${after || '—'} mm${delta}`;
+  };
   const boneGain = (s1.bone_width_before || s3.bone_width_after)
-    ? `Horizontal ${s1.bone_width_before || '—'} → ${s3.bone_width_after || '—'} mm · Vertical ${s1.bone_height_before || '—'} → ${s3.bone_height_after || '—'} mm`
+    ? `Horizontal ${seg(s1.bone_width_before, s3.bone_width_after)} · Vertical ${seg(s1.bone_height_before, s3.bone_height_after)}`
     : undefined;
 
   return (
