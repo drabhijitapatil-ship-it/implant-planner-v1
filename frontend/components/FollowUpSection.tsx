@@ -169,9 +169,10 @@ export default function FollowUpSection({ procedure, onChanged }: { procedure: a
   const samePerson = procedure.supervisor_id && procedure.supervisor_id === procedure.implant_incharge_id;
 
   const last = followups[followups.length - 1];
-  const canStartNext = isOwner && (!last || last.status === 'approved');
-  const canResubmit = isOwner && last?.status === 'rejected';
+  // Spec caps the chained sequence at Fourth Follow up Appointment.
   const nextNum = last ? (last.status === 'rejected' ? last.number : last.number + 1) : 1;
+  const canStartNext = isOwner && (!last || last.status === 'approved') && nextNum <= 4;
+  const canResubmit = isOwner && last?.status === 'rejected';
 
   const canApprove = (fu: any) => {
     if (fu.status === 'pending_supervisor') return (role === 'supervisor' && isSup) || (samePerson && isInc && role === 'implant_incharge') || (samePerson && isSup && role === 'supervisor');

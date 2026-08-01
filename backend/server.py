@@ -3063,6 +3063,10 @@ async def _serialize_referral(r: dict) -> dict:
             proc_oid = ObjectId(proc_id) if ObjectId.is_valid(proc_id) else proc_id
             proc = await db.procedures.find_one({"_id": proc_oid})
             if proc:
+                if not r.get("registration_number") and proc.get("registration_number"):
+                    r["registration_number"] = proc.get("registration_number")
+                if not r.get("patient_name") and proc.get("patient_name"):
+                    r["patient_name"] = proc.get("patient_name")
                 r["from_student_name"] = proc.get("original_student_name") or proc.get("student_name") or r.get("requested_by_name")
                 r["from_supervisor_name"] = proc.get("original_supervisor_name") or proc.get("supervisor_name")
                 if not r.get("from_department_name") and proc.get("department_id"):
@@ -3179,6 +3183,7 @@ async def refer_procedure(procedure_id: str, payload: ReferralCreate, current_us
         # Denormalized so the receiving department can triage from the list
         # screen without needing case access before they've even accepted.
         "patient_name": proc.get("patient_name"),
+        "registration_number": proc.get("registration_number"),
         "implant_procedure_type": proc.get("implant_procedure_type"),
         "case_status": proc.get("status"),
         "history": [{
@@ -3510,7 +3515,7 @@ async def complete_referral(referral_id: str, payload: ReferralComplete, current
             "notes": payload.notes, "status": "pending",
             "approver_ids": [], "requested_by_id": current_user["_id"], "requested_by_name": current_user.get("name", ""),
             "requested_by_role": current_user.get("role"), "requested_at": now,
-            "patient_name": referral.get("patient_name"), "implant_procedure_type": referral.get("implant_procedure_type"),
+            "patient_name": referral.get("patient_name"), "registration_number": referral.get("registration_number"), "implant_procedure_type": referral.get("implant_procedure_type"),
             "case_status": referral.get("case_status"), "chain_from_referral_id": str(referral["_id"]),
             "history": [{
                 "event": "created", "by_id": current_user["_id"], "by_name": current_user.get("name", ""),
@@ -15752,6 +15757,9 @@ async def submit_followup(
         raise HTTPException(status_code=400, detail=f"{followups[-1].get('label')} is still awaiting approval.")
     else:
         number = len(followups) + 1
+
+    if number > 4:
+        raise HTTPException(status_code=400, detail="Maximum of four follow-up appointments (First–Fourth) allowed.")
 
     now_iso = datetime.now(timezone.utc).isoformat()
     is_incharge_self_created = proc.get("created_by_role") == "implant_incharge" and proc.get("created_by_id") == current_user["_id"]

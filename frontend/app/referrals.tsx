@@ -53,6 +53,7 @@ type Referral = {
   requested_by_role?: string;
   requested_at: string;
   patient_name?: string;
+  registration_number?: string;
   implant_procedure_type?: string;
 };
 
@@ -229,71 +230,136 @@ export default function ReferralsScreen() {
   const renderCard = ({ item }: { item: Referral }) => {
     const colors = STATUS_COLORS[item.status] || STATUS_COLORS.pending;
     const isUrgent = item.priority === 'urgent';
+    const regNo = item.registration_number ? item.registration_number.replace(/^#/, '') : null;
+
     return (
       <TouchableOpacity
         style={styles.card}
         onPress={() => router.push(`/procedures/${item.case_id}` as any)}
+        activeOpacity={0.88}
         data-testid={`referral-card-${item.id}`}
       >
+        {/* Card Header: Patient Name + Patient Registration Number (next to name) & Status Badge */}
         <View style={styles.cardHeader}>
-          <Text style={styles.cardPatient} numberOfLines={1}>
-            {item.patient_name || 'Case ' + item.case_id.slice(-6)}
-          </Text>
+          <View style={styles.cardPatientContainer}>
+            <Text style={styles.cardPatient} numberOfLines={1}>
+              {item.patient_name || 'Case ' + item.case_id.slice(-6)}
+            </Text>
+            {!!regNo && (
+              <View style={styles.regBadge}>
+                <Ionicons name="card-outline" size={11} color="#2563EB" style={{ marginRight: 3 }} />
+                <Text style={styles.regBadgeText}>#{regNo}</Text>
+              </View>
+            )}
+          </View>
           <View style={[styles.statusBadge, { backgroundColor: colors.bg }]}>
+            <View style={[styles.statusDot, { backgroundColor: colors.text }]} />
             <Text style={[styles.statusBadgeText, { color: colors.text }]}>
               {(STATUS_LABELS[item.status] || item.status).toUpperCase()}
             </Text>
           </View>
         </View>
-        <Text style={styles.cardMeta}>{item.implant_procedure_type || ''}</Text>
 
-        <View style={styles.cardRow}>
-          <Ionicons name="business-outline" size={13} color="#64748B" />
-          <Text style={styles.cardMetaSmall}>
-            {tab === 'incoming'
-              ? `From Dept: ${item.from_department_name || 'Primary Department'}`
-              : `To Dept: ${item.to_department_name}`}
-          </Text>
-        </View>
-        <View style={styles.cardRow}>
-          <Ionicons name="person-outline" size={13} color="#64748B" />
-          <Text style={styles.cardMetaSmall}>
-            Referred By: {item.requested_by_name} ({item.requested_by_role || ''})
-          </Text>
-        </View>
-        {!!item.from_student_name && (
-          <View style={styles.cardRow}>
-            <Ionicons name="school-outline" size={13} color="#64748B" />
-            <Text style={styles.cardMetaSmall}>Treating Student: {item.from_student_name}</Text>
+        {/* Highlight Container: Procedure Type & Phase */}
+        {(!!item.implant_procedure_type || !!item.assigned_phase) && (
+          <View style={styles.highlightBanner}>
+            {!!item.implant_procedure_type && (
+              <View style={styles.procedureTypeRow}>
+                <Ionicons name="pulse-outline" size={14} color="#0F172A" />
+                <Text style={styles.procedureTypeText} numberOfLines={1}>
+                  {item.implant_procedure_type}
+                </Text>
+              </View>
+            )}
+            {!!item.assigned_phase && (
+              <View style={styles.phasePill}>
+                <Ionicons name="layers-outline" size={12} color="#3730A3" />
+                <Text style={styles.phasePillText}>
+                  {item.assigned_phase}{item.reason ? ` · ${item.reason}` : ''}
+                </Text>
+              </View>
+            )}
           </View>
         )}
-        {!!item.from_supervisor_name && (
-          <View style={styles.cardRow}>
-            <Ionicons name="ribbon-outline" size={13} color="#64748B" />
-            <Text style={styles.cardMetaSmall}>Assigned Supervisor: {item.from_supervisor_name}</Text>
-          </View>
-        )}
-        {!!item.assigned_phase && (
-          <View style={styles.cardRow}>
-            <Ionicons name="layers-outline" size={13} color="#64748B" />
-            <Text style={styles.cardMetaSmall}>{item.assigned_phase}{item.reason ? ` · ${item.reason}` : ''}</Text>
-          </View>
-        )}
-        <View style={styles.cardRow}>
-          <Ionicons name={isUrgent ? 'alert-circle-outline' : 'time-outline'} size={13} color={isUrgent ? '#C62828' : '#64748B'} />
-          <Text style={[styles.cardMetaSmall, isUrgent && { color: '#C62828', fontWeight: '700' }]}>
-            {isUrgent ? 'Urgent' : 'Routine'}
-            {(item.status === 'pending' || item.status === 'active') ? ` · ${daysPending(item)}d pending` : ''}
-          </Text>
-        </View>
-        {!!item.expected_return_date && (
-          <View style={styles.cardRow}>
-            <Ionicons name="calendar-outline" size={13} color="#64748B" />
-            <Text style={styles.cardMetaSmall}>Expected return: {item.expected_return_date}</Text>
-          </View>
-        )}
-        {!!item.notes && <Text style={styles.cardNotes} numberOfLines={2}>"{item.notes}"</Text>}
 
+        {/* Department Transfer Bar */}
+        <View style={styles.deptBox}>
+          <Ionicons name="business" size={14} color="#2563EB" />
+          <Text style={styles.deptText}>
+            {tab === 'incoming' ? (
+              <>
+                From Dept: <Text style={styles.deptHighlight}>{item.from_department_name || 'Primary Dept'}</Text>
+              </>
+            ) : (
+              <>
+                To Dept: <Text style={styles.deptHighlight}>{item.to_department_name}</Text>
+              </>
+            )}
+          </Text>
+        </View>
+
+        {/* Personnel Details */}
+        <View style={styles.detailsGroup}>
+          <View style={styles.cardRow}>
+            <Ionicons name="person-outline" size={13} color="#64748B" />
+            <Text style={styles.cardMetaSmall}>
+              Referred By: <Text style={styles.metaBold}>{item.requested_by_name}</Text>
+              {item.requested_by_role ? ` (${item.requested_by_role})` : ''}
+            </Text>
+          </View>
+
+          {!!item.from_student_name && (
+            <View style={styles.cardRow}>
+              <Ionicons name="school-outline" size={13} color="#059669" />
+              <Text style={styles.cardMetaSmall}>
+                Treating Student: <Text style={styles.metaBold}>{item.from_student_name}</Text>
+              </Text>
+            </View>
+          )}
+
+          {!!item.from_supervisor_name && (
+            <View style={styles.cardRow}>
+              <Ionicons name="ribbon-outline" size={13} color="#7C3AED" />
+              <Text style={styles.cardMetaSmall}>
+                Assigned Supervisor: <Text style={styles.metaBold}>{item.from_supervisor_name}</Text>
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* Timeline & Priority Chips */}
+        <View style={styles.metaFooterRow}>
+          <View style={[styles.priorityChip, isUrgent ? styles.urgentChip : styles.routineChip]}>
+            <Ionicons name={isUrgent ? 'alert-circle' : 'time-outline'} size={12} color={isUrgent ? '#DC2626' : '#475569'} />
+            <Text style={[styles.priorityChipText, isUrgent ? styles.urgentChipText : styles.routineChipText]}>
+              {isUrgent ? 'Urgent' : 'Routine'}
+            </Text>
+          </View>
+
+          {(item.status === 'pending' || item.status === 'active') && (
+            <View style={styles.pendingChip}>
+              <Ionicons name="hourglass-outline" size={12} color="#B45309" />
+              <Text style={styles.pendingChipText}>{daysPending(item)}d pending</Text>
+            </View>
+          )}
+
+          {!!item.expected_return_date && (
+            <View style={styles.dateChip}>
+              <Ionicons name="calendar-outline" size={12} color="#475569" />
+              <Text style={styles.dateChipText}>Return: {item.expected_return_date}</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Notes Callout Box */}
+        {!!item.notes && (
+          <View style={styles.notesBox}>
+            <Ionicons name="chatbox-ellipses-outline" size={14} color="#0284C7" style={{ marginTop: 1 }} />
+            <Text style={styles.notesText} numberOfLines={2}>"{item.notes}"</Text>
+          </View>
+        )}
+
+        {/* Action Buttons */}
         {tab === 'incoming' && item.status === 'pending' && (
           <View style={styles.actionsRow}>
             <TouchableOpacity
@@ -302,7 +368,14 @@ export default function ReferralsScreen() {
               disabled={actingId === item.id}
               data-testid={`accept-referral-${item.id}`}
             >
-              {actingId === item.id ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.actionBtnText}>Accept</Text>}
+              {actingId === item.id ? (
+                <ActivityIndicator color="#FFF" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle-outline" size={16} color="#FFF" />
+                  <Text style={styles.actionBtnText}>Accept</Text>
+                </>
+              )}
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionBtn, styles.declineBtn]}
@@ -310,7 +383,8 @@ export default function ReferralsScreen() {
               disabled={actingId === item.id}
               data-testid={`decline-referral-${item.id}`}
             >
-              <Text style={[styles.actionBtnText, { color: '#C62828' }]}>Decline</Text>
+              <Ionicons name="close-circle-outline" size={16} color="#DC2626" />
+              <Text style={[styles.actionBtnText, { color: '#DC2626' }]}>Decline</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -322,6 +396,7 @@ export default function ReferralsScreen() {
               disabled={actingId === item.id}
               data-testid={`complete-referral-${item.id}`}
             >
+              <Ionicons name="checkmark-done-circle-outline" size={18} color="#FFF" />
               <Text style={styles.actionBtnText}>Complete Referral</Text>
             </TouchableOpacity>
           </View>
@@ -334,7 +409,8 @@ export default function ReferralsScreen() {
               disabled={actingId === item.id}
               data-testid={`cancel-referral-${item.id}`}
             >
-              <Text style={[styles.actionBtnText, { color: '#C62828' }]}>Cancel Request</Text>
+              <Ionicons name="close-circle-outline" size={16} color="#DC2626" />
+              <Text style={[styles.actionBtnText, { color: '#DC2626' }]}>Cancel Request</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -346,7 +422,14 @@ export default function ReferralsScreen() {
               disabled={actingId === item.id}
               data-testid={`approve-internal-${item.id}`}
             >
-              {actingId === item.id ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.actionBtnText}>Approve</Text>}
+              {actingId === item.id ? (
+                <ActivityIndicator color="#FFF" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle-outline" size={16} color="#FFF" />
+                  <Text style={styles.actionBtnText}>Approve</Text>
+                </>
+              )}
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionBtn, styles.declineBtn]}
@@ -354,7 +437,8 @@ export default function ReferralsScreen() {
               disabled={actingId === item.id}
               data-testid={`reject-internal-${item.id}`}
             >
-              <Text style={[styles.actionBtnText, { color: '#C62828' }]}>Reject</Text>
+              <Ionicons name="close-circle-outline" size={16} color="#DC2626" />
+              <Text style={[styles.actionBtnText, { color: '#DC2626' }]}>Reject</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -526,27 +610,252 @@ const styles = StyleSheet.create({
   tabBtnTextActive: { color: '#FFF' },
   listContent: { padding: 16, paddingBottom: 40 },
   card: {
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 14,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0F172A',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  cardPatient: { fontSize: 15, fontWeight: '700', color: '#1A202C', flex: 1, marginRight: 8 },
-  statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
-  statusBadgeText: { fontSize: 10, fontWeight: '700' },
-  cardMeta: { fontSize: 13, color: '#546E7A', marginBottom: 6 },
-  cardRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
-  cardMetaSmall: { fontSize: 12, color: '#64748B' },
-  cardNotes: { fontSize: 12, color: '#94A3B8', fontStyle: 'italic', marginTop: 6 },
-  actionsRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  actionBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
-  acceptBtn: { backgroundColor: '#1A73E8' },
-  declineBtn: { backgroundColor: '#FFEBEE', borderWidth: 1, borderColor: '#FFCDD2' },
-  returnBtn: { backgroundColor: '#2E7D32' },
-  actionBtnText: { fontSize: 13, fontWeight: '700', color: '#FFF' },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  cardPatientContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 1,
+    marginRight: 8,
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  cardPatient: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  regBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+    borderWidth: 1,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  regBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1D4ED8',
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 20,
+    gap: 5,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  highlightBanner: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    gap: 6,
+  },
+  procedureTypeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  procedureTypeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334155',
+    flex: 1,
+  },
+  phasePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EEF2FF',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    gap: 4,
+  },
+  phasePillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#3730A3',
+  },
+  deptBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  deptText: {
+    fontSize: 12.5,
+    color: '#64748B',
+  },
+  deptHighlight: {
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  detailsGroup: {
+    gap: 5,
+    marginBottom: 10,
+  },
+  cardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  cardMetaSmall: {
+    fontSize: 12.5,
+    color: '#64748B',
+  },
+  metaBold: {
+    fontWeight: '600',
+    color: '#334155',
+  },
+  metaFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
+  },
+  priorityChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    gap: 4,
+  },
+  urgentChip: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#FCA5A5',
+    borderWidth: 1,
+  },
+  urgentChipText: {
+    color: '#DC2626',
+    fontWeight: '700',
+    fontSize: 11,
+  },
+  routineChip: {
+    backgroundColor: '#F1F5F9',
+  },
+  routineChipText: {
+    color: '#475569',
+    fontWeight: '600',
+    fontSize: 11,
+  },
+  pendingChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    gap: 4,
+  },
+  pendingChipText: {
+    color: '#B45309',
+    fontWeight: '600',
+    fontSize: 11,
+  },
+  dateChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    gap: 4,
+  },
+  dateChipText: {
+    color: '#475569',
+    fontWeight: '600',
+    fontSize: 11,
+  },
+  notesBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: '#F0F9FF',
+    borderLeftWidth: 3,
+    borderLeftColor: '#0284C7',
+    padding: 10,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  notesText: {
+    fontSize: 12,
+    color: '#0369A1',
+    fontStyle: 'italic',
+    flex: 1,
+    lineHeight: 16,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+  },
+  actionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    paddingVertical: 11,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  acceptBtn: {
+    backgroundColor: '#2563EB',
+  },
+  declineBtn: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  returnBtn: {
+    backgroundColor: '#16A34A',
+  },
+  actionBtnText: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
   emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 64, gap: 8 },
   emptyText: { fontSize: 14, color: '#94A3B8' },
   // Complete Referral sheet (reuses ReferCaseButton's visual language)

@@ -249,8 +249,8 @@ export default function FollowUpForm() {
     }
     if (anyRisk && !preexisting.status) missing.push('Review of Pre-existing systemic condition');
     if (anyRisk && preexisting.status === 'Not controlled' && !preexisting.details.trim()) missing.push('Pre-existing condition details');
-    if (!newCondition.answer) missing.push('New systemic condition');
-    if (newCondition.answer === 'Yes' && !newCondition.details.trim()) missing.push('New systemic condition details');
+    if (!anyRisk && !newCondition.answer) missing.push('New systemic condition');
+    if (!anyRisk && newCondition.answer === 'Yes' && !newCondition.details.trim()) missing.push('New systemic condition details');
     if (!general.comfort) missing.push('Comfort');
     if (general.comfort === 'No' && !general.comfort_details.trim()) missing.push('Comfort details');
     if (!general.pain) missing.push('Pain');
@@ -300,7 +300,7 @@ export default function FollowUpForm() {
         date,
         survival_review: survival,
         preexisting_condition_review: anyRisk ? preexisting : null,
-        new_systemic_condition: newCondition,
+        new_systemic_condition: anyRisk ? null : newCondition,
         general,
         oral_hygiene: hygiene,
         probing_depths: probing,
@@ -341,6 +341,21 @@ export default function FollowUpForm() {
   }
 
   const survivalGateLabel = implantPositions.length === 1 ? 'Implant Survived' : 'All Implants Survived';
+
+  // Implant Survival Review must be completed before the rest of the
+  // follow-up workflow unlocks — it "activates" first per spec, not just
+  // gates final submission.
+  const isrComplete = allSurvived === 'yes' || (
+    allSurvived === 'no' && implantPositions.every(pos => {
+      const e = survival[pos];
+      if (!e?.status) return false;
+      if (e.status === 'Failed') {
+        if (!e.reason) return false;
+        if (e.reason === 'Other' && (!e.reason_other_text.trim() || wordCount(e.reason_other_text) > 100)) return false;
+      }
+      return true;
+    })
+  );
 
   return (
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
@@ -408,6 +423,17 @@ export default function FollowUpForm() {
             })}
           </View>
 
+          {!isrComplete ? (
+            <View style={s.section} testID="followup-locked-notice">
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="lock-closed" size={18} color="#78909C" />
+                <Text style={{ fontSize: 13, color: '#607D8B', flex: 1 }}>
+                  Complete the Implant Survival Review above to unlock the rest of the follow-up workflow.
+                </Text>
+              </View>
+            </View>
+          ) : (
+          <>
           {/* ── Date ── */}
           <View style={s.section}>
             <View style={s.sectionHeader}>
@@ -433,15 +459,17 @@ export default function FollowUpForm() {
                 )}
               </Field>
             )}
-            <Field label="New systemic condition" required
-              info="If the patient has developed any new systemic condition like Sjogren's syndrome (Xerostomia), Diabetes, Bone-related disorder etc.">
-              <Chips options={['Yes', 'No']} value={newCondition.answer}
-                onChange={(v: string) => setNewCondition(p => ({ ...p, answer: v }))} testID="new-condition" />
-              {newCondition.answer === 'Yes' && (
-                <TextInput style={[s.input, { minHeight: 60, marginTop: 8 }]} multiline placeholder="Details of the new systemic condition..."
-                  value={newCondition.details} onChangeText={v => setNewCondition(p => ({ ...p, details: v }))} testID="new-condition-details" />
-              )}
-            </Field>
+            {!anyRisk && (
+              <Field label="New systemic condition" required
+                info="If the patient has developed any new systemic condition like Sjogren's syndrome (Xerostomia), Diabetes, Bone-related disorder etc.">
+                <Chips options={['Yes', 'No']} value={newCondition.answer}
+                  onChange={(v: string) => setNewCondition(p => ({ ...p, answer: v }))} testID="new-condition" />
+                {newCondition.answer === 'Yes' && (
+                  <TextInput style={[s.input, { minHeight: 60, marginTop: 8 }]} multiline placeholder="Details of the new systemic condition..."
+                    value={newCondition.details} onChangeText={v => setNewCondition(p => ({ ...p, details: v }))} testID="new-condition-details" />
+                )}
+              </Field>
+            )}
           </View>
 
           {/* ── General ── */}
@@ -687,6 +715,8 @@ export default function FollowUpForm() {
               )}
             </TouchableOpacity>
           </View>
+          </>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
 

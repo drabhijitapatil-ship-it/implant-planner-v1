@@ -113,8 +113,8 @@ export default function ReferredCaseAssignModal({
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerTitleRow}>
-              <Ionicons name="swap-horizontal" size={22} color="#1565C0" />
-              <Text style={styles.title}>Assign / Transfer Case</Text>
+              <Ionicons name="person-add" size={22} color="#1565C0" />
+              <Text style={styles.title}>Assign to Student</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={22} color="#546E7A" />

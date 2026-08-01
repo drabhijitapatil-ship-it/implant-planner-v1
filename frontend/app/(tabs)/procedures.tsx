@@ -338,7 +338,9 @@ function DefaultProceduresScreen() {
       }
       // Department In-Charge — transfer within own department, skips
       // Supervisor/In-Charge approval (they already have that authority).
-      if (user?.department_id && transferEligible) {
+      // Assign is for a case with no student yet; once assigned, further
+      // moves go through Transfer Case (approval flow) instead.
+      if (user?.department_id && transferEligible && item.student_id) {
         actions.push({
           key: "transfer",
           label: "Transfer Case",
@@ -347,17 +349,19 @@ function DefaultProceduresScreen() {
           onPress: () => setTransferCase({ id: pid, privileged: true }),
         });
       }
-      actions.push({
-        key: "referral_assign",
-        label: "Assign / Transfer to Student",
-        icon: "person-add-outline",
-        color: "#1565C0",
-        onPress: () => setAssignReferredCase({ id: pid, patientName: item.patient_name }),
-      });
+      if (!item.student_id) {
+        actions.push({
+          key: "referral_assign",
+          label: "Assign to Student",
+          icon: "person-add-outline",
+          color: "#1565C0",
+          onPress: () => setAssignReferredCase({ id: pid, patientName: item.patient_name }),
+        });
+      }
     } else if (role === "administrator") {
       // Organization Admin — transfer within the case's own department,
       // skips Supervisor/In-Charge approval.
-      if (user?.is_admin && transferEligible) {
+      if (user?.is_admin && transferEligible && item.student_id) {
         actions.push({
           key: "transfer",
           label: "Transfer Case",
@@ -366,13 +370,15 @@ function DefaultProceduresScreen() {
           onPress: () => setTransferCase({ id: pid, privileged: true }),
         });
       }
-      actions.push({
-        key: "referral_assign",
-        label: "Assign / Transfer to Student",
-        icon: "person-add-outline",
-        color: "#1565C0",
-        onPress: () => setAssignReferredCase({ id: pid, patientName: item.patient_name }),
-      });
+      if (!item.student_id) {
+        actions.push({
+          key: "referral_assign",
+          label: "Assign to Student",
+          icon: "person-add-outline",
+          color: "#1565C0",
+          onPress: () => setAssignReferredCase({ id: pid, patientName: item.patient_name }),
+        });
+      }
     } else if (role === "supervisor") {
       if (!isCompleted && !isReferredToMyDept)
         actions.push({

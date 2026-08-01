@@ -3957,14 +3957,20 @@ export default function ProcedureDetailScreen() {
 
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Staff</Text>
+              {/* referral-assign overwrites top-level student_name/supervisor_name
+                  with the receiving department's picks and backs up the
+                  pre-referral values into original_student_name/
+                  original_supervisor_name — so once that backup exists, the
+                  primary-department rows below must read from it instead of
+                  the (now-overwritten) top-level fields. */}
               {user?.role === "nurse" ? (
                 // Nurse view — keep existing full-staff render, unchanged.
                 <>
-                  {procedure.student_name ? (
+                  {(procedure.original_student_name || procedure.student_name) ? (
                     <InfoRow
                       icon="school"
                       label="Student"
-                      value={procedure.student_name}
+                      value={procedure.original_student_name || procedure.student_name}
                     />
                   ) : procedure.created_by_name &&
                     procedure.created_by_role !== "student" ? (
@@ -3983,7 +3989,7 @@ export default function ProcedureDetailScreen() {
                   <InfoRow
                     icon="school"
                     label="Supervisor"
-                    value={procedure.supervisor_name}
+                    value={procedure.original_supervisor_name || procedure.supervisor_name}
                   />
                   <InfoRow
                     icon="medkit"
@@ -4007,7 +4013,7 @@ export default function ProcedureDetailScreen() {
                     icon="school"
                     label="Supervisor"
                     value={
-                      procedure.supervisor_name || procedure.created_by_name
+                      procedure.original_supervisor_name || procedure.supervisor_name || procedure.created_by_name
                     }
                   />
                   <InfoRow
@@ -4019,23 +4025,49 @@ export default function ProcedureDetailScreen() {
               ) : (
                 // Student-scheduled (default) — show Student + Supervisor + Implant In-Charge.
                 <>
-                  {procedure.student_name ? (
+                  {(procedure.original_student_name || procedure.student_name) ? (
                     <InfoRow
                       icon="school"
                       label="Student"
-                      value={procedure.student_name}
+                      value={procedure.original_student_name || procedure.student_name}
                     />
                   ) : null}
                   <InfoRow
                     icon="school"
                     label="Supervisor"
-                    value={procedure.supervisor_name}
+                    value={procedure.original_supervisor_name || procedure.supervisor_name}
                   />
                   <InfoRow
                     icon="medkit"
                     label="Implant Incharge"
                     value={procedure.implant_incharge_name}
                   />
+                </>
+              )}
+              {/* Once the receiving department's incharge has assigned the
+                  referred case (original_student_id gets backed up at that
+                  point), surface who it's now assigned to there, below the
+                  primary department's staff. */}
+              {!!procedure.original_student_id && (
+                <>
+                  <View style={{ height: 1, backgroundColor: '#E2E8F0', marginVertical: 10 }} />
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#1D4ED8', marginBottom: 4 }}>
+                    Referred to {(activeReferral || procedure?.active_referral)?.to_department_name || 'Another Department'}
+                  </Text>
+                  {!!procedure.student_name && (
+                    <InfoRow
+                      icon="school"
+                      label="Student"
+                      value={procedure.student_name}
+                    />
+                  )}
+                  {!!procedure.supervisor_name && (
+                    <InfoRow
+                      icon="school"
+                      label="Supervisor"
+                      value={procedure.supervisor_name}
+                    />
+                  )}
                 </>
               )}
             </View>
