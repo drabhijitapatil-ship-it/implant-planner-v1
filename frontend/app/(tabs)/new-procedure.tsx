@@ -284,7 +284,7 @@ export default function NewProcedureScreen() {
   const isTablet = width >= 768;
   const { user } = useAuth();
   const router = useRouter();
-  const params = useLocalSearchParams<{ draftId?: string }>();
+  const params = useLocalSearchParams<{ draftId?: string; augResumeId?: string }>();
   const [step, setStep] = useState<'details' | 'implants' | 'review'>('details');
   // iter-348: Pre-submit Review screen — shown to Supervisor / Implant
   // In-Charge (the roles whose Phase 1 approval otherwise gets auto-stamped
@@ -471,6 +471,54 @@ export default function NewProcedureScreen() {
   // Assessment blocks fire with the same gates (cluster, non-cluster, full-arch,
   // overdenture-as-full-arch) as routine cases.
   const isExistingImplantCase = formData.implant_procedure_type === 'Existing Implant';
+  // iter-393: Pre-Implant Augmentation — when Yes, the implant-specific
+  // sections are deferred and the case is created via a minimal endpoint.
+  const [augmentationRequired, setAugmentationRequired] = useState<'' | 'Yes' | 'No'>('');
+  const [submittingAug, setSubmittingAug] = useState(false);
+  // iter-393: set when resuming Phase 1 after an approved augmentation
+  // ("Proceed to Phase 2"). The augmentation question is hidden and the final
+  // submit PUTs onto the existing case instead of creating a new one.
+  const [augResumeId, setAugResumeId] = useState<string | null>(null);
+  const isAugCase = augmentationRequired === 'Yes' && !isExistingImplantCase;
+
+  const submitAugmentationCase = async () => {
+    const missing: string[] = [];
+    if (!formData.patient_name?.trim()) missing.push('Patient Name');
+    if (!formData.registration_number?.trim()) missing.push('Registration Number');
+    if (!formData.supervisor_id) missing.push('Supervisor');
+    if (!formData.implant_incharge_id) missing.push('Implant In-Charge');
+    if (!formData.receipt_number?.trim()) missing.push('Receipt Number');
+    if (!formData.amount_paid) missing.push('Amount Paid');
+    if (!formData.procedure_date) missing.push('Augmentation Surgery Date');
+    if (!formData.procedure_time) missing.push('Time Slot');
+    if (missing.length) {
+      Alert.alert('Incomplete', `Please complete:\n• ${missing.join('\n• ')}`);
+      return;
+    }
+    setSubmittingAug(true);
+    try {
+      const res = await api.post('/procedures/augmentation-case', {
+        student_name: (formData as any).student_name || user?.name || '',
+        patient_name: formData.patient_name,
+        age: formData.age, sex: formData.sex, profession: formData.profession,
+        mobile_number: formData.mobile_number, patient_email: (formData as any).patient_email || '',
+        registration_number: formData.registration_number,
+        chief_complaint: formData.chief_complaint,
+        supervisor_id: formData.supervisor_id, supervisor_name: formData.supervisor_name,
+        implant_incharge_id: formData.implant_incharge_id, implant_incharge_name: formData.implant_incharge_name,
+        receipt_number: formData.receipt_number,
+        amount_paid: parseFloat(String(formData.amount_paid)) || 0,
+        procedure_date: formData.procedure_date, procedure_time: formData.procedure_time,
+        remark: (formData as any).remark || '',
+      });
+      const newId = res.data?.id;
+      Alert.alert('Case Created', 'Pre-Implant Augmentation case created. Fill Step 1 — Pre-procedure Details from the case screen.');
+      router.replace(`/procedures/${newId}`);
+    } catch (e: any) {
+      Alert.alert('Error', e?.response?.data?.detail || 'Failed to create case');
+    } finally { setSubmittingAug(false); }
+  };
+
   const effectiveProcType = isExistingImplantCase ? existingOrigProcedure : formData.implant_procedure_type;
   const isFullArch = FULL_ARCH_GROUP.has(effectiveProcType);
   const isNonFullArch = NON_FULL_ARCH_TYPES.has(effectiveProcType);
@@ -672,6 +720,37 @@ export default function NewProcedureScreen() {
           } catch { /* ignore — draft may have been deleted */ }
         };
         loadDraft();
+      } else if (params.augResumeId) {
+        // iter-393: resume Phase 1 after approved augmentation Step 3 Review.
+        const loadAugResume = async () => {
+          try {
+            const res = await api.get(`/procedures/${params.augResumeId}`);
+            const proc = res.data;
+            if (proc.augmentation_outcome !== 'proceed_phase2') return;
+            setAugResumeId(params.augResumeId!);
+            setAugmentationRequired('No');
+            setCreatedProcedureId(null);
+            setFormData(prev => ({
+              ...prev,
+              patient_name: proc.patient_name || '',
+              age: proc.age || '',
+              sex: proc.sex || '',
+              profession: proc.profession || '',
+              mobile_number: proc.mobile_number || '',
+              patient_email: proc.patient_email || '',
+              registration_number: proc.registration_number || '',
+              chief_complaint: proc.chief_complaint || '',
+              student_name: proc.student_name || prev.student_name || '',
+              supervisor_id: proc.supervisor_id || '',
+              supervisor_name: proc.supervisor_name || '',
+              implant_incharge_id: proc.implant_incharge_id || '',
+              implant_incharge_name: proc.implant_incharge_name || '',
+              receipt_number: '', amount_paid: '', procedure_date: '', procedure_time: '',
+            }));
+            setStep('details');
+          } catch { /* ignore */ }
+        };
+        loadAugResume();
       } else {
         // iter-229: No draftId in route → start a fresh case. (Previously this
         // branch was gated on `!createdProcedureId` and `createdProcedureId`
@@ -703,10 +782,12 @@ export default function NewProcedureScreen() {
         setExtraIntraoralCount(0);
         setCreatedProcedureId(null);
         setIsDraftResume(false);
+        setAugResumeId(null);
+        setAugmentationRequired('');
         setStep('details');
         AsyncStorage.removeItem(FORM_STORAGE_KEY).catch(() => {});
       }
-    }, [params.draftId, user?.name])
+    }, [params.draftId, params.augResumeId, user?.name])
   );
 
   // iter-223: defensive — whenever an existing-implant draft is hydrated,
@@ -1289,9 +1370,15 @@ export default function NewProcedureScreen() {
         } : {}),
       };
 
-      const res = await api.post('/procedures', payload);
+      let res;
+      if (augResumeId) {
+        // iter-393: post-augmentation — merge Phase 1 details onto the existing case.
+        res = await api.put(`/procedures/${augResumeId}/augmentation/complete-phase1`, payload);
+      } else {
+        res = await api.post('/procedures', payload);
+      }
 
-      const procId = res.data.id || res.data._id;
+      const procId = res.data.id || res.data._id || augResumeId;
 
       // ── Persist Atrophy Assessment for Full-Arch cases (silent guidance) ──
       if (isFullArch && procId) {
@@ -2064,10 +2151,602 @@ export default function NewProcedureScreen() {
       </View>
       )}
 
+      {/* ─── Payment Details ─── */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Payment Details</Text>
+        <View style={styles.fieldContainer}>
+          <Text style={styles.label}>Receipt Number <Text style={{ color: '#DC3545' }}>*</Text></Text>
+          <TextInput style={styles.input} value={formData.receipt_number}
+            onChangeText={v => updateForm('receipt_number', v)} placeholder="Enter receipt number" />
+        </View>
+        <View style={styles.fieldContainer}>
+          <Text style={styles.label}>Amount Paid <Text style={{ color: '#DC3545' }}>*</Text></Text>
+          <TextInput style={styles.input} value={formData.amount_paid} keyboardType="numeric"
+            onChangeText={v => updateForm('amount_paid', v)} placeholder="Enter amount" />
+        </View>
+      </View>
+
+      {/* iter-213: when "Existing Implant" is the procedure type, swap the
+          rest of the surgical-prep form for the existing-implant wizard
+          (FDI inventory, present prosthetic component, prosthetic history,
+          radiograph, save + phase routing). Skips clinical exam / implant
+          planning / loading / scheduling collected by the regular flow. */}
+      {formData.implant_procedure_type === 'Existing Implant' && (
+        <View onLayout={onExistingStepLayout(1)}>
+        <ExistingImplantSection
+          patient={{
+            student_name: (formData as any).student_name || '',
+            patient_name: formData.patient_name,
+            age: formData.age || '',
+            sex: formData.sex || '',
+            profession: formData.profession || '',
+            mobile_number: formData.mobile_number || '',
+            patient_email: formData.patient_email || '',
+            registration_number: formData.registration_number,
+            chief_complaint: formData.chief_complaint || '',
+            supervisor_id: formData.supervisor_id,
+            supervisor_name: formData.supervisor_name || '',
+            implant_incharge_id: formData.implant_incharge_id,
+            implant_incharge_name: formData.implant_incharge_name || '',
+            receipt_number: formData.receipt_number,
+            amount_paid: String(formData.amount_paid || ''),
+            procedure_date: formData.procedure_date || '',
+            procedure_time: formData.procedure_time || '',
+            remark: (formData as any).remark || '',
+          }}
+          validatePatient={() => {
+            if (!formData.patient_name?.trim()) return 'Patient name is required.';
+            if (!formData.registration_number?.trim()) return 'MR / Registration number is required.';
+            if (!formData.supervisor_id) return 'Please select a supervisor.';
+            if (!formData.implant_incharge_id) return 'Please select an implant in-charge.';
+            if (!formData.receipt_number?.trim()) return 'Receipt number is required.';
+            if (!formData.amount_paid) return 'Amount paid is required.';
+            // iter-220: appointment date/time are irrelevant for historical
+            // (existing-implant) cases — the surgery already happened. Backend
+            // payload auto-fills today's date inside ExistingImplantSection.
+            return null;
+          }}
+          draft={existingImplantDraft}
+          onOriginalProcedureChange={setExistingOrigProcedure}
+          onImplantTeethChange={setExistingImplantTeeth}
+          arch={formData.arch}
+          onArchChange={v => updateForm('arch', v)}
+          extraSubmitFields={{
+            medical_assessment: formData.medical_assessment,
+            medical_risk_level: formData.medical_risk_level,
+            // Clinical Examination fields captured by the parent.
+            edentulous_sites: formData.edentulous_sites,
+            occlusocervical_height: formData.occlusocervical_height,
+            mesiodistal_space: formData.mesiodistal_space,
+            arch_condition: formData.arch_condition,
+            ridge_contour: formData.ridge_contour,
+            soft_tissue_thickness: formData.soft_tissue_thickness,
+            keratinized_mucosa: formData.keratinized_mucosa,
+            periodontal_status: formData.periodontal_status,
+            occlusal_scheme: formData.occlusal_scheme,
+            parafunction_habit: formData.parafunction_habit,
+            vertical_dimension: formData.vertical_dimension,
+            opposing_dentition: formData.opposing_dentition,
+            vertical_dimension_mm: formData.vertical_dimension_mm,
+            available_interarch_space: formData.available_interarch_space,
+            opposing_arch: formData.opposing_arch,
+            tmj: formData.tmj,
+            smile_line: formData.smile_line,
+            gingival_biotype: formData.gingival_biotype,
+          }}
+          hideActionButtons
+          onReady={setExistingSubmitApi}
+        />
+        </View>
+      )}
+
+      {/* ─── iter-393: Pre-Implant Augmentation gate (after Payment Details) ─── */}
+      {!!augResumeId && (
+        <View style={[styles.section, { backgroundColor: '#F1F8F2', borderColor: '#A5D6A7', borderWidth: 1 }]} testID="aug-resume-banner" data-testid="aug-resume-banner">
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: '#1B5E20', alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="checkmark-done" size={21} color="#FFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: '#1B5E20', fontWeight: '800', fontSize: 14.5 }}>Pre-Implant Augmentation Approved</Text>
+              <Text style={{ color: '#33691E', fontSize: 12.5, marginTop: 3, lineHeight: 18 }}>
+                The bone graft has healed and been signed off. Complete the Phase 1 implant details below to proceed to Phase 2.
+              </Text>
+            </View>
+          </View>
+        </View>
+      )}
+      {!isExistingImplantCase && !augResumeId && (
+        <View style={styles.section} testID="augmentation-question-section" data-testid="augmentation-question-section">
+          <Text style={styles.sectionTitle}>Is Bone Augmentation Required Before Implant Placement? <Text style={{ color: '#DC3545' }}>*</Text></Text>
+          <View style={styles.chipRow}>
+            {['Yes', 'No'].map(o => (
+              <TouchableOpacity key={o}
+                style={[styles.chip, augmentationRequired === o && styles.chipActive]}
+                onPress={() => setAugmentationRequired(o as any)}
+                testID={`aug-required-${o.toLowerCase()}`} data-testid={`aug-required-${o.toLowerCase()}`}>
+                <Text style={[styles.chipText, augmentationRequired === o && styles.chipTextActive]}>{o}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {isAugCase && (
+            <View style={[styles.riskBadge, { backgroundColor: '#EFEBE9', marginTop: 10 }]}>
+              <Text style={{ color: '#5D4037', fontSize: 12.5 }}>
+                Bone grafting will be completed and reviewed first. The implant-specific sections (Procedure Type, CBCT, Implant Selection…) are deferred until the graft heals and is approved — then the regular Phase 1 workflow resumes.
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
+
+      {isAugCase && (
+        <>
+          <View style={styles.section} testID="aug-schedule-section" data-testid="aug-schedule-section">
+            <Text style={styles.sectionTitle}>Schedule Pre-Implant Augmentation Surgery</Text>
+            <CalendarPicker
+              label="Augmentation Surgery Date"
+              value={formData.procedure_date}
+              onChange={(date) => {
+                updateForm('procedure_date', date);
+                updateForm('procedure_time', '');
+              }}
+              required
+            />
+            {formData.procedure_date && (() => {
+              const d = new Date(formData.procedure_date + 'T00:00:00');
+              const dayOfWeek = d.getDay();
+              if (dayOfWeek === 0) {
+                return (
+                  <View style={[styles.riskBadge, { backgroundColor: '#FFF3E0' }]}>
+                    <Text style={{ color: '#E65100', fontWeight: '600', fontSize: 13 }}>No procedure slots available on Sundays</Text>
+                  </View>
+                );
+              }
+              const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+              const dayName = dayNames[dayOfWeek];
+              const availableSlots = PROCEDURE_TIME_SLOTS.filter(sl => sl.days.includes(dayName));
+              return (
+                <View style={styles.fieldContainer}>
+                  <Text style={styles.label}>Time Slot <Text style={{ color: '#DC3545' }}>*</Text></Text>
+                  <View style={styles.chipRow}>
+                    {availableSlots.map(slot => {
+                      const booked = bookedSlots[slot.value];
+                      const isBooked = !!booked;
+                      const isSelected = formData.procedure_time === slot.value;
+                      return (
+                        <View key={slot.value}>
+                          <TouchableOpacity
+                            style={[styles.chip, isSelected && styles.chipActive, isBooked && styles.chipBooked]}
+                            onPress={() => !isBooked && updateForm('procedure_time', slot.value)}
+                            disabled={isBooked}
+                            testID={`aug-slot-${slot.value}`} data-testid={`aug-slot-${slot.value}`}>
+                            <Text style={[styles.chipText, isSelected && styles.chipTextActive, isBooked && styles.chipBookedText]}>{slot.label}</Text>
+                            {isBooked && <Ionicons name="lock-closed" size={12} color="#999" style={{ marginLeft: 4 }} />}
+                          </TouchableOpacity>
+                          {isBooked && (
+                            <Text style={styles.bookedInfo} numberOfLines={1}>{booked.patient_name} ({booked.scheduled_by})</Text>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              );
+            })()}
+          </View>
+          <View style={{ paddingHorizontal: 16, paddingBottom: 28 }}>
+            <TouchableOpacity style={[styles.submitBtn, submittingAug && { opacity: 0.6 }]}
+              onPress={submitAugmentationCase} disabled={submittingAug} testID="aug-create-case-btn" data-testid="aug-create-case-btn">
+              {submittingAug ? <ActivityIndicator color="#FFF" /> : (
+                <><Ionicons name="bandage" size={18} color="#FFF" /><Text style={styles.submitBtnText}>Create Case — Pre-Implant Augmentation</Text></>
+              )}
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
+
+
+      {/* iter-233: resume the non-Existing-Implant gated section. Everything
+          below (Schedule, Loading Type, CBCT upload, Phase 1 Checklist, Bone
+          Graft, Continue button) belongs only to the routine flow; Existing
+          Implant cases skip straight to the Medical Assessment + lifted
+          submit buttons rendered further down.
+          iter-393: also skipped for Pre-Implant Augmentation cases — the
+          dedicated aug-schedule + "Create Case" button above already
+          handles case creation; the deferred implant-specific sections
+          resume later via the augResumeId Phase-1-completion flow. */}
+      {!isExistingImplantCase && !isAugCase && (<>
+
+      {/* ─── Schedule ─── */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Schedule</Text>
+        <CalendarPicker
+          label="Procedure Date"
+          value={formData.procedure_date}
+          onChange={(date) => {
+            updateForm('procedure_date', date);
+            updateForm('procedure_time', ''); // reset time when date changes
+          }}
+          required
+        />
+        {formData.procedure_date && schedMode === 'default' && (() => {
+          const d = new Date(formData.procedure_date + 'T00:00:00');
+          const dayOfWeek = d.getDay(); // 0=Sun
+          if (dayOfWeek === 0) {
+            return (
+              <View style={[styles.riskBadge, { backgroundColor: '#FFF3E0' }]}>
+                <Text style={{ color: '#E65100', fontWeight: '600', fontSize: 13 }}>
+                  No procedure slots available on Sundays
+                </Text>
+              </View>
+            );
+          }
+          const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+          const dayName = dayNames[dayOfWeek];
+          const availableSlots = PROCEDURE_TIME_SLOTS.filter(s => s.days.includes(dayName));
+          return (
+            <View style={styles.fieldContainer}>
+              <Text style={styles.label}>Time Slot <Text style={{ color: '#DC3545' }}>*</Text></Text>
+              <View style={styles.chipRow}>
+                {availableSlots.map(slot => {
+                  const booked = bookedSlots[slot.value];
+                  const isBooked = !!booked;
+                  const isSelected = formData.procedure_time === slot.value;
+                  return (
+                    <View key={slot.value}>
+                      <TouchableOpacity
+                        style={[styles.chip, isSelected && styles.chipActive, isBooked && styles.chipBooked]}
+                        onPress={() => !isBooked && updateForm('procedure_time', slot.value)}
+                        disabled={isBooked}
+                        data-testid={`slot-${slot.value}`}>
+                        <Text style={[styles.chipText, isSelected && styles.chipTextActive, isBooked && styles.chipBookedText]}>
+                          {slot.label}
+                        </Text>
+                        {isBooked && <Ionicons name="lock-closed" size={12} color="#999" style={{ marginLeft: 4 }} />}
+                      </TouchableOpacity>
+                      {isBooked && (
+                        <Text style={styles.bookedInfo} numberOfLines={1}>
+                          {booked.patient_name} ({booked.scheduled_by})
+                        </Text>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          );
+        })()}
+
+        {/* Custom mode — org-defined named slots for this weekday. */}
+        {formData.procedure_date && schedMode === 'custom' && (
+          daySlots.length === 0 ? (
+            <View style={[styles.riskBadge, { backgroundColor: '#FFF3E0' }]}>
+              <Text style={{ color: '#E65100', fontWeight: '600', fontSize: 13 }}>
+                No procedure slots are configured for this day.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.fieldContainer}>
+              <Text style={styles.label}>Time Slot <Text style={{ color: '#DC3545' }}>*</Text></Text>
+              <View style={styles.chipRow}>
+                {daySlots.map(slot => {
+                  const booked = bookedSlots[slot.time];
+                  const isBooked = !!booked;
+                  const isSelected = formData.procedure_time === slot.time;
+                  return (
+                    <View key={slot.time}>
+                      <TouchableOpacity
+                        style={[styles.chip, isSelected && styles.chipActive, isBooked && styles.chipBooked]}
+                        onPress={() => !isBooked && updateForm('procedure_time', slot.time)}
+                        disabled={isBooked}
+                        data-testid={`slot-${slot.time}`}>
+                        <Text style={[styles.chipText, isSelected && styles.chipTextActive, isBooked && styles.chipBookedText]}>
+                          {slot.label}
+                        </Text>
+                        {isBooked && <Ionicons name="lock-closed" size={12} color="#999" style={{ marginLeft: 4 }} />}
+                      </TouchableOpacity>
+                      {isBooked && (
+                        <Text style={styles.bookedInfo} numberOfLines={1}>
+                          {booked.patient_name} ({booked.scheduled_by})
+                        </Text>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          )
+        )}
+
+        {/* Open-window mode — pick any start time; it auto-occupies the
+            org-configured duration (e.g. 10:00 AM + 2h -> blocks to 12:00 PM). */}
+        {formData.procedure_date && schedMode === 'open' && (() => {
+          const commitTime = (h: number | null, m: number, mer: 'AM' | 'PM') => {
+            if (h == null) { updateForm('procedure_time', ''); return; }
+            let h24 = h % 12;
+            if (mer === 'PM') h24 += 12;
+            updateForm('procedure_time', `${String(h24).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+          };
+          const endTimeLabel = (() => {
+            if (openHour == null) return null;
+            let h24 = openHour % 12; if (openMeridiem === 'PM') h24 += 12;
+            const startMin = h24 * 60 + openMinute;
+            const endMin = startMin + Math.round(openWindowHours * 60);
+            const eh = Math.floor((endMin / 60) % 24);
+            const em = endMin % 60;
+            const suffix = eh >= 12 ? 'PM' : 'AM';
+            const eh12 = eh % 12 || 12;
+            return `${eh12}:${String(em).padStart(2, '0')} ${suffix}`;
+          })();
+          const existingBookings = Object.entries(bookedSlots);
+
+          const handleOpenPicker = () => {
+            setTempHour(openHour ? String(openHour).padStart(2, '0') : '07');
+            setTempMinute(String(openMinute).padStart(2, '0'));
+            setTempMeridiem(openMeridiem);
+            setActiveInput('hour');
+            setShowOpenTimePicker(true);
+          };
+
+          return (
+            <View style={styles.fieldContainer}>
+              <Text style={styles.label}>Time Slot <Text style={{ color: '#DC3545' }}>*</Text></Text>
+              
+              <TouchableOpacity
+                style={styles.dropdown}
+                onPress={handleOpenPicker}
+                data-testid="open-mode-time-picker-btn"
+              >
+                <Text style={[styles.dropdownText, openHour == null && { color: '#90A4AE' }]}>
+                  {openHour != null
+                    ? `${String(openHour).padStart(2, '0')}:${String(openMinute).padStart(2, '0')} ${openMeridiem}`
+                    : 'Select Time'}
+                </Text>
+                <Ionicons name="time-outline" size={20} color="#1565C0" />
+              </TouchableOpacity>
+
+              {/* Open-window time picker dialog modal (Material 3 style with Clock Face) */}
+              <Modal
+                visible={showOpenTimePicker}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowOpenTimePicker(false)}
+              >
+                <Pressable style={styles.timeModalOverlay} onPress={() => setShowOpenTimePicker(false)}>
+                  <Pressable style={styles.timeModalContainer} onPress={() => {}}>
+                    <Text style={styles.timeModalTitle}>Select time</Text>
+                    
+                    <View style={styles.timeModalInputRow}>
+                      {/* Hour Box */}
+                      <View style={{ alignItems: 'center' }}>
+                        <TouchableOpacity
+                          style={[styles.timeModalBox, activeInput === 'hour' && styles.timeModalBoxActive]}
+                          onPress={() => setActiveInput('hour')}
+                        >
+                          <TextInput
+                            style={styles.timeModalInput}
+                            value={tempHour}
+                            onChangeText={(v) => {
+                              const clean = v.replace(/[^0-9]/g, '');
+                              setTempHour(clean);
+                              if (clean.length === 2) {
+                                setActiveInput('minute');
+                              }
+                            }}
+                            keyboardType="number-pad"
+                            maxLength={2}
+                            placeholder="00"
+                            placeholderTextColor="#90A4AE"
+                            onFocus={() => setActiveInput('hour')}
+                            selectTextOnFocus={true}
+                          />
+                        </TouchableOpacity>
+                        <Text style={styles.timeModalSubLabel}>Hour</Text>
+                      </View>
+
+                      {/* Colon */}
+                      <Text style={styles.timeModalColon}>:</Text>
+
+                      {/* Minute Box */}
+                      <View style={{ alignItems: 'center' }}>
+                        <TouchableOpacity
+                          style={[styles.timeModalBox, activeInput === 'minute' && styles.timeModalBoxActive]}
+                          onPress={() => setActiveInput('minute')}
+                        >
+                          <TextInput
+                            style={styles.timeModalInput}
+                            value={tempMinute}
+                            onChangeText={(v) => {
+                              const clean = v.replace(/[^0-9]/g, '');
+                              setTempMinute(clean);
+                            }}
+                            keyboardType="number-pad"
+                            maxLength={2}
+                            placeholder="00"
+                            placeholderTextColor="#90A4AE"
+                            onFocus={() => setActiveInput('minute')}
+                            selectTextOnFocus={true}
+                          />
+                        </TouchableOpacity>
+                        <Text style={styles.timeModalSubLabel}>Minute</Text>
+                      </View>
+
+                      {/* AM/PM Toggle */}
+                      <View style={styles.timeModalMeridiemContainer}>
+                        <TouchableOpacity
+                          style={[styles.timeModalMeridiemBtn, tempMeridiem === 'AM' && styles.timeModalMeridiemBtnActive, { borderBottomWidth: 0.5, borderBottomColor: '#CFD8DC' }]}
+                          onPress={() => setTempMeridiem('AM')}
+                        >
+                          <Text style={[styles.timeModalMeridiemText, tempMeridiem === 'AM' && styles.timeModalMeridiemTextActive]}>AM</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.timeModalMeridiemBtn, tempMeridiem === 'PM' && styles.timeModalMeridiemBtnActive, { borderTopWidth: 0.5, borderTopColor: '#CFD8DC' }]}
+                          onPress={() => setTempMeridiem('PM')}
+                        >
+                          <Text style={[styles.timeModalMeridiemText, tempMeridiem === 'PM' && styles.timeModalMeridiemTextActive]}>PM</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    {/* Clock Dial Face */}
+                    {showDialMode && (() => {
+                      const dialSize = 220;
+                      const center = dialSize / 2;
+                      const handLength = 70;
+                      
+                      const angle = (() => {
+                        if (activeInput === 'hour') {
+                          const val = parseInt(tempHour, 10) || 12;
+                          return (val * 30 - 90) * (Math.PI / 180);
+                        } else {
+                          const val = parseInt(tempMinute, 10) || 0;
+                          return (val * 6 - 90) * (Math.PI / 180);
+                        }
+                      })();
+
+                      const targetX = center + handLength * Math.cos(angle);
+                      const targetY = center + handLength * Math.sin(angle);
+
+                      return (
+                        <View style={styles.clockDial}>
+                          <Svg height={dialSize} width={dialSize} style={StyleSheet.absoluteFill}>
+                            {/* Line connecting pivot to number */}
+                            <Line
+                              x1={center}
+                              y1={center}
+                              x2={targetX}
+                              y2={targetY}
+                              stroke="#1565C0"
+                              strokeWidth="2.5"
+                            />
+                            {/* Inner circle pivot */}
+                            <Circle cx={center} cy={center} r="4" fill="#1565C0" />
+                          </Svg>
+
+                          {/* Hours 1-12 or Minutes 0-55 */}
+                          {activeInput === 'hour' ? (
+                            [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(h => {
+                              const theta = (h * 30 - 90) * (Math.PI / 180);
+                              const numX = center + handLength * Math.cos(theta) - 16;
+                              const numY = center + handLength * Math.sin(theta) - 16;
+                              const isSelected = parseInt(tempHour, 10) === h || (h === 12 && parseInt(tempHour, 10) === 0);
+                              return (
+                                <TouchableOpacity
+                                  key={h}
+                                  style={[
+                                    styles.clockNumberBox,
+                                    { left: numX, top: numY },
+                                    isSelected && styles.clockNumberBoxSelected
+                                  ]}
+                                  onPress={() => {
+                                    setTempHour(String(h).padStart(2, '0'));
+                                    setActiveInput('minute');
+                                  }}
+                                >
+                                  <Text style={[styles.clockNumberText, isSelected && styles.clockNumberTextSelected]}>
+                                    {h}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })
+                          ) : (
+                            [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map(m => {
+                              const theta = ((m / 5) * 30 - 90) * (Math.PI / 180);
+                              const numX = center + handLength * Math.cos(theta) - 16;
+                              const numY = center + handLength * Math.sin(theta) - 16;
+                              const isSelected = parseInt(tempMinute, 10) === m;
+                              return (
+                                <TouchableOpacity
+                                  key={m}
+                                  style={[
+                                    styles.clockNumberBox,
+                                    { left: numX, top: numY },
+                                    isSelected && styles.clockNumberBoxSelected
+                                  ]}
+                                  onPress={() => {
+                                    setTempMinute(String(m).padStart(2, '0'));
+                                  }}
+                                >
+                                  <Text style={[styles.clockNumberText, isSelected && styles.clockNumberTextSelected]}>
+                                    {m === 0 ? '00' : m}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })
+                          )}
+                        </View>
+                      );
+                    })()}
+
+                    {/* Bottom Action buttons */}
+                    <View style={[styles.timeModalFooter, { marginTop: showDialMode ? 24 : 12 }]}>
+                      <TouchableOpacity onPress={() => setShowDialMode(prev => !prev)} style={{ padding: 4 }}>
+                        <MaterialCommunityIcons 
+                          name={showDialMode ? "keyboard-outline" : "clock-outline"} 
+                          size={24} 
+                          color="#546E7A" 
+                        />
+                      </TouchableOpacity>
+                      <View style={{ flexDirection: 'row', gap: 20 }}>
+                        <TouchableOpacity onPress={() => setShowOpenTimePicker(false)}>
+                          <Text style={styles.timeModalFooterText}>Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => {
+                          const h = parseInt(tempHour, 10);
+                          const m = parseInt(tempMinute, 10);
+                          if (isNaN(h) || h < 1 || h > 12) {
+                            Alert.alert('Invalid Hour', 'Please enter a valid hour (1-12).');
+                            return;
+                          }
+                          if (isNaN(m) || m < 0 || m > 59) {
+                            Alert.alert('Invalid Minute', 'Please enter a valid minute (0-59).');
+                            return;
+                          }
+                          setOpenHour(h);
+                          setOpenMinute(m);
+                          setOpenMeridiem(tempMeridiem);
+                          commitTime(h, m, tempMeridiem);
+                          setShowOpenTimePicker(false);
+                        }}>
+                          <Text style={styles.timeModalFooterText}>OK</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </Pressable>
+                </Pressable>
+              </Modal>
+
+              {endTimeLabel && (
+                <Text style={[styles.bookedInfo, { textAlign: 'left', marginTop: 8, maxWidth: '100%' }]}>
+                  Occupies until {endTimeLabel} ({openWindowHours}h slot)
+                </Text>
+              )}
+              {existingBookings.length > 0 && (
+                <View style={{ marginTop: 8 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#78909C', marginBottom: 4 }}>Already booked today:</Text>
+                  {existingBookings.map(([t, info]) => (
+                    <Text key={t} style={[styles.bookedInfo, { textAlign: 'left', maxWidth: '100%' }]} numberOfLines={1}>
+                      {formatTimeLabelLocal(t)} — {info.patient_name} ({info.scheduled_by})
+                    </Text>
+                  ))}
+                </View>
+              )}
+            </View>
+          );
+        })()}
+      </View>
+
       {/* ─── Procedure Type ─── */}
-      {/* iter-213: Procedure Information now precedes Payment Details so the
-          operator picks the procedure type (which may be "Existing Implant"
-          and morph the rest of the form) before entering payment info. */}
+      {/* Product-decision reorder: Procedure Information now renders AFTER
+          Schedule (and before Type of Loading) — order is Payment Details →
+          Schedule → Procedure Information → Type of Loading → CBCT →
+          Intraoral Photo → Phase 1 Checklist → Medical Assessment. Pure
+          relocation of this block; no internal behavior changed. The
+          Prosthetic Treatment Plan / FDI chart / Clinical Examination /
+          Occlusal Analysis / Full-Arch Atrophy / Aesthetic Risk block reads
+          formData.implant_procedure_type / isFullArch / isNonFullArch /
+          prostheticOptions, so it was moved to render right after this
+          block (below), not left in its old spot above Schedule. */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Procedure Information</Text>
         <Dropdown label="Type of Implant Procedure" value={formData.implant_procedure_type}
@@ -2236,96 +2915,7 @@ export default function NewProcedureScreen() {
         )}
       </View>
 
-      {/* ─── Payment Details ─── */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Payment Details</Text>
-        <View style={styles.fieldContainer}>
-          <Text style={styles.label}>Receipt Number <Text style={{ color: '#DC3545' }}>*</Text></Text>
-          <TextInput style={styles.input} value={formData.receipt_number}
-            onChangeText={v => updateForm('receipt_number', v)} placeholder="Enter receipt number" />
-        </View>
-        <View style={styles.fieldContainer}>
-          <Text style={styles.label}>Amount Paid <Text style={{ color: '#DC3545' }}>*</Text></Text>
-          <TextInput style={styles.input} value={formData.amount_paid} keyboardType="numeric"
-            onChangeText={v => updateForm('amount_paid', v)} placeholder="Enter amount" />
-        </View>
-      </View>
-
-      {/* iter-213: when "Existing Implant" is the procedure type, swap the
-          rest of the surgical-prep form for the existing-implant wizard
-          (FDI inventory, present prosthetic component, prosthetic history,
-          radiograph, save + phase routing). Skips clinical exam / implant
-          planning / loading / scheduling collected by the regular flow. */}
-      {formData.implant_procedure_type === 'Existing Implant' && (
-        <View onLayout={onExistingStepLayout(1)}>
-        <ExistingImplantSection
-          patient={{
-            student_name: (formData as any).student_name || '',
-            patient_name: formData.patient_name,
-            age: formData.age || '',
-            sex: formData.sex || '',
-            profession: formData.profession || '',
-            mobile_number: formData.mobile_number || '',
-            patient_email: formData.patient_email || '',
-            registration_number: formData.registration_number,
-            chief_complaint: formData.chief_complaint || '',
-            supervisor_id: formData.supervisor_id,
-            supervisor_name: formData.supervisor_name || '',
-            implant_incharge_id: formData.implant_incharge_id,
-            implant_incharge_name: formData.implant_incharge_name || '',
-            receipt_number: formData.receipt_number,
-            amount_paid: String(formData.amount_paid || ''),
-            procedure_date: formData.procedure_date || '',
-            procedure_time: formData.procedure_time || '',
-            remark: (formData as any).remark || '',
-          }}
-          validatePatient={() => {
-            if (!formData.patient_name?.trim()) return 'Patient name is required.';
-            if (!formData.registration_number?.trim()) return 'MR / Registration number is required.';
-            if (!formData.supervisor_id) return 'Please select a supervisor.';
-            if (!formData.implant_incharge_id) return 'Please select an implant in-charge.';
-            if (!formData.receipt_number?.trim()) return 'Receipt number is required.';
-            if (!formData.amount_paid) return 'Amount paid is required.';
-            // iter-220: appointment date/time are irrelevant for historical
-            // (existing-implant) cases — the surgery already happened. Backend
-            // payload auto-fills today's date inside ExistingImplantSection.
-            return null;
-          }}
-          draft={existingImplantDraft}
-          onOriginalProcedureChange={setExistingOrigProcedure}
-          onImplantTeethChange={setExistingImplantTeeth}
-          arch={formData.arch}
-          onArchChange={v => updateForm('arch', v)}
-          extraSubmitFields={{
-            medical_assessment: formData.medical_assessment,
-            medical_risk_level: formData.medical_risk_level,
-            // Clinical Examination fields captured by the parent.
-            edentulous_sites: formData.edentulous_sites,
-            occlusocervical_height: formData.occlusocervical_height,
-            mesiodistal_space: formData.mesiodistal_space,
-            arch_condition: formData.arch_condition,
-            ridge_contour: formData.ridge_contour,
-            soft_tissue_thickness: formData.soft_tissue_thickness,
-            keratinized_mucosa: formData.keratinized_mucosa,
-            periodontal_status: formData.periodontal_status,
-            occlusal_scheme: formData.occlusal_scheme,
-            parafunction_habit: formData.parafunction_habit,
-            vertical_dimension: formData.vertical_dimension,
-            opposing_dentition: formData.opposing_dentition,
-            vertical_dimension_mm: formData.vertical_dimension_mm,
-            available_interarch_space: formData.available_interarch_space,
-            opposing_arch: formData.opposing_arch,
-            tmj: formData.tmj,
-            smile_line: formData.smile_line,
-            gingival_biotype: formData.gingival_biotype,
-          }}
-          hideActionButtons
-          onReady={setExistingSubmitApi}
-        />
-        </View>
-      )}
-
-      {formData.implant_procedure_type !== 'Existing Implant' && (<>
+      {formData.implant_procedure_type !== 'Existing Implant' && !isAugCase && (<>
 
       {/* ─── Prosthetic Treatment Plan ─── (moved here per iter-134; now appears
             BEFORE the FDI chart so that an Overdenture-with-Attachment choice
@@ -2864,392 +3454,6 @@ export default function NewProcedureScreen() {
         </View>
       )}
 
-      {/* iter-233: resume the non-Existing-Implant gated section. Everything
-          below (Schedule, Loading Type, CBCT upload, Phase 1 Checklist, Bone
-          Graft, Continue button) belongs only to the routine flow; Existing
-          Implant cases skip straight to the Medical Assessment + lifted
-          submit buttons rendered further down. */}
-      {!isExistingImplantCase && (<>
-
-      {/* ─── Schedule ─── */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Schedule</Text>
-        <CalendarPicker
-          label="Procedure Date"
-          value={formData.procedure_date}
-          onChange={(date) => {
-            updateForm('procedure_date', date);
-            updateForm('procedure_time', ''); // reset time when date changes
-          }}
-          required
-        />
-        {formData.procedure_date && schedMode === 'default' && (() => {
-          const d = new Date(formData.procedure_date + 'T00:00:00');
-          const dayOfWeek = d.getDay(); // 0=Sun
-          if (dayOfWeek === 0) {
-            return (
-              <View style={[styles.riskBadge, { backgroundColor: '#FFF3E0' }]}>
-                <Text style={{ color: '#E65100', fontWeight: '600', fontSize: 13 }}>
-                  No procedure slots available on Sundays
-                </Text>
-              </View>
-            );
-          }
-          const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-          const dayName = dayNames[dayOfWeek];
-          const availableSlots = PROCEDURE_TIME_SLOTS.filter(s => s.days.includes(dayName));
-          return (
-            <View style={styles.fieldContainer}>
-              <Text style={styles.label}>Time Slot <Text style={{ color: '#DC3545' }}>*</Text></Text>
-              <View style={styles.chipRow}>
-                {availableSlots.map(slot => {
-                  const booked = bookedSlots[slot.value];
-                  const isBooked = !!booked;
-                  const isSelected = formData.procedure_time === slot.value;
-                  return (
-                    <View key={slot.value}>
-                      <TouchableOpacity
-                        style={[styles.chip, isSelected && styles.chipActive, isBooked && styles.chipBooked]}
-                        onPress={() => !isBooked && updateForm('procedure_time', slot.value)}
-                        disabled={isBooked}
-                        data-testid={`slot-${slot.value}`}>
-                        <Text style={[styles.chipText, isSelected && styles.chipTextActive, isBooked && styles.chipBookedText]}>
-                          {slot.label}
-                        </Text>
-                        {isBooked && <Ionicons name="lock-closed" size={12} color="#999" style={{ marginLeft: 4 }} />}
-                      </TouchableOpacity>
-                      {isBooked && (
-                        <Text style={styles.bookedInfo} numberOfLines={1}>
-                          {booked.patient_name} ({booked.scheduled_by})
-                        </Text>
-                      )}
-                    </View>
-                  );
-                })}
-              </View>
-            </View>
-          );
-        })()}
-
-        {/* Custom mode — org-defined named slots for this weekday. */}
-        {formData.procedure_date && schedMode === 'custom' && (
-          daySlots.length === 0 ? (
-            <View style={[styles.riskBadge, { backgroundColor: '#FFF3E0' }]}>
-              <Text style={{ color: '#E65100', fontWeight: '600', fontSize: 13 }}>
-                No procedure slots are configured for this day.
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.fieldContainer}>
-              <Text style={styles.label}>Time Slot <Text style={{ color: '#DC3545' }}>*</Text></Text>
-              <View style={styles.chipRow}>
-                {daySlots.map(slot => {
-                  const booked = bookedSlots[slot.time];
-                  const isBooked = !!booked;
-                  const isSelected = formData.procedure_time === slot.time;
-                  return (
-                    <View key={slot.time}>
-                      <TouchableOpacity
-                        style={[styles.chip, isSelected && styles.chipActive, isBooked && styles.chipBooked]}
-                        onPress={() => !isBooked && updateForm('procedure_time', slot.time)}
-                        disabled={isBooked}
-                        data-testid={`slot-${slot.time}`}>
-                        <Text style={[styles.chipText, isSelected && styles.chipTextActive, isBooked && styles.chipBookedText]}>
-                          {slot.label}
-                        </Text>
-                        {isBooked && <Ionicons name="lock-closed" size={12} color="#999" style={{ marginLeft: 4 }} />}
-                      </TouchableOpacity>
-                      {isBooked && (
-                        <Text style={styles.bookedInfo} numberOfLines={1}>
-                          {booked.patient_name} ({booked.scheduled_by})
-                        </Text>
-                      )}
-                    </View>
-                  );
-                })}
-              </View>
-            </View>
-          )
-        )}
-
-        {/* Open-window mode — pick any start time; it auto-occupies the
-            org-configured duration (e.g. 10:00 AM + 2h -> blocks to 12:00 PM). */}
-        {formData.procedure_date && schedMode === 'open' && (() => {
-          const commitTime = (h: number | null, m: number, mer: 'AM' | 'PM') => {
-            if (h == null) { updateForm('procedure_time', ''); return; }
-            let h24 = h % 12;
-            if (mer === 'PM') h24 += 12;
-            updateForm('procedure_time', `${String(h24).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
-          };
-          const endTimeLabel = (() => {
-            if (openHour == null) return null;
-            let h24 = openHour % 12; if (openMeridiem === 'PM') h24 += 12;
-            const startMin = h24 * 60 + openMinute;
-            const endMin = startMin + Math.round(openWindowHours * 60);
-            const eh = Math.floor((endMin / 60) % 24);
-            const em = endMin % 60;
-            const suffix = eh >= 12 ? 'PM' : 'AM';
-            const eh12 = eh % 12 || 12;
-            return `${eh12}:${String(em).padStart(2, '0')} ${suffix}`;
-          })();
-          const existingBookings = Object.entries(bookedSlots);
-
-          const handleOpenPicker = () => {
-            setTempHour(openHour ? String(openHour).padStart(2, '0') : '07');
-            setTempMinute(String(openMinute).padStart(2, '0'));
-            setTempMeridiem(openMeridiem);
-            setActiveInput('hour');
-            setShowOpenTimePicker(true);
-          };
-
-          return (
-            <View style={styles.fieldContainer}>
-              <Text style={styles.label}>Time Slot <Text style={{ color: '#DC3545' }}>*</Text></Text>
-              
-              <TouchableOpacity
-                style={styles.dropdown}
-                onPress={handleOpenPicker}
-                data-testid="open-mode-time-picker-btn"
-              >
-                <Text style={[styles.dropdownText, openHour == null && { color: '#90A4AE' }]}>
-                  {openHour != null
-                    ? `${String(openHour).padStart(2, '0')}:${String(openMinute).padStart(2, '0')} ${openMeridiem}`
-                    : 'Select Time'}
-                </Text>
-                <Ionicons name="time-outline" size={20} color="#1565C0" />
-              </TouchableOpacity>
-
-              {/* Open-window time picker dialog modal (Material 3 style with Clock Face) */}
-              <Modal
-                visible={showOpenTimePicker}
-                transparent={true}
-                animationType="fade"
-                onRequestClose={() => setShowOpenTimePicker(false)}
-              >
-                <Pressable style={styles.timeModalOverlay} onPress={() => setShowOpenTimePicker(false)}>
-                  <Pressable style={styles.timeModalContainer} onPress={() => {}}>
-                    <Text style={styles.timeModalTitle}>Select time</Text>
-                    
-                    <View style={styles.timeModalInputRow}>
-                      {/* Hour Box */}
-                      <View style={{ alignItems: 'center' }}>
-                        <TouchableOpacity
-                          style={[styles.timeModalBox, activeInput === 'hour' && styles.timeModalBoxActive]}
-                          onPress={() => setActiveInput('hour')}
-                        >
-                          <TextInput
-                            style={styles.timeModalInput}
-                            value={tempHour}
-                            onChangeText={(v) => {
-                              const clean = v.replace(/[^0-9]/g, '');
-                              setTempHour(clean);
-                              if (clean.length === 2) {
-                                setActiveInput('minute');
-                              }
-                            }}
-                            keyboardType="number-pad"
-                            maxLength={2}
-                            placeholder="00"
-                            placeholderTextColor="#90A4AE"
-                            onFocus={() => setActiveInput('hour')}
-                            selectTextOnFocus={true}
-                          />
-                        </TouchableOpacity>
-                        <Text style={styles.timeModalSubLabel}>Hour</Text>
-                      </View>
-
-                      {/* Colon */}
-                      <Text style={styles.timeModalColon}>:</Text>
-
-                      {/* Minute Box */}
-                      <View style={{ alignItems: 'center' }}>
-                        <TouchableOpacity
-                          style={[styles.timeModalBox, activeInput === 'minute' && styles.timeModalBoxActive]}
-                          onPress={() => setActiveInput('minute')}
-                        >
-                          <TextInput
-                            style={styles.timeModalInput}
-                            value={tempMinute}
-                            onChangeText={(v) => {
-                              const clean = v.replace(/[^0-9]/g, '');
-                              setTempMinute(clean);
-                            }}
-                            keyboardType="number-pad"
-                            maxLength={2}
-                            placeholder="00"
-                            placeholderTextColor="#90A4AE"
-                            onFocus={() => setActiveInput('minute')}
-                            selectTextOnFocus={true}
-                          />
-                        </TouchableOpacity>
-                        <Text style={styles.timeModalSubLabel}>Minute</Text>
-                      </View>
-
-                      {/* AM/PM Toggle */}
-                      <View style={styles.timeModalMeridiemContainer}>
-                        <TouchableOpacity
-                          style={[styles.timeModalMeridiemBtn, tempMeridiem === 'AM' && styles.timeModalMeridiemBtnActive, { borderBottomWidth: 0.5, borderBottomColor: '#CFD8DC' }]}
-                          onPress={() => setTempMeridiem('AM')}
-                        >
-                          <Text style={[styles.timeModalMeridiemText, tempMeridiem === 'AM' && styles.timeModalMeridiemTextActive]}>AM</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.timeModalMeridiemBtn, tempMeridiem === 'PM' && styles.timeModalMeridiemBtnActive, { borderTopWidth: 0.5, borderTopColor: '#CFD8DC' }]}
-                          onPress={() => setTempMeridiem('PM')}
-                        >
-                          <Text style={[styles.timeModalMeridiemText, tempMeridiem === 'PM' && styles.timeModalMeridiemTextActive]}>PM</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-
-                    {/* Clock Dial Face */}
-                    {showDialMode && (() => {
-                      const dialSize = 220;
-                      const center = dialSize / 2;
-                      const handLength = 70;
-                      
-                      const angle = (() => {
-                        if (activeInput === 'hour') {
-                          const val = parseInt(tempHour, 10) || 12;
-                          return (val * 30 - 90) * (Math.PI / 180);
-                        } else {
-                          const val = parseInt(tempMinute, 10) || 0;
-                          return (val * 6 - 90) * (Math.PI / 180);
-                        }
-                      })();
-
-                      const targetX = center + handLength * Math.cos(angle);
-                      const targetY = center + handLength * Math.sin(angle);
-
-                      return (
-                        <View style={styles.clockDial}>
-                          <Svg height={dialSize} width={dialSize} style={StyleSheet.absoluteFill}>
-                            {/* Line connecting pivot to number */}
-                            <Line
-                              x1={center}
-                              y1={center}
-                              x2={targetX}
-                              y2={targetY}
-                              stroke="#1565C0"
-                              strokeWidth="2.5"
-                            />
-                            {/* Inner circle pivot */}
-                            <Circle cx={center} cy={center} r="4" fill="#1565C0" />
-                          </Svg>
-
-                          {/* Hours 1-12 or Minutes 0-55 */}
-                          {activeInput === 'hour' ? (
-                            [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(h => {
-                              const theta = (h * 30 - 90) * (Math.PI / 180);
-                              const numX = center + handLength * Math.cos(theta) - 16;
-                              const numY = center + handLength * Math.sin(theta) - 16;
-                              const isSelected = parseInt(tempHour, 10) === h || (h === 12 && parseInt(tempHour, 10) === 0);
-                              return (
-                                <TouchableOpacity
-                                  key={h}
-                                  style={[
-                                    styles.clockNumberBox,
-                                    { left: numX, top: numY },
-                                    isSelected && styles.clockNumberBoxSelected
-                                  ]}
-                                  onPress={() => {
-                                    setTempHour(String(h).padStart(2, '0'));
-                                    setActiveInput('minute');
-                                  }}
-                                >
-                                  <Text style={[styles.clockNumberText, isSelected && styles.clockNumberTextSelected]}>
-                                    {h}
-                                  </Text>
-                                </TouchableOpacity>
-                              );
-                            })
-                          ) : (
-                            [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map(m => {
-                              const theta = ((m / 5) * 30 - 90) * (Math.PI / 180);
-                              const numX = center + handLength * Math.cos(theta) - 16;
-                              const numY = center + handLength * Math.sin(theta) - 16;
-                              const isSelected = parseInt(tempMinute, 10) === m;
-                              return (
-                                <TouchableOpacity
-                                  key={m}
-                                  style={[
-                                    styles.clockNumberBox,
-                                    { left: numX, top: numY },
-                                    isSelected && styles.clockNumberBoxSelected
-                                  ]}
-                                  onPress={() => {
-                                    setTempMinute(String(m).padStart(2, '0'));
-                                  }}
-                                >
-                                  <Text style={[styles.clockNumberText, isSelected && styles.clockNumberTextSelected]}>
-                                    {m === 0 ? '00' : m}
-                                  </Text>
-                                </TouchableOpacity>
-                              );
-                            })
-                          )}
-                        </View>
-                      );
-                    })()}
-
-                    {/* Bottom Action buttons */}
-                    <View style={[styles.timeModalFooter, { marginTop: showDialMode ? 24 : 12 }]}>
-                      <TouchableOpacity onPress={() => setShowDialMode(prev => !prev)} style={{ padding: 4 }}>
-                        <MaterialCommunityIcons 
-                          name={showDialMode ? "keyboard-outline" : "clock-outline"} 
-                          size={24} 
-                          color="#546E7A" 
-                        />
-                      </TouchableOpacity>
-                      <View style={{ flexDirection: 'row', gap: 20 }}>
-                        <TouchableOpacity onPress={() => setShowOpenTimePicker(false)}>
-                          <Text style={styles.timeModalFooterText}>Cancel</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={() => {
-                          const h = parseInt(tempHour, 10);
-                          const m = parseInt(tempMinute, 10);
-                          if (isNaN(h) || h < 1 || h > 12) {
-                            Alert.alert('Invalid Hour', 'Please enter a valid hour (1-12).');
-                            return;
-                          }
-                          if (isNaN(m) || m < 0 || m > 59) {
-                            Alert.alert('Invalid Minute', 'Please enter a valid minute (0-59).');
-                            return;
-                          }
-                          setOpenHour(h);
-                          setOpenMinute(m);
-                          setOpenMeridiem(tempMeridiem);
-                          commitTime(h, m, tempMeridiem);
-                          setShowOpenTimePicker(false);
-                        }}>
-                          <Text style={styles.timeModalFooterText}>OK</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </Pressable>
-                </Pressable>
-              </Modal>
-
-              {endTimeLabel && (
-                <Text style={[styles.bookedInfo, { textAlign: 'left', marginTop: 8, maxWidth: '100%' }]}>
-                  Occupies until {endTimeLabel} ({openWindowHours}h slot)
-                </Text>
-              )}
-              {existingBookings.length > 0 && (
-                <View style={{ marginTop: 8 }}>
-                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#78909C', marginBottom: 4 }}>Already booked today:</Text>
-                  {existingBookings.map(([t, info]) => (
-                    <Text key={t} style={[styles.bookedInfo, { textAlign: 'left', maxWidth: '100%' }]} numberOfLines={1}>
-                      {formatTimeLabelLocal(t)} — {info.patient_name} ({info.scheduled_by})
-                    </Text>
-                  ))}
-                </View>
-              )}
-            </View>
-          );
-        })()}
-      </View>
-
       {/* ─── Loading Type ─── */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Type of Loading <Text style={{ color: '#DC3545' }}>*</Text></Text>
@@ -3670,8 +3874,11 @@ export default function NewProcedureScreen() {
         );
       })()}
 
-      {/* iter-233: resume the routine-only block for Bone Graft + Continue. */}
-      {!isExistingImplantCase && (<>
+      {/* iter-233: resume the routine-only block for Bone Graft + Continue.
+          iter-393: also skipped for Pre-Implant Augmentation cases — they
+          submit via the dedicated "Create Case — Pre-Implant Augmentation"
+          button above, not the routine Continue-to-Implant-Selection flow. */}
+      {!isExistingImplantCase && !isAugCase && (<>
 
       {/* ─── Bone Graft (if applicable) ─── */}
       {formData.implant_procedure_type.includes('Bone') && (

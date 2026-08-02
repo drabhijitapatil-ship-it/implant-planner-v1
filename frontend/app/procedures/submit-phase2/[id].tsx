@@ -24,6 +24,7 @@ import {
   normalizeSurgeryApproach, isGuidedApproach,
 } from '../../../constants/checklist';
 import { getCuffHeightsFor } from '../../../constants/attachmentCuffCatalogue';
+import AugStep2Form, { emptyAugStep2 } from '../../../components/AugStep2Form';
 
 export default function Phase2SubmissionScreen() {
   const { id } = useLocalSearchParams();
@@ -69,6 +70,7 @@ export default function Phase2SubmissionScreen() {
   const [implantPositions, setImplantPositions] = useState<string[]>([]);
   const [boneGraftUsed, setBoneGraftUsed] = useState(false);
   const [boneGraftDetails, setBoneGraftDetails] = useState('');
+  const [augData, setAugData] = useState<any>(emptyAugStep2());
   const [implantOtherNotes, setImplantOtherNotes] = useState('');
   const [prostheticComponent, setProstheticComponent] = useState('');
   const [prostheticOpen, setProstheticOpen] = useState(false);
@@ -154,7 +156,7 @@ export default function Phase2SubmissionScreen() {
     phase2ActualDoneDate, preSurgeryChecklist, preopNotes,
     anesthesiaAdequate, anesthesiaDetails, flapDesign, drillingType,
     implantSeated, implantSeatedComment, torqueValues,
-    boneGraftUsed, boneGraftDetails, implantOtherNotes,
+    boneGraftUsed, boneGraftDetails, augData, implantOtherNotes,
     prostheticComponent, prostheticComponents, prosthesisType, prosthesisTypeOther,
     healingAbutmentCuffHeight, accessChannelOpenings,
     suturesPlaced, hemostasisAchieved, postOpChecklist,
@@ -174,6 +176,7 @@ export default function Phase2SubmissionScreen() {
     if (d.torqueValues !== undefined) setTorqueValues(d.torqueValues);
     if (d.boneGraftUsed !== undefined) setBoneGraftUsed(d.boneGraftUsed);
     if (d.boneGraftDetails !== undefined) setBoneGraftDetails(d.boneGraftDetails);
+    if (d.augData !== undefined) setAugData(d.augData);
     if (d.implantOtherNotes !== undefined) setImplantOtherNotes(d.implantOtherNotes);
     if (d.prostheticComponent !== undefined) setProstheticComponent(d.prostheticComponent);
     if (d.prostheticComponents !== undefined) setProstheticComponents(d.prostheticComponents);
@@ -561,7 +564,8 @@ export default function Phase2SubmissionScreen() {
         implant_seated_comment: implantSeatedComment || null,
         torque_values: torqueValues.map(v => parseFloat(v)),
         bone_graft_used: boneGraftUsed,
-        bone_graft_details: boneGraftUsed ? boneGraftDetails || null : null,
+        bone_graft_details: null,
+        augmentation: boneGraftUsed ? augData : null,
         implant_other_notes: implantOtherNotes || null,
         prosthetic_component: caseLevelPc,
         // iter-356: per-implant array. null when single/full-arch (unchanged flow).
@@ -1087,9 +1091,12 @@ return [missPreop, missSurgery, missRadiographs, missPostOp, []];
               ))}
             </View>
 
-            {/* Bone Graft and Membrane */}
+            {/* Bone and Soft Tissue Augmentation (iter-395; legacy label:
+                Bone Graft and Membrane) — same structured form used by the
+                Pre-Implant Augmentation Stage's Step 2, for grafting done
+                during the implant surgery itself rather than staged before it. */}
             <View style={s.field}>
-              <Text style={s.label}>Bone Graft and Membrane</Text>
+              <Text style={s.label}>Bone and Soft Tissue Augmentation</Text>
               <View style={{ flexDirection: 'row', gap: 12, marginTop: 4 }}>
                 <TouchableOpacity
                   style={[s.toggleBtn, boneGraftUsed && s.toggleBtnActive]}
@@ -1100,21 +1107,14 @@ return [missPreop, missSurgery, missRadiographs, missPostOp, []];
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[s.toggleBtn, !boneGraftUsed && s.toggleBtnActive]}
-                  onPress={() => { setBoneGraftUsed(false); setBoneGraftDetails(''); }}
+                  onPress={() => { setBoneGraftUsed(false); setBoneGraftDetails(''); setAugData(emptyAugStep2()); }}
                   data-testid="bone-graft-no"
                 >
                   <Text style={[s.toggleBtnText, !boneGraftUsed && s.toggleBtnTextActive]}>No</Text>
                 </TouchableOpacity>
               </View>
               {boneGraftUsed && (
-                <TextInput
-                  style={[s.input, { marginTop: 8 }]}
-                  value={boneGraftDetails}
-                  onChangeText={setBoneGraftDetails}
-                  placeholder="Type of bone graft and membrane used..."
-                  multiline
-                  data-testid="bone-graft-details"
-                />
+                <AugStep2Form value={augData} onChange={setAugData} testPrefix="p2aug" />
               )}
             </View>
 

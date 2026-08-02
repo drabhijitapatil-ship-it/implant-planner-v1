@@ -85,6 +85,8 @@ import CaseImplantPlanning from "../../components/CaseImplantPlanning"; // iter-
 import TransferApprovalCard from "../../components/TransferApprovalCard";
 import ContributionTimelineCard from "../../components/ContributionTimelineCard";
 import FollowUpSection from "../../components/FollowUpSection";
+import AugmentationSection from "../../components/AugmentationSection";
+import AugmentationPhase2Review from "../../components/AugmentationPhase2Review";
 // Treatment Complete banner above the timeline.
 import ImplantLifecycleTimeline from "../../components/ImplantLifecycleTimeline";
 import ExportPrintMenu from "../../components/ExportPrintMenu";
@@ -946,6 +948,22 @@ export default function ProcedureDetailScreen() {
     const isOwner =
       user?.id === procedure.student_id || user?.id === procedure.created_by_id;
     return isOwner && procedure.status === "phase1_approved";
+  };
+
+  // iter-393 Fix #3: true when this case has a Pre-Implant Augmentation
+  // round whose Step 3 Review was approved and Phase 2 has opened
+  // (mirrors AugmentationPhase2Review's own visibility gate). When true,
+  // the entry point into Phase 2 must be the CTA attached to that review
+  // card instead of the standalone "PHASE 1 APPROVED" button, so the
+  // augmentation summary is an enforced gate rather than a passive card.
+  const hasApprovedAugmentationGate = () => {
+    if (!procedure) return false;
+    const inPhase2 = ["phase1_approved", "pending_phase2"].includes(
+      procedure.status,
+    );
+    if (!inPhase2) return false;
+    const rounds: any[] = procedure.augmentations || [];
+    return rounds.some((r) => r.status === "step3_approved" && r.step3);
   };
 
   const canSubmitStage2Surgical = () => {
@@ -3670,8 +3688,14 @@ export default function ProcedureDetailScreen() {
                 );
               })()}
 
-            {/* Submit Phase 2 Button — gated by Patient Consent Form */}
-            {canSubmitPhase2() && (
+            {/* Submit Phase 2 Button — gated by Patient Consent Form.
+                iter-393 Fix #3: when an approved Pre-Implant Augmentation
+                round exists (hasApprovedAugmentationGate), this standalone
+                entry point is suppressed — the ONLY way into Phase 2 is the
+                equivalent CTA rendered attached to <AugmentationPhase2Review>
+                further down, so the review card is an enforced gate rather
+                than a passive summary the user can scroll past. */}
+            {canSubmitPhase2() && !hasApprovedAugmentationGate() && (
               <View style={styles.phase2ButtonContainer}>
                 {procedure.patient_consent_form ? (
                   <>
@@ -3957,13 +3981,42 @@ export default function ProcedureDetailScreen() {
 
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Staff</Text>
-              {/* referral-assign overwrites top-level student_name/supervisor_name
-                  with the receiving department's picks and backs up the
-                  pre-referral values into original_student_name/
-                  original_supervisor_name — so once that backup exists, the
-                  primary-department rows below must read from it instead of
-                  the (now-overwritten) top-level fields. */}
-              {user?.role === "nurse" ? (
+              {/* Once a referral-assign has happened (original_student_id
+                  backed up), show the originating and receiving department's
+                  teams as two separate cards instead of one merged list —
+                  a referred case has two distinct staff teams, not one. */}
+              {procedure.original_student_id ? (
+                <>
+                  <View style={{ backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', padding: 12, marginBottom: 10 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#334155', marginBottom: 6 }}>
+                      {(activeReferral || procedure?.active_referral)?.from_department_name || 'Originating Department'}
+                    </Text>
+                    {!!procedure.original_student_name && (
+                      <InfoRow icon="school" label="Student" value={procedure.original_student_name} />
+                    )}
+                    {!!procedure.original_supervisor_name && (
+                      <InfoRow icon="school" label="Supervisor" value={procedure.original_supervisor_name} />
+                    )}
+                    {!!procedure.implant_incharge_name && (
+                      <InfoRow icon="medkit" label="Implant Incharge" value={procedure.implant_incharge_name} />
+                    )}
+                  </View>
+                  <View style={{ backgroundColor: '#EFF6FF', borderRadius: 12, borderWidth: 1, borderColor: '#BFDBFE', padding: 12 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#1D4ED8', marginBottom: 6 }}>
+                      {(activeReferral || procedure?.active_referral)?.to_department_name || 'Referred Department'}
+                    </Text>
+                    {!!procedure.student_name && (
+                      <InfoRow icon="school" label="Student" value={procedure.student_name} />
+                    )}
+                    {!!procedure.supervisor_name && (
+                      <InfoRow icon="school" label="Supervisor" value={procedure.supervisor_name} />
+                    )}
+                    {!!procedure.assigned_incharge_name && (
+                      <InfoRow icon="medkit" label="Implant Incharge" value={procedure.assigned_incharge_name} />
+                    )}
+                  </View>
+                </>
+              ) : user?.role === "nurse" ? (
                 // Nurse view — keep existing full-staff render, unchanged.
                 <>
                   {(procedure.original_student_name || procedure.student_name) ? (
@@ -4042,32 +4095,6 @@ export default function ProcedureDetailScreen() {
                     label="Implant Incharge"
                     value={procedure.implant_incharge_name}
                   />
-                </>
-              )}
-              {/* Once the receiving department's incharge has assigned the
-                  referred case (original_student_id gets backed up at that
-                  point), surface who it's now assigned to there, below the
-                  primary department's staff. */}
-              {!!procedure.original_student_id && (
-                <>
-                  <View style={{ height: 1, backgroundColor: '#E2E8F0', marginVertical: 10 }} />
-                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#1D4ED8', marginBottom: 4 }}>
-                    Referred to {(activeReferral || procedure?.active_referral)?.to_department_name || 'Another Department'}
-                  </Text>
-                  {!!procedure.student_name && (
-                    <InfoRow
-                      icon="school"
-                      label="Student"
-                      value={procedure.student_name}
-                    />
-                  )}
-                  {!!procedure.supervisor_name && (
-                    <InfoRow
-                      icon="school"
-                      label="Supervisor"
-                      value={procedure.supervisor_name}
-                    />
-                  )}
                 </>
               )}
             </View>
@@ -9491,6 +9518,125 @@ export default function ProcedureDetailScreen() {
               onChanged={() => loadProcedure()}
             />
             <ContributionTimelineCard procedureId={id as string} />
+            {/* iter-393: Pre-Implant Augmentation — round status, Step 1/2/3
+                launch buttons, faculty approve/reject, and the Phase-2 review
+                summary once Step 3 is approved and Phase 1 has resumed. */}
+            <AugmentationSection
+              procedure={procedure}
+              onChanged={() => loadProcedure()}
+            />
+            <AugmentationPhase2Review procedure={procedure} />
+            {/* iter-393 Fix #3: enforced gate — when an approved augmentation
+                round exists, this is the ONLY entry point into Phase 2 (the
+                standalone "PHASE 1 APPROVED" button above is suppressed via
+                hasApprovedAugmentationGate()). Attached immediately below the
+                review card so the summary can't be scrolled past. Same
+                consent-form gating as the routine entry point. */}
+            {canSubmitPhase2() && hasApprovedAugmentationGate() && (
+              <View
+                style={styles.phase2ButtonContainer}
+                testID="aug-phase2-entry-cta"
+              >
+                {procedure.patient_consent_form ? (
+                  <>
+                    <TouchableOpacity
+                      style={styles.phase2Button}
+                      onPress={() =>
+                        router.push(`/procedures/submit-phase2/${id}`)
+                      }
+                      data-testid="aug-phase2-submit-btn"
+                    >
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={24}
+                        color="#FFF"
+                      />
+                      <View style={styles.phase2ButtonTextContainer}>
+                        <Text style={styles.phase2ButtonTitle}>
+                          PROCEED TO PHASE 2
+                        </Text>
+                        <Text style={styles.phase2ButtonSubtitle}>
+                          Bone graft reviewed & approved — tap to complete
+                          Phase 2 - Implant Surgery
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={24} color="#FFF" />
+                    </TouchableOpacity>
+                    {user?.role !== "nurse" &&
+                      procedure.instruments_autoclaved?.marked && (
+                        <View
+                          style={styles.autoclaveBadge}
+                          testID="aug-instruments-autoclaved-badge"
+                        >
+                          <View style={styles.autoclaveBadgeIcon}>
+                            <Ionicons
+                              name="shield-checkmark"
+                              size={16}
+                              color="#FFF"
+                            />
+                          </View>
+                          <View style={styles.autoclaveBadgeTextWrap}>
+                            <Text style={styles.autoclaveBadgeTitle}>
+                              Nurse has prepped instruments
+                            </Text>
+                            <Text
+                              style={styles.autoclaveBadgeSub}
+                              numberOfLines={1}
+                            >
+                              Autoclaved
+                              {procedure.instruments_autoclaved?.marked_by_name
+                                ? ` by ${procedure.instruments_autoclaved.marked_by_name}`
+                                : ""}
+                              {procedure.instruments_autoclaved?.marked_at
+                                ? ` · ${format(new Date(procedure.instruments_autoclaved.marked_at), "MMM dd · hh:mm a")}`
+                                : ""}
+                            </Text>
+                          </View>
+                        </View>
+                      )}
+                  </>
+                ) : (
+                  <TouchableOpacity
+                    style={[
+                      styles.phase2Button,
+                      {
+                        backgroundColor: uploadingConsent
+                          ? "#90CAF9"
+                          : "#1565C0",
+                      },
+                    ]}
+                    onPress={uploadConsentForProcedure}
+                    disabled={uploadingConsent}
+                    data-testid="aug-upload-consent-phase2-btn"
+                  >
+                    {uploadingConsent ? (
+                      <ActivityIndicator size="small" color="#FFF" />
+                    ) : (
+                      <Ionicons name="cloud-upload" size={22} color="#FFF" />
+                    )}
+                    <View style={styles.phase2ButtonTextContainer}>
+                      <Text
+                        style={[styles.phase2ButtonTitle, { fontSize: 15 }]}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                      >
+                        UPLOAD CONSENT FORM
+                      </Text>
+                      <Text
+                        style={styles.phase2ButtonSubtitle}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                      >
+                        Phase 2 unlocks once the signed consent is uploaded
+                      </Text>
+                    </View>
+                    {!uploadingConsent && (
+                      <Ionicons name="chevron-forward" size={22} color="#FFF" />
+                    )}
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
             <FollowUpSection
               procedure={procedure}
               onChanged={() => loadProcedure()}
