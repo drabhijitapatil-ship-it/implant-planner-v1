@@ -862,6 +862,11 @@ function SupervisorDashboard({
     procedures.filter((p: any) => (p.followups || []).some((f: any) => f.status === 'pending_supervisor')),
     [procedures]
   );
+  // Pre-Implant Augmentation rounds awaiting this supervisor.
+  const pendingAugmentations = useMemo(() =>
+    procedures.filter((p: any) => (p.augmentations || []).some((a: any) => a.status === 'pending_supervisor')),
+    [procedures]
+  );
   const draftCases = useMemo(
     () => procedures.filter((p: any) => p.status === "draft"),
     [procedures],
@@ -992,15 +997,42 @@ function SupervisorDashboard({
           </View>
 
           {/* Pending Approval Queue */}
-          {pendingApproval.length + pendingFollowups.length > 0 && (
+          {pendingApproval.length + pendingFollowups.length + pendingAugmentations.length > 0 && (
             <View style={s.section}>
               <View style={s.sectionHeader}>
                 <Ionicons name="clipboard-outline" size={18} color="#E65100" />
                 <Text style={[s.sectionTitle, { color: "#E65100" }]}>
                   Pending Your Approval (
-                  {pendingApproval.length + pendingFollowups.length})
+                  {pendingApproval.length + pendingFollowups.length + pendingAugmentations.length})
                 </Text>
               </View>
+              {pendingAugmentations.slice(0, 5).map((proc: any) => (
+                <TouchableOpacity
+                  key={`aug-${proc.id}`}
+                  style={s.approvalCard}
+                  onPress={() => router.push(`/procedures/${proc.id}`)}
+                  data-testid={`sup-pending-aug-${proc.id}`}
+                  testID={`sup-pending-aug-${proc.id}`}
+                >
+                  <View
+                    style={[
+                      s.approvalPhaseWrap,
+                      { backgroundColor: "#D7CCC8" },
+                    ]}
+                  >
+                    <Ionicons name="bandage" size={16} color="#5D4037" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.approvalPatient}>{proc.patient_name}</Text>
+                    <Text style={s.approvalSub}>
+                      Pre-Implant Augmentation — review required
+                    </Text>
+                  </View>
+                  <View style={[s.reviewChip, { backgroundColor: "#5D4037" }]}>
+                    <Text style={s.reviewChipText}>Review Now</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
               {pendingFollowups.slice(0, 5).map((proc: any) => (
                 <TouchableOpacity
                   key={`fu-${proc.id}`}
@@ -1174,6 +1206,14 @@ function InChargeDashboard({
     [procedures]
   );
 
+  // Pre-Implant Augmentation rounds awaiting this in-charge.
+  const pendingAugmentations = useMemo(() =>
+    procedures.filter((p: any) => (p.augmentations || []).some((a: any) =>
+      a.status === 'pending_incharge' ||
+      (a.status === 'pending_supervisor' && p.supervisor_id && p.supervisor_id === p.implant_incharge_id)
+    )),
+    [procedures]
+  );
   return (
     <>
       {layoutMode !== "tablet-right" && (
@@ -1319,15 +1359,42 @@ function InChargeDashboard({
           )}
 
           {/* Pending Review */}
-          {pendingApproval.length + pendingFollowups.length > 0 && (
+          {pendingApproval.length + pendingFollowups.length + pendingAugmentations.length > 0 && (
             <View style={s.section}>
               <View style={s.sectionHeader}>
                 <Ionicons name="clipboard-outline" size={18} color="#E65100" />
                 <Text style={[s.sectionTitle, { color: "#E65100" }]}>
                   Pending Review (
-                  {pendingApproval.length + pendingFollowups.length})
+                  {pendingApproval.length + pendingFollowups.length + pendingAugmentations.length})
                 </Text>
               </View>
+              {pendingAugmentations.slice(0, 5).map((proc: any) => (
+                <TouchableOpacity
+                  key={`aug-${proc.id}`}
+                  style={s.approvalCard}
+                  onPress={() => router.push(`/procedures/${proc.id}`)}
+                  data-testid={`ic-pending-aug-${proc.id}`}
+                  testID={`ic-pending-aug-${proc.id}`}
+                >
+                  <View
+                    style={[
+                      s.approvalPhaseWrap,
+                      { backgroundColor: "#D7CCC8" },
+                    ]}
+                  >
+                    <Ionicons name="bandage" size={16} color="#5D4037" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.approvalPatient}>{proc.patient_name}</Text>
+                    <Text style={s.approvalSub}>
+                      Pre-Implant Augmentation — review required
+                    </Text>
+                  </View>
+                  <View style={[s.reviewChip, { backgroundColor: "#5D4037" }]}>
+                    <Text style={s.reviewChipText}>Review Now</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
               {pendingFollowups.slice(0, 5).map((proc: any) => (
                 <TouchableOpacity
                   key={`fu-${proc.id}`}

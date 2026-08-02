@@ -1406,6 +1406,82 @@ export default function ProcedureDetailScreen() {
             </View>
           </View>
         )}
+        {/* Pre-Implant Augmentation status banner — the case sits at
+            status "augmentation_in_progress" for the entire Step 1→3
+            lifecycle, which used to fall through STATUS_LABELS/STATUS_COLORS
+            with no entry (blank pill) and looked like a stuck/ambiguous
+            Phase 1. This banner replaces that generic pill (hidden above
+            for this status) with an explicit, correctly-worded state:
+            "Augmentation In Progress" while a round is still open, flipping
+            to "Pre-Implant Augmentation Completed" once Step 3 is approved
+            and cleared to proceed to Phase 2. */}
+        {(() => {
+          if (procedure?.status !== "augmentation_in_progress") return null;
+          const rounds = procedure?.augmentations || [];
+          const currentRound = rounds[rounds.length - 1];
+          if (!currentRound) return null;
+          const cleared =
+            currentRound.status === "step3_approved" &&
+            procedure?.augmentation_outcome === "proceed_phase2";
+          const roundStatusText: Record<string, string> = {
+            step1_pending: "Step 1 — Pre-procedure Details pending",
+            step2_pending: "Step 2 — Post-procedure Details pending",
+            pending_supervisor: "Step 2 submitted — awaiting Supervisor review",
+            pending_incharge: "Step 2 approved by Supervisor — awaiting Implant In-Charge review",
+            approved: "Step 2 approved — Step 3 review pending",
+          };
+          return (
+            <View
+              style={{
+                marginHorizontal: 16,
+                marginTop: 8,
+                marginBottom: 4,
+                padding: 12,
+                backgroundColor: cleared ? "#E8F5E9" : "#FFF3E0",
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: cleared ? "#A5D6A7" : "#FFCC80",
+                flexDirection: "row",
+                alignItems: "center",
+              }}
+              testID="augmentation-status-banner"
+            >
+              <Ionicons
+                name={cleared ? "checkmark-circle" : "bandage"}
+                size={22}
+                color={cleared ? "#1B5E20" : "#E65100"}
+                style={{ marginRight: 10 }}
+              />
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontWeight: "700",
+                    color: cleared ? "#1B5E20" : "#E65100",
+                  }}
+                >
+                  {cleared
+                    ? "Pre-Implant Augmentation Completed"
+                    : "Augmentation In Progress"}
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    color: cleared ? "#2E7D32" : "#EF6C00",
+                    marginTop: 2,
+                  }}
+                >
+                  {cleared
+                    ? "Bone graft cleared — proceed to Phase 2 to continue with implant placement."
+                    : `Round ${currentRound.round || 1} — ${
+                        roundStatusText[currentRound.status] ||
+                        "In progress"
+                      }`}
+                </Text>
+              </View>
+            </View>
+          );
+        })()}
         {/* KeyboardAvoidingView so inline inputs (approval/rejection comments,
           field edits) aren't hidden behind the keyboard — the comment box sits
           near the bottom of a long scroll and was fully covered on phones. */}
@@ -1477,7 +1553,8 @@ export default function ProcedureDetailScreen() {
             )}
 
             <View style={styles.statusCard}>
-              {procedure.status !== "completed" && (
+              {procedure.status !== "completed" &&
+                procedure.status !== "augmentation_in_progress" && (
                 <View
                   style={[
                     styles.statusBadge,
@@ -1499,6 +1576,7 @@ export default function ProcedureDetailScreen() {
                 </View>
               )}
               {procedure.status !== "completed" &&
+                procedure.status !== "augmentation_in_progress" &&
                 (() => {
                   const trail = getProgressTrail(
                     procedure.status,
@@ -2893,8 +2971,19 @@ export default function ProcedureDetailScreen() {
                         "pending_stage2_prosthetic",
                         "completed",
                       ].includes(procedure.status),
-                      active: procedure.status === "pending_phase1",
-                      timestamp: procedure.phase1_completed_at,
+                      // Pre-Implant Augmentation keeps the case at status
+                      // "augmentation_in_progress" while Phase 1 is still
+                      // effectively open (planning resumes after Step 3) —
+                      // treat it the same as pending_phase1 here so Phase 1
+                      // shows as the active step, not a plain unstarted dot.
+                      active:
+                        procedure.status === "pending_phase1" ||
+                        procedure.status === "augmentation_in_progress",
+                      timestamp:
+                        procedure.status === "augmentation_in_progress" ||
+                        procedure.status === "treatment_ended"
+                          ? null
+                          : procedure.phase1_completed_at,
                       approver: phaseApprover,
                     },
                     {
@@ -6257,23 +6346,44 @@ export default function ProcedureDetailScreen() {
                   Achieved" card (rendered above, near the Final Prosthetic
                   Plan) is the single source of truth so the value isn't
                   displayed twice on the case page. */}
-                    {procedure.phase2_data.bone_graft_used !== undefined && (
-                      <InfoRow
-                        icon="fitness"
-                        label="Bone Graft & Membrane"
-                        value={
-                          procedure.phase2_data.bone_graft_used ? "Yes" : "No"
-                        }
-                      />
+                    {procedure.phase2_data.augmentation ? (
+                      <>
+                        <InfoRow icon="fitness" label="Bone & Soft Tissue Augmentation" value="Yes" />
+                        {(procedure.phase2_data.augmentation.procedures_performed || []).length > 0 && (
+                          <InfoRow icon="construct" label="Augmentation Procedure" value={procedure.phase2_data.augmentation.procedures_performed.join(', ')} />
+                        )}
+                        {(() => {
+                          const a = procedure.phase2_data.augmentation;
+                          const mats = [
+                            ...(a.autogenous_used === 'Yes' ? [`Autogenous${(a.autogenous_sites || []).length ? ` (${a.autogenous_sites.join(', ')})` : ''}`] : []),
+                            ...(a.allograft_used === 'Yes' ? ['Allograft'] : []),
+                            ...(a.other_graft_materials || []),
+                          ];
+                          return mats.length ? <InfoRow icon="flask" label="Graft Materials" value={mats.join(', ')} /> : null;
+                        })()}
+                        {procedure.phase2_data.augmentation.membrane_used === 'Yes' && (
+                          <InfoRow icon="layers" label="Membrane" value={(procedure.phase2_data.augmentation.membrane_types || []).join(', ') || 'Yes'} />
+                        )}
+                        {(procedure.phase2_data.augmentation.fixation || []).length > 0 && (
+                          <InfoRow icon="hardware-chip" label="Fixation" value={procedure.phase2_data.augmentation.fixation.join(', ')} />
+                        )}
+                        {procedure.phase2_data.augmentation.soft_tissue_graft === 'Yes' && (
+                          <InfoRow icon="leaf" label="Soft Tissue Graft" value={(procedure.phase2_data.augmentation.soft_tissue_types || []).join(', ') || 'Yes'} />
+                        )}
+                        {!!procedure.phase2_data.augmentation.healing_protocol && (
+                          <InfoRow icon="hourglass" label="Healing Protocol" value={procedure.phase2_data.augmentation.healing_protocol === 'Custom' ? procedure.phase2_data.augmentation.healing_custom_text : procedure.phase2_data.augmentation.healing_protocol} />
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        {procedure.phase2_data.bone_graft_used !== undefined && (
+                          <InfoRow icon="fitness" label="Bone & Soft Tissue Augmentation" value={procedure.phase2_data.bone_graft_used ? 'Yes' : 'No'} />
+                        )}
+                        {procedure.phase2_data.bone_graft_used && procedure.phase2_data.bone_graft_details && (
+                          <InfoRow icon="document-text" label="Bone Graft Details" value={procedure.phase2_data.bone_graft_details} />
+                        )}
+                      </>
                     )}
-                    {procedure.phase2_data.bone_graft_used &&
-                      procedure.phase2_data.bone_graft_details && (
-                        <InfoRow
-                          icon="document-text"
-                          label="Bone Graft Details"
-                          value={procedure.phase2_data.bone_graft_details}
-                        />
-                      )}
                     {procedure.phase2_data.implant_other_notes && (
                       <InfoRow
                         icon="document-text"
@@ -9644,8 +9754,13 @@ export default function ProcedureDetailScreen() {
             {/* Implant Planning - Standalone Section.
             iter-223: hidden for existing-implant cases — those have the
             implants pre-captured in `procedure.existing_implants[]` and the
-            implant-planning UI doesn't apply (no Add Implant / Pending). */}
+            implant-planning UI doesn't apply (no Add Implant / Pending).
+            Also hidden while a Pre-Implant Augmentation round is in progress
+            (status "augmentation_in_progress") — the implant type/site
+            isn't chosen yet at that point, planning only becomes relevant
+            once "Proceed to Phase 2" restarts the real Phase 1 workflow. */}
             {procedure.status !== "pending_phase1" &&
+              procedure.status !== "augmentation_in_progress" &&
               procedure.case_origin !== "existing_implants" && (
                 <CaseImplantPlanning
                   procedureId={id as string}

@@ -142,7 +142,24 @@ export default function CaseSubmissionStatus({ procedure, user, compact = false 
   const isAdmin = user?.role === 'administrator' || user?.role === 'admin' || user?.role === 'super_admin';
   const isNurse = user?.role === 'nurse';
 
-  const phases = useMemo(() => [computePhase1(procedure), computePhase2(procedure), computePhase3(procedure), computePhase4(procedure)], [procedure]);
+  const phases = useMemo(() => {
+    // Cases still inside the Pre-Implant Augmentation workflow (or
+    // terminated during it) have NOT entered the regular Phase 1–4 flow —
+    // none of the compute* functions have a branch for status
+    // "augmentation_in_progress" / "treatment_ended", so without this guard
+    // they all fall through to their default "done" case and every phase
+    // shows as complete. Show every phase as locked instead.
+    const s = procedure?.status;
+    if (s === 'augmentation_in_progress' || (s === 'treatment_ended' && procedure?.augmentation_outcome === 'terminated')) {
+      return [
+        { state: 'locked' as const, pct: 0, sectionsLeft: 4 },
+        { state: 'locked' as const, pct: 0, sectionsLeft: 4 },
+        { state: 'locked' as const, pct: 0, sectionsLeft: 2 },
+        { state: 'locked' as const, pct: 0, sectionsLeft: 2 },
+      ];
+    }
+    return [computePhase1(procedure), computePhase2(procedure), computePhase3(procedure), computePhase4(procedure)];
+  }, [procedure]);
   const doneCount = phases.filter(p => p.state === 'done' || p.state === 'completed').length;
 
   const phaseRoutes: Record<number, string> = {

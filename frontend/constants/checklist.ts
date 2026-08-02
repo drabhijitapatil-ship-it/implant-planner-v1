@@ -637,6 +637,8 @@ export const STATUS_COLORS: Record<string, string> = {
   rejected: '#F44336',
   permanently_rejected: '#B71C1C',
   cancelled: '#78909C',
+  augmentation_in_progress: '#E65100',
+  treatment_ended: '#B71C1C',
 };
 
 export const STATUS_LABELS: Record<string, string> = {
@@ -657,6 +659,8 @@ export const STATUS_LABELS: Record<string, string> = {
   rejected: 'Rejected',
   permanently_rejected: 'Permanently Rejected',
   cancelled: 'Cancelled',
+  augmentation_in_progress: 'Pre-Implant Augmentation In Progress',
+  treatment_ended: 'Treatment Terminated',
 };
 
 export const USER_ROLES = {

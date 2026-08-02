@@ -579,6 +579,28 @@ function DefaultProceduresScreen() {
           </View>
         ) : null}
 
+        {/* Pre-Implant Augmentation Done Badge (conditional) — the case went
+            through bone graft augmentation and is now past it (status no
+            longer augmentation_in_progress). */}
+        {item.augmentation_required && (item.augmentations || []).length > 0 && item.status !== 'augmentation_in_progress' && (
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: '#EFEBE9',
+            borderColor: '#D7CCC8',
+            borderWidth: 1,
+            borderRadius: 8,
+            paddingHorizontal: 8,
+            paddingVertical: 5,
+            marginTop: 6,
+          }} data-testid={`aug-done-badge-${item.id}`}>
+            <Ionicons name="bandage" size={14} color="#5D4037" style={{ marginRight: 6 }} />
+            <Text style={{ fontSize: 11, fontWeight: '700', color: '#5D4037', flex: 1 }} numberOfLines={1}>
+              Pre-Implant Augmentation ✓
+            </Text>
+          </View>
+        )}
+
         <View style={styles.divider} />
 
         {/* Details Alignment (2-column layout) */}
