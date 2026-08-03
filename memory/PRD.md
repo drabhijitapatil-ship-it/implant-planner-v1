@@ -1,5 +1,16 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 399 (Jun 2026) — Lab Slip active-implant fix + transfer access-restriction messaging
+
+**Bug 1 — Lab slip used failed R0 implant specs**: `buildLabSlipHtml` (`utils/pdfGenerator.ts`) read raw `implant_plans` (first-placed implant) even after a Survival Review replacement. Now overlays each row with the ACTIVE revision's specs from the pre-resolved `procedure.implants` (`_active_revision` merge) and EXCLUDES implants that are Failed/Treatment-Ended with no replacement (user choice 1a). Cases without survival data unchanged.
+
+**Bug 2 — Previous user tapping a post-transfer case got raw 'Access denied'**: backend `_case_accessible_to()` (mirrors GET /procedures/{id} rules) now stamps `accessible` on every case row in patient-lookup / patient-name-lookup / patient-history. PatientHistoryStrip + both New-Case banners render inaccessible rows greyed with lock icon + 'No access' badge; tap toggles inline note: "This case was created after the patient was transferred from you. Only the current treating team can view it." (generic wording when the viewer wasn't the transferor). User choices: 2a (locked row visible), 3a (message).
+
+**Tests**: iteration_316.json — backend 6/6 pytest (`tests/test_iter399_labslip_transfer.py`), frontend E2E 100% (lab slip popup HTML shows only active Osstem/TSIII row, failed rows excluded; locked row + note for previous student; in-charge unaffected).
+
+---
+
+
 ## Iteration 398 (Jun 2026) — Patient NAME match detection with Cancel (multi-implant follow-up)
 
 **User choices**: exact full-name match only (case-insensitive); name match never auto-links — link only on "Auto-fill patient details" confirm, Cancel = not linked; multiple same-name patients → pick-list (reg no. + case count) with pick-or-Cancel; reg-number banner left as-is.
