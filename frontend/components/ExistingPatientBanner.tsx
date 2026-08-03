@@ -19,6 +19,7 @@ type Props = {
 export default function ExistingPatientBanner({ lookup, autofilled, onAutofill, onDismiss }: Props) {
   const router = useRouter();
   const [showCases, setShowCases] = useState(false);
+  const [lockedNoteFor, setLockedNoteFor] = useState<string | null>(null);
   const p = lookup?.patient || {};
   const cases = lookup?.cases || [];
 
@@ -62,11 +63,16 @@ export default function ExistingPatientBanner({ lookup, autofilled, onAutofill, 
         </TouchableOpacity>
       </View>
 
-      {showCases && cases.map((c, i) => (
+      {showCases && cases.map((c, i) => {
+        const locked = c.accessible === false;
+        return (
+        <View key={c.id}>
         <TouchableOpacity
-          key={c.id}
-          style={s.row}
-          onPress={() => router.push(`/procedures/${c.id}`)}
+          style={[s.row, locked && { opacity: 0.75 }]}
+          onPress={() => {
+            if (locked) { setLockedNoteFor(lockedNoteFor === c.id ? null : c.id); return; }
+            router.push(`/procedures/${c.id}`);
+          }}
           testID={`existing-patient-case-${c.id}`}
           data-testid={`existing-patient-case-${c.id}`}
         >
@@ -80,9 +86,15 @@ export default function ExistingPatientBanner({ lookup, autofilled, onAutofill, 
               {c.procedure_date || 'Not scheduled'} · {(STATUS_LABELS as any)[c.status] || c.status}
             </Text>
           </View>
-          <Ionicons name="chevron-forward" size={15} color="#90A4AE" />
+          <Ionicons name={locked ? 'lock-closed' : 'chevron-forward'} size={15} color="#90A4AE" />
         </TouchableOpacity>
-      ))}
+        {locked && lockedNoteFor === c.id && (
+          <View style={s.lockedNote} testID={`existing-patient-locked-note-${c.id}`}>
+            <Text style={s.lockedNoteTxt}>You don't have access to this case. Only its treating team can view it.</Text>
+          </View>
+        )}
+        </View>
+      ); })}
     </View>
   );
 }
@@ -104,4 +116,6 @@ const s = StyleSheet.create({
   numTxt: { color: '#FFF', fontSize: 11, fontWeight: '800' },
   rowTitle: { fontSize: 12.5, fontWeight: '700', color: '#37474F' },
   rowSub: { fontSize: 11, color: '#78909C', marginTop: 2 },
+  lockedNote: { backgroundColor: '#FFF7E8', borderRadius: 8, padding: 9, marginTop: 5, borderWidth: 1, borderColor: '#FFE0A3' },
+  lockedNoteTxt: { fontSize: 11.5, color: '#795548', lineHeight: 16 },
 });

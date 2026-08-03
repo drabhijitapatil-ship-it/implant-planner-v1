@@ -1,0 +1,24 @@
+{
+  "summary": "iter-399 two-bug verification PASSED end-to-end. Backend: 6/6 pytest cases green (BUG1 GET /procedures/{id} returns implants[] with _active_revision=true + Osstem/TSIII/5.0/11.5 spec overlay for slot 0, _active_in_treatment=false for the Failed-no-replacement slot 1; BUG2 patient-history returns accessible=true for case A and accessible=false for case B when queried as Gaurav (previous_student of A only), both accessible=true for Abhijit (in-charge); direct GET /procedures/{caseB} as Gaurav returns 403/404; patient-lookup also carries accessible per case). Frontend E2E via Playwright: (BUG1) Logged in as Abhijit, opened seeded LABSLIP-TEST-1 procedure, clicked [data-testid=generate-lab-slip-btn], captured the popup blob page — Implant Details table renders exactly ONE data row (header + 1 <tr>) with site 16 · Osstem · TSIII · 5.0 mm · 11.5 mm. No 'Nobel' anywhere in the HTML, no row for site 26. (BUG2 Gaurav) On /procedures/{caseA} the patient-history-strip lists 2 cases, caseB row shows the 'No access' badge, tapping it renders [data-testid=patient-history-locked-note-{caseB_id}] with EXACT text 'This case was created after the patient was transferred from you. Only the current treating team can view it.', no navigation occurs, second tap hides the note. (BUG2 regression) Same page as Abhijit shows both rows normal (no 'No access'), tapping caseB navigates to its detail page.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter399_labslip_transfer.py",
+    "/app/test_reports/pytest/iter399.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PatientHistoryStrip.tsx wasTransferredFromMe check reads procedure.previous_students of the CURRENT case being viewed, not the target locked case — works today because in the seeded scenario the viewer (Gaurav) IS in caseA.previous_students, but if a viewer lands on a case they own outright and there is another locked case in the strip belonging to a different transfer chain, the personalised 'from you' wording could show incorrectly. Consider driving the wording off a per-row backend hint (e.g. case.transferred_from_me boolean) or off the current user's presence in the LOCKED case's previous_students rather than the current case's.",
+    "buildLabSlipHtml overlay only fires when procedure.implants[] arrives pre-resolved from GET /procedures/{id}. Any caller that hydrates a procedure via a lighter endpoint (list view / offline cache) could bypass the overlay silently. Adding a defensive client-side resolver or documenting the requirement on the function would prevent future regressions.",
+    "server.py _case_accessible_to returns True for nurse whenever status != 'draft' — this may be broader than the UI implies and is unrelated to iter-399 but worth an audit against nurse-role permissions elsewhere."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter399_labslip_transfer.py"
+  ],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100% (all assertions pass)"},
+  "test_credentials": "From /app/memory/test_credentials.md — Abhijit.patil/Admin@123 (in-charge/admin), Gaurav.pandey/Student@123 (student). Second student for transfer target: Atharva.mahadik (id 69b79409a17f36c024eb2d66) — no login required, only used as target student_id on seeded doc.",
+  "seed_data_creation": "Two temp registration_numbers seeded then deleted: LABSLIP-TEST-1 (1 procedure with phase2_survival_review and phase4_step1_data) and XFER-TEST-1 (2 procedures — caseA with previous_students=[Gaurav], caseB without). All fully cleaned up after tests via /tmp/seed_iter399.py cleanup.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Reusable pytest file: /app/backend/tests/test_iter399_labslip_transfer.py — uses fixtures that self-seed and self-cleanup. Frontend automation needs docs seeded first (see /tmp/seed_iter399.py). Known user IDs: Gaurav=69b79409a17f36c024eb2d65, Atharva=69b79409a17f36c024eb2d66, Abhijit(incharge)=69b79407a17f36c024eb2d5e, Paresh(sup)=69b79407a17f36c024eb2d60. Lab slip opens via window.open blob; use Playwright context.expect_page() to capture the popup and page.content() to assert on the HTML. Login TextInput data-testids still don't emit (fallback to placeholder selectors)."
+}

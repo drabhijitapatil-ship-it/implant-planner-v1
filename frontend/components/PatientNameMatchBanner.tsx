@@ -30,6 +30,7 @@ export default function PatientNameMatchBanner({ lookup, name, onConfirmAutofill
   const patients = lookup?.patients || [];
   const [selectedIdx, setSelectedIdx] = useState<number>(patients.length === 1 ? 0 : -1);
   const [showCases, setShowCases] = useState(false);
+  const [lockedNoteFor, setLockedNoteFor] = useState<string | null>(null);
   const sel = selectedIdx >= 0 ? patients[selectedIdx] : null;
 
   return (
@@ -100,8 +101,15 @@ export default function PatientNameMatchBanner({ lookup, name, onConfirmAutofill
               </TouchableOpacity>
             )}
           </View>
-          {showCases && sel.cases.map((c, i) => (
-            <TouchableOpacity key={c.id} style={s.row} onPress={() => router.push(`/procedures/${c.id}`)}
+          {showCases && sel.cases.map((c, i) => {
+            const locked = (c as any).accessible === false;
+            return (
+            <View key={c.id}>
+            <TouchableOpacity style={[s.row, locked && { opacity: 0.75 }]}
+              onPress={() => {
+                if (locked) { setLockedNoteFor(lockedNoteFor === c.id ? null : c.id); return; }
+                router.push(`/procedures/${c.id}`);
+              }}
               testID={`name-match-case-${c.id}`} data-testid={`name-match-case-${c.id}`}>
               <View style={s.numBubble}><Text style={s.numTxt}>{i + 1}</Text></View>
               <View style={{ flex: 1 }}>
@@ -111,9 +119,15 @@ export default function PatientNameMatchBanner({ lookup, name, onConfirmAutofill
                 </Text>
                 <Text style={s.rowSub}>{c.procedure_date || 'Not scheduled'} · {(STATUS_LABELS as any)[c.status] || c.status}</Text>
               </View>
-              <Ionicons name="chevron-forward" size={15} color="#B0BEC5" />
+              <Ionicons name={locked ? 'lock-closed' : 'chevron-forward'} size={15} color={locked ? '#90A4AE' : '#B0BEC5'} />
             </TouchableOpacity>
-          ))}
+            {locked && lockedNoteFor === c.id && (
+              <View style={s.lockedNote} testID={`name-match-locked-note-${c.id}`}>
+                <Text style={s.lockedNoteTxt}>You don't have access to this case. Only its treating team can view it.</Text>
+              </View>
+            )}
+            </View>
+          ); })}
         </>
       )}
 
@@ -145,4 +159,6 @@ const s = StyleSheet.create({
   numTxt: { color: '#FFF', fontSize: 11, fontWeight: '800' },
   cancelBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: 11, paddingVertical: 7, borderRadius: 999, borderWidth: 1, borderColor: '#EF9A9A', backgroundColor: '#FFF' },
   cancelBtnTxt: { color: '#C62828', fontSize: 12.5, fontWeight: '700' },
+  lockedNote: { backgroundColor: '#FFF', borderRadius: 8, padding: 9, marginTop: 5, borderWidth: 1, borderColor: '#FFE0A3' },
+  lockedNoteTxt: { fontSize: 11.5, color: '#795548', lineHeight: 16 },
 });
