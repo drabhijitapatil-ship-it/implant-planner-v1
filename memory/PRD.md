@@ -1,5 +1,24 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 397 (Jun 2026) — Hybrid Multi-Implant Mechanism (existing patient, new implant episode)
+
+**User choices**: 1b (this feature only, role-based analytics deferred), 2a (prior cases tappable).
+
+**Backend** (`/app/backend/server.py`)
+- `GET /api/procedures/patient-lookup?registration_number=X` — case-insensitive exact match, drafts + archived excluded. Returns `{found, patient{demographics + medical_assessment + medical_risk_level}, cases[], latest_case_id}`. Clinician roles only (nurse 403). Logs `patient_lookup` to access_logs.
+- `GET /api/procedures/{id}/patient-history` — all cases sharing the registration number with `is_current` flag.
+- `linked_parent_case_id` field added to `ProcedureCreate` + `AugmentationCaseCreate` and persisted on create.
+
+**Frontend**
+- `components/ExistingPatientBanner.tsx` — "Existing Patient Detected" banner under the Registration Number field on New Procedure: auto-fill demographics/medical history button + expandable tappable prior-case list. testids: existing-patient-banner / -autofill-btn / -toggle-cases / -case-{id}.
+- `new-procedure.tsx` — 600ms-debounced lookup effect (skipped for draft resume / aug resume / created case); sets `linked_parent_case_id` automatically; `applyPatientAutofill()` copies name/age/sex/profession/mobile/email/medical assessment.
+- `components/PatientHistoryStrip.tsx` rendered on `procedures/[id].tsx` after Patient Information — "Patient Treatment History (N cases)" timeline, hides when ≤1 case, "This case" badge + "Additional implant treatment" badge via linked_parent_case_id.
+
+**Tests**: iteration_158.json — backend 10/10 pytest (`tests/test_iter397_hybrid_multi_implant.py`), frontend E2E 100% (banner, autofill, case navigation, 2-case strip, no-banner regressions).
+
+---
+
+
 ## Iteration 365 (Feb 2026) — Analytics polish: calendar picker, CSV fix, uniform tabs, per-procedure drill, failure analysis
 
 **User-driven changes (all 5 requests)**

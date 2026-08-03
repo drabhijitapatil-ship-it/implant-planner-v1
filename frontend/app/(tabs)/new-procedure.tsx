@@ -1898,7 +1898,7 @@ export default function NewProcedureScreen() {
         <View style={styles.fieldContainer}>
           <Text style={styles.label}>Registration Number <Text style={{ color: '#DC3545' }}>*</Text></Text>
           <TextInput style={styles.input} value={formData.registration_number}
-            onChangeText={v => updateForm('registration_number', v)} placeholder="Enter registration number" data-testid="registration-number-input" />
+            onChangeText={v => updateForm('registration_number', v)} placeholder="Enter registration number" testID="registration-number-input" data-testid="registration-number-input" />
         </View>
         {!!patientLookup?.found && !lookupDismissed && (
           <ExistingPatientBanner
