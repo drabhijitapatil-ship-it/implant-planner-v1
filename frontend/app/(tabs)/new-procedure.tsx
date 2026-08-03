@@ -15,6 +15,7 @@ import { AtrophyClassificationChip } from '../../components/AtrophyClassificatio
 import ExistingImplantSection from '../../components/ExistingImplantSection';
 import FdiAnatomicalChart from '../../components/FdiAnatomicalChart';
 import PredictiveRiskCard from '../../components/PredictiveRiskCard';
+import ExistingPatientBanner from '../../components/ExistingPatientBanner';
 import { validateImplantSelection, findMissingRuns, clusterLeader } from '../../utils/implantValidation';
 import {
   PROCEDURE_TYPES,  LOADING_TYPES,
@@ -348,6 +349,8 @@ export default function NewProcedureScreen() {
     mobile_number: '',
     patient_email: '',
     registration_number: '',
+    // iter-397: multi-implant episodes — id of this patient's latest prior case
+    linked_parent_case_id: '',
     chief_complaint: '',
     student_name: user?.role === 'student' ? (user?.name || '') : '',
     supervisor_id: (user?.role === 'supervisor' || user?.role === 'implant_incharge') ? (user?.id || '') : '',
@@ -450,6 +453,57 @@ export default function NewProcedureScreen() {
   const [augResumeId, setAugResumeId] = useState<string | null>(null);
   const isAugCase = augmentationRequired === 'Yes' && !isExistingImplantCase;
 
+  // iter-397: existing-patient detection by registration number (hybrid
+  // multi-implant mechanism). Debounced lookup → banner + auto-fill + link.
+  const [patientLookup, setPatientLookup] = useState<any | null>(null);
+  const [lookupDismissed, setLookupDismissed] = useState(false);
+  const [lookupAutofilled, setLookupAutofilled] = useState(false);
+  const lookupTimer = useRef<any>(null);
+  useEffect(() => {
+    if (lookupTimer.current) clearTimeout(lookupTimer.current);
+    const reg = formData.registration_number?.trim();
+    // Skip while resuming a draft / augmentation case — the reg number there
+    // belongs to the case being edited, not a new episode.
+    if (!reg || reg.length < 2 || isDraftResume || !!params.draftId || !!augResumeId || !!createdProcedureId) {
+      setPatientLookup(null);
+      setLookupAutofilled(false);
+      return;
+    }
+    lookupTimer.current = setTimeout(async () => {
+      try {
+        const res = await api.get(`/procedures/patient-lookup?registration_number=${encodeURIComponent(reg)}`);
+        if (res.data?.found) {
+          setPatientLookup(res.data);
+          setLookupDismissed(false);
+          setFormData(prev => ({ ...prev, linked_parent_case_id: res.data.latest_case_id || '' }));
+        } else {
+          setPatientLookup(null);
+          setLookupAutofilled(false);
+          setFormData(prev => (prev.linked_parent_case_id ? { ...prev, linked_parent_case_id: '' } : prev));
+        }
+      } catch { setPatientLookup(null); }
+    }, 600);
+    return () => { if (lookupTimer.current) clearTimeout(lookupTimer.current); };
+  }, [formData.registration_number, isDraftResume, params.draftId, augResumeId, createdProcedureId]);
+
+  const applyPatientAutofill = () => {
+    const p = patientLookup?.patient;
+    if (!p) return;
+    setFormData(prev => ({
+      ...prev,
+      patient_name: p.patient_name || prev.patient_name,
+      age: p.age || prev.age,
+      sex: p.sex || prev.sex,
+      profession: p.profession || prev.profession,
+      mobile_number: p.mobile_number || prev.mobile_number,
+      patient_email: p.patient_email || prev.patient_email,
+      medical_assessment: (p.medical_assessment && Object.keys(p.medical_assessment).length
+        ? p.medical_assessment : prev.medical_assessment) as Record<string, string>,
+      medical_risk_level: p.medical_risk_level || prev.medical_risk_level,
+    }));
+    setLookupAutofilled(true);
+  };
+
   const submitAugmentationCase = async () => {
     const missing: string[] = [];
     if (!formData.patient_name?.trim()) missing.push('Patient Name');
@@ -472,6 +526,7 @@ export default function NewProcedureScreen() {
         age: formData.age, sex: formData.sex, profession: formData.profession,
         mobile_number: formData.mobile_number, patient_email: (formData as any).patient_email || '',
         registration_number: formData.registration_number,
+        linked_parent_case_id: (formData as any).linked_parent_case_id || '',
         chief_complaint: formData.chief_complaint,
         supervisor_id: formData.supervisor_id, supervisor_name: formData.supervisor_name,
         implant_incharge_id: formData.implant_incharge_id, implant_incharge_name: formData.implant_incharge_name,
@@ -729,7 +784,7 @@ export default function NewProcedureScreen() {
         setExistingImplantDraft(null);
         setFormData({
           patient_name: '', age: '', sex: '', profession: '', mobile_number: '', patient_email: '',
-          registration_number: '', chief_complaint: '', student_name: user?.name || '',
+          registration_number: '', linked_parent_case_id: '', chief_complaint: '', student_name: user?.name || '',
           supervisor_id: (user?.role === 'supervisor' || user?.role === 'implant_incharge') ? (user?.id || '') : '',
           supervisor_name: (user?.role === 'supervisor' || user?.role === 'implant_incharge') ? (user?.name || '') : '',
           implant_incharge_id: user?.role === 'implant_incharge' ? (user?.id || '') : '',
@@ -1845,6 +1900,14 @@ export default function NewProcedureScreen() {
           <TextInput style={styles.input} value={formData.registration_number}
             onChangeText={v => updateForm('registration_number', v)} placeholder="Enter registration number" data-testid="registration-number-input" />
         </View>
+        {!!patientLookup?.found && !lookupDismissed && (
+          <ExistingPatientBanner
+            lookup={patientLookup}
+            autofilled={lookupAutofilled}
+            onAutofill={applyPatientAutofill}
+            onDismiss={() => setLookupDismissed(true)}
+          />
+        )}
         {user?.role === 'student' && (
           <View style={styles.fieldContainer}>
             <Text style={styles.label}>Name of Postgraduate Student</Text>

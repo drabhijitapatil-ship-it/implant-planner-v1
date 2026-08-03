@@ -54,6 +54,7 @@ import RescheduleModal from '../../components/RescheduleModal';
 import ImplantLifecycleTimeline from '../../components/ImplantLifecycleTimeline';
 import AugmentationChecklist from '../../components/AugmentationChecklist';
 import ClinicalEvaluationBanner from '../../components/ClinicalEvaluationBanner';
+import PatientHistoryStrip from '../../components/PatientHistoryStrip';
 import PulsingDoubleArrow from '../../components/onboarding/primitives/PulsingDoubleArrow';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, {
@@ -2122,6 +2123,8 @@ export default function ProcedureDetailScreen() {
           <InfoRow icon="card" label="Registration Number" value={procedure.registration_number} />
           <InfoRow icon="medical" label="Implant Site" value={procedure.implant_site} />
         </View>
+
+        <PatientHistoryStrip procedure={procedure} />
 
         <ClinicalEvaluationBanner procedureId={String(id)} />
 

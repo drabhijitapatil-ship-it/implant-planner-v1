@@ -377,6 +377,9 @@ class ProcedureCreate(BaseModel):
     patient_email: Optional[str] = Field("", max_length=255)
     registration_number: str = Field(..., max_length=50)
     chief_complaint: Optional[str] = Field("", max_length=1000)
+    # iter-397: multi-implant episodes — id of the patient's most recent prior
+    # case (same registration number) so treatment history can be chained.
+    linked_parent_case_id: Optional[str] = Field("", max_length=64)
     periodontal_status: Optional[str] = Field("", max_length=20)
     teeth_present: Optional[List[str]] = Field(default_factory=list)
     # New: teeth marked RED on the FDI chart in Phase 1 Step 1.
@@ -2255,6 +2258,94 @@ async def get_procedures(
         proc["id"] = proc["_id"]
     
     return procedures
+
+
+# ── iter-397: Multi-implant episodes for the same patient ────────────────
+_PATIENT_LOOKUP_PROJ = {
+    "_id": 1, "patient_name": 1, "age": 1, "sex": 1, "profession": 1,
+    "mobile_number": 1, "patient_email": 1, "registration_number": 1,
+    "medical_assessment": 1, "medical_risk_level": 1,
+    "implant_procedure_type": 1, "missing_teeth": 1, "status": 1,
+    "procedure_date": 1, "student_name": 1, "created_by_name": 1,
+    "created_at": 1, "augmentation_required": 1, "linked_parent_case_id": 1,
+    "current_phase": 1,
+}
+
+
+def _patient_case_row(d: dict) -> dict:
+    return {
+        "id": str(d["_id"]),
+        "implant_procedure_type": d.get("implant_procedure_type") or ("Pre-Implant Augmentation" if d.get("augmentation_required") else ""),
+        "missing_teeth": d.get("missing_teeth") or [],
+        "status": d.get("status"),
+        "current_phase": d.get("current_phase"),
+        "procedure_date": d.get("procedure_date"),
+        "student_name": d.get("student_name") or d.get("created_by_name") or "",
+        "augmentation_required": bool(d.get("augmentation_required")),
+        "linked_parent_case_id": d.get("linked_parent_case_id") or "",
+        "created_at": str(d.get("created_at") or ""),
+    }
+
+
+@api_router.get("/procedures/patient-lookup")
+async def patient_lookup(registration_number: str, current_user: dict = Depends(get_current_user)):
+    """Detect an existing patient by registration number so a new implant
+    episode can be pre-filled and linked to the prior case(s)."""
+    if current_user["role"] not in ("student", "supervisor", "implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Not permitted")
+    reg = (registration_number or "").strip()
+    if not reg:
+        return {"found": False, "patient": None, "cases": []}
+    query = {
+        "registration_number": {"$regex": f"^{re.escape(reg)}$", "$options": "i"},
+        "archived": {"$ne": True},
+        "status": {"$ne": "draft"},
+    }
+    docs = await db.procedures.find(query, _PATIENT_LOOKUP_PROJ).sort("created_at", 1).to_list(50)
+    if not docs:
+        return {"found": False, "patient": None, "cases": []}
+    latest = docs[-1]
+    patient = {
+        "patient_name": latest.get("patient_name", ""),
+        "age": latest.get("age", ""),
+        "sex": latest.get("sex", ""),
+        "profession": latest.get("profession", ""),
+        "mobile_number": latest.get("mobile_number", ""),
+        "patient_email": latest.get("patient_email", ""),
+        "medical_assessment": latest.get("medical_assessment") or {},
+        "medical_risk_level": latest.get("medical_risk_level", ""),
+    }
+    cases = [_patient_case_row(d) for d in docs]
+    await log_access(action="patient_lookup", resource_type="patient", resource_id=reg, user=current_user)
+    return {"found": True, "patient": patient, "cases": cases, "latest_case_id": cases[-1]["id"]}
+
+
+@api_router.get("/procedures/{procedure_id}/patient-history")
+async def get_patient_history(procedure_id: str, current_user: dict = Depends(get_current_user)):
+    """Every case sharing this patient's registration number (treatment timeline)."""
+    if current_user["role"] not in ("student", "supervisor", "implant_incharge", "administrator", "nurse"):
+        raise HTTPException(status_code=403, detail="Not permitted")
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, _PATIENT_LOOKUP_PROJ)
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    reg = (proc.get("registration_number") or "").strip()
+    if not reg:
+        return {"cases": []}
+    query = {
+        "registration_number": {"$regex": f"^{re.escape(reg)}$", "$options": "i"},
+        "archived": {"$ne": True},
+        "$or": [{"status": {"$ne": "draft"}}, {"_id": proc["_id"]}],
+    }
+    docs = await db.procedures.find(query, _PATIENT_LOOKUP_PROJ).sort("created_at", 1).to_list(50)
+    cases = []
+    for d in docs:
+        row = _patient_case_row(d)
+        row["is_current"] = row["id"] == procedure_id
+        cases.append(row)
+    return {"cases": cases}
 
 
 @api_router.get("/procedures/archived")
@@ -15343,6 +15434,8 @@ class AugmentationCaseCreate(BaseModel):
     procedure_date: str = Field(..., max_length=30)
     procedure_time: str = Field(..., max_length=20)
     remark: Optional[str] = Field("", max_length=1000)
+    # iter-397: multi-implant episodes — link to the patient's prior case.
+    linked_parent_case_id: Optional[str] = Field("", max_length=64)
 
 
 class AugmentationStep1Submit(BaseModel):

@@ -1,0 +1,33 @@
+{
+  "summary": "iter-397 Hybrid multi-implant mechanism: backend + frontend E2E verified. Backend pytest 10/10 passing (patient-lookup role gating, case-insensitive match, drafts/archived excluded, unknown-reg found=false, nurse 403; patient-history returns cases with is_current flag & 404 on unknown id; POST /procedures and POST /procedures/augmentation-case persist linked_parent_case_id). Frontend E2E: logged in as implant-in-charge Abhijit.patil, opened New Case tab, typed 'P2AUG-UI-1' — [data-testid=existing-patient-banner] appeared under Registration Number after debounce, showing 'P2 Aug UI Patient · 48 yrs · Male — 1 previous case'. [data-testid=existing-patient-autofill-btn] click populated Patient Name='P2 Aug UI Patient' and Age='48' (profession/mobile empty because source case values are empty — correct). [data-testid=existing-patient-toggle-cases] revealed 1 prior-case row [data-testid=existing-patient-case-6a6b7fbf6633443cf356df15]; tapping it navigated to /procedures/6a6b7fbf6633443cf356df15. On that detail page (1-case patient) the patient-history-strip correctly did NOT render. To validate the multi-case strip I created a linked draft via API and opened /procedures/{new_id} — [data-testid=patient-history-strip] rendered 'Patient Treatment History (2 cases)' with 2 tappable rows and exactly one 'This case' badge on the current one. Regression: typing an unknown reg 'TESTREG-UNIQUE-9999' does NOT show the banner. Draft created for the strip test was deleted after verification.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "New Case / global", "issues": ["Non-blocking console noise: repeated 'Unexpected text node: . A text node cannot be a child of a <View>' warnings — likely a stray whitespace/expression inside a <View> in a shared layout. Not caused by iter-397 code but worth surfacing."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter397_hybrid_multi_implant.py",
+    "/app/test_reports/pytest/iter397.xml"
+  ],
+  "action_items": [
+    "Expose data-testid=\"registration-number-input\" on the DOM <input>. In new-procedure.tsx line 1901 the prop is passed to <TextInput> but the rendered DOM does not carry data-testid (verified via attribute dump). Suggest passing via testID (react-native-web maps testID→data-testid) or using the same wrapper helper that other testids on the page use.",
+    "Optionally clean up the global 'Unexpected text node' console warning."
+  ],
+  "critical_code_review_comments": [
+    "new-procedure.tsx line 1901: data-testid on <TextInput> not reaching DOM — automation currently must fall back to placeholder selector. All banner/autofill/toggle/case-row testids (from ExistingPatientBanner) DO appear correctly, as do patient-history-strip testids from PatientHistoryStrip.",
+    "Backend endpoints look clean: correct role gating, ObjectId conversion, case-insensitive regex is escaped, drafts excluded from lookup but included in own patient-history (matches spec)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter397_hybrid_multi_implant.py"
+  ],
+  "success_rate": { "backend": "100%", "frontend": "100%" },
+  "test_credentials": "Uses /app/memory/test_credentials.md — Abhijit.patil / Admin@123 (implant_incharge), nurse.1@dental.edu / Nurse@123",
+  "seed_data_creation": "None persisted — one temporary draft procedure was created via API to validate the 2-case history strip and deleted after verification.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Existing multi-case patient in DB: registration_number='P2AUG-UI-1' has exactly 1 non-draft case (id 6a6b7fbf6633443cf356df15). Reuse that reg for banner/autofill tests. Registration lookup debounce is 600ms so wait >=1.5s after fill. Registration-number-input data-testid is not exposed in DOM; select via input[placeholder=\"Enter registration number\"] until fixed. Supervisor id 69b79407a17f36c024eb2d60 (Paresh.gandhi), In-charge id 69b79407a17f36c024eb2d5e (Abhijit.patil) — useful for POST /procedures automation.",
+  "rca of the issue": "N/A — feature works end-to-end. Only cosmetic finding is missing data-testid propagation on the registration-number TextInput."
+}
