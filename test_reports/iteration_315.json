@@ -1,0 +1,28 @@
+{
+  "summary": "RETEST of iter-398 name-match amber banner feature after main agent restored /app/frontend/app/(tabs)/new-procedure.tsx (now 3626 lines, no truncation). Bundle loads cleanly, login works, all 6 review scenarios executed end-to-end via Playwright and PASS. Single-match amber banner shows correct patient card (P2 Aug UI Patient · 48 yrs · Male · Reg. No. P2AUG-UI-1 · 1 previous case) with all three action buttons. Autofill handoff copies age/sex/registration number, amber banner disappears and blue existing-patient banner appears in green 'Details auto-filled' state. Per-name cancel memory works — banner does not reappear while the name is unchanged and Registration Number stays empty. Multi-match variant renders 2 rows (AUG-S3-B and AUG-S3-A, both 50 yrs Female, 1 case), tapping a row opens the detail card with autofill / View cases / Change (back) / Cancel; View cases shows tappable case rows with testid name-match-case-<procId>; Change returns to the list. Suppression regression: blue reg banner shown from Registration Number entry suppresses the amber name banner; partial name ('Step3') and unknown full name show no banner. iter-397 blue reg-number banner is unchanged and fully functional (existing-patient-banner + dismiss/autofill/toggle-cases testids present).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Global (all screens)", "issues": ["Console spam: repeating 'Unexpected text node: . A text node cannot be a child of a <View>' warning from React Native Web. Cosmetic but drowns real errors during debugging — suggest hunting the stray whitespace/text node." ]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "OPTIONAL: TextInput data-testid props on login screen (login-email-input, login-password-input) are not being emitted to the DOM. Only login-submit-btn and build-stamp testids are visible in the DOM on /auth/login. This is a RN Web quirk — using both `testID` and `data-testid` on TextInput usually works. Recommend adding `testID` alongside `data-testid` on the two TextInputs at /app/frontend/app/auth/login.tsx lines 141 and 158, or switching to the `dataSet={{ testid: 'login-email-input' }}` pattern. Not blocking iter-398 but future testers will hit the same 'input[placeholder]' workaround.",
+    "OPTIONAL: patient-age-input, patient-sex-* testids on New Case form similarly did not surface a queryable data-testid on the DOM (input_value returned None). Value is correctly populated in the UI (verified by screenshot). Same RN Web TextInput data-testid propagation issue."
+  ],
+  "critical_code_review_comments": [
+    "/app/frontend/app/(tabs)/new-procedure.tsx is 3626 lines — monolithic and hard to review. Suggest extracting the name-match / reg-match banner state machine and the FDI section builders into dedicated modules.",
+    "RN Web TextInput `data-testid` propagation is inconsistent across the codebase. Establish a shared helper (or dataSet convention) so test automation can rely on testids for inputs, not placeholders."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100% (6/6 scenarios pass)"},
+  "test_credentials": "Abhijit.patil / Admin@123 (from review_request; /app/memory/test_credentials.md not consulted since credentials were explicit)",
+  "seed_data_creation": "None — used existing fixtures P2AUG-UI-1 and AUG-S3-A / AUG-S3-B",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter-398 amber name-match banner is fully working. Debounce ≈600ms (wait ≥1.5s after typing). Login TextInput data-testids are not emitted to the DOM — use `input[placeholder^=\"Login ID\"]` / `input[placeholder=\"Password\"]` and `[data-testid=login-submit-btn]`. Patient-name-input, registration-number-input, name-match-* and existing-patient-* testids are all reliable. Fixtures: 'P2 Aug UI Patient' → single reg P2AUG-UI-1 (48 M, 1 case 6a6b7fbf6633443cf356df15); 'Step3 UI Patient' → 2 patients regs AUG-S3-B + AUG-S3-A (both 50 F, 1 case each). Console shows harmless 'Unexpected text node' RN Web warnings — safe to filter.",
+  "rca of the issue": "N/A — feature works. Note: the review-request testid `login-identifier-input` does not exist; actual code uses `data-testid=login-email-input` (and it also doesn't emit due to RN Web TextInput). Not a bug for iter-398."
+}
