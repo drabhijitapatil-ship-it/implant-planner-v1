@@ -2320,6 +2320,59 @@ async def patient_lookup(registration_number: str, current_user: dict = Depends(
     return {"found": True, "patient": patient, "cases": cases, "latest_case_id": cases[-1]["id"]}
 
 
+def _patient_block(d: dict) -> dict:
+    return {
+        "patient_name": d.get("patient_name", ""),
+        "age": d.get("age", ""),
+        "sex": d.get("sex", ""),
+        "profession": d.get("profession", ""),
+        "mobile_number": d.get("mobile_number", ""),
+        "patient_email": d.get("patient_email", ""),
+        "medical_assessment": d.get("medical_assessment") or {},
+        "medical_risk_level": d.get("medical_risk_level", ""),
+    }
+
+
+@api_router.get("/procedures/patient-name-lookup")
+async def patient_name_lookup(patient_name: str, current_user: dict = Depends(get_current_user)):
+    """iter-398: detect existing patient(s) by exact full-name match
+    (case-insensitive). Same name may belong to several distinct patients, so
+    results are grouped per registration number for the clinician to pick or
+    cancel."""
+    if current_user["role"] not in ("student", "supervisor", "implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Not permitted")
+    name = (patient_name or "").strip()
+    if not name:
+        return {"found": False, "patients": []}
+    query = {
+        "patient_name": {"$regex": f"^{re.escape(name)}$", "$options": "i"},
+        "archived": {"$ne": True},
+        "status": {"$ne": "draft"},
+    }
+    docs = await db.procedures.find(query, _PATIENT_LOOKUP_PROJ).sort("created_at", 1).to_list(100)
+    if not docs:
+        return {"found": False, "patients": []}
+    grouped: Dict[str, Dict[str, Any]] = {}
+    for d in docs:
+        reg = (d.get("registration_number") or "").strip()
+        key = reg.lower()
+        entry = grouped.setdefault(key, {
+            "registration_number": reg,
+            "patient": _patient_block(d),
+            "cases": [],
+        })
+        entry["patient"] = _patient_block(d)  # latest wins (docs sorted asc)
+        entry["cases"].append(_patient_case_row(d))
+    patients = []
+    for entry in grouped.values():
+        entry["cases_count"] = len(entry["cases"])
+        entry["latest_case_id"] = entry["cases"][-1]["id"]
+        patients.append(entry)
+    patients.sort(key=lambda e: e["cases"][-1]["created_at"], reverse=True)
+    await log_access(action="patient_name_lookup", resource_type="patient", resource_id=name, user=current_user)
+    return {"found": True, "patients": patients}
+
+
 @api_router.get("/procedures/{procedure_id}/patient-history")
 async def get_patient_history(procedure_id: str, current_user: dict = Depends(get_current_user)):
     """Every case sharing this patient's registration number (treatment timeline)."""
