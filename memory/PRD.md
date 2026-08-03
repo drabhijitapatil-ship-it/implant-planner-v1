@@ -1,5 +1,23 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 398 (Jun 2026) — Patient NAME match detection with Cancel (multi-implant follow-up)
+
+**User choices**: exact full-name match only (case-insensitive); name match never auto-links — link only on "Auto-fill patient details" confirm, Cancel = not linked; multiple same-name patients → pick-list (reg no. + case count) with pick-or-Cancel; reg-number banner left as-is.
+
+**Backend** (`/app/backend/server.py`)
+- `GET /api/procedures/patient-name-lookup?patient_name=X` — exact case-insensitive name match, non-draft/non-archived, grouped per registration number (distinct patients), each entry: `{registration_number, patient, cases[], cases_count, latest_case_id}` sorted latest-first. Clinician roles only (nurse 403), logs `patient_name_lookup`.
+
+**Frontend**
+- `components/PatientNameMatchBanner.tsx` — amber "Possible Existing Patient" banner under the Patient Name field: multi-patient pick-list → detail card → Auto-fill / View cases (tappable) / Change / "Cancel — different patient". testids: name-match-banner / -patient-{i} / -autofill-btn / -toggle-cases / -back-btn / -cancel-btn / -case-{id}.
+- `new-procedure.tsx` — 600ms-debounced name effect (≥3 chars; suppressed by active reg-number match, draft/aug resume); `applyNameMatchAutofill` copies demographics + registration_number + linked_parent_case_id then hands over to the blue reg banner in auto-filled state; `cancelNameMatch` remembers the cancelled name (per exact value) and clears any link.
+
+**Incident during build**: new-procedure.tsx got truncated mid-write (Metro bundle break) — restored from git commit f11dd107 and edits re-applied cleanly.
+
+**Tests**: iteration_315.json — 6/6 frontend E2E pass (single match, autofill handoff, cancel memory, multi-match pick-list, reg-suppression, iter-397 regression). Backend curl-verified (single/multi grouping, partial-name reject, nurse 403).
+
+---
+
+
 ## Iteration 397 (Jun 2026) — Hybrid Multi-Implant Mechanism (existing patient, new implant episode)
 
 **User choices**: 1b (this feature only, role-based analytics deferred), 2a (prior cases tappable).
