@@ -16,6 +16,7 @@ import ExistingImplantSection from '../../components/ExistingImplantSection';
 import FdiAnatomicalChart from '../../components/FdiAnatomicalChart';
 import PredictiveRiskCard from '../../components/PredictiveRiskCard';
 import ExistingPatientBanner from '../../components/ExistingPatientBanner';
+import PatientNameMatchBanner from '../../components/PatientNameMatchBanner';
 import { validateImplantSelection, findMissingRuns, clusterLeader } from '../../utils/implantValidation';
 import {
   PROCEDURE_TYPES,  LOADING_TYPES,
@@ -2522,4 +2523,1104 @@ export default function NewProcedureScreen() {
               testIDPrefix="fdi"
             />
             {missing.length > 0 && (
-              <Text style={{ fontSize: 12, color: '#B71C1C', fontWeight: '700', marginTop: 8, textAlign: 'c
+              <Text style={{ fontSize: 12, color: '#B71C1C', fontWeight: '700', marginTop: 8, textAlign: 'center' }}>
+                {missing.length} {missing.length === 1 ? 'tooth' : 'teeth'} marked — {missing.sort().join(', ')}
+              </Text>
+            )}
+            {countError && (
+              <Text style={{ fontSize: 11, color: '#B71C1C', marginTop: 6, textAlign: 'center', fontWeight: '600' }}>{countError}</Text>
+            )}
+          </View>
+        );
+      })()}
+
+      </>)}
+
+      {!isAugCase && (<>
+      {/* ─── Clinical Examination ─── */}
+      {/* iter-233: rendered for BOTH routine cases AND Existing Implant cases.
+          For Existing Implant the gate is `effectiveProcType` (= the inner
+          "Type of Implant Procedure Done") so the section only appears once
+          the user picks an original procedure type inside the section. The
+          parent's iter-231 useEffect syncs the lifted implant tooth-positions
+          into `formData.missing_teeth` so cluster utilities work identically. */}
+      {effectiveProcType && (
+        <View style={styles.section} onLayout={showFlowStrip ? onExistingStepLayout(2) : undefined}>
+          <Text style={styles.sectionTitle}>Clinical Examination</Text>
+
+          {/* Intraoral Examination – Non-Full-Arch (Single, Multiple, GBR, Guided Surgery)
+              Skipped when Overdenture-with-Attachment is selected — that case
+              uses the full-arch block below. */}
+          {isClinicalExamGroup && !isOverdentureNonFullArch && (
+            <>
+              <Text style={styles.subSectionTitle}>Intraoral Examination</Text>
+              <Text style={[styles.subSectionTitle, { fontSize: 14, color: '#1565C0', marginTop: 4 }]}>Edentulous Site</Text>
+              {(formData.missing_teeth || []).length >= 2 ? (
+                // Cluster-aware per-tooth rows. Adjacent missing teeth in the
+                // same arch share a single Mesiodistal Space (the contiguous
+                // edentulous span), but each tooth keeps its own per-tooth
+                // Occlusocervical Height. Singletons render with both fields.
+                (() => {
+                  const runs = findMissingRuns(formData.missing_teeth || []);
+                  const setOc = (tooth: string, v: string) => {
+                    const next = { ...(formData.edentulous_site_measurements || {}) };
+                    next[tooth] = { ...(next[tooth] || {}), oc: v };
+                    updateForm('edentulous_site_measurements', next);
+                  };
+                  const setMd = (tooth: string, v: string) => {
+                    const next = { ...(formData.edentulous_site_measurements || {}) };
+                    next[tooth] = { ...(next[tooth] || {}), md: v };
+                    updateForm('edentulous_site_measurements', next);
+                  };
+                  // Per-cluster intraoral findings setter — keyed by the leader
+                  // tooth of each missing run so adjacent teeth share one set.
+                  const setSite = (key: string, field: 'ridge_contour' | 'soft_tissue_thickness' | 'keratinized_mucosa', v: string) => {
+                    const next = { ...(formData.clinical_exam_per_site || {}) };
+                    next[key] = { ...(next[key] || {}), [field]: v };
+                    updateForm('clinical_exam_per_site', next);
+                  };
+                  return (
+                    <View style={{ marginBottom: 8 }}>
+                      <Text style={{ fontSize: 12, color: '#546E7A', marginBottom: 8 }}>
+                        Enter the measurements for each tooth marked on the FDI chart. Adjacent missing teeth share one mesiodistal span.
+                      </Text>
+                      {runs.map((run) => {
+                        const archLabel = run.arch === 'maxillary' ? 'Maxillary' : 'Mandibular';
+                        const positions = run.positions; // already arch-sorted
+                        const isCluster = positions.length >= 2;
+                        const leader = clusterLeader(positions) || positions[0];
+                        const leaderRow = (formData.edentulous_site_measurements || {})[leader] || {};
+                        if (!isCluster) {
+                          // Singleton tooth (Scenario 1) — both oc + md per tooth
+                          const tooth = positions[0];
+                          const row = (formData.edentulous_site_measurements || {})[tooth] || {};
+                          return (
+                            <View key={`ed-single-${tooth}`} style={{ backgroundColor: '#FAFAFA', borderRadius: 10, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: '#ECEFF1' }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                                <View style={{ backgroundColor: '#E53935', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
+                                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#FFF' }}>FDI {tooth}</Text>
+                                </View>
+                                <Text style={{ fontSize: 12, fontWeight: '700', color: '#37474F' }}>Measurements (mm)</Text>
+                              </View>
+                              <View style={{ flexDirection: 'row', gap: 8 }}>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#1565C0', marginBottom: 4 }} numberOfLines={1}>Occlusocervical Height *</Text>
+                                  <TextInput
+                                    style={[styles.input, { borderColor: '#1565C0' }]}
+                                    placeholder="e.g. 12"
+                                    keyboardType="decimal-pad"
+                                    maxLength={5}
+                                    value={row.oc || ''}
+                                    onChangeText={(v) => setOc(tooth, v)}
+                                    data-testid={`oc-height-${tooth}`}
+                                  />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#1565C0', marginBottom: 4 }} numberOfLines={1}>Mesiodistal Space *</Text>
+                                  <TextInput
+                                    style={[styles.input, { borderColor: '#1565C0' }]}
+                                    placeholder="e.g. 15"
+                                    keyboardType="decimal-pad"
+                                    maxLength={5}
+                                    value={row.md || ''}
+                                    onChangeText={(v) => setMd(tooth, v)}
+                                    data-testid={`md-space-${tooth}`}
+                                  />
+                                </View>
+                              </View>
+                              {/* Per-site intraoral findings (this isolated tooth = its own site) */}
+                              {formData.implant_procedure_type !== 'Single Conventional Implant' && (() => {
+                                const site = (formData.clinical_exam_per_site || {})[tooth] || {};
+                                return (
+                                  <View style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#ECEFF1' }}>
+                                    <Dropdown label="Ridge Contour" value={site.ridge_contour || ''}
+                                      options={RIDGE_CONTOUR_OPTIONS} onChange={(v) => setSite(tooth, 'ridge_contour', v)} data-testid={`ridge-contour-${tooth}`} />
+                                    <Dropdown label="Soft Tissue Thickness" value={site.soft_tissue_thickness || ''}
+                                      options={SOFT_TISSUE_OPTIONS} onChange={(v) => setSite(tooth, 'soft_tissue_thickness', v)} data-testid={`soft-tissue-${tooth}`} />
+                                    <Dropdown label="Keratinized Mucosa" value={site.keratinized_mucosa || ''}
+                                      options={KERATINIZED_MUCOSA_OPTIONS} onChange={(v) => setSite(tooth, 'keratinized_mucosa', v)} data-testid={`keratinized-${tooth}`} />
+                                  </View>
+                                );
+                              })()}
+                            </View>
+                          );
+                        }
+                        // Cluster (Scenario 2) — one shared mesiodistal span, per-tooth oc rows
+                        return (
+                          <View key={`ed-cluster-${run.arch}-${leader}`} style={{ backgroundColor: '#FAFAFA', borderRadius: 10, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: '#ECEFF1' }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                              <Text style={{ fontSize: 12, fontWeight: '700', color: '#37474F' }}>Adjacent Missing Cluster ({archLabel})</Text>
+                              {positions.map((t) => (
+                                <View key={`pill-${t}`} style={{ backgroundColor: '#E53935', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
+                                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#FFF' }}>FDI {t}</Text>
+                                </View>
+                              ))}
+                            </View>
+                            <View style={{ marginBottom: 10 }}>
+                              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1565C0', marginBottom: 4 }} numberOfLines={1}>Mesiodistal Space — total cluster span (mm) *</Text>
+                              <TextInput
+                                style={[styles.input, { borderColor: '#1565C0' }]}
+                                placeholder="e.g. 24"
+                                keyboardType="decimal-pad"
+                                maxLength={5}
+                                value={leaderRow.md || ''}
+                                onChangeText={(v) => setMd(leader, v)}
+                                data-testid={`md-cluster-${leader}`}
+                              />
+                              <Text style={{ fontSize: 11, color: '#78909C', marginTop: 4, fontStyle: 'italic' }}>
+                                Measure between the two natural teeth bordering this missing cluster.
+                              </Text>
+                            </View>
+                            <Text style={{ fontSize: 12, fontWeight: '600', color: '#1565C0', marginBottom: 6 }}>Occlusocervical Height per tooth (mm) *</Text>
+                            {positions.map((tooth) => {
+                              const row = (formData.edentulous_site_measurements || {})[tooth] || {};
+                              return (
+                                <View key={`ed-cluster-row-${tooth}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                                  <View style={{ backgroundColor: '#E53935', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, minWidth: 56, alignItems: 'center' }}>
+                                    <Text style={{ fontSize: 11, fontWeight: '800', color: '#FFF' }}>FDI {tooth}</Text>
+                                  </View>
+                                  <TextInput
+                                    style={[styles.input, { borderColor: '#1565C0', flex: 1, marginBottom: 0 }]}
+                                    placeholder="e.g. 12"
+                                    keyboardType="decimal-pad"
+                                    maxLength={5}
+                                    value={row.oc || ''}
+                                    onChangeText={(v) => setOc(tooth, v)}
+                                    data-testid={`oc-height-${tooth}`}
+                                  />
+                                </View>
+                              );
+                            })}
+                            {/* Per-cluster intraoral findings — adjacent missing
+                                teeth share ONE set of dropdowns (continuous
+                                edentulous span = one site). Singletons render
+                                their own set above. */}
+                            {(() => {
+                              const site = (formData.clinical_exam_per_site || {})[leader] || {};
+                              return (
+                                <View style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#ECEFF1' }}>
+                                  <Dropdown label="Ridge Contour" value={site.ridge_contour || ''}
+                                    options={RIDGE_CONTOUR_OPTIONS} onChange={(v) => setSite(leader, 'ridge_contour', v)} data-testid={`ridge-contour-${leader}`} />
+                                  <Dropdown label="Soft Tissue Thickness" value={site.soft_tissue_thickness || ''}
+                                    options={SOFT_TISSUE_OPTIONS} onChange={(v) => setSite(leader, 'soft_tissue_thickness', v)} data-testid={`soft-tissue-${leader}`} />
+                                  <Dropdown label="Keratinized Mucosa" value={site.keratinized_mucosa || ''}
+                                    options={KERATINIZED_MUCOSA_OPTIONS} onChange={(v) => setSite(leader, 'keratinized_mucosa', v)} data-testid={`keratinized-${leader}`} />
+                                </View>
+                              );
+                            })()}
+                          </View>
+                        );
+                      })}
+                    </View>
+                  );
+                })()
+              ) : (
+                // Single-tooth (or nothing marked yet) — current fields unchanged
+                <>
+                  <View style={{ marginBottom: 8 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: '#1565C0', marginBottom: 4 }}>Occlusocervical Height (mm) <Text style={{ color: '#DC3545' }}>*</Text></Text>
+                    <TextInput
+                      style={[styles.input, { borderColor: '#1565C0' }]}
+                      placeholder="e.g. 12"
+                      keyboardType="decimal-pad"
+                      maxLength={5}
+                      value={formData.occlusocervical_height}
+                      onChangeText={v => updateForm('occlusocervical_height', v)}
+                      data-testid="occlusocervical-height-input"
+                    />
+                  </View>
+                  <View style={{ marginBottom: 8 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: '#333', marginBottom: 4 }}>Mesiodistal Space (mm) *</Text>
+                    <TextInput
+                      style={[styles.input, { borderColor: '#1565C0' }]}
+                      placeholder="e.g. 15"
+                      keyboardType="decimal-pad"
+                      maxLength={5}
+                      value={formData.mesiodistal_space}
+                      onChangeText={v => updateForm('mesiodistal_space', v)}
+                      data-testid="mesiodistal-space-input"
+                    />
+                  </View>
+                </>
+              )}
+              {/* Single-site (or empty) dropdowns. When ≥2 missing teeth are
+                  selected and the procedure is NOT Single Conventional Implant,
+                  we instead render Ridge Contour / Soft Tissue / Keratinized
+                  per-cluster INSIDE each cluster card above. */}
+              {((formData.missing_teeth || []).length < 2 || formData.implant_procedure_type === 'Single Conventional Implant') && (
+                <>
+                  <Dropdown label="Ridge Contour" value={formData.ridge_contour}
+                    options={RIDGE_CONTOUR_OPTIONS} onChange={v => updateForm('ridge_contour', v)} />
+                  <Dropdown label="Soft Tissue Thickness" value={formData.soft_tissue_thickness}
+                    options={SOFT_TISSUE_OPTIONS} onChange={v => updateForm('soft_tissue_thickness', v)} />
+                  <Dropdown label="Keratinized Mucosa" value={formData.keratinized_mucosa}
+                    options={KERATINIZED_MUCOSA_OPTIONS} onChange={v => updateForm('keratinized_mucosa', v)} />
+                </>
+              )}
+            </>
+          )}
+
+          {/* Intraoral Examination – Full-Arch (All on 4/6/X) OR
+              Non-Full-Arch + Overdenture-with-Attachment (treated as full-arch) */}
+          {(isFullArch || isOverdentureNonFullArch) && (
+            <>
+              <Text style={styles.subSectionTitle}>Intraoral Examination</Text>
+              {/* Non-full-arch + Overdenture flow doesn't otherwise collect Arch
+                  in Procedure Information, so surface it here. */}
+              {isOverdentureNonFullArch && (
+                <Dropdown label="Arch" value={formData.arch}
+                  options={['Maxillary', 'Mandibular']} onChange={v => updateForm('arch', v)} required data-testid="overdenture-arch-dropdown" />
+              )}
+              <Dropdown label={formData.arch === 'Maxillary' ? 'Maxillary Arch Condition' : formData.arch === 'Mandibular' ? 'Mandibular Arch Condition' : 'Arch Condition'}
+                value={formData.arch_condition}
+                options={ARCH_CONDITION_OPTIONS} onChange={v => updateForm('arch_condition', v)} />
+              <Dropdown label="Ridge Contour" value={formData.ridge_contour}
+                options={RIDGE_CONTOUR_OPTIONS} onChange={v => updateForm('ridge_contour', v)} />
+              <Dropdown label="Soft Tissue Thickness" value={formData.soft_tissue_thickness}
+                options={SOFT_TISSUE_OPTIONS} onChange={v => updateForm('soft_tissue_thickness', v)} />
+              <Dropdown label="Keratinized Mucosa" value={formData.keratinized_mucosa}
+                options={KERATINIZED_MUCOSA_OPTIONS} onChange={v => updateForm('keratinized_mucosa', v)} />
+            </>
+          )}
+
+          {/* Periodontal Status – shown for specific procedure types */}
+          {(formData.implant_procedure_type === 'Single Conventional Implant' ||
+            formData.implant_procedure_type === 'Multiple Conventional Implants' ||
+            formData.implant_procedure_type === 'Immediate Implant' ||
+            formData.implant_procedure_type === 'Partial Extraction Therapy' ||
+            formData.implant_procedure_type === 'Implant Placement with Guided Bone Regeneration' ||
+            formData.implant_procedure_type === 'Guided Surgery' ||
+            // iter-330c: Sinus Lift also requires Periodontal Status — the
+            // submit validator demanded it but the render gate was missing
+            // it, leaving the user stuck at a "Please select Periodontal
+            // Status" popup with no dropdown visible to fill.
+            formData.implant_procedure_type === 'Sinus Lift') && (
+          <>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, marginBottom: 2 }}>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0' }}>Periodontal Status <Text style={{ color: '#DC3545' }}>*</Text></Text>
+            <TouchableOpacity
+              onPress={() => Alert.alert(
+                'Periodontal Status Assessment',
+                'Check for the following factors:\n\n' +
+                '\u2022 History of untreated periodontal conditions\n' +
+                '\u2022 Pocket probing depth around remaining natural teeth\n' +
+                '\u2022 Bleeding on probing\n' +
+                '\u2022 Plaque control and oral hygiene status\n' +
+                '\u2022 Tooth mobility\n' +
+                '\u2022 Furcation involvement in molars'
+              )}
+              data-testid="periodontal-status-info-btn"
+            >
+              <Ionicons name="information-circle" size={20} color="#1565C0" />
+            </TouchableOpacity>
+          </View>
+          <Dropdown label="" value={formData.periodontal_status}
+            options={['Good', 'Fair', 'Poor']} onChange={v => updateForm('periodontal_status', v)}
+            placeholder="Select periodontal status" />
+          </>
+          )}
+
+          {/* Occlusal Analysis – Non-Full-Arch */}
+          {isNonFullArch && (
+            <>
+              <Text style={styles.subSectionTitle}>Occlusal Analysis</Text>
+              <Dropdown label="Occlusal Scheme" value={formData.occlusal_scheme}
+                options={OCCLUSAL_SCHEME_OPTIONS} onChange={v => updateForm('occlusal_scheme', v)} />
+              <Dropdown label="Parafunction Habit" value={formData.parafunction_habit}
+                options={PARAFUNCTION_HABIT_OPTIONS} onChange={v => updateForm('parafunction_habit', v)} />
+              <Dropdown label="Opposing Dentition" value={formData.opposing_dentition}
+                options={['Natural Dentition', 'Fixed Partial Denture', 'Fixed Implant Prosthesis', 'Removable Prosthesis', 'Edentulous']}
+                onChange={v => updateForm('opposing_dentition', v)} />
+            </>
+          )}
+
+          {/* Occlusal Analysis – Full Arch */}
+          {isFullArch && (
+            <>
+              <Text style={styles.subSectionTitle}>Occlusal Analysis</Text>
+              <View style={styles.fieldContainer}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <Text style={styles.label}>
+                    {formData.arch === 'Maxillary' ? 'Maxillary Restorative Space (mm)' : formData.arch === 'Mandibular' ? 'Mandibular Restorative Space (mm)' : 'Restorative Space (mm)'}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => Alert.alert('Info', 'Residual alveolar ridge to opposing occlusal table')}
+                    data-testid="restorative-space-info-btn"
+                  >
+                    <Ionicons name="information-circle" size={20} color="#1565C0" />
+                  </TouchableOpacity>
+                </View>
+                <TextInput style={styles.input} value={formData.available_interarch_space} keyboardType="decimal-pad"
+                  onChangeText={v => updateForm('available_interarch_space', v)} placeholder="Enter in mm" data-testid="restorative-space-input" />
+              </View>
+              <Dropdown label="Opposing Arch" value={formData.opposing_arch}
+                options={['Natural Dentition', 'Fixed Partial Denture', 'Fixed Implant Prosthesis', 'Removable Prosthesis', 'Edentulous']}
+                onChange={v => updateForm('opposing_arch', v)} />
+              <Dropdown label="Temporomandibular Joint" value={formData.tmj}
+                options={TMJ_OPTIONS} onChange={v => updateForm('tmj', v)} />
+
+              {/* ── Atrophy Assessment (Full-Arch only) ── */}
+              {/* iter-235: hide Atrophy Assessment for Existing Implant full-arch
+                  cases — the implants are already placed so an atrophy class /
+                  therapeutic-option recommendation is not actionable. */}
+              {!isExistingImplantCase && (<>
+              <Text style={[styles.subSectionTitle, { marginTop: 18 }]}>Atrophy Assessment</Text>
+              <Text style={{ fontSize: 12, color: '#5C6BC0', marginBottom: 10, fontStyle: 'italic' }}>
+                Enter average bone height and width in the anterior and posterior regions for each treated arch. The class and recommended therapeutic options are computed automatically.
+              </Text>
+
+              {(formData.arch === 'Maxillary' || formData.arch === 'Both') && (
+                <View style={{ marginBottom: 12, padding: 12, backgroundColor: '#F3F8FF', borderRadius: 10, borderLeftWidth: 3, borderLeftColor: '#1565C0' }} testID="atrophy-maxilla-block">
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#0D47A1', marginBottom: 8 }}>Maxilla</Text>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Anterior Height (mm)</Text>
+                      <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="e.g. 14"
+                        value={formData.atrophy_max_ant_h} onChangeText={v => updateForm('atrophy_max_ant_h', v)} testID="atrophy-max-ant-h" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Posterior Height (mm)</Text>
+                      <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="e.g. 6"
+                        value={formData.atrophy_max_post_h} onChangeText={v => updateForm('atrophy_max_post_h', v)} testID="atrophy-max-post-h" />
+                    </View>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Anterior Width (mm)</Text>
+                      <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="e.g. 7"
+                        value={formData.atrophy_max_ant_w} onChangeText={v => updateForm('atrophy_max_ant_w', v)} testID="atrophy-max-ant-w" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Posterior Width (mm)</Text>
+                      <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="e.g. 7"
+                        value={formData.atrophy_max_post_w} onChangeText={v => updateForm('atrophy_max_post_w', v)} testID="atrophy-max-post-w" />
+                    </View>
+                  </View>
+                  <AtrophyClassificationChip
+                    arch="maxilla"
+                    anterior_height={formData.atrophy_max_ant_h}
+                    posterior_height={formData.atrophy_max_post_h}
+                    anterior_width={formData.atrophy_max_ant_w}
+                    posterior_width={formData.atrophy_max_post_w}
+                    opposing_arch={formData.opposing_arch}
+                    smoking={formData.medical_assessment?.smoking}
+                    hba1c={formData.medical_assessment?.hba1c}
+                  />
+                </View>
+              )}
+
+              {(formData.arch === 'Mandibular' || formData.arch === 'Both') && (
+                <View style={{ marginBottom: 12, padding: 12, backgroundColor: '#F3F8FF', borderRadius: 10, borderLeftWidth: 3, borderLeftColor: '#1565C0' }} testID="atrophy-mandible-block">
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#0D47A1', marginBottom: 8 }}>Mandible</Text>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Anterior Height (mm)</Text>
+                      <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="e.g. 18"
+                        value={formData.atrophy_man_ant_h} onChangeText={v => updateForm('atrophy_man_ant_h', v)} testID="atrophy-man-ant-h" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Posterior Height (mm)</Text>
+                      <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="e.g. 9"
+                        value={formData.atrophy_man_post_h} onChangeText={v => updateForm('atrophy_man_post_h', v)} testID="atrophy-man-post-h" />
+                    </View>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Anterior Width (mm)</Text>
+                      <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="e.g. 7"
+                        value={formData.atrophy_man_ant_w} onChangeText={v => updateForm('atrophy_man_ant_w', v)} testID="atrophy-man-ant-w" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Posterior Width (mm)</Text>
+                      <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="e.g. 7"
+                        value={formData.atrophy_man_post_w} onChangeText={v => updateForm('atrophy_man_post_w', v)} testID="atrophy-man-post-w" />
+                    </View>
+                  </View>
+                  <AtrophyClassificationChip
+                    arch="mandible"
+                    anterior_height={formData.atrophy_man_ant_h}
+                    posterior_height={formData.atrophy_man_post_h}
+                    anterior_width={formData.atrophy_man_ant_w}
+                    posterior_width={formData.atrophy_man_post_w}
+                    opposing_arch={formData.opposing_arch}
+                    smoking={formData.medical_assessment?.smoking}
+                    hba1c={formData.medical_assessment?.hba1c}
+                  />
+                </View>
+              )}
+              </>)}
+            </>
+          )}
+
+          {/* Aesthetic Risk Assessment – Non-Full-Arch */}
+          {isNonFullArch && (
+            <>
+              <Text style={styles.subSectionTitle}>Aesthetic Risk Assessment</Text>
+              <Dropdown label="Smile Line" value={formData.smile_line}
+                options={SMILE_LINE_OPTIONS} onChange={v => updateForm('smile_line', v)} />
+              <Dropdown label="Gingival Biotype" value={formData.gingival_biotype}
+                options={GINGIVAL_BIOTYPE_OPTIONS} onChange={v => updateForm('gingival_biotype', v)} />
+            </>
+          )}
+        </View>
+      )}
+
+      {/* iter-233: resume the non-Existing-Implant gated section. Everything
+          below (Schedule, Loading Type, CBCT upload, Phase 1 Checklist, Bone
+          Graft, Continue button) belongs only to the routine flow; Existing
+          Implant cases skip straight to the Medical Assessment + lifted
+          submit buttons rendered further down. */}
+      </>)}
+      {!isExistingImplantCase && !isAugCase && (<>
+
+      {/* ─── Schedule ─── */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Schedule</Text>
+        <CalendarPicker
+          label="Procedure Date"
+          value={formData.procedure_date}
+          onChange={(date) => {
+            updateForm('procedure_date', date);
+            updateForm('procedure_time', ''); // reset time when date changes
+          }}
+          required
+        />
+        {formData.procedure_date && (() => {
+          const d = new Date(formData.procedure_date + 'T00:00:00');
+          const dayOfWeek = d.getDay(); // 0=Sun
+          if (dayOfWeek === 0) {
+            return (
+              <View style={[styles.riskBadge, { backgroundColor: '#FFF3E0' }]}>
+                <Text style={{ color: '#E65100', fontWeight: '600', fontSize: 13 }}>
+                  No procedure slots available on Sundays
+                </Text>
+              </View>
+            );
+          }
+          const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+          const dayName = dayNames[dayOfWeek];
+          const availableSlots = PROCEDURE_TIME_SLOTS.filter(s => s.days.includes(dayName));
+          return (
+            <View style={styles.fieldContainer}>
+              <Text style={styles.label}>Time Slot <Text style={{ color: '#DC3545' }}>*</Text></Text>
+              <View style={styles.chipRow}>
+                {availableSlots.map(slot => {
+                  const booked = bookedSlots[slot.value];
+                  const isBooked = !!booked;
+                  const isSelected = formData.procedure_time === slot.value;
+                  return (
+                    <View key={slot.value}>
+                      <TouchableOpacity
+                        style={[styles.chip, isSelected && styles.chipActive, isBooked && styles.chipBooked]}
+                        onPress={() => !isBooked && updateForm('procedure_time', slot.value)}
+                        disabled={isBooked}
+                        data-testid={`slot-${slot.value}`}>
+                        <Text style={[styles.chipText, isSelected && styles.chipTextActive, isBooked && styles.chipBookedText]}>
+                          {slot.label}
+                        </Text>
+                        {isBooked && <Ionicons name="lock-closed" size={12} color="#999" style={{ marginLeft: 4 }} />}
+                      </TouchableOpacity>
+                      {isBooked && (
+                        <Text style={styles.bookedInfo} numberOfLines={1}>
+                          {booked.patient_name} ({booked.scheduled_by})
+                        </Text>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          );
+        })()}
+      </View>
+
+      {/* ─── Loading Type ─── */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Type of Loading <Text style={{ color: '#DC3545' }}>*</Text></Text>
+        <View style={styles.chipRow}>
+          {LOADING_TYPES.map(lt => (
+            <TouchableOpacity key={lt}
+              style={[styles.chip, formData.loading_type.includes(lt) && styles.chipActive]}
+              onPress={() => toggleLoading(lt)}>
+              <Text style={[styles.chipText, formData.loading_type.includes(lt) && styles.chipTextActive]}>
+                {lt}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      {/* Prosthetic Treatment Plan was moved up to immediately follow Procedure
+          Information (iter-134). Empty placeholder retained intentionally. */}
+
+      {/* ─── CBCT Report Upload (Mandatory: 2 minimum) ─── */}
+      {/* iter-231: skipped for Existing Implant cases — intake CBCT is
+          captured directly on the implant cards instead. */}
+      {!isExistingImplantCase && !isAugCase && (
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>CBCT Report <Text style={{ color: '#DC3545' }}>*</Text></Text>
+        {cbctFiles.map((file, idx) => {
+          const isExtra = idx >= 2;
+          const baseUrl = api.defaults.baseURL || '';
+          return (
+            <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }} data-testid={`cbct-slot-${idx}`}>
+              <View style={{ width: 30, alignItems: 'center' }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#555' }}>{idx + 1}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                {file ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    {file.filename.match(/\.(png|jpg|jpeg)$/i) ? (
+                      <Image source={{ uri: `${baseUrl}/uploads/${file.filename}?token=${authToken}`, headers: { Authorization: `Bearer ${authToken}` } }}
+                        style={{ width: 36, height: 36, borderRadius: 6 }} resizeMode="cover" />
+                    ) : (
+                      <Ionicons name="document-attach" size={22} color="#4CAF50" />
+                    )}
+                    <TouchableOpacity
+                      style={styles.cbctViewBtn}
+                      onPress={() => Linking.openURL(`${baseUrl}/uploads/${file.filename}?token=${authToken}`).catch(() => Alert.alert('Error', 'Could not open file'))}
+                      data-testid={`view-cbct-${idx}`}
+                    >
+                      <Text style={styles.cbctViewBtnText} numberOfLines={1}>View CBCT Report</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => { const u = [...cbctFiles]; u[idx] = null; setCbctFiles(u); }}
+                      data-testid={`remove-cbct-${idx}`}>
+                      <Ionicons name="close-circle" size={22} color="#E53935" />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.cbctUploadBtn}
+                    onPress={() => pickCbctFileAtIndex(idx)} disabled={cbctUploadingIdx === idx}
+                    data-testid={`upload-cbct-${idx}`}
+                  >
+                    {cbctUploadingIdx === idx ? (
+                      <ActivityIndicator color="#FFF" size="small" />
+                    ) : (
+                      <>
+                        <Ionicons name="cloud-upload" size={18} color="#FFF" />
+                        <Text style={styles.cbctUploadBtnText}>Upload CBCT Report</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )}
+              </View>
+              {isExtra && (
+                <TouchableOpacity onPress={() => removeExtraCbct(idx)} data-testid={`remove-extra-cbct-${idx}`}>
+                  <Ionicons name="remove-circle" size={26} color="#E53935" />
+                </TouchableOpacity>
+              )}
+            </View>
+          );
+        })}
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10 }}
+          onPress={addExtraCbct} data-testid="add-extra-cbct-btn">
+          <Ionicons name="add-circle" size={26} color="#4CAF50" />
+          <Text style={{ color: '#4CAF50', fontWeight: '700', fontSize: 14 }}>Add CBCT Report</Text>
+        </TouchableOpacity>
+        <Text style={{ fontSize: 11, color: '#999', marginTop: 2 }}>
+          Minimum 2 CBCT Reports required. Accepted: PDF, PNG, JPG, HEIC (Max 25MB each)
+        </Text>
+      </View>
+      )}
+
+      {/* ─── iter-356: Patient Intra-oral Photograph (Mandatory: 2 minimum) ─── */}
+      {/* Skipped for Existing Implant cases (consistent with CBCT). Same
+          slot-based UX as CBCT but slots 0+1 have fixed labels ("Occlusal
+          View" / "Lateral view/Frontal view"). Extras get an editable custom
+          label. */}
+      {!isExistingImplantCase && !isAugCase && (
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Patient Intra-oral Photograph <Text style={{ color: '#DC3545' }}>*</Text></Text>
+        {intraoralPhotos.map((file, idx) => {
+          const isExtra = idx >= 2;
+          const baseUrl = api.defaults.baseURL || '';
+          const fixedLabel = idx < INTRAORAL_LABELS.length ? INTRAORAL_LABELS[idx] : '';
+          return (
+            <View key={idx} style={{ marginBottom: 12 }} data-testid={`intraoral-slot-${idx}`}>
+              {/* Slot label (fixed for 0/1, editable text input for extras) */}
+              {isExtra ? (
+                <TextInput
+                  style={{
+                    fontSize: 13, fontWeight: '700', color: '#1565C0',
+                    marginBottom: 6, paddingVertical: 6, paddingHorizontal: 10,
+                    borderWidth: 1, borderColor: '#B3D4FC', borderRadius: 8,
+                    backgroundColor: '#F5FAFF',
+                  }}
+                  value={file?.label || ''}
+                  onChangeText={(t) => updateIntraoralLabel(idx, t)}
+                  placeholder="e.g., Right buccal view"
+                  placeholderTextColor="#90A4AE"
+                  editable={!!file}
+                  data-testid={`intraoral-label-${idx}`}
+                />
+              ) : (
+                <Text style={{ fontSize: 13, fontWeight: '800', color: '#1565C0', marginBottom: 6, letterSpacing: 0.3 }}>
+                  Tab {idx + 1} — {fixedLabel}
+                </Text>
+              )}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={{ flex: 1 }}>
+                  {file ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Image
+                        source={{ uri: `${baseUrl}/uploads/${file.filename}?token=${authToken}`, headers: { Authorization: `Bearer ${authToken}` } }}
+                        style={{ width: 36, height: 36, borderRadius: 6 }}
+                        resizeMode="cover"
+                      />
+                      <TouchableOpacity
+                        style={styles.cbctViewBtn}
+                        onPress={() => Linking.openURL(`${baseUrl}/uploads/${file.filename}?token=${authToken}`).catch(() => Alert.alert('Error', 'Could not open file'))}
+                        data-testid={`view-intraoral-${idx}`}
+                      >
+                        <Text style={styles.cbctViewBtnText} numberOfLines={1}>View Photograph</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => { const u = [...intraoralPhotos]; u[idx] = null; setIntraoralPhotos(u); }}
+                        data-testid={`remove-intraoral-${idx}`}
+                      >
+                        <Ionicons name="close-circle" size={22} color="#E53935" />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.cbctUploadBtn}
+                      onPress={() => pickIntraoralAtIndex(idx)}
+                      disabled={intraoralUploadingIdx === idx}
+                      data-testid={`upload-intraoral-${idx}`}
+                    >
+                      {intraoralUploadingIdx === idx ? (
+                        <ActivityIndicator color="#FFF" size="small" />
+                      ) : (
+                        <>
+                          <Ionicons name="cloud-upload" size={18} color="#FFF" />
+                          <Text style={styles.cbctUploadBtnText}>Upload Photograph</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </View>
+                {isExtra && (
+                  <TouchableOpacity onPress={() => removeExtraIntraoral(idx)} data-testid={`remove-extra-intraoral-${idx}`}>
+                    <Ionicons name="remove-circle" size={26} color="#E53935" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          );
+        })}
+        <TouchableOpacity
+          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10 }}
+          onPress={addExtraIntraoral}
+          data-testid="add-extra-intraoral-btn"
+        >
+          <Ionicons name="add-circle" size={26} color="#4CAF50" />
+          <Text style={{ color: '#4CAF50', fontWeight: '700', fontSize: 14 }}>Add Photograph</Text>
+        </TouchableOpacity>
+        <Text style={{ fontSize: 11, color: '#999', marginTop: 2 }}>
+          Minimum 2 Photographs required. Accepted: PNG, JPEG, HEIC (Max 20 MB each)
+        </Text>
+      </View>
+      )}
+
+      {/* ─── Phase 1 Checklist ─── */}
+      {/* iter-231: routine flow only. Existing Implant cases render a
+          standalone Medical Assessment block below instead (no pre-surgical
+          checklist items because no surgery is performed). */}
+      {!isExistingImplantCase && !isAugCase && (
+      <View style={styles.section} onLayout={showFlowStrip ? onExistingStepLayout(3) : undefined}>
+        <Text style={styles.sectionTitle}>Phase 1 Checklist <Text style={{ color: '#DC3545' }}>*</Text></Text>
+        {CHECKLIST_DATA.pre_surgical.items.filter(item => item.id !== 'medical_assessment').filter(item => !(isFullArch && item.id === 'oral_prophylaxis')).map(item => (
+          <View key={item.id} style={styles.checklistRow}>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={[styles.checklistLabel, { flex: 1 }]}>{item.label}</Text>
+              {/* iter-251: ℹ️ info popover with clinical protocol reminder */}
+              {(item as any).tooltip && (
+                <TouchableOpacity
+                  onPress={() => setActiveTooltip({ label: item.label, tooltip: (item as any).tooltip })}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  testID={`checklist-info-${item.id}`}
+                  accessibilityLabel={`More information about ${item.label}`}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="information-circle-outline" size={18} color="#1565C0" />
+                </TouchableOpacity>
+              )}
+            </View>
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              {['Yes', 'No'].map(opt => (
+                <TouchableOpacity key={opt}
+                  style={[styles.yesNoBtn, checklistItems[item.id] === true && opt === 'Yes' && { backgroundColor: '#4CAF50', borderColor: '#4CAF50' }, checklistItems[item.id] === false && opt === 'No' && { backgroundColor: '#F44336', borderColor: '#F44336' }]}
+                  onPress={() => setChecklistItems(prev => ({ ...prev, [item.id]: opt === 'Yes' }))}>
+                  <Text style={[styles.yesNoText, (checklistItems[item.id] === true && opt === 'Yes') || (checklistItems[item.id] === false && opt === 'No') ? styles.yesNoTextActive : {}]}>{opt}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        ))}
+
+        {/* ─── Medical Assessment Sub-section ─── */}
+        <View style={styles.medicalSection}>
+          <Text style={styles.subSectionTitle}>Medical Assessment</Text>
+          {MEDICAL_RISK_FACTORS.map(factor => (
+            <View key={factor.id}>
+              <View style={styles.medicalRow}>
+                <Text style={styles.medicalLabel}>{factor.label}</Text>
+                <View style={styles.yesNoRow}>
+                  {factor.options.map(opt => (
+                    <TouchableOpacity key={opt}
+                      style={[styles.yesNoBtn, formData.medical_assessment[factor.id] === opt && (opt === 'No' ? styles.noActive : styles.yesActive)]}
+                      onPress={() => updateMedical(factor.id, opt)}>
+                      <Text style={[styles.yesNoText, formData.medical_assessment[factor.id] === opt && styles.yesNoTextActive]}>{opt}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+              {factor.id === 'diabetes' && (formData.medical_assessment.diabetes === 'Controlled' || formData.medical_assessment.diabetes === 'Uncontrolled') && (
+                <View style={styles.hba1cRow} testID="hba1c-row-routine" data-testid="hba1c-row-routine">
+                  <Text style={styles.hba1cLabel}>HbA1c Value <Text style={styles.hba1cOptional}>(optional, %)</Text></Text>
+                  <TextInput
+                    style={styles.hba1cInput}
+                    value={formData.medical_assessment.hba1c || ''}
+                    onChangeText={(t) => updateMedical('hba1c', t)}
+                    placeholder="e.g. 7.2"
+                    placeholderTextColor="#90A4AE"
+                    keyboardType="decimal-pad"
+                    inputMode="decimal"
+                    testID="hba1c-input-routine"
+                    data-testid="hba1c-input-routine"
+                  />
+                </View>
+              )}
+            </View>
+          ))}
+          {renderHaematologySection('routine')}
+          {Object.keys(formData.medical_assessment).length > 0 && (() => {
+            const risk = calculateMedicalRisk(formData.medical_assessment);
+            return (
+              <View>
+                <View style={[styles.riskBadge, { backgroundColor: risk.color + '18' }]}>
+                  <Text style={[styles.riskBadgeText, { color: risk.color }]}>
+                    Medical Risk: {risk.level} (Score: {risk.score}/15)
+                  </Text>
+                </View>
+                {risk.warnings.length > 0 && (
+                  <View style={{ marginTop: 8, padding: 10, backgroundColor: '#FFF3E0', borderRadius: 8, borderLeftWidth: 3, borderLeftColor: risk.color }}>
+                    {risk.warnings.map((w, i) => (
+                      <Text key={i} style={{ fontSize: 12, color: '#5D4037', marginBottom: i < risk.warnings.length - 1 ? 4 : 0 }}>
+                        {'\u26A0'} {w}
+                      </Text>
+                    ))}
+                  </View>
+                )}
+              </View>
+            );
+          })()}
+        </View>
+      </View>
+      )}
+
+      </>)}
+
+      {/* iter-231: Standalone Medical Assessment block for Existing Implant
+          cases — mirrors the routine flow's sub-section but without the
+          surrounding pre-surgical checklist items. */}
+      {isExistingImplantCase && (
+        <View style={styles.section} onLayout={onExistingStepLayout(3)}>
+          <Text style={styles.sectionTitle}>Medical Assessment <Text style={{ color: '#DC3545' }}>*</Text></Text>
+          <View style={styles.medicalSection}>
+            {MEDICAL_RISK_FACTORS.map(factor => (
+              <View key={factor.id}>
+                <View style={styles.medicalRow}>
+                  <Text style={styles.medicalLabel}>{factor.label}</Text>
+                  <View style={styles.yesNoRow}>
+                    {factor.options.map(opt => (
+                      <TouchableOpacity key={opt}
+                        style={[styles.yesNoBtn, formData.medical_assessment[factor.id] === opt && (opt === 'No' ? styles.noActive : styles.yesActive)]}
+                        onPress={() => updateMedical(factor.id, opt)}>
+                        <Text style={[styles.yesNoText, formData.medical_assessment[factor.id] === opt && styles.yesNoTextActive]}>{opt}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+                {factor.id === 'diabetes' && (formData.medical_assessment.diabetes === 'Controlled' || formData.medical_assessment.diabetes === 'Uncontrolled') && (
+                  <View style={styles.hba1cRow} testID="hba1c-row-existing" data-testid="hba1c-row-existing">
+                    <Text style={styles.hba1cLabel}>HbA1c Value <Text style={styles.hba1cOptional}>(optional, %)</Text></Text>
+                    <TextInput
+                      style={styles.hba1cInput}
+                      value={formData.medical_assessment.hba1c || ''}
+                      onChangeText={(t) => updateMedical('hba1c', t)}
+                      placeholder="e.g. 7.2"
+                      placeholderTextColor="#90A4AE"
+                      keyboardType="decimal-pad"
+                      inputMode="decimal"
+                      testID="hba1c-input-existing"
+                      data-testid="hba1c-input-existing"
+                    />
+                  </View>
+                )}
+              </View>
+            ))}
+            {renderHaematologySection('existing')}
+            {Object.keys(formData.medical_assessment).length > 0 && (() => {
+              const risk = calculateMedicalRisk(formData.medical_assessment);
+              return (
+                <View>
+                  <View style={[styles.riskBadge, { backgroundColor: risk.color + '18' }]}>
+                    <Text style={[styles.riskBadgeText, { color: risk.color }]}>
+                      Medical Risk: {risk.level} (Score: {risk.score}/15)
+                    </Text>
+                  </View>
+                  {risk.warnings.length > 0 && (
+                    <View style={{ marginTop: 8, padding: 10, backgroundColor: '#FFF3E0', borderRadius: 8, borderLeftWidth: 3, borderLeftColor: risk.color }}>
+                      {risk.warnings.map((w, i) => (
+                        <Text key={i} style={{ fontSize: 12, color: '#5D4037', marginBottom: i < risk.warnings.length - 1 ? 4 : 0 }}>
+                          {'\u26A0'} {w}
+                        </Text>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              );
+            })()}
+          </View>
+        </View>
+      )}
+
+      {/* iter-232: Lifted submit buttons for Existing Implant — rendered
+          at the bottom of the form so the user fills everything top-to-
+          bottom and submits as the natural last action. Buttons stay
+          inside ExistingImplantSection for non-existing flows.
+          iter-235: order is Phase 3 → Phase 4 Step 1 → Save Draft, with a
+          tighter 6px vertical gap (per user request). */}
+      {isExistingImplantCase && existingSubmitApi?.canSubmit && (() => {
+        // iter-261: same disable + holistic-guard pattern as routine Continue.
+        const canSubmit = [0, 1, 2, 3].every(i => existingStepDone[i]);
+        const incompleteCount = [0, 1, 2, 3].filter(i => !existingStepDone[i]).length;
+        const guard = (run: () => void) => {
+          if (!canSubmit) {
+            const labels = [0, 1, 2, 3].filter(i => !existingStepDone[i]).map(i => FLOW_STEP_LABELS[i]);
+            Alert.alert(
+              'Incomplete sections',
+              `Please complete the following before submitting:\n\n${labels.map(l => `• ${l}`).join('\n')}`,
+              [{ text: 'OK' }]
+            );
+            return;
+          }
+          run();
+        };
+        return (
+          <View style={[styles.section, { gap: 6 }]} testID="existing-impl-action-buttons" onLayout={onExistingStepLayout(4)}>
+            <TouchableOpacity
+              style={[styles.continueBtn, { backgroundColor: canSubmit ? '#43A047' : '#B0BEC5', marginVertical: 0, marginHorizontal: 0 }, existingSubmitApi.submitting && { opacity: 0.6 }]}
+              onPress={() => guard(() => existingSubmitApi.submit('phase3'))}
+              disabled={existingSubmitApi.submitting}
+              data-testid="ei-move-phase3-bottom"
+            >
+              <Ionicons name={canSubmit ? 'arrow-forward-circle' : 'lock-closed'} size={20} color="#FFF" />
+              <Text style={styles.continueBtnText} numberOfLines={2}>{existingSubmitApi.labels.phase3}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.continueBtn, { backgroundColor: canSubmit ? '#1565C0' : '#B0BEC5', marginVertical: 0, marginHorizontal: 0 }, existingSubmitApi.submitting && { opacity: 0.6 }]}
+              onPress={() => guard(() => existingSubmitApi.submit('phase4_step1'))}
+              disabled={existingSubmitApi.submitting}
+              data-testid="ei-move-phase4-bottom"
+            >
+              {existingSubmitApi.submitting
+                ? <ActivityIndicator color="#FFF" />
+                : <><Ionicons name={canSubmit ? 'arrow-forward-circle' : 'lock-closed'} size={20} color="#FFF" /><Text style={styles.continueBtnText} numberOfLines={2}>{existingSubmitApi.labels.phase4}</Text></>}
+            </TouchableOpacity>
+            {!canSubmit && !existingSubmitApi.submitting && (
+              <Text style={{ marginTop: 2, textAlign: 'center', color: '#90A4AE', fontSize: 12, fontWeight: '600' }}>
+                {incompleteCount} section{incompleteCount > 1 ? 's' : ''} still incomplete — press Continue to see the full list
+              </Text>
+            )}
+            {!existingSubmitApi.isDraftResume && (
+              <TouchableOpacity
+                style={[styles.continueBtn, { backgroundColor: '#FFF', borderWidth: 1.5, borderColor: '#CFD8DC', marginVertical: 0, marginHorizontal: 0 }, existingSubmitApi.submitting && { opacity: 0.6 }]}
+                onPress={() => existingSubmitApi.submit('draft')}
+                disabled={existingSubmitApi.submitting}
+                data-testid="ei-save-draft-bottom"
+              >
+                <Ionicons name="save-outline" size={20} color="#37474F" />
+                <Text style={[styles.continueBtnText, { color: '#37474F' }]}>Save Draft</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        );
+      })()}
+
+      {/* iter-233: resume the routine-only block for Bone Graft + Continue. */}
+      {!isExistingImplantCase && !isAugCase && (<>
+
+      {/* ─── Bone Graft (if applicable) ─── */}
+      {formData.implant_procedure_type.includes('Bone') && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Bone Graft Specifications</Text>
+          <TextInput style={[styles.input, { minHeight: 60 }]} value={formData.bone_graft_specifications}
+            onChangeText={v => updateForm('bone_graft_specifications', v)}
+            placeholder="Enter bone graft details" multiline />
+        </View>
+      )}
+
+      {/* ─── Continue Button ─── */}
+      {/* iter-231: hide for Existing Implant — that flow has its own
+          "Submit for Approval and Move to …" buttons inside
+          ExistingImplantSection.
+          iter-260: visually disabled (greyed + lock icon + helper text)
+          until all 4 sections are complete. Tap still works to surface
+          the holistic Alert listing what's missing. */}
+      {!isExistingImplantCase && !isAugCase && (() => {
+        const canContinue = [0, 1, 2, 3].every(i => existingStepDone[i]);
+        const incompleteCount = [0, 1, 2, 3].filter(i => !existingStepDone[i]).length;
+        return (
+          <View onLayout={showFlowStrip ? onExistingStepLayout(4) : undefined}>
+            <TouchableOpacity
+              style={[styles.continueBtn, !canContinue && { backgroundColor: '#B0BEC5' }]}
+              onPress={handleContinueToImplants}
+              disabled={loading}
+              data-testid="continue-to-implants"
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <>
+                  {!canContinue && <Ionicons name="lock-closed" size={18} color="#FFF" />}
+                  <Text style={styles.continueBtnText}>Continue to Implant Selection</Text>
+                  {canContinue && <Ionicons name="arrow-forward" size={20} color="#FFF" />}
+                </>
+              )}
+            </TouchableOpacity>
+            {!canContinue && !loading && (
+              <Text style={{ marginTop: 8, textAlign: 'center', color: '#90A4AE', fontSize: 12, fontWeight: '600' }}>
+                {incompleteCount} section{incompleteCount > 1 ? 's' : ''} still incomplete — press Continue to see the full list
+              </Text>
+            )}
+          </View>
+        );
+      })()}
+      </>)}
+    </ScrollView>
+
+    {/* iter-251: clinical-protocol info popover for Phase 1 Checklist items */}
+    <Modal
+      visible={!!activeTooltip}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setActiveTooltip(null)}
+    >
+      <TouchableOpacity
+        activeOpacity={1}
+        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 }}
+        onPress={() => setActiveTooltip(null)}
+      >
+        <TouchableOpacity activeOpacity={1} onPress={() => { /* swallow taps on card */ }}
+          style={{ backgroundColor: '#FFFFFF', borderRadius: 16, padding: 20, maxWidth: 480, width: '100%', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.18, shadowRadius: 20, elevation: 12 }}
+          testID="checklist-info-modal"
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 12 }}>
+            <Ionicons name="information-circle" size={22} color="#1565C0" style={{ marginTop: 2 }} />
+            <Text style={{ flex: 1, fontSize: 16, fontWeight: '700', color: '#0D47A1', lineHeight: 22 }}>
+              {activeTooltip?.label}
+            </Text>
+          </View>
+          <Text style={{ fontSize: 14, color: '#37474F', lineHeight: 21 }}>
+            {activeTooltip?.tooltip}
+          </Text>
+          <TouchableOpacity
+            onPress={() => setActiveTooltip(null)}
+            style={{ marginTop: 16, alignSelf: 'flex-end', paddingHorizontal: 18, paddingVertical: 9, backgroundColor: '#1565C0', borderRadius: 8 }}
+            testID="checklist-info-close"
+          >
+            <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700' }}>Got it</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+    </>
+  );
+}
+
+// ─── Styles ────────────────────────────────────────────
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#F0F4F8' },
+  headerBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
+  headerTitle: { fontSize: 18, fontWeight: '800', color: '#0D47A1', marginLeft: 12, lineHeight: 22 },
+  backBtn: { padding: 6 },
+  stepIndicator: { fontSize: 13, color: '#1565C0', fontWeight: '700', marginLeft: 12, marginTop: 2, marginBottom: 12, letterSpacing: 0.3 },
+  stepHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E0E7EE' },
+  stepTitle: { fontSize: 18, fontWeight: '700', color: '#0D47A1', marginLeft: 12 },
+  section: { backgroundColor: '#FFF', borderRadius: 16, marginHorizontal: 16, marginBottom: 16, padding: 18, shadowColor: '#1565C0', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3, borderWidth: 1, borderColor: '#E8EDF5' },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1565C0', marginBottom: 14, letterSpacing: 0.3 },
+  // iter-236: sticky progress strip for the Existing Implant workflow.
+  existingProgressBar: { backgroundColor: '#FFFFFF', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#E3F2FD', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 2 },
+  existingProgressLabel: { fontSize: 13, fontWeight: '700', color: '#0F2740', letterSpacing: 0.2, flex: 1 },
+  existingProgressCount: { fontSize: 12, fontWeight: '700', color: '#1565C0', marginLeft: 8 },
+  existingProgressTrack: { marginTop: 8, height: 6, backgroundColor: '#E3F2FD', borderRadius: 999, overflow: 'hidden' },
+  existingProgressFill: { height: 6, backgroundColor: '#1565C0', borderRadius: 999 },
+  // iter-237: tappable step pills under the progress strip.
+  // iter-238: pills now flex to fill the row evenly + render number/✓ icon
+  // separately so they line up on a single tidy row.
+  // iter-239: tightened paddings so the leading "2." / "3." numerals stay
+  // fully inside the pill (they were clipping on narrow viewports).
+  existingStepPillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 10 },
+  existingStepPill: { flexGrow: 1, flexBasis: 0, minWidth: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: '#CFD8DC', backgroundColor: '#F8FAFC' },
+  existingStepPillActive: { backgroundColor: '#1565C0', borderColor: '#1565C0' },
+  existingStepPillDone: { backgroundColor: '#E8F5E9', borderColor: '#A5D6A7' },
+  existingStepPillNum: { fontSize: 10, fontWeight: '700', color: '#37474F', marginRight: 4, lineHeight: 13 },
+  existingStepPillText: { fontSize: 10, fontWeight: '600', color: '#37474F', letterSpacing: 0.1, lineHeight: 13, flexShrink: 1 },
+  existingStepPillTextActive: { color: '#FFFFFF' },
+  existingStepPillTextDone: { color: '#2E7D32' },
+  subSectionTitle: { fontSize: 14, fontWeight: '700', color: '#1565C0', marginTop: 14, marginBottom: 10, paddingBottom: 8, borderBottomWidth: 1.5, borderBottomColor: '#E3F2FD' },
+  fieldContainer: { marginBottom: 14 },
+  label: { fontSize: 13, fontWeight: '600', color: '#1565C0', marginBottom: 6, letterSpacing: 0.2 },
+  input: { borderWidth: 1.5, borderColor: '#D0DCE8', borderRadius: 10, padding: 12, fontSize: 15, backgroundColor: '#F8FAFC' },
+  dropdown: { borderWidth: 1.5, borderColor: '#D0DCE8', borderRadius: 10, padding: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F8FAFC' },
+  dropdownText: { fontSize: 15, color: '#333', flex: 1 },
+  dropdownList: { borderWidth: 1.5, borderColor: '#D0DCE8', borderRadius: 10, marginTop: 4, backgroundColor: '#FFF', maxHeight: 250, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 3 },
+  dropdownItem: { padding: 12, borderBottomWidth: 1, borderBottomColor: '#F0F4F8' },
+  dropdownItemActive: { backgroundColor: '#E3F2FD' },
+  dropdownItemText: { fontSize: 14, color: '#333' },
+  dropdownItemTextActive: { color: '#1565C0', fontWeight: '600' },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, borderColor: '#D0DCE8', backgroundColor: '#F8FAFC' },
+  chipActive: { backgroundColor: '#1565C0', borderColor: '#1565C0' },
+  chipText: { fontSize: 13, color: '#666' },
+  chipTextActive: { color: '#FFF', fontWeight: '600' },
+  chipBooked: { backgroundColor: '#F0F0F0', borderColor: '#DDD', opacity: 0.7 },
+  chipBookedText: { color: '#999', textDecorationLine: 'line-through' },
+  bookedInfo: { fontSize: 10, color: '#999', marginTop: 2, maxWidth: 120, textAlign: 'center' },
+  checklistRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F0F4F8' },
+  checklistLabel: { fontSize: 14, color: '#333', marginLeft: 0, flex: 1 },
+  medicalSection: { marginTop: 16, padding: 14, backgroundColor: '#F0F4F8', borderRadius: 12, borderWidth: 1, borderColor: '#E0E7EE' },
+  medicalRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#E0E7EE' },
+  medicalLabel: { fontSize: 14, color: '#333', fontWeight: '500', marginBottom: 8 },
+  hba1cRow: { paddingHorizontal: 4, paddingTop: 4, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#E0E7EE', backgroundColor: '#FAFBFD' },
+  hba1cLabel: { fontSize: 13, color: '#37474F', fontWeight: '600', marginBottom: 6 },
+  hba1cOptional: { fontSize: 11, color: '#78909C', fontWeight: '400' },
+  hba1cInput: { borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#263238', backgroundColor: '#FFF', maxWidth: 180 },
+  haematologyWrap: { marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#CFD8DC' },
+  haematologyHeading: { fontSize: 14, fontWeight: '700', color: '#1E3A5F', marginBottom: 10 },
+  haematologyOptional: { fontSize: 11, fontWeight: '400', color: '#78909C' },
+  haematologyRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#EEF2F7', gap: 12 },
+  haematologyLabel: { fontSize: 13, color: '#263238', fontWeight: '600' },
+  haematologyHint: { fontSize: 11, color: '#78909C', marginTop: 2 },
+  haematologyInput: { borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#263238', backgroundColor: '#FFF', minWidth: 110, textAlign: 'right' },
+  yesNoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  yesNoBtn: { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, borderColor: '#D0DCE8', backgroundColor: '#FFF' },
+  yesActive: { backgroundColor: '#DC3545', borderColor: '#DC3545' },
+  noActive: { backgroundColor: '#4CAF50', borderColor: '#4CAF50' },
+  yesNoText: { fontSize: 13, color: '#666', fontWeight: '500' },
+  yesNoTextActive: { color: '#FFF' },
+  riskBadge: { marginTop: 12, padding: 12, borderRadius: 12, alignItems: 'center' },
+  riskBadgeText: { fontSize: 14, fontWeight: '700' },
+  cbctUploadBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1565C0', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 20, borderStyle: 'dashed' as any, shadowColor: '#1565C0', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 2 },
+  cbctUploadBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
+  cbctViewBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: '#43A047', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10, flex: 1 },
+  cbctViewBtnText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
+  continueBtn: { flexDirection: 'row', backgroundColor: '#1565C0', borderRadius: 14, padding: 16, marginHorizontal: 16, marginVertical: 20, alignItems: 'center', justifyContent: 'center', gap: 8, shadowColor: '#1565C0', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 5 },
+  continueBtnText: { color: '#FFF', fontSize: 16, fontWeight: '700', letterSpacing: 0.5 },
+  submitContainer: { padding: 16, backgroundColor: '#FFF', borderTopWidth: 1, borderTopColor: '#E0E7EE' },
+  submitBtn: { flexDirection: 'row', backgroundColor: '#43A047', borderRadius: 14, padding: 16, alignItems: 'center', justifyContent: 'center', gap: 8, shadowColor: '#43A047', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 5 },
+  submitBtnText: { color: '#FFF', fontSize: 16, fontWeight: '700', letterSpacing: 0.5 },
+});
