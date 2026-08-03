@@ -573,7 +573,7 @@ export const buildLabSlipHtml = (procedure: any): string => {
   // surgical phases were skipped so `implant_plans` is empty. Pull the
   // implant inventory from `existing_implants` instead so the Lab Slip
   // still has implant-site / brand / system / Ø / length / platform rows.
-  const plans: any[] = (Array.isArray(procedure.implant_plans) && procedure.implant_plans.length > 0)
+  const basePlans: any[] = (Array.isArray(procedure.implant_plans) && procedure.implant_plans.length > 0)
     ? procedure.implant_plans
     : ((procedure.existing_implants || []).map((r: any) => ({
         position: r.tooth,
@@ -585,6 +585,35 @@ export const buildLabSlipHtml = (procedure: any): string => {
         implant_platform: r.platform || '',
         gingival_height: r.gingival_height_mm ?? '',
       })));
+
+  // iter-399: Survival Review substitution — the lab slip must carry the
+  // ACTIVE implant at each site. Replaced implants show the R{n} revision's
+  // specs; failed / treatment-ended implants without a replacement are
+  // excluded entirely (no prosthesis can be fabricated on them).
+  // `procedure.implants` arrives pre-resolved from GET /procedures/{id}
+  // (_resolve_active_implants_inline) and aligns with basePlans by index.
+  const resolvedImplants: any[] = Array.isArray(procedure.implants) ? procedure.implants : [];
+  const hasSurvivalOverlay = resolvedImplants.some((r: any) =>
+    r && (r._survival_status || r._active_revision || r._active_in_treatment === false));
+  const plans: any[] = hasSurvivalOverlay
+    ? basePlans.map((p: any, i: number) => {
+        const r = resolvedImplants[i];
+        if (!r) return p;
+        if (r._active_in_treatment === false) return null;
+        if (!r._active_revision) return p;
+        const site = r.tooth_number ?? r.tooth;
+        const brand = r.brand ?? r.system ?? '';
+        const system = r.system ?? '';
+        return {
+          ...p,
+          ...(site ? { position: site, tooth: site, tooth_number: site } : {}),
+          brand, implant_brand: brand,
+          system, implant_system: system,
+          diameter: r.diameter ?? '', implant_diameter: r.diameter ?? '',
+          length: r.length ?? '', implant_length: r.length ?? '',
+        };
+      }).filter(Boolean)
+    : basePlans;
 
   // Implant table rows
   const implantRows = plans.map((p: any, i: number) => {

@@ -2269,11 +2269,35 @@ _PATIENT_LOOKUP_PROJ = {
     "procedure_date": 1, "student_name": 1, "created_by_name": 1,
     "created_at": 1, "augmentation_required": 1, "linked_parent_case_id": 1,
     "current_phase": 1,
+    "student_id": 1, "previous_students": 1, "transfer_request": 1,
+    "supervisor_id": 1, "created_by_id": 1, "implant_incharge_id": 1,
 }
 
 
-def _patient_case_row(d: dict) -> dict:
-    return {
+def _case_accessible_to(user: dict, d: dict) -> bool:
+    """iter-399: mirrors the GET /procedures/{id} access rules so patient
+    history lists can flag cases the viewer cannot open (e.g. a case created
+    by the new owner after this user transferred the patient away)."""
+    role = user["role"]
+    uid = user["_id"]
+    if role in ("implant_incharge", "administrator"):
+        return True
+    if role == "student":
+        tr = d.get("transfer_request") or {}
+        return (
+            d.get("student_id") == uid
+            or uid in (d.get("previous_students") or [])
+            or (tr.get("to_student_id") == uid and tr.get("status") == "pending_recipient")
+        )
+    if role == "supervisor":
+        return d.get("supervisor_id") == uid or d.get("created_by_id") == uid
+    if role == "nurse":
+        return d.get("status") != "draft"
+    return False
+
+
+def _patient_case_row(d: dict, user: Optional[dict] = None) -> dict:
+    row = {
         "id": str(d["_id"]),
         "implant_procedure_type": d.get("implant_procedure_type") or ("Pre-Implant Augmentation" if d.get("augmentation_required") else ""),
         "missing_teeth": d.get("missing_teeth") or [],
@@ -2285,6 +2309,9 @@ def _patient_case_row(d: dict) -> dict:
         "linked_parent_case_id": d.get("linked_parent_case_id") or "",
         "created_at": str(d.get("created_at") or ""),
     }
+    if user is not None:
+        row["accessible"] = _case_accessible_to(user, d)
+    return row
 
 
 @api_router.get("/procedures/patient-lookup")
@@ -2315,7 +2342,7 @@ async def patient_lookup(registration_number: str, current_user: dict = Depends(
         "medical_assessment": latest.get("medical_assessment") or {},
         "medical_risk_level": latest.get("medical_risk_level", ""),
     }
-    cases = [_patient_case_row(d) for d in docs]
+    cases = [_patient_case_row(d, current_user) for d in docs]
     await log_access(action="patient_lookup", resource_type="patient", resource_id=reg, user=current_user)
     return {"found": True, "patient": patient, "cases": cases, "latest_case_id": cases[-1]["id"]}
 
@@ -2362,7 +2389,7 @@ async def patient_name_lookup(patient_name: str, current_user: dict = Depends(ge
             "cases": [],
         })
         entry["patient"] = _patient_block(d)  # latest wins (docs sorted asc)
-        entry["cases"].append(_patient_case_row(d))
+        entry["cases"].append(_patient_case_row(d, current_user))
     patients = []
     for entry in grouped.values():
         entry["cases_count"] = len(entry["cases"])
@@ -2395,7 +2422,7 @@ async def get_patient_history(procedure_id: str, current_user: dict = Depends(ge
     docs = await db.procedures.find(query, _PATIENT_LOOKUP_PROJ).sort("created_at", 1).to_list(50)
     cases = []
     for d in docs:
-        row = _patient_case_row(d)
+        row = _patient_case_row(d, current_user)
         row["is_current"] = row["id"] == procedure_id
         cases.append(row)
     return {"cases": cases}
