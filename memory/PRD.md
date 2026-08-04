@@ -1,5 +1,16 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 402 (Jun 2026) — Add-Implant system dropdown fix + Lot Number removal
+
+**Bug 1 — "Brand — undefined" in Add-Implant system dropdown**: modal fetched `/implant-catalog` (items expose `name`, not `system`). Fixed: now uses `/implant-library/systems` — the same 76-system library as Phase 1/Survival Review. Bonus (user choice 1a): picking a catalog system turns Diameter/Length into dropdowns of that system's actual catalog sizes; "Other" reverts to manual inputs (`add-implant-diameter/length-opt-*`).
+**Bug 2 — Lot Number removed** (user choice 2a: fields only, historic data untouched): removed from the Add-Implant modal AND the Survival Review replacement form (payload sends null; backend field already Optional).
+**Repair**: survival-review/[id].tsx had a corrupted duplicated StyleSheet tail — removed.
+
+**Tests**: iteration_319.json — 100% pass: 77 dropdown options, zero "undefined", diameter/length dropdowns match library payload, Other→manual, no lot fields in either form, backend accepts payloads without lot_number.
+
+---
+
+
 ## Iteration 401 (Jun 2026) — Mid-Treatment Implant Addition (same case, Phase 2/3/4)
 
 **Feature**: For Multiple Conventional Implants / All on 4 / All on 6 / All on X cases in Phase 2, 3 or 4, a new implant that is part of the SAME treatment (not a parallel case) can be added to the existing case. User choices: 1a student → supervisor → in-charge approval (supervisor request skips to in-charge; in-charge/admin auto-approve), 2a multiple/full-arch types only, 3a full Phase-2-style capture (FDI site, catalog system dropdown + Other, Ø/length, placement date, torque, ISQ, mandatory IOPA, augmentation section, required reason), 4a Phase-4 additions without ISQ get a non-blocking "Pending stage-2 verification" flag.
