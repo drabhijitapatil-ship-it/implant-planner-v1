@@ -886,6 +886,19 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
                       {isTreatmentEnded ? 'Treatment Ended' : (isInactive ? 'Inactive' : 'Active')}
                     </Text>
                   </View>
+                  {/* iter-401: mid-treatment addition chips */}
+                  {!!(plan as any).added_in_phase && (
+                    <View style={[st.revChip, { backgroundColor: '#E1F5FE' }]}
+                      testID={`implant-plan-added-${idx}`} data-testid={`implant-plan-added-${idx}`}>
+                      <Text style={[st.revChipText, { color: '#01579B' }]}>Added in Phase {(plan as any).added_in_phase}</Text>
+                    </View>
+                  )}
+                  {!!(plan as any).pending_stage2_verification && (
+                    <View style={[st.revChip, { backgroundColor: '#FFF3E0' }]}
+                      testID={`implant-plan-pending-s2-${idx}`} data-testid={`implant-plan-pending-s2-${idx}`}>
+                      <Text style={[st.revChipText, { color: '#E65100' }]}>Pending stage-2 verification</Text>
+                    </View>
+                  )}
                 </View>
                 <Text style={[st.implantSpecs, isInactive && st.textMuted]}>
                   D: {plan.diameter}mm | L: {plan.length}mm

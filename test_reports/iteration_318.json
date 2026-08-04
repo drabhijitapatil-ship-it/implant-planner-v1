@@ -1,0 +1,42 @@
+{
+  "summary": "iter-401 (Mid-Treatment Implant Addition) — backend fully verified with 10/10 pytest cases: in-charge auto-approve happy path (implants/plans/missing_teeth/torque_values all extended, augmentation & addition_reason persisted, added_in_phase=3), student→supervisor→in-charge chain (pending_supervisor → pending_incharge → approved, implants only appended on final approve), decline path (never appended), and validations (Single case → 400, completed status → 400, duplicate site 16 → 400, invalid FDI 99 → 400, nurse → 403, non-treating student → 403, missing iopa_url → 422, missing reason → 422). Phase-4 pending flag: without ISQ → pending_stage2_verification=true on both implant & implant_plans; with ISQ → false. Frontend E2E verified: after seeding an approved addition via API for site 26, /procedures/{id} renders (a) the [data-testid=add-implant-section] card, (b) an approved request row [data-testid^=implant-addition-req-] with 'Approved — added to case', (c) the new implant tile shows the 'Added in Phase 3' chip [data-testid^=implant-plan-added-], (d) Torque Values Achieved lists Implant 2 = 40 Ncm alongside the original 35. Regression: NO add-implant-section rendered on a 'Single Conventional Implant' case. Modal opens on click, tooth dropdown (36) works, system dropdown loads 69 catalog options + Other, aug Yes/No toggle present, reason textarea works — visible in captured screenshot. Automation stopped short at the PlacementDatePicker (no [data-testid^=date-day-] on DOM) and the IOPA file chooser sheet — these are automation-selector gaps, not user-facing bugs; the API path is 100% green.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AddImplantSection.tsx (Dropdown options)", "issue": "Console prints ~150× 'Encountered two children with the same key' warnings when the tooth catalog dropdown and system-catalog dropdown open (both use option strings as key; system catalog has duplicate labels e.g. two identical brand — system entries). Fix: use index-suffixed keys `${opt}-${idx}` or dedupe the option list in getImplantSystemOptions().",
+       "selector": "[data-testid=add-implant-tooth], [data-testid=add-implant-system]", "priority": "MEDIUM"},
+      {"component": "PlacementDatePicker (day cells)", "issue": "No `data-testid=\"date-day-<YYYY-MM-DD>\"` emitted on calendar day cells → external test harnesses (and the review-request spec) cannot pick a placement date. Please add a stable testID per selectable day.",
+       "selector": "[data-testid^=date-day-]", "priority": "MEDIUM"},
+      {"component": "IOPA picker sheet (add-implant modal)", "issue": "After [data-testid=add-implant-iopa-btn] is clicked a modal 'Choose Files' text appears but there is no data-testid on that picker option, so page.expect_file_chooser flow (the one described in the review request) times out. Please add [data-testid=add-implant-iopa-choose-files].",
+       "selector": "[data-testid=add-implant-iopa-choose-files]", "priority": "LOW"},
+      {"component": "auth/login.tsx TextInputs (regression note)", "issue": "TextInputs at lines 141 & 158 use JSX prop `data-testid=\"login-email-input\"/\"login-password-input\"` without a matching `testID` — RNW does not forward `data-testid` on <TextInput>. Add `testID={...}` alongside so future test scripts don't have to fall back to placeholder selectors.",
+       "selector": "[data-testid=login-email-input]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter401_add_implant.py",
+    "/app/test_reports/pytest/iter401.xml"
+  ],
+  "action_items": [
+    "Dedup / index-key the option lists rendered inside AddImplantSection Dropdown to remove the 'duplicate key' React warnings (functional but noisy).",
+    "Add data-testid `date-day-<YYYY-MM-DD>` to each selectable day cell in PlacementDatePicker so the review-request UI flow can be fully automated.",
+    "Add data-testid to the IOPA 'Choose Files' picker sheet option (e.g. `add-implant-iopa-choose-files`).",
+    "Add matching `testID` prop to the login TextInputs so login-email-input / login-password-input are addressable via data-testid on RNW (pre-existing minor issue)."
+  ],
+  "critical_code_review_comments": [
+    "server.py:2461-2506 (_apply_implant_addition) uses `datetime.now(timezone.utc).isoformat()` for added_at but `datetime.utcnow()` for updated_at — mix of naive vs aware datetimes, standardise.",
+    "server.py:2547 uses `_resolve_active_implants_inline(proc)` and filters `_active_in_treatment is not False` — good — but the duplicate-site check does not account for added-then-declined implants that were never appended; verified by test (declined path leaves implants[] unchanged), so no bug, just note that the pending-site guard on line 2550 correctly considers pending_supervisor + pending_incharge but treats 'approved' requests as 'active' via the implants[] scan (no double-counting).",
+    "AddImplantSection.tsx Dropdown at lines 40-49 uses `key={opt}` — will collide when system catalog has repeated labels; switch to `key={\\`${testID}-${idx}\\`}`.",
+    "server.py add-implant validation currently returns HTTP 400 for the FDI check, HTTP 422 (pydantic) for max_length; consistent — no change needed."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter401_add_implant.py"],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "90% — feature user-visible & data-testid coverage OK on the section, request row, and 'Added in Phase' chip; automation gaps on date picker & IOPA picker (not user-facing)"},
+  "test_credentials": "Abhijit.patil / Admin@123 (in-charge), Gaurav.pandey / Student@123, Paresh.gandhi / Supervisor@123, nurse.1@dental.edu / Nurse@123",
+  "seed_data_creation": "test_iter401_add_implant.py creates/tears down ADDIMP-TEST-* procedures per class via _cleanup fixture. UI seeded procedures (ADDIMP-UI-*) were deleted after testing (2 procedures + 0 notifications).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend endpoints POST /api/procedures/{id}/add-implant and .../resolve are fully green under all 10 scenarios. The UI card, modal, approved-request row and 'Added in Phase N' chip all render with the expected data-testids. If main agent adds testids on the PlacementDatePicker day cells and the IOPA 'Choose Files' picker sheet, a full click-through UI test can be automated end-to-end without seeding via API. Duplicate-key React warnings from the system-catalog Dropdown are cosmetic (~150 log lines).",
+  "rca of the issue": "N/A — no bug. Automation blockers stem from missing data-testids on the PlacementDatePicker day cells and the IOPA file-picker sheet; the underlying feature works correctly (verified by direct API + rendered case-detail screenshot)."
+}
