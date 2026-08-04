@@ -55,6 +55,7 @@ import ImplantLifecycleTimeline from '../../components/ImplantLifecycleTimeline'
 import AugmentationChecklist from '../../components/AugmentationChecklist';
 import ClinicalEvaluationBanner from '../../components/ClinicalEvaluationBanner';
 import PatientHistoryStrip from '../../components/PatientHistoryStrip';
+import AddImplantSection from '../../components/AddImplantSection';
 import PulsingDoubleArrow from '../../components/onboarding/primitives/PulsingDoubleArrow';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, {
@@ -2125,6 +2126,8 @@ export default function ProcedureDetailScreen() {
         </View>
 
         <PatientHistoryStrip procedure={procedure} />
+
+        <AddImplantSection procedure={procedure} onChanged={loadProcedure} />
 
         <ClinicalEvaluationBanner procedureId={String(id)} />
 

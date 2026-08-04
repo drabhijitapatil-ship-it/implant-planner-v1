@@ -2428,6 +2428,216 @@ async def get_patient_history(procedure_id: str, current_user: dict = Depends(ge
     return {"cases": cases}
 
 
+# ── iter-401: Mid-treatment implant addition (same case, Phase 2/3/4) ────
+_ADDITION_STATUS_PHASE = {
+    "phase1_approved": 2, "pending_phase2": 2,
+    "phase2_approved": 3, "pending_stage2_surgical": 3,
+    "stage2_surgical_approved": 4, "pending_stage2_prosthetic": 4,
+    "stage2_prosthetic_step1_approved": 4, "pending_final_delivery": 4,
+}
+_ADDITION_CASE_TYPES = {"Multiple Conventional Implants", "All on 4", "All on 6", "All on X"}
+_FDI_CODES = {str(q * 10 + t) for q in (1, 2, 3, 4) for t in range(1, 9)}
+
+
+class ImplantAdditionCreate(BaseModel):
+    tooth_number: str = Field(..., max_length=4)
+    system: str = Field(..., max_length=160)
+    diameter: float = Field(..., gt=0, lt=10)
+    length: float = Field(..., gt=0, lt=30)
+    placement_date: str = Field(..., max_length=30)
+    insertion_torque_ncm: Optional[float] = None
+    isq: Optional[float] = None
+    lot_number: Optional[str] = Field("", max_length=60)
+    iopa_url: str = Field(..., min_length=1, max_length=500)
+    reason: str = Field(..., min_length=3, max_length=1000)
+    augmentation: Optional[Dict[str, Any]] = None
+
+
+class ImplantAdditionResolve(BaseModel):
+    action: str = Field(..., pattern="^(approve|decline)$")
+    comment: Optional[str] = Field("", max_length=500)
+
+
+async def _apply_implant_addition(proc: Dict[str, Any], req: Dict[str, Any]) -> None:
+    """Append the approved implant to the case's implants[] + implant_plans[]
+    (index-aligned, never re-indexed) so survival review, lab slip, PDFs and
+    analytics pick it up automatically."""
+    phase = req.get("phase_at_request") or _ADDITION_STATUS_PHASE.get(proc.get("status"), 2)
+    system_label = req["system"]
+    brand = system_label.split(" — ")[0].strip() if " — " in system_label else system_label
+    system_name = system_label.split(" — ")[1].strip() if " — " in system_label else system_label
+    pending_s2 = phase == 4 and req.get("isq") in (None, "")
+    meta = {
+        "insertion_torque_ncm": req.get("insertion_torque_ncm"),
+        "isq": req.get("isq"),
+        "lot_number": req.get("lot_number") or None,
+        "placement_date": req.get("placement_date"),
+        "iopa_url": req.get("iopa_url"),
+        "augmentation": req.get("augmentation"),
+        "added_in_phase": phase,
+        "added_by_id": req.get("requested_by_id"),
+        "added_by_name": req.get("requested_by_name"),
+        "added_at": datetime.now(timezone.utc).isoformat(),
+        "addition_reason": req.get("reason"),
+        "pending_stage2_verification": pending_s2,
+    }
+    imp = {
+        "tooth_number": req["tooth_number"], "tooth": req["tooth_number"],
+        "system": system_label, "brand": brand,
+        "diameter": req["diameter"], "length": req["length"],
+        **meta,
+    }
+    plan = {
+        "position": req["tooth_number"], "tooth": req["tooth_number"],
+        "brand": brand, "system": system_name,
+        "diameter": str(req["diameter"]), "length": str(req["length"]),
+        **meta,
+    }
+    implants = _extract_procedure_implants(proc)
+    push_ops: Dict[str, Any] = {"implant_plans": plan}
+    if isinstance(proc.get("torque_values"), list):
+        push_ops["torque_values"] = req.get("insertion_torque_ncm")
+    if req["tooth_number"] not in (proc.get("missing_teeth") or []):
+        push_ops["missing_teeth"] = req["tooth_number"]
+    await db.procedures.update_one(
+        {"_id": proc["_id"]},
+        {"$set": {"implants": list(implants) + [imp], "updated_at": datetime.utcnow()},
+         "$push": push_ops},
+    )
+
+
+async def _notify_addition(user_id: Optional[str], procedure_id: str, message: str):
+    if not user_id:
+        return
+    await db.notifications.insert_one({
+        "user_id": user_id,
+        "procedure_id": procedure_id,
+        "message": message,
+        "type": "approval_request",
+        "read": False,
+        "created_at": datetime.utcnow(),
+    })
+
+
+@api_router.post("/procedures/{procedure_id}/add-implant")
+async def request_implant_addition(procedure_id: str, payload: ImplantAdditionCreate, current_user: dict = Depends(get_current_user)):
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    role, uid = current_user["role"], current_user["_id"]
+    if role == "nurse":
+        raise HTTPException(status_code=403, detail="Not permitted")
+    if role == "student" and proc.get("student_id") != uid:
+        raise HTTPException(status_code=403, detail="Only the treating student can add an implant to this case")
+    if role == "supervisor" and proc.get("supervisor_id") != uid and proc.get("created_by_id") != uid:
+        raise HTTPException(status_code=403, detail="Only this case's supervisor can add an implant")
+    phase = _ADDITION_STATUS_PHASE.get(proc.get("status"))
+    if phase is None:
+        raise HTTPException(status_code=400, detail="Implants can only be added while the case is in Phase 2, 3 or 4")
+    if (proc.get("implant_procedure_type") or "") not in _ADDITION_CASE_TYPES:
+        raise HTTPException(status_code=400, detail="Adding implants is only available for Multiple Implants and full-arch (All on 4/6/X) cases")
+    tooth = payload.tooth_number.strip()
+    if tooth not in _FDI_CODES:
+        raise HTTPException(status_code=400, detail="Invalid FDI tooth number")
+    active_sites = {
+        str(i.get("tooth_number") or i.get("tooth"))
+        for i in _resolve_active_implants_inline(proc)
+        if i.get("_active_in_treatment") is not False
+    }
+    pending_sites = {
+        r.get("tooth_number") for r in (proc.get("implant_addition_requests") or [])
+        if str(r.get("status", "")).startswith("pending")
+    }
+    if tooth in active_sites or tooth in pending_sites:
+        raise HTTPException(status_code=400, detail=f"Site {tooth} already has an active implant or a pending addition request")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    req = {
+        "id": str(uuid.uuid4()),
+        **payload.model_dump(),
+        "tooth_number": tooth,
+        "requested_by_id": uid,
+        "requested_by_name": current_user.get("name"),
+        "requested_by_role": role,
+        "requested_at": now_iso,
+        "phase_at_request": phase,
+        "status": "pending_supervisor",
+        "supervisor_action": None,
+        "incharge_action": None,
+    }
+    auto = {"by_id": uid, "by_name": current_user.get("name"), "at": now_iso, "action": "approve", "comment": "Auto-approved (requester)"}
+    if role in ("implant_incharge", "administrator"):
+        req["status"] = "approved"
+        req["supervisor_action"] = auto
+        req["incharge_action"] = auto
+    elif role == "supervisor":
+        req["status"] = "pending_incharge"
+        req["supervisor_action"] = auto
+    await db.procedures.update_one({"_id": proc["_id"]}, {"$push": {"implant_addition_requests": req}})
+    who = current_user.get("name")
+    msg = f"Implant addition (site {tooth}, Phase {phase}) requested by {who} for patient {proc.get('patient_name')}"
+    if req["status"] == "approved":
+        await _apply_implant_addition(proc, req)
+    elif req["status"] == "pending_supervisor":
+        await _notify_addition(proc.get("supervisor_id"), procedure_id, msg)
+    else:
+        await _notify_addition(proc.get("implant_incharge_id"), procedure_id, msg)
+    return {"ok": True, "request": req}
+
+
+@api_router.post("/procedures/{procedure_id}/add-implant/{request_id}/resolve")
+async def resolve_implant_addition(procedure_id: str, request_id: str, body: ImplantAdditionResolve, current_user: dict = Depends(get_current_user)):
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    reqs = proc.get("implant_addition_requests") or []
+    req = next((r for r in reqs if r.get("id") == request_id), None)
+    if not req:
+        raise HTTPException(status_code=404, detail="Addition request not found")
+    if req.get("status") not in ("pending_supervisor", "pending_incharge"):
+        raise HTTPException(status_code=400, detail="This request has already been resolved")
+    role, uid = current_user["role"], current_user["_id"]
+    stamp = {"by_id": uid, "by_name": current_user.get("name"), "at": datetime.now(timezone.utc).isoformat(),
+             "action": body.action, "comment": body.comment or ""}
+    if req["status"] == "pending_supervisor":
+        is_sup = role == "supervisor" and proc.get("supervisor_id") == uid
+        if not (is_sup or role in ("implant_incharge", "administrator")):
+            raise HTTPException(status_code=403, detail="Only this case's supervisor or the implant in-charge can act on this request")
+        req["supervisor_action"] = stamp
+        if body.action == "decline":
+            req["status"] = "declined"
+        elif role in ("implant_incharge", "administrator"):
+            req["incharge_action"] = stamp
+            req["status"] = "approved"
+        else:
+            req["status"] = "pending_incharge"
+    else:
+        if role not in ("implant_incharge", "administrator"):
+            raise HTTPException(status_code=403, detail="Only the implant in-charge can give final approval")
+        req["incharge_action"] = stamp
+        req["status"] = "approved" if body.action == "approve" else "declined"
+    await db.procedures.update_one(
+        {"_id": proc["_id"], "implant_addition_requests.id": request_id},
+        {"$set": {"implant_addition_requests.$": req}},
+    )
+    if req["status"] == "approved":
+        await _apply_implant_addition(proc, req)
+        await _notify_addition(req.get("requested_by_id"), procedure_id,
+                               f"Implant addition (site {req['tooth_number']}) approved — the implant is now part of the case for {proc.get('patient_name')}")
+    elif req["status"] == "declined":
+        await _notify_addition(req.get("requested_by_id"), procedure_id,
+                               f"Implant addition (site {req['tooth_number']}) was declined by {current_user.get('name')}")
+    else:
+        await _notify_addition(proc.get("implant_incharge_id"), procedure_id,
+                               f"Implant addition (site {req['tooth_number']}) for {proc.get('patient_name')} awaits your final approval")
+    return {"ok": True, "request": req}
+
+
 @api_router.get("/procedures/archived")
 async def get_archived_procedures(current_user: dict = Depends(get_current_user)):
     """Get archived procedures visible to the current user."""
@@ -14421,7 +14631,7 @@ async def submit_phase2(
     if plans:
         implants_array: List[Dict[str, Any]] = []
         for i, plan in enumerate(plans):
-            implants_array.append({
+            entry = {
                 "tooth_number": plan.get("position"),
                 "system": plan.get("system") or plan.get("brand"),
                 "brand": plan.get("brand"),
@@ -14432,7 +14642,16 @@ async def submit_phase2(
                 "bone_type": plan.get("bone_type"),
                 "insertion_torque_ncm": (torques[i] if i < len(torques) else None),
                 "placement_date": update_data["phase2_actual_done_date"],
-            })
+            }
+            # iter-401: mid-treatment additions carry their own capture data on
+            # the plan entry — preserve it when re-materializing implants[].
+            if plan.get("added_in_phase"):
+                for k in ("insertion_torque_ncm", "isq", "iopa_url", "augmentation",
+                          "placement_date", "added_in_phase", "added_by_id", "added_by_name",
+                          "added_at", "addition_reason", "pending_stage2_verification", "lot_number"):
+                    if plan.get(k) is not None:
+                        entry[k] = plan.get(k)
+            implants_array.append(entry)
         update_data["implants"] = implants_array
     
     await db.procedures.update_one(
