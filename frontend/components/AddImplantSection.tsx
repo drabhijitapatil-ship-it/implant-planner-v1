@@ -122,7 +122,13 @@ export default function AddImplantSection({ procedure, onChanged }: { procedure:
 
   const handleIopa = async () => {
     try {
+      // iter-403: the global attach picker is a plain View overlay (not an RN
+      // Modal), so it renders BEHIND this form's Modal. Hide the form while
+      // picking, then restore it — same file, same state.
+      setModalOpen(false);
+      await new Promise(r => setTimeout(r, 250));
       const picked = await showUploadPicker(['application/pdf', 'image/png', 'image/jpeg', 'image/heic', 'image/heif']);
+      setModalOpen(true);
       if (!picked) return;
       patch({ iopa_uploading: true });
       const fd = new FormData();
@@ -139,6 +145,7 @@ export default function AddImplantSection({ procedure, onChanged }: { procedure:
       if (!up.data?.filename) throw new Error('Upload returned no filename');
       patch({ iopa_url: up.data.filename, iopa_uploading: false });
     } catch (e: any) {
+      setModalOpen(true);
       patch({ iopa_uploading: false });
       Alert.alert('Upload failed', e?.response?.data?.detail || e?.message || 'Could not upload the IOPA.');
     }

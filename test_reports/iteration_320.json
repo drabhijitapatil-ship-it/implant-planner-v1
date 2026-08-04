@@ -1,0 +1,29 @@
+{
+  "summary": "iter-403 BUG FIX VERIFIED end-to-end: Mid-Treatment Add-Implant IOPA picker now works. Clicking [data-testid=add-implant-iopa-btn] hides the Add-Implant Modal, the global attach-picker-sheet becomes VISIBLE with all 4 buttons (library/camera/files/cancel) clickable. File upload succeeds (POST /api/uploads/media-temp -> 200), form Modal reopens with all state intact (tooth 26 preserved) and IOPA button turns green 'IOPA uploaded'. Cancel path also reopens the form with state intact. Full submit flow POST /api/procedures/{id}/add-implant -> 200; UI shows 'Approved — added to case' with 'Site 26 · Adin — NP CloseFit · Ø3 × 8mm' and Mongo confirms implants[1].iopa_url is a real uploaded filename (67467ceaa5cc482baa7623220b9bf3ff.png). Survival-Review regression: code path unchanged — that screen is not a Modal so handleReplIopaUpload invokes showUploadPicker directly without hide/reopen dance (previously verified in iter-319). Seed procedure IOPA-FIX-1 cleaned up after tests.",
+  "verified_fixes": {
+    "form_modal_hides_on_picker_open": "PASS - after clicking add-implant-iopa-btn, [data-testid=add-implant-iopa-btn] is not visible (form Modal hidden) while [data-testid=attach-picker-sheet] is visible.",
+    "picker_sheet_visible_and_interactive": "PASS - attach-library-btn, attach-camera-btn, attach-files-btn, attach-cancel-btn all visible & clickable.",
+    "upload_path_form_reopens_with_state": "PASS - after set_files via expect_file_chooser, POST /api/uploads/media-temp returned 200, add-implant Modal reopened, tooth field still '26', IOPA button text = 'IOPA uploaded' (green).",
+    "cancel_path_form_reopens_state_intact": "PASS - clicking attach-cancel-btn closes picker, add-implant Modal reopens, IOPA still 'IOPA uploaded', tooth still '26'.",
+    "full_submit_end_to_end": "PASS - POST /api/procedures/{id}/add-implant returned 200 with system 'Adin — NP CloseFit', diameter 3, length 8, placement_date 2026-08-03 (max=today), reason set. UI shows the 'Approved — added to case' chip and Site 26 row.",
+    "iopa_url_persisted": "PASS - MongoDB implants[1].iopa_url = '67467ceaa5cc482baa7623220b9bf3ff.png' (real uploaded file, not empty)."
+  },
+  "regression": {
+    "survival_review_repl_iopa": "CODE-VERIFIED (unchanged path) - handleReplIopaUpload calls showUploadPicker directly with no setModalOpen hide/reopen (survival-review screen is a Screen route, not a Modal). Behaviour previously verified in iter-319; not re-run E2E to avoid churning state."
+  },
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/tests/seed_iter403.py"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AddImplantSection.handleIopa relies on a fixed 250ms setTimeout to allow the RN Modal to unmount before the picker overlay renders. This works but is timing-fragile; a more robust approach is to use requestAnimationFrame + onDismiss/onShow callbacks of the Modal, or to convert the Add-Implant form to a plain View overlay so it stacks the same way as the picker (like survival-review).",
+    "Same underlying platform quirk (RN Modal above plain View overlay) could bite any other form Modal that later tries to use showUploadPicker — consider hoisting the hide/reopen dance into showUploadPicker itself (accept an optional hostModalSetter) or expose a shared usePickerWithinModal() hook so future call sites don't have to remember this workaround."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Abhijit.patil / Admin@123 (administrator)",
+  "seed_data_creation": "Created and cleaned up procedure registration_number=IOPA-FIX-1 (ObjectId 6a71cd7b98d83dec5fa5400b) with 1 seeded Nobel Active #16 implant. Deleted after tests.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "iter-403 IOPA picker fix inside Add-Implant Modal fully verified E2E. Login uses [data-testid=login-email-input] + [data-testid=login-password-input] + [data-testid=login-submit-btn]. For attach picker inside RN Modal, wait ~700ms after clicking add-implant-iopa-btn (250ms hide + animation). expect_file_chooser DID work reliably for attach-files-btn in this run when clicked with force=True — prior iter-319 note about it being unreliable no longer applies. Test date picker exposes date-day-YYYY-MM-DD but only past nearby dates enabled (maxDate=today)."
+}
