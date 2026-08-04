@@ -29,6 +29,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import PlacementDatePicker from '../../../components/PlacementDatePicker';
+import AugStep2Form, { emptyAugStep2 } from '../../../components/AugStep2Form';
 import { showUploadPicker } from '../../../utils/uploadPicker';
 import RadiographThumb from '../../../components/RadiographThumb';
 import api from '../../../utils/api';
@@ -88,6 +89,10 @@ type FailureEntry = {
     healing_abutment_mm: string;                     // when Healing Abutment
     immediate_loading_prosthesis: string;            // one of the options / 'Other'
     immediate_loading_prosthesis_other: string;      // manual entry when Other
+    // iter-400: Bone & Soft Tissue Augmentation done with the replacement
+    // surgery — same capture as Phase 2 (AugStep2Form schema).
+    aug_used: '' | 'Yes' | 'No';
+    augmentation: any;
   };
 };
 
@@ -229,6 +234,8 @@ export default function SurvivalReview() {
             healing_abutment_mm: '',
             immediate_loading_prosthesis: '',
             immediate_loading_prosthesis_other: '',
+            aug_used: 'No',
+            augmentation: emptyAugStep2(),
           },
         },
       }));
@@ -375,6 +382,8 @@ export default function SurvivalReview() {
                 : (r.procedure_type === 'Two Stage'
                     ? `Two Stage - ${r.prosthetic_component || ''}`.trim()
                     : (r.procedure_type === 'Immediate Loading' ? 'Immediate Loading' : null)),
+              // iter-400: Bone & Soft Tissue Augmentation with the replacement.
+              augmentation: r.aug_used === 'Yes' ? r.augmentation : null,
             } : null,
           };
         });
@@ -759,6 +768,36 @@ export default function SurvivalReview() {
                           )}
                         </View>
                       )}
+
+                      {/* iter-400: Bone and Soft Tissue Augmentation — the exact
+                          Phase 2 capture, per replaced implant. Optional (defaults
+                          No), form opens on Yes. */}
+                      <View style={{ marginTop: 8 }}>
+                        <Text style={s.lbl}>Bone and Soft Tissue Augmentation</Text>
+                        <View style={{ flexDirection: 'row', gap: 12, marginTop: 4 }}>
+                          <TouchableOpacity
+                            style={[s.pillTiny, f.replacement.aug_used === 'Yes' && s.pillOn]}
+                            onPress={() => setReplField(i, { aug_used: 'Yes' })}
+                            data-testid={`imp-${i}-repl-aug-yes`} testID={`imp-${i}-repl-aug-yes`}
+                          >
+                            <Text style={[s.pillTT, f.replacement.aug_used === 'Yes' && s.pillTOn]}>Yes</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[s.pillTiny, f.replacement.aug_used !== 'Yes' && s.pillOn]}
+                            onPress={() => setReplField(i, { aug_used: 'No', augmentation: emptyAugStep2() })}
+                            data-testid={`imp-${i}-repl-aug-no`} testID={`imp-${i}-repl-aug-no`}
+                          >
+                            <Text style={[s.pillTT, f.replacement.aug_used !== 'Yes' && s.pillTOn]}>No</Text>
+                          </TouchableOpacity>
+                        </View>
+                        {f.replacement.aug_used === 'Yes' && (
+                          <AugStep2Form
+                            value={f.replacement.augmentation}
+                            onChange={(v: any) => setReplField(i, { augmentation: v })}
+                            testPrefix={`imp-${i}-repl-aug`}
+                          />
+                        )}
+                      </View>
                     </View>
                   )}
                 </View>

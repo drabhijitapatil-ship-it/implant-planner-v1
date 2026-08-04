@@ -5585,6 +5585,10 @@ async def submit_survival_review(
                     "immediate_loading_prosthesis_detail": imm_detail,
                     # If the site changed, the replacement lives at the NEW tooth
                     "tooth_number": new_tooth or (implants[idx].get("tooth_number") or implants[idx].get("tooth")),
+                    # iter-400: Bone & Soft Tissue Augmentation performed with the
+                    # replacement surgery — same schema as the Phase 2 capture.
+                    "bone_graft_used": isinstance(repl.get("augmentation"), dict),
+                    "augmentation": repl.get("augmentation") if isinstance(repl.get("augmentation"), dict) else None,
                 }
         # Any implant not listed in failures is treated as Active.
         for i in range(len(implants)):
