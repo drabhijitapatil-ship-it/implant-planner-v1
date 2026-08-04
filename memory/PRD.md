@@ -1,5 +1,18 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 401 (Jun 2026) — Mid-Treatment Implant Addition (same case, Phase 2/3/4)
+
+**Feature**: For Multiple Conventional Implants / All on 4 / All on 6 / All on X cases in Phase 2, 3 or 4, a new implant that is part of the SAME treatment (not a parallel case) can be added to the existing case. User choices: 1a student → supervisor → in-charge approval (supervisor request skips to in-charge; in-charge/admin auto-approve), 2a multiple/full-arch types only, 3a full Phase-2-style capture (FDI site, catalog system dropdown + Other, Ø/length, placement date, torque, ISQ, mandatory IOPA, augmentation section, required reason), 4a Phase-4 additions without ISQ get a non-blocking "Pending stage-2 verification" flag.
+
+- **Backend**: `POST /api/procedures/{id}/add-implant` (creates request in `implant_addition_requests[]`, role-gated, FDI/duplicate-site/status/type validation) + `POST .../add-implant/{req_id}/resolve` (approve/decline chain). `_apply_implant_addition` APPENDS to `implants[]` + `implant_plans[]` (index-aligned) + `missing_teeth` + `torque_values` with metadata (`added_in_phase`, `added_by`, `addition_reason`, `pending_stage2_verification`, `augmentation`). Phase-2 implants[] re-materialization preserves addition metadata from the plan entry. Notifications at every hop.
+- **Frontend**: `components/AddImplantSection.tsx` on the case detail — request rows with status chips + Approve/Decline for approvers, "Add implant to this treatment" button → full modal form (testids add-implant-*). `CaseImplantPlanning` shows "Added in Phase N" + "Pending stage-2 verification" chips on the new tile.
+- **Testability fixes**: PlacementDatePicker day cells now emit `date-day-<YYYY-MM-DD>` testids (custom dayComponent); login inputs got testID props; AddImplantSection dropdown keys deduped/index-suffixed.
+
+**Tests**: iteration_318.json — backend 10/10 pytest (`tests/test_iter401_add_implant.py`): auto-approve, full student→supervisor→in-charge chain, decline, all validations (400/403/422), Phase-4 pending flag. Frontend E2E: section card, request rows, modal, "Added in Phase 3" chip, torque list extension, no section on Single cases. Post-fix login/testid smoke verified via Playwright.
+
+---
+
+
 ## Iteration 400 (Jun 2026) — Bone & Soft Tissue Augmentation in Survival Review replacements
 
 **Feature**: When an implant fails and is replaced in the Implant Survival Review (Phase 2 → 3), the replacement block now includes the same "Bone and Soft Tissue Augmentation" section as Phase 2. User choices: 1a optional (defaults No, form opens on Yes, non-blocking); 2a compact summary visible in the case detail's revision tiles.

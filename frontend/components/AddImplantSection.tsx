@@ -41,8 +41,8 @@ function Dropdown({ value, options, placeholder, onChange, testID }: {
           <View style={s.mSheet}>
             <Text style={s.mTitle}>{placeholder}</Text>
             <ScrollView style={{ maxHeight: 380 }}>
-              {options.map(opt => (
-                <TouchableOpacity key={opt} style={[s.mItem, value === opt && s.mItemOn]}
+              {options.map((opt, i) => (
+                <TouchableOpacity key={`${opt}-${i}`} style={[s.mItem, value === opt && s.mItemOn]}
                   onPress={() => { onChange(opt); setOpen(false); }}
                   data-testid={testID ? `${testID}-opt-${opt.replace(/\s+/g, '-')}` : undefined}
                   testID={testID ? `${testID}-opt-${opt.replace(/\s+/g, '-')}` : undefined}>
@@ -108,7 +108,7 @@ export default function AddImplantSection({ procedure, onChanged }: { procedure:
     } catch {}
   };
   const systemOptions = useMemo(
-    () => [...catalog.map((c: any) => `${c.brand} — ${c.system}`).sort((a, b) => a.localeCompare(b)), 'Other'],
+    () => [...Array.from(new Set(catalog.map((c: any) => `${c.brand} — ${c.system}`))).sort((a, b) => a.localeCompare(b)), 'Other'],
     [catalog]
   );
 

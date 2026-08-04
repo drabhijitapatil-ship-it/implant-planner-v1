@@ -138,6 +138,7 @@ export default function LoginScreen() {
                 keyboardType="default"
                 autoCapitalize="none"
                 autoCorrect={false}
+                testID="login-email-input"
                 data-testid="login-email-input"
               />
 
@@ -155,6 +156,7 @@ export default function LoginScreen() {
                 autoCorrect={false}
                 autoComplete="off"
                 textContentType="password"
+                testID="login-password-input"
                 data-testid="login-password-input"
               />
 
