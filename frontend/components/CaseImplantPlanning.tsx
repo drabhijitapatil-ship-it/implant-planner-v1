@@ -1044,6 +1044,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
               <View
                 key={`chain-${idx}-${revNum}`}
                 style={[st.implantCard, st.implantCardInactive]}
+                testID={`implant-revision-${idx}-r${revNum}`}
                 data-testid={`implant-revision-${idx}-r${revNum}`}
               >
                 <View style={st.implantCardHeader}>
@@ -1077,7 +1078,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
                     {c.placement_date && <Text style={st.detailText}>Placed on: {c.placement_date}</Text>}
                     {c.failure_date && <Text style={st.detailText}>Failed on: {String(c.failure_date).slice(0,10)}</Text>}
                     {(() => { const a = augSummary(c.augmentation); return a ? (
-                      <Text style={st.detailText} data-testid={`implant-revision-aug-${idx}-r${revNum}`}>Augmentation: {a}</Text>
+                      <Text style={st.detailText} testID={`implant-revision-aug-${idx}-r${revNum}`} data-testid={`implant-revision-aug-${idx}-r${revNum}`}>Augmentation: {a}</Text>
                     ) : null; })()}
                   </View>
                 )}
@@ -1114,6 +1115,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
               <View
                 key={`active-repl-${idx}`}
                 style={st.implantCard}
+                testID={`implant-revision-active-${idx}`}
                 data-testid={`implant-revision-active-${idx}`}
               >
                 <View style={st.implantCardHeader}>
@@ -1146,7 +1148,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
                   {repl.lot_number && <Text style={st.detailText}>Lot: {repl.lot_number}</Text>}
                   {repl.placement_date && <Text style={st.detailText}>Placed on: {repl.placement_date}</Text>}
                   {(() => { const a = augSummary(repl.augmentation); return a ? (
-                    <Text style={st.detailText} data-testid={`implant-revision-active-aug-${idx}`}>Augmentation: {a}</Text>
+                    <Text style={st.detailText} testID={`implant-revision-active-aug-${idx}`} data-testid={`implant-revision-active-aug-${idx}`}>Augmentation: {a}</Text>
                   ) : null; })()}
                 </View>
                 {/* iter-351: Compare current active vs previous revision. */}
