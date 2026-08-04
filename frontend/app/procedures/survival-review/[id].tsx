@@ -75,7 +75,7 @@ type FailureEntry = {
     system_other_text: string;
     diameter: string;
     length: string;
-    lot_number: string;
+    lot_number: string; // retained in state shape for old drafts; input removed (iter-402)
     insertion_torque_ncm: string;
     isq: string;
     placement_date: string;
@@ -685,9 +685,6 @@ export default function SurvivalReview() {
                         data-testid={`imp-${i}-repl-torque`}
                         testID={`imp-${i}-repl-torque`}
                       />
-
-                      <Text style={[s.lbl, { marginTop: 6 }]}>Lot Number <Text style={s.lblOpt}>(optional)</Text></Text>
-                      <TextInput style={s.input} placeholder="e.g. K12345" value={f.replacement.lot_number} onChangeText={v => setReplField(i, { lot_number: v })} data-testid={`imp-${i}-repl-lot`} testID={`imp-${i}-repl-lot`} />
 
                       <Text style={[s.lbl, { marginTop: 6 }]}>ISQ Value <Text style={s.lblOpt}>(optional)</Text></Text>
                       <TextInput style={s.input} placeholder="e.g. 72" keyboardType="decimal-pad" value={f.replacement.isq} onChangeText={v => setReplField(i, { isq: v })} data-testid={`imp-${i}-repl-isq`} testID={`imp-${i}-repl-isq`} />
