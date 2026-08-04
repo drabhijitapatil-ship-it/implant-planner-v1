@@ -1,5 +1,18 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 400 (Jun 2026) — Bone & Soft Tissue Augmentation in Survival Review replacements
+
+**Feature**: When an implant fails and is replaced in the Implant Survival Review (Phase 2 → 3), the replacement block now includes the same "Bone and Soft Tissue Augmentation" section as Phase 2. User choices: 1a optional (defaults No, form opens on Yes, non-blocking); 2a compact summary visible in the case detail's revision tiles.
+
+- **Survival Review form** (`survival-review/[id].tsx`): per replaced implant, Yes/No pill (`imp-{i}-repl-aug-yes/no`) → reusable `AugStep2Form` (6 sections, testPrefix `imp-{i}-repl-aug`). Payload sends `replacement.augmentation` when Yes, null otherwise.
+- **Backend** (`submit_survival_review`): persists `replacement.augmentation` dict + `bone_graft_used` bool; travels with the revision chain (prior aug preserved in chain items on subsequent failures).
+- **Case detail** (`CaseImplantPlanning.tsx`): new `augSummary()` renders an "Augmentation: …" line on the active R{n} tile (`implant-revision-active-aug-{idx}`) and failed chain tiles (`implant-revision-aug-{idx}-r{n}`). Also fixed missing `testID` props on the revision tiles (RN-web only emits data-testid via testID).
+
+**Tests**: iteration_317.json — backend 3/3 pytest (`tests/test_iter400_survival_aug.py`) + UI capture flow verified; retest of the display testids self-verified via Playwright screenshot (aug line renders with correct summary on R1 tile).
+
+---
+
+
 ## Iteration 399 (Jun 2026) — Lab Slip active-implant fix + transfer access-restriction messaging
 
 **Bug 1 — Lab slip used failed R0 implant specs**: `buildLabSlipHtml` (`utils/pdfGenerator.ts`) read raw `implant_plans` (first-placed implant) even after a Survival Review replacement. Now overlays each row with the ACTIVE revision's specs from the pre-resolved `procedure.implants` (`_active_revision` merge) and EXCLUDES implants that are Failed/Treatment-Ended with no replacement (user choice 1a). Cases without survival data unchanged.
