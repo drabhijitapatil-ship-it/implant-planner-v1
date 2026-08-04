@@ -74,7 +74,7 @@ export default function AddImplantSection({ procedure, onChanged }: { procedure:
   const [form, setForm] = useState({
     tooth_number: '', system: '', system_is_other: false, system_other_text: '',
     diameter: '', length: '', placement_date: '', insertion_torque_ncm: '', isq: '',
-    lot_number: '', iopa_url: '', iopa_uploading: false, reason: '',
+    iopa_url: '', iopa_uploading: false, reason: '',
     aug_used: 'No' as 'Yes' | 'No', augmentation: emptyAugStep2(),
   });
   const patch = (p: Partial<typeof form>) => setForm(prev => ({ ...prev, ...p }));
@@ -103,7 +103,9 @@ export default function AddImplantSection({ procedure, onChanged }: { procedure:
   const openModal = async () => {
     setModalOpen(true);
     try {
-      const res = await api.get('/implant-catalog');
+      // iter-402: same 76-system implant library as Phase 1 / Survival Review
+      // (the /implant-catalog endpoint has a different shape → showed "undefined").
+      const res = await api.get('/implant-library/systems');
       setCatalog(Array.isArray(res.data) ? res.data : (res.data?.systems || []));
     } catch {}
   };
@@ -111,6 +113,12 @@ export default function AddImplantSection({ procedure, onChanged }: { procedure:
     () => [...Array.from(new Set(catalog.map((c: any) => `${c.brand} — ${c.system}`))).sort((a, b) => a.localeCompare(b)), 'Other'],
     [catalog]
   );
+  const selectedCatalogSystem = useMemo(
+    () => catalog.find((c: any) => `${c.brand} — ${c.system}` === form.system),
+    [catalog, form.system]
+  );
+  const diameterOptions: number[] = selectedCatalogSystem?.diameters || [];
+  const lengthOptions: number[] = selectedCatalogSystem?.lengths || [];
 
   const handleIopa = async () => {
     try {
@@ -159,13 +167,12 @@ export default function AddImplantSection({ procedure, onChanged }: { procedure:
         placement_date: form.placement_date,
         insertion_torque_ncm: form.insertion_torque_ncm ? parseFloat(form.insertion_torque_ncm) : null,
         isq: form.isq ? parseFloat(form.isq) : null,
-        lot_number: form.lot_number,
         iopa_url: form.iopa_url,
         reason: form.reason.trim(),
         augmentation: form.aug_used === 'Yes' ? form.augmentation : null,
       });
       setModalOpen(false);
-      setForm({ tooth_number: '', system: '', system_is_other: false, system_other_text: '', diameter: '', length: '', placement_date: '', insertion_torque_ncm: '', isq: '', lot_number: '', iopa_url: '', iopa_uploading: false, reason: '', aug_used: 'No', augmentation: emptyAugStep2() });
+      setForm({ tooth_number: '', system: '', system_is_other: false, system_other_text: '', diameter: '', length: '', placement_date: '', insertion_torque_ncm: '', isq: '', iopa_url: '', iopa_uploading: false, reason: '', aug_used: 'No', augmentation: emptyAugStep2() });
       Alert.alert('Submitted', res.data?.request?.status === 'approved'
         ? 'Implant added to this case.'
         : 'Implant addition submitted for approval.');
@@ -259,7 +266,7 @@ export default function AddImplantSection({ procedure, onChanged }: { procedure:
 
               <Text style={s.lbl}>Implant System *</Text>
               <Dropdown value={form.system} options={systemOptions} placeholder="Select Implant System"
-                onChange={v => patch({ system: v, system_is_other: v === 'Other' })} testID="add-implant-system" />
+                onChange={v => patch({ system: v, system_is_other: v === 'Other', diameter: '', length: '' })} testID="add-implant-system" />
               {form.system_is_other && (
                 <TextInput style={s.input} placeholder="Enter implant system manually" value={form.system_other_text}
                   onChangeText={v => patch({ system_other_text: v })} testID="add-implant-system-other" data-testid="add-implant-system-other" />
@@ -268,13 +275,23 @@ export default function AddImplantSection({ procedure, onChanged }: { procedure:
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 <View style={{ flex: 1 }}>
                   <Text style={s.lbl}>Diameter (mm) *</Text>
-                  <TextInput style={s.input} placeholder="e.g. 4.3" keyboardType="decimal-pad" value={form.diameter}
-                    onChangeText={v => patch({ diameter: v })} testID="add-implant-diameter" data-testid="add-implant-diameter" />
+                  {diameterOptions.length > 0 ? (
+                    <Dropdown value={form.diameter ? `${form.diameter} mm` : ''} options={diameterOptions.map(d => `${d} mm`)}
+                      placeholder="Diameter (mm)" onChange={v => patch({ diameter: v.replace(' mm', '') })} testID="add-implant-diameter" />
+                  ) : (
+                    <TextInput style={s.input} placeholder="e.g. 4.3" keyboardType="decimal-pad" value={form.diameter}
+                      onChangeText={v => patch({ diameter: v })} testID="add-implant-diameter" data-testid="add-implant-diameter" />
+                  )}
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={s.lbl}>Length (mm) *</Text>
-                  <TextInput style={s.input} placeholder="e.g. 10" keyboardType="decimal-pad" value={form.length}
-                    onChangeText={v => patch({ length: v })} testID="add-implant-length" data-testid="add-implant-length" />
+                  {lengthOptions.length > 0 ? (
+                    <Dropdown value={form.length ? `${form.length} mm` : ''} options={lengthOptions.map(l => `${l} mm`)}
+                      placeholder="Length (mm)" onChange={v => patch({ length: v.replace(' mm', '') })} testID="add-implant-length" />
+                  ) : (
+                    <TextInput style={s.input} placeholder="e.g. 10" keyboardType="decimal-pad" value={form.length}
+                      onChangeText={v => patch({ length: v })} testID="add-implant-length" data-testid="add-implant-length" />
+                  )}
                 </View>
               </View>
 
@@ -295,10 +312,6 @@ export default function AddImplantSection({ procedure, onChanged }: { procedure:
                     onChangeText={v => patch({ isq: v })} testID="add-implant-isq" data-testid="add-implant-isq" />
                 </View>
               </View>
-
-              <Text style={s.lbl}>Lot Number</Text>
-              <TextInput style={s.input} placeholder="e.g. K12345" value={form.lot_number}
-                onChangeText={v => patch({ lot_number: v })} testID="add-implant-lot" data-testid="add-implant-lot" />
 
               <Text style={s.lbl}>IOPA Radiograph *</Text>
               <TouchableOpacity style={[s.iopaBtn, !!form.iopa_url && s.iopaBtnDone]} onPress={handleIopa}
