@@ -164,6 +164,23 @@ const UPPER_RIGHT = ['17','16','15','14','13','12','11'];
 const UPPER_LEFT  = ['21','22','23','24','25','26','27'];
 const LOWER_RIGHT = ['47','46','45','44','43','42','41'];
 const LOWER_LEFT  = ['31','32','33','34','35','36','37'];
+
+// iter-400: compact one-line summary of a replacement's Bone & Soft Tissue
+// Augmentation capture (AugStep2Form schema) for the revision tiles.
+const augSummary = (aug: any): string | null => {
+  if (!aug || typeof aug !== 'object') return null;
+  const parts: string[] = [];
+  if ((aug.procedures_performed || []).length) parts.push((aug.procedures_performed || []).join(', '));
+  const mats: string[] = [];
+  if (aug.autogenous_used === 'Yes') mats.push('Autogenous');
+  if (aug.allograft_used === 'Yes') mats.push('Allograft');
+  mats.push(...(aug.other_graft_materials || []));
+  if (mats.length) parts.push(`Graft: ${mats.join(', ')}`);
+  if (aug.membrane_used === 'Yes') parts.push(`Membrane: ${(aug.membrane_types || []).join(', ') || 'Yes'}`);
+  if (aug.soft_tissue_graft === 'Yes') parts.push(`Soft tissue: ${(aug.soft_tissue_types || []).join(', ') || 'Yes'}`);
+  if (aug.healing_protocol) parts.push(`Healing: ${aug.healing_protocol === 'Custom' ? (aug.healing_custom_text || 'Custom') : aug.healing_protocol}`);
+  return parts.length ? parts.join(' · ') : null;
+};
 const TOOTH_TYPE: Record<string,string> = {};
 ['16','17','26','27','36','37','46','47'].forEach(t => TOOTH_TYPE[t] = 'molar');
 ['14','15','24','25','34','35','44','45'].forEach(t => TOOTH_TYPE[t] = 'premolar');
@@ -1059,6 +1076,9 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
                     {c.lot_number && <Text style={st.detailText}>Lot: {c.lot_number}</Text>}
                     {c.placement_date && <Text style={st.detailText}>Placed on: {c.placement_date}</Text>}
                     {c.failure_date && <Text style={st.detailText}>Failed on: {String(c.failure_date).slice(0,10)}</Text>}
+                    {(() => { const a = augSummary(c.augmentation); return a ? (
+                      <Text style={st.detailText} data-testid={`implant-revision-aug-${idx}-r${revNum}`}>Augmentation: {a}</Text>
+                    ) : null; })()}
                   </View>
                 )}
                 <View style={st.implantActions}>
@@ -1125,6 +1145,9 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
                   </Text>}
                   {repl.lot_number && <Text style={st.detailText}>Lot: {repl.lot_number}</Text>}
                   {repl.placement_date && <Text style={st.detailText}>Placed on: {repl.placement_date}</Text>}
+                  {(() => { const a = augSummary(repl.augmentation); return a ? (
+                    <Text style={st.detailText} data-testid={`implant-revision-active-aug-${idx}`}>Augmentation: {a}</Text>
+                  ) : null; })()}
                 </View>
                 {/* iter-351: Compare current active vs previous revision. */}
                 <View style={st.implantActions}>

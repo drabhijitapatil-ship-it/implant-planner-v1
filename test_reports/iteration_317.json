@@ -1,0 +1,31 @@
+{
+  "summary": "iter-400 (Replacement-implant Bone & Soft Tissue Augmentation): Verified backend persistence via 3 pytest cases (with-aug, without-aug, login) — all PASS. Verified UI end-to-end on /procedures/survival-review/{id}: selecting Failed → picking reason → replaced Yes → reveals replacement block with the NEW 'Bone and Soft Tissue Augmentation' pill toggle (defaults No, testids imp-0-repl-aug-yes / imp-0-repl-aug-no both present). Clicking Yes reveals imp-0-repl-aug-form containing the full AugStep2Form (proc-trigger, auto-yes/no, material-trigger, membrane-yes/no, fixation-trigger, stt-yes/no, healing-trigger). Toggling back to No hides the form. Phase 2 aug testids (p2-aug-yes/p2-aug-no) remain present in submit-phase2/[id].tsx (regression source-verified). Case-detail display (2a): the 'Augmentation: <summary>' line RENDERS VISIBLY on the active R1 tile with the expected content ('Augmentation: Guided Bone Regeneration (GBR) · Graft: Autogenous · Membrane: Resorbable Collagen · Healing: Submerged'), BUT the required data-testid attributes `implant-revision-active-aug-{idx}` and `implant-revision-active-{idx}` do NOT appear on the DOM — the JSX only sets `data-testid` on the View/Text without a matching `testID` prop, and React-Native-Web only forwards data-testid to the DOM when the `testID` prop is used.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "CaseImplantPlanning.tsx (lines 1117 & 1149)", "issue": "data-testid attributes `implant-revision-active-{idx}` and `implant-revision-active-aug-{idx}` are NOT emitted to the DOM. React-Native-Web only converts the `testID` prop to a data-testid DOM attribute; a bare JSX `data-testid` prop on <View>/<Text> is dropped. Add a matching `testID={...}` alongside every `data-testid={...}` (same pattern already used on the sibling `implant-plan-status-${idx}` and `implant-lifecycle-timeline` which DO render).", "selector": "[data-testid=implant-revision-active-aug-0]", "priority": "MEDIUM"},
+      {"component": "CaseImplantPlanning.tsx (line 1080)", "issue": "Likely same issue on the failed-chain tile testid `implant-revision-aug-{idx}-r{n}` — please add matching `testID` and re-verify.", "selector": "[data-testid=implant-revision-aug-0-r1]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter400_survival_aug.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Add `testID={...}` prop matching every `data-testid={...}` on <View>/<Text> in CaseImplantPlanning.tsx for the active-revision tile (line 1117) and the augmentation summary lines (lines 1080, 1149), otherwise external test harnesses cannot select them (the visible feature already works)."
+  ],
+  "critical_code_review_comments": [
+    "CaseImplantPlanning.tsx is 2807 lines — consider splitting into smaller modules (planning grid, active revision tile, chain history, compare-dialog).",
+    "Backend submit_survival_review at server.py:5588-5591 uses `isinstance(repl.get('augmentation'), dict)` for `bone_graft_used`; this is correct but relies on client-side default emptiness. Recommend also validating min-shape (procedures_performed non-empty) once product locks the schema."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter400_survival_aug.py"],
+  "success_rate": {"backend": "100%", "frontend": "80% (feature works; testids missing on DOM for 2 selectors)"},
+  "test_credentials": "Abhijit.patil / Admin@123 (in-charge)",
+  "seed_data_creation": "Seeded procedures were deleted after tests. `test_iter400_survival_aug.py` creates and tears down its own docs with prefix SRAUG-TEST-.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend persistence is fully verified. If main agent adds the missing `testID` props to CaseImplantPlanning.tsx lines 1080/1117/1149, re-run just the UI portion: seed a phase2_approved procedure (see helper in /app/backend/tests/test_iter400_survival_aug.py::_seed_procedure), POST /api/procedures/{id}/survival-review with augmentation, then GET /procedures/{id} and assert `[data-testid=implant-revision-active-aug-0]` count > 0.",
+  "rca of the issue": "React-Native-Web forwards `testID` prop as `data-testid` DOM attribute; it does NOT forward a JSX `data-testid` prop by itself on RN primitives (<View>, <Text>). CaseImplantPlanning.tsx lines 1117 and 1149 (and 1080 on the chain-tile) declare `data-testid=` without a companion `testID=`. Mitigation: add `testID={...}` alongside every `data-testid={...}` (already the pattern for `implant-plan-status-${idx}` on line 882-883)."
+}
