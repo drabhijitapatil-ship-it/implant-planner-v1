@@ -1,5 +1,16 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 403 (Jun 2026) — Add-Implant IOPA upload picker fix
+
+**Bug**: The 'Upload IOPA' button in the Mid-Treatment Add-Implant modal did nothing. Root cause: the global attach picker (`AttachPickerModalRoot`) is a plain View overlay (deliberately not an RN Modal, for iOS one-modal rule), which stacks BELOW the Add-Implant RN Modal — the picker opened invisibly behind the form. **Fix**: `handleIopa` hides the form Modal (250ms), shows the picker (now visible/clickable), then restores the Modal with all state intact; cancel/error paths also reopen it.
+
+**Tests**: iteration_320.json — 100% E2E: picker sheet visible with all 4 options, file uploads to /uploads/media-temp, modal reopens with state + green 'IOPA uploaded', cancel path OK, full submit persists real iopa_url on the appended implant. Survival-review IOPA path unaffected.
+
+**Note for future**: any NEW form rendered in an RN Modal that calls `showUploadPicker` needs the same hide→pick→reopen dance (or use a plain overlay).
+
+---
+
+
 ## Iteration 402 (Jun 2026) — Add-Implant system dropdown fix + Lot Number removal
 
 **Bug 1 — "Brand — undefined" in Add-Implant system dropdown**: modal fetched `/implant-catalog` (items expose `name`, not `system`). Fixed: now uses `/implant-library/systems` — the same 76-system library as Phase 1/Survival Review. Bonus (user choice 1a): picking a catalog system turns Diameter/Length into dropdowns of that system's actual catalog sizes; "Other" reverts to manual inputs (`add-implant-diameter/length-opt-*`).
