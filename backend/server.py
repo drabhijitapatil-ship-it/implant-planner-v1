@@ -4161,16 +4161,14 @@ async def _generate_transfer_handoff_summary(proc: dict) -> str:
     )
 
     try:
-        chat = LlmChat(
-            api_key=_get_llm_key(),
-            session_id=f"transfer-handoff-{proc.get('_id')}-{uuid.uuid4().hex[:8]}",
-            system_message=(
-                "You are an implant dentistry clinical writer. Produce "
-                "compact, de-identified handoff briefs. NEVER include patient "
-                "name, DOB, or address. Include only age + sex if provided."
-            ),
-        ).with_model("openai", "gpt-5.2")
-        response = await chat.send_message(UserMessage(text=prompt))
+        response = await _claude_send(
+            f"transfer-handoff-{proc.get('_id')}-{uuid.uuid4().hex[:8]}",
+            CLINICAL_AI_PERSONA + "\n\n"
+            "TASK MODE: you are producing a compact, de-identified transfer handoff brief. NEVER include "
+            "patient name, DOB, or address. Include only age + sex if provided."
+            + CLINICAL_AI_NO_CITE,
+            prompt,
+        )
         return str(response).strip()
     except Exception as exc:  # pragma: no cover - fallback
         return (
@@ -10426,6 +10424,82 @@ def _get_llm_key():
     return os.environ.get("EMERGENT_LLM_KEY", "")
 
 
+def _get_claude_key() -> str:
+    """iter-404: the customer's own Anthropic key powers all TEXT AI features
+    (Claude Sonnet 4.6). Falls back to the universal key (which also routes
+    anthropic models) if unset, so AI never hard-fails on a missing env var."""
+    return os.environ.get("ANTHROPIC_API_KEY", "") or os.environ.get("EMERGENT_LLM_KEY", "")
+
+
+# iter-404: shared clinical persona injected into every Claude text feature.
+CLINICAL_AI_PERSONA = (
+    "You are the clinical AI of a prosthodontics implant case-management platform, acting as a senior "
+    "implantologist, prosthodontist and oral & maxillofacial surgeon with decades of combined surgical and "
+    "restorative experience.\n"
+    "KNOWLEDGE BASE: ground every suggestion in current, contemporary peer-reviewed implant dentistry — "
+    "osseointegration science (Brånemark; Albrektsson success criteria), ITI and EAO consensus statements, "
+    "Misch's Contemporary Implant Dentistry, Lindhe's Clinical Periodontology and Implant Dentistry, "
+    "Zarb/Bolender prosthodontic principles, current loading-protocol evidence (immediate vs early vs "
+    "conventional), primary-stability science (insertion torque ≥35 Ncm with ISQ ≥70 commonly supports "
+    "immediate loading; ISQ <60 favours delayed protocols), GBR/augmentation literature (Buser, Urban), the "
+    "2017 World Workshop peri-implant disease classification, and full-arch concepts (All-on-4/Maló, AP "
+    "spread, MUA angulation 0-45°).\n"
+    "WORKFLOW CONTEXT — this platform manages implant cases across five connected phases; always reason "
+    "across them as one continuum:\n"
+    "• Phase 1 — Registration & Planning: demographics, medical assessment & risk level, chief complaint, "
+    "periodontal status, missing teeth (FDI), CBCT uploads, bone width/height/type, implant system selection "
+    "from a 76-system library, and staged pre-implant augmentation when the ridge is deficient.\n"
+    "• Phase 2 — Implant Surgery: surgical approach, drilling protocol, insertion torque, ISQ, bone & "
+    "soft-tissue augmentation (GBR, membranes, autogenous/allograft, soft-tissue grafts), healing protocol "
+    "(single-stage / two-stage / immediate loading), then the Implant Survival Review where failed implants "
+    "are replaced as R1/R2 revisions — only ACTIVE implants carry the prosthesis.\n"
+    "• Phase 3 — Stage-2 Surgical: re-entry, healing-abutment placement, ISQ verification of osseointegration.\n"
+    "• Phase 4 — Prosthetics: impressions/scans, shade selection, MUA selection & angulation, lab slip "
+    "generation (active implants only), try-in, final delivery, occlusal scheme.\n"
+    "• Phase 5 — Follow-Up & Maintenance: recall schedule, peri-implant health monitoring, radiographic "
+    "bone-level comparison, prosthetic maintenance and complication management.\n"
+    "The platform also supports mid-treatment implant additions to the same case, parallel cases for the same "
+    "patient, case transfers between clinicians, and a student → supervisor → implant in-charge approval "
+    "hierarchy.\n"
+    "BEHAVIOUR: think and speak like an experienced chair-side mentor. Connect findings across phases (e.g. a "
+    "Phase-1 thin biotype should inform Phase-4 abutment choice; a low Phase-2 ISQ should temper Phase-4 "
+    "loading decisions). Give concrete numbers and thresholds where the evidence supports them. Flag when "
+    "supervisor review or additional diagnostics are prudent. Never invent specifications. This is clinical "
+    "decision SUPPORT for qualified dental professionals — the treating clinician retains final responsibility."
+)
+
+# Chats & suggestions may NAME real established sources; formal documents stay citation-free.
+CLINICAL_AI_CITE = (
+    " When it strengthens the answer, name the relevant established evidence explicitly (e.g. 'ITI Consensus', "
+    "'Albrektsson criteria', 'Misch', '2017 World Workshop') — real sources only; never invent citations, "
+    "authors, years, or journal names."
+)
+CLINICAL_AI_NO_CITE = (
+    " Never cite, name, or reference any specific guidelines, organizations, textbooks, or journals in this "
+    "document — present the knowledge as your own professional clinical assessment."
+)
+
+
+async def _claude_send(session_id: str, system_message: str, text: str, timeout: Optional[float] = None) -> str:
+    """iter-404: send to Claude Sonnet 4.6 with the customer's own Anthropic
+    key; if that account rejects (e.g. no credit balance), retry once on the
+    universal key (which also routes anthropic) so AI features never go dark."""
+    keys = [k for k in (os.environ.get("ANTHROPIC_API_KEY"), os.environ.get("EMERGENT_LLM_KEY")) if k]
+    last_err: Optional[Exception] = None
+    for key in keys:
+        try:
+            chat = LlmChat(api_key=key, session_id=session_id, system_message=system_message
+                           ).with_model("anthropic", "claude-sonnet-4-6")
+            coro = chat.send_message(UserMessage(text=text))
+            return await (asyncio.wait_for(coro, timeout) if timeout else coro)
+        except asyncio.TimeoutError:
+            raise
+        except Exception as e:
+            last_err = e
+            logger.warning(f"Claude call failed on key ending ...{key[-6:]}: {type(e).__name__} — trying fallback")
+    raise last_err if last_err else RuntimeError("No LLM key configured")
+
+
 @api_router.post("/ai/explain-recommendation")
 async def ai_explain_recommendation(request: Request, current_user: dict = Depends(get_current_user)):
     """Generate AI explanation for implant recommendation."""
@@ -10668,13 +10742,13 @@ async def _ensure_exit_summary(procedure_id: str, proc: dict, current_user: dict
         return existing["text"]
 
     prompt = _build_exit_summary_prompt(proc)
-    chat = LlmChat(
-        api_key=_get_llm_key(),
-        session_id=f"exit-summary-{procedure_id}-{uuid.uuid4().hex[:8]}",
-        system_message="You are an expert implant dentistry clinician writing a medico-legal hand-off note. Be conservative and evidence-anchored."
-    ).with_model("openai", "gpt-5.2")
-
-    text = await chat.send_message(UserMessage(text=prompt))
+    text = await _claude_send(
+        f"exit-summary-{procedure_id}-{uuid.uuid4().hex[:8]}",
+        CLINICAL_AI_PERSONA + "\n\n"
+        "TASK MODE: you are writing a medico-legal hand-off note. Be conservative and evidence-anchored."
+        + CLINICAL_AI_NO_CITE,
+        prompt,
+    )
     text = (text or "").strip()
 
     now = datetime.now(timezone.utc)
@@ -10832,13 +10906,13 @@ Clinical Data:
 
 Provide a clinical explanation in professional scientific language. Do not mention any guideline names or references. Write as a professional clinical note."""
 
-    chat = LlmChat(
-        api_key=_get_llm_key(),
-        session_id=f"explain-standalone-{uuid.uuid4().hex[:8]}",
-        system_message="You are an expert implant dentistry clinical advisor. Provide concise, evidence-based clinical explanations."
-    ).with_model("openai", "gpt-5.2")
-
-    response = await chat.send_message(UserMessage(text=prompt))
+    response = await _claude_send(
+        f"explain-standalone-{uuid.uuid4().hex[:8]}",
+        CLINICAL_AI_PERSONA + "\n\n"
+        "TASK MODE: provide a concise, evidence-based clinical explanation."
+        + CLINICAL_AI_NO_CITE,
+        prompt,
+    )
 
     return {"explanation": response}
 
@@ -11613,12 +11687,12 @@ WHERE TO FIND THINGS IN THE APP
     # wait_for so we fail fast (in 25s) with a friendly message instead of
     # letting the gateway return a confusing 5xx.
     try:
-        chat = LlmChat(
-            api_key=_get_llm_key(),
-            session_id=session_id,
-            system_message=system_message,
-        ).with_model("openai", "gpt-4o-mini")
-        response_text = await asyncio.wait_for(chat.send_message(UserMessage(text=prompt)), timeout=25.0)
+        response_text = await _claude_send(
+            session_id,
+            CLINICAL_AI_PERSONA + CLINICAL_AI_CITE + "\n\n" + system_message,
+            prompt,
+            timeout=25.0,
+        )
     except asyncio.TimeoutError:
         return {"answer": "I'm taking a bit too long to think — could you ask that again, maybe a touch shorter? (My responses time out at 25 s.)", "session_id": session_id}
     except Exception as e:
@@ -11751,18 +11825,17 @@ async def ai_ask_implanr(request: Request, current_user: dict = Depends(get_curr
         f"add 'Brochure detail: …' on a new line for the additional information."
     )
 
-    chat = LlmChat(
-        api_key=_get_llm_key(),
-        session_id=f"implanr-{current_user.get('id','')}-{uuid.uuid4().hex[:8]}",
-        system_message=(
-            "You are Implanr AI, a precise prosthodontic assistant. Output plain text only — never markdown. "
+    response = await _claude_send(
+        f"implanr-{current_user.get('id','')}-{uuid.uuid4().hex[:8]}",
+        (
+            CLINICAL_AI_PERSONA + CLINICAL_AI_CITE + "\n\n"
+            "TASK MODE: You are Implanr AI, a precise prosthodontic assistant. Output plain text only — never markdown. "
             f"{_CONVENTIONS} "
             "Quote exact specification values from the supplied component database and uploaded manufacturer "
             "brochure excerpts. If a value is missing, reply only with 'Information is not available.' Never fabricate."
-        )
-    ).with_model("openai", "gpt-5.2")
-
-    response = await chat.send_message(UserMessage(text=prompt))
+        ),
+        prompt,
+    )
     return {"answer": response, "scoped_system": target_key or None}
 
 
@@ -11962,13 +12035,14 @@ FORMAT INSTRUCTIONS:
             + style_block
         )
 
-    chat = LlmChat(
-        api_key=_get_llm_key(),
-        session_id=f"summary-{procedure_id}-{uuid.uuid4().hex[:8]}",
-        system_message="You are an expert implant dentistry clinical advisor and prosthodontist. You write case summaries using rigorous scientific clinical language grounded in established evidence-based implantology. Never cite, name, or reference any specific guidelines, organizations, textbooks, or journals in your output — present the knowledge as your own professional clinical assessment."
-    ).with_model("openai", "gpt-5.2")
-
-    response = await chat.send_message(UserMessage(text=prompt))
+    response = await _claude_send(
+        f"summary-{procedure_id}-{uuid.uuid4().hex[:8]}",
+        CLINICAL_AI_PERSONA + "\n\n"
+        "TASK MODE: write the case summary using rigorous scientific clinical language grounded in "
+        "established evidence-based implantology."
+        + CLINICAL_AI_NO_CITE,
+        prompt,
+    )
     # iter-339 HIPAA: scrub all PHI (name, phone, email, DOB, address).
     response = _redact_phi_from_ai_text(response, proc)
 
@@ -12022,13 +12096,13 @@ Write a concise operative note (4-6 sentences) in standard surgical documentatio
 
 HIPAA: Refer to the individual only as "the patient" throughout. Never use, guess, or invent any personal name."""
 
-    chat = LlmChat(
-        api_key=_get_llm_key(),
-        session_id=f"surgical-{procedure_id}-{uuid.uuid4().hex[:8]}",
-        system_message="You are an expert implant surgeon generating operative notes."
-    ).with_model("openai", "gpt-5.2")
-    
-    response = await chat.send_message(UserMessage(text=prompt))
+    response = await _claude_send(
+        f"surgical-{procedure_id}-{uuid.uuid4().hex[:8]}",
+        CLINICAL_AI_PERSONA + "\n\n"
+        "TASK MODE: generate a standard operative note."
+        + CLINICAL_AI_NO_CITE,
+        prompt,
+    )
     # iter-339 HIPAA: scrub all PHI (name, phone, email, DOB, address).
     response = _redact_phi_from_ai_text(response, proc)
     
@@ -12332,13 +12406,11 @@ OUTPUT RULES (strict):
     if history_context:
         prompt = f"Previous conversation:{history_context}\n\nUser: {body.message}\n\nRespond to the latest user message."
 
-    chat = LlmChat(
-        api_key=_get_llm_key(),
-        session_id=f"chat-{body.procedure_id}-{uuid.uuid4().hex[:8]}",
-        system_message=system
-    ).with_model("openai", "gpt-5.2")
-    
-    response = await chat.send_message(UserMessage(text=prompt))
+    response = await _claude_send(
+        f"chat-{body.procedure_id}-{uuid.uuid4().hex[:8]}",
+        CLINICAL_AI_PERSONA + CLINICAL_AI_CITE + "\n\n" + system,
+        prompt,
+    )
     
     # Append to history
     chat_history.append({"role": "user", "content": body.message})
