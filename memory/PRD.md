@@ -1,5 +1,17 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration 404 (Jun 2026) — Default AI switched to Claude Sonnet 4.6 (customer's own Anthropic key)
+
+**Change**: All 8 TEXT AI features now use `claude-sonnet-4-6` via shared helper `_claude_send(session_id, system, text, timeout)`: ai/chat, ai/assistant, ai/ask-implanr, ai/case-summary, ai/surgical-notes, exit summary, transfer handoff, explain-standalone. The 2 VISION features (radiograph AI notes, explain-recommendation with images) stay on OpenAI gpt-5.2 via EMERGENT_LLM_KEY.
+- **Key handling**: `ANTHROPIC_API_KEY` in backend/.env (customer's key, currently $0 balance → auto-fallback active). `_claude_send` tries customer key → universal key, with a 10-min cooldown after a customer-key failure to avoid the wasted round-trip. Key becomes primary automatically once funded (within ≤10 min of cooldown expiry).
+- **Persona**: shared `CLINICAL_AI_PERSONA` — senior implantologist/prosthodontist/oral surgeon grounded in contemporary literature (ITI/EAO consensus, Misch, Lindhe, Albrektsson, Buser/Urban, 2017 World Workshop, All-on-4/Maló) + complete Phase 1→5 workflow map (incl. survival review revisions, augmentation, mid-treatment additions, transfers, approval hierarchy). Citation policy (user choice 1a): chats/suggestions may NAME real sources (`CLINICAL_AI_CITE`); formal documents (case summary, surgical notes, exit summary, handoff, explain-standalone) stay citation-free (`CLINICAL_AI_NO_CITE`).
+- **Perf fixes post-test**: case-summary got a ~700-word budget (4-implant case: 502@60s → 200@42s); broken-key cooldown cut per-call overhead (assistant: 3.9s).
+
+**Tests**: iteration_321.json — 7/7 automated + live checks (multi-turn chat continuity + history persistence, NO_CITE compliance, PHI redaction, vision paths untouched); both flagged issues fixed and re-verified via curl timings.
+
+---
+
+
 ## Iteration 403 (Jun 2026) — Add-Implant IOPA upload picker fix
 
 **Bug**: The 'Upload IOPA' button in the Mid-Treatment Add-Implant modal did nothing. Root cause: the global attach picker (`AttachPickerModalRoot`) is a plain View overlay (deliberately not an RN Modal, for iOS one-modal rule), which stacks BELOW the Add-Implant RN Modal — the picker opened invisibly behind the form. **Fix**: `handleIopa` hides the form Modal (250ms), shows the picker (now visible/clickable), then restores the Modal with all state intact; cancel/error paths also reopen it.

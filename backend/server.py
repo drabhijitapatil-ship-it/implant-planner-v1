@@ -10483,10 +10483,20 @@ CLINICAL_AI_NO_CITE = (
 async def _claude_send(session_id: str, system_message: str, text: str, timeout: Optional[float] = None) -> str:
     """iter-404: send to Claude Sonnet 4.6 with the customer's own Anthropic
     key; if that account rejects (e.g. no credit balance), retry once on the
-    universal key (which also routes anthropic) so AI features never go dark."""
-    keys = [k for k in (os.environ.get("ANTHROPIC_API_KEY"), os.environ.get("EMERGENT_LLM_KEY")) if k]
+    universal key (which also routes anthropic) so AI features never go dark.
+    A 10-min cooldown skips the customer key after a failure so every call
+    doesn't pay the wasted round-trip."""
+    import time as _time
+    global _anthropic_key_bad_until
+    keys: List[tuple] = []
+    ak = os.environ.get("ANTHROPIC_API_KEY")
+    if ak and _time.time() >= _anthropic_key_bad_until:
+        keys.append(("customer", ak))
+    ek = os.environ.get("EMERGENT_LLM_KEY")
+    if ek:
+        keys.append(("universal", ek))
     last_err: Optional[Exception] = None
-    for key in keys:
+    for name, key in keys:
         try:
             chat = LlmChat(api_key=key, session_id=session_id, system_message=system_message
                            ).with_model("anthropic", "claude-sonnet-4-6")
@@ -10496,8 +10506,13 @@ async def _claude_send(session_id: str, system_message: str, text: str, timeout:
             raise
         except Exception as e:
             last_err = e
-            logger.warning(f"Claude call failed on key ending ...{key[-6:]}: {type(e).__name__} — trying fallback")
+            if name == "customer":
+                _anthropic_key_bad_until = _time.time() + 600
+            logger.warning(f"Claude call failed on {name} key ending ...{key[-6:]}: {type(e).__name__} — trying fallback")
     raise last_err if last_err else RuntimeError("No LLM key configured")
+
+
+_anthropic_key_bad_until = 0.0
 
 
 @api_router.post("/ai/explain-recommendation")
@@ -12039,7 +12054,8 @@ FORMAT INSTRUCTIONS:
         f"summary-{procedure_id}-{uuid.uuid4().hex[:8]}",
         CLINICAL_AI_PERSONA + "\n\n"
         "TASK MODE: write the case summary using rigorous scientific clinical language grounded in "
-        "established evidence-based implantology."
+        "established evidence-based implantology. Keep the complete summary focused and under roughly 700 "
+        "words — dense clinical prose, no filler, no repetition."
         + CLINICAL_AI_NO_CITE,
         prompt,
     )
