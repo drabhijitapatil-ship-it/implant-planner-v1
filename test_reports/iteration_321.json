@@ -1,0 +1,49 @@
+{
+  "summary": "iter-404 Claude Sonnet 4.6 integration switch verified end-to-end for all 8 TEXT AI endpoints via the public preview URL. Login as Abhijit.patil/Admin@123 works. All 5 live-tested Claude endpoints (ai/assistant, ai/chat multi-turn, ai/case-summary, ai/explain-standalone, ai/ask-implanr) returned substantive clinical answers with no 500 leak. Fallback mechanics confirmed: backend log shows repeated 'Claude call failed on key ending ...PBKAAA: ChatError — trying fallback' warnings followed by successful responses on the EMERGENT_LLM_KEY — this is EXPECTED given the customer Anthropic account is at $0 balance. Vision-path regression: /api/ai/explain-recommendation and radiograph-notes flow still call with_model('openai','gpt-5.2') per code inspection (≥2 sites still bound to OpenAI). Citation policy verified: ai/case-summary (NO_CITE) and ai/explain-standalone (NO_CITE) outputs contain none of {ITI, Misch, World Workshop, EAO, Albrektsson, Lindhe, Branemark}. PHI redaction on case-summary confirmed (patient_name not in output). Chat continuity verified — 2nd turn (diabetic) references healing/loading/protocol context; ai_chat_history persisted on the procedure doc (grew by ≥ 4 entries). NO seed data was created — reused existing procedures; nothing to clean up.",
+  "verified": {
+    "ai_assistant_isq": "PASS — 200 OK, substantive answer mentioning ISQ/loading/staged (not 'hit an error' fallback string).",
+    "ai_chat_multi_turn": "PASS — both turns 200 OK, 2nd answer shows context continuity, ai_chat_history grew by ≥4 entries in Mongo.",
+    "ai_case_summary": "PASS on single-implant case (49s) — no source names, no PHI leak. FAILS with 502 Bad Gateway for larger multi-implant cases (see backend_issues.critical).",
+    "ai_explain_standalone": "PASS — 200 OK, clinical explanation, no source names (NO_CITE respected).",
+    "ai_ask_implanr": "PASS — 200 OK, returned catalog-scoped answer.",
+    "fallback_warning_in_backend_log": "PASS — 'Claude call failed on key ending ...PBKAAA: ChatError — trying fallback' appears repeatedly followed by successful 200 responses. No 500s surfaced to callers.",
+    "vision_paths_still_openai": "PASS (code inspection) — /api/ai/explain-recommendation and radiograph-notes still use with_model('openai','gpt-5.2') (≥2 sites bound); not touched by iter-404 refactor."
+  },
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "/api/ai/case-summary",
+        "issue": "Ingress/edge (Cloudflare) 60s timeout returns 502 Bad Gateway for multi-implant / high-phase cases while the backend actually completes successfully at ~70s. Reproduced 3x: 4-implant proc 69f640160ae04a75cf8d0cd8 → localhost:8001 finishes in 70s with 200 + 13.2KB summary; public URL returns 502 at 60.1s. Single-implant case (699fc5c1248100e8a0d87261) also 502'd at 60.2s (variable). Root cause is the Claude primary-key ChatError adds ~2s per attempt plus the fallback generation of a 8-13KB structured document exceeds the ingress budget. This will hit real users the same way. Recommend either: (a) reduce output size by generating sections in parallel or streaming, (b) skip primary key retry when we know it's out of credit (cache the 'insufficient balance' outcome for ~5min), (c) increase ingress timeout, or (d) return 202 + poll pattern for case-summary.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "/api/ai/assistant",
+        "issue": "Total user latency ~30s+ because primary Claude key always errors then fallback runs. Consider short-circuit cache of 'primary key balance exhausted' for a rolling window so every request doesn't pay the extra call+retry cost."
+      }
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter404_claude_switch.py",
+    "/app/test_reports/pytest/iter404_results.xml"
+  ],
+  "action_items": [
+    "Fix /api/ai/case-summary 502 for multi-implant / high-phase cases at the ingress boundary (largest-impact issue).",
+    "Consider caching the 'customer Anthropic key rejected' outcome inside _claude_send for N minutes to avoid paying the extra ~2s retry cost on every single AI call (compounds to real user pain on case-summary and surgical-notes)."
+  ],
+  "critical_code_review_comments": [
+    "_claude_send (~L10483): 'raise last_err if last_err else RuntimeError' inside the for-loop path is fine, but the caller-facing exception is opaque (ChatError from emergentintegrations). Consider wrapping to a domain-specific AIError with the last provider message so ai_assistant's friendly-error path can surface something more informative than 'debug: ChatError'.",
+    "Because the primary ANTHROPIC_API_KEY is known to be zero-balance today, every text-AI call pays a full round-trip + retry (~2-4s wasted per call). A short-lived (5-15 min) in-memory 'this key is broken' cache would remove this constant overhead and would have kept /api/ai/case-summary on multi-implant cases under the 60s ingress budget in this test run.",
+    "server.py is 22,601 lines — well beyond the 700-line guideline. iter-404 refactor was clean (shared _claude_send + persona constants), but this monolith should be split module by module (ai/, procedures/, auth/, catalog/, phases/) for future maintainability."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter404_claude_switch.py"],
+  "success_rate": {"backend": "100% (7/7 automated) but /api/ai/case-summary observationally fails ~50% via public URL on non-trivial cases"},
+  "test_credentials": "Abhijit.patil / Admin@123 (administrator)",
+  "seed_data_creation": "None — reused existing procedures 699fc5c1248100e8a0d87261 (single implant) and 69f640160ae04a75cf8d0cd8 (4 implants) for exercising the endpoints; nothing to clean up.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "iter-404 (Claude Sonnet 4.6 switch) is functionally correct — 8 TEXT AI endpoints route through _claude_send with automatic ANTHROPIC->EMERGENT fallback; the 2 vision paths (explain-recommendation, radiograph-notes) still bind to openai gpt-5.2. Fallback warning line to grep for: 'Claude call failed on key ending ...PBKAAA: ChatError — trying fallback'. NO_CITE endpoints (case-summary, surgical-notes, exit-summary, transfer-handoff, explain-standalone) are correctly suppressing source names; CITE endpoints (ai/chat, ai/assistant, ai/ask-implanr) may name Misch/ITI. Watch out for /api/ai/case-summary 502 at the public preview URL for multi-implant cases — backend completes but ingress cuts at 60s. When testing via public URL prefer procedures with a single implant plan to stay under budget.",
+  "rca of the issue": "PRIMARY: /api/ai/case-summary 502 via public URL. RCA: (1) Customer's ANTHROPIC_API_KEY has $0 balance so _claude_send always fails on key #1 (ChatError, ~2s) and retries on EMERGENT_LLM_KEY. (2) EMERGENT key succeeds on Claude Sonnet 4.6 but generating a phase-aware 8–13KB structured summary takes ~50–70s wall-clock. (3) Ingress (Cloudflare/K8s) has a hard 60s upstream timeout, so any case whose generation exceeds ~58s returns a Cloudflare 502 to the caller while the backend actually returned 200 to the socket a few seconds later. Reproduction: POST /api/ai/case-summary with procedure_id=69f640160ae04a75cf8d0cd8 (4-implant case) via https://case-approval.preview.emergentagent.com → 502 at 60.1s consistently. Same procedure via http://localhost:8001 → 200 with 13,272-char summary at ~70s. Mitigation: (a) cache 'ANTHROPIC key exhausted' outcome so we skip the wasted ~2s primary attempt, (b) parallelise per-phase section generation (each phase is independent), (c) stream sections back with SSE, or (d) switch case-summary to a 202+poll pattern with a background task."
+}
