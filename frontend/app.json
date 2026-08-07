@@ -2,12 +2,12 @@
   "expo": {
     "name": "Implanr",
     "slug": "implanr",
-    "version": "1.2.8",
+    "version": "1.2.9",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "implanr",
     "userInterfaceStyle": "automatic",
-    "runtimeVersion": "1.2.8",
+    "runtimeVersion": "1.2.9",
     "updates": {
       "enabled": true,
       "url": "https://u.expo.dev/421ba752-d276-4e5d-9496-66d13cd3d6a0"
@@ -18,7 +18,7 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       },
-      "buildNumber": "32"
+      "buildNumber": "33"
     },
     "android": {
       "adaptiveIcon": {
@@ -30,7 +30,7 @@
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_MEDIA_VIDEO"
       ],
-      "versionCode": 31
+      "versionCode": 32
     },
     "web": {
       "bundler": "metro",

@@ -318,6 +318,24 @@ async def _get_org_scheduling_config(org_id: Optional[str]) -> Dict[str, Any]:
     return {**DEFAULT_SCHEDULING_CONFIG, **org["scheduling_config"]}
 
 
+async def _get_dept_scheduling_config(org_id: Optional[str], department_id: Optional[str]) -> Dict[str, Any]:
+    """Per-department scheduling config — each department has its own
+    operatory, so its slots/fees are independent of every other department's.
+    Falls back to the org-wide config when the department has none set of
+    its own, or when the caller has no department at all (single-department
+    colleges and clinics keep exactly today's org-wide behavior)."""
+    if department_id and org_id:
+        try:
+            dept = await db.departments.find_one(
+                {"_id": ObjectId(department_id), "org_id": org_id}, {"scheduling_config": 1},
+            )
+        except Exception:
+            dept = None
+        if dept and dept.get("scheduling_config"):
+            return {**DEFAULT_SCHEDULING_CONFIG, **dept["scheduling_config"]}
+    return await _get_org_scheduling_config(org_id)
+
+
 async def _org_member_ids(org_id: Optional[str]) -> List[str]:
     """All user _id strings (as strings) belonging to this org. Empty org_id -> empty list."""
     if not org_id:
@@ -722,6 +740,9 @@ class ProcedureCreate(BaseModel):
     patient_email: Optional[str] = Field("", max_length=255)
     registration_number: str = Field(..., max_length=50)
     chief_complaint: Optional[str] = Field("", max_length=1000)
+     # iter-397: multi-implant episodes — id of the patient's most recent prior
+    # case (same registration number) so treatment history can be chained.
+    linked_parent_case_id: Optional[str] = Field("", max_length=64)
     periodontal_status: Optional[str] = Field("", max_length=20)
     teeth_present: Optional[List[str]] = Field(default_factory=list)
     # New: teeth marked RED on the FDI chart in Phase 1 Step 1.
@@ -3545,33 +3566,55 @@ async def complete_referral(referral_id: str, payload: ReferralComplete, current
                 try:
                     proc_obj_id = ObjectId(proc_id_str)
                     proc_doc = await db.procedures.find_one({"_id": proc_obj_id})
-                    if proc_doc and proc_doc.get("original_student_id"):
-                        orig_stu_id = proc_doc["original_student_id"]
-                        orig_stu_oid = ObjectId(orig_stu_id) if ObjectId.is_valid(orig_stu_id) else orig_stu_id
-                        orig_student = await db.users.find_one({"_id": orig_stu_oid})
+                    if proc_doc:
+                        notify_ids: set = set()
+                        if proc_doc.get("original_student_id"):
+                            orig_stu_id = proc_doc["original_student_id"]
+                            orig_stu_oid = ObjectId(orig_stu_id) if ObjectId.is_valid(orig_stu_id) else orig_stu_id
+                            orig_student = await db.users.find_one({"_id": orig_stu_oid})
 
-                        update_proc: Dict[str, Any] = {
-                            "student_id": orig_stu_id,
-                            "student_name": orig_student.get("name") if orig_student else proc_doc.get("original_student_name"),
-                        }
-                        if proc_doc.get("original_supervisor_id"):
-                            orig_sup_id = proc_doc["original_supervisor_id"]
-                            orig_sup_oid = ObjectId(orig_sup_id) if ObjectId.is_valid(orig_sup_id) else orig_sup_id
-                            orig_supervisor = await db.users.find_one({"_id": orig_sup_oid})
-                            update_proc["supervisor_id"] = orig_sup_id
-                            update_proc["supervisor_name"] = orig_supervisor.get("name") if orig_supervisor else proc_doc.get("original_supervisor_name")
+                            update_proc: Dict[str, Any] = {
+                                "student_id": orig_stu_id,
+                                "student_name": orig_student.get("name") if orig_student else proc_doc.get("original_student_name"),
+                            }
+                            notify_ids.add(orig_stu_id)
+                            if proc_doc.get("original_supervisor_id"):
+                                orig_sup_id = proc_doc["original_supervisor_id"]
+                                orig_sup_oid = ObjectId(orig_sup_id) if ObjectId.is_valid(orig_sup_id) else orig_sup_id
+                                orig_supervisor = await db.users.find_one({"_id": orig_sup_oid})
+                                update_proc["supervisor_id"] = orig_sup_id
+                                update_proc["supervisor_name"] = orig_supervisor.get("name") if orig_supervisor else proc_doc.get("original_supervisor_name")
+                                notify_ids.add(orig_sup_id)
 
-                        await db.procedures.update_one({"_id": proc_obj_id}, {"$set": update_proc})
+                            await db.procedures.update_one({"_id": proc_obj_id}, {"$set": update_proc})
+                        else:
+                            # Never handed to a receiving-department student/supervisor
+                            # in the first place — student_id/supervisor_id are
+                            # already the originals, nothing to revert, but the
+                            # people who own the case still need to hear it's back.
+                            if proc_doc.get("student_id"):
+                                notify_ids.add(proc_doc["student_id"])
+                            if proc_doc.get("supervisor_id"):
+                                notify_ids.add(proc_doc["supervisor_id"])
 
-                        # Notify original student
-                        await _notify_referral_event(
-                            [orig_stu_id],
-                            proc_id_str,
-                            proc_doc.get("patient_name"),
-                            "Referral Returned To You",
-                            f"The referred case for {proc_doc.get('patient_name', 'Patient')} has been returned to your department and re-assigned to you.",
-                            "referral_returned"
-                        )
+                        # Always loop in the ORIGINATING department's Implant
+                        # In-Charge(s) too — they're the ones who'll assign the
+                        # continuing work to a student in their department,
+                        # same as when the referral was first created.
+                        orig_dept_id = proc_doc.get("department_id")
+                        if orig_dept_id:
+                            incharges = await _find_department_incharges(referral["org_id"], orig_dept_id)
+                            notify_ids.update(str(u["_id"]) for u in incharges)
+
+                        if notify_ids:
+                            await _notify_referral_event(
+                                list(notify_ids),
+                                proc_id_str,
+                                proc_doc.get("patient_name"),
+                                "Referral Returned To You",
+                                f"The referred case for {proc_doc.get('patient_name', 'Patient')} has been returned to your department.",
+                                "referral_returned"
+                            )
                 except Exception as e:
                     logger.error(f"Error reverting procedure student on referral return: {e}")
 
@@ -4044,15 +4087,9 @@ class SchedulingConfigUpdate(BaseModel):
     open_window_hours: Optional[float] = None
 
 
-@api_router.put("/organizations/me/scheduling-config")
-async def update_scheduling_config(payload: SchedulingConfigUpdate, current_user: dict = Depends(get_current_user)):
-    """Set the caller's org scheduling mode (default / custom / open) and its
-    mode-specific settings. Implant In-Charge only."""
-    if current_user.get("role") != "implant_incharge":
-        raise HTTPException(status_code=403, detail="Only the Implant In-Charge can change this setting")
-    org_id = current_user.get("org_id")
-    if not org_id:
-        raise HTTPException(status_code=400, detail="No organization associated with this account")
+def _build_scheduling_config(payload: SchedulingConfigUpdate) -> Dict[str, Any]:
+    """Shared validation for both the org-wide and per-department scheduling
+    config endpoints — same rules either way, just a different target doc."""
     if payload.mode not in ("default", "custom", "open"):
         raise HTTPException(status_code=400, detail="mode must be 'default', 'custom', or 'open'")
 
@@ -4081,6 +4118,21 @@ async def update_scheduling_config(payload: SchedulingConfigUpdate, current_user
             raise HTTPException(status_code=400, detail="Slot duration must be between 0.5 and 8 hours")
         cfg["open_window_hours"] = hours
 
+    return cfg
+
+
+@api_router.put("/organizations/me/scheduling-config")
+async def update_scheduling_config(payload: SchedulingConfigUpdate, current_user: dict = Depends(get_current_user)):
+    """Set the caller's org-wide fallback scheduling mode. Implant In-Charge
+    only. This is the default any department without its own override
+    inherits — see /departments/{id}/scheduling-config for per-department
+    settings, which is what most multi-department orgs actually want."""
+    if current_user.get("role") != "implant_incharge":
+        raise HTTPException(status_code=403, detail="Only the Implant In-Charge can change this setting")
+    org_id = current_user.get("org_id")
+    if not org_id:
+        raise HTTPException(status_code=400, detail="No organization associated with this account")
+    cfg = _build_scheduling_config(payload)
     try:
         result = await db.organizations.update_one({"_id": ObjectId(org_id)}, {"$set": {"scheduling_config": cfg}})
     except Exception:
@@ -4088,6 +4140,84 @@ async def update_scheduling_config(payload: SchedulingConfigUpdate, current_user
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Organization not found")
     return {"scheduling_config": cfg}
+
+
+def _user_department_ids(current_user: dict) -> set:
+    ids = set(current_user.get("department_ids") or [])
+    if current_user.get("department_id"):
+        ids.add(current_user["department_id"])
+    return ids
+
+
+def _assert_can_manage_dept_scheduling(current_user: dict, department_id: str) -> None:
+    if current_user.get("is_super_admin") or current_user.get("is_admin"):
+        return
+    is_own_incharge = (
+        current_user.get("role") == "implant_incharge"
+        and department_id in _user_department_ids(current_user)
+    )
+    if not is_own_incharge:
+        raise HTTPException(
+            status_code=403,
+            detail="Only this department's Implant In-Charge or the organization admin can manage its schedule",
+        )
+
+
+@api_router.get("/departments/{department_id}/scheduling-config")
+async def get_department_scheduling_config(department_id: str, current_user: dict = Depends(get_current_user)):
+    """Each department has its own operatory — its schedule is independent
+    of every other department's. Falls back to the org-wide config
+    (scheduling_config on the org doc) when this department has no override
+    of its own set yet."""
+    try:
+        dept = await db.departments.find_one({"_id": ObjectId(department_id)})
+    except Exception:
+        dept = None
+    if not dept:
+        raise HTTPException(status_code=404, detail="Department not found")
+    if not current_user.get("is_super_admin") and dept.get("org_id") != current_user.get("org_id"):
+        raise HTTPException(status_code=403, detail="Cannot access departments outside your organization")
+    _assert_can_manage_dept_scheduling(current_user, department_id)
+
+    has_override = bool(dept.get("scheduling_config"))
+    cfg = {**DEFAULT_SCHEDULING_CONFIG, **dept["scheduling_config"]} if has_override else await _get_org_scheduling_config(dept.get("org_id"))
+    return {"scheduling_config": cfg, "uses_department_override": has_override, "department_name": dept.get("name")}
+
+
+@api_router.put("/departments/{department_id}/scheduling-config")
+async def update_department_scheduling_config(department_id: str, payload: SchedulingConfigUpdate, current_user: dict = Depends(get_current_user)):
+    try:
+        dept = await db.departments.find_one({"_id": ObjectId(department_id)})
+    except Exception:
+        dept = None
+    if not dept:
+        raise HTTPException(status_code=404, detail="Department not found")
+    if not current_user.get("is_super_admin") and dept.get("org_id") != current_user.get("org_id"):
+        raise HTTPException(status_code=403, detail="Cannot manage departments outside your organization")
+    _assert_can_manage_dept_scheduling(current_user, department_id)
+
+    cfg = _build_scheduling_config(payload)
+    await db.departments.update_one({"_id": ObjectId(department_id)}, {"$set": {"scheduling_config": cfg}})
+    return {"scheduling_config": cfg}
+
+
+@api_router.delete("/departments/{department_id}/scheduling-config")
+async def reset_department_scheduling_config(department_id: str, current_user: dict = Depends(get_current_user)):
+    """Clear this department's override — it goes back to inheriting the
+    org-wide default instead of having its own explicit config."""
+    try:
+        dept = await db.departments.find_one({"_id": ObjectId(department_id)})
+    except Exception:
+        dept = None
+    if not dept:
+        raise HTTPException(status_code=404, detail="Department not found")
+    if not current_user.get("is_super_admin") and dept.get("org_id") != current_user.get("org_id"):
+        raise HTTPException(status_code=403, detail="Cannot manage departments outside your organization")
+    _assert_can_manage_dept_scheduling(current_user, department_id)
+
+    await db.departments.update_one({"_id": ObjectId(department_id)}, {"$unset": {"scheduling_config": ""}})
+    cfg = await _get_org_scheduling_config(dept.get("org_id"))
+    return {"scheduling_config": cfg, "uses_department_override": False}
 
 
 # ── super_admin: Subscription Plan templates ──────────────────────────────
@@ -5824,11 +5954,14 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
     is_supervisor = current_user["role"] == "supervisor"
     is_incharge = current_user["role"] in ("implant_incharge", "administrator")
 
-    # Org-configurable scheduling: mode (default/custom/open) + the 24h
-    # advance-booking toggle. Both set by the Implant In-Charge from
-    # Organization Settings; fetched once here for the checks below.
+    # Department-configurable scheduling: mode (default/custom/open) + the
+    # 24h advance-booking toggle. Set by each department's own Implant
+    # In-Charge from Settings — each department has its own operatory, so
+    # its slots are independent of every other department's (falls back to
+    # the org-wide config for departmentless orgs/callers).
     org_id = current_user.get("org_id")
-    sched_cfg = await _get_org_scheduling_config(org_id)
+    department_id = current_user.get("department_id")
+    sched_cfg = await _get_dept_scheduling_config(org_id, department_id)
     sched_mode = sched_cfg.get("mode", "default")
     org_enforces_restriction = True
     if org_id:
@@ -5887,7 +6020,10 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
         window_hours = float(sched_cfg.get("open_window_hours") or 2.0)
         new_end = procedure_datetime + timedelta(hours=window_hours)
         same_day = await db.procedures.find(
-            {"procedure_date": procedure.procedure_date, "status": {"$ne": "cancelled"}},
+            {
+                "org_id": org_id, "department_id": department_id,
+                "procedure_date": procedure.procedure_date, "status": {"$ne": "cancelled"},
+            },
             {"_id": 1, "procedure_time": 1, "patient_name": 1, "created_by_name": 1,
              "student_name": 1, "status": 1, "created_by_id": 1, "student_id": 1},
         ).to_list(200)
@@ -5911,8 +6047,12 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
                     detail=f"This time overlaps an existing booking ({other_start.strftime('%I:%M %p')}–{other_end.strftime('%I:%M %p')}) for patient {patient} (scheduled by {booked_by}). Please choose a different time."
                 )
     else:
-        # ── Duplicate slot check: only 1 patient per slot per day (default/custom modes) ──
+        # ── Duplicate slot check: only 1 patient per slot per day, PER DEPARTMENT
+        # (default/custom modes) — each department has its own operatory, so
+        # this must never collide across departments (or orgs) ──
         existing = await db.procedures.find_one({
+            "org_id": org_id,
+            "department_id": department_id,
             "procedure_date": procedure.procedure_date,
             "procedure_time": procedure.procedure_time,
             "status": {"$ne": "cancelled"},
@@ -6145,12 +6285,14 @@ async def get_booked_slots(date: str, current_user: dict = Depends(get_current_u
 
 @api_router.get("/procedures/slots-month/{month}")
 async def get_booked_slots_month(month: str, current_user: dict = Depends(get_current_user)):
-    """Org-wide slot occupancy for a calendar month (YYYY-MM), visible to every
-    role — powers the Home-screen calendar dots (orange = partially booked,
-    red = fully booked). `total` is computed server-side from the org's
-    scheduling config (fixed count for default/custom, null for open mode —
-    there's no fixed capacity to be "full" against). Per slot returns who
-    booked it + procedure type; deliberately no patient identity."""
+    """Slot occupancy for a calendar month (YYYY-MM) — powers the Home-screen
+    calendar dots (orange = partially booked, red = fully booked). Each
+    department has its own operatory, so occupancy is scoped to the caller's
+    own department (org admin/super_admin keep the org-wide view they've
+    always had — they oversee every department). `total` is computed
+    server-side from the effective (department, falling back to org-wide)
+    scheduling config. Per slot returns who booked it + procedure type;
+    deliberately no patient identity."""
     if not re.fullmatch(r"\d{4}-\d{2}", month):
         raise HTTPException(status_code=400, detail="month must be YYYY-MM")
     query: Dict[str, Any] = {
@@ -6161,6 +6303,14 @@ async def get_booked_slots_month(month: str, current_user: dict = Depends(get_cu
     org_scope = await _org_scope_match(current_user)
     if org_scope:
         query.update(org_scope)
+    # Explicit department filter — _org_scope_match already narrows via the
+    # case's student/supervisor/creator being in the caller's department,
+    # but that's an indirect membership check. This is the same direct
+    # filter the booking conflict-check itself uses, so the dots the user
+    # sees always match what actually blocks/allows a new booking.
+    dept_id = current_user.get("department_id")
+    if dept_id and not current_user.get("is_admin") and not current_user.get("is_super_admin"):
+        query["department_id"] = dept_id
     cursor = db.procedures.find(
         query,
         {"_id": 0, "procedure_date": 1, "procedure_time": 1, "student_name": 1,
@@ -6176,7 +6326,7 @@ async def get_booked_slots_month(month: str, current_user: dict = Depends(get_cu
             "procedure_type": p.get("implant_procedure_type") or "",
         }
 
-    sched_cfg = await _get_org_scheduling_config(current_user.get("org_id"))
+    sched_cfg = await _get_dept_scheduling_config(current_user.get("org_id"), dept_id)
     sched_mode = sched_cfg.get("mode", "default")
 
     def _total_for_date(date_str: str) -> Optional[int]:
@@ -6306,6 +6456,386 @@ async def get_procedures(
         proc["active_referral"] = active_referrals.get(proc["_id"])
 
     return procedures
+
+
+# ── iter-397: Multi-implant episodes for the same patient ────────────────
+_PATIENT_LOOKUP_PROJ = {
+    "_id": 1, "patient_name": 1, "age": 1, "sex": 1, "profession": 1,
+    "mobile_number": 1, "patient_email": 1, "registration_number": 1,
+    "medical_assessment": 1, "medical_risk_level": 1,
+    "implant_procedure_type": 1, "missing_teeth": 1, "status": 1,
+    "procedure_date": 1, "student_name": 1, "created_by_name": 1,
+    "created_at": 1, "augmentation_required": 1, "linked_parent_case_id": 1,
+    "current_phase": 1,
+    "student_id": 1, "previous_students": 1, "transfer_request": 1,
+    "supervisor_id": 1, "created_by_id": 1, "implant_incharge_id": 1,
+}
+
+
+
+def _case_accessible_to(user: dict, d: dict) -> bool:
+    """iter-399: mirrors the GET /procedures/{id} access rules so patient
+    history lists can flag cases the viewer cannot open (e.g. a case created
+    by the new owner after this user transferred the patient away)."""
+    role = user["role"]
+    uid = user["_id"]
+    if role in ("implant_incharge", "administrator"):
+        return True
+    if role == "student":
+        tr = d.get("transfer_request") or {}
+        return (
+            d.get("student_id") == uid
+            or uid in (d.get("previous_students") or [])
+            or (tr.get("to_student_id") == uid and tr.get("status") == "pending_recipient")
+        )
+    if role == "supervisor":
+        return d.get("supervisor_id") == uid or d.get("created_by_id") == uid
+    if role == "nurse":
+        return d.get("status") != "draft"
+    return False
+
+
+def _patient_case_row(d: dict, user: Optional[dict] = None) -> dict:
+    row = {
+        "id": str(d["_id"]),
+        "implant_procedure_type": d.get("implant_procedure_type") or ("Pre-Implant Augmentation" if d.get("augmentation_required") else ""),
+        "missing_teeth": d.get("missing_teeth") or [],
+        "status": d.get("status"),
+        "current_phase": d.get("current_phase"),
+        "procedure_date": d.get("procedure_date"),
+        "student_name": d.get("student_name") or d.get("created_by_name") or "",
+        "augmentation_required": bool(d.get("augmentation_required")),
+        "linked_parent_case_id": d.get("linked_parent_case_id") or "",
+        "created_at": str(d.get("created_at") or ""),
+    }
+    if user is not None:
+        row["accessible"] = _case_accessible_to(user, d)
+    return row
+
+
+@api_router.get("/procedures/patient-lookup")
+async def patient_lookup(registration_number: str, current_user: dict = Depends(get_current_user)):
+    """Detect an existing patient by registration number so a new implant
+    episode can be pre-filled and linked to the prior case(s)."""
+    if current_user["role"] not in ("student", "supervisor", "implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Not permitted")
+    reg = (registration_number or "").strip()
+    if not reg:
+        return {"found": False, "patient": None, "cases": []}
+    query = {
+        "registration_number": {"$regex": f"^{re.escape(reg)}$", "$options": "i"},
+        "archived": {"$ne": True},
+        "status": {"$ne": "draft"},
+    }
+    docs = await db.procedures.find(query, _PATIENT_LOOKUP_PROJ).sort("created_at", 1).to_list(50)
+    if not docs:
+        return {"found": False, "patient": None, "cases": []}
+    latest = docs[-1]
+    patient = {
+        "patient_name": latest.get("patient_name", ""),
+        "age": latest.get("age", ""),
+        "sex": latest.get("sex", ""),
+        "profession": latest.get("profession", ""),
+        "mobile_number": latest.get("mobile_number", ""),
+        "patient_email": latest.get("patient_email", ""),
+        "medical_assessment": latest.get("medical_assessment") or {},
+        "medical_risk_level": latest.get("medical_risk_level", ""),
+    }
+    cases = [_patient_case_row(d) for d in docs]
+    await log_access(action="patient_lookup", resource_type="patient", resource_id=reg, user=current_user)
+    return {"found": True, "patient": patient, "cases": cases, "latest_case_id": cases[-1]["id"]}
+
+
+def _patient_block(d: dict) -> dict:
+    return {
+        "patient_name": d.get("patient_name", ""),
+        "age": d.get("age", ""),
+        "sex": d.get("sex", ""),
+        "profession": d.get("profession", ""),
+        "mobile_number": d.get("mobile_number", ""),
+        "patient_email": d.get("patient_email", ""),
+        "medical_assessment": d.get("medical_assessment") or {},
+        "medical_risk_level": d.get("medical_risk_level", ""),
+    }
+
+
+@api_router.get("/procedures/patient-name-lookup")
+async def patient_name_lookup(patient_name: str, current_user: dict = Depends(get_current_user)):
+    """iter-398: detect existing patient(s) by exact full-name match
+    (case-insensitive). Same name may belong to several distinct patients, so
+    results are grouped per registration number for the clinician to pick or
+    cancel."""
+    if current_user["role"] not in ("student", "supervisor", "implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Not permitted")
+    name = (patient_name or "").strip()
+    if not name:
+        return {"found": False, "patients": []}
+    query = {
+        "patient_name": {"$regex": f"^{re.escape(name)}$", "$options": "i"},
+        "archived": {"$ne": True},
+        "status": {"$ne": "draft"},
+    }
+    docs = await db.procedures.find(query, _PATIENT_LOOKUP_PROJ).sort("created_at", 1).to_list(100)
+    if not docs:
+        return {"found": False, "patients": []}
+    grouped: Dict[str, Dict[str, Any]] = {}
+    for d in docs:
+        reg = (d.get("registration_number") or "").strip()
+        key = reg.lower()
+        entry = grouped.setdefault(key, {
+            "registration_number": reg,
+            "patient": _patient_block(d),
+            "cases": [],
+        })
+        entry["patient"] = _patient_block(d)  # latest wins (docs sorted asc)
+        entry["cases"].append(_patient_case_row(d))
+    patients = []
+    for entry in grouped.values():
+        entry["cases_count"] = len(entry["cases"])
+        entry["latest_case_id"] = entry["cases"][-1]["id"]
+        patients.append(entry)
+    patients.sort(key=lambda e: e["cases"][-1]["created_at"], reverse=True)
+    await log_access(action="patient_name_lookup", resource_type="patient", resource_id=name, user=current_user)
+    return {"found": True, "patients": patients}
+
+
+@api_router.get("/procedures/{procedure_id}/patient-history")
+async def get_patient_history(procedure_id: str, current_user: dict = Depends(get_current_user)):
+    """Every case sharing this patient's registration number (treatment timeline)."""
+    if current_user["role"] not in ("student", "supervisor", "implant_incharge", "administrator", "nurse"):
+        raise HTTPException(status_code=403, detail="Not permitted")
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, _PATIENT_LOOKUP_PROJ)
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    reg = (proc.get("registration_number") or "").strip()
+    if not reg:
+        return {"cases": []}
+    query = {
+        "registration_number": {"$regex": f"^{re.escape(reg)}$", "$options": "i"},
+        "archived": {"$ne": True},
+        "$or": [{"status": {"$ne": "draft"}}, {"_id": proc["_id"]}],
+    }
+    docs = await db.procedures.find(query, _PATIENT_LOOKUP_PROJ).sort("created_at", 1).to_list(50)
+    cases = []
+    for d in docs:
+        row = _patient_case_row(d)
+        row["is_current"] = row["id"] == procedure_id
+        cases.append(row)
+    return {"cases": cases}
+
+
+# ── iter-401: Mid-treatment implant addition (same case, Phase 2/3/4) ────
+_ADDITION_STATUS_PHASE = {
+    "phase1_approved": 2, "pending_phase2": 2,
+    "phase2_approved": 3, "pending_stage2_surgical": 3,
+    "stage2_surgical_approved": 4, "pending_stage2_prosthetic": 4,
+    "stage2_prosthetic_step1_approved": 4, "pending_final_delivery": 4,
+}
+_ADDITION_CASE_TYPES = {"Multiple Conventional Implants", "All on 4", "All on 6", "All on X"}
+_FDI_CODES = {str(q * 10 + t) for q in (1, 2, 3, 4) for t in range(1, 9)}
+
+
+class ImplantAdditionCreate(BaseModel):
+    tooth_number: str = Field(..., max_length=4)
+    system: str = Field(..., max_length=160)
+    diameter: float = Field(..., gt=0, lt=10)
+    length: float = Field(..., gt=0, lt=30)
+    placement_date: str = Field(..., max_length=30)
+    insertion_torque_ncm: Optional[float] = None
+    isq: Optional[float] = None
+    lot_number: Optional[str] = Field("", max_length=60)
+    iopa_url: str = Field(..., min_length=1, max_length=500)
+    reason: str = Field(..., min_length=3, max_length=1000)
+    augmentation: Optional[Dict[str, Any]] = None
+
+
+class ImplantAdditionResolve(BaseModel):
+    action: str = Field(..., pattern="^(approve|decline)$")
+    comment: Optional[str] = Field("", max_length=500)
+
+
+async def _apply_implant_addition(proc: Dict[str, Any], req: Dict[str, Any]) -> None:
+    """Append the approved implant to the case's implants[] + implant_plans[]
+    (index-aligned, never re-indexed) so survival review, lab slip, PDFs and
+    analytics pick it up automatically."""
+    phase = req.get("phase_at_request") or _ADDITION_STATUS_PHASE.get(proc.get("status"), 2)
+    system_label = req["system"]
+    brand = system_label.split(" — ")[0].strip() if " — " in system_label else system_label
+    system_name = system_label.split(" — ")[1].strip() if " — " in system_label else system_label
+    pending_s2 = phase == 4 and req.get("isq") in (None, "")
+    meta = {
+        "insertion_torque_ncm": req.get("insertion_torque_ncm"),
+        "isq": req.get("isq"),
+        "lot_number": req.get("lot_number") or None,
+        "placement_date": req.get("placement_date"),
+        "iopa_url": req.get("iopa_url"),
+        "augmentation": req.get("augmentation"),
+        "added_in_phase": phase,
+        "added_by_id": req.get("requested_by_id"),
+        "added_by_name": req.get("requested_by_name"),
+        "added_at": datetime.now(timezone.utc).isoformat(),
+        "addition_reason": req.get("reason"),
+        "pending_stage2_verification": pending_s2,
+    }
+    imp = {
+        "tooth_number": req["tooth_number"], "tooth": req["tooth_number"],
+        "system": system_label, "brand": brand,
+        "diameter": req["diameter"], "length": req["length"],
+        **meta,
+    }
+    plan = {
+        "position": req["tooth_number"], "tooth": req["tooth_number"],
+        "brand": brand, "system": system_name,
+        "diameter": str(req["diameter"]), "length": str(req["length"]),
+        **meta,
+    }
+    implants = _extract_procedure_implants(proc)
+    push_ops: Dict[str, Any] = {"implant_plans": plan}
+    if isinstance(proc.get("torque_values"), list):
+        push_ops["torque_values"] = req.get("insertion_torque_ncm")
+    if req["tooth_number"] not in (proc.get("missing_teeth") or []):
+        push_ops["missing_teeth"] = req["tooth_number"]
+    await db.procedures.update_one(
+        {"_id": proc["_id"]},
+        {"$set": {"implants": list(implants) + [imp], "updated_at": datetime.utcnow()},
+         "$push": push_ops},
+    )
+
+
+async def _notify_addition(user_id: Optional[str], procedure_id: str, message: str):
+    if not user_id:
+        return
+    await db.notifications.insert_one({
+        "user_id": user_id,
+        "procedure_id": procedure_id,
+        "message": message,
+        "type": "approval_request",
+        "read": False,
+        "created_at": datetime.utcnow(),
+    })
+
+
+@api_router.post("/procedures/{procedure_id}/add-implant")
+async def request_implant_addition(procedure_id: str, payload: ImplantAdditionCreate, current_user: dict = Depends(get_current_user)):
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    role, uid = current_user["role"], current_user["_id"]
+    if role == "nurse":
+        raise HTTPException(status_code=403, detail="Not permitted")
+    if role == "student" and proc.get("student_id") != uid:
+        raise HTTPException(status_code=403, detail="Only the treating student can add an implant to this case")
+    if role == "supervisor" and proc.get("supervisor_id") != uid and proc.get("created_by_id") != uid:
+        raise HTTPException(status_code=403, detail="Only this case's supervisor can add an implant")
+    phase = _ADDITION_STATUS_PHASE.get(proc.get("status"))
+    if phase is None:
+        raise HTTPException(status_code=400, detail="Implants can only be added while the case is in Phase 2, 3 or 4")
+    if (proc.get("implant_procedure_type") or "") not in _ADDITION_CASE_TYPES:
+        raise HTTPException(status_code=400, detail="Adding implants is only available for Multiple Implants and full-arch (All on 4/6/X) cases")
+    tooth = payload.tooth_number.strip()
+    if tooth not in _FDI_CODES:
+        raise HTTPException(status_code=400, detail="Invalid FDI tooth number")
+    active_sites = {
+        str(i.get("tooth_number") or i.get("tooth"))
+        for i in _resolve_active_implants_inline(proc)
+        if i.get("_active_in_treatment") is not False
+    }
+    pending_sites = {
+        r.get("tooth_number") for r in (proc.get("implant_addition_requests") or [])
+        if str(r.get("status", "")).startswith("pending")
+    }
+    if tooth in active_sites or tooth in pending_sites:
+        raise HTTPException(status_code=400, detail=f"Site {tooth} already has an active implant or a pending addition request")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    req = {
+        "id": str(uuid.uuid4()),
+        **payload.model_dump(),
+        "tooth_number": tooth,
+        "requested_by_id": uid,
+        "requested_by_name": current_user.get("name"),
+        "requested_by_role": role,
+        "requested_at": now_iso,
+        "phase_at_request": phase,
+        "status": "pending_supervisor",
+        "supervisor_action": None,
+        "incharge_action": None,
+    }
+    auto = {"by_id": uid, "by_name": current_user.get("name"), "at": now_iso, "action": "approve", "comment": "Auto-approved (requester)"}
+    if role in ("implant_incharge", "administrator"):
+        req["status"] = "approved"
+        req["supervisor_action"] = auto
+        req["incharge_action"] = auto
+    elif role == "supervisor":
+        req["status"] = "pending_incharge"
+        req["supervisor_action"] = auto
+    await db.procedures.update_one({"_id": proc["_id"]}, {"$push": {"implant_addition_requests": req}})
+    who = current_user.get("name")
+    msg = f"Implant addition (site {tooth}, Phase {phase}) requested by {who} for patient {proc.get('patient_name')}"
+    if req["status"] == "approved":
+        await _apply_implant_addition(proc, req)
+    elif req["status"] == "pending_supervisor":
+        await _notify_addition(proc.get("supervisor_id"), procedure_id, msg)
+    else:
+        await _notify_addition(proc.get("implant_incharge_id"), procedure_id, msg)
+    return {"ok": True, "request": req}
+
+
+@api_router.post("/procedures/{procedure_id}/add-implant/{request_id}/resolve")
+async def resolve_implant_addition(procedure_id: str, request_id: str, body: ImplantAdditionResolve, current_user: dict = Depends(get_current_user)):
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    reqs = proc.get("implant_addition_requests") or []
+    req = next((r for r in reqs if r.get("id") == request_id), None)
+    if not req:
+        raise HTTPException(status_code=404, detail="Addition request not found")
+    if req.get("status") not in ("pending_supervisor", "pending_incharge"):
+        raise HTTPException(status_code=400, detail="This request has already been resolved")
+    role, uid = current_user["role"], current_user["_id"]
+    stamp = {"by_id": uid, "by_name": current_user.get("name"), "at": datetime.now(timezone.utc).isoformat(),
+             "action": body.action, "comment": body.comment or ""}
+    if req["status"] == "pending_supervisor":
+        is_sup = role == "supervisor" and proc.get("supervisor_id") == uid
+        if not (is_sup or role in ("implant_incharge", "administrator")):
+            raise HTTPException(status_code=403, detail="Only this case's supervisor or the implant in-charge can act on this request")
+        req["supervisor_action"] = stamp
+        if body.action == "decline":
+            req["status"] = "declined"
+        elif role in ("implant_incharge", "administrator"):
+            req["incharge_action"] = stamp
+            req["status"] = "approved"
+        else:
+            req["status"] = "pending_incharge"
+    else:
+        if role not in ("implant_incharge", "administrator"):
+            raise HTTPException(status_code=403, detail="Only the implant in-charge can give final approval")
+        req["incharge_action"] = stamp
+        req["status"] = "approved" if body.action == "approve" else "declined"
+    await db.procedures.update_one(
+        {"_id": proc["_id"], "implant_addition_requests.id": request_id},
+        {"$set": {"implant_addition_requests.$": req}},
+    )
+    if req["status"] == "approved":
+        await _apply_implant_addition(proc, req)
+        await _notify_addition(req.get("requested_by_id"), procedure_id,
+                               f"Implant addition (site {req['tooth_number']}) approved — the implant is now part of the case for {proc.get('patient_name')}")
+    elif req["status"] == "declined":
+        await _notify_addition(req.get("requested_by_id"), procedure_id,
+                               f"Implant addition (site {req['tooth_number']}) was declined by {current_user.get('name')}")
+    else:
+        await _notify_addition(proc.get("implant_incharge_id"), procedure_id,
+                               f"Implant addition (site {req['tooth_number']}) for {proc.get('patient_name')} awaits your final approval")
+    return {"ok": True, "request": req}
+
 
 
 @api_router.get("/procedures/archived")
@@ -10383,9 +10913,19 @@ try:
     from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
     import uuid
 except ImportError:
-    # Fall back to openai SDK directly (emergentintegrations not on PyPI)
+    # Fall back to openai/anthropic SDKs directly (emergentintegrations not on PyPI).
+    # Real multi-provider dispatch: provider="anthropic" -> Anthropic Messages API
+    # (text-only Implanr AI), provider="openai" -> OpenAI (IOPA/CBCT image analysis).
     try:
         from openai import AsyncOpenAI as _AsyncOpenAI
+    except ImportError:
+        _AsyncOpenAI = None
+    try:
+        from anthropic import AsyncAnthropic as _AsyncAnthropic
+    except ImportError:
+        _AsyncAnthropic = None
+
+    if _AsyncOpenAI is not None or _AsyncAnthropic is not None:
 
         class ImageContent:
             def __init__(self, image_base64: str = "", image_url: str = ""):
@@ -10400,18 +10940,58 @@ except ImportError:
         class LlmChat:
             def __init__(self, api_key: str = "", session_id: str = "", system_message: str = ""):  # noqa: ARG002
                 self._api_key = api_key
+                self._provider = "openai"
                 self._model = "gpt-4o"
+                self._system_message = system_message
                 self._messages: list = []
                 if system_message:
                     self._messages = [{"role": "system", "content": system_message}]
 
-            def with_model(self, provider: str, model: str):  # noqa: ARG002
-                # Map legacy model aliases that may not exist yet
-                _alias = {"gpt-5.2": "gpt-4o", "gpt-5": "gpt-4o"}
-                self._model = _alias.get(model, model)
+            def with_model(self, provider: str, model: str):
+                self._provider = provider
+                if provider == "anthropic":
+                    _alias = {"claude-sonnet-5": "claude-sonnet-5", "sonnet": "claude-sonnet-5"}
+                    self._model = _alias.get(model, model)
+                else:
+                    # Map legacy model aliases that may not exist yet
+                    _alias = {"gpt-5.2": "gpt-4o", "gpt-5": "gpt-4o"}
+                    self._model = _alias.get(model, model)
                 return self
 
             async def send_message(self, message: "UserMessage") -> str:
+                if self._provider == "anthropic":
+                    return await self._send_anthropic(message)
+                return await self._send_openai(message)
+
+            async def _send_anthropic(self, message: "UserMessage") -> str:
+                if _AsyncAnthropic is None:
+                    raise HTTPException(503, "Anthropic SDK not available")
+                client = _AsyncAnthropic(api_key=self._api_key or _get_anthropic_key())
+                if message.file_contents:
+                    content: list = []
+                    for img in message.file_contents:
+                        if img.image_base64:
+                            content.append({
+                                "type": "image",
+                                "source": {"type": "base64", "media_type": "image/jpeg", "data": img.image_base64},
+                            })
+                    content.append({"type": "text", "text": message.text})
+                else:
+                    content = message.text  # type: ignore[assignment]
+                kwargs: dict = {}
+                if self._system_message:
+                    kwargs["system"] = self._system_message
+                resp = await client.messages.create(
+                    model=self._model,
+                    max_tokens=8192,
+                    messages=[{"role": "user", "content": content}],
+                    **kwargs,
+                )
+                return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
+
+            async def _send_openai(self, message: "UserMessage") -> str:
+                if _AsyncOpenAI is None:
+                    raise HTTPException(503, "OpenAI SDK not available")
                 client = _AsyncOpenAI(api_key=self._api_key)
                 if message.file_contents:
                     content: list = [{"type": "text", "text": message.text}]
@@ -10426,9 +11006,9 @@ except ImportError:
                 resp = await client.chat.completions.create(model=self._model, messages=msgs)  # type: ignore[arg-type]
                 return resp.choices[0].message.content or ""
 
-        logging.info("emergentintegrations not installed — using openai SDK directly.")
-    except ImportError:
-        logging.warning("Neither emergentintegrations nor openai installed — AI features disabled.")
+        logging.info("emergentintegrations not installed — using openai/anthropic SDKs directly.")
+    else:
+        logging.warning("Neither emergentintegrations, openai, nor anthropic installed — AI features disabled.")
         class _AIStub:
             def __init__(self, *a, **kw): raise HTTPException(503, "AI features not available")
             def with_model(self, *a, **kw): return self
@@ -10506,6 +11086,111 @@ def _redact_phi_from_ai_text(text: str, proc: Optional[dict]) -> str:
 # iter-338 backward-compat alias — old call-sites still work.
 def _redact_name_from_ai_text(text: str, patient_name: Optional[str]) -> str:
     return _redact_phi_from_ai_text(text, {"patient_name": patient_name} if patient_name else None)
+
+
+def _get_claude_key() -> str:
+    """iter-404: the customer's own Anthropic key powers all TEXT AI features
+    (Claude Sonnet 5). Falls back to EMERGENT_LLM_KEY if unset, so AI never
+    hard-fails on a missing env var. Unused — _claude_send() builds its own
+    key list inline; kept for any external caller still importing this."""
+    return os.environ.get("ANTHROPIC_API_KEY", "") or os.environ.get("EMERGENT_LLM_KEY", "")
+
+
+# iter-404: shared clinical persona injected into every Claude text feature.
+CLINICAL_AI_PERSONA = (
+    "You are the clinical AI of a prosthodontics implant case-management platform, acting as a senior "
+    "implantologist, prosthodontist and oral & maxillofacial surgeon with decades of combined surgical and "
+    "restorative experience.\n"
+    "KNOWLEDGE BASE: ground every suggestion in current, contemporary peer-reviewed implant dentistry — "
+    "osseointegration science (Brånemark; Albrektsson success criteria), ITI and EAO consensus statements, "
+    "Misch's Contemporary Implant Dentistry, Lindhe's Clinical Periodontology and Implant Dentistry, "
+    "Zarb/Bolender prosthodontic principles, current loading-protocol evidence (immediate vs early vs "
+    "conventional), primary-stability science (insertion torque ≥35 Ncm with ISQ ≥70 commonly supports "
+    "immediate loading; ISQ <60 favours delayed protocols), GBR/augmentation literature (Buser, Urban), the "
+    "2017 World Workshop peri-implant disease classification, and full-arch concepts (All-on-4/Maló, AP "
+    "spread, MUA angulation 0-45°).\n"
+    "WORKFLOW CONTEXT — this platform manages implant cases across five connected phases; always reason "
+    "across them as one continuum:\n"
+    "• Phase 1 — Registration & Planning: demographics, medical assessment & risk level, chief complaint, "
+    "periodontal status, missing teeth (FDI), CBCT uploads, bone width/height/type, implant system selection "
+    "from a 76-system library, and staged pre-implant augmentation when the ridge is deficient.\n"
+    "• Phase 2 — Implant Surgery: surgical approach, drilling protocol, insertion torque, ISQ, bone & "
+    "soft-tissue augmentation (GBR, membranes, autogenous/allograft, soft-tissue grafts), healing protocol "
+    "(single-stage / two-stage / immediate loading), then the Implant Survival Review where failed implants "
+    "are replaced as R1/R2 revisions — only ACTIVE implants carry the prosthesis.\n"
+    "• Phase 3 — Stage-2 Surgical: re-entry, healing-abutment placement, ISQ verification of osseointegration.\n"
+    "• Phase 4 — Prosthetics: impressions/scans, shade selection, MUA selection & angulation, lab slip "
+    "generation (active implants only), try-in, final delivery, occlusal scheme.\n"
+    "• Phase 5 — Follow-Up & Maintenance: recall schedule, peri-implant health monitoring, radiographic "
+    "bone-level comparison, prosthetic maintenance and complication management.\n"
+    "The platform also supports mid-treatment implant additions to the same case, parallel cases for the same "
+    "patient, case transfers between clinicians, and a student → supervisor → implant in-charge approval "
+    "hierarchy.\n"
+    "BEHAVIOUR: think and speak like an experienced chair-side mentor. Connect findings across phases (e.g. a "
+    "Phase-1 thin biotype should inform Phase-4 abutment choice; a low Phase-2 ISQ should temper Phase-4 "
+    "loading decisions). Give concrete numbers and thresholds where the evidence supports them. Flag when "
+    "supervisor review or additional diagnostics are prudent. Never invent specifications. This is clinical "
+    "decision SUPPORT for qualified dental professionals — the treating clinician retains final responsibility."
+)
+
+# Chats & suggestions may NAME real established sources; formal documents stay citation-free.
+CLINICAL_AI_CITE = (
+    " When it strengthens the answer, name the relevant established evidence explicitly (e.g. 'ITI Consensus', "
+    "'Albrektsson criteria', 'Misch', '2017 World Workshop') — real sources only; never invent citations, "
+    "authors, years, or journal names."
+)
+CLINICAL_AI_NO_CITE = (
+    " Never cite, name, or reference any specific guidelines, organizations, textbooks, or journals in this "
+    "document — present the knowledge as your own professional clinical assessment."
+)
+
+
+_anthropic_key_bad_until = 0.0
+
+
+async def _claude_send(session_id: str, system_message: str, text: str, timeout: Optional[float] = None) -> str:
+    """iter-404: send to Claude Sonnet 5 with the customer's own Anthropic
+    key; if that account rejects (e.g. no credit balance), retry once on
+    EMERGENT_LLM_KEY as a secondary key so AI features never go dark. Note:
+    in this deployment EMERGENT_LLM_KEY is an OpenAI-shaped key (same value
+    as OPENAI_API_KEY), so it won't authenticate against Anthropic either —
+    the retry is a harmless no-op here unless that env var is later set to a
+    real second Anthropic key. A 10-min cooldown skips the primary key after
+    a failure so every call doesn't pay the wasted round-trip — but only
+    when a real fallback is actually usable, so a single transient error
+    can never blacklist the only working key for 10 minutes."""
+    import time as _time
+    global _anthropic_key_bad_until
+    ek = os.environ.get("EMERGENT_LLM_KEY")
+    # EMERGENT_LLM_KEY may be an OpenAI-shaped key sharing an env var with
+    # OPENAI_API_KEY (as it is in this deployment) — that can never
+    # authenticate against Anthropic, so it's not a real fallback. Only
+    # treat it as usable, and only cooldown the primary key, when it looks
+    # like an actual Anthropic key.
+    ek_usable = bool(ek and ek.startswith("sk-ant-"))
+    keys: List[tuple] = []
+    ak = os.environ.get("ANTHROPIC_API_KEY")
+    if ak and _time.time() >= _anthropic_key_bad_until:
+        keys.append(("primary", ak))
+    if ek_usable:
+        keys.append(("secondary", ek))
+    last_err: Optional[Exception] = None
+    for name, key in keys:
+        try:
+            chat = LlmChat(api_key=key, session_id=session_id, system_message=system_message
+                           ).with_model("anthropic", "claude-sonnet-5")
+            coro = chat.send_message(UserMessage(text=text))
+            return await (asyncio.wait_for(coro, timeout) if timeout else coro)
+        except asyncio.TimeoutError:
+            raise
+        except Exception as e:
+            last_err = e
+            if name == "primary" and ek_usable:
+                _anthropic_key_bad_until = _time.time() + 600
+            logging.warning(f"Claude call failed on {name} key ending ...{key[-6:]}: {type(e).__name__} — trying fallback")
+    raise last_err if last_err else RuntimeError("No LLM key configured")
+
+
 
 
 
@@ -10718,6 +11403,10 @@ def _get_llm_key():
     return os.environ.get("OPENAI_API_KEY", "") or os.environ.get("EMERGENT_LLM_KEY", "")
 
 
+def _get_anthropic_key():
+    return os.environ.get("ANTHROPIC_API_KEY", "")
+
+
 _AI_BLOCKED_ROLES = {"nurse", "dental_assistant"}
 
 @api_router.post("/ai/explain-recommendation")
@@ -10815,7 +11504,7 @@ Provide a clinical explanation in professional scientific language. Do not menti
         api_key=_get_llm_key(),
         session_id=f"explain-{procedure_id}-{implant_index}-{uuid.uuid4().hex[:8]}",
         system_message="You are an expert implant dentistry clinical advisor. Provide concise, evidence-based clinical explanations."
-    ).with_model("openai", "gpt-5.2")
+    ).with_model("anthropic", "claude-sonnet-5")
     
     response = await chat.send_message(UserMessage(text=prompt))
     # iter-339 HIPAA: scrub all PHI (name, phone, email, DOB, address).
@@ -10938,13 +11627,13 @@ async def _ensure_exit_summary(procedure_id: str, proc: dict, current_user: dict
         return existing["text"]
 
     prompt = _build_exit_summary_prompt(proc)
-    chat = LlmChat(
-        api_key=_get_llm_key(),
-        session_id=f"exit-summary-{procedure_id}-{uuid.uuid4().hex[:8]}",
-        system_message="You are an expert implant dentistry clinician writing a medico-legal hand-off note. Be conservative and evidence-anchored."
-    ).with_model("openai", "gpt-5.2")
-
-    text = await chat.send_message(UserMessage(text=prompt))
+    text = await _claude_send(
+        f"exit-summary-{procedure_id}-{uuid.uuid4().hex[:8]}",
+        CLINICAL_AI_PERSONA + "\n\n"
+        "TASK MODE: you are writing a medico-legal hand-off note. Be conservative and evidence-anchored."
+        + CLINICAL_AI_NO_CITE,
+        prompt,
+    )
     text = (text or "").strip()
     # HIPAA belt-and-braces net, same as every other AI endpoint in this file.
     text = _redact_phi_from_ai_text(text, proc)
@@ -11108,13 +11797,13 @@ Clinical Data:
 
 Provide a clinical explanation in professional scientific language. Do not mention any guideline names or references. Write as a professional clinical note."""
 
-    chat = LlmChat(
-        api_key=_get_llm_key(),
-        session_id=f"explain-standalone-{uuid.uuid4().hex[:8]}",
-        system_message="You are an expert implant dentistry clinical advisor. Provide concise, evidence-based clinical explanations."
-    ).with_model("openai", "gpt-5.2")
-
-    response = await chat.send_message(UserMessage(text=prompt))
+    response = await _claude_send(
+        f"explain-standalone-{uuid.uuid4().hex[:8]}",
+        CLINICAL_AI_PERSONA + "\n\n"
+        "TASK MODE: provide a concise, evidence-based clinical explanation."
+        + CLINICAL_AI_NO_CITE,
+        prompt,
+    )
 
     return {"explanation": response}
 
@@ -11886,12 +12575,12 @@ WHERE TO FIND THINGS IN THE APP
     # wait_for so we fail fast (in 25s) with a friendly message instead of
     # letting the gateway return a confusing 5xx.
     try:
-        chat = LlmChat(
-            api_key=_get_llm_key(),
-            session_id=session_id,
-            system_message=system_message,
-        ).with_model("openai", "gpt-4o-mini")
-        response_text = await asyncio.wait_for(chat.send_message(UserMessage(text=prompt)), timeout=25.0)
+        response_text = await _claude_send(
+            session_id,
+            CLINICAL_AI_PERSONA + CLINICAL_AI_CITE + "\n\n" + system_message,
+            prompt,
+            timeout=25.0,
+        )
     except asyncio.TimeoutError:
         return {"answer": "I'm taking a bit too long to think — could you ask that again, maybe a touch shorter? (My responses time out at 25 s.)", "session_id": session_id}
     except Exception as e:
@@ -12026,18 +12715,17 @@ async def ai_ask_implanr(request: Request, current_user: dict = Depends(get_curr
         f"add 'Brochure detail: …' on a new line for the additional information."
     )
 
-    chat = LlmChat(
-        api_key=_get_llm_key(),
-        session_id=f"implanr-{current_user.get('id','')}-{uuid.uuid4().hex[:8]}",
-        system_message=(
-            "You are Implanr AI, a precise prosthodontic assistant. Output plain text only — never markdown. "
+    response = await _claude_send(
+        f"implanr-{current_user.get('id','')}-{uuid.uuid4().hex[:8]}",
+        (
+            CLINICAL_AI_PERSONA + CLINICAL_AI_CITE + "\n\n"
+            "TASK MODE: You are Implanr AI, a precise prosthodontic assistant. Output plain text only — never markdown. "
             f"{_CONVENTIONS} "
             "Quote exact specification values from the supplied component database and uploaded manufacturer "
             "brochure excerpts. If a value is missing, reply only with 'Information is not available.' Never fabricate."
-        )
-    ).with_model("openai", "gpt-5.2")
-
-    response = await chat.send_message(UserMessage(text=prompt))
+        ),
+        prompt,
+    )
     return {"answer": response, "scoped_system": target_key or None}
 
 
@@ -12240,13 +12928,17 @@ FORMAT INSTRUCTIONS:
             + style_block
         )
 
-    chat = LlmChat(
-        api_key=_get_llm_key(),
-        session_id=f"summary-{procedure_id}-{uuid.uuid4().hex[:8]}",
-        system_message="You are an expert implant dentistry clinical advisor and prosthodontist. You write case summaries using rigorous scientific clinical language grounded in established evidence-based implantology. Never cite, name, or reference any specific guidelines, organizations, textbooks, or journals in your output — present the knowledge as your own professional clinical assessment."
-    ).with_model("openai", "gpt-5.2")
-
-    response = await chat.send_message(UserMessage(text=prompt))
+    response = await _claude_send(
+        f"summary-{procedure_id}-{uuid.uuid4().hex[:8]}",
+        CLINICAL_AI_PERSONA + "\n\n"
+        "TASK MODE: write the case summary using rigorous scientific clinical language grounded in "
+        "established evidence-based implantology. Keep the complete summary focused and under roughly 700 "
+        "words — dense clinical prose, no filler, no repetition."
+        + CLINICAL_AI_NO_CITE,
+        prompt,
+    )
+    # iter-339 HIPAA: scrub all PHI (name, phone, email, DOB, address).
+    response = _redact_phi_from_ai_text(response, proc)
 
     # Strip residual markdown asterisks / underscores — defense-in-depth
     # (matches the stripping already applied in the chat assistant endpoint).
@@ -12313,13 +13005,15 @@ Hemostasis Achieved: {'Yes' if phase2.get('hemostasis_achieved') else 'N/A'}
 
 Write a concise operative note (4-6 sentences) in standard surgical documentation format. Include: preparation, osteotomy, implant placement, primary stability (referencing actual torque values), and closure. Professional tone."""
 
-    chat = LlmChat(
-        api_key=_get_llm_key(),
-        session_id=f"surgical-{procedure_id}-{uuid.uuid4().hex[:8]}",
-        system_message="You are an expert implant surgeon generating operative notes."
-    ).with_model("openai", "gpt-5.2")
-    
-    response = await chat.send_message(UserMessage(text=prompt))
+    response = await _claude_send(
+        f"surgical-{procedure_id}-{uuid.uuid4().hex[:8]}",
+        CLINICAL_AI_PERSONA + "\n\n"
+        "TASK MODE: generate a standard operative note."
+        + CLINICAL_AI_NO_CITE,
+        prompt,
+    )
+    # iter-339 HIPAA: scrub all PHI (name, phone, email, DOB, address).
+    response = _redact_phi_from_ai_text(response, proc)
 
     # Strip residual markdown asterisks / underscores — defense-in-depth.
     import re as _re_md_sn
@@ -12637,7 +13331,7 @@ OUTPUT RULES (strict):
         api_key=_get_llm_key(),
         session_id=f"chat-{body.procedure_id}-{uuid.uuid4().hex[:8]}",
         system_message=system
-    ).with_model("openai", "gpt-5.2")
+    ).with_model("anthropic", "claude-sonnet-5")
     
     response = await chat.send_message(UserMessage(text=prompt))
     
@@ -14889,7 +15583,7 @@ async def submit_phase2(
     if plans:
         implants_array: List[Dict[str, Any]] = []
         for i, plan in enumerate(plans):
-            implants_array.append({
+            entry = {
                 "tooth_number": plan.get("position"),
                 "system": plan.get("system") or plan.get("brand"),
                 "brand": plan.get("brand"),
@@ -14900,7 +15594,16 @@ async def submit_phase2(
                 "bone_type": plan.get("bone_type"),
                 "insertion_torque_ncm": (torques[i] if i < len(torques) else None),
                 "placement_date": update_data["phase2_actual_done_date"],
-            })
+            }
+            # iter-401: mid-treatment additions carry their own capture data on
+            # the plan entry — preserve it when re-materializing implants[].
+            if plan.get("added_in_phase"):
+                for k in ("insertion_torque_ncm", "isq", "iopa_url", "augmentation",
+                          "placement_date", "added_in_phase", "added_by_id", "added_by_name",
+                          "added_at", "addition_reason", "pending_stage2_verification", "lot_number"):
+                    if plan.get(k) is not None:
+                        entry[k] = plan.get(k)
+            implants_array.append(entry)
         update_data["implants"] = implants_array
 
     await db.procedures.update_one(
@@ -15769,7 +16472,8 @@ class AugmentationCaseCreate(BaseModel):
     procedure_date: str = Field(..., max_length=30)
     procedure_time: str = Field(..., max_length=20)
     remark: Optional[str] = Field("", max_length=1000)
-
+    # iter-397: multi-implant episodes — link to the patient's prior case.
+    linked_parent_case_id: Optional[str] = Field("", max_length=64)
 
 class AugmentationStep1Submit(BaseModel):
     reasons: List[str] = []
@@ -22747,6 +23451,8 @@ async def submit_survival_review(
                     "immediate_loading_prosthesis_detail": imm_detail,
                     # If the site changed, the replacement lives at the NEW tooth
                     "tooth_number": new_tooth or (implants[idx].get("tooth_number") or implants[idx].get("tooth")),
+                    "bone_graft_used": isinstance(repl.get("augmentation"), dict),
+                    "augmentation": repl.get("augmentation") if isinstance(repl.get("augmentation"), dict) else None,
                 }
         # Any implant not listed in failures is treated as Active.
         for i in range(len(implants)):
@@ -25864,7 +26570,12 @@ async def _log_transfer_event(procedure_id: str, action: str, outcome: str,
 
 async def _generate_transfer_handoff_summary(proc: dict) -> str:
     """LLM-generated de-identified case brief for the receiving student.
-    Strict PHI policy: age + sex only. No name, DOB, address, phone."""
+    Strict PHI policy: age + sex only. No name, DOB, address, phone.
+    """
+    # Build a de-identified payload. Field names must match this app's actual
+    # procedure schema — NOT the "implants"/"phase1..4" shape from the other
+    # instance's server.py; that shape doesn't exist here and silently reads
+    # None for every field, producing an empty handoff brief.
     payload = {
         "age": proc.get("age"),
         "sex": proc.get("sex"),
@@ -25899,30 +26610,29 @@ async def _generate_transfer_handoff_summary(proc: dict) -> str:
         "You are writing a 4-6 sentence clinical handoff brief for a student "
         "who is taking over an implant case mid-workflow. STRICT PHI RULES: "
         "do NOT include patient name, date of birth, address, phone, or any "
-        "demographic beyond age and sex. Focus on: what was planned (implant "
-        "positions/systems), what was executed surgically (torque, flap), "
-        "the healing/prosthetic status, and any prosthetic decisions already "
+        "demographic beyond age and sex. Focus on: what was planned in Phase "
+        "1, what was executed in Phase 2 (torque, ISQ, healing plan), the "
+        "prosthetic status from Phase 3, and any Phase 4 decisions already "
         "made. Highlight the single most important thing the new student "
         "must not forget. Use present tense. De-identified data only:\n\n"
         + json.dumps(payload, default=str)
     )
 
     try:
-        chat = LlmChat(
-            api_key=_get_llm_key(),
-            session_id=f"transfer-handoff-{proc.get('_id')}-{uuid.uuid4().hex[:8]}",
-            system_message=(
-                "You are an implant dentistry clinical writer. Produce "
-                "compact, de-identified handoff briefs. NEVER include patient "
-                "name, DOB, or address. Include only age + sex if provided."
-            ),
-        ).with_model("openai", "gpt-5.2")
-        response = await chat.send_message(UserMessage(text=prompt))
+        response = await _claude_send(
+            f"transfer-handoff-{proc.get('_id')}-{uuid.uuid4().hex[:8]}",
+            CLINICAL_AI_PERSONA + "\n\n"
+            "TASK MODE: you are producing a compact, de-identified transfer handoff brief. NEVER include "
+            "patient name, DOB, or address. Include only age + sex if provided."
+            + CLINICAL_AI_NO_CITE,
+            prompt,
+        )
         return str(response).strip()
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover - fallback
         return (
             f"Handoff brief unavailable (AI service error: {exc}). "
             f"Case currently at Phase {payload['current_phase']}. "
+            f"Age {payload['age']} / {payload['sex']}. "
             f"Implants planned: {len(payload['implant_plans'])}. Review case detail for full history."
         )
 

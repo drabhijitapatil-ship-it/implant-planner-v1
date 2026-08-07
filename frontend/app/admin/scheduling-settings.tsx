@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import api from '../../utils/api';
 import CenteredHeader from '../../components/CenteredHeader';
+import { useAuth } from '../../contexts/AuthContext';
 
 /**
  * Organization Settings. Implant In-Charge only.
@@ -15,14 +16,20 @@ import CenteredHeader from '../../components/CenteredHeader';
  * Three independent things live here:
  *  1. Organization Logo — shown on generated documents (case reports, lab
  *     slips, consent forms) and in-app. Moved here from Profile so all
- *     org-wide settings live in one place.
+ *     org-wide settings live in one place. Always org-wide.
  *  2. 24-Hour Advance Scheduling — students/supervisors can't book <24h out.
- *     In-Charge always bypasses this regardless of the toggle.
+ *     In-Charge always bypasses this regardless of the toggle. Org-wide.
  *  3. Time Slot mode — how the "Time Slot" picker behaves on case creation:
  *       default — the original fixed slots (10:00 AM Mon-Sat, 2:00 PM Mon-Fri).
  *       custom  — In-Charge defines named slots per weekday.
  *       open    — scheduler picks ANY start time; a slot occupies
  *                 [start, start + duration). In-Charge sets the duration.
+ *     Per-department: each department has its own operatory, so a
+ *     department-tagged Implant In-Charge configures THEIR department's
+ *     slots here (independent of every other department's), falling back
+ *     to the org-wide default until they save their own. An In-Charge with
+ *     no department (single-department colleges, clinics) keeps editing
+ *     the org-wide config directly, exactly as before.
  */
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -74,6 +81,9 @@ const formatTime = (t: string): string => {
 };
 
 export default function SchedulingSettingsScreen() {
+  const { user } = useAuth();
+  const departmentId = user?.department_id || null;
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -89,6 +99,17 @@ export default function SchedulingSettingsScreen() {
   const [openWindowHours, setOpenWindowHours] = useState('2');
   const [activePickerSlotIdx, setActivePickerSlotIdx] = useState<number | null>(null);
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [usesDeptOverride, setUsesDeptOverride] = useState(false);
+
+  const applyConfig = (cfg: any) => {
+    setMode(cfg?.mode || 'default');
+    if (Array.isArray(cfg?.custom_slots) && cfg.custom_slots.length > 0) {
+      setCustomSlots(cfg.custom_slots.map((s: any) => ({ time: s.time || '', label: s.label || '', days: s.days || [] })));
+    } else {
+      setCustomSlots([emptySlot()]);
+    }
+    setOpenWindowHours(cfg?.open_window_hours ? String(cfg.open_window_hours) : '2');
+  };
 
   const load = async () => {
     try {
@@ -98,12 +119,14 @@ export default function SchedulingSettingsScreen() {
         setOrgName(org.name || '');
         setOrgLogo(org.logo || null);
         setEnforceRestriction(org.enforce_scheduling_restriction ?? true);
-        const cfg = org.scheduling_config || {};
-        setMode(cfg.mode || 'default');
-        if (Array.isArray(cfg.custom_slots) && cfg.custom_slots.length > 0) {
-          setCustomSlots(cfg.custom_slots.map((s: any) => ({ time: s.time || '', label: s.label || '', days: s.days || [] })));
+        if (!departmentId) {
+          applyConfig(org.scheduling_config || {});
         }
-        if (cfg.open_window_hours) setOpenWindowHours(String(cfg.open_window_hours));
+      }
+      if (departmentId) {
+        const deptRes = await api.get(`/departments/${departmentId}/scheduling-config`);
+        applyConfig(deptRes.data?.scheduling_config || {});
+        setUsesDeptOverride(!!deptRes.data?.uses_department_override);
       }
     } catch {
       Alert.alert('Error', 'Could not load organization settings');
@@ -194,8 +217,14 @@ export default function SchedulingSettingsScreen() {
       } else if (mode === 'open') {
         payload.open_window_hours = parseFloat(openWindowHours);
       }
-      await api.put('/organizations/me/scheduling-config', payload);
-      Alert.alert('Saved', 'Scheduling settings updated.');
+      if (departmentId) {
+        await api.put(`/departments/${departmentId}/scheduling-config`, payload);
+        setUsesDeptOverride(true);
+        Alert.alert('Saved', 'Your department\'s scheduling settings have been updated — independent of every other department.');
+      } else {
+        await api.put('/organizations/me/scheduling-config', payload);
+        Alert.alert('Saved', 'Scheduling settings updated.');
+      }
     } catch (e: any) {
       Alert.alert('Error', e?.response?.data?.detail || 'Could not save scheduling settings');
     } finally {
@@ -288,6 +317,18 @@ export default function SchedulingSettingsScreen() {
               </TouchableOpacity>
             </View>
             <Text style={s.hint}>Controls what students and supervisors see when picking a procedure time during case creation.</Text>
+
+            {departmentId ? (
+              <View style={s.scopeBadge} data-testid="scheduling-scope-badge">
+                <Ionicons name="business" size={13} color="#1A73E8" />
+                <Text style={s.scopeBadgeText}>
+                  {user?.department_name || 'Your department'} — independent of every other department
+                </Text>
+              </View>
+            ) : null}
+            {departmentId && !usesDeptOverride && (
+              <Text style={s.inheritedHint}>Currently using the organization default — saving sets your own.</Text>
+            )}
 
             <View style={s.modeRow}>
               {([
@@ -642,6 +683,30 @@ const s = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     color: '#1A73E8',
+  },
+  scopeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginTop: 10,
+  },
+  scopeBadgeText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#1A73E8',
+  },
+  inheritedHint: {
+    fontSize: 11.5,
+    color: '#94A3B8',
+    fontStyle: 'italic',
+    marginTop: 6,
   },
   modeRow: {
     flexDirection: 'row',

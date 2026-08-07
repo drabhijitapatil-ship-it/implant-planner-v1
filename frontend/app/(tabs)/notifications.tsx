@@ -67,6 +67,15 @@ export default function NotificationsScreen() {
     if (!notification.read) {
       await markAsRead(notification.id);
     }
+    // Referral notifications point at a case the recipient hasn't accepted
+    // into their own case list yet — /procedures/{id} works on the backend,
+    // but the case isn't actionable there until accepted. The Referrals
+    // screen (Incoming tab, where implant_incharge lands by default) is
+    // where they actually accept/act on it.
+    if (typeof notification.type === 'string' && notification.type.startsWith('referral_')) {
+      router.push('/referrals');
+      return;
+    }
     router.push(`/procedures/${notification.procedure_id}`);
   };
 
@@ -78,6 +87,11 @@ export default function NotificationsScreen() {
         return 'checkmark-circle';
       case 'rejected':
         return 'close-circle';
+      case 'referral_incoming':
+      case 'referral_approval':
+        return 'swap-horizontal';
+      case 'referral_status':
+        return 'git-branch-outline';
       default:
         return 'information-circle';
     }
@@ -91,6 +105,10 @@ export default function NotificationsScreen() {
         return '#4CAF50';
       case 'rejected':
         return '#F44336';
+      case 'referral_incoming':
+      case 'referral_approval':
+      case 'referral_status':
+        return '#6A1B9A';
       default:
         return '#007AFF';
     }

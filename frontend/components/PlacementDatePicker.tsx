@@ -80,6 +80,30 @@ export default function PlacementDatePicker({
                 onChange(day.dateString);
                 setOpen(false);
               }}
+              dayComponent={({ date, state }: any) => {
+                const iso = date?.dateString;
+                const selected = iso === value;
+                const disabled = state === 'disabled';
+                return (
+                  <TouchableOpacity
+                    disabled={disabled}
+                    onPress={() => { onChange(iso); setOpen(false); }}
+                    style={[styles.dayCell, selected && styles.dayCellSel]}
+                    testID={`date-day-${iso}`}
+                    // @ts-ignore — RN-Web forwards data-* attrs.
+                    data-testid={`date-day-${iso}`}
+                  >
+                    <Text style={[
+                      styles.dayText,
+                      disabled && { color: '#CFD8DC' },
+                      state === 'today' && !selected && { color: '#1565C0', fontWeight: '800' },
+                      selected && { color: '#FFF' },
+                    ]}>
+                      {date?.day}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              }}
               theme={{
                 todayTextColor: '#1565C0',
                 arrowColor: '#0D47A1',
@@ -122,4 +146,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6, paddingVertical: 6, marginBottom: 4,
   },
   sheetTitle: { fontSize: 14, fontWeight: '800', color: '#0D47A1', letterSpacing: 0.3 },
+  dayCell: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  dayCellSel: { backgroundColor: '#0D47A1' },
+  dayText: { fontSize: 14, fontWeight: '600', color: '#1e2a44' },
 });

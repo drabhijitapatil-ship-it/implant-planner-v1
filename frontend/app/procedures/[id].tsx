@@ -87,6 +87,7 @@ import ContributionTimelineCard from "../../components/ContributionTimelineCard"
 import FollowUpSection from "../../components/FollowUpSection";
 import AugmentationSection from "../../components/AugmentationSection";
 import AugmentationPhase2Review from "../../components/AugmentationPhase2Review";
+import AddImplantSection from '../../components/AddImplantSection';
 // Treatment Complete banner above the timeline.
 import ImplantLifecycleTimeline from "../../components/ImplantLifecycleTimeline";
 import ExportPrintMenu from "../../components/ExportPrintMenu";
@@ -95,6 +96,7 @@ import RescheduleModal from "../../components/RescheduleModal";
 import AugmentationChecklist from "../../components/AugmentationChecklist";
 import ClinicalEvaluationBanner from "../../components/ClinicalEvaluationBanner";
 import EndTreatmentPendingBanner from "../../components/EndTreatmentPendingBanner";
+import PatientHistoryStrip from "../../components/PatientHistoryStrip";
 import PulsingDoubleArrow from "../../components/onboarding/primitives/PulsingDoubleArrow";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Animated, {
@@ -485,11 +487,23 @@ export default function ProcedureDetailScreen() {
       const assignedPhase = activeReferral?.assigned_phase_num || 2;
       if (fieldKey) {
         let fieldPhase = 1;
-        if (fieldKey.startsWith("phase2_data") || fieldKey.startsWith("torque_values") || fieldKey === "bone_graft_used") {
+        if (
+          fieldKey.startsWith("phase2_data") ||
+          fieldKey.startsWith("torque_values") ||
+          fieldKey === "bone_graft_used"
+        ) {
           fieldPhase = 2;
-        } else if (fieldKey.startsWith("phase3_data") || fieldKey.startsWith("stage2_surgical") || fieldKey.startsWith("stage2_prosthetic") || fieldKey === "isq_value") {
+        } else if (
+          fieldKey.startsWith("phase3_data") ||
+          fieldKey.startsWith("stage2_surgical") ||
+          fieldKey.startsWith("stage2_prosthetic") ||
+          fieldKey === "isq_value"
+        ) {
           fieldPhase = 3;
-        } else if (fieldKey.startsWith("phase4") || fieldKey === "final_prosthetic_plan") {
+        } else if (
+          fieldKey.startsWith("phase4") ||
+          fieldKey === "final_prosthetic_plan"
+        ) {
           fieldPhase = 4;
         }
 
@@ -644,7 +658,9 @@ export default function ProcedureDetailScreen() {
       }
       try {
         const refRes = await api.get(`/procedures/${id}/referrals`);
-        const active = (refRes.data?.referrals || []).find((r: any) => r.status === "active" || r.status === "pending");
+        const active = (refRes.data?.referrals || []).find(
+          (r: any) => r.status === "active" || r.status === "pending",
+        );
         setActiveReferral(active || null);
       } catch (e) {
         // silent catch
@@ -817,7 +833,8 @@ export default function ProcedureDetailScreen() {
   };
 
   const handleApprove = async () => {
-    const isFacultyIncharge = user?.role === "implant_incharge" || user?.is_admin;
+    const isFacultyIncharge =
+      user?.role === "implant_incharge" || user?.is_admin;
     if (isFacultyIncharge && activeReferral) {
       Alert.alert(
         "Approve & Return Options",
@@ -833,7 +850,7 @@ export default function ProcedureDetailScreen() {
             style: "default",
             onPress: () => processApproval(true),
           },
-        ]
+        ],
       );
     } else {
       Alert.alert(
@@ -861,9 +878,14 @@ export default function ProcedureDetailScreen() {
       if (returnCase && activeReferral) {
         await api.post(`/referrals/${activeReferral.id}/complete`, {
           outcome: "returned",
-          notes: approvalComment.trim() || "Phase approved and returned to originating department.",
+          notes:
+            approvalComment.trim() ||
+            "Phase approved and returned to originating department.",
         });
-        Alert.alert("Success", "Procedure approved and returned to original student in originating department!");
+        Alert.alert(
+          "Success",
+          "Procedure approved and returned to original student in originating department!",
+        );
       } else {
         Alert.alert("Success", "Procedure approved successfully");
       }
@@ -1376,31 +1398,53 @@ export default function ProcedureDetailScreen() {
           />
         </View>
         {!!(activeReferral || procedure?.active_referral) && (
-          <View style={{
-            marginHorizontal: 16,
-            marginTop: 8,
-            marginBottom: 4,
-            padding: 12,
-            backgroundColor: '#EFF6FF',
-            borderRadius: 12,
-            borderWidth: 1,
-            borderColor: '#BFDBFE',
-            flexDirection: 'row',
-            alignItems: 'center',
-          }}>
-            <Ionicons name="swap-horizontal" size={22} color="#1D4ED8" style={{ marginRight: 10 }} />
+          <View
+            style={{
+              marginHorizontal: 16,
+              marginTop: 8,
+              marginBottom: 4,
+              padding: 12,
+              backgroundColor: "#EFF6FF",
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: "#BFDBFE",
+              flexDirection: "row",
+              alignItems: "center",
+            }}
+          >
+            <Ionicons
+              name="swap-horizontal"
+              size={22}
+              color="#1D4ED8"
+              style={{ marginRight: 10 }}
+            />
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1E40AF' }}>
+              <Text
+                style={{ fontSize: 13, fontWeight: "700", color: "#1E40AF" }}
+              >
                 Referred Case (Cross-Department)
               </Text>
-              <Text style={{ fontSize: 12, color: '#1E3A8A', marginTop: 2 }}>
-                From: <Text style={{ fontWeight: '600' }}>{(activeReferral || procedure?.active_referral)?.from_department_name || 'Primary Dept'}</Text>
-                {'  ➔  '}
-                To: <Text style={{ fontWeight: '600' }}>{(activeReferral || procedure?.active_referral)?.to_department_name || 'Referred Dept'}</Text>
+              <Text style={{ fontSize: 12, color: "#1E3A8A", marginTop: 2 }}>
+                From:{" "}
+                <Text style={{ fontWeight: "600" }}>
+                  {(activeReferral || procedure?.active_referral)
+                    ?.from_department_name || "Primary Dept"}
+                </Text>
+                {"  ➔  "}
+                To:{" "}
+                <Text style={{ fontWeight: "600" }}>
+                  {(activeReferral || procedure?.active_referral)
+                    ?.to_department_name || "Referred Dept"}
+                </Text>
               </Text>
-              {!!(activeReferral || procedure?.active_referral)?.assigned_phase && (
-                <Text style={{ fontSize: 11, color: '#2563EB', marginTop: 2 }}>
-                  Assigned Phase: {(activeReferral || procedure?.active_referral)?.assigned_phase}
+              {!!(activeReferral || procedure?.active_referral)
+                ?.assigned_phase && (
+                <Text style={{ fontSize: 11, color: "#2563EB", marginTop: 2 }}>
+                  Assigned Phase:{" "}
+                  {
+                    (activeReferral || procedure?.active_referral)
+                      ?.assigned_phase
+                  }
                 </Text>
               )}
             </View>
@@ -1427,7 +1471,8 @@ export default function ProcedureDetailScreen() {
             step1_pending: "Step 1 — Pre-procedure Details pending",
             step2_pending: "Step 2 — Post-procedure Details pending",
             pending_supervisor: "Step 2 submitted — awaiting Supervisor review",
-            pending_incharge: "Step 2 approved by Supervisor — awaiting Implant In-Charge review",
+            pending_incharge:
+              "Step 2 approved by Supervisor — awaiting Implant In-Charge review",
             approved: "Step 2 approved — Step 3 review pending",
           };
           return (
@@ -1474,8 +1519,7 @@ export default function ProcedureDetailScreen() {
                   {cleared
                     ? "Bone graft cleared — proceed to Phase 2 to continue with implant placement."
                     : `Round ${currentRound.round || 1} — ${
-                        roundStatusText[currentRound.status] ||
-                        "In progress"
+                        roundStatusText[currentRound.status] || "In progress"
                       }`}
                 </Text>
               </View>
@@ -1555,26 +1599,26 @@ export default function ProcedureDetailScreen() {
             <View style={styles.statusCard}>
               {procedure.status !== "completed" &&
                 procedure.status !== "augmentation_in_progress" && (
-                <View
-                  style={[
-                    styles.statusBadge,
-                    {
-                      backgroundColor:
-                        STATUS_COLORS[
-                          procedure.status as keyof typeof STATUS_COLORS
-                        ],
-                    },
-                  ]}
-                >
-                  <Text style={styles.statusText}>
-                    {
-                      STATUS_LABELS[
-                        procedure.status as keyof typeof STATUS_LABELS
-                      ]
-                    }
-                  </Text>
-                </View>
-              )}
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      {
+                        backgroundColor:
+                          STATUS_COLORS[
+                            procedure.status as keyof typeof STATUS_COLORS
+                          ],
+                      },
+                    ]}
+                  >
+                    <Text style={styles.statusText}>
+                      {
+                        STATUS_LABELS[
+                          procedure.status as keyof typeof STATUS_LABELS
+                        ]
+                      }
+                    </Text>
+                  </View>
+                )}
               {procedure.status !== "completed" &&
                 procedure.status !== "augmentation_in_progress" &&
                 (() => {
@@ -4065,6 +4109,9 @@ export default function ProcedureDetailScreen() {
                 value={procedure.implant_site}
               />
             </View>
+            <PatientHistoryStrip procedure={procedure} />
+
+        <AddImplantSection procedure={procedure} onChanged={loadProcedure} />
 
             <ClinicalEvaluationBanner procedureId={String(id)} />
 
@@ -4076,43 +4123,103 @@ export default function ProcedureDetailScreen() {
                   a referred case has two distinct staff teams, not one. */}
               {procedure.original_student_id ? (
                 <>
-                  <View style={{ backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', padding: 12, marginBottom: 10 }}>
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#334155', marginBottom: 6 }}>
-                      {(activeReferral || procedure?.active_referral)?.from_department_name || 'Originating Department'}
+                  <View
+                    style={{
+                      backgroundColor: "#F8FAFC",
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: "#E2E8F0",
+                      padding: 12,
+                      marginBottom: 10,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: "700",
+                        color: "#334155",
+                        marginBottom: 6,
+                      }}
+                    >
+                      {(activeReferral || procedure?.active_referral)
+                        ?.from_department_name || "Originating Department"}
                     </Text>
                     {!!procedure.original_student_name && (
-                      <InfoRow icon="school" label="Student" value={procedure.original_student_name} />
+                      <InfoRow
+                        icon="school"
+                        label="Student"
+                        value={procedure.original_student_name}
+                      />
                     )}
                     {!!procedure.original_supervisor_name && (
-                      <InfoRow icon="school" label="Supervisor" value={procedure.original_supervisor_name} />
+                      <InfoRow
+                        icon="school"
+                        label="Supervisor"
+                        value={procedure.original_supervisor_name}
+                      />
                     )}
                     {!!procedure.implant_incharge_name && (
-                      <InfoRow icon="medkit" label="Implant Incharge" value={procedure.implant_incharge_name} />
+                      <InfoRow
+                        icon="medkit"
+                        label="Implant Incharge"
+                        value={procedure.implant_incharge_name}
+                      />
                     )}
                   </View>
-                  <View style={{ backgroundColor: '#EFF6FF', borderRadius: 12, borderWidth: 1, borderColor: '#BFDBFE', padding: 12 }}>
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#1D4ED8', marginBottom: 6 }}>
-                      {(activeReferral || procedure?.active_referral)?.to_department_name || 'Referred Department'}
+                  <View
+                    style={{
+                      backgroundColor: "#EFF6FF",
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: "#BFDBFE",
+                      padding: 12,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: "700",
+                        color: "#1D4ED8",
+                        marginBottom: 6,
+                      }}
+                    >
+                      {(activeReferral || procedure?.active_referral)
+                        ?.to_department_name || "Referred Department"}
                     </Text>
                     {!!procedure.student_name && (
-                      <InfoRow icon="school" label="Student" value={procedure.student_name} />
+                      <InfoRow
+                        icon="school"
+                        label="Student"
+                        value={procedure.student_name}
+                      />
                     )}
                     {!!procedure.supervisor_name && (
-                      <InfoRow icon="school" label="Supervisor" value={procedure.supervisor_name} />
+                      <InfoRow
+                        icon="school"
+                        label="Supervisor"
+                        value={procedure.supervisor_name}
+                      />
                     )}
                     {!!procedure.assigned_incharge_name && (
-                      <InfoRow icon="medkit" label="Implant Incharge" value={procedure.assigned_incharge_name} />
+                      <InfoRow
+                        icon="medkit"
+                        label="Implant Incharge"
+                        value={procedure.assigned_incharge_name}
+                      />
                     )}
                   </View>
                 </>
               ) : user?.role === "nurse" ? (
                 // Nurse view — keep existing full-staff render, unchanged.
                 <>
-                  {(procedure.original_student_name || procedure.student_name) ? (
+                  {procedure.original_student_name || procedure.student_name ? (
                     <InfoRow
                       icon="school"
                       label="Student"
-                      value={procedure.original_student_name || procedure.student_name}
+                      value={
+                        procedure.original_student_name ||
+                        procedure.student_name
+                      }
                     />
                   ) : procedure.created_by_name &&
                     procedure.created_by_role !== "student" ? (
@@ -4131,7 +4238,10 @@ export default function ProcedureDetailScreen() {
                   <InfoRow
                     icon="school"
                     label="Supervisor"
-                    value={procedure.original_supervisor_name || procedure.supervisor_name}
+                    value={
+                      procedure.original_supervisor_name ||
+                      procedure.supervisor_name
+                    }
                   />
                   <InfoRow
                     icon="medkit"
@@ -4155,7 +4265,9 @@ export default function ProcedureDetailScreen() {
                     icon="school"
                     label="Supervisor"
                     value={
-                      procedure.original_supervisor_name || procedure.supervisor_name || procedure.created_by_name
+                      procedure.original_supervisor_name ||
+                      procedure.supervisor_name ||
+                      procedure.created_by_name
                     }
                   />
                   <InfoRow
@@ -4167,17 +4279,23 @@ export default function ProcedureDetailScreen() {
               ) : (
                 // Student-scheduled (default) — show Student + Supervisor + Implant In-Charge.
                 <>
-                  {(procedure.original_student_name || procedure.student_name) ? (
+                  {procedure.original_student_name || procedure.student_name ? (
                     <InfoRow
                       icon="school"
                       label="Student"
-                      value={procedure.original_student_name || procedure.student_name}
+                      value={
+                        procedure.original_student_name ||
+                        procedure.student_name
+                      }
                     />
                   ) : null}
                   <InfoRow
                     icon="school"
                     label="Supervisor"
-                    value={procedure.original_supervisor_name || procedure.supervisor_name}
+                    value={
+                      procedure.original_supervisor_name ||
+                      procedure.supervisor_name
+                    }
                   />
                   <InfoRow
                     icon="medkit"
@@ -6348,40 +6466,118 @@ export default function ProcedureDetailScreen() {
                   displayed twice on the case page. */}
                     {procedure.phase2_data.augmentation ? (
                       <>
-                        <InfoRow icon="fitness" label="Bone & Soft Tissue Augmentation" value="Yes" />
-                        {(procedure.phase2_data.augmentation.procedures_performed || []).length > 0 && (
-                          <InfoRow icon="construct" label="Augmentation Procedure" value={procedure.phase2_data.augmentation.procedures_performed.join(', ')} />
+                        <InfoRow
+                          icon="fitness"
+                          label="Bone & Soft Tissue Augmentation"
+                          value="Yes"
+                        />
+                        {(
+                          procedure.phase2_data.augmentation
+                            .procedures_performed || []
+                        ).length > 0 && (
+                          <InfoRow
+                            icon="construct"
+                            label="Augmentation Procedure"
+                            value={procedure.phase2_data.augmentation.procedures_performed.join(
+                              ", ",
+                            )}
+                          />
                         )}
                         {(() => {
                           const a = procedure.phase2_data.augmentation;
                           const mats = [
-                            ...(a.autogenous_used === 'Yes' ? [`Autogenous${(a.autogenous_sites || []).length ? ` (${a.autogenous_sites.join(', ')})` : ''}`] : []),
-                            ...(a.allograft_used === 'Yes' ? ['Allograft'] : []),
+                            ...(a.autogenous_used === "Yes"
+                              ? [
+                                  `Autogenous${(a.autogenous_sites || []).length ? ` (${a.autogenous_sites.join(", ")})` : ""}`,
+                                ]
+                              : []),
+                            ...(a.allograft_used === "Yes"
+                              ? ["Allograft"]
+                              : []),
                             ...(a.other_graft_materials || []),
                           ];
-                          return mats.length ? <InfoRow icon="flask" label="Graft Materials" value={mats.join(', ')} /> : null;
+                          return mats.length ? (
+                            <InfoRow
+                              icon="flask"
+                              label="Graft Materials"
+                              value={mats.join(", ")}
+                            />
+                          ) : null;
                         })()}
-                        {procedure.phase2_data.augmentation.membrane_used === 'Yes' && (
-                          <InfoRow icon="layers" label="Membrane" value={(procedure.phase2_data.augmentation.membrane_types || []).join(', ') || 'Yes'} />
+                        {procedure.phase2_data.augmentation.membrane_used ===
+                          "Yes" && (
+                          <InfoRow
+                            icon="layers"
+                            label="Membrane"
+                            value={
+                              (
+                                procedure.phase2_data.augmentation
+                                  .membrane_types || []
+                              ).join(", ") || "Yes"
+                            }
+                          />
                         )}
-                        {(procedure.phase2_data.augmentation.fixation || []).length > 0 && (
-                          <InfoRow icon="hardware-chip" label="Fixation" value={procedure.phase2_data.augmentation.fixation.join(', ')} />
+                        {(procedure.phase2_data.augmentation.fixation || [])
+                          .length > 0 && (
+                          <InfoRow
+                            icon="hardware-chip"
+                            label="Fixation"
+                            value={procedure.phase2_data.augmentation.fixation.join(
+                              ", ",
+                            )}
+                          />
                         )}
-                        {procedure.phase2_data.augmentation.soft_tissue_graft === 'Yes' && (
-                          <InfoRow icon="leaf" label="Soft Tissue Graft" value={(procedure.phase2_data.augmentation.soft_tissue_types || []).join(', ') || 'Yes'} />
+                        {procedure.phase2_data.augmentation
+                          .soft_tissue_graft === "Yes" && (
+                          <InfoRow
+                            icon="leaf"
+                            label="Soft Tissue Graft"
+                            value={
+                              (
+                                procedure.phase2_data.augmentation
+                                  .soft_tissue_types || []
+                              ).join(", ") || "Yes"
+                            }
+                          />
                         )}
-                        {!!procedure.phase2_data.augmentation.healing_protocol && (
-                          <InfoRow icon="hourglass" label="Healing Protocol" value={procedure.phase2_data.augmentation.healing_protocol === 'Custom' ? procedure.phase2_data.augmentation.healing_custom_text : procedure.phase2_data.augmentation.healing_protocol} />
+                        {!!procedure.phase2_data.augmentation
+                          .healing_protocol && (
+                          <InfoRow
+                            icon="hourglass"
+                            label="Healing Protocol"
+                            value={
+                              procedure.phase2_data.augmentation
+                                .healing_protocol === "Custom"
+                                ? procedure.phase2_data.augmentation
+                                    .healing_custom_text
+                                : procedure.phase2_data.augmentation
+                                    .healing_protocol
+                            }
+                          />
                         )}
                       </>
                     ) : (
                       <>
-                        {procedure.phase2_data.bone_graft_used !== undefined && (
-                          <InfoRow icon="fitness" label="Bone & Soft Tissue Augmentation" value={procedure.phase2_data.bone_graft_used ? 'Yes' : 'No'} />
+                        {procedure.phase2_data.bone_graft_used !==
+                          undefined && (
+                          <InfoRow
+                            icon="fitness"
+                            label="Bone & Soft Tissue Augmentation"
+                            value={
+                              procedure.phase2_data.bone_graft_used
+                                ? "Yes"
+                                : "No"
+                            }
+                          />
                         )}
-                        {procedure.phase2_data.bone_graft_used && procedure.phase2_data.bone_graft_details && (
-                          <InfoRow icon="document-text" label="Bone Graft Details" value={procedure.phase2_data.bone_graft_details} />
-                        )}
+                        {procedure.phase2_data.bone_graft_used &&
+                          procedure.phase2_data.bone_graft_details && (
+                            <InfoRow
+                              icon="document-text"
+                              label="Bone Graft Details"
+                              value={procedure.phase2_data.bone_graft_details}
+                            />
+                          )}
                       </>
                     )}
                     {procedure.phase2_data.implant_other_notes && (
@@ -9666,8 +9862,8 @@ export default function ProcedureDetailScreen() {
                           PROCEED TO PHASE 2
                         </Text>
                         <Text style={styles.phase2ButtonSubtitle}>
-                          Bone graft reviewed & approved — tap to complete
-                          Phase 2 - Implant Surgery
+                          Bone graft reviewed & approved — tap to complete Phase
+                          2 - Implant Surgery
                         </Text>
                       </View>
                       <Ionicons name="chevron-forward" size={24} color="#FFF" />
