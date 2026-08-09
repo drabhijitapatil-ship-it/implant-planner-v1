@@ -62,6 +62,7 @@ export default function RootLayout() {
               <Stack.Screen name="analytics/procedure-overview" options={{ headerShown: false }} />
               <Stack.Screen name="analytics/advanced" options={{ headerShown: false }} />
               <Stack.Screen name="procedures/survival-review/[id]" options={{ headerShown: false }} />
+              <Stack.Screen name="procedures/consent-sign/[id]" options={{ headerShown: false }} />
               <Stack.Screen name="admin/implant-catalog" options={{ headerShown: false }} />
               <Stack.Screen name="admin/implant-catalog-edit" options={{ headerShown: false }} />
               <Stack.Screen name="admin/implant-compare" options={{ headerShown: false }} />

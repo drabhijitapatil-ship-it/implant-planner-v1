@@ -8,11 +8,43 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, router as globalRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../../utils/api';
 import { PhaseHeader } from '../../../components/PhaseHeader';
 import SignaturePad, { Stroke } from '../../../components/SignaturePad';
+
+/** Route-level error boundary: any render/runtime error on this screen shows
+ * a readable message with Retry/Back instead of a blank native screen. */
+export function ErrorBoundary({ error, retry }: { error: Error; retry: () => Promise<void> }) {
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#FFF' }} edges={['top']}>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }} testID="consent-sign-error-boundary">
+        <Ionicons name="warning" size={40} color="#E53935" />
+        <Text style={{ fontSize: 16, fontWeight: '700', color: '#37474F', marginTop: 12, textAlign: 'center' }}>
+          The e-signature screen hit an error
+        </Text>
+        <Text selectable style={{ fontSize: 12, color: '#78909C', marginTop: 10, textAlign: 'center' }}>
+          {String(error?.message || error)}
+        </Text>
+        <TouchableOpacity
+          onPress={() => retry()}
+          style={{ marginTop: 20, backgroundColor: '#1565C0', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}
+          testID="consent-sign-retry-btn"
+        >
+          <Text style={{ color: '#FFF', fontWeight: '700' }}>Try Again</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => globalRouter.back()}
+          style={{ marginTop: 10, paddingHorizontal: 24, paddingVertical: 10 }}
+          testID="consent-sign-error-back-btn"
+        >
+          <Text style={{ color: '#546E7A', fontWeight: '600' }}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
+  );
+}
 
 const LANGS = [
   { code: 'en', label: 'English' },
@@ -36,6 +68,7 @@ export default function ConsentSignScreen() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    console.log('[consent-sign] mounted, id =', id);
     (async () => {
       try {
         const [procRes, textRes] = await Promise.all([
