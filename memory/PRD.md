@@ -7327,3 +7327,9 @@ User choice: PATIENT ONLY signs on device. User declared no further tasks after 
 **Known cosmetic (carried over, optional):** RN-Web "text node inside <View>" console warnings on dashboard/case details; shadow* deprecation warnings.
 
 **Backlog (user paused work):** Role-based Advanced Analytics (P0 carried), Microsoft OAuth login, MUA-angulation workflow, administrator-role rollback verification, multi-tenant core, drilling-protocol PDF, tablet responsiveness, dark mode.
+
+## Iteration 323 (Jun 2026) — Fix: e-signature crash on DEPLOYED native app (Expo Go iOS)
+User report: tapping "e-Sign on this device" crashed on the DEPLOYED app (admin login, phase1_approved cases). Could NOT be reproduced on web preview (all flows pass, zero page errors, all DB Phase-1 cases have clean field types; deployed backend verified current — /api/consent-texts returns 200 v2.1 on https://implant-app-r-1774251381.emergent.host).
+ROOT CAUSE (native-only): `SignaturePad.tsx` rendered `<Svg width="100%" height="100%">` — percentage dimensions on react-native-svg crash on the React Native New Architecture (Expo SDK 54 native iOS/Android) while working fine on RN-Web. Also had web-only style props (touchAction/userSelect) and a `data-testid` DOM prop leaking to native.
+FIX: SignaturePad now measures its container via onLayout and passes NUMERIC width/height to Svg (renders only when width>0); web-only styles gated behind Platform.OS==='web'; data-testid only on web; Svg pointerEvents moved to style. Web regression verified (drawing works, no page errors). iOS bundle compiles (expo export --platform ios — JS bundling succeeded; hermesc step fails only due to container arch, irrelevant).
+PENDING USER VERIFICATION: user must REDEPLOY and re-test on their device (cannot run iOS natively in this environment).
