@@ -49,7 +49,7 @@ export default function SignaturePad({ strokes, onChange, height = 150, testID }
     <View
       style={[s.pad, { height }]}
       {...pan.panHandlers}
-      onLayout={e => setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
+      onLayout={e => { const { width, height } = e.nativeEvent.layout; setSize({ w: width, h: height }); }}
       testID={testID}
       {...(webProps as any)}
     >

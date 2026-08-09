@@ -199,7 +199,7 @@ export default function ConsentSignScreen() {
             <Text style={s.clearBtnText}>Clear</Text>
           </TouchableOpacity>
         </View>
-        <View onLayout={e => setPadSize(p => ({ ...p, w: e.nativeEvent.layout.width }))}>
+        <View onLayout={e => { const w = e.nativeEvent.layout.width; setPadSize(p => ({ ...p, w })); }}>
           <SignaturePad strokes={strokes} onChange={setStrokes} height={180} testID="signature-pad" />
         </View>
 
