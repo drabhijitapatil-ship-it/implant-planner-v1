@@ -152,6 +152,14 @@ export function PatientConsentSection({ router }: { router: any }) {
                 </>
               )}
             </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => router.push(`/procedures/consent-sign/${c.id}`)}
+              style={styles.esignBtn}
+              testID={`consent-esign-${c.id}`}
+            >
+              <Ionicons name="finger-print" size={16} color="#FFF" />
+              <Text style={styles.uploadBtnText}>e-Sign on device</Text>
+            </TouchableOpacity>
             <View style={{ marginTop: 6 }}>
               <ExportPrintMenu
                 label="Export / Print consent"
@@ -271,6 +279,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   uploadBtnText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
+  esignBtn: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#00897B',
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
   printBtn: {
     marginTop: 6,
     flexDirection: 'row',

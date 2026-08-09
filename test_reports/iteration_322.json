@@ -1,0 +1,34 @@
+{
+  "summary": "Comprehensive backend + frontend testing of Patient Consent E-Signature (v2.1, EN/HI/MR). All 15 backend pytest tests PASS and all frontend flows work end-to-end. Backend: GET /consent-texts (auth-gated, returns v2.1 for en/hi/mr), POST /procedures/{id}/consent/esign (success, PNG saved to /app/backend/uploads/, 400 validation errors for confirmed_explained=false / <8 points / unknown version, 404 for bad id, 403 for non-stakeholder student), post-esign procedure state (patient_consent_form.esigned=true, version increments, consent_history archives previous, approval_history contains consent/esigned entry, edit_log populated), consent-form-template PDF embeds image XObject + 'Patient signed electronically...Language: MR / Consent text v2.1' metadata line inside its ASCII85+Flate content stream, and regression: /upload-consent multipart still archives prior e-signed consent. Frontend: student Gaurav.pandey login -> case 6a6b7fbf6633443cf356df15 shows teal consent-esign-btn ('Re-sign on this device'), navigates to /procedures/consent-sign/{id} which shows consent-sign-case-card, language chips (EN/HI/MR really switch consent-text-body), consent-explained-checkbox toggles, signature-pad captures mouse strokes, signature-clear-btn present, consent-esign-submit-btn works. Empty submit shows inline error 'Please confirm the procedure was explained...' (consent-sign-error). After drawing signature + ticking checkbox, submit navigates back to /procedures/{id}. Nurse (nurse.1@dental.edu) dashboard 'Patient Consent Forms' widget shows 5 consent-esign-{caseId} buttons that navigate to the sign screen.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard/Case list (student)", "issues": ["Console flood of 'Unexpected text node: A text node cannot be a child of a <View>' React Native warnings on dashboard and case-details render — not blocking but should be cleaned up (likely stray whitespace inside a <View> in one of the list/card components)"]},
+      {"screen": "Global", "issues": ["Multiple deprecation warnings: shadow* style props (use boxShadow), props.pointerEvents, Image.style.tintColor — cosmetic, from RN Web migration"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_consent_esign_iter322.py",
+    "/app/test_reports/pytest/consent_esign_iter322.xml"
+  ],
+  "action_items": [
+    "(Optional) Fix stray 'text node inside View' warnings in dashboard/case-detail components — repeats ~15+ times per navigation.",
+    "(Optional) Replace shadow* style props with boxShadow to silence RN Web deprecation warnings."
+  ],
+  "critical_code_review_comments": [
+    "esign endpoint correctly enforces confirmed_explained, min stroke points, consent_version whitelist, 404 for missing procedure, 403 for non-stakeholder student — solid input validation.",
+    "PDF metadata line 'Patient signed electronically ... Language: MR · Consent text v2.1 · Witnessed by ...' is emitted, and signature image XObject is embedded — verified by decoding the Flate+ASCII85 content stream.",
+    "Previous consent (both e-signed and multipart-uploaded) is archived into consent_history on subsequent esign or file upload — regression preserved.",
+    "server.py is now very large; the consent-related code (~4900-5060) is a candidate to be moved into its own module (backend/consent_service.py) for maintainability."
+  ],
+  "updated_files": ["/app/backend/tests/test_consent_esign_iter322.py"],
+  "success_rate": {"backend": "100% (15/15)", "frontend": "100% (all critical flows)"},
+  "test_credentials": "Gaurav.pandey/Student@123, Paresh.gandhi/Supervisor@123, Abhijit.patil/Admin@123, nurse.1@dental.edu/Nurse@123",
+  "seed_data_creation": "None — reused existing case 6a6b7fbf6633443cf356df15 (already e-signed by main agent) and pre-existing cases in nurse's dashboard.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "test_consent_esign_iter322.py is a full regression suite for the consent e-signature feature; run with `pytest backend/tests/test_consent_esign_iter322.py -v`. PDF text extraction requires ASCII85+Flate decoding — helper _extract_pdf_text is included. Nurse widget testid pattern: consent-esign-{caseId}. Student action row testid: consent-esign-btn. Consent-sign screen testids: consent-sign-case-card, consent-lang-en|hi|mr, consent-text-body, consent-explained-checkbox, signature-pad, signature-clear-btn, consent-esign-submit-btn, consent-sign-error. Signature must be drawn using page.mouse.down/move/up (PanResponder).",
+  "rca of the issue": "N/A — no functional issues found."
+}

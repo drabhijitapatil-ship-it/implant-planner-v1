@@ -1768,6 +1768,19 @@ export default function ProcedureDetailScreen() {
                 </TouchableOpacity>
               )}
               {canUpload && (
+                <TouchableOpacity
+                  style={[styles.consentActionBtn, styles.consentActionBtnEsign]}
+                  onPress={() => router.push(`/procedures/consent-sign/${id}` as any)}
+                  activeOpacity={0.85}
+                  testID="consent-esign-btn"
+                >
+                  <Ionicons name="finger-print" size={16} color="#FFF" />
+                  <Text style={styles.consentActionBtnText}>
+                    {consentUploaded ? 'Re-sign on this device' : 'e-Sign on this device'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {canUpload && (
                 <ExportPrintMenu
                   label="Export / Print consent form"
                   buttonStyle={[styles.consentActionBtn, styles.consentActionBtnSecondary]}
@@ -5798,6 +5811,7 @@ const styles = StyleSheet.create({
   },
   consentActionBtnPrimary: { backgroundColor: '#1565C0' },
   consentActionBtnSecondary: { backgroundColor: '#37474F' },
+  consentActionBtnEsign: { backgroundColor: '#00897B' },
   consentActionBtnText: {
     color: '#FFF',
     fontSize: 13,
