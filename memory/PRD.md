@@ -7310,3 +7310,20 @@ Step 3 form live, Phase 2 review card, PDF (Q2-a); both Step 1 & Step 3 CBCT lin
 Testing: backend curl (400 without cbct / 200 with, stored correctly) + 3 UI screenshots verified all
 placements (section order, hydrated slot with View link, live gain preview, readback rows/links).
 No testing-agent run this iteration (targeted self-tests); flows reuse widgets validated in iter 312/313.
+
+## Iteration 322 (Jun 2026) — Patient Consent E-Signature (Phase 1) — COMPLETE
+User choice: PATIENT ONLY signs on device. User declared no further tasks after this feature.
+
+**What was built:**
+- `components/SignaturePad.tsx` — zero-dependency SVG + PanResponder pad (works on RN-Web + native; NO WebView).
+- `app/procedures/consent-sign/[id].tsx` — signing screen: case card, language chips (EN / हिन्दी / मराठी, consent text v2.1 from `GET /api/consent-texts`), explanation-confirmed checkbox, signature pad with Clear, inline validation errors, submit.
+- Backend `POST /api/procedures/{id}/consent/esign` (server.py ~5021): validates stakeholder + confirmed_explained + ≥8 stroke points + version whitelist; rasterizes strokes server-side via Pillow (`_render_signature_png`), SHA-256 tamper hash, saves PNG to `backend/uploads/`, sets `patient_consent_form` (Phase-2 unlock gate) with `esigned:true`, stores `consent_esign` metadata, archives prior consent to `consent_history`, logs approval_history (`consent/esigned`) + edit_log.
+- Consent PDF (`GET /consent-form-template`) now embeds the signature PNG in the Patient Signature row + a "Patient signed electronically … Language · version · Witnessed by · SHA-256" metadata line; non-esigned cases keep the blank print template (regression preserved).
+- Entry points: teal `consent-esign-btn` in case details consent row (owner student + nurse, Phase-1 window) and `consent-esign-{caseId}` button in nurse dashboard PatientConsentSection widget.
+- Fixed missing `import hashlib` in server.py.
+
+**Testing:** iteration_322.json — backend 15/15 PASS, frontend all flows PASS (regression suite at `backend/tests/test_consent_esign_iter322.py`).
+
+**Known cosmetic (carried over, optional):** RN-Web "text node inside <View>" console warnings on dashboard/case details; shadow* deprecation warnings.
+
+**Backlog (user paused work):** Role-based Advanced Analytics (P0 carried), Microsoft OAuth login, MUA-angulation workflow, administrator-role rollback verification, multi-tenant core, drilling-protocol PDF, tablet responsiveness, dark mode.
