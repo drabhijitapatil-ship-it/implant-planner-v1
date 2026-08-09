@@ -16,9 +16,12 @@ type Props = {
   onChange: (strokes: Stroke[]) => void;
   height?: number;
   testID?: string;
+  /** Fired true on touch-down, false on release — lets the parent freeze
+   *  its ScrollView so the page doesn't move while the patient signs. */
+  onSigningChange?: (active: boolean) => void;
 };
 
-export default function SignaturePad({ strokes, onChange, height = 150, testID }: Props) {
+export default function SignaturePad({ strokes, onChange, height = 150, testID, onSigningChange }: Props) {
   const current = useRef<Stroke>([]);
   const strokesRef = useRef(strokes);
   strokesRef.current = strokes;
@@ -28,7 +31,10 @@ export default function SignaturePad({ strokes, onChange, height = 150, testID }
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
       onPanResponderGrant: e => {
+        onSigningChange?.(true);
         const { locationX, locationY } = e.nativeEvent;
         current.current = [[locationX, locationY]];
         onChange([...strokesRef.current, current.current]);
@@ -38,8 +44,10 @@ export default function SignaturePad({ strokes, onChange, height = 150, testID }
         current.current.push([locationX, locationY]);
         onChange([...strokesRef.current.slice(0, -1), [...current.current]]);
       },
-      onPanResponderRelease: () => { current.current = []; },
+      onPanResponderRelease: () => { current.current = []; onSigningChange?.(false); },
+      onPanResponderTerminate: () => { current.current = []; onSigningChange?.(false); },
       onPanResponderTerminationRequest: () => false,
+      onShouldBlockNativeResponder: () => true,
     })
   ).current;
 

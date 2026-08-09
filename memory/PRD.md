@@ -7345,3 +7345,9 @@ ROOT CAUSE: consent-sign screen's `onLayout={e => setPadSize(p => ({...p, w: e.n
 FIX: read layout values synchronously before setState in both /app/frontend/app/procedures/consent-sign/[id].tsx and components/SignaturePad.tsx. Web e2e re-verified (checkbox+draw, zero page errors). ErrorBoundary + Stack registration from iter-324 retained.
 PENDING USER VERIFICATION on device after redeploy.
 LEARNING (memory): NEVER access e.nativeEvent inside deferred/functional setState updaters — extract values synchronously first. Native recycles events; web does not.
+
+## Iteration 326 (Jun 2026) — e-signature consent: full form + scroll-lock while signing
+1. NEW backend GET /api/procedures/{id}/consent-content — returns the COMPLETE informed-consent form content (same as printable PDF: patient info rows, planned procedure rows incl. sinus-lift/guided-surgery cascade, planned implants, sections 1-5) as structured JSON. Stakeholder-gated like the other consent endpoints.
+2. consent-sign screen rewritten: renders the full form (title, Patient Information, Planned Procedure, Planned Implant(s), sections 1-5), then the EN/HI/MR v2.1 consent statement, checkbox, pad, submit. ErrorBoundary + all testids retained; new testids: consent-form-title, consent-patient-info, consent-procedure-details, consent-implants, consent-section-{1-5}.
+3. Scroll lock while signing: SignaturePad gained onSigningChange(true/false) fired on touch-down/release/terminate + capture-phase responder claims + onShouldBlockNativeResponder; screen sets ScrollView scrollEnabled={false} during signing so the page no longer moves under the patient's finger.
+Verified on web (curl + e2e draw, zero page errors). Device verification of scroll-lock pending user redeploy.

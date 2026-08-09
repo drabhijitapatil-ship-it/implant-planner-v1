@@ -5005,6 +5005,127 @@ async def get_consent_texts(current_user: dict = Depends(get_current_user)):
     return {"version": CONSENT_CURRENT_VERSION, "texts": CONSENT_TEXTS[CONSENT_CURRENT_VERSION]}
 
 
+@api_router.get("/procedures/{procedure_id}/consent-content")
+async def get_consent_content(procedure_id: str, current_user: dict = Depends(get_current_user)):
+    """Full informed-consent form content (same as the printable PDF template)
+    as structured JSON so the e-signature screen shows the complete form."""
+    try:
+        procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        procedure = None
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    role = current_user.get("role")
+    uid = current_user.get("_id")
+    is_stakeholder = (
+        procedure.get("created_by_id") == uid or
+        procedure.get("student_id") == uid or
+        procedure.get("supervisor_id") == uid or
+        procedure.get("implant_incharge_id") == uid or
+        role in ("nurse", "implant_incharge", "administrator", "supervisor")
+    )
+    if not is_stakeholder:
+        raise HTTPException(status_code=403, detail="Not allowed to view this consent form")
+
+    patient_info = [
+        ["Patient Name", procedure.get("patient_name") or "—"],
+        ["Age", str(procedure.get("age") or "—")],
+        ["Sex", procedure.get("sex") or "—"],
+        ["Registration No.", procedure.get("registration_number") or "—"],
+        ["Mobile", procedure.get("mobile_number") or "—"],
+        ["Email", procedure.get("email") or "—"],
+        ["Chief Complaint", procedure.get("chief_complaint") or "—"],
+    ]
+
+    proc_rows = [["Procedure Type", procedure.get("implant_procedure_type") or "—"]]
+    if (procedure.get("implant_procedure_type") or "") == "Sinus Lift":
+        proc_rows.append(["Type of Sinus Lift", procedure.get("sinus_lift_type") or "—"])
+        proc_rows.append(["Bone Graft Material", procedure.get("bone_graft_material_details") or "—"])
+    for label, key in [
+        ("Procedure Type (Surgical)", "procedure_surgery_type"),
+        ("Type of Guided Surgery", "guided_surgery_type"),
+        ("Type of Static Guide", "static_guide_type"),
+        ("Type of Sleeve", "sleeve_type"),
+        ("Dynamic Navigation System", "dynamic_nav_system"),
+    ]:
+        if procedure.get(key):
+            proc_rows.append([label, procedure.get(key)])
+    proc_rows.extend([
+        ["Arch", procedure.get("arch") or "—"],
+        ["Site / Teeth", ", ".join(procedure.get("edentulous_sites") or []) or procedure.get("edentulous_site") or "—"],
+        ["Loading Protocol", ", ".join(procedure.get("loading_type") or []) or "—"],
+        ["Treating Clinician", procedure.get("student_name") or procedure.get("created_by_name") or "—"],
+        ["Supervising Clinician", procedure.get("supervisor_name") or "—"],
+        ["Implant In-Charge", procedure.get("implant_incharge_name") or "—"],
+        ["Scheduled Date", f"{procedure.get('procedure_date') or '—'} at {procedure.get('procedure_time') or '—'}"],
+    ])
+
+    implants_out = []
+    for imp in (procedure.get("implants") or procedure.get("selected_implants") or []):
+        site = imp.get("tooth") or imp.get("site") or imp.get("fdi") or "—"
+        brand = imp.get("brand") or imp.get("manufacturer") or "—"
+        system = imp.get("system") or imp.get("line") or ""
+        dia = imp.get("diameter") or imp.get("width") or "—"
+        length = imp.get("length") or "—"
+        implants_out.append({
+            "site": str(site),
+            "label": f"{brand} {system}".strip(),
+            "size": f"{dia} × {length} mm",
+        })
+
+    sections = [
+        {
+            "title": "1. Nature of the Procedure",
+            "body": "A dental implant is a titanium or zirconia post surgically placed into the jawbone to replace missing teeth. "
+                    "The procedure may involve local anaesthesia, gingival incision, osteotomy, implant placement, bone grafting if needed, "
+                    "and suture closure. A prosthesis (crown / bridge / denture) is delivered after a healing period.",
+        },
+        {
+            "title": "2. Known Risks & Complications",
+            "body": "Pain, swelling, bruising, and post-operative bleeding; infection requiring antibiotics; injury to adjacent teeth, nerves, "
+                    "blood vessels, or the maxillary sinus; temporary or (rarely) permanent numbness of the lip, chin, or tongue; failure of "
+                    "osseointegration requiring implant removal and possible re-placement; need for additional procedures (bone graft, sinus lift, "
+                    "soft-tissue augmentation); late mechanical complications — screw loosening, prosthesis fracture, wear; aesthetic variability.",
+        },
+        {
+            "title": "3. Alternatives & My Responsibilities",
+            "body": "Alternatives: no treatment, conventional fixed bridge, removable partial/complete denture, orthodontic repositioning — "
+                    "advantages, limitations, and costs have been explained to me. "
+                    "My responsibilities: disclose complete medical history and medications; follow pre- and post-operative instructions; "
+                    "attend all follow-ups; maintain oral hygiene; refrain from smoking during healing; pay agreed professional fees.",
+        },
+        {
+            "title": "4. Data Protection & Digital Record Consent",
+            "body": "In plain language: I understand my clinical information — name, contact details, medical history, radiographs, "
+                    "photographs, and treatment records — will be stored in the Implanr application and shared with the clinicians and authorized "
+                    "staff directly involved in my care (treating clinician, supervising faculty or senior dentist, implant in-charge, nurses, and "
+                    "the designated clinic/institution administrator). I may withdraw this consent in writing at any time, understanding that "
+                    "withdrawal may affect continuity of treatment.\n\n"
+                    "Formal clause: I expressly and voluntarily consent, under the Digital Personal Data Protection Act, 2023 (and, where "
+                    "applicable, GDPR, HIPAA, or other governing law), to the collection, storage, processing, and transmission of my identifiable "
+                    "health data within the Implanr application for clinical evaluation, treatment planning, treatment delivery, audit, and "
+                    "longitudinal record-keeping, and to access by, and sharing with, the individuals lawfully involved in my treatment.",
+        },
+        {
+            "title": "5. Consent Statement",
+            "body": "I have read and understood the information above, had the opportunity to ask questions, and had all my questions answered "
+                    "to my satisfaction. I understand that dentistry is not an exact science and no guarantees have been made regarding the "
+                    "outcome. I hereby authorize the treating clinician and their team to perform the procedure described above, along with any "
+                    "additional procedures deemed necessary during treatment in my best interest. I also consent to clinical photography/video "
+                    "recording for record-keeping, clinical, and educational purposes with appropriate identity safeguards.",
+        },
+    ]
+
+    return {
+        "title": "INFORMED CONSENT — DENTAL IMPLANT PROCEDURE",
+        "patient_info": patient_info,
+        "procedure_details": proc_rows,
+        "implants": implants_out,
+        "sections": sections,
+        "version": CONSENT_CURRENT_VERSION,
+    }
+
+
 class ConsentEsignBody(BaseModel):
     strokes: List[List[List[float]]]  # [[[x,y],...] per stroke], px in pad space
     pad_width: float = Field(..., gt=0, le=2000)
