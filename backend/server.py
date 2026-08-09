@@ -9093,6 +9093,15 @@ async def upload_ios(
     
     return {"message": "File uploaded successfully", "filename": file.filename}
 
+# iter-405: public, non-PHI generated documents (e.g. grant proposal PDF).
+@api_router.get("/docs/grant-proposal")
+async def download_grant_proposal():
+    path = ROOT_DIR / "generated_docs" / "Implanr_Grant_Proposal.pdf"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Document not found")
+    return FileResponse(path, media_type="application/pdf", filename="Implanr_Grant_Proposal.pdf")
+
+
 @api_router.get("/uploads/{filename}")
 async def serve_upload(filename: str, token: Optional[str] = Query(None), current_user: dict = Depends(get_current_user_optional)):
     file_path = UPLOADS_DIR / filename
