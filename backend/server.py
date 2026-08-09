@@ -10,6 +10,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import hashlib
 import uuid
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr, field_validator
@@ -4915,8 +4916,15 @@ async def generate_consent_template(
     story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor('#CFD8DC'), spaceAfter=2))
     story.append(Paragraph("Signatures", styles['H2']))
     sig_line = "__________________________"
+    esign = procedure.get("consent_esign") or {}
+    patient_sig_cell = sig_line
+    patient_date_cell = "____________"
+    if esign.get("filename") and (UPLOADS_DIR / esign["filename"]).exists():
+        from reportlab.platypus import Image as RLImage
+        patient_sig_cell = RLImage(str(UPLOADS_DIR / esign["filename"]), width=48*mm, height=14*mm, kind='proportional')
+        patient_date_cell = (esign.get("signed_at") or "")[:10] or "____________"
     sig_rows = [
-        ["Patient Signature:", sig_line, "Date:", "____________"],
+        ["Patient Signature:", patient_sig_cell, "Date:", patient_date_cell],
         ["Patient Name (printed):", procedure.get("patient_name") or sig_line, "", ""],
         ["Guardian Signature (if minor):", sig_line, "Relationship:", "____________"],
         ["Treating Clinician Signature:", sig_line, "Date:", "____________"],
@@ -4934,10 +4942,19 @@ async def generate_consent_template(
         ('TOPPADDING', (0,0), (-1,-1), 1),
     ]))
     story.append(st)
-    story.append(Paragraph(
-        "Print — get patient to sign — scan or photograph — upload in the Implanr app to unlock Phase 2.",
-        styles['SmallGrey']
-    ))
+    if esign.get("filename"):
+        story.append(Paragraph(
+            f"Patient signed electronically in the Implanr app on {(esign.get('signed_at') or '')[:19].replace('T', ' ')} UTC · "
+            f"Language: {(esign.get('language') or 'en').upper()} · Consent text {esign.get('consent_version', '')} · "
+            f"Witnessed by {esign.get('witnessed_by_name', '')} ({esign.get('witnessed_by_role', '')}) · "
+            f"SHA-256: {(esign.get('sha256') or '')[:16]}…",
+            styles['SmallGrey']
+        ))
+    else:
+        story.append(Paragraph(
+            "Print — get patient to sign — scan or photograph — upload in the Implanr app to unlock Phase 2.",
+            styles['SmallGrey']
+        ))
     
     doc.build(story)
     buf.seek(0)
@@ -4970,6 +4987,146 @@ async def upload_consent_temp(
         "original_name": file.filename,
         "content_type": file.content_type or "application/pdf",
     }
+
+
+# ── iter-406: Patient Consent E-Signature (Phase 1) ──────────────────────
+CONSENT_TEXTS = {
+    "v2.1": {
+        "en": "I, the undersigned, confirm that the nature and purpose of dental implant surgery at the site(s) listed have been explained to me, including possible risks: pain, swelling, bleeding, infection, injury to adjacent teeth or nerves, sinus involvement, implant failure, and the possible need for additional procedures such as bone grafting. Alternatives (fixed bridge, removable denture, no treatment) and the expected costs were discussed with me. I consent to the surgical procedure, administration of local anaesthesia, and clinical photography for treatment records and teaching. I understand that I may withdraw this consent at any time before surgery.",
+        "hi": "मैं, अधोहस्ताक्षरी, पुष्टि करता/करती हूँ कि सूचीबद्ध स्थान पर डेंटल इम्प्लांट सर्जरी की प्रकृति और उद्देश्य मुझे समझाए गए हैं, जिनमें संभावित जोखिम शामिल हैं: दर्द, सूजन, रक्तस्राव, संक्रमण, आसपास के दाँतों या नसों को क्षति, साइनस संबंधी जटिलता, इम्प्लांट विफलता, तथा बोन ग्राफ्टिंग जैसी अतिरिक्त प्रक्रियाओं की संभावित आवश्यकता। विकल्पों (ब्रिज, हटाने योग्य डेन्चर, कोई उपचार नहीं) और अनुमानित लागत पर चर्चा की गई। मैं शल्य प्रक्रिया, स्थानीय संज्ञाहरण और उपचार अभिलेखों हेतु क्लिनिकल फोटोग्राफी के लिए सहमति देता/देती हूँ। मैं समझता/समझती हूँ कि सर्जरी से पहले किसी भी समय यह सहमति वापस ले सकता/सकती हूँ।",
+        "mr": "मी, निम्नस्वाक्षरीकार, पुष्टी करतो/करते की नमूद जागी डेंटल इम्प्लांट शस्त्रक्रियेचे स्वरूप व हेतू मला समजावून सांगितले आहेत, ज्यात संभाव्य धोके समाविष्ट आहेत: वेदना, सूज, रक्तस्राव, संसर्ग, शेजारील दात किंवा नसांना इजा, सायनसशी संबंधित गुंतागुंत, इम्प्लांट अपयश, तसेच बोन ग्राफ्टिंगसारख्या अतिरिक्त प्रक्रियांची संभाव्य गरज. पर्याय (ब्रिज, काढता येणारे कवळी, उपचार न करणे) व अपेक्षित खर्च यांची चर्चा झाली. मी शस्त्रक्रिया, स्थानिक भूल व उपचार नोंदींसाठी क्लिनिकल छायाचित्रणास संमती देतो/देते. शस्त्रक्रियेपूर्वी केव्हाही ही संमती मागे घेता येते हे मला समजते.",
+    }
+}
+CONSENT_CURRENT_VERSION = "v2.1"
+
+
+@api_router.get("/consent-texts")
+async def get_consent_texts(current_user: dict = Depends(get_current_user)):
+    return {"version": CONSENT_CURRENT_VERSION, "texts": CONSENT_TEXTS[CONSENT_CURRENT_VERSION]}
+
+
+class ConsentEsignBody(BaseModel):
+    strokes: List[List[List[float]]]  # [[[x,y],...] per stroke], px in pad space
+    pad_width: float = Field(..., gt=0, le=2000)
+    pad_height: float = Field(..., gt=0, le=1000)
+    consent_version: str = Field(CONSENT_CURRENT_VERSION, max_length=10)
+    language: str = Field("en", pattern="^(en|hi|mr)$")
+    confirmed_explained: bool = Field(...)
+
+
+def _render_signature_png(strokes, pad_w, pad_h) -> bytes:
+    """Rasterize the pad strokes server-side (Pillow) — one code path for web
+    and native, and the server-computed SHA-256 is the tamper evidence."""
+    from PIL import Image, ImageDraw
+    scale = 2.0
+    img = Image.new("RGB", (int(pad_w * scale), int(pad_h * scale)), "white")
+    draw = ImageDraw.Draw(img)
+    for stroke in strokes:
+        pts = [(x * scale, y * scale) for x, y in stroke]
+        if len(pts) == 1:
+            x, y = pts[0]
+            draw.ellipse([x - 2, y - 2, x + 2, y + 2], fill=(26, 35, 50))
+        else:
+            draw.line(pts, fill=(26, 35, 50), width=4, joint="curve")
+    import io as _io
+    buf = _io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+@api_router.post("/procedures/{procedure_id}/consent/esign")
+async def esign_consent(procedure_id: str, body: ConsentEsignBody, current_user: dict = Depends(get_current_user)):
+    """In-app e-signature for the patient consent. Sets the SAME
+    patient_consent_form gate the Phase-2 unlock checks today; the prior
+    consent (uploaded or e-signed) is archived, never deleted."""
+    try:
+        procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        procedure = None
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    role = current_user.get("role")
+    uid = current_user.get("_id")
+    is_stakeholder = (
+        procedure.get("created_by_id") == uid or
+        procedure.get("student_id") == uid or
+        procedure.get("supervisor_id") == uid or
+        procedure.get("implant_incharge_id") == uid or
+        role in ("nurse", "implant_incharge", "administrator", "supervisor")
+    )
+    if not is_stakeholder:
+        raise HTTPException(status_code=403, detail="Not allowed to capture consent for this case")
+    if not body.confirmed_explained:
+        raise HTTPException(status_code=400, detail="The explanation confirmation must be ticked")
+    total_pts = sum(len(s) for s in body.strokes)
+    if not body.strokes or total_pts < 8:
+        raise HTTPException(status_code=400, detail="Patient signature required")
+    if total_pts > 20000:
+        raise HTTPException(status_code=400, detail="Signature data too large")
+    if body.consent_version not in CONSENT_TEXTS:
+        raise HTTPException(status_code=400, detail="Unknown consent version")
+
+    png = _render_signature_png(body.strokes, body.pad_width, body.pad_height)
+    if len(png) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Signature image exceeds 2MB")
+    sha256 = hashlib.sha256(png).hexdigest()
+    unique_name = f"consent_esign_{uuid.uuid4().hex}.png"
+    with open(UPLOADS_DIR / unique_name, "wb") as f:
+        f.write(png)
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    previous_form = procedure.get("patient_consent_form")
+    previous_esign = procedure.get("consent_esign")
+    version = (previous_form.get("version", 1) + 1) if previous_form else 1
+    consent_entry = {
+        "filename": unique_name,
+        "original_name": f"Consent-eSignature-v{version}.png",
+        "content_type": "image/png",
+        "uploaded_by_id": uid,
+        "uploaded_by_name": current_user.get("name", ""),
+        "uploaded_by_role": role or "",
+        "uploaded_at": now_iso,
+        "version": version,
+        "esigned": True,
+    }
+    esign_meta = {
+        "filename": unique_name,
+        "signed_at": now_iso,
+        "consent_version": body.consent_version,
+        "language": body.language,
+        "confirmed_explained": True,
+        "witnessed_by_id": uid,
+        "witnessed_by_name": current_user.get("name", ""),
+        "witnessed_by_role": role or "",
+        "sha256": sha256,
+    }
+    update_op: Dict[str, Any] = {
+        "$set": {
+            "patient_consent_form": consent_entry,
+            "consent_esign": esign_meta,
+            "updated_at": now_iso,
+        },
+        "$push": {
+            "approval_history": {
+                "phase": "consent", "action": "esigned",
+                "by": uid, "by_name": current_user.get("name", ""), "role": role or "", "at": now_iso,
+            },
+            "edit_log": {
+                "field": "patient_consent_form",
+                "old_value": (previous_form.get("original_name") if previous_form else None),
+                "new_value": f"v{version} · e-signature ({body.language.upper()}, {body.consent_version})",
+                "edited_by": current_user.get("name", ""),
+                "edited_by_role": role or "",
+                "edited_at": now_iso,
+            },
+        },
+    }
+    if previous_form:
+        update_op["$push"]["consent_history"] = previous_form
+    if previous_esign:
+        update_op["$push"]["consent_esign_voided"] = {**previous_esign, "voided_at": now_iso, "voided_by": current_user.get("name", "")}
+    await db.procedures.update_one({"_id": procedure["_id"]}, update_op)
+    return {"ok": True, "consent_esign": esign_meta, "patient_consent_form": consent_entry}
 
 
 @api_router.post("/procedures/{procedure_id}/upload-consent")
