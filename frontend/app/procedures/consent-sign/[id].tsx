@@ -1,7 +1,8 @@
 /**
- * iter-406 — In-app Patient Consent e-Signature (Phase 1).
- * Language-selectable consent text (EN/HI/MR, v2.1) + custom SVG signature pad.
- * Submits strokes to the backend which rasterizes the PNG + SHA-256 hash.
+ * iter-406/325 — In-app Patient Consent e-Signature (Phase 1).
+ * Shows the COMPLETE informed-consent form (same content as the printable
+ * template) + language-selectable consent statement (EN/HI/MR, v2.1) +
+ * custom SVG signature pad. Scrolling is frozen while the patient signs.
  */
 import React, { useState, useEffect } from 'react';
 import {
@@ -52,17 +53,29 @@ const LANGS = [
   { code: 'mr', label: 'मराठी' },
 ];
 
+const InfoRows = ({ rows, testID }: { rows: string[][]; testID: string }) => (
+  <View style={s.infoCard} testID={testID}>
+    {rows.map(([label, value], i) => (
+      <View key={i} style={[s.infoRow, i === rows.length - 1 && { borderBottomWidth: 0 }]}>
+        <Text style={s.infoLabel}>{label}</Text>
+        <Text style={s.infoValue}>{value}</Text>
+      </View>
+    ))}
+  </View>
+);
+
 export default function ConsentSignScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
 
-  const [procedure, setProcedure] = useState<any>(null);
+  const [content, setContent] = useState<any>(null);
   const [texts, setTexts] = useState<Record<string, string>>({});
   const [version, setVersion] = useState('v2.1');
   const [lang, setLang] = useState<'en' | 'hi' | 'mr'>('en');
   const [confirmed, setConfirmed] = useState(false);
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [padSize, setPadSize] = useState({ w: 0, h: 180 });
+  const [signing, setSigning] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -71,22 +84,22 @@ export default function ConsentSignScreen() {
     console.log('[consent-sign] mounted, id =', id);
     (async () => {
       try {
-        const [procRes, textRes] = await Promise.all([
-          api.get(`/procedures/${id}`),
+        const [contentRes, textRes] = await Promise.all([
+          api.get(`/procedures/${id}/consent-content`),
           api.get('/consent-texts'),
         ]);
-        setProcedure(procRes.data);
+        setContent(contentRes.data);
         setTexts(textRes.data.texts || {});
         setVersion(textRes.data.version || 'v2.1');
       } catch (e: any) {
-        Alert.alert('Error', e?.response?.data?.detail || 'Failed to load case');
+        Alert.alert('Error', e?.response?.data?.detail || 'Failed to load consent form');
       } finally {
         setLoading(false);
       }
     })();
   }, [id]);
 
-  const totalPts = strokes.reduce((a, s) => a + s.length, 0);
+  const totalPts = strokes.reduce((a, st) => a + st.length, 0);
 
   const submit = async () => {
     setError('');
@@ -133,23 +146,44 @@ export default function ConsentSignScreen() {
         onBack={() => router.back()}
         testID="consent-sign-header"
       />
-      <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
-        {/* Case summary */}
-        <View style={s.caseCard} testID="consent-sign-case-card">
-          <Text style={s.patientName}>{procedure?.patient_name || 'Patient'}</Text>
-          <Text style={s.caseMeta}>
-            {[procedure?.implant_procedure_type, procedure?.registration_number ? `Reg. ${procedure.registration_number}` : null]
-              .filter(Boolean).join('  ·  ')}
-          </Text>
-          <Text style={s.caseMeta}>
-            {[procedure?.student_name ? `Clinician: ${procedure.student_name}` : null,
-              procedure?.supervisor_name ? `Supervisor: ${procedure.supervisor_name}` : null]
-              .filter(Boolean).join('  ·  ')}
-          </Text>
-        </View>
+      <ScrollView
+        contentContainerStyle={s.scroll}
+        keyboardShouldPersistTaps="handled"
+        scrollEnabled={!signing}
+      >
+        {/* ── Full informed-consent form (same content as printable template) ── */}
+        <Text style={s.formTitle} testID="consent-form-title">{content?.title || 'INFORMED CONSENT — DENTAL IMPLANT PROCEDURE'}</Text>
+        <Text style={s.formSub}>Please read carefully before signing.</Text>
 
-        {/* Language selector */}
-        <Text style={s.sectionLabel}>Consent Language</Text>
+        <Text style={s.sectionLabel}>Patient Information</Text>
+        <InfoRows rows={content?.patient_info || []} testID="consent-patient-info" />
+
+        <Text style={s.sectionLabel}>Planned Procedure</Text>
+        <InfoRows rows={content?.procedure_details || []} testID="consent-procedure-details" />
+
+        {(content?.implants || []).length > 0 && (
+          <>
+            <Text style={s.sectionLabel}>Planned Implant(s)</Text>
+            <View style={s.infoCard} testID="consent-implants">
+              {content.implants.map((imp: any, i: number) => (
+                <View key={i} style={[s.infoRow, i === content.implants.length - 1 && { borderBottomWidth: 0 }]}>
+                  <Text style={s.infoLabel}>Site {imp.site}</Text>
+                  <Text style={s.infoValue}>{imp.label}  ·  {imp.size}</Text>
+                </View>
+              ))}
+            </View>
+          </>
+        )}
+
+        {(content?.sections || []).map((sec: any, i: number) => (
+          <View key={i} testID={`consent-section-${i + 1}`}>
+            <Text style={s.sectionTitle}>{sec.title}</Text>
+            <Text style={s.sectionBody}>{sec.body}</Text>
+          </View>
+        ))}
+
+        {/* ── Consent statement in patient's language ── */}
+        <Text style={[s.sectionLabel, { marginTop: 18 }]}>Consent Statement — Patient's Language</Text>
         <View style={s.langRow}>
           {LANGS.map(l => (
             <TouchableOpacity
@@ -162,8 +196,6 @@ export default function ConsentSignScreen() {
             </TouchableOpacity>
           ))}
         </View>
-
-        {/* Consent text */}
         <View style={s.textCard} testID="consent-text-body">
           <Text style={s.consentText}>{texts[lang] || texts.en || ''}</Text>
           <Text style={s.versionNote}>Consent text version {version}</Text>
@@ -200,8 +232,15 @@ export default function ConsentSignScreen() {
           </TouchableOpacity>
         </View>
         <View onLayout={e => { const w = e.nativeEvent.layout.width; setPadSize(p => ({ ...p, w })); }}>
-          <SignaturePad strokes={strokes} onChange={setStrokes} height={180} testID="signature-pad" />
+          <SignaturePad
+            strokes={strokes}
+            onChange={setStrokes}
+            height={180}
+            testID="signature-pad"
+            onSigningChange={setSigning}
+          />
         </View>
+        <Text style={s.padHint}>The page stays still while signing — lift the finger/stylus to scroll again.</Text>
 
         {!!error && (
           <View style={s.errorRow} testID="consent-sign-error">
@@ -238,14 +277,19 @@ const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#F5F7FA' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scroll: { padding: 16, paddingBottom: 48 },
-  caseCard: {
-    backgroundColor: '#FFF', borderRadius: 12, padding: 14, marginBottom: 16,
-    borderLeftWidth: 3, borderLeftColor: '#1565C0',
+  formTitle: { fontSize: 15, fontWeight: '800', color: '#0D47A1', textAlign: 'center', letterSpacing: 0.3 },
+  formSub: { fontSize: 11, color: '#78909C', textAlign: 'center', marginTop: 4, marginBottom: 14 },
+  sectionLabel: { fontSize: 13, fontWeight: '700', color: '#37474F', marginBottom: 8, marginTop: 6 },
+  infoCard: { backgroundColor: '#FFF', borderRadius: 12, paddingHorizontal: 14, marginBottom: 14 },
+  infoRow: {
+    flexDirection: 'row', paddingVertical: 8, gap: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#ECEFF1',
   },
-  patientName: { fontSize: 16, fontWeight: '700', color: '#0D47A1' },
-  caseMeta: { fontSize: 12, color: '#546E7A', marginTop: 3 },
-  sectionLabel: { fontSize: 13, fontWeight: '700', color: '#37474F', marginBottom: 8 },
-  langRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  infoLabel: { width: 130, fontSize: 12, fontWeight: '700', color: '#546E7A' },
+  infoValue: { flex: 1, fontSize: 12.5, color: '#263238' },
+  sectionTitle: { fontSize: 13, fontWeight: '700', color: '#1565C0', marginTop: 12, marginBottom: 4 },
+  sectionBody: { fontSize: 12.5, lineHeight: 19, color: '#37474F', backgroundColor: '#FFF', borderRadius: 10, padding: 12 },
+  langRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   langChip: {
     paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
     backgroundColor: '#FFF', borderWidth: 1, borderColor: '#CFD8DC',
@@ -264,6 +308,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 4, borderRadius: 14, backgroundColor: '#FFEBEE',
   },
   clearBtnText: { fontSize: 12, fontWeight: '700', color: '#C62828' },
+  padHint: { fontSize: 10.5, color: '#90A4AE', marginTop: 6, fontStyle: 'italic' },
   errorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
   errorText: { flex: 1, fontSize: 12.5, color: '#C62828', fontWeight: '600' },
   submitBtn: {
