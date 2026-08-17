@@ -169,6 +169,7 @@ export const PROCEDURE_TYPES = [
   'Zygoma and Pterygoid Implants',
   'Pterygoid and Conventional Implants',
   'Zygoma and Conventional Implants',
+  'Zygoma, Pterygoid and Conventional Implants',
   // iter-213: "Existing Implant" branch — patient already has implants
   // placed (elsewhere / earlier) and needs prosthetic continuation.
   // The form swaps the surgical sections for an existing-implant
@@ -187,10 +188,35 @@ export const ZYGOMA_PTERYGOID_PROCEDURE_TYPES = [
   'Zygoma and Pterygoid Implants',
   'Pterygoid and Conventional Implants',
   'Zygoma and Conventional Implants',
+  'Zygoma, Pterygoid and Conventional Implants',
 ];
 
 export const isZygomaPterygoidProcedure = (t: string | undefined | null): boolean =>
   !!t && ZYGOMA_PTERYGOID_PROCEDURE_TYPES.includes(t);
+
+// iter-Feb-2026: Pterygoid + Conventional cases are NOT treated as
+// advanced maxillary rehabilitation cases. The Phase 1 form skips the
+// zygomatic-specific sections (banner, medical-flags, anaesthesia,
+// pre-surgical, extraoral, existing-prosthesis, radiographic, zygomatic
+// region, Bedrossian, ZAGA, diagnostic summary, prosthetic planning,
+// design checks, team composition) and shows ONLY the two supplementary
+// sections relevant to a pterygoid workflow:
+//   • Section 6 — Intraoral Examination (Zygoma/Pterygoid Supplementary)
+//   • Section 10 — Pterygomaxillary Region Assessment
+export const isPterygoidOnlyProcedure = (t: string | undefined | null): boolean =>
+  t === 'Pterygoid and Conventional Implants';
+
+// Cases that mix advanced (Zygoma/Pterygoid) + conventional implants in the
+// same case — the implant picker must surface BOTH advanced AND conventional
+// systems so the operator can plan the whole case in a single view.
+export const MIXED_ADVANCED_AND_CONVENTIONAL_PROCEDURE_TYPES = [
+  'Pterygoid and Conventional Implants',
+  'Zygoma and Conventional Implants',
+  'Zygoma, Pterygoid and Conventional Implants',
+];
+
+export const isMixedAdvancedAndConventional = (t: string | undefined | null): boolean =>
+  !!t && MIXED_ADVANCED_AND_CONVENTIONAL_PROCEDURE_TYPES.includes(t);
 
 // Configuration options presented when a Zygoma/Pterygoid procedure type
 // is selected (from user brochure — 5 configurations).

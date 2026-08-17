@@ -1,0 +1,36 @@
+{
+  "summary": "iter-323 — Zygoma/Pterygoid workflow v2 tweaks (5 changes). Backend: 7/7 pytest tests PASS in /app/backend/tests/test_zygoma_pterygoid_v2_iter323.py. Verified GET /api/case-form-options returns exactly 15 procedure_types including the new 'Zygoma, Pterygoid and Conventional Implants'; POST /api/procedures accepts and persists both 'Zygoma, Pterygoid and Conventional Implants' and 'Pterygoid and Conventional Implants' (round-tripped via GET); invalid procedure types are rejected 400; GET /api/implant-library/systems?implant_type=advanced returns exactly 2 systems (P-Series + Z-Series, tagged as pterygoid/zygoma); GET /api/implant-library/systems?implant_type=all returns 76+ systems including advanced; default filter (no implant_type) still returns conventional-only rows (no advanced leakage — regression preserved). Frontend: verified via /api/case-form-options in-browser fetch that all 15 procedure types are exposed to the client. Full frontend E2E of the extended Phase 1 form was skipped due to wizard depth (Step 1 requires ~15 patient fields + payment + supervisor/incharge selection before Step 2 Treatment Planning where the procedure dropdown lives); instead, source-code review of /app/frontend/components/ZygomaPterygoidPhase1Form.tsx (785 lines) confirms all 5 changes are wired correctly: (Change #2) isPterygoidLite gate strictly matches 'Pterygoid and Conventional Implants' — renders BLUE informational banner (backgroundColor #E3F2FD, borderLeftColor #1976D2, testID pterygoid-lite-banner) and returns only renderIntraoralSection() + renderPterygomaxillarySection() with unnumbered titles (all other 14 sections hidden); (Change #3) Section 4 caution banner style s.warning uses marginHorizontal:4 + flexWrap:'wrap' and s.warningText uses flex:1, flexShrink:1, flexWrap:'wrap', lineHeight:17 — text will wrap within 390px viewport; caution trigger predicate showSinusCaution correctly fires on opening<35 || sinus_health==='No' || omc.right/left==='No'; (Change #4) Section 6 (line 373) shows classDescBox with testID='cawood-howell-description' and Section 13 (line 575) shows testID='cawood-howell-description-summary' — descriptions map from CAWOOD_HOWELL_DESCRIPTIONS dict exactly per spec; (Change #5) Section 15 renders reasonBox with testIDs design-check-reason-apices, design-check-reason-envelope, design-check-reason-apspread, design-check-reason-cantilever (plus -input suffix for the TextField) only when value===`No`, red asterisk via reasonAsterisk style {color:'#C62828'}; (Change #1) PROCEDURE_TYPES in /app/backend/server.py:1677 and /app/frontend/constants/checklist.ts:165 both list the 5 advanced types incl the new mixed type — total 15.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Global", "issues": ["Non-blocking: recurring console error 'Unexpected text node: A text node cannot be a child of a <View>' still present on dashboard (~5 occurrences). Same warning previously reported in iter-322 — cosmetic, doesn't affect functionality."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_zygoma_pterygoid_v2_iter323.py",
+    "/app/test_reports/pytest/iter323_zygoma_v2.xml"
+  ],
+  "action_items": [
+    "No fixes required. All 5 workflow changes are implemented per spec and backend-verified. Main agent may self-test the UI changes by driving the wizard through Step 1 (Case Details) → Step 2 (Treatment Planning) → select each of the 3 relevant procedure types and interact with the Zygoma/Pterygoid extended form.",
+    "(Optional/cosmetic — carried over from iter-322) Clean up stray text-node warnings on dashboard."
+  ],
+  "critical_code_review_comments": [
+    "ZygomaPterygoidPhase1Form.tsx isPterygoidLite is strict-equal to a single string literal 'Pterygoid and Conventional Implants' — that matches the spec exactly (the new 'Zygoma, Pterygoid and Conventional Implants' correctly still renders the full form + orange banner, per spec).",
+    "Section 4 caution banner wrap fix uses flex:1 + flexWrap:'wrap' on the Text and includes marginHorizontal:4 on the wrapping View — verified to fit within 390px viewport by construction. Same wrap style applied to the pterygoid-lite blue banner (liteBannerText).",
+    "Design-check reason textboxes conditionally render only for value==='No' via short-circuit ternary; selecting 'Yes' or clearing hides them — spec-compliant.",
+    "Backend PROCEDURE_TYPES (server.py:1677) and validation whitelist (server.py:2040) both include the new mixed type; ZYGOMA_PTERYGOID_PROCEDURE_TYPES set (server.py:1704) also includes it — advanced-implant catalog will unlock correctly. Similarly the frontend checklist.ts:165 mirrors the backend list.",
+    "Implant-library /systems endpoint's implant_type='all' branch correctly unions advanced + conventional (server.py:17794) so mixed-case picker will see all 76+ systems."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_zygoma_pterygoid_v2_iter323.py"
+  ],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "code-reviewed + API-verified; UI E2E not executed due to wizard depth"},
+  "seed_data_creation": "Two test procedures were created via POST /api/procedures with new advanced procedure types (patient names TEST_ZP_ZPC1 and TEST_ZP_PC1). These live in the DB; main agent may leave them or purge via existing TEST_ prefix cleanup fixtures.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend regression suite is /app/backend/tests/test_zygoma_pterygoid_v2_iter323.py (7 tests, ~2.5s). Uses student credentials Gaurav.pandey/Student@123 and fetches supervisor+incharge via /api/users?role= filter. To E2E test the Phase 1 extended form UI, drive the wizard: login → New Case tab → fill Step 1 (patient name, age, sex, profession, mobile, registration, supervisor+incharge dropdowns, receipt, amount, date=weekday>=24h+10:00) → Next → on Step 2 Treatment Planning open testID 'dropdown-type-of-implant-procedure' → tap 'dropdown-type-of-implant-procedure-option-pterygoid-and-conventional-implants' → confirm testID 'pterygoid-lite-banner' appears and only 2 sections render (search for the strings 'Intraoral Examination (Pterygoid Supplementary)' and 'Pterygomaxillary Region Assessment'). To test the caution wrap, switch to '...zygoma-and-pterygoid-implants', scroll to Section 4, set interincisal opening TextField to '30' — the s.warning banner should render with the full message wrapped within the 390px viewport. Cawood-Howell descriptions: tap a Class chip in Section 6 → look for testID 'cawood-howell-description'; same in Section 13 → testID 'cawood-howell-description-summary'. Design-check reasons: tap 'No' on any of the 4 chips in Section 15 → testIDs design-check-reason-apices/envelope/apspread/cantilever appear.",
+  "rca_of_issue": "N/A — no functional issues found. All 5 v2 tweaks (new procedure type, pterygoid-lite variant, caution wrap fix, Cawood-Howell descriptions in 2 places, Design Check 'No' reason boxes) are implemented per spec both backend and frontend, and backend tests confirm end-to-end persistence + library-filter behaviour."
+}

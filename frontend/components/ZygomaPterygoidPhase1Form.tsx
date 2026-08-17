@@ -40,6 +40,17 @@ import { Ionicons } from '@expo/vector-icons';
 // ── Shared option lists ─────────────────────────────────────────────────
 const YES_NO = ['Yes', 'No'];
 const CAWOOD_HOWELL = ['Class I', 'Class II', 'Class III', 'Class IV', 'Class V', 'Class VI'];
+
+// iter-Feb-2026 (v2): Cawood-Howell class descriptions shown below the
+// chip row whenever a class is selected. Sourced from user brief.
+const CAWOOD_HOWELL_DESCRIPTIONS: Record<string, string> = {
+  'Class I': 'Dentate ridge with teeth present.',
+  'Class II': 'Immediate post-extraction ridge; smooth contour after tooth loss.',
+  'Class III': 'Broad and rounded ridge with adequate height and width for conventional prosthetics.',
+  'Class IV': 'Knife-edge ridge with sufficient height but inadequate width.',
+  'Class V': 'Flat ridge with insufficient height and width.',
+  'Class VI': 'Depressed ridge with a concave or cup-shaped surface showing basal bone loss.',
+};
 const ZAGA_TYPES = ['ZAGA 0', 'ZAGA 1', 'ZAGA 2', 'ZAGA 3', 'ZAGA 4'];
 const ANTERIOR_MAX_WALL_CONCAVITY = ['Type 0', 'Type 1', 'Type 2', 'Type 3', 'Type 4'];
 const FACIAL_PROFILE = ['Straight', 'Convex', 'Concave'];
@@ -335,6 +346,12 @@ const ZygomaPterygoidPhase1Form: React.FC<Props> = ({ procedureType, value, onCh
     onChange(setPath(value || {}, path, v));
   }, [value, onChange]);
 
+  // iter-Feb-2026 (v2): "Pterygoid and Conventional Implants" is NOT
+  // an advanced maxillary rehab case. Show ONLY Section 6 (Intraoral
+  // Examination) and Section 10 (Pterygomaxillary Region). Skip the
+  // orange banner and all zygomatic-specific sections.
+  const isPterygoidLite = procedureType === 'Pterygoid and Conventional Implants';
+
   const showSinusCaution = (() => {
     const opening = parseFloat(value?.pre_surgical?.interincisal_opening_mm || '');
     const sinusOK = value?.pre_surgical?.sinus_health;
@@ -345,6 +362,55 @@ const ZygomaPterygoidPhase1Form: React.FC<Props> = ({ procedureType, value, onCh
     if (omcR === 'No' || omcL === 'No') return true;
     return false;
   })();
+
+  // Section 6 helper — reused inside both variants (full + lite).
+  const renderIntraoralSection = () => (
+    <SectionCard title={isPterygoidLite ? 'Intraoral Examination (Pterygoid Supplementary)' : '6. Intraoral Examination (Zygoma/Pterygoid Supplementary)'} icon="scan-outline" tint="#6A1B9A">
+      <Field label="Residual Ridge Form (Cawood-Howell)">
+        <ChipRow options={CAWOOD_HOWELL} value={value?.intraoral?.residual_ridge_form} onChange={v => set('intraoral.residual_ridge_form', v)} readOnly={readOnly} />
+        {/* iter-Feb-2026 (v2): Cawood-Howell class description on selection */}
+        {value?.intraoral?.residual_ridge_form && CAWOOD_HOWELL_DESCRIPTIONS[value.intraoral.residual_ridge_form] ? (
+          <View style={s.classDescBox} testID="cawood-howell-description">
+            <Text style={s.classDescLabel}>{value.intraoral.residual_ridge_form}</Text>
+            <Text style={s.classDescText}>{CAWOOD_HOWELL_DESCRIPTIONS[value.intraoral.residual_ridge_form]}</Text>
+          </View>
+        ) : null}
+      </Field>
+      <BilateralPair label="Keratinised Mucosa Width" suffix="mm" value={value?.intraoral?.keratinised_mucosa_width_mm} onChange={v => set('intraoral.keratinised_mucosa_width_mm', v)} keyboardType="decimal-pad" readOnly={readOnly} />
+      <BilateralPair label="Tuberosity Height" suffix="mm" value={value?.intraoral?.tuberosity_height_mm} onChange={v => set('intraoral.tuberosity_height_mm', v)} keyboardType="decimal-pad" readOnly={readOnly} />
+      <BilateralPair label="Tuberosity Form" value={value?.intraoral?.tuberosity_form} onChange={v => set('intraoral.tuberosity_form', v)} readOnly={readOnly} />
+      <BilateralPair label="Palatal Vault Depth" suffix="mm" value={value?.intraoral?.palatal_vault_depth_mm} onChange={v => set('intraoral.palatal_vault_depth_mm', v)} keyboardType="decimal-pad" readOnly={readOnly} />
+      <Text style={s.helper}>ℹ️ Teeth to be extracted are captured via the FDI chart in the main form.</Text>
+    </SectionCard>
+  );
+
+  const renderPterygomaxillarySection = () => (
+    <SectionCard title={isPterygoidLite ? 'Pterygomaxillary Region Assessment' : '10. Pterygomaxillary Region Assessment'} icon="triangle-outline" tint="#EF6C00">
+      <BilateralPair label="Tuberosity Height" suffix="mm" value={value?.pterygomaxillary_region?.tuberosity_height_mm} onChange={v => set('pterygomaxillary_region.tuberosity_height_mm', v)} keyboardType="decimal-pad" readOnly={readOnly} />
+      <BilateralPair label="Tuberosity Bone Density" value={value?.pterygomaxillary_region?.tuberosity_bone_density} onChange={v => set('pterygomaxillary_region.tuberosity_bone_density', v)} readOnly={readOnly} />
+      <BilateralPair label="Pyramidal Process of Palatine — Volume" value={value?.pterygomaxillary_region?.pyramidal_process_volume} onChange={v => set('pterygomaxillary_region.pyramidal_process_volume', v)} readOnly={readOnly} />
+      <BilateralPair label="Pterygoid Plate Thickness at Target" suffix="mm" value={value?.pterygomaxillary_region?.pterygoid_plate_thickness_mm} onChange={v => set('pterygomaxillary_region.pterygoid_plate_thickness_mm', v)} keyboardType="decimal-pad" readOnly={readOnly} />
+      <BilateralPair label="Planned Implant Path Length (to cortex)" suffix="mm" value={value?.pterygomaxillary_region?.planned_path_length_mm} onChange={v => set('pterygomaxillary_region.planned_path_length_mm', v)} keyboardType="decimal-pad" readOnly={readOnly} />
+      <BilateralPair label="Greater Palatine Canal Position" value={value?.pterygomaxillary_region?.greater_palatine_canal_position} onChange={v => set('pterygomaxillary_region.greater_palatine_canal_position', v)} readOnly={readOnly} />
+      <BilateralPair label="Maxillary Artery / Pterygoid Plexus Proximity" value={value?.pterygomaxillary_region?.maxillary_artery_pterygoid_plexus} onChange={v => set('pterygomaxillary_region.maxillary_artery_pterygoid_plexus', v)} readOnly={readOnly} />
+    </SectionCard>
+  );
+
+  // ── Pterygoid-lite variant — only 2 supplementary sections ──
+  if (isPterygoidLite) {
+    return (
+      <View style={s.wrapper}>
+        <View style={s.liteBanner} testID="pterygoid-lite-banner">
+          <Ionicons name="information-circle" size={18} color="#1976D2" />
+          <Text style={s.liteBannerText}>
+            {procedureType} — pterygoid supplementary data capture only. This is a routine full-arch case with pterygoid anchorage; the extended zygomatic assessment is not required.
+          </Text>
+        </View>
+        {renderIntraoralSection()}
+        {renderPterygomaxillarySection()}
+      </View>
+    );
+  }
 
   return (
     <View style={s.wrapper}>
@@ -433,16 +499,7 @@ const ZygomaPterygoidPhase1Form: React.FC<Props> = ({ procedureType, value, onCh
       </SectionCard>
 
       {/* 6. Intraoral Examination */}
-      <SectionCard title="6. Intraoral Examination (Zygoma/Pterygoid Supplementary)" icon="scan-outline" tint="#6A1B9A">
-        <Field label="Residual Ridge Form (Cawood-Howell)">
-          <ChipRow options={CAWOOD_HOWELL} value={value?.intraoral?.residual_ridge_form} onChange={v => set('intraoral.residual_ridge_form', v)} readOnly={readOnly} />
-        </Field>
-        <BilateralPair label="Keratinised Mucosa Width" suffix="mm" value={value?.intraoral?.keratinised_mucosa_width_mm} onChange={v => set('intraoral.keratinised_mucosa_width_mm', v)} keyboardType="decimal-pad" readOnly={readOnly} />
-        <BilateralPair label="Tuberosity Height" suffix="mm" value={value?.intraoral?.tuberosity_height_mm} onChange={v => set('intraoral.tuberosity_height_mm', v)} keyboardType="decimal-pad" readOnly={readOnly} />
-        <BilateralPair label="Tuberosity Form" value={value?.intraoral?.tuberosity_form} onChange={v => set('intraoral.tuberosity_form', v)} readOnly={readOnly} />
-        <BilateralPair label="Palatal Vault Depth" suffix="mm" value={value?.intraoral?.palatal_vault_depth_mm} onChange={v => set('intraoral.palatal_vault_depth_mm', v)} keyboardType="decimal-pad" readOnly={readOnly} />
-        <Text style={s.helper}>ℹ️ Teeth to be extracted are captured via the FDI chart in the main form.</Text>
-      </SectionCard>
+      {renderIntraoralSection()}
 
       {/* 7. Existing Prosthesis */}
       <SectionCard title="7. Existing Prosthesis Assessment" icon="fitness-outline" tint="#F57C00">
@@ -494,15 +551,7 @@ const ZygomaPterygoidPhase1Form: React.FC<Props> = ({ procedureType, value, onCh
       </SectionCard>
 
       {/* 10. Pterygomaxillary Region */}
-      <SectionCard title="10. Pterygomaxillary Region Assessment" icon="triangle-outline" tint="#EF6C00">
-        <BilateralPair label="Tuberosity Height" suffix="mm" value={value?.pterygomaxillary_region?.tuberosity_height_mm} onChange={v => set('pterygomaxillary_region.tuberosity_height_mm', v)} keyboardType="decimal-pad" readOnly={readOnly} />
-        <BilateralPair label="Tuberosity Bone Density" value={value?.pterygomaxillary_region?.tuberosity_bone_density} onChange={v => set('pterygomaxillary_region.tuberosity_bone_density', v)} readOnly={readOnly} />
-        <BilateralPair label="Pyramidal Process of Palatine — Volume" value={value?.pterygomaxillary_region?.pyramidal_process_volume} onChange={v => set('pterygomaxillary_region.pyramidal_process_volume', v)} readOnly={readOnly} />
-        <BilateralPair label="Pterygoid Plate Thickness at Target" suffix="mm" value={value?.pterygomaxillary_region?.pterygoid_plate_thickness_mm} onChange={v => set('pterygomaxillary_region.pterygoid_plate_thickness_mm', v)} keyboardType="decimal-pad" readOnly={readOnly} />
-        <BilateralPair label="Planned Implant Path Length (to cortex)" suffix="mm" value={value?.pterygomaxillary_region?.planned_path_length_mm} onChange={v => set('pterygomaxillary_region.planned_path_length_mm', v)} keyboardType="decimal-pad" readOnly={readOnly} />
-        <BilateralPair label="Greater Palatine Canal Position" value={value?.pterygomaxillary_region?.greater_palatine_canal_position} onChange={v => set('pterygomaxillary_region.greater_palatine_canal_position', v)} readOnly={readOnly} />
-        <BilateralPair label="Maxillary Artery / Pterygoid Plexus Proximity" value={value?.pterygomaxillary_region?.maxillary_artery_pterygoid_plexus} onChange={v => set('pterygomaxillary_region.maxillary_artery_pterygoid_plexus', v)} readOnly={readOnly} />
-      </SectionCard>
+      {renderPterygomaxillarySection()}
 
       {/* 11. Bedrossian Zones */}
       <SectionCard title="11. Bedrossian Zone Availability" icon="grid-outline" tint="#7CB342">
@@ -521,6 +570,13 @@ const ZygomaPterygoidPhase1Form: React.FC<Props> = ({ procedureType, value, onCh
       <SectionCard title="13. Diagnostic Summary" icon="document-text-outline" tint="#455A64">
         <Field label="Cawood-Howell Class">
           <ChipRow options={CAWOOD_HOWELL} value={value?.diagnostic_summary?.cawood_howell} onChange={v => set('diagnostic_summary.cawood_howell', v)} readOnly={readOnly} />
+          {/* iter-Feb-2026 (v2): Cawood-Howell description also here */}
+          {value?.diagnostic_summary?.cawood_howell && CAWOOD_HOWELL_DESCRIPTIONS[value.diagnostic_summary.cawood_howell] ? (
+            <View style={s.classDescBox} testID="cawood-howell-description-summary">
+              <Text style={s.classDescLabel}>{value.diagnostic_summary.cawood_howell}</Text>
+              <Text style={s.classDescText}>{CAWOOD_HOWELL_DESCRIPTIONS[value.diagnostic_summary.cawood_howell]}</Text>
+            </View>
+          ) : null}
         </Field>
         <Field label="Bedrossian Classification">
           <TextField value={value?.diagnostic_summary?.bedrossian} placeholder="e.g., Class III (posterior)" onChange={v => set('diagnostic_summary.bedrossian', v)} readOnly={readOnly} />
@@ -550,15 +606,63 @@ const ZygomaPterygoidPhase1Form: React.FC<Props> = ({ procedureType, value, onCh
       <SectionCard title="15. Design Checks" icon="checkmark-done-outline" tint="#2E7D32">
         <Field label="Apices distance adequate">
           <ChipRow options={YES_NO} value={value?.design_checks?.apices_distance} onChange={v => set('design_checks.apices_distance', v)} readOnly={readOnly} />
+          {value?.design_checks?.apices_distance === 'No' ? (
+            <View style={s.reasonBox} testID="design-check-reason-apices">
+              <Text style={s.reasonLabel}>Reason / Explanation <Text style={s.reasonAsterisk}>*</Text></Text>
+              <TextField
+                value={value?.design_checks?.apices_distance_reason}
+                placeholder="Explain the issue and mitigation plan..."
+                onChange={v => set('design_checks.apices_distance_reason', v)}
+                multiline readOnly={readOnly}
+                testID="design-check-reason-apices-input"
+              />
+            </View>
+          ) : null}
         </Field>
         <Field label="Heads within prosthetic envelope">
           <ChipRow options={YES_NO} value={value?.design_checks?.heads_within_prosthetic_envelope} onChange={v => set('design_checks.heads_within_prosthetic_envelope', v)} readOnly={readOnly} />
+          {value?.design_checks?.heads_within_prosthetic_envelope === 'No' ? (
+            <View style={s.reasonBox} testID="design-check-reason-envelope">
+              <Text style={s.reasonLabel}>Reason / Explanation <Text style={s.reasonAsterisk}>*</Text></Text>
+              <TextField
+                value={value?.design_checks?.heads_within_prosthetic_envelope_reason}
+                placeholder="Explain the issue and mitigation plan..."
+                onChange={v => set('design_checks.heads_within_prosthetic_envelope_reason', v)}
+                multiline readOnly={readOnly}
+                testID="design-check-reason-envelope-input"
+              />
+            </View>
+          ) : null}
         </Field>
         <Field label="A–P Spread adequate">
           <ChipRow options={YES_NO} value={value?.design_checks?.ap_spread_adequate} onChange={v => set('design_checks.ap_spread_adequate', v)} readOnly={readOnly} />
+          {value?.design_checks?.ap_spread_adequate === 'No' ? (
+            <View style={s.reasonBox} testID="design-check-reason-apspread">
+              <Text style={s.reasonLabel}>Reason / Explanation <Text style={s.reasonAsterisk}>*</Text></Text>
+              <TextField
+                value={value?.design_checks?.ap_spread_adequate_reason}
+                placeholder="Explain the issue and mitigation plan..."
+                onChange={v => set('design_checks.ap_spread_adequate_reason', v)}
+                multiline readOnly={readOnly}
+                testID="design-check-reason-apspread-input"
+              />
+            </View>
+          ) : null}
         </Field>
         <Field label="Cantilever eliminated / acceptable">
           <ChipRow options={YES_NO} value={value?.design_checks?.cantilever_eliminated} onChange={v => set('design_checks.cantilever_eliminated', v)} readOnly={readOnly} />
+          {value?.design_checks?.cantilever_eliminated === 'No' ? (
+            <View style={s.reasonBox} testID="design-check-reason-cantilever">
+              <Text style={s.reasonLabel}>Reason / Explanation <Text style={s.reasonAsterisk}>*</Text></Text>
+              <TextField
+                value={value?.design_checks?.cantilever_eliminated_reason}
+                placeholder="Explain the issue and mitigation plan..."
+                onChange={v => set('design_checks.cantilever_eliminated_reason', v)}
+                multiline readOnly={readOnly}
+                testID="design-check-reason-cantilever-input"
+              />
+            </View>
+          ) : null}
         </Field>
       </SectionCard>
 
@@ -591,9 +695,10 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'flex-start',
     backgroundColor: '#FFF3E0', borderLeftWidth: 4, borderLeftColor: '#FF6F00',
     padding: 12, borderRadius: 8, marginBottom: 16,
+    marginHorizontal: 4,
   },
   bannerTitle: { fontSize: 14, fontWeight: '700', color: '#E65100', marginBottom: 2 },
-  bannerBody: { fontSize: 12, color: '#5D4037', lineHeight: 16 },
+  bannerBody: { fontSize: 12, color: '#5D4037', lineHeight: 16, flexWrap: 'wrap' },
   section: {
     backgroundColor: '#fff', borderRadius: 10, marginBottom: 12,
     borderWidth: 1, borderColor: '#ECEFF1',
@@ -634,11 +739,46 @@ const s = StyleSheet.create({
   sideLabel: { fontSize: 11, color: '#78909C', marginBottom: 4, fontWeight: '600' },
   helper: { fontSize: 11, color: '#78909C', fontStyle: 'italic', marginTop: 4 },
   warning: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#FFF3E0', borderRadius: 6, padding: 8, marginTop: 6, marginBottom: 6,
+    flexDirection: 'row', alignItems: 'flex-start',
+    backgroundColor: '#FFF3E0', borderRadius: 6, padding: 10, marginTop: 8, marginBottom: 8,
+    marginHorizontal: 4,
     borderLeftWidth: 3, borderLeftColor: '#FB8C00',
+    flexWrap: 'wrap',
   },
-  warningText: { fontSize: 12, color: '#E65100', marginLeft: 6, flex: 1 },
+  warningText: {
+    fontSize: 12, color: '#E65100', marginLeft: 8,
+    flex: 1, flexShrink: 1, flexWrap: 'wrap', lineHeight: 17,
+  },
+  // iter-Feb-2026 (v2): Cawood-Howell class description box (Section 6 + 13)
+  classDescBox: {
+    marginTop: 8,
+    backgroundColor: '#F3E5F5',
+    borderLeftWidth: 3, borderLeftColor: '#8E24AA',
+    borderRadius: 6,
+    paddingHorizontal: 10, paddingVertical: 8,
+  },
+  classDescLabel: { fontSize: 12, fontWeight: '700', color: '#4A148C', marginBottom: 2 },
+  classDescText: { fontSize: 12, color: '#37474F', lineHeight: 17 },
+  // iter-Feb-2026 (v2): Design-check "No" reason textbox (Section 15)
+  reasonBox: {
+    marginTop: 8,
+    backgroundColor: '#FFF8E1',
+    borderLeftWidth: 3, borderLeftColor: '#F9A825',
+    borderRadius: 6,
+    paddingHorizontal: 10, paddingVertical: 8,
+  },
+  reasonLabel: { fontSize: 12, fontWeight: '600', color: '#5D4037', marginBottom: 4 },
+  reasonAsterisk: { color: '#C62828', fontWeight: '700' },
+  // iter-Feb-2026 (v2): Pterygoid-lite variant banner (blue, informational)
+  liteBanner: {
+    flexDirection: 'row', alignItems: 'flex-start',
+    backgroundColor: '#E3F2FD', borderLeftWidth: 4, borderLeftColor: '#1976D2',
+    padding: 12, borderRadius: 8, marginBottom: 16,
+  },
+  liteBannerText: {
+    fontSize: 12, color: '#0D47A1', marginLeft: 8,
+    flex: 1, flexShrink: 1, flexWrap: 'wrap', lineHeight: 17,
+  },
 });
 
 export default ZygomaPterygoidPhase1Form;
