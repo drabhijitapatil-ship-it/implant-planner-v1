@@ -1693,6 +1693,7 @@ PROCEDURE_TYPES = [
     "Zygoma and Pterygoid Implants",
     "Pterygoid and Conventional Implants",
     "Zygoma and Conventional Implants",
+    "Zygoma, Pterygoid and Conventional Implants",
 ]
 
 # iter-Feb-2026: Procedure types that require Zygoma/Pterygoid implants.
@@ -1705,6 +1706,7 @@ ZYGOMA_PTERYGOID_PROCEDURE_TYPES = {
     "Zygoma and Pterygoid Implants",
     "Pterygoid and Conventional Implants",
     "Zygoma and Conventional Implants",
+    "Zygoma, Pterygoid and Conventional Implants",
 }
 
 LOADING_TYPES = ["Immediate Loading", "Early Loading", "Delayed Loading"]
@@ -2048,6 +2050,7 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
         "Zygoma and Pterygoid Implants",
         "Pterygoid and Conventional Implants",
         "Zygoma and Conventional Implants",
+        "Zygoma, Pterygoid and Conventional Implants",
     ]
     if procedure.implant_procedure_type not in valid_procedure_types:
         raise HTTPException(status_code=400, detail=f"Invalid implant procedure type: {procedure.implant_procedure_type}")

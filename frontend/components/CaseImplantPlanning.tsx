@@ -630,15 +630,27 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
   const loadData = useCallback(async () => {
     try {
       // iter-Feb-2026: Zygoma/Pterygoid procedure types fetch the "advanced"
-      // implant catalog (Refirm Z-Series + P-Series). Every other procedure
-      // type sees only conventional systems (backend default).
-      const isAdvancedCase = !!procedureType && [
+      // implant catalog (Refirm Z-Series + P-Series). Mixed cases (that
+      // combine advanced + conventional implants) fetch ALL systems so the
+      // operator can plan both advanced anchor implants and anterior
+      // conventional implants from a single picker.
+      const PURE_ADVANCED = new Set([
         'Quad Zygoma Implants',
         'Zygoma and Pterygoid Implants',
+      ]);
+      const MIXED = new Set([
         'Pterygoid and Conventional Implants',
         'Zygoma and Conventional Implants',
-      ].includes(procedureType);
-      const systemsQs = isAdvancedCase ? '?implant_type=advanced' : '';
+        'Zygoma, Pterygoid and Conventional Implants',
+      ]);
+      let systemsQs = '';
+      if (procedureType) {
+        if (MIXED.has(procedureType)) {
+          systemsQs = '?implant_type=all';
+        } else if (PURE_ADVANCED.has(procedureType)) {
+          systemsQs = '?implant_type=advanced';
+        }
+      }
       const [planRes, sysRes, toothRes, procRes] = await Promise.allSettled([
         api.get(`/procedures/${procedureId}/implant-plan`),
         api.get(`/implant-library/systems${systemsQs}`),
