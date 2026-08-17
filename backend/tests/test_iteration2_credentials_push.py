@@ -16,7 +16,7 @@ import os
 # Use environment variable for BASE_URL
 BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', '').rstrip('/')
 if not BASE_URL:
-    BASE_URL = "https://case-approval.preview.emergentagent.com"
+    BASE_URL = "https://dental-consent-sign.preview.emergentagent.com"
 
 # All test credentials from setup_users.py
 TEST_CREDENTIALS = [

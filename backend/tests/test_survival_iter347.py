@@ -12,7 +12,7 @@ import requests
 BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
     # Fall back to /app/frontend/.env indirectly — production URL
-    BASE_URL = "https://case-approval.preview.emergentagent.com"
+    BASE_URL = "https://dental-consent-sign.preview.emergentagent.com"
 
 ADMIN = {"identifier": "Abhijit.patil", "password": "Admin@123"}
 STUDENT = {"identifier": "Gaurav.pandey", "password": "Student@123"}

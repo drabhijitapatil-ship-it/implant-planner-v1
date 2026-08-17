@@ -1,5 +1,58 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration Feb-2026-A (Feb 2026) — Refirm Zygoma & Pterygoid Implants — Foundation + Phase 1 workflow
+
+**Scope**: User request — introduce Zygoma (Z-Series) and Pterygoid (P-Series) implants from Refirm® (IntEssence Solutions, ISO 13485:2016) as distinct implant types with a dedicated advanced-maxillary rehabilitation workflow. Milestone 1 of 3: foundation + Phase 1 data-capture form.
+
+### Delivered
+
+**Backend** (`server.py`, `refirm_advanced_implants_data.py`)
+- New module `refirm_advanced_implants_data.py` with 13 Z-Series lengths (30–60 mm, Ø 4.0) and 4 P-Series lengths (18–25 mm, Ø 4.0) — each carrying part_number (SKU), kit_sku, material, and system-level metadata (indication, kit contents, torque, angulation, positions, cosign flag).
+- `implant_library` schema extended with `implant_type` (`conventional` | `zygoma` | `pterygoid`), `part_number`, `kit_sku`, `material`. Idempotent seed writes these on both insert and update; legacy rows backfilled to `conventional`.
+- `/api/implant-library/systems` accepts `?implant_type=` filter (`conventional` | `advanced` | `zygoma` | `pterygoid` | `all`). Advanced systems return kit SKU, kit contents, manufacturer, regulatory, cosign requirement, typical torque/angulation, and supported FDI positions.
+- `/api/implant-library/suggest` now filters to `implant_type=conventional` only — zygoma/pterygoid systems will never appear in the standard suggestion engine.
+- Four new procedure types added to `PROCEDURE_TYPES`: "Quad Zygoma Implants", "Zygoma and Pterygoid Implants", "Pterygoid and Conventional Implants", "Zygoma and Conventional Implants". Added `ZYGOMA_PTERYGOID_PROCEDURE_TYPES` set for cross-app gating.
+- Procedure model + update model extended with `zygoma_pterygoid_data: Dict[str, Any]` (nested by phase — phase1/phase2/phase3/phase4/phase5) and `zygoma_pterygoid_configuration: str`. Validation whitelists new procedure types.
+- Verified: `Zygoma: 13, Pterygoid: 4, Conventional: 1158, Total: 1175` seeded rows. Full Zygoma case creation E2E via API confirmed (all nested Phase 1 fields persisted correctly).
+
+**Frontend** (`ZygomaPterygoidPhase1Form.tsx`, `new-procedure.tsx`, `checklist.ts`, `CaseImplantPlanning.tsx`)
+- New reusable component `ZygomaPterygoidPhase1Form.tsx` — 16-section extended Phase 1 data-capture form:
+  1. Configuration (5 options per brochure)
+  2. Medical Assessment (4 safety flags + ASA grade)
+  3. Anaesthesia Plan (GA nasal intubation / IV sedation+LA / LA only)
+  4. Pre-Surgical Assessment (interincisal opening, sinus health, OMC patency R/L, inter-arch space) + smart caution banner
+  5. Extraoral Examination (facial profile, lip support, asymmetry, zygomatic prominence R/L)
+  6. Intraoral Examination (Cawood-Howell, keratinised mucosa R/L, tuberosity height/form R/L, palatal vault R/L)
+  7. Existing Prosthesis (6 types, fit, phonetics, esthetics, satisfaction) — conditionally revealed
+  8. Radiographic Assessment (imaging modality multi-select + FOV)
+  9. Zygomatic Region (body height R/L, cortical thickness R/L, anterior max wall concavity Type 0-4 R/L, membrane thickening R/L, sinus septa R/L, ostium/OMC notes, orbital floor distance R/L)
+  10. Pterygomaxillary Region (tuberosity height/density R/L, pyramidal process volume R/L, pterygoid plate thickness R/L, planned path length R/L, greater palatine canal R/L, maxillary artery/pterygoid plexus proximity R/L)
+  11. Bedrossian Zone Availability (Zone 1 Premaxilla/Premolar/Molar R/L)
+  12. ZAGA Classification Aparicio (ZAGA 0-4 per side)
+  13. Diagnostic Summary (Cawood-Howell, Bedrossian, ZAGA R/L)
+  14. Prosthetic Planning (diagnostic steps multi-select, flange, occlusal scheme)
+  15. Design Checks (apices distance, prosthetic envelope, AP spread, cantilever)
+  16. Team Composition (medico-legal — surgeon, assistant, anaesthetist, prosthodontist, nurse)
+- `checklist.ts` exports `ZYGOMA_PTERYGOID_PROCEDURE_TYPES`, `isZygomaPterygoidProcedure()`, `ZYGOMA_PTERYGOID_CONFIGURATIONS` (5).
+- `new-procedure.tsx` conditionally renders the Zygoma form when advanced procedure type selected; state stored in `formData.zygoma_pterygoid_data` and mirrored to `zygoma_pterygoid_configuration` for validation.
+- `CaseImplantPlanning.tsx` now fetches `/api/implant-library/systems?implant_type=advanced` when the case's `procedureType` is one of the four Zygoma/Pterygoid types — only Refirm Z-Series and P-Series appear in the picker for these cases.
+- Payload extension: `zygoma_pterygoid_data: { phase1: {...} }` and `zygoma_pterygoid_configuration` sent to `/api/procedures` only when procedure type is advanced.
+
+### Still to deliver (Milestone 2 & 3)
+- Phase 2 surgical checklist (flap raised, alveoloplasty, sinus window/slot, membrane elevated, membrane perforation, zygomatic border palpated, apical exit verified, pterygoid cortex engaged, tension-free closure) + implants placed capture + intra-op complications + team composition
+- Phase 2 co-sign enforcement (supervisor + implant in-charge) for Zygoma/Pterygoid cases before submit
+- Phase 3 renamed to "Immediate Loading & Post-Operative Monitoring" for Zygoma/Pterygoid cases (Day 0 / Day 7 / Day 30 timepoints; immediate prosthesis delivery, post-op imaging, occlusal setup, medications, complications, patient instructions, follow-up schedule, photographs)
+- Phase 4 Definitive Prosthesis workflow adapted (screw-retained forced, angled MUA torque log, phonetics/esthetics, cantilever verification, hygiene training)
+- Phase 5 Zygoma Success Code (Aparicio ORIS) — implant stability, prosthetic offset head position, sinus status, peri-implant soft tissue — per side, timeline-tagged
+- Bone Graft & Membrane workflow reused for Zygoma/Pterygoid (user request)
+- Improvisations: per-implant Surgical Approach (Intrasinus/Extrasinus/Extramaxillary/Sinus-slot), planned angulation (0/17/30/45/55/60°), per-implant actual insertion torque + primary stability, recall timepoint tagging, radiographic bone level tracking, case complexity auto-computed from ZAGA + Cawood-Howell.
+
+**Tests**: Backend fully verified end-to-end via python/requests script — 4 procedure types available, advanced systems endpoint returns Refirm Z-Series + P-Series with full metadata, procedure create persists nested zygoma_pterygoid_data. Frontend: form component lints cleanly, integrates into new-procedure.tsx behind procedure-type conditional; needs user UI testing on a fresh case.
+
+---
+
+
+
 ## Iteration 404 (Jun 2026) — Default AI switched to Claude Sonnet 4.6 (customer's own Anthropic key)
 
 **Change**: All 8 TEXT AI features now use `claude-sonnet-4-6` via shared helper `_claude_send(session_id, system, text, timeout)`: ai/chat, ai/assistant, ai/ask-implanr, ai/case-summary, ai/surgical-notes, exit summary, transfer handoff, explain-standalone. The 2 VISION features (radiograph AI notes, explain-recommendation with images) stay on OpenAI gpt-5.2 via EMERGENT_LLM_KEY.

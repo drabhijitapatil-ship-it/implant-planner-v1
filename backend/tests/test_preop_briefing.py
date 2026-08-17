@@ -17,7 +17,7 @@ import pytest
 import requests
 from datetime import datetime, timedelta
 
-BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://case-approval.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://dental-consent-sign.preview.emergentagent.com").rstrip("/")
 
 STUDENT_CREDS = {"identifier": "Gaurav.pandey", "password": "Student@123"}
 INCHARGE_CREDS = {"identifier": "Abhijit.patil", "password": "Admin@123"}

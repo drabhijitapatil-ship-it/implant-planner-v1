@@ -18,7 +18,7 @@ import requests
 from pymongo import MongoClient
 from bson import ObjectId
 
-BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://case-approval.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://dental-consent-sign.preview.emergentagent.com").rstrip("/")
 MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
 DB_NAME = os.environ.get("DB_NAME", "test_database")
 

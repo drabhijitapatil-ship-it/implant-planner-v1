@@ -17,6 +17,7 @@ import FdiAnatomicalChart from '../../components/FdiAnatomicalChart';
 import PredictiveRiskCard from '../../components/PredictiveRiskCard';
 import ExistingPatientBanner from '../../components/ExistingPatientBanner';
 import PatientNameMatchBanner from '../../components/PatientNameMatchBanner';
+import ZygomaPterygoidPhase1Form, { ZygomaPterygoidPhase1Data } from '../../components/ZygomaPterygoidPhase1Form';
 import { validateImplantSelection, findMissingRuns, clusterLeader } from '../../utils/implantValidation';
 import {
   PROCEDURE_TYPES,  LOADING_TYPES,
@@ -43,6 +44,7 @@ import {
   MEDICAL_RISK_FACTORS,
   calculateMedicalRisk,
   getProstheticOptions,
+  isZygomaPterygoidProcedure,
   PHASE1_ATTACHMENT_TYPE_OPTIONS,
 } from '../../constants/checklist';
 
@@ -429,6 +431,9 @@ export default function NewProcedureScreen() {
     // Medical Assessment
     medical_assessment: {} as Record<string, string>,
     medical_risk_level: '',
+    // iter-Feb-2026: Zygoma & Pterygoid workflow data.
+    zygoma_pterygoid_data: {} as ZygomaPterygoidPhase1Data,
+    zygoma_pterygoid_configuration: '',
   });
 
   // Checklist state
@@ -1395,6 +1400,12 @@ export default function NewProcedureScreen() {
             label: f!.label || (i < INTRAORAL_LABELS.length ? INTRAORAL_LABELS[i] : `Photo ${i + 1}`),
           })),
         } : {}),
+        // iter-Feb-2026: Zygoma & Pterygoid workflow payload — only send
+        // when procedure type is one of the advanced maxillary types.
+        ...(isZygomaPterygoidProcedure(sanitized.implant_procedure_type) ? {
+          zygoma_pterygoid_data: { phase1: sanitized.zygoma_pterygoid_data || {} },
+          zygoma_pterygoid_configuration: sanitized.zygoma_pterygoid_configuration || '',
+        } : {}),
       };
 
       let res;
@@ -2220,6 +2231,29 @@ export default function NewProcedureScreen() {
             </Text>
           </View>
         )}
+        {/* iter-Feb-2026: Zygoma & Pterygoid Advanced Workflow — surfaces
+            when one of the 4 advanced maxillary procedure types is selected.
+            Renders as a self-contained extended Phase 1 form and persists
+            data under formData.zygoma_pterygoid_data (nested dict). */}
+        {isZygomaPterygoidProcedure(formData.implant_procedure_type) && (
+          <View style={{ marginTop: 8 }}>
+            <ZygomaPterygoidPhase1Form
+              procedureType={formData.implant_procedure_type}
+              value={{
+                ...(formData.zygoma_pterygoid_data || {}),
+                configuration: formData.zygoma_pterygoid_configuration || (formData.zygoma_pterygoid_data as any)?.configuration,
+              }}
+              onChange={(next: ZygomaPterygoidPhase1Data) => {
+                updateForm('zygoma_pterygoid_data', next);
+                // Also mirror the top-level configuration for validation.
+                if (next.configuration !== undefined) {
+                  updateForm('zygoma_pterygoid_configuration', next.configuration);
+                }
+              }}
+            />
+          </View>
+        )}
+
         {/* iter-235: hide the Arch dropdown for Existing Implant — it lives
             inside the ExistingImplantSection between Type of Implant Procedure
             Done and Implant Selection instead. */}

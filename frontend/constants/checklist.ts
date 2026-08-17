@@ -162,12 +162,44 @@ export const PROCEDURE_TYPES = [
   'All on 4',
   'All on 6',
   'All on X',
+  // iter-Feb-2026: Advanced maxillary implants — Zygoma & Pterygoid
+  // protocols. Unlocks the Refirm Z-Series and P-Series systems and
+  // triggers the extended Zygoma/Pterygoid Phase 1 data-capture form.
+  'Quad Zygoma Implants',
+  'Zygoma and Pterygoid Implants',
+  'Pterygoid and Conventional Implants',
+  'Zygoma and Conventional Implants',
   // iter-213: "Existing Implant" branch — patient already has implants
   // placed (elsewhere / earlier) and needs prosthetic continuation.
   // The form swaps the surgical sections for an existing-implant
   // wizard (FDI inventory, brand/system auto-fill, present prosthetic
   // component, prosthetic history, radiographs, phase-routing).
   'Existing Implant',
+];
+
+// iter-Feb-2026: Procedure types that unlock Zygoma/Pterygoid workflow.
+// Used across the app to (a) reveal the Zygoma-specific Phase 1 form
+// sections, (b) unlock Refirm Z-Series and P-Series in the implant picker,
+// (c) enforce supervisor/attending co-sign at Phase 2 submit, and (d) swap
+// the Phase 3 flow to "Immediate Loading & Post-Operative Monitoring".
+export const ZYGOMA_PTERYGOID_PROCEDURE_TYPES = [
+  'Quad Zygoma Implants',
+  'Zygoma and Pterygoid Implants',
+  'Pterygoid and Conventional Implants',
+  'Zygoma and Conventional Implants',
+];
+
+export const isZygomaPterygoidProcedure = (t: string | undefined | null): boolean =>
+  !!t && ZYGOMA_PTERYGOID_PROCEDURE_TYPES.includes(t);
+
+// Configuration options presented when a Zygoma/Pterygoid procedure type
+// is selected (from user brochure — 5 configurations).
+export const ZYGOMA_PTERYGOID_CONFIGURATIONS = [
+  'Quad zygoma',
+  'Quad zygoma + 2 pterygoid',
+  '2 zygoma + anterior conventional',
+  '4 Pterygoid + conventional',
+  'Zygoma + pterygoid + conventional',
 ];
 
 // iter-387: Surgical-approach cascade (Phase 1 — Procedure Information)

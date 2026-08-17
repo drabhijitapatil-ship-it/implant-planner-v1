@@ -629,9 +629,19 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
 
   const loadData = useCallback(async () => {
     try {
+      // iter-Feb-2026: Zygoma/Pterygoid procedure types fetch the "advanced"
+      // implant catalog (Refirm Z-Series + P-Series). Every other procedure
+      // type sees only conventional systems (backend default).
+      const isAdvancedCase = !!procedureType && [
+        'Quad Zygoma Implants',
+        'Zygoma and Pterygoid Implants',
+        'Pterygoid and Conventional Implants',
+        'Zygoma and Conventional Implants',
+      ].includes(procedureType);
+      const systemsQs = isAdvancedCase ? '?implant_type=advanced' : '';
       const [planRes, sysRes, toothRes, procRes] = await Promise.allSettled([
         api.get(`/procedures/${procedureId}/implant-plan`),
-        api.get('/implant-library/systems'),
+        api.get(`/implant-library/systems${systemsQs}`),
         api.get('/implant-library/tooth-recommendations'),
         api.get(`/procedures/${procedureId}`),
       ]);
@@ -646,7 +656,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
     } finally {
       setLoading(false);
     }
-  }, [procedureId]);
+  }, [procedureId, procedureType]);
 
   useEffect(() => { loadData(); }, [loadData]);
 

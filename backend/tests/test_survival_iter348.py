@@ -13,7 +13,7 @@ import pytest
 import requests
 
 BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "").rstrip("/") or \
-    "https://case-approval.preview.emergentagent.com"
+    "https://dental-consent-sign.preview.emergentagent.com"
 
 ADMIN = {"identifier": "Abhijit.patil", "password": "Admin@123"}
 STUDENT = {"identifier": "Gaurav.pandey", "password": "Student@123"}
