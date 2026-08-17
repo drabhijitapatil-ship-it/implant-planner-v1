@@ -1,6 +1,6 @@
 import requests, json, sys
 
-BASE = "https://case-approval.preview.emergentagent.com/api"
+BASE = "https://dental-consent-sign.preview.emergentagent.com/api"
 CASE = "6a6b300e811c1535451fde6a"
 
 def login(u, p):

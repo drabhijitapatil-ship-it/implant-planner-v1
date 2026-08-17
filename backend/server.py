@@ -466,6 +466,31 @@ class ProcedureCreate(BaseModel):
     intraoral_photos: Optional[List[Dict[str, str]]] = None
     # Patient Consent Form (uploaded via /uploads/consent-temp or POST /procedures/{id}/upload-consent)
     patient_consent_form: Optional[Dict[str, Any]] = None  # {filename, original_name, content_type, uploaded_by_*, uploaded_at, version}
+    # iter-Feb-2026: Zygoma & Pterygoid workflow data. Nested dict keyed by
+    # phase (phase1, phase2, phase3, phase4, phase5). Only populated when
+    # implant_procedure_type ∈ ZYGOMA_PTERYGOID_PROCEDURE_TYPES. Schema is
+    # intentionally flexible (Dict[str, Any]) so the workflow can evolve
+    # without model migrations. Common sub-keys:
+    #   phase1.medical_assessment, phase1.anaesthesia_plan,
+    #   phase1.pre_surgical, phase1.extraoral, phase1.intraoral,
+    #   phase1.existing_prosthesis, phase1.radiographic,
+    #   phase1.zygomatic_region, phase1.pterygomaxillary_region,
+    #   phase1.bedrossian_zones, phase1.zaga, phase1.diagnostic_summary,
+    #   phase1.prosthetic_planning, phase1.implant_selection,
+    #   phase1.design_checks, phase1.team_composition
+    #   phase2.surgical_checklist, phase2.implants_placed,
+    #   phase2.intraop_complications
+    #   phase3.day0, phase3.day7, phase3.day30 (immediate loading + monitoring)
+    #   phase4.definitive_prosthesis
+    #   phase5.zygoma_success_code, phase5.recall_timepoint
+    zygoma_pterygoid_data: Optional[Dict[str, Any]] = None
+    # iter-Feb-2026: Zygoma-configuration option (matches user brochure).
+    # Only used when implant_procedure_type ∈ ZYGOMA_PTERYGOID_PROCEDURE_TYPES.
+    # Values: "Quad zygoma" | "Quad zygoma + 2 pterygoid" |
+    #         "2 zygoma + anterior conventional" |
+    #         "4 Pterygoid + conventional" |
+    #         "Zygoma + pterygoid + conventional"
+    zygoma_pterygoid_configuration: Optional[str] = Field("", max_length=100)
 
     @field_validator('patient_name')
     @classmethod
@@ -542,6 +567,9 @@ class ProcedureUpdate(BaseModel):
     bridge_material: Optional[str] = Field(None, max_length=80)
     bridge_pontics: Optional[List[str]] = None
     bridge_implants: Optional[List[str]] = None
+    # iter-Feb-2026: Zygoma & Pterygoid workflow data on the draft/update model.
+    zygoma_pterygoid_data: Optional[Dict[str, Any]] = None
+    zygoma_pterygoid_configuration: Optional[str] = Field(None, max_length=100)
 
     @field_validator('patient_name')
     @classmethod
@@ -1658,7 +1686,26 @@ PROCEDURE_TYPES = [
     "All on 4",
     "All on 6",
     "All on X",
+    # iter-Feb-2026: Advanced maxillary implants — Zygoma & Pterygoid
+    # protocols. These unlock the Refirm Z-Series and P-Series systems
+    # and require supervisor / implant-incharge co-sign at Phase 2 submit.
+    "Quad Zygoma Implants",
+    "Zygoma and Pterygoid Implants",
+    "Pterygoid and Conventional Implants",
+    "Zygoma and Conventional Implants",
 ]
+
+# iter-Feb-2026: Procedure types that require Zygoma/Pterygoid implants.
+# Used across the app to (a) unlock advanced-implant catalogs, (b) surface
+# Zygoma-specific data capture sections in Phase 1/2, (c) enforce supervisor
+# co-sign at Phase 2 submit, and (d) swap the standard Phase 3 second-stage
+# flow with the immediate-loading + post-op monitoring protocol.
+ZYGOMA_PTERYGOID_PROCEDURE_TYPES = {
+    "Quad Zygoma Implants",
+    "Zygoma and Pterygoid Implants",
+    "Pterygoid and Conventional Implants",
+    "Zygoma and Conventional Implants",
+}
 
 LOADING_TYPES = ["Immediate Loading", "Early Loading", "Delayed Loading"]
 
@@ -1996,6 +2043,11 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
         # procedure that grafts bone via the sinus floor.
         "Sinus Lift",
         "All on 4", "All on 6", "All on X",
+        # iter-Feb-2026: Advanced maxillary implants (Zygoma & Pterygoid).
+        "Quad Zygoma Implants",
+        "Zygoma and Pterygoid Implants",
+        "Pterygoid and Conventional Implants",
+        "Zygoma and Conventional Implants",
     ]
     if procedure.implant_procedure_type not in valid_procedure_types:
         raise HTTPException(status_code=400, detail=f"Invalid implant procedure type: {procedure.implant_procedure_type}")
@@ -17709,36 +17761,95 @@ BRAND_NAME_CORRECTIONS = {
 }
 
 @api_router.get("/implant-library/systems")
-async def get_implant_systems(response: Response, current_user: dict = Depends(get_current_user)):
-    """Return implant systems grouped by brand+system with indications and restrictions."""
+async def get_implant_systems(
+    response: Response,
+    implant_type: Optional[str] = None,  # "conventional" | "zygoma" | "pterygoid" | "advanced" | None(=conventional)
+    current_user: dict = Depends(get_current_user),
+):
+    """Return implant systems grouped by brand+system with indications and restrictions.
+
+    iter-Feb-2026: implant_type filter added.
+    - Omitted / "conventional" → default behaviour: only conventional systems (legacy).
+    - "zygoma"                 → only Refirm Z-Series (and any future zygoma systems).
+    - "pterygoid"              → only Refirm P-Series (and any future pterygoid systems).
+    - "advanced"               → zygoma + pterygoid combined (used by the advanced-implant picker).
+    - "all"                    → no filter (admin/debug only).
+    """
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     response.headers["Pragma"] = "no-cache"
-    pipeline = [
+
+    # Resolve the implant_type filter.
+    if implant_type in (None, "", "conventional"):
+        match_stage = {"$match": {"$or": [
+            {"implant_type": "conventional"},
+            {"implant_type": {"$exists": False}},
+        ]}}
+    elif implant_type == "advanced":
+        match_stage = {"$match": {"implant_type": {"$in": ["zygoma", "pterygoid"]}}}
+    elif implant_type in ("zygoma", "pterygoid"):
+        match_stage = {"$match": {"implant_type": implant_type}}
+    elif implant_type == "all":
+        match_stage = None
+    else:
+        raise HTTPException(status_code=400, detail=f"Invalid implant_type filter: {implant_type}")
+
+    pipeline: List[Dict[str, Any]] = []
+    if match_stage is not None:
+        pipeline.append(match_stage)
+    pipeline.extend([
         {"$group": {
             "_id": {"brand": "$brand", "system": "$system"},
             "diameters": {"$addToSet": "$diameter"},
             "lengths": {"$addToSet": "$length"},
             "count": {"$sum": 1},
+            "implant_type": {"$first": "$implant_type"},
         }},
         {"$sort": {"_id.brand": 1, "_id.system": 1}},
-    ]
+    ])
     results = await db.implant_library.aggregate(pipeline).to_list(200)
+
+    # Advanced-implant metadata lookup (Refirm Zygoma/Pterygoid).
+    try:
+        from refirm_advanced_implants_data import ADVANCED_SYSTEM_METADATA as _ADV_META
+    except Exception:
+        _ADV_META = {}
+
     systems = []
     for r in results:
         brand = r["_id"]["brand"]
         system = r["_id"]["system"]
         key = f"{brand}|{system}"
         ind_data = IMPLANT_INDICATIONS.get(key, {})
+        row_impl_type = r.get("implant_type") or "conventional"
         entry = {
             "brand": brand,
             "system": system,
             "diameters": sorted(r["diameters"]),
             "lengths": sorted(r["lengths"]),
             "count": r["count"],
+            "implant_type": row_impl_type,
             "indication": ind_data.get("indication", ""),
             "indicated_procedures": ind_data.get("indicated_procedures", []),
             "indicated_bone_types": ind_data.get("indicated_bone_types", []),
         }
+        # Merge advanced-implant metadata when available.
+        adv = _ADV_META.get((brand, system))
+        if adv:
+            # Advanced metadata takes precedence over generic IMPLANT_INDICATIONS
+            # for indication text and adds kit/regulatory/torque details.
+            entry["indication"] = adv.get("indication", entry["indication"])
+            entry["kit_sku"] = adv.get("kit_sku")
+            entry["kit_dimension"] = adv.get("kit_dimension")
+            entry["kit_contents"] = adv.get("kit_contents", [])
+            entry["manufacturer"] = adv.get("manufacturer")
+            entry["regulatory"] = adv.get("regulatory")
+            entry["material"] = adv.get("material")
+            entry["surface"] = adv.get("surface")
+            entry["requires_cosign"] = adv.get("requires_cosign", False)
+            entry["drilling_protocol_note"] = adv.get("drilling_protocol_note")
+            entry["typical_torque"] = adv.get("typical_torque")
+            entry["typical_angulation_deg"] = adv.get("typical_angulation_deg", [])
+            entry["supported_positions_fdi"] = adv.get("supported_positions_fdi", [])
         if "restricted_teeth" in ind_data:
             entry["restricted_teeth"] = ind_data["restricted_teeth"]
         if "indicated_teeth" in ind_data:
@@ -17813,10 +17924,18 @@ async def suggest_implant(
             len_min, len_max = tooth_data["length"][0], tooth_data["length"][1]
 
     # Query matching implants
+    # iter-Feb-2026: standard suggestion engine ONLY returns conventional
+    # implants. Zygoma/Pterygoid systems (Refirm Z-Series / P-Series) are
+    # surfaced via a dedicated endpoint and require the case procedure type
+    # to be one of the advanced-implant procedure types.
     query = {
         "brand": brand, "system": system,
         "diameter": {"$gte": diam_min, "$lte": diam_max},
         "length": {"$gte": len_min, "$lte": len_max},
+        "$or": [
+            {"implant_type": "conventional"},
+            {"implant_type": {"$exists": False}},
+        ],
     }
     recommended = await db.implant_library.find(query, {"_id": 0}).sort([("diameter", 1), ("length", 1)]).to_list(50)
 
@@ -17826,11 +17945,18 @@ async def suggest_implant(
             "brand": brand, "system": system,
             "diameter": {"$gte": diam_min - 0.5, "$lte": diam_max + 0.5},
             "length": {"$gte": max(len_min - 2, 6), "$lte": len_max + 2},
+            "$or": [
+                {"implant_type": "conventional"},
+                {"implant_type": {"$exists": False}},
+            ],
         }
         recommended = await db.implant_library.find(query_wider, {"_id": 0}).sort([("diameter", 1), ("length", 1)]).to_list(50)
 
     all_implants = await db.implant_library.find(
-        {"brand": brand, "system": system}, {"_id": 0}
+        {"brand": brand, "system": system, "$or": [
+            {"implant_type": "conventional"},
+            {"implant_type": {"$exists": False}},
+        ]}, {"_id": 0}
     ).sort([("diameter", 1), ("length", 1)]).to_list(200)
 
     response = {
@@ -22853,6 +22979,7 @@ async def seed_on_startup():
                     "system": system,
                     "diameter": float(diameter),
                     "length": float(length),
+                    "implant_type": "conventional",
                     "source": "library_master",
                 })
 
@@ -22867,10 +22994,22 @@ async def seed_on_startup():
                             "system": sys_name,
                             "diameter": float(diameter),
                             "length": float(length),
+                            "implant_type": "conventional",
                             "source": "alpha_bio_brochure",
                         })
         except Exception as ab_err:
             logging.warning(f"Alpha-Bio brochure rows skipped: {ab_err}")
+
+        # Append Refirm advanced implants (Zygoma Z-Series + Pterygoid P-Series).
+        # These are advanced implants ONLY surfaced when the case procedure
+        # type is "Zygoma and Pterygoid Implants" — the standard suggestion
+        # engine filters them out by default.
+        try:
+            from refirm_advanced_implants_data import get_seed_records as _refirm_adv
+            for rec in _refirm_adv():
+                records.append(rec)
+        except Exception as rf_err:
+            logging.warning(f"Refirm advanced (Zygoma/Pterygoid) rows skipped: {rf_err}")
 
         # Idempotent upsert keyed on the natural composite key. We $set the
         # source field on every match (so existing rows imported by the
@@ -22880,16 +23019,32 @@ async def seed_on_startup():
         inserted = 0
         for rec in records:
             key = {k: rec[k] for k in ("brand", "system", "diameter", "length")}
+            # Extra fields (implant_type, part_number, kit_sku, material) are
+            # written on both insert and update so advanced-implant metadata
+            # stays in sync with the source module.
+            extra_set = {"source": rec["source"]}
+            for opt in ("implant_type", "part_number", "kit_sku", "material"):
+                if opt in rec:
+                    extra_set[opt] = rec[opt]
+            # For rows without an explicit implant_type, treat as conventional.
+            extra_set.setdefault("implant_type", "conventional")
             res = await db.implant_library.update_one(
                 key,
                 {
-                    "$set": {"source": rec["source"]},
+                    "$set": extra_set,
                     "$setOnInsert": key,
                 },
                 upsert=True,
             )
             if res.upserted_id is not None:
                 inserted += 1
+
+        # Backfill implant_type for any legacy rows that may pre-date this
+        # migration (admin-added rows, older seeds without implant_type).
+        await db.implant_library.update_many(
+            {"implant_type": {"$exists": False}},
+            {"$set": {"implant_type": "conventional"}},
+        )
 
         total = await db.implant_library.count_documents({})
         admin_added = await db.implant_library.count_documents(

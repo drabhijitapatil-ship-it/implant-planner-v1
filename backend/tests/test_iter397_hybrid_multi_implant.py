@@ -13,7 +13,7 @@ import os
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://case-approval.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://dental-consent-sign.preview.emergentagent.com").rstrip("/")
 
 ADMIN = {"identifier": "Abhijit.patil", "password": "Admin@123"}
 NURSE = {"identifier": "nurse.1@dental.edu", "password": "Nurse@123"}

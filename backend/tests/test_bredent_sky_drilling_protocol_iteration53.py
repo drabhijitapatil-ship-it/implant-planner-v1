@@ -23,7 +23,7 @@ import pytest
 import requests
 import os
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://case-approval.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://dental-consent-sign.preview.emergentagent.com').rstrip('/')
 
 # Module-level session and token to avoid rate limiting
 _session = None

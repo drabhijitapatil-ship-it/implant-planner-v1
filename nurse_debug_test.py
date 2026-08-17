@@ -3,7 +3,7 @@
 import requests
 import json
 
-BASE_URL = "https://case-approval.preview.emergentagent.com/api"
+BASE_URL = "https://dental-consent-sign.preview.emergentagent.com/api"
 
 def test_nurse_restrictions():
     print("=== Debugging Nurse Role Restrictions ===")

@@ -27,7 +27,7 @@ import requests
 
 BASE_URL = os.environ.get(
     "EXPO_PUBLIC_BACKEND_URL",
-    "https://case-approval.preview.emergentagent.com",
+    "https://dental-consent-sign.preview.emergentagent.com",
 ).rstrip("/")
 
 CSV_URL = f"{BASE_URL}/api/admin/access-logs/export-csv"

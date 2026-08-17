@@ -16,7 +16,7 @@ import zlib
 import pytest
 import requests
 
-BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://case-approval.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://dental-consent-sign.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
 PROC_ID = "69cfde8b356c7405230a9dcc"  # known existing case provided by main agent
 

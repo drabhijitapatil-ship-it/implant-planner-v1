@@ -21,7 +21,7 @@
   "critical_code_review_comments": [],
   "updated_files": [],
   "success_rate": {"backend": "100%", "frontend": "not tested (per request)"},
-  "test_credentials": "Used iter_103-107 fixtures (Admin Abhijit.patil/Admin@123, Student Gaurav.pandey/Student@123, Supervisor Paresh.gandhi/Supervisor@123) via REACT_APP_BACKEND_URL=https://case-approval.preview.emergentagent.com",
+  "test_credentials": "Used iter_103-107 fixtures (Admin Abhijit.patil/Admin@123, Student Gaurav.pandey/Student@123, Supervisor Paresh.gandhi/Supervisor@123) via REACT_APP_BACKEND_URL=https://dental-consent-sign.preview.emergentagent.com",
   "seed_data_creation": "None - tests self-seed via existing fixtures",
   "retest_needed": false,
   "main_agent_can_self_test": true,

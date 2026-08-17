@@ -14,7 +14,7 @@ from pymongo import MongoClient
 
 BASE_URL = os.environ.get(
     "REACT_APP_BACKEND_URL",
-    "https://case-approval.preview.emergentagent.com",
+    "https://dental-consent-sign.preview.emergentagent.com",
 ).rstrip("/")
 
 

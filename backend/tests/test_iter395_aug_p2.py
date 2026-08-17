@@ -4,7 +4,7 @@ import io
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://case-approval.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://dental-consent-sign.preview.emergentagent.com").rstrip("/")
 
 CASE_S3_A = "6a6b3abbfaa51605761c69a5"   # AUG-S3-A augmentation_in_progress step3_approved
 CASE_S3_B = "6a6b3abbfaa51605761c69aa"   # AUG-S3-B augmentation_in_progress step3_approved

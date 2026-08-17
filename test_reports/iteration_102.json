@@ -18,7 +18,7 @@
     "no_browser_apis_on_native_path": true
   },
   "web_regression_repro_steps": [
-    "1. Login https://case-approval.preview.emergentagent.com with nurse.1@dental.edu / Nurse@123 (viewport 480x900).",
+    "1. Login https://dental-consent-sign.preview.emergentagent.com with nurse.1@dental.edu / Nurse@123 (viewport 480x900).",
     "2. Click scheduled-card-69cf9bdfdafb502718057bcd. URL → /procedures/69cf9bdfdafb502718057bcd.",
     "3. Scroll to Implant Planning section — MIS-Lance+ D:3.75mm L:11.5mm D2 position 36 card renders with 'Drilling Protocol' button visible (nurse non-canEdit branch).",
     "4. Tap 'Drilling Protocol' → inline drill sequence renders (5 steps: Marking 1.9mm → Pilot 2.4mm → 3.1mm → Final 3.65mm → MIS LANCE+ Implant 3.75mm). 'Print / Export Drilling Protocol PDF' grey button renders at bottom.",

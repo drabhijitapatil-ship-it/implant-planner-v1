@@ -1,117 +1,164 @@
-<analysis>**original_problem_statement**: A comprehensive prosthodontics mobile application for managing implant surgical case workflows across 4 phases. The user recently uploaded master documents for drilling protocols and implant indications. The current priority is ensuring the deployed Expo Go application correctly reflects these backend updates, as the user reported seeing stale data (only 45 systems instead of 49, missing protocols, and role-based access issues). Additionally, the user requested Phase 1 UI refinements and PDF export functionality.
+<analysis>**original_problem_statement**: A comprehensive prosthodontics mobile application for managing implant surgical case workflows across 5 phases (now including Follow-Up & Maintenance and Pre-Implant Augmentation). PRODUCT REQUIREMENTS: Manage users by roles (student, supervisor, implant_incharge, nurse, administrator), execute a multi-phase case approval workflow, generate comprehensive PDFs, provide clinical decision support, HIPAA compliance features, Multi-tenant Architecture, comprehensive role-scoped Clinical Analytics, and robust e-signature/consent management.
 
-**User's preferred language**: English (INSTRUCT next agent to respond in English only)
+**User's preferred language**: English (INSTRUCT next agent to respond in the user's preferred language only)
 
-**what currently exists?**: 
-A React Native (Expo) frontend + FastAPI backend + MongoDB application. The application features a dynamic 4-phase approval workflow. The backend dynamically maps user inputs against hardcoded dictionaries in a massive  file to generate surgical protocols. The backend case report PDF generator has been updated to include all recent clinical and medical data. The deployment pipeline uses Expo Go.
+**what currently exists?**: React Native (Expo Web/Mobile) frontend + FastAPI backend + MongoDB. Fully functional 5-phase case workflow. Recently implemented E-Signature capture directly on the device using a custom PanResponder/SVG pad, now showing the full informed consent form with scroll-locking for accurate signature capture. 
 
-**Last working item**: 
-    - Last item agent was working: Fixing the Stale Data in Expo Go deployment issue. The agent discovered the deployed managed MongoDB was stuck on old seed data (45 systems) because the backend  function was using a safe upsert that didn't overwrite old data. The agent updated the seed logic to force a full collection replace if the document count does not match the latest authoritative Excel file, and added  to the frontend .
+**Last working item**:
+    - Last item agent was working: Enhancing the Patient Consent E-Signature in Phase 1. The user requested two UX updates: displaying the *complete* informed consent form (matching the printable version) instead of a summary, and locking the screen scroll while the patient is signing so the canvas doesn't move. Both were implemented.
     - Status: USER VERIFICATION PENDING
-    - Agent Testing Done: Y
-    - Which testing method agent to use?: NA (Agent successfully tested backend startup logs showing 49 systems/649 documents seeded. User needs to verify via their physical iOS device).
+    - Agent Testing Done: Y (via execute_bash & screenshot_tool)
+    - Which testing method agent to use? testing_agent or screenshot_tool for frontend UI verification.
     - User Testing Done: N
 
-**All Pending/In progress Issue list**: 
-  Issue 1: Expo Go App Showing Stale Data (P0)
-     - Attempted fixes: Agent updated the backend  logic in  to forcefully sync the database with  if the counts don't match. Added the required  to  as per the deployment agent's advice, and cleaned up redundant Excel files.
-     - Next debug checklist: Instruct the user to trigger a fresh redeployment and scan the new QR code. Ask the user to verify if they now see 49 implant systems, available drilling protocols, and if Supervisors can successfully navigate to New Case.
-     - Why fix this issue and what will be achieved with the fix? The user cannot verify or use the newly integrated medical data if the production/deployed database is stuck on a legacy cache.
-     - Status: USER VERIFICATION PENDING
-     - Is recurring issue? Y
-     - Should Test frontend/backend/both after fix? Frontend (User Testing via Expo Go)
+**All Pending/In progress Issue list**:
+  Issue 1: Verify  role rollback state (P1)
+     - Attempted fixes: Carried over from older forks.
+     - Next debug checklist:  the codebase for . Verify if DB requires a manual update to restore Dr. Riddhi Sabane's role to .
+     - Why fix this issue and what will be achieved with the fix?: Ensures RBAC consistency based on the user's past instructions.
+     - Status: NOT STARTED
+     - Is recurring issue? N
+     - Should Test frontend/backend/both after fix?: Backend
      - Blocked on other issue: None
 
-**In progress Task List**: 
-   *(None currently in progress - awaiting user verification on the deployment fix)*
+  Issue 2: MUA-angulation workflow capture for delayed loading (P1)
+     - Attempted fixes: None.
+     - Next debug checklist: Un-gate MUA questions in Phase 2 for all full-arch cases. Add MUA capture to Phase 3. Create an angulation picker component [0°, 17°, 30°, 45°, Other].
+     - Why fix this issue and what will be achieved with the fix?: Improves clinical data capture for full-arch cases.
+     - Status: NOT STARTED
+     - Is recurring issue? N
+     - Should Test frontend/backend/both after fix?: Both
+     - Blocked on other issue: None
+
+  Issue 3: Microsoft Login for Sign Up and Login (P1)
+     - Attempted fixes: None.
+     - Next debug checklist: Call  to get the Microsoft OAuth playbook.
+     - Why fix this issue and what will be achieved with the fix?: Fulfills core auth requirements for institutional login.
+     - Status: NOT STARTED
+     - Is recurring issue? N
+     - Should Test frontend/backend/both after fix?: Both
+     - Blocked on other issue: None
+
+**In progress Task List**:
+  Task 1: Role-based Advanced Analytics & Graphical Representation (P0)
+     - Where to resume: Update backend  endpoints and frontend Advanced Analytics hub to scope data based on user role (Supervisor sees students+self; In-charge sees supervisors+students; College Admin sees all departments).
+     - What will be achieved with this?: Hierarchical visibility of performance metrics and visual analytics.
+     - Status: NOT STARTED
+     - Should Test frontend/backend/both after fix?: Both
+     - Blocked on something: None
 
 **Upcoming and Future Tasks**
     Upcoming Tasks:
-    - P1: Data visibility refinement for approval workflow: Ensure all entered data is visible to Supervisor and In-Charge *before* approval, and to the student *after* approval (in ).
-    - P2: Add indications and protocols for the remaining 17 implant systems once the user provides the files for them.
+    - P1: Implement Multi-tenant backend core & Platform Super Admin dashboard.
     
     Future Tasks:
-    - P2: Backend refactoring: Decompose the massive  (>6200 lines) into modular routers and services.
-    - P2: Frontend refactoring: Modularize complex UI components like .
-    - P2: Data cleanup: Create a script to find and remove duplicate user entries from the database.
+    - P2: Add PDF export for Drilling Protocols (printable sequence for nursing team).
+    - P2: Implant AI - Forum / Group Chat semantic search.
+    - P2: Implement proper Phased Dark Mode.
 
 **Completed work in this session**
-- Audited and fixed missing/extra steps in 3 critical drilling protocols (Alpha-Bio SPI, Neodent Helix GM, Ankylos C/X) to perfectly match the user's uploaded Word document. (DONE)
-- Updated the backend PDF case report generator () to include Clinical Examination, Medical Assessments, and new Phase 2/3/4 data structures. (DONE)
-- Verified frontend Phase 1 UI requirements:  correctly shows the Top 3 + Show More implant matching logic. (DONE)
-- Diagnosed and fixed the root cause of the stale deployment issue by updating  in  to forcefully drop and reseed the MongoDB  collection if data is outdated. (DONE)
-- Added  to frontend  to stabilize Expo Go tunneling. (DONE)
-- Removed redundant/legacy Excel files, leaving only the authoritative . (DONE)
+- Patient Consent E-Signature API and UI (DONE): Created cross-platform  and saving mechanism.
+- E-Signature Native Crashes (DONE): Fixed native iOS crashes caused by SVG  and deferred state  measurements. 
+- E-Signature UI Parity (DONE): Displayed full consent form text and disabled background scrolling while the user interacts with the signature pad.
 
 **Earlier issues found/mentioned but not fixed**
-  *(None - all previously mentioned Phase 1 UI/PDF tasks and drilling protocol audits were completed)*
+   Issue 1: Tablet Responsiveness is limited
+   - Debug checklist: Refactor to responsive split-view layouts.
+   - Why to solve this issue and what will be achieved with this?: Provides a native iPad/Android tablet experience.
+   - Should Test frontend/backend/both after fix: Frontend
+   - Is recurring issue? N
+
+   Issue 2: React Native empty text-node warning
+   - Debug checklist: A recurring warning  is thrown occasionally on the procedure details view. Attempted minor hunts but root cause is elusive due to RN-Web masking.
+   - Why to solve this issue and what will be achieved with this?: Cleans up console noise.
+   - Should Test frontend/backend/both after fix: Frontend
+   - Is recurring issue? Y
 
 **Known issue recurrence from previous fork**
-  - Issue recurrence in previous fork: App showing old data / Updates are not happening in Expo Go.
-  - Recurrence count: 4
-  - Status: USER VERIFICATION PENDING (Agent implemented a backend seed replacement fix).
+  - Issue recurrence in previous fork: The  component faced multiple layout and native crash issues due to differences between Expo Web and Expo Go native rendering. 
+  - Recurrence count: 2
+  - Status: RESOLVED
+  Note: Do NOT revert  dimension logic. It requires explicit numeric width/height (no percentages) and avoids  reads during deferred state updates.
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
-- **Frontend**: React Native, Expo Router. Complex conditional rendering based on user role (, , ).
-- **Backend**: FastAPI, MongoDB (Motor). Generates dynamic surgical protocols based on hardcoded dictionaries mapped against user inputs (bone density, dimensions). FPDF2 is used for case report PDF generation.
+- Frontend: React Native, Expo Router.
+- Backend: FastAPI, MongoDB.
+- Custom e-signature mechanism: Standard  relies on WebView which breaks in RN Web previews, so a custom SVG/PanResponder based approach was built and stabilized.
 
 **key DB schema**
-  - : Contains exactly 649 documents representing variant combinations, grouped under exactly 49 brand/system keys.
-  - : Complex case document containing  and nested arrays/objects for each clinical phase (, , etc.).
+  - : Contains an array for  and ,  dict for uploads/signatures.
 
 **changes in tech stack**
-  - None
+  - None this session. (Claude Sonnet 4.6 handles text, OpenAI handles vision).
 
 **All files of reference** 
--  (Modified seed logic, PDF generator, and drilling protocols)
--  (Verified as the single source of truth)
--  (Modified to include Expo tunnel subdomain)
--  (Updated)
+-  (E-signature capture component)
+-  (E-signature capture screen)
+-  (Consent endpoint: )
 
 **Areas that need refactoring**: 
--  is critically large (>6200 lines) and contains routing, schemas, DB logic, and massive hardcoded medical dictionaries. It urgently needs to be broken down.
+-  is huge. Strict parallel  only.
 
 **key api endpoints**
--  (Generates comprehensive PDF)
 - 
 - 
 
 **Critical Info for New Agent** 
-- **Deployment State Awareness**: The user's deployed app was connecting to an Emergent-managed MongoDB that had stale seed data (45 systems instead of 49). The agent fixed the  function to forcefully overwrite the database if counts don't match the Excel file. 
-- **Immediate Action**: You MUST start by asking the user to trigger a redeployment in their platform UI, scan the new Expo QR code, and verify if the data (49 systems, visible protocols, ability for supervisors to create cases) is now correctly reflecting in their iOS Expo Go app. 
-- Do not attempt to build Android APKs; the user relies exclusively on Expo Go for iOS.
+- **Signature Pad**: Do NOT use  or any WebView based module. Maintain the custom SVG and PanResponder implementation.
+- **Storage**: Consent files are saved locally inside  as PNGs.
+- **Claude & OpenAI Separation**: Claude Sonnet 4.6 handles all text via Anthropic API Key. OpenAI handles radiograph vision via Emergent Universal Key. Do not mix them.
+- **Route Registration**: Always ensure new Expo Router screens are properly registered in  (or their parent layout folder) to avoid native black screen crashes.
 
 **documents and test reports created in this job**
   - 
-  -  (17/17 backend tests passed for PDF generation and protocol fixes)
 
 **Last 10 User Messages and any pending HUMAN messages** 
-1. (Latest) User states: 1. Scanning the QR code from the redeployment in emergent. 3. I see data with 45 implant systems. No drilling protocols, Supervisors and Implant In Charge cannot create a new case. 4. Yes (Status: USER VERIFICATION PENDING - Agent applied backend seed fixes to address this).
-2. User states: Still, the changes are not seen in the Expo Go app after Redeployment. The Expo Go is showing some backdated version of the app. (Status: COMPLETED - led to investigation above).
-3. User says Yes to starting the drilling protocol audit and Phase 1 UI/PDF export tasks. (Status: COMPLETED).
+ 1. Agent asked to confirm the plan to focus on E-signature first.
+ 2. User approved E-Signature, instructed to pause after completion, and clarified the patient signs on the device.
+ 3. Agent completed E-Signature and finished the job.
+ 4. User reported E-Signature crashing for existing cases in Phase 1.
+ 5. (Credits Recharged).
+ 6. Agent verified web works, suspected native issue, asked user for debug details.
+ 7. User confirmed they were testing on a deployed app via Expo Go using the Admin login, and saw a plain black screen.
+ 8. Agent fixed route registration and SVG width issues causing native crashes, finished the job.
+ 9. User reported it was *still* crashing on tab press (black screen) with an attached photo.
+ 10. Agent identified a null layout error on iPhone, fixed it, and finished.
+ 11. User requested the full informed consent text to be visible (like the printed version) and for the screen scrolling to be disabled while drawing the signature. Agent implemented both, verified, and finished. *(User Verification Pending).*
 
 **Project Health Check:**
-- Broken: None
-- Mocked: None
+- Broken: None.
+- Mocked: None.
 
 **3rd Party Integrations** 
 - Expo EAS (Deployment)
-- Ngrok v3 (Local Tunneling)
 - Stripe (Payments) - requires User API Key
+- Anthropic (Claude Sonnet 4.6) - requires User API Key
+- OpenAI/Gemini (Vision/Image Generation) - uses Emergent LLM Key
+- Microsoft OAuth - *Requested, pending implementation via integration_expert*
 
 **Testing status**
-  - Testing agent used after significant changes: YES ( was used to verify backend PDF generation and protocol logic).
-  - Troubleshoot agent used after agent stuck in loop: NO (but Deployment Agent was consulted).
+  - Testing agent used after significant changes: YES (iteration_322.json).
+  - Troubleshoot agent used after agent stuck in loop: NO.
   - Test files created: 
-  - Known regressions: None currently known.
+  - Known regressions: None.
 
 **Credentials to test flow:**
-- Admin/In-Charge:  / 
+- Admin / Implant In-Charge:  / 
 - Student:  / 
 - Supervisor:  / 
+- Nurse:  / 
 
 **What agent forgot to execute**
-The agent completed the planned tasks, but the conversation ended immediately after applying the fix for the user's stale deployment issue. The next agent must immediately guide the user to test the fix by redeploying the app and verifying the Expo Go environment.</analysis>
+- Nothing missed from the agreed-upon scope (agent was explicitly told stop there no task after e-signature). However, Role-Based Analytics (Task 1) and Microsoft Auth (Issue 3) remain as the highest priority items for the next session.
+
+**Debugging checklist for current issue**
+    Issue: Role-based Advanced Analytics & Graphical Representation
+    Frontend files to check: 
+    - 
+    - 
+    Backend files to check:
+    -  (Search for )
+    Database to check: MongoDB ( collection filtered by  or  based on the requester's RBAC level).</analysis>

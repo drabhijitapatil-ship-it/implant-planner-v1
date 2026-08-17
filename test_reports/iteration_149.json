@@ -28,6 +28,6 @@
   "seed_data_creation": "None",
   "retest_needed": false,
   "main_agent_can_self_test": true,
-  "context_for_next_testing_agent": "Asset gallery now serves exactly 76 unique JPGs at https://case-approval.preview.emergentagent.com/shots/. Role-specific content verified by MD5. If new screenshots are added, update the 76-count assertion in TestGalleryIndex.test_references_exactly_76_unique_jpgs and the expected MD5 prefixes in TestOnboardingSlides.test_slide6_md5_four_distinct_values.",
+  "context_for_next_testing_agent": "Asset gallery now serves exactly 76 unique JPGs at https://dental-consent-sign.preview.emergentagent.com/shots/. Role-specific content verified by MD5. If new screenshots are added, update the 76-count assertion in TestGalleryIndex.test_references_exactly_76_unique_jpgs and the expected MD5 prefixes in TestOnboardingSlides.test_slide6_md5_four_distinct_values.",
   "rca_of_the_issue": "Previous capture used Playwright page.goto() which forces a hard reload in Expo Router web. utils/api.ts (lines 11-27) stores web auth tokens in a module-level memoryTokens dict (NOT localStorage), so reloads dropped the auth context and onboarding.tsx fell back to its 'student' role default (line 38), making every role-specific screenshot identical to Student. Main agent's fix: capture via soft navigation (history.pushState + popstate) which preserves AuthContext state. Verified by MD5 uniqueness on slide6 of each role."
 }
