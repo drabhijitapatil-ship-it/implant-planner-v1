@@ -41,7 +41,13 @@ if not mongo_url:
     raise RuntimeError("MONGO_URL environment variable is required")
 logging.info(f"Connecting to MongoDB: {mongo_url[:30]}...")
 client = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=10000, connectTimeoutMS=10000)
-db_name = os.environ.get('DB_NAME', 'test_database')
+# iter-Feb-2026 (v5): DB_NAME is required from environment. No hardcoded
+# fallback — the deploy pipeline rewrites this per-environment; failing
+# fast here prevents production traffic from silently hitting the wrong DB.
+db_name = os.environ.get('DB_NAME')
+if not db_name:
+    logging.error("DB_NAME not set! Backend cannot start without a database name.")
+    raise RuntimeError("DB_NAME environment variable is required")
 db = client[db_name]
 
 # Security
@@ -900,6 +906,15 @@ async def send_expo_push_notifications(user_ids: List[str], title: str, body: st
             tokens.append(user["push_token"])
     if not tokens:
         return
+    # iter-Feb-2026 (v5): Push delivery is gated on EMERGENT_PUSH_KEY being
+    # configured. When missing (current deployment), this function is a
+    # no-op — the raw Expo push endpoint is not called. Once the user
+    # provisions push through the Emergent integration flow, EMERGENT_PUSH_KEY
+    # will be populated and this guard removes itself.
+    emergent_push_key = os.environ.get("EMERGENT_PUSH_KEY", "")
+    if not emergent_push_key or emergent_push_key == "placeholder":
+        logging.info("[push] EMERGENT_PUSH_KEY not configured — push delivery skipped")
+        return
     messages = [
         {"to": token, "sound": "default", "title": title, "body": body, "data": data or {}}
         for token in tokens
@@ -966,9 +981,16 @@ async def log_access(
 
 
 async def _ensure_access_log_indexes() -> None:
-    """Create TTL + query indexes on startup. Idempotent."""
+    """Create query indexes on startup. Idempotent.
+
+    iter-Feb-2026 (v5): TTL-based auto-expiry of audit logs has been
+    REMOVED from the automatic startup path entirely. HIPAA/audit
+    retention is now handled by an explicit out-of-band operator script
+    (not by an automatic index creation), so a fresh deployment can never
+    hard-delete existing audit records without a deliberate migration.
+    """
     try:
-        await db.access_logs.create_index("created_at", expireAfterSeconds=180 * 24 * 3600)
+        # Non-destructive query indexes only.
         await db.access_logs.create_index([("user_id", 1), ("created_at", -1)])
         await db.access_logs.create_index([("resource_type", 1), ("resource_id", 1), ("created_at", -1)])
     except Exception as e:
@@ -23060,29 +23082,63 @@ async def seed_on_startup():
                 logging.warning(f"HTTPS enforcement: URL '{u}' uses http:// instead of https://. Consider using HTTPS in production.")
 
     # --- Seed users (force-sync authoritative user list on every startup) ---
-    AUTHORITATIVE_USERS = [
-        {"name": "Dr. Abhijit Patil", "username": "Abhijit.patil", "email": "Abhijit.patil@dental.edu", "password": "Admin@123", "role": "implant_incharge"},
-        {"name": "Dr. Ajay Sabane", "username": "Ajay.sabane", "email": "Ajay.sabane@dental.edu", "password": "Admin@123", "role": "implant_incharge"},
-        {"name": "Dr. Paresh Gandhi", "username": "Paresh.gandhi", "email": "Paresh.gandhi@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
-        {"name": "Dr. Rajshree Jadhav", "username": "Rajshree.jadhav", "email": "Rajshree.jadhav@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
-        {"name": "Dr. Vasantha N", "username": "Vasantha.n", "email": "Vasantha.n@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
-        {"name": "Dr. Rupali Patil", "username": "Rupali.patil", "email": "Rupali.patil@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
-        {"name": "Dr. Pankaj Kadam", "username": "Pankaj.kadam", "email": "Pankaj.kadam@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
-        {"name": "Dr. Gaurav Pandey", "username": "Gaurav.pandey", "email": "Gaurav.pandey@student.dental.edu", "password": "Student@123", "role": "student"},
-        {"name": "Dr. Atharva Mahadik", "username": "Atharva.mahadik", "email": "Atharva.mahadik@student.dental.edu", "password": "Student@123", "role": "student"},
-        {"name": "Dr. Anand Kurum", "username": "Anand.kurum", "email": "Anand.kurum@student.dental.edu", "password": "Student@123", "role": "student"},
-        {"name": "Dr. Yashica Jain", "username": "Yashica.jain", "email": "Yashica.jain@student.dental.edu", "password": "Student@123", "role": "student"},
-        {"name": "Dr. Vaibhav Deshpande", "username": "Vaibhav.deshpande", "email": "Vaibhav.deshpande@student.dental.edu", "password": "Student@123", "role": "student"},
-        {"name": "Dr. Manasi Dhiren", "username": "Manasi.dhiren", "email": "Manasi.dhiren@student.dental.edu", "password": "Student@123", "role": "student"},
-        {"name": "Dr. Renuka Bodakhe", "username": "Renuka.bodakhe", "email": "Renuka.bodakhe@student.dental.edu", "password": "Student@123", "role": "student"},
-        {"name": "Dr. Shritej Shevakari", "username": "Shritej.shevakari", "email": "Shritej.shevakari@student.dental.edu", "password": "Student@123", "role": "student"},
-        {"name": "Dr. Aaditya Patil", "username": "Aaditya.patil", "email": "Aaditya.patil@student.dental.edu", "password": "Student@123", "role": "student"},
-        {"name": "Dr. Kunal Parikh", "username": "Kunal.parikh", "email": "Kunal.parikh@student.dental.edu", "password": "Student@123", "role": "student"},
-        {"name": "Dr. Krishna Mehta", "username": "Krishna.mehta", "email": "Krishna.mehta@student.dental.edu", "password": "Student@123", "role": "student"},
-        {"name": "Dr. Sakshi Lohade", "username": "Sakshi.lohade", "email": "Sakshi.lohade@student.dental.edu", "password": "Student@123", "role": "student"},
-        {"name": "Nurse 1", "username": "Nurse.1", "email": "Nurse.1@dental.edu", "password": "Nurse@123", "role": "nurse"},
-        {"name": "Nurse 2", "username": "Nurse.2", "email": "Nurse.2@dental.edu", "password": "Nurse@123", "role": "nurse"},
-    ]
+    # iter-Feb-2026 (v5): Demo/test user seeding is OPT-IN via SEED_DEMO_USERS.
+    # Production deployments MUST leave this unset (or set to 'false') so no
+    # demo accounts are auto-created. Passwords come exclusively from
+    # environment variables — there are no hardcoded fallbacks. If
+    # SEED_DEMO_USERS is 'true' but any password env var is missing, the
+    # corresponding user rows are SKIPPED and a warning is logged (no
+    # silent creation of accounts with default passwords).
+    seed_demo_users = os.environ.get("SEED_DEMO_USERS", "false").lower() == "true"
+    if not seed_demo_users:
+        logging.info("SEED_DEMO_USERS not enabled — skipping demo user seed (production-safe default).")
+        AUTHORITATIVE_USERS = []
+    else:
+        _ADM_PW = os.environ.get("DEMO_ADMIN_PW", "")
+        _SUP_PW = os.environ.get("DEMO_SUPERVISOR_PW", "")
+        _STU_PW = os.environ.get("DEMO_STUDENT_PW", "")
+        _NUR_PW = os.environ.get("DEMO_NURSE_PW", "")
+        missing = [k for k, v in {
+            "DEMO_ADMIN_PW": _ADM_PW, "DEMO_SUPERVISOR_PW": _SUP_PW,
+            "DEMO_STUDENT_PW": _STU_PW, "DEMO_NURSE_PW": _NUR_PW,
+        }.items() if not v]
+        if missing:
+            logging.warning(f"SEED_DEMO_USERS=true but missing env passwords: {missing}. Users for missing roles will NOT be created.")
+        _proto: list = []
+        if _ADM_PW:
+            _proto += [
+                {"name": "Dr. Abhijit Patil", "username": "Abhijit.patil", "email": "Abhijit.patil@dental.edu", "password": _ADM_PW, "role": "implant_incharge"},
+                {"name": "Dr. Ajay Sabane", "username": "Ajay.sabane", "email": "Ajay.sabane@dental.edu", "password": _ADM_PW, "role": "implant_incharge"},
+            ]
+        if _SUP_PW:
+            _proto += [
+                {"name": "Dr. Paresh Gandhi", "username": "Paresh.gandhi", "email": "Paresh.gandhi@dental.edu", "password": _SUP_PW, "role": "supervisor"},
+                {"name": "Dr. Rajshree Jadhav", "username": "Rajshree.jadhav", "email": "Rajshree.jadhav@dental.edu", "password": _SUP_PW, "role": "supervisor"},
+                {"name": "Dr. Vasantha N", "username": "Vasantha.n", "email": "Vasantha.n@dental.edu", "password": _SUP_PW, "role": "supervisor"},
+                {"name": "Dr. Rupali Patil", "username": "Rupali.patil", "email": "Rupali.patil@dental.edu", "password": _SUP_PW, "role": "supervisor"},
+                {"name": "Dr. Pankaj Kadam", "username": "Pankaj.kadam", "email": "Pankaj.kadam@dental.edu", "password": _SUP_PW, "role": "supervisor"},
+            ]
+        if _STU_PW:
+            _proto += [
+                {"name": "Dr. Gaurav Pandey", "username": "Gaurav.pandey", "email": "Gaurav.pandey@student.dental.edu", "password": _STU_PW, "role": "student"},
+                {"name": "Dr. Atharva Mahadik", "username": "Atharva.mahadik", "email": "Atharva.mahadik@student.dental.edu", "password": _STU_PW, "role": "student"},
+                {"name": "Dr. Anand Kurum", "username": "Anand.kurum", "email": "Anand.kurum@student.dental.edu", "password": _STU_PW, "role": "student"},
+                {"name": "Dr. Yashica Jain", "username": "Yashica.jain", "email": "Yashica.jain@student.dental.edu", "password": _STU_PW, "role": "student"},
+                {"name": "Dr. Vaibhav Deshpande", "username": "Vaibhav.deshpande", "email": "Vaibhav.deshpande@student.dental.edu", "password": _STU_PW, "role": "student"},
+                {"name": "Dr. Manasi Dhiren", "username": "Manasi.dhiren", "email": "Manasi.dhiren@student.dental.edu", "password": _STU_PW, "role": "student"},
+                {"name": "Dr. Renuka Bodakhe", "username": "Renuka.bodakhe", "email": "Renuka.bodakhe@student.dental.edu", "password": _STU_PW, "role": "student"},
+                {"name": "Dr. Shritej Shevakari", "username": "Shritej.shevakari", "email": "Shritej.shevakari@student.dental.edu", "password": _STU_PW, "role": "student"},
+                {"name": "Dr. Aaditya Patil", "username": "Aaditya.patil", "email": "Aaditya.patil@student.dental.edu", "password": _STU_PW, "role": "student"},
+                {"name": "Dr. Kunal Parikh", "username": "Kunal.parikh", "email": "Kunal.parikh@student.dental.edu", "password": _STU_PW, "role": "student"},
+                {"name": "Dr. Krishna Mehta", "username": "Krishna.mehta", "email": "Krishna.mehta@student.dental.edu", "password": _STU_PW, "role": "student"},
+                {"name": "Dr. Sakshi Lohade", "username": "Sakshi.lohade", "email": "Sakshi.lohade@student.dental.edu", "password": _STU_PW, "role": "student"},
+            ]
+        if _NUR_PW:
+            _proto += [
+                {"name": "Nurse 1", "username": "Nurse.1", "email": "Nurse.1@dental.edu", "password": _NUR_PW, "role": "nurse"},
+                {"name": "Nurse 2", "username": "Nurse.2", "email": "Nurse.2@dental.edu", "password": _NUR_PW, "role": "nurse"},
+            ]
+        AUTHORITATIVE_USERS = _proto
 
     # Upsert each authoritative user (update existing, insert missing, preserve profile_photo & password for existing users)
     new_count = 0

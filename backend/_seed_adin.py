@@ -35,23 +35,21 @@ async def main():
     client = AsyncIOMotorClient(os.environ["MONGO_URL"])
     db = client[os.environ["DB_NAME"]]
 
-    # iter-294 (Feb 2026): UNP CloseFit no longer has an 8 mm length per
-    # corrected Adin catalog. Remove any legacy row that was seeded
-    # earlier (idempotent — no-op once cleaned).
-    legacy_unp_8 = await db.implant_library.delete_many({
-        "brand": BRAND, "system": "UNP CloseFit", "length": 8.0,
-    })
-    if legacy_unp_8.deleted_count:
-        print(f"[implant_library] removed {legacy_unp_8.deleted_count} legacy UNP CloseFit L=8 row(s)")
-
-    # iter-295 (Feb 2026): Touareg-OS Ø3.5 no longer offers 6.25 mm length
-    # per corrected catalog. Idempotent — no-op once cleaned.
-    legacy_touareg_os = await db.implant_library.delete_many({
-        "brand": BRAND, "system": "Touareg-OS",
-        "diameter": 3.5, "length": 6.25,
-    })
-    if legacy_touareg_os.deleted_count:
-        print(f"[implant_library] removed {legacy_touareg_os.deleted_count} legacy Touareg-OS Ø3.5 L=6.25 row(s)")
+    # iter-Feb-2026 (v5): Destructive legacy cleanups DISABLED on startup.
+    # These delete_many calls were one-off migrations; running them on every
+    # deploy risks removing live data in a new environment. They are now
+    # no-ops. Run manually via a migration script if needed.
+    # legacy_unp_8 = await db.implant_library.delete_many({
+    #     "brand": BRAND, "system": "UNP CloseFit", "length": 8.0,
+    # })
+    # if legacy_unp_8.deleted_count:
+    #     print(f"[implant_library] removed {legacy_unp_8.deleted_count} legacy UNP CloseFit L=8 row(s)")
+    # legacy_touareg_os = await db.implant_library.delete_many({
+    #     "brand": BRAND, "system": "Touareg-OS",
+    #     "diameter": 3.5, "length": 6.25,
+    # })
+    # if legacy_touareg_os.deleted_count:
+    #     print(f"[implant_library] removed {legacy_touareg_os.deleted_count} legacy Touareg-OS Ø3.5 L=6.25 row(s)")
 
     # ── 1. implant_library — one row per (Ø,L) per system ─────────────────
     inserted_rows = 0

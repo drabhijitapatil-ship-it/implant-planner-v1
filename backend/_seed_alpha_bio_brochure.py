@@ -122,15 +122,17 @@ async def main():
         await db.implant_catalog.update_one(
             {"_id": spi_existing["_id"]}, {"$set": update}
         )
-        # If BOTH old and new keys exist (re-run case), drop the old
-        if spi_existing.get("key") == "Alpha-Bio Tec|SPI":
-            dup = await db.implant_catalog.count_documents({"key": f"{BRAND}|SPI"})
-            if dup > 1:
-                # Keep the most-recently updated, drop the rest
-                cursor = db.implant_catalog.find({"key": f"{BRAND}|SPI"}).sort("updated_at", -1)
-                docs = await cursor.to_list(10)
-                for d in docs[1:]:
-                    await db.implant_catalog.delete_one({"_id": d["_id"]})
+        # iter-Feb-2026 (v5): Destructive dedup DISABLED on startup.
+        # If BOTH old and new keys exist (re-run case), we no longer drop
+        # duplicates automatically — this could remove live data in a new
+        # environment. Run manually via a migration script if needed.
+        # if spi_existing.get("key") == "Alpha-Bio Tec|SPI":
+        #     dup = await db.implant_catalog.count_documents({"key": f"{BRAND}|SPI"})
+        #     if dup > 1:
+        #         cursor = db.implant_catalog.find({"key": f"{BRAND}|SPI"}).sort("updated_at", -1)
+        #         docs = await cursor.to_list(10)
+        #         for d in docs[1:]:
+        #             await db.implant_catalog.delete_one({"_id": d["_id"]})
         print("[implant_catalog] normalized SPI brand to 'Alpha Bio'")
     else:
         print("[implant_catalog] (no existing SPI doc to normalize — skipped)")

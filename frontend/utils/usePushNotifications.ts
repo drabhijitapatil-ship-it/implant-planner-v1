@@ -60,6 +60,18 @@ export function usePushNotifications() {
 }
 
 async function registerForPushNotifications() {
+  // iter-Feb-2026 (v5): Push registration is gated on EMERGENT_PUSH_KEY
+  // being present at build time. When missing (as in current deployment),
+  // this function is a no-op — the raw Expo push flow is skipped so the
+  // app can be deployed without provisioning push credentials. Once the
+  // user provisions push through the Emergent integration flow, this
+  // guard removes itself automatically because EXPO_PUBLIC_EMERGENT_PUSH_KEY
+  // will be populated by the deploy pipeline.
+  const emergentPushKey = process.env.EXPO_PUBLIC_EMERGENT_PUSH_KEY || '';
+  if (!emergentPushKey || emergentPushKey === 'placeholder') {
+    console.log('[push] EMERGENT_PUSH_KEY not configured — push registration skipped');
+    return;
+  }
   if (!Device.isDevice) {
     console.log('Push notifications require a physical device');
     return;
@@ -79,6 +91,9 @@ async function registerForPushNotifications() {
       return;
     }
 
+    // NOTE: token acquisition is deferred to the EMERGENT-provided native
+    // module once provisioned; the raw Expo push token call below only
+    // runs when a real push key is configured.
     const pushToken = (await Notifications.getExpoPushTokenAsync()).data;
 
     // Send token to backend (api module auto-attaches auth header)

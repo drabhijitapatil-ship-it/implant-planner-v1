@@ -1,0 +1,42 @@
+{
+  "summary": "Deployment-hardening regression pass (iter-Feb-2026 v5). Backend: 17/17 automated tests PASS. Verified — backend starts cleanly on 8001, MONGO_URL/DB_NAME required guards active (no fallback used), all 4 role logins work (implant_incharge=Abhijit.patil correctly seeded), Zygoma workflow end-to-end works (create Quad-Zygoma procedure → PATCH /zygoma-workflow phase2 → dual cosign (supervisor + incharge) → GET /zygoma-cosigns returns phase2_ready=true), implant-library filtering (default=conventional only, ?implant_type=advanced returns Refirm Z-Series + P-Series, ?implant_type=all returns both), 15 procedure types incl. 5 Zygoma variants, admin /access-logs endpoint reachable, non-TTL query indexes (user_id+created_at & resource_type+resource_id+created_at) present on access_logs, push send_push_notification() no-ops when EMERGENT_PUSH_KEY unset (verified env + no 5xx). Frontend: login screen loads, 4-role login works, dashboard renders 5 Zygoma cases visible, direct navigation to /procedures/zygoma-workflow/{id} renders extended workflow header + Phase 2/3/4/5 cards + surgical checklist + implants-placed section + supervisor/incharge cosign panel. NOTE — legacy TTL index (created_at expireAfterSeconds=15552000) still present on the DEV MongoDB access_logs collection from prior deploys; the hardening removed TTL from startup so a FRESH deploy DB will not create it, but existing environments retain the legacy index (non-blocking, flagged as warning).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "startup / access_logs TTL",
+        "issue": "Legacy TTL index (expireAfterSeconds=15552000) still present on access_logs in existing dev DB. Startup no longer creates it (fresh deploys are safe), but dev/staging DBs migrated from pre-hardening code will retain it. Consider one-time db.access_logs.dropIndex('created_at_1') during dev cleanup — not a deploy blocker."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_deploy_hardening_regression.py",
+    "/app/test_reports/pytest/iter406_deploy_hardening.xml"
+  ],
+  "action_items": [
+    "OPTIONAL (dev only, non-blocking): drop the legacy TTL index on access_logs.created_at in the dev/staging MongoDB. Prod fresh deploys are already safe since startup no longer creates it.",
+    "No regressions found — deployment hardening changes verified transparent to end users."
+  ],
+  "critical_code_review_comments": [
+    "server.py MONGO_URL/DB_NAME hard-fail guards (lines 38-51) correctly raise RuntimeError with descriptive messages.",
+    "server.py _ensure_access_log_indexes() (lines 983-997) correctly limited to non-destructive query indexes; TTL creation removed as claimed.",
+    "server.py send_push_notification() (lines 909-917) correctly short-circuits when EMERGENT_PUSH_KEY unset or 'placeholder'.",
+    "config.ts (frontend) fails soft with console.warn when EXPO_PUBLIC_BACKEND_URL missing — matches spec (change #3 said 'warns to console', not 'throws').",
+    "test_credentials.md correctly documents Abhijit.patil as implant_incharge (matches seed)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_deploy_hardening_regression.py (NEW)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Created 1 Quad Zygoma procedure during E2E test; cleaned up in teardown + additional cleanup pass. No leftover test data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Deployment hardening (iter-Feb-2026 v5) verified. All 12 request items pass. Only cosmetic caveat: dev-DB legacy TTL index on access_logs remains from pre-hardening. Zygoma cosign payload shape is {stage, role_slot, signature_data, signer_name} — NOT {phase, role, signature}. Procedure creation requires: student_name, patient_name, registration_number, supervisor_id/name, implant_incharge_id/name, receipt_number, amount_paid, procedure_date, procedure_time, implant_procedure_type, loading_type (list), prosthetic_plan, bone_graft_specifications, arch. Implant-library response is a bare list of {brand, system, diameters, lengths, ...} — not wrapped in {systems:[]}.",
+  "rca_of_issue": "N/A — no functional regressions. Backend/frontend both compile & run cleanly. All 10 hardening items validated in-vivo: gitignore rewrite (transparent), app.json backendUrl removed (frontend still uses EXPO_PUBLIC_BACKEND_URL from env), config.ts fail-closed on missing env (warns), eas.json.bak (transparent), DB_NAME required (asserted), destructive delete_many neutralised in 3 seed files (spot-checked), TTL removed from startup (verified — legacy DBs retain but no new TTL created), demo user seed gated on SEED_DEMO_USERS + DEMO_*_PW env vars (all 4 roles still authenticate with existing dev creds), push notifications no-op (EMERGENT_PUSH_KEY unset, no 5xx on push-adjacent endpoints), supervisor expo --lan removed (expo RUNNING, frontend loads)."
+}
