@@ -171,20 +171,32 @@ export default function SurvivalReview() {
   useEffect(() => {
     (async () => {
       try {
-        const [impRes, procRes, catRes] = await Promise.all([
+        // iter-Feb-2026 (v4): For Zygoma/Pterygoid cases, the survival
+        // review must consider BOTH conventional AND advanced implants,
+        // so we fetch the full catalog (implant_type=all). Non-Zygoma
+        // cases keep the default (conventional-only) behaviour.
+        const [impRes, procRes] = await Promise.all([
           api.get(`/procedures/${id}/active-implants`),
           api.get(`/procedures/${id}`),
-          api.get('/implant-library/systems'),
         ]);
+        const proc = procRes.data;
+        const isZygomaCase = [
+          'Quad Zygoma Implants',
+          'Zygoma and Pterygoid Implants',
+          'Pterygoid and Conventional Implants',
+          'Zygoma and Conventional Implants',
+          'Zygoma, Pterygoid and Conventional Implants',
+        ].includes(proc?.implant_procedure_type || '');
+        const catRes = await api.get(`/implant-library/systems${isZygomaCase ? '?implant_type=all' : ''}`);
         setImplants(impRes.data?.active || []);
         setProcedureMeta({
-          implant_procedure_type: procRes.data?.implant_procedure_type,
-          number_of_implants: procRes.data?.number_of_implants
-            || (procRes.data?.implant_plans?.length || procRes.data?.implants?.length || procRes.data?.existing_implants?.length || 0),
+          implant_procedure_type: proc?.implant_procedure_type,
+          number_of_implants: proc?.number_of_implants
+            || (proc?.implant_plans?.length || proc?.implants?.length || proc?.existing_implants?.length || 0),
         });
         setCatalog(Array.isArray(catRes.data) ? catRes.data : (catRes.data?.systems || []));
         // iter-346: load prior review so history + multi-round submission works
-        setSurvivalReviewState(procRes.data?.phase2_survival_review || null);
+        setSurvivalReviewState(proc?.phase2_survival_review || null);
       } catch (e: any) {
         Alert.alert('Error', e?.response?.data?.detail || 'Failed to load survival review data');
       } finally { setLoading(false); }

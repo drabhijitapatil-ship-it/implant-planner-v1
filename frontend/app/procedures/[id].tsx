@@ -2243,6 +2243,36 @@ export default function ProcedureDetailScreen() {
           ) : null}
         </View>
 
+        {/* iter-Feb-2026 (v4): Zygoma & Pterygoid Extended Workflow CTA.
+            Renders only for Zygoma/Pterygoid procedure types. Provides a
+            single entry point to Phases 2-5 of the extended workflow. */}
+        {procedure.implant_procedure_type && [
+          'Quad Zygoma Implants',
+          'Zygoma and Pterygoid Implants',
+          'Pterygoid and Conventional Implants',
+          'Zygoma and Conventional Implants',
+          'Zygoma, Pterygoid and Conventional Implants',
+        ].includes(procedure.implant_procedure_type) && (
+          <TouchableOpacity
+            style={{
+              flexDirection: 'row', alignItems: 'center',
+              backgroundColor: '#5E35B1', paddingVertical: 14, paddingHorizontal: 16,
+              borderRadius: 10, marginBottom: 12,
+              shadowColor: '#5E35B1', shadowOpacity: 0.25, shadowRadius: 6, shadowOffset: { width: 0, height: 3 },
+              elevation: 3,
+            }}
+            onPress={() => router.push(`/procedures/zygoma-workflow/${id}` as any)}
+            testID="zygoma-workflow-btn"
+          >
+            <Ionicons name="medical" size={22} color="#FFF" />
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '700' }}>Zygoma / Pterygoid Extended Workflow</Text>
+              <Text style={{ color: '#EDE7F6', fontSize: 11, marginTop: 2 }}>Phases 2-5: Surgical · Loading · Prosthetic · ORIS</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={22} color="#FFF" />
+          </TouchableOpacity>
+        )}
+
         {/* Procedure Type & Plan */}
         {procedure.implant_procedure_type && (
           <View style={styles.section} data-testid="procedure-type-section">

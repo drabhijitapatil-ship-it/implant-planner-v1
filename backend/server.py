@@ -500,6 +500,16 @@ class ProcedureCreate(BaseModel):
     # — this list captures teeth positions where conventional implants
     # will be placed alongside the advanced anchor implants.
     conventional_implant_locations: Optional[List[str]] = Field(default_factory=list)
+    # iter-Feb-2026 (v4): Co-sign records for the Zygoma/Pterygoid extended
+    # workflow. Structure:
+    #   {
+    #     "phase2":      {supervisor: {...sig}, incharge: {...sig}, at: iso},
+    #     "phase3_day0": {supervisor: {...sig}, prosthodontist: {...sig}, at: iso}
+    #   }
+    # Each sig entry: {signer_id, signer_name, signer_role, signature_data,
+    # comment, at}. Blocks Phase 2 / Phase 3 Day-0 submit until both signers
+    # have countersigned. Only enforced for Zygoma/Pterygoid procedure types.
+    zygoma_pterygoid_cosigns: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
     @field_validator('patient_name')
     @classmethod
@@ -2584,6 +2594,131 @@ async def _notify_addition(user_id: Optional[str], procedure_id: str, message: s
         "read": False,
         "created_at": datetime.utcnow(),
     })
+
+
+# ─────────────────────────────────────────────────────────────────────
+# iter-Feb-2026 (v4) — Zygoma & Pterygoid Extended Workflow endpoints
+# ─────────────────────────────────────────────────────────────────────
+class ZygomaPhaseUpdate(BaseModel):
+    """Generic update model for any of the 4 extended-workflow phases.
+    The frontend sends the entire phase-2/3/4/5 dict on save. Server merges
+    at the phase key without touching the other phases."""
+    phase: str = Field(..., pattern=r"^phase[2-5]$")
+    data: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ZygomaCosignRequest(BaseModel):
+    """Co-sign body — one signer at a time. Two are required to unlock a
+    submit: for phase2 → supervisor + incharge; for phase3_day0 → supervisor
+    + prosthodontist."""
+    stage: str = Field(..., pattern=r"^(phase2|phase3_day0)$")
+    role_slot: str = Field(..., max_length=40)  # supervisor | incharge | prosthodontist
+    signature_data: str = Field("", max_length=200000)  # base64 PNG data URL from SignaturePad
+    signer_name: str = Field("", max_length=120)
+    comment: str = Field("", max_length=500)
+
+
+@api_router.patch("/procedures/{procedure_id}/zygoma-workflow")
+async def update_zygoma_workflow_phase(
+    procedure_id: str,
+    payload: ZygomaPhaseUpdate,
+    current_user: dict = Depends(get_current_user),
+):
+    """Merge-update a single phase (2/3/4/5) of the Zygoma/Pterygoid extended
+    workflow into `procedures.zygoma_pterygoid_data.<phase>`. Idempotent."""
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    proc_type = proc.get("implant_procedure_type", "")
+    if proc_type not in ZYGOMA_PTERYGOID_PROCEDURE_TYPES:
+        raise HTTPException(status_code=400, detail="Not a Zygoma/Pterygoid case")
+
+    existing = proc.get("zygoma_pterygoid_data") or {}
+    existing[payload.phase] = payload.data
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"zygoma_pterygoid_data": existing, "updated_at": datetime.utcnow()}},
+    )
+    return {"ok": True, "phase": payload.phase, "saved_keys": list(payload.data.keys())}
+
+
+@api_router.post("/procedures/{procedure_id}/zygoma-cosign")
+async def add_zygoma_cosign(
+    procedure_id: str,
+    payload: ZygomaCosignRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Record a supervisor/incharge/prosthodontist co-sign for a Zygoma
+    case. Two co-signs are required before Phase 2 or Phase 3 Day-0 can be
+    marked as submitted (see /submit endpoint below)."""
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    proc_type = proc.get("implant_procedure_type", "")
+    if proc_type not in ZYGOMA_PTERYGOID_PROCEDURE_TYPES:
+        raise HTTPException(status_code=400, detail="Not a Zygoma/Pterygoid case")
+
+    # Role-based validation — enforce that the signer is authorised for the slot.
+    role = str(current_user.get("role") or "").lower()
+    slot = (payload.role_slot or "").lower()
+    allowed = {
+        "supervisor": {"supervisor", "administrator", "implant_incharge"},
+        "incharge": {"implant_incharge", "administrator"},
+        "prosthodontist": {"prosthodontist", "supervisor", "administrator", "implant_incharge"},
+    }
+    if slot not in allowed:
+        raise HTTPException(status_code=400, detail=f"Unknown role slot: {slot}")
+    if role not in allowed[slot]:
+        raise HTTPException(status_code=403, detail=f"Role '{role}' not allowed for slot '{slot}'")
+
+    now = datetime.utcnow()
+    entry = {
+        "signer_id": str(current_user.get("_id") or current_user.get("id") or ""),
+        "signer_name": payload.signer_name or f"{current_user.get('first_name','')} {current_user.get('last_name','')}".strip() or current_user.get("username", ""),
+        "signer_role": role,
+        "signature_data": payload.signature_data,
+        "comment": payload.comment,
+        "at": now.isoformat(),
+    }
+    cosigns = proc.get("zygoma_pterygoid_cosigns") or {}
+    stage_cosigns = cosigns.get(payload.stage) or {}
+    stage_cosigns[slot] = entry
+    stage_cosigns["last_updated_at"] = now.isoformat()
+    cosigns[payload.stage] = stage_cosigns
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"zygoma_pterygoid_cosigns": cosigns, "updated_at": now}},
+    )
+    return {"ok": True, "stage": payload.stage, "slot": slot, "cosigns": cosigns}
+
+
+@api_router.get("/procedures/{procedure_id}/zygoma-cosigns")
+async def get_zygoma_cosigns(procedure_id: str, current_user: dict = Depends(get_current_user)):
+    """Return the current co-sign state for both required stages plus a
+    convenience `is_ready` flag per stage (both signers present)."""
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    cosigns = proc.get("zygoma_pterygoid_cosigns") or {}
+    p2 = cosigns.get("phase2") or {}
+    p3d0 = cosigns.get("phase3_day0") or {}
+    return {
+        "cosigns": cosigns,
+        "phase2_ready": bool(p2.get("supervisor") and p2.get("incharge")),
+        "phase3_day0_ready": bool(p3d0.get("supervisor") and p3d0.get("prosthodontist")),
+    }
 
 
 @api_router.post("/procedures/{procedure_id}/add-implant")
