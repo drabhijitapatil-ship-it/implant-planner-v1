@@ -1,0 +1,37 @@
+{
+  "summary": "iter-Feb-2026 v3 (Zygoma/Pterygoid Phase 1 workflow — Changes #1-#5) fully verified. Backend: 4/4 pytest pass — POST /api/procedures accepts and persists `conventional_implant_locations` (round-trip for 'Zygoma, Pterygoid and Conventional Implants' with ['11','21','12','22'] and 'Pterygoid and Conventional Implants' with ['16','26']); Zygoma-type + arch='Maxillary' accepted and persisted; absent list defaults to []/None. Frontend (mobile 390x844, student login): Change #1 ✓ (arch-locked-maxillary chip renders with correct text, Missing Teeth hidden, Atrophy Assessment hidden for Quad Zygoma, Arch Condition/Ridge Contour/Soft Tissue/Keratinized Mucosa/Occlusal Scheme render for Zygoma full-arch cases). Change #2/#3 ✓ (Conventional Implant Location section renders with correct sub-title for Zygoma+Conv, Ptery+Conv, Zygoma+Ptery+Conv; 16 testIDs `fdi-conv-implant-loc-<FDI>` (11..48) present). Change #4 ✓ [BUG FIX] (vertical caution banner testID pre-surgical-caution-opening shows specific text 'Limited maximum interincisal opening (30 mm < 35 mm)...' with bounding box x=48 width=294 right=342 well within 390px viewport — fully visible, no clipping. Setting Sinus=No adds a second stacked banner pre-surgical-caution-sinus). Change #5 ✓ (generate-diagnostic-summary-btn present in Section 13; tapping populates Bedrossian text and diagnostic-summary-narrative multi-line field — narrative auto-generated from available data; field remains editable). Pterygoid+Conventional correctly renders in LITE MODE (pterygoid-lite-banner present, no Advanced Maxillary banner, no arch-locked chip — preserves v2 behaviour) but still shows the Conventional Implant Location section (correct because it is mixed-conventional).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "new-procedure (Step 1)", "issues": ["Multiple console warnings 'Unexpected text node: . A text node cannot be a child of a <View>.' fire on this screen (React-Native-web hygiene). Not blocking any tested flow but indicates stray whitespace/text between View children somewhere in the render tree — worth a cleanup pass."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_zygoma_v3_iter_feb2026.py",
+    "/app/test_reports/pytest/iter_feb2026_v3.xml"
+  ],
+  "action_items": [
+    "Optional cleanup: silence the recurring React-Native-web 'Unexpected text node' console warning on the new-procedure screen — usually caused by literal spaces or newlines between JSX children inside <View> containers (grep the file around conditional render blocks that surround inline space/text). Not blocking."
+  ],
+  "critical_code_review_comments": [
+    "server.py L502 (ProcedureCreate) and L583 (ProcedureUpdate) — `conventional_implant_locations: Optional[List[str]]` is correctly modelled; POST/GET round-trip verified. No sanitisation on the list items — safe for now because FDI codes are numeric strings, but if the field is ever user-authored consider a regex constraint (^[1-8][1-8]$).",
+    "ZygomaPterygoidPhase1Form.tsx L863-885 — v3 caution styling correctly uses flexDirection:'column', width:'100%', marginHorizontal:0. Verified banner right-edge=342px on 390px viewport (48px inset from card). Fix is solid.",
+    "new-procedure.tsx L2280-2295 — clean gating: `isZygomaFullArchProcedure` selects locked-chip vs. dropdown branch. arch auto-set at L641-642 keyed on the same predicate; no divergence risk.",
+    "new-procedure.tsx L2562 — Missing Teeth chart correctly gated on `!isFullArch` and Zygoma cases live inside FULL_ARCH_GROUP → the hide is automatic (no separate hide-flag needed).",
+    "new-procedure.tsx L2974 — Atrophy Assessment gated with `!isZygomaFullArchProcedure` — correctly still renders for All-on-4/6/X."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_zygoma_v3_iter_feb2026.py (new — 4 pytest cases)"
+  ],
+  "success_rate": {
+    "backend": "100% (4/4 iter-Feb-2026 v3 tests pass — see /app/test_reports/pytest/iter_feb2026_v3.xml)",
+    "frontend": "100% of the 14 requested UI checks verified (arch-locked-maxillary, Missing Teeth hide, Atrophy hide, full-arch clinical sub-sections present, Conventional Implant Location section + FDI testIDs, pre-surgical-caution-opening text + geometry, stacked caution-sinus banner, generate-diagnostic-summary-btn + diagnostic-summary-narrative populated, pterygoid-lite-banner preserved)"
+  },
+  "seed_data_creation": "Created 4 procedure records via API tests: TEST_ZV3_ZPC / TEST_ZV3_PC / TEST_ZV3_QZM / TEST_ZV3_ZP (with random session tag to avoid slot collisions). Registration/receipt numbers are TEST-ZV3-<tag>-*. Safe to leave — pytest-only regression rows.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "iter-Feb-2026 v3 Zygoma/Pterygoid workflow (5 changes) is fully verified E2E. Backend regression: /app/backend/tests/test_zygoma_v3_iter_feb2026.py — run with `EXPO_PUBLIC_BACKEND_URL=$(grep EXPO_PUBLIC_BACKEND_URL /app/frontend/.env | cut -d= -f2) pytest`. Frontend testing pattern that worked: (1) login via /auth/login with data-testid=login-submit-btn, (2) navigate to /new-procedure, (3) click [data-testid=dropdown-type-of-implant-procedure], (4) select the desired zygoma/pterygoid variant by text locator, (5) all 4 Zygoma-form testIDs (arch-locked-maxillary, pre-surgical-caution-group/-opening/-sinus/-omc-r/-omc-l, generate-diagnostic-summary-btn, diagnostic-summary-narrative, pterygoid-lite-banner) are stable. The Interincisal Opening input has no testID — I injected a marker by DOM-walking from the label text; consider adding a testID like 'interincisal-opening-input' for cleaner future tests. Persistent 'Unexpected text node' console warning is background noise unrelated to any tested feature."
+}
